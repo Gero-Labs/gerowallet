@@ -1,11 +1,11 @@
 <template>
-  <v-card outlined class="liquid-glass">
+  <v-card variant="outlined" class="liquid-glass">
     <v-card-title class="d-flex align-center" style="gap: 8px;">
-      <v-icon color="primary" small>mdi-store</v-icon>
+      <v-icon color="primary" size="small">mdi-store</v-icon>
       <span class="text-subtitle-1 font-weight-bold">{{ $t('gomining.minerShop') }}</span>
       <v-spacer />
-      <v-chip x-small outlined color="success">
-        <v-icon x-small left>mdi-check-circle</v-icon>
+      <v-chip size="x-small" variant="outlined" color="success">
+        <v-icon size="x-small" start>mdi-check-circle</v-icon>
         {{ $t('gomining.poweredByGoMining') }}
       </v-chip>
     </v-card-title>
@@ -38,16 +38,16 @@
           md="4"
           lg="3"
         >
-          <v-card outlined class="collection-card pa-3 d-flex flex-column" style="height: 100%;">
+          <v-card variant="outlined" class="collection-card pa-3 d-flex flex-column" style="height: 100%;">
             <!-- Collection image -->
             <v-img
               :src="collection.imageUrl"
               height="140"
-              contain
+
               class="mb-3 rounded"
             >
               <template #placeholder>
-                <v-row class="fill-height ma-0" align="center" justify="center">
+                <v-row class="fill-height ma-0 align-center justify-center"  >
                   <v-icon size="48" color="#F7931A40">mdi-pickaxe</v-icon>
                 </v-row>
               </template>
@@ -91,12 +91,12 @@
                 </div>
               </div>
               <v-btn
-                small
+                size="small"
                 color="primary"
                 :disabled="collection.available === 0"
                 @click="$emit('buy', collection)"
               >
-                <v-icon small left>mdi-cart-plus</v-icon>
+                <v-icon size="small" start>mdi-cart-plus</v-icon>
                 {{ $t('gomining.buy') }}
               </v-btn>
             </div>

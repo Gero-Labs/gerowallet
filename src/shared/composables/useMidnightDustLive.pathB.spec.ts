@@ -1,4 +1,5 @@
-import Vue, { nextTick, reactive, ref } from 'vue';
+import * as Vue from 'vue';
+import { nextTick, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -48,11 +49,11 @@ const registeredB = (wide: boolean) => ({
   pathBRegistered: true, pathBIsDestinationWide: wide, pathBAsOfMs: Date.now(), pathBBatchAsOfMs: Date.now(),
 });
 
-let views: Vue[] = [];
+let views: Vue.App[] = [];
 function mount(): MidnightDustLive {
   let live!: MidnightDustLive;
-  const view = new Vue({ setup() { live = useMidnightDustLive(); return {}; }, render: (h) => h('div') });
-  view.$mount();
+  const view = Vue.createApp({ setup() { live = useMidnightDustLive(); return {}; }, render: () => Vue.h('div') });
+  view.mount(document.createElement('div'));
   views.push(view);
   return live;
 }
@@ -67,7 +68,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
-  for (const view of views) view.$destroy();
+  for (const view of views) view.unmount();
   views = [];
   vi.useRealTimers();
 });

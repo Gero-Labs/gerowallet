@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // The stat strip is a projection of the votes join, and the only thing worth
 // pinning down about it is HONESTY: an unreachable votes endpoint must read as
 // "not available", never as "0 actions awaiting your vote". That difference is
@@ -8,8 +10,8 @@
 // layer is stubbed; GButton / EmptyState / ErrorState are `<script setup>`
 // imports that Vue 2.7 resolves lexically, so they render for real.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 
 const listProposals = vi.fn();
 const getProposalVotes = vi.fn();
@@ -32,7 +34,7 @@ vi.mock('@/modules/governance/dialogs/CastVoteDialog.vue', () => ({
   default: { name: 'CastVoteDialog', props: ['isOpen', 'actions'], render: () => null },
 }));
 
-vi.mock('vue-router/composables', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import ActionList from './ActionList.vue';
@@ -82,10 +84,8 @@ function votesPage(rows: Array<{ drepId: string; vote: string }>) {
   };
 }
 
-function mountPage(): Wrapper<Vue> {
-  return mount(ActionList, {
-    mocks: { $t },
-    stubs: {
+function mountPage(): VueWrapper {
+  return mount(ActionList, { global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: {
       'v-icon': true,
       'v-chip': true,
       'v-chip-group': true,
@@ -94,10 +94,9 @@ function mountPage(): Wrapper<Vue> {
       AsOf: true,
       'v-btn': {
         inheritAttrs: false,
-        template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>',
+        template: '<button v-bind="$attrs"><slot /></button>',
       },
-    },
-  });
+    } } });
 }
 
 /** Let the mounted list fetch and the votes join that follows it both settle. */
@@ -108,7 +107,7 @@ async function settle(): Promise<void> {
   }
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -122,7 +121,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
   vi.restoreAllMocks();
 });
@@ -311,7 +310,7 @@ describe('ActionList stat strip', () => {
     wrapper = mountPage();
     await settle();
 
-    const titles = wrapper.findAll('.action-row__title').wrappers.map(row => row.text());
+    const titles = wrapper.findAll('.action-row__title').map(row => row.text());
     expect(titles).toEqual(['Soonest', 'Later', 'Decided']);
     // The ordering is only ever this PAGE's ordering, and the note says so.
     expect(wrapper.html()).toContain('governance.actionsOrderNote');
@@ -339,7 +338,7 @@ describe('ActionList stat strip', () => {
     // Never tone alone: each quiet row still carries its status in words.
     // (`$t` echoes the key here, which StatusPill reads as a missing
     // translation and falls back to the raw status — still a word.)
-    const labels = quiet.wrappers.map(row => row.find('.status-pill').text()).sort();
+    const labels = quiet.map(row => row.find('.status-pill').text()).sort();
     expect(labels).toEqual(['enacted', 'expired']);
   });
 

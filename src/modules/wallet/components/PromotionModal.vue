@@ -14,7 +14,7 @@
     <div class="card-fees">
       <section class="card-fees__tiers" aria-labelledby="card-fees-tiers">
         <p id="card-fees-tiers" class="card-fees__banner">
-          <v-icon small>mdi-star-circle-outline</v-icon>
+          <v-icon size="small">mdi-star-circle-outline</v-icon>
           <span>
             {{ t('card.startingMayFirst') }} <strong>{{ t('card.geroHolders') }}</strong>
             {{ t('card.willEnjoyTokenIncentives') }}
@@ -29,7 +29,7 @@
           </div>
           <ul class="card-fees__benefits">
             <li v-for="benefit in tier.benefits" :key="benefit">
-              <v-icon small>mdi-check</v-icon>
+              <v-icon size="small">mdi-check</v-icon>
               {{ benefit }}
             </li>
           </ul>
@@ -56,7 +56,7 @@
     </div>
 
     <p class="card-fees__footer t-caption">
-      <v-icon small>mdi-wallet-outline</v-icon>
+      <v-icon size="small">mdi-wallet-outline</v-icon>
       {{ t('card.tierDetectedAutomatically') }}
     </p>
   </BaseDialog>

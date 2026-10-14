@@ -53,19 +53,19 @@
 
       <!-- Nav buttons -->
       <div class="wizard-nav">
-        <v-btn v-if="step > 0" text small class="wizard-back" @click="back()">
+        <v-btn v-if="step > 0" variant="text" size="small" class="wizard-back" @click="back()">
           {{ $t('copilot.onboarding.back') }}
         </v-btn>
         <v-spacer />
-        <v-btn v-if="step < 2" depressed class="connect-btn" @click="next()">
+        <v-btn v-if="step < 2" variant="flat" class="connect-btn" @click="next()">
           {{ $t('copilot.onboarding.next') }}
         </v-btn>
-        <v-btn v-else depressed class="connect-btn" @click="$emit('done')">
+        <v-btn v-else variant="flat" class="connect-btn" @click="$emit('done')">
           {{ $t('copilot.onboarding.finish') }}
         </v-btn>
       </div>
 
-      <v-btn v-if="step < 2" text x-small class="wizard-skip" @click="$emit('done')">
+      <v-btn v-if="step < 2" variant="text" size="x-small" class="wizard-skip" @click="$emit('done')">
         {{ $t('copilot.onboarding.skip') }}
       </v-btn>
 

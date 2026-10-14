@@ -39,7 +39,12 @@ export default [
     },
     {
         ignores: [
-            'node_modules/**',
+            '**/node_modules/**',
+            '.worktrees/**',
+            '.claude/worktrees/**',
+            '.claude-design-tmp/**',
+            'spikes/vue3-migration/targets/*/dist/**',
+            'spikes/vue3-migration/artifacts/**',
             'dist/**',
             'extension/**',
             'build/**',

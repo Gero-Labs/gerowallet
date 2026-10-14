@@ -13,33 +13,33 @@
          of the first outlined field's floating label under the header. -->
     <v-card-text class="px-3 pt-4 pb-4">
       <v-select
-        :value="provider"
+        :model-value="provider"
         :items="providerItems"
         item-value="id"
-        item-text="label"
+        item-title="label"
         :label="t('settings.submitApi.providerLabel')"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         attach
         hide-details
         class="mb-5"
         :disabled="busy"
-        @change="selectProvider"
+        @update:model-value="selectProvider"
       >
         <template #selection="{ item }">
           <span class="submit-api-provider">
             <img v-if="item.logo" :src="item.logo" alt="" class="submit-api-provider-logo">
-            <v-icon v-else small class="submit-api-provider-logo">mdi-server</v-icon>
+            <v-icon v-else size="small" class="submit-api-provider-logo">mdi-server</v-icon>
             {{ item.label }}
           </span>
         </template>
-        <template #item="{ item }">
+        <template #item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
           <span class="submit-api-provider">
             <img v-if="item.logo" :src="item.logo" alt="" class="submit-api-provider-logo">
-            <v-icon v-else small class="submit-api-provider-logo">mdi-server</v-icon>
+            <v-icon v-else size="small" class="submit-api-provider-logo">mdi-server</v-icon>
             {{ item.label }}
           </span>
-        </template>
+        </template></v-list-item></template>
       </v-select>
       <!-- Default (Gero) keeps this same layout with the fields disabled, so switching
            provider never resizes the dialog. Saving Default deletes any saved endpoint. -->
@@ -49,15 +49,15 @@
         :placeholder="urlPlaceholder"
         :hint="t('settings.submitApi.urlHint')"
         persistent-hint
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         autocomplete="off"
         :disabled="fieldsDisabled"
         :error-messages="fieldError('url')"
       />
       <p class="t-caption submit-api-note">{{ t('settings.submitApi.networkHint', { network }) }}</p>
       <p class="t-caption submit-api-note">{{ t('settings.submitApi.urlKeyHint') }}</p>
-      <v-alert v-if="validation.insecureWarning" type="warning" text dense>
+      <v-alert v-if="validation.insecureWarning" type="warning" variant="text" density="compact">
         {{ t('settings.submitApi.httpWarning') }}
       </v-alert>
 
@@ -65,8 +65,8 @@
         v-model="headerName"
         :label="t('settings.submitApi.headerNameLabel')"
         placeholder="X-Api-Key"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         autocomplete="off"
         :disabled="fieldsDisabled"
         :error-messages="fieldError('headerName')"
@@ -88,8 +88,8 @@
         v-model="headerValue"
         type="password"
         :label="t('settings.submitApi.headerValueLabel')"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         autocomplete="off"
         :disabled="fieldsDisabled"
         :error-messages="fieldError('headerValue')"
@@ -113,8 +113,8 @@
       <!-- One slot for every note, so picking Default (Gero) does not resize the dialog either. -->
       <p class="t-caption submit-api-note">{{ t(noteKey) }}</p>
 
-      <v-alert v-if="testMessage" :type="testAlertType" text dense>{{ testMessage }}</v-alert>
-      <v-alert v-if="serverError" type="error" text dense>{{ serverError }}</v-alert>
+      <v-alert v-if="testMessage" :type="testAlertType" variant="text" density="compact">{{ testMessage }}</v-alert>
+      <v-alert v-if="serverError" type="error" variant="text" density="compact">{{ serverError }}</v-alert>
 
       <div class="submit-api-actions">
         <GButton tier="secondary" :loading="testing" :disabled="busy || isDefault || !canSubmit" @click="runTest()">

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Gero Vue migration pilot (synthetic data only)",
+  "version": "0.1.0",
+  "description": "Isolated framework integration evidence. No real wallets, funds, signing, or production services.",
+  "permissions": ["storage", "sidePanel"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "content_security_policy": { "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self'; connect-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'none'; media-src 'none'; object-src 'self'" }
+}

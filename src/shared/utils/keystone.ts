@@ -7,6 +7,7 @@ import {
   UREncoder,
 } from '@keystonehq/keystone-sdk';
 import { CryptoKeypath, DerivationAlgorithm, PathComponent } from '@keystonehq/bc-ur-registry-cardano';
+import { CryptoHDKey } from '@keystonehq/bc-ur-registry';
 import { Options } from 'qr-code-styling/lib/types';
 import logo128Url from '@/assets/img/bkp/logo128.png';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -76,7 +77,7 @@ export const parseSignature = (ur: UR): CardanoSignature => {
  * @param addressPath - Derivation path for the signing address
  * @returns Object with UR for QR code generation, builder to reuse when parsing response, and addressBytes
  */
-export const createKeystoneDataSignRequest = (address: string, payloadHex: string, xfp: string, xpub: string, addressPath: string): { ur: UR; builder; addressBytes: Uint8Array } => {
+export const createKeystoneDataSignRequest = (address: string, payloadHex: string, xfp: string, xpub: string, addressPath: string): { ur: UR; requestId: string; builder; addressBytes: Uint8Array } => {
   // Decode address to get raw bytes - handle both hex and bech32 formats
   let addressBytes: Uint8Array;
   if (address.startsWith('addr') || address.startsWith('stake')) {
@@ -99,6 +100,7 @@ export const createKeystoneDataSignRequest = (address: string, payloadHex: strin
 
   return {
     ur: sdk.cardano.generateSignDataRequest(signDataRequest),
+    requestId: signDataRequest.requestId,
     builder,
     addressBytes
   };
@@ -111,8 +113,9 @@ export const createKeystoneDataSignRequest = (address: string, payloadHex: strin
  * @param addressBytes - The address bytes (for COSE_Key construction)
  * @returns Object with COSE_Sign1 signature and COSE_Key in hex format
  */
-export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array): { signature: string; key: string } => {
+export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array, expectedRequestId: string): { signature: string; key: string } => {
   const keystoneSign: CardanoSignDataSignature = sdk.cardano.parseSignDataSignature(ur);
+  if (!expectedRequestId || keystoneSign.requestId !== expectedRequestId) throw new Error('Keystone response does not match the approved request');
 
   // Build COSE_Sign1 using the builder with Keystone's raw signature (frees builder internally)
   const signatureHex = buildAndSignData(builder, toHexArray(keystoneSign.signature), undefined);
@@ -176,6 +179,7 @@ const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Trans
 
 export interface KeystoneSignRequestResponse {
   ur: UR,
+  requestId: string,
   useHash: boolean,
   txHash?: string
 }
@@ -285,6 +289,7 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
 
   // Check if we should sign the hash or full transaction (for multi-sig/script transactions)
   const useHash = sdk.cardano.checkNeedSignTxHash(cborBuffer);
+  const requestId = crypto.randomUUID();
   debugLog('[Keystone] checkNeedSignTxHash:', useHash);
 
   if (useHash) {
@@ -306,8 +311,9 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
         ownedKeypathList,
         ownedAddressList,
         'gerowallet',
-        crypto.randomUUID()
+        requestId
       ),
+      requestId,
       useHash: true,
       txHash
     };
@@ -317,7 +323,7 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
     const res = getOwnedUtxos(tx.body().inputs().values(), xfp);
     // Create sign request object following Keystone demo pattern
     const cardanoSignRequest = {
-      requestId: crypto.randomUUID(),
+      requestId,
       signData: cborBuffer,
       utxos: res.keystoneUtxos,
       extraSigners: res.extraSigners,
@@ -327,6 +333,7 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
     // Generate UR using SDK wrapper (as shown in Keystone demo)
     return {
       ur: sdk.cardano.generateSignRequest(cardanoSignRequest),
+      requestId,
       useHash: false,
       txHash: null
     };
@@ -434,7 +441,8 @@ export const parseBitcoinAccount = (ur: UR): {
   chainCode: string;
 } => {
   // Parse the crypto-hdkey UR
-  const cryptoHDKey = (sdk as any).bitcoin.parseCryptoHDKey(ur);
+  if (ur.type !== 'crypto-hdkey') throw new Error('Expected a crypto-hdkey response');
+  const cryptoHDKey = CryptoHDKey.fromCBOR(ur.cbor);
 
   return {
     xpub: cryptoHDKey.getBip32Key(), // Base58 encoded xpub
@@ -456,7 +464,7 @@ export const generateBitcoinPSBTQR = (psbtHex: string, _requestId: string = cryp
   const psbtBuffer = Buffer.from(psbtHex, 'hex');
 
   // Generate crypto-psbt UR
-  const ur: UR = (sdk as any).bitcoin.generatePSBT(psbtBuffer);
+  const ur: UR = sdk.btc.generatePSBT(psbtBuffer);
 
   return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190);
 };
@@ -468,8 +476,5 @@ export const generateBitcoinPSBTQR = (psbtHex: string, _requestId: string = cryp
  */
 export const parseBitcoinSignature = (ur: UR): string => {
   // Parse the signed crypto-psbt UR
-  const signedPsbt = (sdk as any).bitcoin.parsePSBT(ur);
-
-  // Return signed PSBT as hex
-  return signedPsbt.toHex();
+  return sdk.btc.parsePSBT(ur);
 };

@@ -60,7 +60,7 @@
       @click="emit('rationale', row)"
     >
       {{ $t('governance.readWhy') }}
-      <v-icon x-small class="ml-1">mdi-message-text-outline</v-icon>
+      <v-icon size="x-small" class="ml-1">mdi-message-text-outline</v-icon>
     </button>
   </div>
 </template>

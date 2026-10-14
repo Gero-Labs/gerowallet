@@ -3,7 +3,7 @@
        hierarchy + class names so the design language is identical; only the
        data source (midnightStore.transactions) and tx-type semantics differ. -->
   <v-card
-    outlined
+    variant="outlined"
     class="fill-height d-flex flex-column glass-panel recent-tx-card"
   >
     <div class="recent-tx-header flex-grow-0">
@@ -18,7 +18,7 @@
         v-if="recent.length === 0"
         class="recent-tx-empty d-flex flex-column align-center justify-center flex-grow-1"
       >
-        <v-icon small color="grey">mdi-clipboard-text-outline</v-icon>
+        <v-icon size="small" color="grey">mdi-clipboard-text-outline</v-icon>
         <span class="text-caption text--secondary mt-1">
           {{ $t('transactions.noTransactionsFound') }}
         </span>
@@ -37,7 +37,7 @@
                    as ordinary otherwise, on the one screen the user actually
                    scans. -->
               <span v-if="sponsorFor(tx.hash)" class="tx-chip">
-                <v-icon x-small>mdi-lightning-bolt</v-icon>
+                <v-icon size="x-small">mdi-lightning-bolt</v-icon>
                 {{ $t('midnight.sponsor.feeInline', { name: sponsorFor(tx.hash) }) }}
               </span>
             </div>
@@ -49,9 +49,9 @@
             <span class="recent-tx-amount" :style="{ color: amountColor(tx.type) }">
               {{ formatAmountSigned(tx) }}
             </span>
-            <v-tooltip v-if="isUnscaled(tx.token)" top content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+            <v-tooltip location="top" v-if="isUnscaled(tx.token)"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="x-small" color="warning" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
               </template>
               {{ $t('midnight.rawBalanceNotice') }}
             </v-tooltip>

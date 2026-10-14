@@ -5,55 +5,39 @@
 
 /* ---- App chrome ---- */
 html { background: var(--g-canvas); }
-html .v-application {
+html :is(.v-application, .v-overlay-container) {
   font-family: var(--g-font-ui) !important;
   color: var(--g-text-1);
 }
 
-/* Vuetify pins Roboto, with the override flag, on every typography
-   helper at (0,2,0), and ships BOTH the legacy unprefixed names and the modern
-   `text-`-prefixed ones. This app uses the modern ones heavily (text-caption in
-   70 files, text-body-2 in 41). Roboto is not bundled, so any helper we miss
-   falls back to system sans.
-   The `html` prefix is load-bearing, not decoration. Vuetify's CSS is emitted
-   TWICE -- once from vuetify.min.css and again from the per-component
-   `vuetify/lib` sass that VuetifyResolver pulls in -- and the second copy lands
-   AFTER baseline.css in the bundle. A tying (0,2,0) rule would therefore lose on
-   source order, which is exactly what happened before this prefix existed
-   (verified in a browser against the built stylesheet). `html ...` is (0,2,1)
-   and wins regardless of order. */
-html .v-application .text-h1, html .v-application .text-h2, html .v-application .text-h3,
-html .v-application .text-h4, html .v-application .text-h5, html .v-application .text-h6,
-html .v-application .text-subtitle-1, html .v-application .text-subtitle-2,
-html .v-application .text-body-1, html .v-application .text-body-2,
-html .v-application .text-caption, html .v-application .text-overline,
-html .v-application .text-button,
-html .v-application .subtitle-1, html .v-application .subtitle-2,
-html .v-application .body-1, html .v-application .body-2,
-html .v-application .caption, html .v-application .overline,
-html .v-application .headline,
-html .v-application .display-1, html .v-application .display-2,
-html .v-application .display-3, html .v-application .display-4 {
+/* Preserve the wallet font for legacy typography helpers in both the app and
+   teleported menus/dialogs. Keep the existing specificity so component CSS
+   cannot change the font through stylesheet order. */
+html :is(.v-application, .v-overlay-container) :is(
+  .text-h1, .text-h2, .text-h3, .text-h4, .text-h5, .text-h6,
+  .text-subtitle-1, .text-subtitle-2, .text-body-1, .text-body-2,
+  .text-caption, .text-overline, .text-button, .subtitle-1, .subtitle-2,
+  .body-1, .body-2, .caption, .overline, .headline,
+  .display-1, .display-2, .display-3, .display-4
+) {
   font-family: var(--g-font-ui) !important;
 }
 
 /* ---- Buttons: sentence case, no tracking, press on pointer-down ----
    Radius is scoped: Vuetify's .v-btn--round/.v-btn--fab (circles) and
    .v-btn--tile are only specificity 0,1,0 and would LOSE to an unscoped
-   0,2,0 override, squaring every icon button in the app. */
-.v-application .v-btn {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 600;
+   0,2,0 override, squaring every icon button in the app. VTab now uses VBtn
+   internally; keep its own tab typography, shape, and selected-state layout. */
+:is(.v-application, .v-overlay-container) .v-btn:not(.v-tab) {
   transition: color var(--g-dur-fast) ease-out,
               border-color var(--g-dur-fast) ease-out,
               background-color var(--g-dur-fast) ease-out,
               filter var(--g-dur-fast) ease-out;
 }
-.v-application .v-btn:not(.v-btn--round):not(.v-btn--fab):not(.v-btn--tile) {
+:is(.v-application, .v-overlay-container) .v-btn:not(.v-tab):not(.v-btn--round):not(.v-btn--fab):not(.v-btn--tile):not(.v-btn--icon):not(.v-btn--rounded) {
   border-radius: var(--g-r-control);
 }
-.v-application .v-btn:active {
+:is(.v-application, .v-overlay-container) .v-btn:not(.v-tab):active {
   transform: translateY(1px);
   filter: brightness(0.96);
 }
@@ -64,18 +48,28 @@ html .v-application .display-3, html .v-application .display-4 {
    Specificity, spelled out, because it is easy to get wrong:
    Vuetify's enabled rule `.theme--dark.v-btn.v-btn--has-bg` is (0,3,0) with NO
    override flag, so (0,4,0) beats it cleanly and no flag is needed here. */
-.v-application .theme--dark.v-btn.geroButton {
+:is(.v-application, .v-overlay-container) .v-btn.geroButton {
   background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   color: var(--g-on-grad);
-  font-weight: 600;
   border-radius: var(--g-r-control);
 }
 /* Fallback for the rare non-v-btn use of the class. */
 .geroButton {
   background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   color: var(--g-on-grad);
-  font-weight: 600;
   border-radius: var(--g-r-control);
+}
+/* Native typography helpers must override the default button weight, just as
+   the old font-weight-* utilities did. Authored component text stays local. */
+@layer vuetify-overrides {
+  :is(.v-application, .v-overlay-container) .v-btn:not(.v-tab) {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  :is(.v-application, .v-overlay-container) .v-btn:not(.v-tab),
+  .geroButton {
+    font-weight: 600;
+  }
 }
 /* Disabled is different: Vuetify's
    `.theme--dark.v-btn.v-btn--disabled.v-btn--has-bg` (0,4,0) and
@@ -84,28 +78,16 @@ html .v-application .display-3, html .v-application .display-4 {
    between two flagged declarations specificity decides -- so this rule must be
    flagged AND reach (0,5,0), or the disabled CTA renders Vuetify's translucent
    grey instead of the raised surface. */
-.v-application .theme--dark.v-btn.geroButton.v-btn--disabled,
-.v-application .theme--dark.v-btn.geroButton:disabled {
+:is(.v-application, .v-overlay-container) .v-btn.geroButton.v-btn--disabled,
+:is(.v-application, .v-overlay-container) .v-btn.geroButton:disabled {
   background: var(--g-raised) !important;
   color: var(--g-text-3) !important;
 }
 
-/* ---- Tooltip ----
-   Vuetify ships `.v-tooltip__content` at `opacity: .9` over a translucent grey,
-   so the page beneath shows THROUGH the tooltip's own text and the two sets of
-   glyphs interleave. On a dark canvas that is not "slightly transparent", it is
-   unreadable. Given an opaque surface, a hairline and the primary text tone
-   instead.
-
-   `.menuable__content__active` is (0,2,0) and re-asserts the opacity while the
-   tooltip is shown, so the override has to carry both that class and the `html`
-   prefix to reach (0,2,1) and win on specificity rather than by forcing it.
-
-   The descendant rule is the other half of the bug: tooltip bodies are written
-   with `.t-caption`, whose colour is `--g-text-3` — a dim grey chosen to recede
-   against the CANVAS, not to be read on a raised overlay. */
-html .v-tooltip__content,
-html .v-tooltip__content.menuable__content__active {
+/* ---- Tooltip: an opaque surface keeps the page from showing through the text.
+   Vuetify 4 renders the content inside its tooltip overlay. Caption/body text
+   uses the primary tone here so it remains readable on the raised surface. */
+html .v-tooltip > .v-overlay__content {
   background: var(--g-overlay);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
@@ -113,8 +95,8 @@ html .v-tooltip__content.menuable__content__active {
   opacity: 1;
   padding: var(--g-s-2) var(--g-s-3);
 }
-html .v-tooltip__content .t-caption,
-html .v-tooltip__content .t-body-sm {
+html .v-tooltip > .v-overlay__content .t-caption,
+html .v-tooltip > .v-overlay__content .t-body-sm {
   color: var(--g-text-1);
 }
 
@@ -161,21 +143,21 @@ html .v-tooltip__content .t-body-sm {
 }
 .g-mono b, .g-mono .emph { color: var(--g-text-1); font-weight: 500; }
 
-/* ---- Focus: visible ring, never removed ---- */
-:where(a, button, [role='button'], .v-btn, input, select, textarea, [tabindex]):focus-visible {
+/* Native fields paint focus on their own boundary. A second ring around the
+   inner editor cuts through icons, padding and the field's rounded corners. */
+:where(a, button, [role='button'], .v-btn, input, select, textarea, [tabindex]):not(:where(.v-field input, .v-field select, .v-field textarea, .v-otp-input__input)):focus-visible {
   outline: 2px solid var(--g-accent);
   outline-offset: 2px;
 }
 
 /* ---- The house dialog transition: fade + a 2% scale, once.
-   v-dialog renders a plain <transition name="...">, so these are Vue 2's
-   enter/leave class names. ---- */
+   Vuetify passes this transition name to Vue 3's Transition. ---- */
 .g-dialog-transition-enter-active,
 .g-dialog-transition-leave-active {
   transition: opacity var(--g-dur-base) var(--g-ease),
               transform var(--g-dur-base) var(--g-ease);
 }
-.g-dialog-transition-enter,
+.g-dialog-transition-enter-from,
 .g-dialog-transition-leave-to {
   opacity: 0;
   transform: scale(0.98);

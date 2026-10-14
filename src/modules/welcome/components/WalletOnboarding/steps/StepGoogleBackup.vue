@@ -13,16 +13,16 @@
         <v-alert
           color="error"
           icon="mdi-alert-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mb-3"
           style="width: 100%;"
         >
           <span class="text-body-2">{{ errorMessage }}</span>
         </v-alert>
-        <v-btn class="onb-btn" depressed color="primary" :loading="storing" @click="storeRecovery()">
-          <v-icon left small>mdi-refresh</v-icon>
+        <v-btn class="onb-btn" variant="flat" color="primary" :loading="storing" @click="storeRecovery()">
+          <v-icon start size="small">mdi-refresh</v-icon>
           {{ $t('common.retry') }}
         </v-btn>
       </template>

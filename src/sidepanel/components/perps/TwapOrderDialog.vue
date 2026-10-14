@@ -1,12 +1,12 @@
 <template>
   <v-dialog
-    :value="value"
+    :model-value="modelValue"
     persistent
     max-width="420"
-    dark
-    overlay-color="#000"
-    overlay-opacity="0.6"
-    @input="onDialogInput"
+    theme="dark"
+    scrim="var(--g-canvas)"
+    :opacity="0.6"
+    @update:model-value="onDialogInput"
   >
     <div class="twap-dialog">
       <!-- Header -->
@@ -34,9 +34,9 @@
       <v-text-field
         v-model="symbolModel"
         :label="$t('perps.algo.symbol')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="td-input mb-2"
       />
@@ -45,9 +45,9 @@
       <v-text-field
         v-model="totalSize"
         :label="$t('perps.algo.totalSize')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="td-input mb-2"
         type="number"
@@ -59,9 +59,9 @@
         <v-text-field
           v-model.number="durationMinutes"
           :label="$t('perps.algo.durationMin')"
-          outlined
-          dense
-          dark
+          variant="outlined"
+          density="compact"
+          theme="dark"
           hide-details
           class="td-input"
           type="number"
@@ -71,9 +71,9 @@
         <v-text-field
           v-model.number="intervalSeconds"
           :label="$t('perps.algo.intervalSec')"
-          outlined
-          dense
-          dark
+          variant="outlined"
+          density="compact"
+          theme="dark"
           hide-details
           class="td-input"
           type="number"
@@ -85,9 +85,9 @@
       <v-text-field
         v-model="limitPrice"
         :label="$t('perps.algo.limitPrice')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="td-input mb-2"
         type="number"
@@ -143,15 +143,15 @@ import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading'
 import type { CreateTwapRequest, TwapSide } from '@/api/strike-v2.types';
 
 const props = withDefaults(defineProps<{
-  value: boolean;
+  modelValue: boolean;
   symbol?: string;
 }>(), {
-  value: false,
+  modelValue: false,
   symbol: '',
 });
 
 const emit = defineEmits<{
-  (e: 'input', val: boolean): void;
+  (e: 'update:modelValue', val: boolean): void;
   (e: 'created', strategyId: string): void;
 }>();
 
@@ -173,7 +173,7 @@ watch(() => props.symbol, (next) => {
   if (next) symbolModel.value = next;
 });
 
-watch(() => props.value, (open) => {
+watch(() => props.modelValue, (open) => {
   if (open) {
     errorMessage.value = null;
     submitting.value = false;
@@ -198,11 +198,11 @@ const canSubmit = computed<boolean>(() => {
 });
 
 function close(): void {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function onDialogInput(val: boolean): void {
-  emit('input', val);
+  emit('update:modelValue', val);
 }
 
 function validate(): string | null {
@@ -323,7 +323,10 @@ async function submit(): Promise<void> {
   color: var(--g-error) !important;
 }
 
-.td-input :deep(.v-input__slot) {
+.td-input :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-input-padding-top: calc((var(--v-input-control-height) - 1.5rem) / 2);
+  --v-field-padding-bottom: var(--v-input-padding-top);
   background: rgba(255, 255, 255, 0.03) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 36px !important;

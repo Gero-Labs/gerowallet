@@ -88,17 +88,17 @@
 
           <div class="receive-actions">
             <GButton tier="primary" :disabled="!target.value" @click="copyTarget()">
-              <v-icon small left>{{ copied ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+              <v-icon size="small" start>{{ copied ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
               {{ copied ? t('common.copied') : copyLabel }}
             </GButton>
             <GButton tier="secondary" :disabled="!qrData" @click="saveQr()">
-              <v-icon small left>mdi-tray-arrow-down</v-icon>
+              <v-icon size="small" start>mdi-tray-arrow-down</v-icon>
               {{ t('receive.saveQr') }}
             </GButton>
           </div>
 
           <p v-if="target.hint" class="receive-hint">
-            <v-icon small color="var(--g-info)" class="receive-hint__icon">mdi-information-outline</v-icon>
+            <v-icon size="small" color="var(--g-info)" class="receive-hint__icon">mdi-information-outline</v-icon>
             <span>{{ target.hint }}</span>
           </p>
         </div>
@@ -113,10 +113,10 @@
           :aria-expanded="detailsOpen ? 'true' : 'false'"
           @click="detailsOpen = !detailsOpen"
         >
-          <v-icon small color="var(--g-text-2)">mdi-file-tree-outline</v-icon>
+          <v-icon size="small" color="var(--g-text-2)">mdi-file-tree-outline</v-icon>
           <span class="receive-card__title receive-card__title--quiet">{{ t('receive.derivationDetails') }}</span>
           <span class="receive-card__meta">{{ target.path }}</span>
-          <v-icon small class="receive-chevron" :class="{ 'receive-chevron--open': detailsOpen }">mdi-chevron-down</v-icon>
+          <v-icon size="small" class="receive-chevron" :class="{ 'receive-chevron--open': detailsOpen }">mdi-chevron-down</v-icon>
         </button>
         <v-expand-transition>
           <div v-show="detailsOpen" id="receive-details" class="receive-details">
@@ -140,11 +140,11 @@
                   :disabled="bitcoinAddressIndex === 0"
                   @click="previousBitcoinAddress()"
                 >
-                  <v-icon small>mdi-chevron-left</v-icon>
+                  <v-icon size="small">mdi-chevron-left</v-icon>
                 </GButton>
                 <span class="receive-mono g-num">{{ bitcoinAddressIndex }}</span>
                 <GButton compact :aria-label="t('common.next')" @click="nextBitcoinAddress()">
-                  <v-icon small>mdi-chevron-right</v-icon>
+                  <v-icon size="small">mdi-chevron-right</v-icon>
                 </GButton>
               </div>
             </div>
@@ -161,11 +161,11 @@
           :aria-expanded="requestOpen ? 'true' : 'false'"
           @click="requestOpen = !requestOpen"
         >
-          <v-icon small color="var(--g-text-2)">mdi-tag-outline</v-icon>
+          <v-icon size="small" color="var(--g-text-2)">mdi-tag-outline</v-icon>
           <span class="receive-card__title receive-card__title--quiet">
             {{ t('receive.specifyAmount') }} ({{ t('common.optional') }})
           </span>
-          <v-icon small class="receive-chevron" :class="{ 'receive-chevron--open': requestOpen }">mdi-chevron-down</v-icon>
+          <v-icon size="small" class="receive-chevron" :class="{ 'receive-chevron--open': requestOpen }">mdi-chevron-down</v-icon>
         </button>
         <v-expand-transition>
           <div v-show="requestOpen" id="receive-request" class="receive-request">
@@ -174,19 +174,19 @@
               :label="t('receive.amount') + ' (BTC)'"
               type="number"
               step="0.00000001"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               hide-details
             >
-              <template v-slot:append>
+              <template v-slot:append-inner>
                 <span class="t-caption">BTC</span>
               </template>
             </v-text-field>
             <v-text-field
               v-model="bitcoinLabel"
               :label="t('receive.label')"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               counter="50"
               maxlength="50"
             ></v-text-field>
@@ -206,7 +206,7 @@
             @click="usedOpen = !usedOpen"
           >
             <span class="receive-card__icon">
-              <v-icon small color="var(--g-accent)">mdi-wallet-outline</v-icon>
+              <v-icon size="small" color="var(--g-accent)">mdi-wallet-outline</v-icon>
             </span>
             <span class="receive-card__title">{{ t('wallet.usedAddresses') }}</span>
             <span class="receive-count g-num">{{ usedAddresses.length }}</span>
@@ -218,7 +218,7 @@
             class="receive-switch mt-0 pt-0"
             color="var(--g-accent)"
             inset
-            dense
+            density="compact"
             hide-details
           />
           <button
@@ -229,7 +229,7 @@
             :aria-expanded="usedOpen ? 'true' : 'false'"
             @click="usedOpen = !usedOpen"
           >
-            <v-icon small class="receive-chevron" :class="{ 'receive-chevron--open': usedOpen }">mdi-chevron-down</v-icon>
+            <v-icon size="small" class="receive-chevron" :class="{ 'receive-chevron--open': usedOpen }">mdi-chevron-down</v-icon>
           </button>
         </div>
         <v-expand-transition>

@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :is-open="value"
+    :is-open="modelValue"
     :title="isPrfWallet ? t('security.lockSettingsOnly') : t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
@@ -12,66 +12,66 @@
       <!-- Unlock Method Section -->
       <v-card class="transparent" flat>
         <v-card-title class="justify-center pt-0">
-          <v-icon color="primary" class="mr-1" small>mdi-lock-outline</v-icon>
+          <v-icon color="primary" class="mr-1" size="small">mdi-lock-outline</v-icon>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.unlockMethod') }}</span>
         </v-card-title>
         <v-card-subtitle class="text-center">
           {{ $t('security.selectHowToUnlock') }}
         </v-card-subtitle>
         <v-card-text class="pa-0">
-          <v-list v-if="isMpcWallet" dense class="pa-0 transparent" nav>
+          <v-list v-if="isMpcWallet" density="compact" class="pa-0 transparent" nav>
             <!-- None -->
-            <v-list-item two-line @click="handleUnlockMethodSelect(null)" class="mb-0">
-              <v-list-item-avatar class="my-0"><v-icon>mdi-lock-off-outline</v-icon></v-list-item-avatar>
-              <v-list-item-content>
+            <v-list-item lines="two" @click="handleUnlockMethodSelect(null)" class="mb-0">
+              <v-avatar class="my-0"><v-icon>mdi-lock-off-outline</v-icon></v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.none') }}</v-list-item-title>
                 <v-list-item-subtitle>{{ $t('security.mpcLockNoneDesc') }}</v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-icon v-if="selectedUnlockMethod === null" style="align-self: center;">
+              </div>
+              <div class="g-list-icon" v-if="selectedUnlockMethod === null" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
-              </v-list-item-icon>
+              </div>
             </v-list-item>
 
             <v-divider class="mx-1" />
 
             <!-- Device secret: passkey OR spending password, per how the wallet was created -->
-            <v-list-item two-line @click="handleMpcLockSelect()" class="mb-0">
-              <v-list-item-avatar class="my-0">
+            <v-list-item lines="two" @click="handleMpcLockSelect()" class="mb-0">
+              <v-avatar class="my-0">
                 <v-icon>{{ isMpcPasskeyWallet ? 'mdi-fingerprint' : 'mdi-form-textbox-password' }}</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ isMpcPasskeyWallet ? $t('security.passkey') : $t('security.spendingPassword') }}</v-list-item-title>
                 <v-list-item-subtitle>{{ isMpcPasskeyWallet ? $t('security.mpcLockPasskeyDesc') : $t('security.mpcLockPasswordDesc') }}</v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-icon v-if="selectedUnlockMethod !== null" style="align-self: center;">
+              </div>
+              <div class="g-list-icon" v-if="selectedUnlockMethod !== null" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
-              </v-list-item-icon>
+              </div>
             </v-list-item>
           </v-list>
 
-          <v-list v-else dense class="pa-0 transparent" nav>
+          <v-list v-else density="compact" class="pa-0 transparent" nav>
             <!-- None -->
-            <v-list-item two-line @click="handleUnlockMethodSelect(null)" class="mb-0">
-              <v-list-item-avatar class="my-0">
+            <v-list-item lines="two" @click="handleUnlockMethodSelect(null)" class="mb-0">
+              <v-avatar class="my-0">
                 <v-icon>mdi-lock-off-outline</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.none') }}</v-list-item-title>
                 <v-list-item-subtitle>{{ $t('security.noUnlockMethodRequired') }}</v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-icon v-if="selectedUnlockMethod === null" style="align-self: center;">
+              </div>
+              <div class="g-list-icon" v-if="selectedUnlockMethod === null" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
-              </v-list-item-icon>
+              </div>
             </v-list-item>
 
             <v-divider class="mx-1" />
 
             <!-- Password Unlock -->
-            <v-list-item two-line @click="handleUnlockMethodSelect('password')" class="mb-0">
-              <v-list-item-avatar class="my-0">
+            <v-list-item lines="two" @click="handleUnlockMethodSelect('password')" class="mb-0">
+              <v-avatar class="my-0">
                 <v-icon>mdi-form-textbox-password</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <!-- PRF wallets: Separate password for UI locking only -->
                 <template v-if="isPrfWallet">
                   <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
@@ -82,42 +82,42 @@
                   <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
                   <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
                 </template>
-              </v-list-item-content>
-              <v-list-item-icon v-if="selectedUnlockMethod === 'password'" style="align-self: center;">
+              </div>
+              <div class="g-list-icon" v-if="selectedUnlockMethod === 'password'" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
-              </v-list-item-icon>
+              </div>
             </v-list-item>
 
             <v-divider class="mx-1" />
 
             <!-- PIN Code -->
-            <v-list-item two-line @click="handleUnlockMethodSelect('pin')" class="mb-0">
-              <v-list-item-avatar class="my-0">
+            <v-list-item lines="two" @click="handleUnlockMethodSelect('pin')" class="mb-0">
+              <v-avatar class="my-0">
                 <v-icon>mdi-numeric</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.pin') }}</v-list-item-title>
                 <v-list-item-subtitle>{{ $t('security.4To6DigitCode') }}</v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-icon v-if="selectedUnlockMethod === 'pin'" style="align-self: center;">
+              </div>
+              <div class="g-list-icon" v-if="selectedUnlockMethod === 'pin'" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
-              </v-list-item-icon>
+              </div>
             </v-list-item>
 
             <v-divider class="mx-1" />
 
             <!-- Pattern -->
-            <v-list-item two-line @click="handleUnlockMethodSelect('pattern')" class="mb-0">
-              <v-list-item-avatar class="my-0">
+            <v-list-item lines="two" @click="handleUnlockMethodSelect('pattern')" class="mb-0">
+              <v-avatar class="my-0">
                 <v-icon>mdi-lock-pattern</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.pattern') }}</v-list-item-title>
                 <v-list-item-subtitle>{{ $t('security.drawPatternToUnlock') }}</v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-icon v-if="selectedUnlockMethod === 'pattern'" style="align-self: center;">
+              </div>
+              <div class="g-list-icon" v-if="selectedUnlockMethod === 'pattern'" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
-              </v-list-item-icon>
+              </div>
             </v-list-item>
           </v-list>
         </v-card-text>
@@ -128,7 +128,7 @@
       <!-- Auto-Lock Timer Section -->
       <v-card class="transparent" flat :disabled="selectedUnlockMethod === null">
         <v-card-title class="justify-center pt-0">
-          <v-icon color="primary" class="mr-1" small>mdi-timer-lock-outline</v-icon>
+          <v-icon color="primary" class="mr-1" size="small">mdi-timer-lock-outline</v-icon>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.autoLockTimer') }}</span>
         </v-card-title>
         <v-card-subtitle class="text-center">
@@ -140,26 +140,26 @@
             :items="autoLockOptions"
             :label="$t('security.autoLockTimer')"
             item-value="value"
-            item-text="text"
-            outlined
-            dense
+            item-title="text"
+            variant="outlined"
+            density="compact"
             attach
             hide-details
-            :menu-props="{ top: true, offsetY: true }"
-            @change="handleAutoLockSelect"
+            :menu-props="{ location: 'top' }"
+            @update:model-value="handleAutoLockSelect"
           >
             <template v-slot:selection="{ item }">
-              <v-icon left small>{{ item.icon }}</v-icon>
+              <v-icon start size="small">{{ item.icon }}</v-icon>
               {{ item.text }}
             </template>
-            <template v-slot:item="{ item }">
-              <v-list-item-content>
+            <template v-slot:item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
+              <div class="g-list-content">
                 <v-list-item-title>
-                  <v-icon left small>{{ item.icon }}</v-icon>
+                  <v-icon start size="small">{{ item.icon }}</v-icon>
                   {{ item.text }}
                 </v-list-item-title>
-              </v-list-item-content>
-            </template>
+              </div>
+            </template></v-list-item></template>
           </v-select>
         </v-card-text>
       </v-card>
@@ -172,16 +172,16 @@
       <v-card class="transparent" flat v-if="showPassKeySection">
         <v-card-title class="justify-center pt-0">
           <v-avatar size="18" class="mr-1">
-            <v-img :src="assets.passKeySvg" contain style="filter: brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%);"></v-img>
+            <v-img :src="assets.passKeySvg"  style="filter: brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%);"></v-img>
           </v-avatar>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.passKeySettings') }}</span>
-          <v-tooltip bottom content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
+          <v-tooltip location="bottom"  content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
               <v-icon
                 class="ml-1"
-                x-small
-                v-bind="attrs"
-                v-on="on"
+                size="x-small"
+                v-bind="activatorProps"
+
               >
                 mdi-information-outline
               </v-icon>
@@ -197,16 +197,16 @@
           <v-alert
             v-if="!isPassKeySupported"
             type="warning"
-            dense
+            density="compact"
             class="mb-4"
           >
             {{ $t('security.passKeyNotSupported') }}
           </v-alert>
 
           <!-- PassKey Registration Status -->
-          <v-list dense class="pa-0 transparent" nav>
+          <v-list density="compact" class="pa-0 transparent" nav>
             <v-list-item>
-              <v-list-item-content>
+              <div class="g-list-content">
                 <v-list-item-title>
                   {{ isPassKeyRegistered ? $t('security.passKeyRegistered') : $t('security.passKeyNotRegistered') }}
                 </v-list-item-title>
@@ -220,11 +220,11 @@
                     {{ isPassKeyRegistered ? $t('security.passKeyRegisteredDescription') : $t('security.passKeyNotRegisteredDescription') }}
                   </template>
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action v-if="!isPrfWallet && !isMpcPasskeyWallet">
+              </div>
+              <div class="g-list-action" v-if="!isPrfWallet && !isMpcPasskeyWallet">
                 <v-btn
-                  small
-                  text
+                  size="small"
+                  variant="text"
                   :color="isPassKeyRegistered ? 'error' : 'primary'"
                   :loading="loadingPassKeyRegistration"
                   :disabled="!isPassKeySupported"
@@ -232,35 +232,35 @@
                 >
                   {{ isPassKeyRegistered ? $t('security.deregister') : $t('security.register') }}
                 </v-btn>
-              </v-list-item-action>
+              </div>
               <!-- Core-encryption passkeys (PRF or passkey-MPC): show lock icon instead of button -->
-              <v-list-item-action v-else-if="(isPrfWallet || isMpcPasskeyWallet) && isPassKeyRegistered">
-                <v-tooltip bottom content-class="custom-tooltip">
-                  <template v-slot:activator="{ on, attrs }">
+              <div class="g-list-action" v-else-if="(isPrfWallet || isMpcPasskeyWallet) && isPassKeyRegistered">
+                <v-tooltip location="bottom"  content-class="custom-tooltip">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-icon
                       color="primary"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="activatorProps"
+
                     >
                       mdi-lock
                     </v-icon>
                   </template>
                   <span>{{ isMpcPasskeyWallet ? $t('security.passKeyRequiredForMpcWallet') : $t('security.passKeyRequiredForPrfWallet') }}</span>
                 </v-tooltip>
-              </v-list-item-action>
+              </div>
             </v-list-item>
           </v-list>
 
           <!-- Divider before password autofill section (Normal non-PRF wallets only) -->
           <v-divider class="my-3 mx-1" v-if="isNormalWallet && !isPrfWallet" />
 
-          <v-list dense class="pa-0 transparent" nav>
+          <v-list density="compact" class="pa-0 transparent" nav>
             <!-- Use PassKey for Password Autofill (Normal non-PRF wallets only) -->
             <v-list-item v-if="isNormalWallet && !isPrfWallet" :disabled="isPassKeyAutofillDisabled">
-              <v-list-item-avatar class="my-0">
+              <v-avatar class="my-0">
                 <v-icon :disabled="isPassKeyAutofillDisabled">mdi-form-textbox-password</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.usePassKeyForPasswordAutofill') }}</v-list-item-title>
                 <v-list-item-subtitle v-if="!selectedUnlockMethod">
                   {{ $t('security.passKeyRequiresUnlockMethod') }}
@@ -268,29 +268,29 @@
                 <v-list-item-subtitle v-else>
                   {{ $t('security.usePassKeyForPasswordAutofillDescription') }}
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action>
+              </div>
+              <div class="g-list-action">
                 <v-switch
                   inset
-                  dense
+                  density="compact"
                   v-model="passKeyForPasswordAutofill"
                   color="primary"
                   :disabled="isPassKeyAutofillDisabled"
-                  @change="handlePassKeyAutofillChange"
+                  @update:model-value="handlePassKeyAutofillChange"
                 ></v-switch>
-              </v-list-item-action>
+              </div>
             </v-list-item>
 
             <!-- Auto-Trigger PassKey Authentication (Normal non-PRF wallets only) -->
             <v-list-item v-if="isNormalWallet && !isPrfWallet" :disabled="!passKeyForPasswordAutofill">
-              <v-list-item-avatar class="my-0">
-                <v-img :src="assets.autoTriggerSvg" contain :style="{
+              <v-avatar class="my-0">
+                <v-img :src="assets.autoTriggerSvg"  :style="{
                   width: '24px',
                   height: '24px',
                   opacity: !passKeyForPasswordAutofill ? '0.5' : 1,
                 }" />
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.autoTriggerPassKeyPasswordAutofill') }}</v-list-item-title>
                 <v-list-item-subtitle v-if="!passKeyForPasswordAutofill">
                   {{ $t('security.autoTriggerRequiresAutofill') }}
@@ -298,17 +298,17 @@
                 <v-list-item-subtitle v-else>
                   {{ $t('security.autoTriggerPassKeyPasswordAutofillDescription') }}
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action>
+              </div>
+              <div class="g-list-action">
                 <v-switch
                   inset
-                  dense
+                  density="compact"
                   v-model="passKeyAutoTrigger"
                   color="primary"
                   :disabled="!isPassKeySupported || !passKeyForPasswordAutofill"
-                  @change="handlePassKeyAutoTriggerChange"
+                  @update:model-value="handlePassKeyAutoTriggerChange"
                 ></v-switch>
-              </v-list-item-action>
+              </div>
             </v-list-item>
 
             <!-- Divider after password autofill section (Normal non-PRF wallets only) -->
@@ -316,10 +316,10 @@
 
             <!-- Use PassKey for Unlocking (not MPC — its passkey is core encryption, always on) -->
             <v-list-item v-if="!isMpcWallet" :disabled="isPassKeyUnlockDisabled">
-              <v-list-item-avatar class="my-0">
+              <v-avatar class="my-0">
                 <v-icon :disabled="isPassKeyUnlockDisabled">mdi-lock-open-outline</v-icon>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.usePassKeyForUnlock') }}</v-list-item-title>
                 <v-list-item-subtitle v-if="!selectedUnlockMethod">
                   {{ $t('security.passKeyRequiresUnlockMethod') }}
@@ -327,29 +327,29 @@
                 <v-list-item-subtitle v-else>
                   {{ $t('security.usePassKeyForUnlockDescription') }}
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action>
+              </div>
+              <div class="g-list-action">
                 <v-switch
                   inset
-                  dense
+                  density="compact"
                   v-model="passKeyForUnlock"
                   color="primary"
-                  @change="handlePassKeyUnlockChange"
+                  @update:model-value="handlePassKeyUnlockChange"
                   :disabled="isPassKeyUnlockDisabled"
                 ></v-switch>
-              </v-list-item-action>
+              </div>
             </v-list-item>
 
             <!-- Auto-Trigger PassKey Authentication for Unlock (not MPC) -->
             <v-list-item v-if="!isMpcWallet" :disabled="!passKeyForUnlock">
-              <v-list-item-avatar class="my-0">
-                <v-img :src="assets.autoTriggerSvg" contain :style="{
+              <v-avatar class="my-0">
+                <v-img :src="assets.autoTriggerSvg"  :style="{
                   width: '24px',
                   height: '24px',
                   opacity: !passKeyForUnlock ? '0.5' : 1,
                 }" />
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ $t('security.autoTriggerPassKeyUnlock') }}</v-list-item-title>
                 <v-list-item-subtitle v-if="!passKeyForUnlock">
                   {{ $t('security.autoTriggerRequiresPassKeyUnlock') }}
@@ -357,17 +357,17 @@
                 <v-list-item-subtitle v-else>
                   {{ $t('security.autoTriggerPassKeyUnlockDescription') }}
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action>
+              </div>
+              <div class="g-list-action">
                 <v-switch
                   inset
-                  dense
+                  density="compact"
                   v-model="passKeyAutoTriggerUnlock"
                   color="primary"
                   :disabled="!isPassKeySupported || !passKeyForUnlock"
-                  @change="handlePassKeyAutoTriggerUnlockChange"
+                  @update:model-value="handlePassKeyAutoTriggerUnlockChange"
                 ></v-switch>
-              </v-list-item-action>
+              </div>
             </v-list-item>
           </v-list>
         </v-card-text>
@@ -381,22 +381,22 @@
           {{ $t('security.enterSpendingPassword') }}
         </v-card-title>
         <v-card-text class="pt-8">
-          <v-tooltip
+          <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
             v-model="passwordErrorTooltipEnabled"
-            top
+
             :color="passwordErrorTooltipColor"
           >
-            <template v-slot:activator="{ }">
-              <v-text-field
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-text-field v-bind="activatorProps"
                 v-model="passwordInput"
                 :label="$t('wallet.spendingPassword')"
                 :type="showPasswordInDialog ? 'text' : 'password'"
-                :append-icon="showPasswordInDialog ? 'mdi-eye-off' : 'mdi-eye'"
-                @click:append="showPasswordInDialog = !showPasswordInDialog"
+                :append-inner-icon="showPasswordInDialog ? 'mdi-eye-off' : 'mdi-eye'"
+                @click:append-inner="showPasswordInDialog = !showPasswordInDialog"
                 @keyup.enter="confirmPassword"
                 autofocus
-                outlined
-                dense
+                variant="outlined"
+                density="compact"
                 hide-details
               ></v-text-field>
             </template>
@@ -405,10 +405,10 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="cancelPassword">
+          <v-btn variant="text" @click="cancelPassword">
             {{ $t('common.cancel') }}
           </v-btn>
-          <v-btn color="primary" text @click="confirmPassword" :disabled="!passwordInput">
+          <v-btn color="primary" variant="text" @click="confirmPassword" :disabled="!passwordInput">
             {{ $t('common.confirm') }}
           </v-btn>
         </v-card-actions>
@@ -435,7 +435,7 @@ const { t } = useTranslation();
 
 // Props
 interface Props {
-  value: boolean;
+  modelValue: boolean;
   reloadTrigger?: number;
 }
 
@@ -445,7 +445,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'setup-unlock-method', method: UnlockMethod): void;
   (e: 'updated'): void;
 }>();
@@ -536,7 +536,7 @@ const autoLockOptions = computed(() => {
 });
 
 // Watchers
-watch(() => props.value, (newVal) => {
+watch(() => props.modelValue, (newVal) => {
   if (newVal) {
     // Mark feature as seen when dialog opens
     markFeatureAsSeen('settings.security.lockSettings');
@@ -548,7 +548,7 @@ watch(() => props.value, (newVal) => {
 
 watch(() => props.reloadTrigger, () => {
   // Reload settings when trigger changes
-  if (props.value) {
+  if (props.modelValue) {
     loadCurrentSettings();
   }
 });
@@ -1178,7 +1178,7 @@ function resetForm() {
 }
 
 function handleClose() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 </script>
 <style scoped>

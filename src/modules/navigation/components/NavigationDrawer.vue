@@ -1,17 +1,17 @@
 <template>
   <v-navigation-drawer
     v-model="drawer"
-    :temporary="breakpoint.mobile"
+    :temporary="mobile"
     width="270"
     height="100vh"
     style="min-width: 270px; min-height: 100%"
     class="px-3 liquid-glass-nav-drawer"
-    :absolute="breakpoint.mobile"
+    :absolute="mobile"
   >
     <!-- Prepend slot -->
     <template #prepend>
       <v-list-item class="text-center">
-        <v-list-item-content class="pb-2" style="padding-top: 22px;">
+        <div class="pb-2 g-list-content" style="padding-top: 22px;">
           <v-list-item-title>
             <img
               :src="navLogo"
@@ -20,21 +20,21 @@
             />
           </v-list-item-title>
           <v-list-item-subtitle>
-            <v-btn color="warning" text plain @click="changeLogRef.setEnabled(true)">
+            <v-btn color="warning" variant="text" plain @click="changeLogRef.setEnabled(true)">
               {{ `v${version}` }}<span class="ml-1" v-if="isBeta">(Beta)</span>
-              <v-icon small class="ml-1">mdi-lightning-bolt</v-icon>
+              <v-icon size="small" class="ml-1">mdi-lightning-bolt</v-icon>
             </v-btn>
           </v-list-item-subtitle>
-        </v-list-item-content>
+        </div>
       </v-list-item>
     </template>
 
     <!-- Navigation items -->
-    <v-list nav dense>
-      <template v-for="(item, index) in items" >
-        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px; margin-top: 6px; margin-bottom: 10px;" :key="index">
+    <v-list nav density="compact">
+      <template :key="index" v-for="(item, index) in items" >
+        <v-list-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px; margin-top: 6px; margin-bottom: 10px;" >
           {{ item.header }}
-        </v-subheader>
+        </v-list-subheader>
 
         <v-list-item
           v-else-if="item.link"
@@ -45,48 +45,50 @@
           link
           :class="['menuItem', { 'nexus-item': item.special }]"
           style="height: 34px"
-          :key="index"
-          @mouseenter.native="prefetchItem(item)"
-          @focusin.native="prefetchItem(item)"
-          @pointerdown.native="prefetchItem(item)"
-        >
-          <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
-            <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
-              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-accent)">{{ item.icon }}</v-icon>
-              <!-- Non-special SVG marks tint to the chain accent via a mask (a
-                   color filter can't resolve an arbitrary themeable hex). -->
-              <span
-                v-else-if="!item.special"
-                class="nav-svg-icon"
-                role="img"
-                :aria-label="item.title"
-                :style="{ maskImage: `url(${item.icon})`, WebkitMaskImage: `url(${item.icon})` }"
-              />
-              <v-img
-                v-else
-                width="18"
-                height="18"
-                :src="item.icon"
-                :alt="item.title"
-                contain
-              />
-            </v-badge>
-          </v-list-item-avatar>
 
-          <v-list-item-content>
+          @mouseenter="prefetchItem(item)"
+          @focusin="prefetchItem(item)"
+          @pointerdown="prefetchItem(item)"
+        >
+          <template #prepend>
+            <v-avatar rounded="0" size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
+              <v-badge :model-value="!!item.notificationDot" dot color="error" overlap bordered>
+                <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-accent)">{{ item.icon }}</v-icon>
+                <!-- Non-special SVG marks tint to the chain accent via a mask (a
+                     color filter can't resolve an arbitrary themeable hex). -->
+                <span
+                  v-else-if="!item.special"
+                  class="nav-svg-icon"
+                  role="img"
+                  :aria-label="item.title"
+                  :style="{ maskImage: cssUrl(item.icon), WebkitMaskImage: cssUrl(item.icon) }"
+                />
+                <v-img
+                  v-else
+                  width="18"
+                  height="18"
+                  :src="item.icon"
+                  :alt="item.title"
+
+                />
+              </v-badge>
+            </v-avatar>
+          </template>
+
+          <div class="g-list-content">
             <v-list-item-title style="font-weight: 500">
               {{ item.title }}
             </v-list-item-title>
-          </v-list-item-content>
-          <!-- Mini Player Button for Media Player item -->
-          <v-list-item-action v-if="item.title === 'Media Player' && musicPlaylist?.length > 0">
-            <v-tooltip right>
-              <template v-slot:activator="{ on, attrs }">
+          </div>
+          <template #append v-if="(item.title === 'Media Player' && musicPlaylist?.length > 0) || item.loading || item.underMaintenance || item.new">
+            <!-- Mini Player Button for Media Player item -->
+            <v-tooltip v-if="item.title === 'Media Player' && musicPlaylist?.length > 0" location="end" >
+              <template v-slot:activator="{ props: activatorProps }">
                 <v-btn
-                  icon
-                  x-small
-                  v-bind="attrs"
-                  v-on="on"
+                  icon variant="text"
+                  size="x-small"
+                  v-bind="activatorProps"
+
                   @click.stop.prevent="toggleMiniPlayer"
                   :color="context.shown ? 'primary' : ''"
                 >
@@ -95,60 +97,57 @@
               </template>
               <span>{{ $t('navigation.miniPlayer') }}</span>
             </v-tooltip>
-          </v-list-item-action>
-          <v-list-item-action v-else-if="item.loading">
-            <v-progress-circular size="16" width="2" indeterminate></v-progress-circular>
-          </v-list-item-action>
-          <v-list-item-action v-else-if="item.underMaintenance" class="ma-0">
+            <v-progress-circular v-else-if="item.loading" size="16" width="2" indeterminate></v-progress-circular>
             <v-chip
-              outlined
+              v-else-if="item.underMaintenance"
+              variant="outlined"
               class="px-1"
-              x-small
+              size="x-small"
               color="warning"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="warning" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
-          </v-list-item-action>
-          <v-list-item-action v-else-if="item.new">
+            ><v-icon color="warning" size="x-small" class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
             <v-chip
-              v-if="item.new"
+              v-else-if="item.new"
               class="my-2 px-2"
               color="primary"
-              x-small
+              size="x-small"
             >
               {{ $t('common.new') }}
             </v-chip>
-          </v-list-item-action>
+          </template>
         </v-list-item>
 
         <v-list-item
           v-else-if="item.href"
           :disabled="item.soon"
-          :key="index"
+
           :active-class="themeDark ? 'activePageDark' : 'activePage'"
           link
           @click="openExternalLink(item.href)"
         >
-          <v-list-item-avatar>
-            <v-img :src="item.icon" :alt="item.title"></v-img>
-          </v-list-item-avatar>
+          <template #prepend>
+            <v-avatar>
+              <v-img :src="item.icon" :alt="item.title"></v-img>
+            </v-avatar>
+          </template>
 
-          <v-list-item-content>
+          <div class="g-list-content">
             <v-list-item-title style="font-weight: 500">
               {{ item.title }}
               <v-chip
                 v-if="item.soon"
                 class="ma-2"
                 color="primary"
-                x-small
-                outlined>
+                size="x-small"
+                variant="outlined">
                 {{ $t('common.comingSoon') }}
               </v-chip>
             </v-list-item-title>
-          </v-list-item-content>
+          </div>
 
-          <v-list-item-action>
-            <v-icon small>mdi-open-in-new</v-icon>
-          </v-list-item-action>
+          <template #append>
+            <v-icon size="small">mdi-open-in-new</v-icon>
+          </template>
         </v-list-item>
       </template>
     </v-list>
@@ -156,18 +155,20 @@
     <!-- Append slot -->
     <template #append>
       <v-divider></v-divider>
-      <v-list-item three-line class="px-0">
-        <v-list-item-avatar style="margin: auto" class="mr-3" size="40">
-          <v-img v-if="account" :src="avatar" />
-        </v-list-item-avatar>
+      <v-list-item lines="three" class="px-0" prepend-gap="12">
+        <template #prepend>
+          <v-avatar size="40">
+            <v-img v-if="account" :src="avatar" />
+          </v-avatar>
+        </template>
 
-        <v-list-item-content class="py-0" style="align-self: initial">
+        <div class="py-0 g-list-content" style="align-self: initial">
           <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account && !editingName">
             <span
               class="editable-name"
               @click="startEditingName"
               :title="t('settings.editWalletName')"
-            >{{ account.name }}<v-icon x-small class="ml-1 edit-icon">mdi-pencil</v-icon></span>
+            >{{ account.name }}<v-icon size="x-small" class="ml-1 edit-icon">mdi-pencil</v-icon></span>
           </v-list-item-title>
           <v-list-item-title class="mb-0" style="font-size: 14px; display: flex; align-items: center;" v-if="account && editingName">
             <input
@@ -179,7 +180,7 @@
               @keydown.esc="cancelEditingName"
               @blur="onNameInputBlur"
             />
-            <v-btn icon x-small @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
+            <v-btn icon variant="text" size="x-small" @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
               <v-icon style="font-size: 12px;">mdi-check</v-icon>
             </v-btn>
           </v-list-item-title>
@@ -189,29 +190,31 @@
           <v-list-item-subtitle style="font-size: 11px" v-if="account">
             {{ accountNetworkLabel }}
           </v-list-item-subtitle>
-        </v-list-item-content>
+        </div>
 
-        <v-list-item-action style="margin: auto" class="d-flex flex-row">
-          <v-tooltip v-if="hasUnlockMethod" top content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn icon :aria-label="t('security.lock')" @click="submitLock" v-bind="attrs" v-on="on">
-                <v-icon size="18">mdi-lock</v-icon>
-              </v-btn>
-            </template>
-            <span>{{ $t('security.lock') }}</span>
-          </v-tooltip>
+        <template #append>
+          <div class="d-flex flex-row">
+            <v-tooltip location="top" v-if="hasUnlockMethod"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn icon variant="text" :aria-label="t('security.lock')" @click="submitLock" v-bind="activatorProps" >
+                  <v-icon size="18">mdi-lock</v-icon>
+                </v-btn>
+              </template>
+              <span>{{ $t('security.lock') }}</span>
+            </v-tooltip>
 
-          <v-tooltip top content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn icon :aria-label="t('wallet.logout')" @click="submitLogout" v-bind="attrs" v-on="on">
-                <v-avatar tile size="18">
-                  <v-img :src="assts.logout" alt="logout"></v-img>
-                </v-avatar>
-              </v-btn>
-            </template>
-            <span>{{ $t('wallet.logout') }}</span>
-          </v-tooltip>
-        </v-list-item-action>
+            <v-tooltip location="top"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn icon variant="text" :aria-label="t('wallet.logout')" @click="submitLogout" v-bind="activatorProps" >
+                  <v-avatar rounded="0" size="18">
+                    <v-img :src="assts.logout" alt="logout"></v-img>
+                  </v-avatar>
+                </v-btn>
+              </template>
+              <span>{{ $t('wallet.logout') }}</span>
+            </v-tooltip>
+          </div>
+        </template>
       </v-list-item>
     </template>
   </v-navigation-drawer>
@@ -221,6 +224,7 @@
 import { isPublicRoute } from '@/modules/navigation/helpAccess';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
+import { useDisplay, useTheme } from 'vuetify';
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
@@ -240,6 +244,7 @@ import LoadingState from '@/stores/loading';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { cssUrl } from '@/shared/utils/cssUrl';
 import { debugLog } from '@/utils/debug';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import { GOVERNANCE_ITEMS } from '@/modules/navigation/components/governanceNav';
@@ -272,13 +277,15 @@ const { t } = useTranslation();
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
 // Define props and emit
-const props = defineProps<{ value: boolean }>()
-const emit = defineEmits(['input'])
+const props = defineProps<{ modelValue: boolean }>()
+const emit = defineEmits(['update:modelValue'])
 
-// Access Vuetify instance
+// Composition injections are available in setup; $vuetify is installed later
+// by the options mixin, after this component's setup has finished.
+const { mobile } = useDisplay();
+const theme = useTheme();
+const themeDark = computed(() => theme.current.value.dark);
 const vmProxy = getCurrentInstance()!.proxy
-const breakpoint = vmProxy.$vuetify.breakpoint
-const themeDark = vmProxy.$vuetify.theme.dark
 const router = vmProxy.$router
 
 function prefetchItem(item: NavigationItemUnion) {
@@ -500,8 +507,8 @@ const items = computed((): NavigationItemUnion[] => {
     // enabled only if at least one non-header item before the next header is
     // enabled. Keeps chains with sparse feature sets (e.g. Midnight) from
     // rendering orphaned "Financial hub" / "Media" headings.
-    if (!item.header || !item.enabled) return item;
-    for (let j = i + 1; j < all.length && !all[j].header; j++) {
+    if (!('header' in item) || !item.header || !item.enabled) return item;
+    for (let j = i + 1; j < all.length && !('header' in all[j]); j++) {
       if (all[j].enabled) return item;
     }
     return { ...item, enabled: false };
@@ -529,15 +536,15 @@ const isBlogEnabledByFeatureFlag = computed(() => {
 // Drawer getter/setter
 const drawer = computed({
   get() {
-    return breakpoint.mobile ? props.value : true
+    return mobile.value ? props.modelValue : true
   },
   set(val: boolean) {
-    emit('input', val)
+    emit('update:modelValue', val)
   }
 })
 
 // Watch mobile breakpoint to auto-close drawer
-watch(() => breakpoint.mobile,
+watch(mobile,
   (newVal, oldVal) => {
     if (oldVal === false && newVal === true) {
       drawer.value = false
@@ -606,7 +613,7 @@ async function submitLock() {
     debugLog('🔒 Wallet locked successfully');
 
     // Navigate to login screen
-    !isPublicRoute(router.currentRoute) && router.replace('/welcome').catch(err => {
+    !isPublicRoute(router.currentRoute.value) && router.replace('/welcome').catch(err => {
       debugLog('Navigation after lock handled:', err.message || err);
     });
   } catch (error) {
@@ -857,7 +864,7 @@ onUnmounted(() => {
   }
 }
 
-.v-subheader {
+.v-list-subheader {
   font-size: 11px;
   text-align: left;
   letter-spacing: 0.08em;

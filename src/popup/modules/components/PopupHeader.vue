@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
+  <v-card variant="outlined" class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
     <v-card-title class="justify-center text-center py-0" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
       <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
@@ -9,8 +9,8 @@
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white" width="3" />
-        <v-avatar v-else tile size="16" class="ml-1 text-center">
-          <v-img contain :src="websiteRiskIcon" :alt="$t('common.websiteRiskIcon')" />
+        <v-avatar v-else rounded="0" size="16" class="ml-1 text-center">
+          <v-img  :src="websiteRiskIcon" :alt="$t('common.websiteRiskIcon')" />
         </v-avatar>
       </div>
       <div v-else>
@@ -19,7 +19,7 @@
     </v-card-title>
     <Select
       v-if="showWallet && loggedWallet"
-      :value="loggedWallet"
+      :model-value="loggedWallet"
       :items="[loggedWallet]"
       :readonly="true"
       class="py-0"
@@ -29,13 +29,14 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { getCurrentInstance, ref, toRefs, computed, onMounted } from 'vue';
+import { ref, toRefs, computed, onMounted } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
+import { useRoute } from 'vue-router';
 
 const { t } = useTranslation();
 
@@ -63,7 +64,7 @@ const loading = ref<boolean>(true);
 const dappRisk = ref<DappRisk>(DappRisk.unknown);
 const queryParams = ref(null);
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const route = useRoute();
 
 const faviconFailed = ref<boolean>(false);
 
@@ -103,8 +104,8 @@ function validateDomain(s: string) {
 }
 
 onMounted(async () => {
-  const route = vmProxy.$route;
-  queryParams.value = route.query;
+
+  queryParams.value = { website: typeof route.query['website'] === 'string' ? route.query['website'] : '', favIconUrl: typeof route.query['favIconUrl'] === 'string' ? route.query['favIconUrl'] : '' };
   try {
     const riskString = await cardanoShieldApi.scanUrl(queryParams.value['website']);
     dappRisk.value = DappRisk[riskString as keyof typeof DappRisk] ?? DappRisk.unknown;

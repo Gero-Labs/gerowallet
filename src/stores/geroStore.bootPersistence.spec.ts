@@ -52,7 +52,7 @@ describe('geroStore worker boot persistence', () => {
 
     const writes = env.sets
       .filter((s) => 'geroStore' in s)
-      .map((s) => s.geroStore as { wallets: Record<string, unknown>; config: { locale: string } });
+      .map((s) => s['geroStore'] as { wallets: Record<string, unknown>; config: { locale: string } });
     expect(writes.length).toBeGreaterThan(0);
     expect(writes.map((w) => Object.keys(w.wallets).length)).toEqual(writes.map(() => 1));
     expect(writes[writes.length - 1]!.config.locale).toBe('es');

@@ -1,5 +1,5 @@
 <template>
-  <v-tab-item>
+  <v-window-item>
     <v-card flat class="transparent">
       <v-card-text class="px-0">
         <v-data-table
@@ -7,18 +7,18 @@
           :items="connectedDapps"
           :headers="headers"
           hide-default-footer
-          disable-pagination
+          :items-per-page="-1"
           :header-props="{ 'sort-icon': 'mdi-menu-up' }"
         >
           <template v-slot:[`item.domain`]="{ item }">
             <v-avatar size="16">
-              <v-img :src="faviconFor(item.domain)" contain></v-img>
+              <v-img :src="faviconFor(item.domain)" ></v-img>
             </v-avatar>&nbsp;
             {{item.domain}}
           </template>
           <template v-slot:[`item.actions`]="{ item }">
-            <v-btn small icon @click="confirmRemove(item)">
-              <v-icon small color="red">
+            <v-btn size="small" icon variant="text" @click="confirmRemove(item)">
+              <v-icon size="small" color="red">
                 mdi-trash-can
               </v-icon>
             </v-btn>
@@ -30,11 +30,11 @@
     <!-- WalletConnect Sessions -->
     <v-card v-if="wcEnabled" flat class="transparent mt-4">
       <v-card-title class="px-0 py-2 d-flex align-center">
-        <span class="wc-logo mr-2" :style="{ '--wc-img': `url(${walletConnectLogo})` }"></span>
+        <span class="wc-logo mr-2" :style="{ '--wc-img': cssUrl(walletConnectLogo) }"></span>
         <span style="font-size: 14px;">{{ $t('walletConnect.sessions') }}</span>
         <v-spacer />
-        <v-btn small text color="primary" @click="showPairDialog = true">
-          <v-icon small left>mdi-plus</v-icon>
+        <v-btn size="small" variant="text" color="primary" @click="showPairDialog = true">
+          <v-icon size="small" start>mdi-plus</v-icon>
           {{ $t('walletConnect.connectViaWalletConnect') }}
         </v-btn>
       </v-card-title>
@@ -42,21 +42,21 @@
         <div v-if="wcSessions.length === 0" class="text-center grey--text py-4">
           {{ $t('walletConnect.noActiveSessions') }}
         </div>
-        <v-list v-else dense class="transparent">
+        <v-list v-else density="compact" class="transparent">
           <v-list-item v-for="session in wcSessions" :key="session.topic" class="px-0">
-            <v-list-item-avatar size="24">
-              <v-img v-if="session.peerMeta.icons[0]" :src="session.peerMeta.icons[0]" contain />
+            <v-avatar size="24">
+              <v-img v-if="session.peerMeta.icons[0]" :src="session.peerMeta.icons[0]"  />
               <v-icon v-else size="24">mdi-link-variant</v-icon>
-            </v-list-item-avatar>
-            <v-list-item-content>
+            </v-avatar>
+            <div class="g-list-content">
               <v-list-item-title>{{ session.peerMeta.name }}</v-list-item-title>
               <v-list-item-subtitle>{{ session.peerMeta.url }}</v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-action>
-              <v-btn small icon @click="confirmWcDisconnect(session)">
-                <v-icon small color="red">mdi-link-variant-off</v-icon>
+            </div>
+            <div class="g-list-action">
+              <v-btn size="small" icon variant="text" @click="confirmWcDisconnect(session)">
+                <v-icon size="small" color="red">mdi-link-variant-off</v-icon>
               </v-btn>
-            </v-list-item-action>
+            </div>
           </v-list-item>
         </v-list>
       </v-card-text>
@@ -68,8 +68,8 @@
         <v-icon size="18" class="mr-2">mdi-access-point</v-icon>
         <span style="font-size: 14px;">{{ $t('cip45.sessions') }}</span>
         <v-spacer />
-        <v-btn small text color="primary" @click="showCip45Dialog = true">
-          <v-icon small left>mdi-plus</v-icon>
+        <v-btn size="small" variant="text" color="primary" @click="showCip45Dialog = true">
+          <v-icon size="small" start>mdi-plus</v-icon>
           {{ $t('cip45.connectViaCip45') }}
         </v-btn>
       </v-card-title>
@@ -77,21 +77,21 @@
         <div v-if="!cip45Session" class="text-center grey--text py-4">
           {{ $t('cip45.noActiveSessions') }}
         </div>
-        <v-list v-else dense class="transparent">
+        <v-list v-else density="compact" class="transparent">
           <v-list-item class="px-0">
-            <v-list-item-avatar size="24">
-              <v-img v-if="cip45Session.identicon" :src="cip45Session.identicon" contain />
+            <v-avatar size="24">
+              <v-img v-if="cip45Session.identicon" :src="cip45Session.identicon"  />
               <v-icon v-else size="24">mdi-access-point</v-icon>
-            </v-list-item-avatar>
-            <v-list-item-content>
+            </v-avatar>
+            <div class="g-list-content">
               <v-list-item-title>{{ cip45Session.dappName }}</v-list-item-title>
               <v-list-item-subtitle>{{ cip45Session.dappUrl }}</v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-action>
-              <v-btn small icon @click="confirmCip45Disconnect(cip45Session)">
-                <v-icon small color="red">mdi-link-variant-off</v-icon>
+            </div>
+            <div class="g-list-action">
+              <v-btn size="small" icon variant="text" @click="confirmCip45Disconnect(cip45Session)">
+                <v-icon size="small" color="red">mdi-link-variant-off</v-icon>
               </v-btn>
-            </v-list-item-action>
+            </div>
           </v-list-item>
         </v-list>
       </v-card-text>
@@ -111,14 +111,14 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn
-            text
+            variant="text"
             @click="confirmRemoveDialog = false"
           >
             {{ $t('common.no') }}
           </v-btn>
           <v-btn
             color="primary"
-            text
+            variant="text"
             @click="remove"
           >
             {{ $t('common.yes') }}
@@ -140,8 +140,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="confirmWcDialog = false">{{ $t('common.no') }}</v-btn>
-          <v-btn color="primary" text @click="wcDisconnect">{{ $t('common.yes') }}</v-btn>
+          <v-btn variant="text" @click="confirmWcDialog = false">{{ $t('common.no') }}</v-btn>
+          <v-btn color="primary" variant="text" @click="wcDisconnect">{{ $t('common.yes') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -159,8 +159,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="confirmCip45Dialog = false">{{ $t('common.no') }}</v-btn>
-          <v-btn color="primary" text @click="cip45Disconnect">{{ $t('common.yes') }}</v-btn>
+          <v-btn variant="text" @click="confirmCip45Dialog = false">{{ $t('common.no') }}</v-btn>
+          <v-btn color="primary" variant="text" @click="cip45Disconnect">{{ $t('common.yes') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -170,9 +170,11 @@
 
     <!-- CIP-45 Pair Dialog -->
     <Cip45PairDialog v-if="cip45Enabled" v-model="showCip45Dialog" />
-  </v-tab-item>
+  </v-window-item>
 </template>
 <script setup lang="ts">
+import type { DataTableHeader } from 'vuetify';
+import { cssUrl } from '@/shared/utils/cssUrl';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs } from 'vue';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -222,9 +224,9 @@ const showCip45Dialog = ref(false);
 const confirmCip45Dialog = ref(false);
 const cip45SessionToDisconnect = ref<Cip45Session | null>(null);
 
-const headers = ref([
-  { text: t('settings.domain'), align: "start", sortable: true, value: "domain", width: '99%'},
-  { text: "", align: "start", sortable: false, value: "actions" },
+const headers = ref<DataTableHeader[]>([
+  { title: t('settings.domain'), align: 'start' as const, sortable: true, key: "domain", width: '99%'},
+  { title: "", align: 'start' as const, sortable: false, key: "actions" },
 ]);
 
 // DApp methods

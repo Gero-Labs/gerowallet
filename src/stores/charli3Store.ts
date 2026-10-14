@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -36,7 +37,7 @@ export interface Charli3Store {
   error: string | null;
 }
 
-export const charli3Store = Vue.observable<Charli3Store>({
+export const charli3Store = reactive<Charli3Store>({
   marketData: {
     topVolume: [],
     topGainers: [],
@@ -65,7 +66,7 @@ if (context === 'browser') {
         if (key === 'lastRefreshTime' && updates[key] && typeof updates[key] === 'string') {
           charli3Store[key] = new Date(updates[key] as string);
         } else {
-          (charli3Store as any)[key] = updates[key as keyof Charli3Store];
+          (charli3Store as unknown as Record<string, unknown>)[key] = updates[key as keyof Charli3Store];
         }
       }
     });
@@ -74,7 +75,7 @@ if (context === 'browser') {
   // Initial hydration from chrome.storage (fallback for initial state)
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
-      const stored = result[STORE_NAME];
+      const stored = result[STORE_NAME] as Partial<Omit<Charli3Store, 'lastRefreshTime'>> & { lastRefreshTime?: Date | string | null };
       // Convert stored date string back to Date object
       if (stored.lastRefreshTime && typeof stored.lastRefreshTime === 'string') {
         stored.lastRefreshTime = new Date(stored.lastRefreshTime);
@@ -106,7 +107,7 @@ function broadcastFromBackground(updates: Partial<Charli3Store>) {
 
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || {
+      const current = (result[STORE_NAME] as Partial<Charli3Store> | undefined) || {
         marketData: {
           topVolume: [],
           topGainers: [],
@@ -117,9 +118,9 @@ function broadcastFromBackground(updates: Partial<Charli3Store>) {
         loading: false,
         error: null
       };
-      chrome.storage.local.set({
+      chrome.storage.local.set(plainStoreSnapshot({
         [STORE_NAME]: { ...current, ...serializedUpdates }
-      });
+      }));
     });
   }
 }
@@ -255,7 +256,7 @@ export default {
   state: charli3Store,
 
   // Utility method to get current state snapshot
-  getSnapshot(): any {
+  getSnapshot(): Omit<Charli3Store, 'lastRefreshTime'> & { lastRefreshTime: string | null } {
     return {
       ...charli3Store,
       // Convert Date to string for serialization

@@ -36,7 +36,7 @@
 
     <!-- Loading skeleton -->
     <div v-else-if="loading" class="pa-4">
-      <v-skeleton-loader v-for="i in 6" :key="i" type="list-item-two-line" dark class="mb-2" />
+      <v-skeleton-loader v-for="i in 6" :key="i" type="list-item-two-line" theme="dark" class="mb-2" />
     </div>
 
     <!-- Empty state -->
@@ -82,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, shallowRef, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
@@ -100,7 +100,7 @@ import i18n, { getLocaleCode } from '@/plugins/i18n';
 const { t } = useTranslation();
 
 const showTxDetail = ref(false);
-const selectedTx = ref<StoredTransaction | null>(null);
+const selectedTx = shallowRef<StoredTransaction | null>(null);
 
 const loading = computed(() => !walletStore.transactions);
 

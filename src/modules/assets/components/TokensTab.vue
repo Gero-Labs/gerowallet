@@ -1,11 +1,12 @@
 <template>
-  <v-data-table
-    dense
+  <v-data-table-server
+    density="compact"
     class="transparent tokens-table adaptive-height"
     :headers="headers"
     :items="paginatedTokens"
-    :sort-by.sync="sortOptions.by"
-    :sort-desc.sync="sortOptions.desc"
+    v-model:sort-by="tableSort"
+    :items-length="tokensList.length"
+    item-value="unit"
     :items-per-page="-1"
     hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
@@ -26,12 +27,12 @@
       </tr>
     </template>
     <template v-slot:[`item.name`]="{ item }">
-      <v-list-item dense class="px-0">
-        <v-list-item-action class="my-0" style="margin-right: 16px !important">
+      <v-list-item density="compact" class="px-0">
+        <div class="my-0 g-list-action" style="margin-right: 16px !important">
           <v-badge overlap avatar color="transparent" :offset-y="37" v-if="item['verified']">
             <template v-slot:badge>
-              <v-avatar color="transparent" tile>
-                <v-icon small color="primary"> mdi-check-decagram </v-icon>
+              <v-avatar color="transparent" rounded="0">
+                <v-icon size="small" color="primary"> mdi-check-decagram </v-icon>
               </v-avatar>
             </template>
             <v-avatar size="32">
@@ -41,12 +42,12 @@
           <v-avatar size="32" v-else>
             <img v-if="item['img']" :src="item['img']" :alt="`${item['ticker']} Logo`" />
           </v-avatar>
-        </v-list-item-action>
-        <v-list-item-content>
+        </div>
+        <div class="g-list-content">
           <v-list-item-title>
-            <v-tooltip top :open-delay="300" content-class="custom-tooltip" v-if="item?.metadata?.description">
-              <template v-slot:activator="{ on, attrs }">
-                <span v-bind="attrs" v-on="on" class="token-name-hover">{{ item.name }}</span>
+            <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip" v-if="item?.metadata?.description">
+              <template v-slot:activator="{ props: activatorProps }">
+                <span v-bind="activatorProps"  class="token-name-hover">{{ item.name }}</span>
               </template>
               <div class="token-description-content">
                 {{ item.metadata.description }}
@@ -54,13 +55,13 @@
             </v-tooltip>
             <span v-else>{{ item.name }}</span>
           </v-list-item-title>
-        </v-list-item-content>
+        </div>
       </v-list-item>
     </template>
     <template v-slot:[`item.quantity`]="{ item }">
-      <v-tooltip top :open-delay="500" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">
+      <v-tooltip location="top"  :open-delay="500" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >
             {{ hideBalances ? '••••••' : filters.toCurrency(item.quantity, false, 3, '', '', true, item.metadata?.decimals) }}
           </span>
         </template>
@@ -68,14 +69,14 @@
       </v-tooltip>
     </template>
     <template v-slot:[`item.price`]="{ item }">
-      <v-list-item two-line class="px-0" style="min-height: unset">
-        <v-list-item-content class="pa-0">
+      <v-list-item lines="two" class="px-0" style="min-height: unset">
+        <div class="pa-0 g-list-content">
           <v-list-item-title style="font-size: 0.875rem; margin-bottom: 0">
             <span v-if="!item.price">N/A</span>
             <span v-else>
-              <v-tooltip top :open-delay="500" content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on">
+              <v-tooltip location="top"  :open-delay="500" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <span v-bind="activatorProps" >
                     {{ hideBalances ? '••••••' : filters.toCurrency(item.price, false, 4, getCurrencySymbol(), '', true, 0) }}
                   </span>
                 </template>
@@ -84,7 +85,7 @@
             </span>
           </v-list-item-title>
           <v-list-item-subtitle class="px-0" v-if="Number.isFinite(item.change)">
-            <v-avatar tile size="12" class="mr-1" style="align-self: center">
+            <v-avatar rounded="0" size="12" class="mr-1" style="align-self: center">
               <v-img
                 :src="
                   item.change === 0 ? assets.arrowRightSvg : item.change > 0 ? assets.trendUpSvg : assets.trendDownSvg
@@ -101,15 +102,15 @@
               {{ Math.abs(item.change).toFixed(2) + '%' }}
             </span>
           </v-list-item-subtitle>
-        </v-list-item-content>
+        </div>
       </v-list-item>
     </template>
     <template v-slot:[`item.value`]="{ item }">
       <span v-if="!item.price">N/A</span>
       <span v-else>
-        <v-tooltip top :open-delay="500" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <span v-bind="attrs" v-on="on">
+        <v-tooltip location="top"  :open-delay="500" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <span v-bind="activatorProps" >
               {{ hideBalances ? '••••••' : filters.toCurrency(item.value, false, 3, getCurrencySymbol(), '', true, 0) }}
             </span>
           </template>
@@ -118,9 +119,9 @@
       </span>
     </template>
     <template v-slot:[`item.mcap`]="{ item }">
-      <v-tooltip v-if="item.mcap" top :open-delay="500" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">
+      <v-tooltip location="top" v-if="item.mcap"  :open-delay="500" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >
             {{ hideBalances ? '••••••' : filters.toCurrency(Number(item.mcap), false, 2, getCurrencySymbol(), '', true, 0) }}
           </span>
         </template>
@@ -134,7 +135,7 @@
         v-else
         class="progress-bar"
         height="14"
-        :value="(item.allocation / totalAllocation) * 100"
+        :model-value="(item.allocation / totalAllocation) * 100"
         color="primary"
       >
         <template v-slot:default="{ value }">
@@ -142,7 +143,7 @@
         </template>
       </v-progress-linear>
     </template>
-  </v-data-table>
+  </v-data-table-server>
 
   <!-- Token Detail Dialog -->
   <v-dialog v-model="showTokenDetail" max-width="900px" content-class="token-detail-dialog">
@@ -158,6 +159,7 @@
 import '@/shared/styles/compact-pagination.css';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch } from 'vue';
+import type { DataTableHeader, DataTableSortItem } from 'vuetify';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -168,10 +170,23 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
 
-// Display row assembled by tokensList — a dynamic bag built by resolveAsset plus
-// per-row market fields (price/value/mcap/change/allocation)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TokenRow = Record<string, any>;
+interface TokenRow {
+  unit?: string;
+  policy_id?: string;
+  name?: string;
+  ticker?: string;
+  img?: string;
+  fingerprint?: string;
+  quantity?: string | number;
+  metadata?: { ticker?: string; description?: string; image?: string; verified?: boolean; decimals?: number };
+  verified?: boolean;
+  isScam?: boolean;
+  price?: number;
+  value?: number;
+  mcap?: number;
+  change?: number;
+  allocation?: number;
+}
 
 // Props
 interface Props {
@@ -202,13 +217,13 @@ const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 // Headers for the data table
-const headers = ref<Array<{ text: string; align: string; sortable: boolean; value: string; width?: string }>>([
-  { text: String(t('common.asset')), align: 'start', sortable: true, value: 'name' },
-  { text: String(t('common.quantity')), align: 'center', sortable: true, value: 'quantity', width: '102' },
-  { text: String(t('common.price')), align: 'center', sortable: true, value: 'price', width: '100' },
-  { text: String(t('common.value')), align: 'center', sortable: true, value: 'value', width: '88' },
-  { text: String(t('common.marketCap')), align: 'center', sortable: true, value: 'mcap', width: '104' },
-  { text: String(t('common.allocation')), align: 'center', sortable: true, value: 'allocation', width: '130' },
+const headers = computed<DataTableHeader[]>(() => [
+  { title: String(t('common.asset')), align: 'start', sortable: true, key: 'name' },
+  { title: String(t('common.quantity')), align: 'center', sortable: true, key: 'quantity', width: '102' },
+  { title: String(t('common.price')), align: 'center', sortable: true, key: 'price', width: '100' },
+  { title: String(t('common.value')), align: 'center', sortable: true, key: 'value', width: '88' },
+  { title: String(t('common.marketCap')), align: 'center', sortable: true, key: 'mcap', width: '104' },
+  { title: String(t('common.allocation')), align: 'center', sortable: true, key: 'allocation', width: '130' },
 ]);
 
 // Pagination
@@ -223,6 +238,10 @@ const sortOptions = computed({
   set(value) {
     emit('update:sortOptions', value);
   },
+});
+const tableSort = computed<DataTableSortItem[]>({
+  get: (): DataTableSortItem[] => props.sortOptions.by ? [{ key: props.sortOptions.by, order: props.sortOptions.desc ? 'desc' : 'asc' }] : [],
+  set: value => emit('update:sortOptions', { by: value[0]?.key || '', desc: value[0]?.order === 'desc' }),
 });
 
 // Methods
@@ -264,7 +283,7 @@ const customSort = (items: TokenRow[], sortBy: string[], sortDesc: boolean[]) =>
   // Sort the non-native tokens if sortBy is specified
   if (sortBy.length) {
     otherTokens.sort((a: TokenRow, b: TokenRow) => {
-      const sortKey = sortBy[0];
+      const sortKey = sortBy[0] as keyof TokenRow;
       const compareA = a[sortKey];
       const compareB = b[sortKey];
       if (sortKey === 'quantity') {
@@ -304,8 +323,14 @@ const customSort = (items: TokenRow[], sortBy: string[], sortDesc: boolean[]) =>
 };
 
 // Computed properties
+function coinGeckoMetric(currency: string, key: 'usd' | 'usd_market_cap'): number {
+  const entry = cache.value[currency];
+  if (!entry || typeof entry !== 'object') return 0;
+  return typeof entry[key] === 'number' ? entry[key] : 0;
+}
 const tokensList = computed(() => {
-  let res = Object.values(tokens.value).map((token: TokenRow) => {
+  let res = Object.values(tokens.value).map((source: TokenRow) => {
+    const token = { ...source };
     if (token.policy_id === '') {
       // Live Kraken ticker price for ADA (in USD)
       // Convert to user's selected currency (USD or EUR)
@@ -316,9 +341,9 @@ const tokensList = computed(() => {
         coinGeckoCurrency = 'cardano';
       } else if (token.name === 'Apex Fusion') {
         coinGeckoCurrency = 'apex-4';
-        token.price = convertFiat(cache.value['apex-4']?.usd || 0);
+        token.price = convertFiat(coinGeckoMetric('apex-4', 'usd'));
       }
-      token.mcap = convertFiat(cache.value[coinGeckoCurrency]?.usd_market_cap);
+      token.mcap = convertFiat(coinGeckoMetric(coinGeckoCurrency, 'usd_market_cap'));
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );
@@ -417,8 +442,7 @@ const totalAllocation = computed(() => {
 const showTokenDetail = ref(false);
 const selectedToken = ref<MarketToken | null>(null);
 
-const handleTokenRowClick = (row: TokenRow) => {
-  const _adaPrice = priceStore.adaUsd?.lastPrice || 0;
+const handleTokenRowClick = (_event: Event, { item: row }: { item: TokenRow }) => {
   const isAda = row.policy_id === '' && (row.name === 'Cardano' || row.unit === 'lovelace');
   const dexToken = tokenMetadata.value[row.unit];
   const priceInAda = isAda ? 1 : (dexToken?.price || 0);
@@ -524,7 +548,7 @@ watch(
   overflow: visible;
 }
 
-.tokens-table.adaptive-height >>> .v-data-table__wrapper {
+.tokens-table.adaptive-height >>> .v-table__wrapper {
   overflow: visible;
   min-height: unset;
 }

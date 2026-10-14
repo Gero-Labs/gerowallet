@@ -13,9 +13,11 @@
         @notifications="$emit('notifications')"
         @settings="$emit('settings')"
       />
-      <transition :name="transitionName" mode="out-in">
-        <router-view :key="$route.path" />
-      </transition>
+      <router-view v-slot="{ Component, route: viewRoute }">
+        <transition :name="transitionName" mode="out-in">
+          <component :is="Component" :key="viewRoute.path" />
+        </transition>
+      </router-view>
     </main>
     <BottomNav @action="onNavAction" />
 
@@ -27,7 +29,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router/composables';
+import { useRoute } from 'vue-router';
 import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
@@ -177,7 +179,7 @@ watch(() => route.path, (to) => {
 .page-fade-leave-active {
   transition: opacity 0.18s ease;
 }
-.page-fade-enter,
+.page-fade-enter-from,
 .page-fade-leave-to {
   opacity: 0;
 }
@@ -187,7 +189,7 @@ watch(() => route.path, (to) => {
 .page-slide-left-leave-active {
   transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.22s ease;
 }
-.page-slide-left-enter {
+.page-slide-left-enter-from {
   transform: translateX(24px);
   opacity: 0;
 }
@@ -201,7 +203,7 @@ watch(() => route.path, (to) => {
 .page-slide-right-leave-active {
   transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.22s ease;
 }
-.page-slide-right-enter {
+.page-slide-right-enter-from {
   transform: translateX(-24px);
   opacity: 0;
 }

@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { effectScope, markRaw, reactive, toRaw, watch } from 'vue';
 import { Howl } from 'howler';
 import { resolveIcon } from '@/shared/utils/resolver';
 import { getContextType } from '@/utils/storageSync';
@@ -6,13 +7,42 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { walletStore } from '@/stores/walletStore';
 
+export interface MusicTrack {
+  id: string;
+  artist: string;
+  title: string;
+  img?: string;
+  url: string;
+  mediaType: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  display: boolean;
+  category?: string;
+}
+
+export interface MusicContext {
+  img?: string;
+  isPlaying: boolean;
+  isRepeat: boolean;
+  isShuffle: boolean;
+  currentIndex: number;
+  audio?: Howl;
+  paused: boolean;
+  volume: number;
+  position: number;
+  seek: number;
+  duration?: number;
+  minimized: boolean;
+  shown: boolean;
+}
+
 export interface MusicStore {
-  musicPlaylist: any;
-  context: any;
+  musicPlaylist: MusicTrack[] | undefined;
+  context: MusicContext;
 }
 
 // Create observable state
-export const musicStore = Vue.observable<MusicStore>({
+export const musicStore = reactive<MusicStore>({
   musicPlaylist: undefined,
   context: {
     img: undefined,
@@ -64,23 +94,20 @@ function clearMusicStoreImmediately() {
   };
 }
 
-// Watch for wallet changes and clear immediately
-new Vue({
-  computed: {
-    currentWalletId() {
-      return walletStore.loggedWallet?.id || null;
-    }
-  },
-  watch: {
-    currentWalletId: {
-      handler(newWalletId, oldWalletId) {
-        if (oldWalletId !== null && newWalletId !== oldWalletId) {
-          clearMusicStoreImmediately();
-        }
-      },
-      immediate: true
-    }
-  }
+// One watcher belongs to this context's store module, not to each UI mount.
+// Clear synchronously so the previous wallet cannot play between a switch and
+// Vue's next render. HMR disposes the scope rather than accumulating watchers.
+const walletScope = effectScope(true);
+walletScope.run(() => {
+  watch(() => walletStore.loggedWallet?.id ?? null, (walletId, previousId) => {
+    if (previousId != null && walletId !== previousId) clearMusicStoreImmediately();
+  }, { flush: 'sync' });
+});
+let unsubscribe: (() => void) | undefined;
+if (import.meta.hot) import.meta.hot.dispose(() => {
+  walletScope.stop();
+  unsubscribe?.();
+  clearMusicStoreImmediately();
 });
 
 // Initialize messaging based on context
@@ -88,7 +115,7 @@ new Vue({
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
   // Browser context: Subscribe to updates from background
-  storeMessaging.subscribe(STORE_NAME, (updates: Partial<MusicStore>) => {
+  unsubscribe = storeMessaging.subscribe(STORE_NAME, (updates: Partial<MusicStore>) => {
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -96,9 +123,9 @@ if (context === 'browser') {
         // Special handling for context to preserve audio instance
         if (key === 'context' && musicStore.context.audio) {
           const audioInstance = musicStore.context.audio;
-          (musicStore as any)[key] = { ...updates[key], audio: audioInstance };
+          musicStore.context = { ...musicStore.context, ...updates.context, audio: audioInstance };
         } else {
-          (musicStore as any)[key] = updates[key as keyof MusicStore];
+          (musicStore as unknown as Record<string, unknown>)[key] = updates[key as keyof MusicStore];
         }
       }
     });
@@ -108,7 +135,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       // Don't restore audio-specific states that can't be serialized
-      const storedData = result[STORE_NAME];
+      const storedData = result[STORE_NAME] as Partial<MusicStore>;
       if (storedData.context) {
         storedData.context.audio = undefined;
         storedData.context.isPlaying = false;
@@ -122,8 +149,8 @@ if (context === 'browser') {
 /**
  * Serialize context for storage/messaging (exclude non-serializable fields)
  */
-function serializeContext(ctx: any): any {
-  const { audio, ...serializableContext } = ctx;
+function serializeContext(ctx: MusicContext): Omit<MusicContext, 'audio'> {
+  const { audio: _audio, ...serializableContext } = ctx;
   return serializableContext;
 }
 
@@ -143,7 +170,7 @@ function broadcastFromBackground(updates: Partial<MusicStore>) {
 
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || {
+      const current = (result[STORE_NAME] as Partial<MusicStore> | undefined) || {
         musicPlaylist: undefined,
         context: {
           img: undefined,
@@ -160,9 +187,9 @@ function broadcastFromBackground(updates: Partial<MusicStore>) {
           shown: false,
         }
       };
-      chrome.storage.local.set({
+      chrome.storage.local.set(plainStoreSnapshot({
         [STORE_NAME]: { ...current, ...serializedUpdates }
-      });
+      }));
     });
   }
 }
@@ -191,11 +218,11 @@ const MusicStoreModule = {
             } else if (Array.isArray(file.src)) {
               fileSrc = file.src.join('')
             }
-            const getArtists = (artists: any) => {
+            const getArtists = (artists: unknown) => {
               if (artists !== undefined && Array.isArray(artists)) {
                 return artists.join(', ');
               }
-              return artists;
+              return typeof artists === 'string' ? artists : undefined;
             }
             return {
               id: nft.unit,
@@ -215,12 +242,13 @@ const MusicStoreModule = {
     )
   },
 
-  setMusicPlaylist(musicPlaylist) {
+  setMusicPlaylist(musicPlaylist: MusicTrack[]) {
     musicStore.musicPlaylist = musicPlaylist;
     broadcastFromBackground({ musicPlaylist });
   },
 
-  setContext(context) {
+  setContext(context: MusicContext) {
+    if (context.audio) context.audio = markRaw(toRaw(context.audio));
     musicStore.context = context;
     broadcastFromBackground({ context: serializeContext(context) });
   },
@@ -260,19 +288,20 @@ const MusicStoreModule = {
     }
     if (musicStore.musicPlaylist) {
       const current = musicStore.musicPlaylist[musicStore.context.currentIndex];
-      musicStore.context.audio = new Howl({
+      if (!current) return;
+      musicStore.context.audio = markRaw(new Howl({
         src: [current.url],
         onend: () => {
           musicStore.context.isPlaying = false;
           if (musicStore.context.isRepeat) {
-            musicStore.context.audio.play();
+            musicStore.context.audio?.play();
           } else {
             MusicStoreModule.nextTrack();
           }
         },
         onplay: () => {
           musicStore.context.isPlaying = true;
-          musicStore.context.duration = musicStore.context.audio.duration();
+          musicStore.context.duration = musicStore.context.audio?.duration();
           requestAnimationFrame(MusicStoreModule.step);
         },
         onpause: () => {
@@ -283,7 +312,7 @@ const MusicStoreModule = {
         },
         format: current.mediaType,
         html5: true,
-      });
+      }));
     }
   },
 
@@ -303,6 +332,7 @@ const MusicStoreModule = {
   },
 
   nextTrack() {
+    if (!musicStore.musicPlaylist?.length) return;
     const wasPlaying = musicStore.context.isPlaying;
     console.log('nextTrack called, wasPlaying:', wasPlaying);
 
@@ -330,6 +360,7 @@ const MusicStoreModule = {
   },
 
   prevTrack() {
+    if (!musicStore.musicPlaylist?.length) return;
     const wasPlaying = musicStore.context.isPlaying;
 
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
@@ -362,7 +393,7 @@ const MusicStoreModule = {
     MusicStoreModule.initializeSound();
     if (musicStore.musicPlaylist && musicStore.musicPlaylist[musicStore.context.currentIndex] && musicStore.musicPlaylist[musicStore.context.currentIndex].mediaType.includes('audio')) {
       console.log('Playing track:', musicStore.musicPlaylist[musicStore.context.currentIndex].title);
-      musicStore.context.audio.play();
+      musicStore.context.audio?.play();
       musicStore.context.isPlaying = true;
       broadcastFromBackground({ context: serializeContext(musicStore.context) });
     } else {
@@ -471,7 +502,7 @@ const MusicStoreModule = {
   },
 
   // Utility method to get current track
-  getCurrentTrack(): any {
+  getCurrentTrack(): MusicTrack | null {
     if (!musicStore.musicPlaylist || musicStore.context.currentIndex >= musicStore.musicPlaylist.length) {
       return null;
     }

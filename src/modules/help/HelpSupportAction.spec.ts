@@ -1,3 +1,4 @@
+import * as Vue from 'vue';
 import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,27 +12,25 @@ const h = vi.hoisted(() => ({
   track: vi.fn(),
 }));
 vi.mock('./helpAnalytics', () => ({ trackHelp: h.track }));
-vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
+vi.mock('@/stores/walletStore', async () => ({ walletStore: (h.wallet = Vue.reactive(h.wallet)) }));
 vi.mock('@/stores/featureFlagsStore', async () => {
-  const state = (await import('vue')).reactive(h.flags);
+  const state = (h.flags = Vue.reactive(h.flags));
   return { featureFlagsStore: { state, isLiveChatEnabled: () => state.live } };
 });
 vi.mock('@/shared/composables/useAvailableWallets', async () => {
   const { reactive, computed } = await import('vue');
-  const saved = reactive(h.saved);
+  const saved = (h.saved = reactive(h.saved));
   return { useAvailableWallets: () => ({ hasWallets: computed(() => saved.value) }) };
 });
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('vue-router/composables', () => ({ useRoute: () => h.route }));
+vi.mock('vue-router', () => ({ useRoute: () => h.route }));
 vi.mock('@/shared/components/GButton/GButton.vue', async () => {
   const { defineComponent } = await import('vue');
   return { default: defineComponent({
     props: ['to', 'tier', 'href'],
-    render(h) {
-      return h(this.href ? 'a' : 'button', {
-        attrs: { href: this.href, 'data-to': this.to, 'data-tier': this.tier ?? 'secondary' }, on: this.$listeners,
-      }, this.$slots['default']);
-    },
+    render() {
+    return Vue.h(this.href ? 'a' : 'button', { href: this.href, 'data-to': this.to, 'data-tier': this.tier ?? 'secondary', ...this.$attrs }, this.$slots['default']?.());
+},
   }) };
 });
 import HelpSupportAction from './HelpSupportAction.vue';
@@ -40,29 +39,29 @@ const eligible = { id: 42, chain: 'Cardano', network: 'Mainnet', type: 'Normal',
 const MAILTO = 'mailto:support@gerowallet.io';
 const wrappers: Array<ReturnType<typeof mount>> = [];
 function show() {
-  const wrapper = mount(HelpSupportAction, { stubs: {
-    'v-dialog': { props: ['value'], template: '<div v-if="value"><slot /></div>' },
-    'v-icon': { template: '<i :data-icon="$slots.default && $slots.default[0].text.trim()" />' },
-  } });
+  const wrapper = mount(HelpSupportAction, { global: { stubs: {
+    'v-dialog': { props: ['modelValue'], template: '<div v-if="modelValue"><slot /></div>' },
+    'v-icon': { template: '<i :data-icon="$slots.default && String($slots.default()[0].children).trim()" />' },
+  } } });
   wrappers.push(wrapper);
   return wrapper;
 }
-type Wrapper = ReturnType<typeof show>;
+type VueWrapper = ReturnType<typeof show>;
 function eligibleSession(): void {
   h.wallet.loggedWallet = eligible; h.wallet.isLocked = false;
   h.flags.isInitialized = true; h.flags.live = true;
 }
-const buttonByText = (wrapper: Wrapper, text: string) => wrapper.findAll('button, a').wrappers.find(el => el.text() === text)!;
-const question = (wrapper: Wrapper) => wrapper.find<HTMLTextAreaElement>('#help-support-question');
-const contextBox = (wrapper: Wrapper) => wrapper.find<HTMLTextAreaElement>('#help-support-context');
-const primaries = (wrapper: Wrapper) => wrapper.findAll('[data-tier="primary"]');
+const buttonByText = (wrapper: VueWrapper, text: string) => wrapper.findAll('button, a').find(el => el.text() === text)!;
+const question = (wrapper: VueWrapper) => wrapper.find<HTMLTextAreaElement>('#help-support-question');
+const contextBox = (wrapper: VueWrapper) => wrapper.find<HTMLTextAreaElement>('#help-support-context');
+const primaries = (wrapper: VueWrapper) => wrapper.findAll('[data-tier="primary"]');
 
 beforeEach(() => {
   clearHelpSupport(); h.track.mockReset(); h.route.query = {};
   h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.wallet.isSyncing = false;
   h.flags.isInitialized = false; h.flags.live = false; h.saved.value = false;
 });
-afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); clearHelpSupport(); vi.unstubAllGlobals(); });
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); clearHelpSupport(); vi.unstubAllGlobals(); });
 
 describe('Help support eligibility', () => {
   it.each([
@@ -242,7 +241,7 @@ describe('Help support email dialog (no live chat)', () => {
   it('keeps full Help context in the unlock target', async () => {
     h.saved.value = true;
     const wrapper = show(); openSupport(); await nextTick();
-    expect(wrapper.findAll('button').wrappers.some(button => button.attributes('data-to') === '/welcome?redirect=' + encodeURIComponent(h.route.fullPath))).toBe(true);
+    expect(wrapper.findAll('button').some(button => button.attributes('data-to') === '/welcome?redirect=' + encodeURIComponent(h.route.fullPath))).toBe(true);
   });
 
   it('copies the confirmed email address and reports a failed clipboard operation', async () => {
@@ -313,7 +312,7 @@ describe('Help support clearing', () => {
     eligibleSession();
     const wrapper = show();
     openWalletSupport('draft', 42);
-    wrapper.destroy();
+    wrapper.unmount();
     expect(helpSupportIntent.active).toBe(false);
     expect(helpSupportIntent.dockRequest).toBeNull();
   });

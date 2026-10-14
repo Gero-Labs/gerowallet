@@ -43,22 +43,22 @@
       </v-window-item>
     </v-window>
     <div class="card-status-chip-container">
-      <v-chip v-if="currentCardHasUUID" class="card-status-chip active-chip t-label" small>
-        <v-icon small left>mdi-check-circle</v-icon>
+      <v-chip v-if="currentCardHasUUID" class="card-status-chip active-chip t-label" size="small">
+        <v-icon size="small" start>mdi-check-circle</v-icon>
         {{ $t('card.active') }}
       </v-chip>
       <v-chip
         v-else-if="isCurrentCardEmpty"
         class="card-status-chip order-chip t-label"
-        small
+        size="small"
       >
-        <v-icon small left>mdi-credit-card-plus</v-icon>
+        <v-icon size="small" start>mdi-credit-card-plus</v-icon>
         {{ $t('card.orderNewCard') }}
       </v-chip>
       <v-chip
         v-else-if="loadingOrderDetails && cards[currentCardIndex]?.cardData.id"
         class="card-status-chip loading-chip t-label"
-        small
+        size="small"
         style="width: 100px"
       >
         <v-progress-circular
@@ -72,27 +72,27 @@
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && (normalizedCurrentCardStatus === 'rejected' || normalizedCurrentCardStatus === 'expired')"
         class="card-status-chip rejected-chip t-label"
-        small
+        size="small"
         style="width: 100px"
       >
-        <v-icon small left>mdi-close-circle</v-icon>
+        <v-icon size="small" start>mdi-close-circle</v-icon>
         {{ normalizedCurrentCardStatus === 'expired' ? $t('card.expired') : $t('card.rejected') }}
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'pending'"
         class="card-status-chip pending-chip t-label"
-        small
+        size="small"
         style="width: 100px"
       >
-        <v-icon small left>mdi-clock-outline</v-icon>
+        <v-icon size="small" start>mdi-clock-outline</v-icon>
         {{ $t('card.pending') }}
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'new'"
         class="card-status-chip pending-chip t-label"
-        small
+        size="small"
       >
-        <v-icon small left>mdi-clock-outline</v-icon>
+        <v-icon size="small" start>mdi-clock-outline</v-icon>
         {{ $t('card.pending') }}
       </v-chip>
     </div>

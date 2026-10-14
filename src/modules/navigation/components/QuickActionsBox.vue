@@ -5,21 +5,21 @@
          which the empty-state FundingCard and PerkTeasers still open. -->
     <div v-if="!hideButtons" :class="['quick-actions-container', { 'compact': compact }]">
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
             <v-btn
               :class="['expandable-button', 'buy-button', { 'icon-only': compact }]"
               color="warning"
               height="28"
               @click="openDialog(dialogs.BUY)"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="activatorProps"
+
             >
-              <v-avatar tile size="14">
+              <v-avatar rounded="0" size="14">
                 <v-img
                   :src="assets.dollarShieldSvg"
                   :alt="$t('common.buy')"
-                  contain
+
                 ></v-img>
               </v-avatar>
               <span v-if="!compact" class="button-text">{{ $t('navigation.buySell') }}</span>
@@ -30,21 +30,21 @@
       </div>
 
       <div class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
             <v-btn
               :class="['expandable-button', 'send-button', { 'icon-only': compact }]"
               color="primary"
               height="28"
               @click="openDialog(dialogs.SEND)"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="activatorProps"
+
             >
-              <v-avatar tile size="14">
+              <v-avatar rounded="0" size="14">
                 <v-img
                   :src="assets.sendSvg"
                   :alt="$t('common.send')"
-                  contain
+
                   style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
                 ></v-img>
               </v-avatar>
@@ -56,21 +56,21 @@
       </div>
 
       <div class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
             <v-btn
               :class="['expandable-button', 'receive-button', { 'icon-only': compact }]"
               color="success"
               height="28"
               @click="openDialog(dialogs.RECEIVE)"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="activatorProps"
+
             >
-              <v-avatar tile size="14">
+              <v-avatar rounded="0" size="14">
                 <v-img
                   :src="assets.qrCodeSvg"
                   :alt="$t('common.receive')"
-                  contain
+
                   style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
                 ></v-img>
               </v-avatar>
@@ -81,8 +81,8 @@
         </v-tooltip>
       </div>
       <div v-if="isSwapSupportedByNetwork" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
             <v-btn
               :class="['expandable-button', 'swap-button', { 'icon-only': compact }]"
               color="error"
@@ -90,14 +90,14 @@
               @click="openDialog(dialogs.SWAP)"
               :disabled="!isSwapEnabledByFeatureFlag"
               :loading="loadingSwap"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="activatorProps"
+
             >
-              <v-avatar tile size="14">
+              <v-avatar rounded="0" size="14">
                 <v-img
                   :src="assets.swapSvg"
                   :alt="$t('swap.swap')"
-                  contain
+
                   style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
                 ></v-img>
               </v-avatar>
@@ -111,8 +111,8 @@
         </v-tooltip>
       </div>
       <div v-if="!isPerpetualsDisabled" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
             <v-btn
               :class="['expandable-button', 'perpetuals-button', { 'icon-only': compact }]"
               color="info"
@@ -120,12 +120,12 @@
               @click="openDialog(dialogs.PERPETUALS)"
               :disabled="priceStore.connectionStatus !== 'connected'"
               :loading="priceStore.connectionStatus === 'connecting'"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="activatorProps"
+
             >
               <span
                 class="qa-mask-icon"
-                :style="{ '--qa-icon': `url(${assets.barChart})` }"
+                :style="{ '--qa-icon': cssUrl(assets.barChart) }"
                 role="img"
                 :aria-label="$t('perpetuals.perpetuals')"
               ></span>
@@ -149,8 +149,8 @@
     <BuyDialog :isOpen="!isBuyDisabled && quickActionState.activeDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <BitcoinSendDialog
       v-if="isBitcoin"
-      :value="quickActionState.activeDialog === dialogs.SEND"
-      @input="val => !val && closeDialog()"
+      :model-value="quickActionState.activeDialog === dialogs.SEND"
+      @update:model-value="val => !val && closeDialog()"
     />
     <SendDialog v-else :isOpen="quickActionState.activeDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
     <PerpetualsDialog v-if="!isPerpetualsDisabled" :visible="quickActionState.activeDialog === dialogs.PERPETUALS" @update:visible="val => !val && closeDialog()"></PerpetualsDialog>
@@ -158,6 +158,7 @@
 </template>
 <script setup lang="ts">
 import { toRefs, computed } from 'vue';
+import { cssUrl } from '@/shared/utils/cssUrl';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
@@ -187,7 +188,7 @@ const dialogs = {
   SWAP: 'SWAP',
   BUY: 'BUY',
   PERPETUALS: 'PERPETUALS',
-};
+} as const;
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 
@@ -322,7 +323,7 @@ const isPerpetualsDisabled = computed(() => {
 
 .expandable-button .v-img {
   backdrop-filter: none !important;
-  filter: none !important;
+  /* Preserve the Send/Receive/Swap SVG tint filters on Vuetify's image root. */
 }
 
 /* Mask-painted icon: exact token color instead of an approximate CSS filter. */

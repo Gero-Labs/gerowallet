@@ -54,7 +54,7 @@
         </v-btn>
 
         <v-btn
-          outlined
+          variant="outlined"
           block
           :disabled="submitting || switchingToLocal"
           :loading="switchingToLocal"
@@ -65,7 +65,7 @@
         </v-btn>
 
         <v-btn
-          text
+          variant="text"
           block
           :disabled="submitting || switchingToLocal"
           class="mb-2"

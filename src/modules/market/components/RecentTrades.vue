@@ -7,26 +7,26 @@
       <!-- New trades indicator -->
       <v-chip
         v-if="newTradeCount > 0 && !autoRefresh"
-        x-small
+        size="x-small"
         color="error"
         class="mr-2"
         @click="loadTrades"
       >
         {{ $t('market.newTrades', { count: newTradeCount }) }}
-        <v-icon x-small class="ml-1">mdi-refresh</v-icon>
+        <v-icon size="x-small" class="ml-1">mdi-refresh</v-icon>
       </v-chip>
       <!-- Auto-refresh toggle -->
-      <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
+      <v-tooltip location="bottom"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
           <v-btn
-            icon
-            x-small
-            v-bind="attrs"
-            v-on="on"
+            icon variant="text"
+            size="x-small"
+            v-bind="activatorProps"
+
             :color="autoRefresh ? 'primary' : ''"
             @click="autoRefresh = !autoRefresh"
           >
-            <v-icon x-small>{{ autoRefresh ? 'mdi-sync' : 'mdi-sync-off' }}</v-icon>
+            <v-icon size="x-small">{{ autoRefresh ? 'mdi-sync' : 'mdi-sync-off' }}</v-icon>
           </v-btn>
         </template>
         <span>{{ $t('market.autoRefresh') }}</span>
@@ -61,9 +61,9 @@
         >
           <span class="trade-time">
             {{ formatTime(trade.blockTime) }}
-            <v-tooltip v-if="trade.isOwn" bottom :open-delay="400" content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon x-small color="primary" class="ml-1" style="vertical-align: middle" v-bind="attrs" v-on="on">mdi-account</v-icon>
+            <v-tooltip location="bottom" v-if="trade.isOwn"  :open-delay="400" content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="x-small" color="primary" class="ml-1" style="vertical-align: middle" v-bind="activatorProps" >mdi-account</v-icon>
               </template>
               <span>{{ $t('market.yourTrade') }}</span>
             </v-tooltip>

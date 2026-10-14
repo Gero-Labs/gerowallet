@@ -7,7 +7,7 @@
   <div class="midnight-holdings-table-root">
   <MidnightPrivateBalances />
   <v-data-table
-    dense
+    density="compact"
     class="transparent tokens-table market-token-table"
     :headers="headers"
     :items="rows"
@@ -20,21 +20,21 @@
     </template>
 
     <template v-slot:[`item.name`]="{ item }">
-      <v-list-item dense class="px-0">
-        <v-list-item-action class="my-0" style="margin-right: 12px !important">
+      <v-list-item density="compact" class="px-0">
+        <div class="my-0 g-list-action" style="margin-right: 12px !important">
           <v-avatar size="28" :color="item.iconBg">
-            <v-img v-if="item.image" :src="item.image" contain width="20" height="20" />
-            <v-icon v-else small :color="item.iconColor">{{ item.icon }}</v-icon>
+            <v-img v-if="item.image" :src="item.image"  width="20" height="20" />
+            <v-icon v-else size="small" :color="item.iconColor">{{ item.icon }}</v-icon>
           </v-avatar>
-        </v-list-item-action>
-        <v-list-item-content>
+        </div>
+        <div class="g-list-content">
           <v-list-item-title style="font-size: 13px">
             <span class="font-weight-bold">{{ item.ticker }}</span>
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
             {{ item.name }}
           </v-list-item-subtitle>
-        </v-list-item-content>
+        </div>
       </v-list-item>
     </template>
 
@@ -129,15 +129,15 @@ function formatBigDecimal(value: bigint, divisor: bigint, fractionDigits: number
 // Inactive columns use an em-dash placeholder; once price feeds + indexer
 // historical data are wired they'll fill in without layout changes.
 const headers = computed(() => [
-  { text: '#', value: 'rank', align: 'center' as const, sortable: false, width: 40 },
-  { text: t('market.token'), value: 'name', align: 'start' as const, sortable: false },
-  { text: 'Balance', value: 'balance', align: 'end' as const, sortable: false },
-  { text: 'Price', value: 'price', align: 'end' as const, sortable: false },
-  { text: 'Value', value: 'value', align: 'end' as const, sortable: false },
-  { text: '24H', value: 'change24h', align: 'end' as const, sortable: false },
-  { text: 'MCap', value: 'mcap', align: 'end' as const, sortable: false },
-  { text: 'Avg Cost', value: 'avgCost', align: 'end' as const, sortable: false },
-  { text: 'P&L', value: 'pnl', align: 'end' as const, sortable: false },
+  { title: t('market.rank'), key: 'rank', align: 'center' as const, sortable: false, width: 40 },
+  { title: t('market.token'), key: 'name', align: 'start' as const, sortable: false },
+  { title: t('market.balance'), key: 'balance', align: 'end' as const, sortable: false },
+  { title: t('market.price'), key: 'price', align: 'end' as const, sortable: false },
+  { title: t('market.value'), key: 'value', align: 'end' as const, sortable: false },
+  { title: t('market.change24h'), key: 'change24h', align: 'end' as const, sortable: false },
+  { title: t('market.marketCap'), key: 'mcap', align: 'end' as const, sortable: false },
+  { title: t('market.avgCost'), key: 'avgCost', align: 'end' as const, sortable: false },
+  { title: t('market.totalPnl'), key: 'pnl', align: 'end' as const, sortable: false },
 ]);
 
 interface MidnightHoldingRow {
@@ -284,7 +284,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
 }
 
 
-.tokens-table ::v-deep .v-data-table__wrapper {
+.tokens-table :deep(.v-table__wrapper) {
   background: transparent;
 }
 

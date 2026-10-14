@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :isOpen="props.value"
+    :isOpen="props.modelValue"
     icon="mdi-bitcoin"
     :imgSize="40"
     :title="t('send.sendBitcoin')"
@@ -289,17 +289,18 @@ import { MessageTypes } from '@/models/MessageTypes';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { calculateTxSize } from '@/chains/bitcoin/bitcoinCoinSelection';
 import { FeePriority } from '@/chains/bitcoin/bitcoinFeeEstimator';
+import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 
 const { t } = useTranslation();
 const { loggedWallet, utxos } = toRefs(walletStore);
 
 // Props
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'success', txId: string): void;
 }>();
 
@@ -336,10 +337,9 @@ const btcPrice = computed(() => priceStore.btcUsd?.lastPrice ?? 0);
 
 // Available balance (from UTXOs)
 const availableBalance = computed(() => {
-  if (!utxos.value || utxos.value.length === 0) return BigInt(0);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
-  return utxos.value.reduce((sum: bigint, utxo: any) => sum + BigInt(utxo.value), BigInt(0));
+  return bitcoinUtxos.value.reduce((sum, utxo) => sum + BigInt(utxo.value), BigInt(0));
 });
+const bitcoinUtxos = computed(() => utxos.value.filter((utxo): utxo is IUnifiedUtxo => !Array.isArray(utxo)));
 
 // Amount in satoshis
 const amountInSats = computed(() => {
@@ -354,8 +354,7 @@ function estimateInputCount(): number {
   const target = BigInt(amountInSats.value || 0);
   if (target <= BigInt(0)) return 1;
   // Simulate largest-first selection (default strategy)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
-  const sorted = [...utxos.value].sort((a: any, b: any) => {
+  const sorted = [...bitcoinUtxos.value].sort((a, b) => {
     const av = BigInt(a.value), bv = BigInt(b.value);
     return bv > av ? 1 : bv < av ? -1 : 0;
   });
@@ -529,7 +528,7 @@ async function confirmSend() {
 }
 
 function closeDialog() {
-  emit('input', false);
+  emit('update:modelValue', false);
   currentStep.value = 1;
   recipientAddress.value = '';
   amountBtc.value = '';
@@ -542,7 +541,7 @@ function closeDialog() {
   amountError.value = '';
 }
 
-watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
+watch(() => props.modelValue, (val) => { if (val) updateFeeEstimate(); });
 </script>
 
 <style scoped>
@@ -595,7 +594,7 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 
 .step-fade-enter-active,
 .step-fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
-.step-fade-enter        { opacity: 0; transform: translateX(12px); }
+.step-fade-enter-from        { opacity: 0; transform: translateX(12px); }
 .step-fade-leave-to     { opacity: 0; transform: translateX(-12px); }
 
 /* ── Field blocks ──────────────────────────────────────── */
@@ -1171,5 +1170,5 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 
 /* ── Fade transition ───────────────────────────────────── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
-.fade-enter, .fade-leave-to { opacity: 0; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

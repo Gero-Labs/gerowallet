@@ -1,6 +1,5 @@
-import Vue from 'vue';
-import type { CreateElement } from 'vue';
-import Vuetify from 'vuetify';
+import * as Vue from 'vue';
+import { createTestVuetify } from '@test/helpers/vuetify';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -35,6 +34,7 @@ vi.mock('@/shared/composables/useTransactionSigning', async () => {
         keystoneType: ref(''),
         keystoneCbor: ref(''),
         handleSign,
+        captureAuthorization: () => () => true,
         resetState: vi.fn(),
         handlePassKeySuccess: () => {
           void handleSign();
@@ -50,21 +50,20 @@ vi.mock('@/shared/composables/useTransactionSigning', async () => {
   };
 });
 vi.mock('@/shared/components/TransactionAuthSection.vue', () => ({
-  default: { name: 'TransactionAuthSection', render: (h: CreateElement) => h('div') },
+  default: { name: 'TransactionAuthSection', render: () => Vue.h('div') },
 }));
 vi.mock('@/shared/dialogs/KeystoneSignDialog.vue', () => ({
-  default: { name: 'KeystoneSignDialog', render: (h: CreateElement) => h('div') },
+  default: { name: 'KeystoneSignDialog', render: () => Vue.h('div') },
 }));
 
 import CardSignSectionSfc from './CardSignSection.vue';
 
-Vue.use(Vuetify);
 const CardSignSection = CardSignSectionSfc as unknown as Parameters<typeof mount>[0];
 const TX_1 = { id: 'tx-1' };
 const TX_2 = { id: 'tx-2' };
 
 function render(prepare: () => Promise<unknown>) {
-  const wrapper = mount(CardSignSection, { vuetify: new Vuetify(), propsData: { label: 'Sign', prepare } });
+  const wrapper = mount(CardSignSection, { props: { label: 'Sign', prepare }, global: { plugins: [createTestVuetify()] } });
   return wrapper.findComponent({ name: 'TransactionAuthSection' });
 }
 

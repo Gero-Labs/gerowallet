@@ -19,7 +19,7 @@
       <span v-if="description" class="t-body-sm">{{ description }}</span>
       <slot />
     </span>
-    <span v-if="$slots.aside" class="card-option__aside">
+    <span v-if="$slots['aside']" class="card-option__aside">
       <slot name="aside" />
     </span>
   </label>

@@ -1,5 +1,5 @@
 <template>
-  <v-app dark>
+  <v-app>
     <notifications></notifications>
     <!-- Pushes that arrive while this page is focused (B8): top right, its own host. -->
     <NotifySnackbar />
@@ -72,7 +72,8 @@
   </v-app>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch, getCurrentInstance } from 'vue';
+import { ref, computed, watch } from 'vue';
+import i18n, { updateI18nLocale } from '@/plugins/i18n';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
@@ -121,21 +122,11 @@ const isLocked = computed(() => walletStore.isLocked);
 // Support lives on the full dashboard only (see options/App.vue).
 
 // Watch locale changes from geroStore
-const vmProxy = getCurrentInstance()!.proxy;
 watch(() => geroStore.config?.locale, async (newLocale, oldLocale) => {
-  if (!newLocale || !vmProxy.$i18n) return;
-  if (vmProxy.$i18n.locale === newLocale) return;
-  if (!oldLocale && newLocale === 'us' && vmProxy.$i18n.locale !== 'us') return;
-
-  const { loadLanguage } = await import('@/plugins/i18n');
-  try {
-    await loadLanguage(newLocale);
-    vmProxy.$i18n.locale = newLocale;
-  } catch (error) {
-    console.error(`Failed to load language ${newLocale}:`, error);
-  }
-}, { immediate: true, deep: true });
-
+  if (!newLocale || i18n.locale === newLocale) return;
+  if (!oldLocale && newLocale === 'us' && i18n.locale !== 'us') return;
+  await updateI18nLocale(newLocale);
+}, { immediate: true });
 // Login was the single most-repeated moment in the panel with zero feedback
 // — tapping a wallet did nothing visible until the whole screen swapped out
 // from under the logged-in branch (or never did, on failure, with only a

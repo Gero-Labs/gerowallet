@@ -1,5 +1,5 @@
 <template>
-  <v-layout column>
+  <div class="d-flex flex-column">
     <!-- Midnight: same layout grammar as Cardano's portfolio page.
          Top hero row: portfolio chart (9-col, with metrics panel + chart) +
          recent transactions (3-col). Below: filter chip bar + token table
@@ -39,12 +39,12 @@
                  surfaced as disabled-state chips so the layout stays uniform. -->
             <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
               <div class="filter-chip-bar d-flex align-center" style="gap: 4px;">
-                <v-chip small class="geroButton flex-shrink-0">
-                  <v-icon x-small class="mr-1" color="var(--g-on-grad)">mdi-wallet-outline</v-icon>
+                <v-chip size="small" class="geroButton flex-shrink-0">
+                  <v-icon size="x-small" class="mr-1" color="var(--g-on-grad)">mdi-wallet-outline</v-icon>
                   {{ $t('portfolio.holdings') }}
                 </v-chip>
-                <v-chip small outlined disabled class="flex-shrink-0">
-                  <v-icon x-small class="mr-1">mdi-image-outline</v-icon>
+                <v-chip size="small" variant="outlined" disabled class="flex-shrink-0">
+                  <v-icon size="x-small" class="mr-1">mdi-image-outline</v-icon>
                   {{ $t('assets.collectibles') }}
                 </v-chip>
               </div>
@@ -52,15 +52,15 @@
               <!-- Register-for-DUST lives in the DUST battery panel; the reset
                    icon is the only toolbar action here. -->
               <v-btn
-                icon
-                small
+                icon variant="text"
+                size="small"
                 class="flex-shrink-0 mr-1"
                 :loading="resettingCache"
                 :disabled="resettingCache"
                 :title="$t('midnight.resetSyncCache')"
                 @click="resetMidnightCache()"
               >
-                <v-icon small>mdi-cached</v-icon>
+                <v-icon size="small">mdi-cached</v-icon>
               </v-btn>
             </div>
 
@@ -191,18 +191,18 @@
             <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
               <div ref="chipBarRef" class="filter-chip-bar d-flex align-center flex-shrink-0" style="gap: 4px; overflow-x: auto; min-width: 0;">
-                <v-tooltip v-for="chip in filterChips" :key="chip.value" bottom :disabled="!compactChips">
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom" v-for="chip in filterChips" :key="chip.value"  :disabled="!compactChips">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-chip
-                      small
-                      :outlined="activeView !== chip.value"
+                      size="small"
+                      :variant="activeView !== chip.value ? 'outlined' : 'tonal'"
                       @click="setActiveView(chip.value)"
                       :class="['flex-shrink-0', { 'geroButton': activeView === chip.value }]"
                       style="cursor: pointer"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="activatorProps"
+
                     >
-                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'var(--g-accent)' : 'var(--g-text-2)'">{{ chip.icon }}</v-icon>
+                      <v-icon v-if="chip.icon" size="x-small" :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'var(--g-accent)' : 'var(--g-text-2)'">{{ chip.icon }}</v-icon>
                       <template v-if="!compactChips">{{ chip.label }}</template>
                       <span v-if="chip.value === 'watchlist' && watchlistCount > 0" class="ml-1" style="font-size: 11px; opacity: 0.7;">({{ watchlistCount }})</span>
                     </v-chip>
@@ -218,8 +218,8 @@
                   ? $t('assets.searchCollections')
                   : $t('market.searchPlaceholder')"
                 prepend-inner-icon="mdi-magnify"
-                dense flat solo rounded hide-details clearable
-                background-color="var(--g-hairline-1)"
+                density="compact"  variant="solo" rounded hide-details clearable
+                bg-color="var(--g-hairline-1)"
                 class="header-search"
               />
 
@@ -227,18 +227,18 @@
 
               <!-- NFT view toggle (only in collectibles mode) -->
               <div v-if="activeView === 'collectibles'" class="d-flex align-center flex-shrink-0" style="gap: 2px;">
-                <v-btn icon x-small :class="{ 'mode-active': nftViewMode === 'table' }" class="mode-btn" @click="nftViewMode = 'table'">
-                  <v-icon small>mdi-table</v-icon>
+                <v-btn icon variant="text" size="x-small" :class="{ 'mode-active': nftViewMode === 'table' }" class="mode-btn" @click="nftViewMode = 'table'">
+                  <v-icon size="small">mdi-table</v-icon>
                 </v-btn>
-                <v-btn icon x-small :class="{ 'mode-active': nftViewMode === 'gallery' }" class="mode-btn" @click="nftViewMode = 'gallery'">
-                  <v-icon small>mdi-view-grid</v-icon>
+                <v-btn icon variant="text" size="x-small" :class="{ 'mode-active': nftViewMode === 'gallery' }" class="mode-btn" @click="nftViewMode = 'gallery'">
+                  <v-icon size="small">mdi-view-grid</v-icon>
                 </v-btn>
               </div>
 
               <!-- Live indicator -->
-              <v-tooltip v-if="isMainnetCardano" bottom content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <div class="live-indicator flex-shrink-0 d-flex align-center" v-bind="attrs" v-on="on">
+              <v-tooltip location="bottom" v-if="isMainnetCardano"  content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <div class="live-indicator flex-shrink-0 d-flex align-center" v-bind="activatorProps" >
                     <span class="live-dot" :class="{ 'live-dot--active': marketWsConnected }"></span>
                     <span class="live-label" :class="{ 'live-label--active': marketWsConnected }">LIVE</span>
                   </div>
@@ -247,65 +247,65 @@
               </v-tooltip>
 
               <!-- Unified filter menu (filters + columns) -->
-              <v-menu
+              <v-menu location="start"
                 v-model="filterMenuOpen"
-                offset-y
-                left
+
+
                 :close-on-content-click="false"
                 nudge-bottom="4"
                 content-class="filter-panel-menu"
                 eager
                 transition="none"
               >
-                <template v-slot:activator="{ on, attrs }">
-                  <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
-                      <v-icon small>mdi-tune</v-icon>
+                <template v-slot:activator="{ props: activatorProps }">
+                  <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
+                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                      <v-icon size="small">mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
                 </template>
                 <v-card flat class="liquid-glass-dialog">
                   <!-- Filters -->
-                  <v-list dense class="transparent pa-0">
+                  <v-list density="compact" class="transparent pa-0">
                     <v-list-item v-if="activeView !== 'collectibles' && isMainnetCardano" @click="verifiedOnly = !verifiedOnly">
-                      <v-list-item-action class="mr-2">
-                        <v-icon small :color="verifiedOnly ? 'primary' : ''">
+                      <div class="mr-2 g-list-action">
+                        <v-icon size="small" :color="verifiedOnly ? 'primary' : ''">
                           {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
                         </v-icon>
-                      </v-list-item-action>
+                      </div>
                       <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
                     </v-list-item>
                     <!-- Graduated snek.fun tokens: show inline in the market list (like verified-only) -->
                     <v-list-item v-if="activeView !== 'collectibles'" @click="showSnekfun = !showSnekfun">
-                      <v-list-item-action class="mr-2">
-                        <v-icon small :color="showSnekfun ? 'primary' : ''">
+                      <div class="mr-2 g-list-action">
+                        <v-icon size="small" :color="showSnekfun ? 'primary' : ''">
                           {{ showSnekfun ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
                         </v-icon>
-                      </v-list-item-action>
+                      </div>
                       <v-list-item-title style="font-size: 13px;">
-                        <v-icon x-small color="#A3E635" class="mr-1">mdi-snake</v-icon>{{ $t('market.snekfun') }}
+                        <v-icon size="x-small" color="#A3E635" class="mr-1">mdi-snake</v-icon>{{ $t('market.snekfun') }}
                       </v-list-item-title>
                     </v-list-item>
 
                     <!-- Column preferences (Cardano only) -->
                     <template v-if="!isApex">
                       <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
-                      <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
+                      <v-list-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-list-subheader>
                       <v-list-item
                         v-for="col in columnOptions"
                         :key="col.key"
                         @click="toggleColumn(col.key)"
-                        dense
+                        density="compact"
                       >
-                        <v-list-item-action class="mr-2">
-                          <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
+                        <div class="mr-2 g-list-action">
+                          <v-icon size="small" :color="columnPrefs[col.key] ? 'primary' : ''">
                             {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
                           </v-icon>
-                        </v-list-item-action>
+                        </div>
                         <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
                       </v-list-item>
                       <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
-                      <v-list-item dense @click="resetToDefaults">
+                      <v-list-item density="compact" @click="resetToDefaults">
                         <v-list-item-title style="font-size: 12px; color: var(--g-info);">
                           {{ $t('market.resetColumns') }}
                         </v-list-item-title>
@@ -359,7 +359,7 @@
               <span class="t-caption" style="color: var(--g-text-3);">
                 {{ $t('market.hiddenByFilters', { count: hiddenByFilterCount }) }}
               </span>
-              <v-btn text x-small color="primary" class="ml-2" @click="verifiedOnly = false">
+              <v-btn variant="text" size="x-small" color="primary" class="ml-2" @click="verifiedOnly = false">
                 {{ $t('common.showAll') }}
               </v-btn>
             </div>
@@ -388,7 +388,7 @@
       <!-- cNIGHT → DUST registration -->
       <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="closeDustRegistration()" />
     </template>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -534,7 +534,7 @@ async function resetMidnightCache() {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.RESYNC_MIDNIGHT,
       data: {},
-    });
+    }) as { data?: { success?: boolean; error?: string } };
     if (response?.data?.success) {
       snackbar.fireSuccess(t('midnight.resetSyncCacheDone'));
     } else {
@@ -578,7 +578,8 @@ const verifiedFilterActive = computed(() => verifiedOnly.value && isMainnetCarda
 // Graduated snek.fun tokens shown inline in the market list (toggle, default on)
 const showSnekfun = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
-const nftDialogData = ref<Record<string, unknown> | null>(null);
+type NftCollection = NonNullable<InstanceType<typeof TokensDialog>['$props']['modalData']>;
+const nftDialogData = ref<NftCollection | null>(null);
 const selectedToken = ref<MarketToken | null>(null);
 const panelOpen = ref(false);
 const swapDialogOpen = ref(false);
@@ -885,7 +886,7 @@ function openTokenByUnit(unit: string) {
 function openNftCollection(policyId: string) {
   const col = (collections.value || {})[policyId];
   if (col) {
-    nftDialogData.value = col;
+    nftDialogData.value = col as NftCollection;
   }
 }
 
@@ -1181,6 +1182,12 @@ function closeDustRegistration() {
   border-radius: var(--g-r-control) !important;
 }
 
+/* Neutral tabs used the theme divider before Vuetify's outlined variant
+   switched to the full text color. Keep the selected accent rule below. */
+.filter-chip-bar .v-chip--variant-outlined {
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
 /* Selected chip: cyan-accented (tint + hairline) so the active tab clearly
    reads as the chain accent. The geroButton gradient doesn't apply to a v-chip
    (it rendered a dull grey), so we tint it here instead. The icon stays
@@ -1199,39 +1206,40 @@ function closeDustRegistration() {
   max-width: 440px;
 }
 
-/* A Vuetify solo field defaults to ~48px via .v-input__control — override both
-   the control and the slot so the field height matches the 34px chips. */
-.header-search ::v-deep .v-input__control,
-.header-search ::v-deep .v-input__slot {
+/* Match the 28px filter chips at every layer of Vuetify's field. */
+.header-search :deep(.v-input__control),
+.header-search :deep(.v-field),
+.header-search :deep(.v-field__input) {
   min-height: 28px !important;
   height: 28px !important;
 }
 
-.header-search ::v-deep .v-input__slot {
+.header-search :deep(.v-field) {
   border-radius: var(--g-r-control) !important;
   padding: 0 12px !important;
 }
 
-.header-search ::v-deep input {
+.header-search :deep(input) {
   font-size: 12px;
+  padding: 0;
 }
 
-.header-search ::v-deep input::placeholder {
+.header-search :deep(input::placeholder) {
   font-size: 12px;
   opacity: 0.5;
 }
 
-.header-search ::v-deep .v-input__prepend-inner {
+.header-search :deep(.v-field__prepend-inner) {
   margin-top: 0 !important;
   align-self: center;
 }
 
-.header-search ::v-deep .v-input__prepend-inner .v-icon {
+.header-search :deep(.v-field__prepend-inner .v-icon) {
   font-size: 18px;
   opacity: 0.55;
 }
 
-.header-search ::v-deep .v-input__icon--clear .v-icon {
+.header-search :deep(.v-field__clearable .v-icon) {
   font-size: 16px;
 }
 
@@ -1279,7 +1287,7 @@ function closeDustRegistration() {
   background: transparent;
 }
 
-.holdings-table-card ::v-deep .v-data-table-header th {
+.holdings-table-card :deep(.v-data-table__th) {
   /* Transparent over the glass-panel material: a solid fill here reads as an
      opaque slab once the card is see-through. Header tier is carried by the
      tracked-caps text-3 type + hairline divider (headers are not sticky). */
@@ -1426,7 +1434,7 @@ function closeDustRegistration() {
   isolation: isolate !important;
 }
 
-.filter-panel-search .v-input__slot {
+.filter-panel-search .v-field {
   min-height: 34px !important;
   font-size: 13px;
   background: var(--g-hairline-1) !important;
@@ -1434,12 +1442,17 @@ function closeDustRegistration() {
   color: var(--g-text-1) !important;
 }
 
-.filter-panel-search .v-input__slot input {
+.filter-panel-search .v-field__input {
+  min-height: 34px;
+  padding-block: 0;
+}
+
+.filter-panel-search .v-field input {
   color: var(--g-text-1) !important;
   caret-color: var(--g-text-1) !important;
 }
 
-.filter-panel-search .v-input__slot input::placeholder {
+.filter-panel-search .v-field input::placeholder {
   color: var(--g-text-3) !important;
 }
 
@@ -1447,7 +1460,7 @@ function closeDustRegistration() {
   min-height: 36px !important;
 }
 
-.filter-panel .v-subheader {
+.filter-panel .v-list-subheader {
   color: var(--g-text-3) !important;
 }
 </style>

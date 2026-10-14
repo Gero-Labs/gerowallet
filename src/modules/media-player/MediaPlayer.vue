@@ -1,9 +1,9 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-0">
-        <v-card flat outlined class="liquid-glass" style="min-height: calc(100vh - 80px);">
-          <v-row no-gutters v-if="!musicPlaylist?.length" class="fill-height" align="center" justify="center" style="min-height: calc(-80px + 100vh)">
+        <v-card flat variant="outlined" class="liquid-glass" style="min-height: calc(100vh - 80px);">
+          <v-row no-gutters v-if="!musicPlaylist?.length" class="fill-height align-center justify-center"   style="min-height: calc(-80px + 100vh)">
             <v-col cols="12" class="text-center pa-8">
               <v-icon size="64" color="grey lighten-1">mdi-music-off</v-icon>
               <div class="mt-4 text-h6 grey--text text--lighten-1">{{ $t('emptyState.noMediaNFTs') }}</div>
@@ -30,13 +30,12 @@
                 <v-card-title>
                   <v-spacer></v-spacer>
                   <v-text-field
-                    flat
+
                     v-model="search"
-                    :search-input.sync="search"
+                    v-model:search="search"
                     :placeholder="$t('common.search')"
-                    outlined
-                    solo
-                    dense
+                    variant="outlined"
+                    density="compact"
                     prepend-inner-icon="mdi-magnify"
                     clearable
                     hide-details
@@ -45,11 +44,11 @@
                   </v-text-field>
                 </v-card-title>
                 <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
-                  <v-list nav dense style="width: 100%" class="transparent py-0">
+                  <v-list nav density="compact" style="width: 100%" class="transparent py-0">
                     <!-- Iterate over grouped playlist -->
-                    <template v-for="(group, category) in groupedPlaylist">
+                    <template :key="category" v-for="(group, category) in groupedPlaylist">
                       <!-- Sticky header for each category -->
-                      <v-subheader :key="category" class="sticky-header">{{ category }}</v-subheader>
+                      <v-list-subheader  class="sticky-header">{{ category }}</v-list-subheader>
                       <!-- Iterate over tracks in each category -->
                       <v-list-item
                         v-for="(track, index) in group"
@@ -57,13 +56,13 @@
                         @click="selectTrack(track)"
                         :class="{ 'current-playing': isCurrentTrack(track) }"
                       >
-                          <v-list-item-avatar>
-                            <v-img :src="track.img" contain>
+                          <v-avatar>
+                            <v-img :src="track.img" >
                               <template v-slot:placeholder>
                                 <v-row
-                                  class="fill-height ma-0"
-                                  align="center"
-                                  justify="center"
+                                  class="fill-height ma-0 align-center justify-center"
+
+
                                 >
                                   <v-progress-circular
                                     indeterminate
@@ -72,13 +71,13 @@
                                 </v-row>
                               </template>
                             </v-img>
-                          </v-list-item-avatar>
-                          <v-list-item-content>
+                          </v-avatar>
+                          <div class="g-list-content">
                             <v-list-item-title>{{ track.title }}</v-list-item-title>
                             <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
-                          </v-list-item-content>
+                          </div>
                           <v-spacer></v-spacer>
-                          <v-icon v-if="isCurrentTrack(track)" color="primary" small>
+                          <v-icon v-if="isCurrentTrack(track)" color="primary" size="small">
                             {{ context?.isPlaying ? 'mdi-volume-high' : 'mdi-pause' }}
                           </v-icon>
                         </v-list-item>
@@ -91,37 +90,17 @@
         </v-card>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs } from 'vue';
 import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
 import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
-import MusicStore, { musicStore } from '@/stores/musicStore';
+import MusicStore, { musicStore, type MusicTrack } from '@/stores/musicStore';
 
 const { musicPlaylist, context } = toRefs(musicStore);
 
 const search = ref('');
-const _trackDuration = ref(0);
-const _currentlyPlaying = ref(false);
-const _currentlyStopped = ref(false);
-const _currentTime = ref(0);
-const _currentProgressBar = ref(0);
-const _checkingCurrentPositionInTrack = ref(null);
-const _imageFile = ref("");
-const _track = ref(null);
-
-const _fancyTimeFormat = (s: number) => {
-  return (s - (s %= 60)) / 60 + (9 < s ? ":" : ":0") + s.toFixed(0);
-};
-
-const numbersFilter = (value: number): string => {
-  const number = value + 1;
-  if (number < 10) {
-    return "0" + number + ".";
-  }
-  return number + ".";
-};
 
 const currentTrack = computed(() => {
   if (musicPlaylist.value && context.value) {
@@ -153,7 +132,7 @@ const groupedPlaylist = computed(() => {
   return grouped;
 });
 
-const selectTrack = (track: any) => {
+const selectTrack = (track: MusicTrack) => {
   if (track && musicPlaylist.value) {
     const index = musicPlaylist.value.indexOf(track);
     // Store the current playing state
@@ -166,16 +145,9 @@ const selectTrack = (track: any) => {
   }
 };
 
-const _calculateIndex = (index: number, category: string) => {
-  // Calculate global index based on the category and track index
-  const categoryStartIndex = Object.keys(groupedPlaylist.value).reduce((acc, key) => {
-    if (key === category) return acc;
-    return acc + groupedPlaylist.value[key].length;
-  }, 0);
-  return numbersFilter(categoryStartIndex + index);
-};
 
-const isCurrentTrack = (track: any) => {
+
+const isCurrentTrack = (track: MusicTrack) => {
   if (!currentTrack.value || !musicPlaylist.value) return false;
 
   // Find the index of this track in the full playlist
@@ -445,7 +417,7 @@ video {
   border-left: 3px solid #00c7f3 !important;
 }
 
-.current-playing .v-list-item__title {
+.current-playing .v-list-item-title {
   color: #00c7f3 !important;
   font-weight: 600 !important;
 }

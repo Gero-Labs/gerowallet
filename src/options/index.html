@@ -5,6 +5,9 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3</title>
+  <!-- Establish the native cascade before any bundled component stylesheet.
+       The wallet must not depend on the swap widget to declare this order. -->
+  <link rel="stylesheet" href="../shared/styles/vuetify-layers.css?no-inline" media="all" />
 
   <!-- Critical performance optimizations -->
   <!-- Asset preloads will be handled by Vite during build -->

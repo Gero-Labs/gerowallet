@@ -1,18 +1,17 @@
 <template>
-  <v-data-table
-    dense
+  <v-data-table-server
+    density="compact"
     class="transparent tokens-table market-token-table"
     :headers="activeHeaders"
     :items="paginatedTokens"
-    item-key="rowKey"
-    :sort-by.sync="sortBy"
-    :sort-desc.sync="sortDesc"
-    :custom-sort="customSort"
+    :item-value="(item) => item.rowKey || item.unit"
+    v-model:sort-by="tableSort"
+    :items-length="tokens.length"
     :items-per-page="-1"
     hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :loading="loading"
-    :item-class="rowClass"
+    :row-props="({ item }) => ({ class: rowClass(item) })"
     :expanded="dustExpanded"
     @click:row="handleRowClick"
   >
@@ -34,16 +33,18 @@
     <!-- DUST generation strip: rendered directly beneath the NIGHT (cNIGHT)
          holdings row. Half-height, distinct gold band with the dust-battery
          particle animation; X dismisses it (persisted). -->
-    <template v-slot:expanded-item>
-      <td :colspan="activeHeaders.length" class="dust-line-cell">
-        <DustGenerationLine variant="row" @setup="$emit('dust-setup')" @dismiss="dismissDustLine" />
-      </td>
+    <template v-slot:expanded-row>
+      <tr class="night-dust-row">
+        <td :colspan="activeHeaders.length" class="dust-line-cell">
+          <DustGenerationLine variant="row" @setup="$emit('dust-setup')" @dismiss="dismissDustLine" />
+        </td>
+      </tr>
     </template>
 
     <!-- No data -->
     <template v-slot:no-data>
       <div class="text-center py-6" style="opacity: 0.5">
-        <v-icon large class="mb-2">mdi-magnify</v-icon>
+        <v-icon size="large" class="mb-2">mdi-magnify</v-icon>
         <div>{{ $t('market.noTokens') }}</div>
       </div>
     </template>
@@ -62,14 +63,14 @@
             <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
-          <v-tooltip v-if="isProgrammableRow(item)" top :open-delay="300" content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
+          <v-tooltip location="top" v-if="isProgrammableRow(item)"  :open-delay="300" content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
               <v-icon
                 color="var(--g-warning)"
                 class="programmable-badge"
                 style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: var(--g-surface); border-radius: 50%;"
-                v-bind="attrs"
-                v-on="on"
+                v-bind="activatorProps"
+
               >mdi-lock-outline</v-icon>
             </template>
             {{ $t(programmableTooltipKey(item.unit)) }}
@@ -87,15 +88,15 @@
             style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: var(--g-surface); border-radius: 50%;"
           >mdi-check-decagram</v-icon>
         </div>
-        <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <span class="font-weight-bold token-ticker" style="font-size: 13px" v-bind="attrs" v-on="on">{{ item.ticker }}</span>
+        <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <span class="font-weight-bold token-ticker" style="font-size: 13px" v-bind="activatorProps" >{{ item.ticker }}</span>
           </template>
           {{ item.name }}
         </v-tooltip>
         <v-chip
           v-if="isProgrammableRow(item)"
-          x-small label
+          size="x-small" label
           class="ml-1 flex-shrink-0"
           style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-warning); background: var(--g-warning-fill); border: 1px solid var(--g-warning-line);"
         >
@@ -103,7 +104,7 @@
         </v-chip>
         <v-chip
           v-if="showOwnedBadge && ownedUnits.has(item.unit)"
-          x-small label
+          size="x-small" label
           color="primary"
           class="ml-1 flex-shrink-0"
           style="height: 16px; font-size: 11px; padding: 0 4px;"
@@ -123,9 +124,9 @@
           class="price-flash-overlay"
           :class="priceFlash[item.unit].dir === 'up' ? 'market-flash-up' : 'market-flash-down'"
         ></span>
-        <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <span v-bind="attrs" v-on="on" style="font-size: 13px; white-space: nowrap; position: relative;">{{ formatPrice(item.price) }}</span>
+        <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <span v-bind="activatorProps"  style="font-size: 13px; white-space: nowrap; position: relative;">{{ formatPrice(item.price) }}</span>
           </template>
           <div>${{ (item.price ?? 0).toFixed(8) }}</div>
           <div v-if="!item.isNative" style="opacity: 0.7">
@@ -138,7 +139,7 @@
     <!-- Change columns -->
     <template v-slot:[`item.change1h`]="{ item }">
       <span :style="{ color: changeColor(item.change1h), fontSize: '12px', whiteSpace: 'nowrap' }">
-        <v-avatar tile size="10" class="mr-1">
+        <v-avatar rounded="0" size="10" class="mr-1">
           <v-img :src="changeIcon(item.change1h)" alt="trend" />
         </v-avatar>
         {{ formatChange(item.change1h) }}
@@ -147,7 +148,7 @@
 
     <template v-slot:[`item.change24h`]="{ item }">
       <span :style="{ color: changeColor(item.change24h), fontSize: '12px', whiteSpace: 'nowrap' }">
-        <v-avatar tile size="10" class="mr-1">
+        <v-avatar rounded="0" size="10" class="mr-1">
           <v-img :src="changeIcon(item.change24h)" alt="trend" />
         </v-avatar>
         {{ formatChange(item.change24h) }}
@@ -156,7 +157,7 @@
 
     <template v-slot:[`item.change7d`]="{ item }">
       <span :style="{ color: changeColor(item.change7d), fontSize: '12px', whiteSpace: 'nowrap' }">
-        <v-avatar tile size="10" class="mr-1">
+        <v-avatar rounded="0" size="10" class="mr-1">
           <v-img :src="changeIcon(item.change7d)" alt="trend" />
         </v-avatar>
         {{ formatChange(item.change7d) }}
@@ -165,7 +166,7 @@
 
     <template v-slot:[`item.change30d`]="{ item }">
       <span :style="{ color: changeColor(item.change30d ?? 0), fontSize: '12px', whiteSpace: 'nowrap' }">
-        <v-avatar tile size="10" class="mr-1">
+        <v-avatar rounded="0" size="10" class="mr-1">
           <v-img :src="changeIcon(item.change30d ?? 0)" alt="trend" />
         </v-avatar>
         {{ formatChange(item.change30d ?? 0) }}
@@ -189,9 +190,9 @@
 
     <!-- Volume column -->
     <template v-slot:[`item.volume24h`]="{ item }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.volume24h) }}</span>
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps"  style="font-size: 12px">${{ formatCompact(item.volume24h) }}</span>
         </template>
         ${{ (item.volume24h ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
@@ -199,9 +200,9 @@
 
     <!-- Volume 7D column -->
     <template v-slot:[`item.volume7d`]="{ item }">
-      <v-tooltip v-if="item.volume7d" top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.volume7d) }}</span>
+      <v-tooltip location="top" v-if="item.volume7d"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps"  style="font-size: 12px">${{ formatCompact(item.volume7d) }}</span>
         </template>
         ${{ (item.volume7d ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
@@ -220,9 +221,9 @@
 
     <!-- Total Supply column -->
     <template v-slot:[`item.totalSupply`]="{ item }">
-      <v-tooltip v-if="item.totalSupply != null" top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ formatCompact(item.totalSupply) }}</span>
+      <v-tooltip location="top" v-if="item.totalSupply != null"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps"  style="font-size: 12px">{{ formatCompact(item.totalSupply) }}</span>
         </template>
         {{ (item.totalSupply ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
@@ -231,9 +232,9 @@
 
     <!-- Market Cap column -->
     <template v-slot:[`item.mcap`]="{ item }">
-      <v-tooltip v-if="item.mcap != null" top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.mcap) }}</span>
+      <v-tooltip location="top" v-if="item.mcap != null"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps"  style="font-size: 12px">${{ formatCompact(item.mcap) }}</span>
         </template>
         ${{ (item.mcap ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
@@ -242,9 +243,9 @@
 
     <!-- TVL column -->
     <template v-slot:[`item.tvl`]="{ item }">
-      <v-tooltip v-if="item.tvl != null" top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ getCurrencySymbol() }}{{ formatCompact(convertFiat(item.tvl)) }}</span>
+      <v-tooltip location="top" v-if="item.tvl != null"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps"  style="font-size: 12px">{{ getCurrencySymbol() }}{{ formatCompact(convertFiat(item.tvl)) }}</span>
         </template>
         {{ getCurrencySymbol() }}{{ convertFiat(item.tvl).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
@@ -254,18 +255,18 @@
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
       <div class="d-flex align-center" style="gap: 4px;">
-        <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
+        <v-tooltip location="top" v-if="item.balance"  content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <span v-bind="activatorProps"  style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
           </template>
           {{ hideBalances ? '••••••' : item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
         </v-tooltip>
         <span v-else style="font-size: 12px">—</span>
         <!-- Decimals couldn't be resolved from any source — the balance above is
              raw units, not divided by decimals (issue 1003). -->
-        <v-tooltip v-if="item.decimalsUnknown" top content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+        <v-tooltip location="top" v-if="item.decimalsUnknown"  content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-icon size="x-small" color="warning" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
           </template>
           {{ $t('market.decimalsUnknown') }}
         </v-tooltip>
@@ -273,9 +274,9 @@
     </template>
 
     <template v-slot:[`item.value`]="{ item }">
-      <v-tooltip v-if="item.value" top content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '$•••' : '$' + formatBalance(item.value) }}</span>
+      <v-tooltip location="top" v-if="item.value"  content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps"  style="font-size: 12px">{{ hideBalances ? '$•••' : '$' + formatBalance(item.value) }}</span>
         </template>
         {{ hideBalances ? '••••••' : '$' + item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
       </v-tooltip>
@@ -288,9 +289,9 @@
         v-if="item.allocation"
         class="allocation-bar"
         height="14"
-        :value="totalAllocation > 0 ? (item.allocation / totalAllocation) * 100 : 0"
+        :model-value="totalAllocation > 0 ? (item.allocation / totalAllocation) * 100 : 0"
         color="var(--g-accent)"
-        background-color="var(--g-hairline-1)"
+        bg-color="var(--g-hairline-1)"
         rounded
       >
         <template v-slot:default="{ value }">
@@ -313,14 +314,14 @@
     <template v-slot:[`item.totalPnl`]="{ item }">
       <span v-if="item.isNative" style="font-size: 12px">—</span>
       <span v-else-if="pnlLoading && item.totalPnl == null" class="pnl-skeleton"></span>
-      <v-tooltip v-else-if="item.totalPnl != null" top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
+      <v-tooltip location="top" v-else-if="item.totalPnl != null"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
           <span
-            v-bind="attrs"
-            v-on="on"
+            v-bind="activatorProps"
+
             :style="{ color: hideBalances ? undefined : pnlColor(item.totalPnl), fontSize: '12px', fontWeight: '500', whiteSpace: 'nowrap' }"
           >
-            <v-avatar v-if="!hideBalances" tile size="10" class="mr-1">
+            <v-avatar v-if="!hideBalances" rounded="0" size="10" class="mr-1">
               <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
             </v-avatar>
             {{ hideBalances ? '••••••' : formatPnl(item.totalPnl) + ' ' + nativeSymbol }}
@@ -338,10 +339,10 @@
 
     <!-- Watchlist column -->
     <template v-slot:[`item.watchlist`]="{ item }">
-      <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn icon x-small v-bind="attrs" v-on="on" @click.stop="toggleWatch(item.unit)">
-            <v-icon small :color="isWatched(item.unit) ? 'amber' : ''">
+      <v-tooltip location="bottom"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <v-btn icon variant="text" size="x-small" v-bind="activatorProps"  @click.stop="toggleWatch(item.unit)">
+            <v-icon size="small" :color="isWatched(item.unit) ? 'amber' : ''">
               {{ isWatched(item.unit) ? 'mdi-star' : 'mdi-star-outline' }}
             </v-icon>
           </v-btn>
@@ -351,83 +352,84 @@
     </template>
 
     <!-- Custom header tooltips -->
-    <template v-slot:[`header.volume24h`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.volume24h`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.volumeTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.mcap`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.mcap`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.mcapTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.change1h`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.change1h`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.change1hTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.change24h`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.change24h`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.change24hTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.change7d`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.change7d`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.change7dTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.tvl`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.tvl`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.tvlTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.avgCostBasis`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.avgCostBasis`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.avgCostTooltip') }}
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.totalPnl`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+    <template v-slot:[`header.totalPnl`]="{ column }">
+      <v-tooltip location="top"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span v-bind="activatorProps" >{{ column.title }}</span>
         </template>
         {{ $t('market.totalPnlTooltip') }}
       </v-tooltip>
     </template>
-  </v-data-table>
+  </v-data-table-server>
 </template>
 
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
 import { ref, computed, watch, onMounted } from 'vue';
+import type { DataTableHeader, DataTableSortItem } from 'vuetify';
 import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
@@ -497,12 +499,12 @@ const cnightUnit = computed(() => {
 /** The NIGHT row currently in the table (holdings + Cardano only). Dismissal
  *  hides the strip entirely; the registration status still surfaces in the
  *  token drawer + DUST battery widgets, which aren't dismissable. */
-const dustExpanded = computed<MarketToken[]>(() => {
+const dustExpanded = computed<string[]>(() => {
   if (!props.showHoldingsColumns || dustLineDismissed.value) return [];
   if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return [];
   if (!cnightUnit.value) return [];
   const night = paginatedTokens.value.find((tk) => tk.unit === cnightUnit.value);
-  return night ? [night] : [];
+  return night ? [night.rowKey || night.unit] : [];
 });
 
 function dismissDustLine() {
@@ -526,53 +528,57 @@ const APEX_ALLOWED_COLUMNS = ['rank', 'name', 'price', 'change24h', 'volume24h',
 
 const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);
+const tableSort = computed<DataTableSortItem[]>({
+  get: (): DataTableSortItem[] => sortBy.value ? [{ key: sortBy.value, order: sortDesc.value ? 'desc' : 'asc' }] : [],
+  set: value => { sortBy.value = value[0]?.key || ''; sortDesc.value = value[0]?.order === 'desc'; currentPage.value = 1; },
+});
 const currentPage = ref(1);
 const itemsPerPage = 25;
 
 const baseHeaders = computed(() => {
-  const headers: { text: string; value: string; sortable: boolean; width?: string; class?: string; cellClass?: string }[] = [
-    { text: t('market.rank'), value: 'rank', sortable: false, width: '40px' },
-    { text: t('market.token'), value: 'name', sortable: true },
-    { text: t('market.price'), value: 'price', sortable: true, width: '100px' },
-    { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px' },
-    { text: t('market.change24h'), value: 'change24h', sortable: true, width: '70px' },
-    { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px' },
-    { text: t('market.change30d'), value: 'change30d', sortable: true, width: '70px' },
-    { text: t('market.sparkline'), value: 'sparkline', sortable: false, width: '90px' },
-    { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px' },
-    { text: t('market.volume7d'), value: 'volume7d', sortable: true, width: '90px' },
-    { text: t('market.txnCount'), value: 'txnCount24h', sortable: true, width: '80px' },
-    { text: t('market.makerCount'), value: 'makerCount24h', sortable: true, width: '80px' },
-    { text: t('market.totalSupply'), value: 'totalSupply', sortable: true, width: '90px' },
-    { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
-    { text: t('market.liquidity'), value: 'tvl', sortable: true, width: '90px' },
+  const headers: DataTableHeader[] = [
+    { title: t('market.rank'), key: 'rank', sortable: false, width: '40px' },
+    { title: t('market.token'), key: 'name', sortable: true },
+    { title: t('market.price'), key: 'price', sortable: true, width: '100px' },
+    { title: t('market.change1h'), key: 'change1h', sortable: true, width: '70px' },
+    { title: t('market.change24h'), key: 'change24h', sortable: true, width: '70px' },
+    { title: t('market.change7d'), key: 'change7d', sortable: true, width: '70px' },
+    { title: t('market.change30d'), key: 'change30d', sortable: true, width: '70px' },
+    { title: t('market.sparkline'), key: 'sparkline', sortable: false, width: '90px' },
+    { title: t('market.volume24h'), key: 'volume24h', sortable: true, width: '90px' },
+    { title: t('market.volume7d'), key: 'volume7d', sortable: true, width: '90px' },
+    { title: t('market.txnCount'), key: 'txnCount24h', sortable: true, width: '80px' },
+    { title: t('market.makerCount'), key: 'makerCount24h', sortable: true, width: '80px' },
+    { title: t('market.totalSupply'), key: 'totalSupply', sortable: true, width: '90px' },
+    { title: t('market.marketCap'), key: 'mcap', sortable: true, width: '90px' },
+    { title: t('market.liquidity'), key: 'tvl', sortable: true, width: '90px' },
   ];
 
   // Allocation is toggleable via column preferences (works in both market and holdings views)
   headers.push(
-    { text: t('common.allocation'), value: 'allocation', sortable: true, width: '110px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
+    { title: t('common.allocation'), key: 'allocation', sortable: true, width: '110px', headerProps: { class: 'hidden-sm-and-down' }, cellProps: { class: 'hidden-sm-and-down' } },
   );
 
   if (props.showHoldingsColumns) {
     // Balance after name
-    const nameIndex = headers.findIndex(h => h.value === 'name');
+    const nameIndex = headers.findIndex(h => h.key === 'name');
     headers.splice(nameIndex + 1, 0,
-      { text: t('market.balance'), value: 'balance', sortable: true, width: '80px' },
+      { title: t('market.balance'), key: 'balance', sortable: true, width: '80px' },
     );
     // Value after price
-    const priceIndex = headers.findIndex(h => h.value === 'price');
+    const priceIndex = headers.findIndex(h => h.key === 'price');
     headers.splice(priceIndex + 1, 0,
-      { text: t('market.value'), value: 'value', sortable: true, width: '80px' },
+      { title: t('market.value'), key: 'value', sortable: true, width: '80px' },
     );
     // Avg cost and PnL at the end (before watchlist)
     headers.push(
-      { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
-      { text: t('market.totalPnl'), value: 'totalPnl', sortable: true, width: '90px' },
+      { title: t('market.avgCost'), key: 'avgCostBasis', sortable: true, width: '80px', headerProps: { class: 'hidden-md-and-down' }, cellProps: { class: 'hidden-md-and-down' } },
+      { title: t('market.totalPnl'), key: 'totalPnl', sortable: true, width: '90px' },
     );
   }
 
   headers.push(
-    { text: '', value: 'watchlist', sortable: false, width: '36px' },
+    { title: '', key: 'watchlist', sortable: false, width: '36px' },
   );
 
   return headers;
@@ -586,10 +592,10 @@ const HOLDINGS_COLUMNS = ['balance', 'value'];
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
     // Apex wallets: fixed set of columns from CoinGecko, no column preferences
-    if (isApex.value) return APEX_ALLOWED_COLUMNS.includes(header.value);
-    if (LOCKED_COLUMNS.includes(header.value)) return true;
-    if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.value)) return true;
-    return isColumnVisible(header.value);
+    if (isApex.value) return APEX_ALLOWED_COLUMNS.includes(header.key);
+    if (LOCKED_COLUMNS.includes(header.key)) return true;
+    if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.key)) return true;
+    return isColumnVisible(header.key);
   });
 });
 
@@ -649,7 +655,7 @@ watch(
   },
 );
 
-function handleRowClick(item: MarketToken) {
+function handleRowClick(_event: Event, { item }: { item: MarketToken }) {
   emit('token-click', item);
 }
 
@@ -723,7 +729,7 @@ function rowClass(item: MarketToken): string {
   if (item.isNative) classes.push('native-token-row');
   // The NIGHT row that has the DUST strip expanded beneath it drops its bottom
   // divider so the two read as one row.
-  if (dustExpanded.value.some((t) => t.unit === item.unit)) classes.push('night-dust-attached');
+  if (dustExpanded.value.includes(item.rowKey || item.unit)) classes.push('night-dust-attached');
   return classes.join(' ');
 }
 
@@ -756,7 +762,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 </script>
 
 <style scoped>
-.market-token-table >>> .v-data-table__wrapper {
+.market-token-table >>> .v-table__wrapper {
   overflow-x: auto;
 }
 
@@ -786,15 +792,15 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   border-bottom: none !important;
 }
 /* Vuetify boxes the expanded row with an inset top+bottom shadow
-   (.v-data-table>.v-data-table__wrapper tbody tr.v-data-table__expanded__content,
+   (.v-data-table>.v-table__wrapper tbody tr.v-data-table__expanded__content,
    specificity 0,3,2) — that shadow is what made the DUST strip read as its own
-   boxed row. Match Vuetify's depth (.v-data-table__wrapper tbody, 0,4,2) to
+   boxed row. Match Vuetify's depth (.v-table__wrapper tbody, 0,4,2) to
    remove it without an override flag. */
-.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content {
+.market-token-table >>> .v-table__wrapper tbody tr.v-data-table__expanded__content {
   box-shadow: none;
   cursor: default;
 }
-.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content:hover {
+.market-token-table >>> .v-table__wrapper tbody tr.v-data-table__expanded__content:hover {
   background: transparent;
 }
 

@@ -2,7 +2,7 @@
 // showed to `chrome.storage.local.notifyInbox` (notifyStore); pages mirror that key here and
 // send NOTIFY_INBOX_READ / NOTIFY_INBOX_CLEAR back, so the worker stays the only writer.
 
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { NotifyInboxItem } from '@/services/notify/notifyStore';
@@ -16,7 +16,7 @@ interface NotifyInboxState {
   loaded: boolean;
 }
 
-const state = Vue.observable<NotifyInboxState>({ items: [], loaded: false });
+const state = reactive<NotifyInboxState>({ items: [], loaded: false });
 
 function isItem(v: unknown): v is NotifyInboxItem {
   return !!v && typeof v === 'object' && typeof (v as NotifyInboxItem).e === 'string' && typeof (v as NotifyInboxItem).title === 'string' && typeof (v as NotifyInboxItem).ts === 'number';

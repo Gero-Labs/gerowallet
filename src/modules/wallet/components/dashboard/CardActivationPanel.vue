@@ -11,19 +11,19 @@
 
     <!-- The number is only sent to the provider to confirm delivery; it is never stored or logged. -->
     <v-text-field
-      :value="formatted"
+      :model-value="formatted"
       :label="t('card.cardNumber')"
       :hint="t('card.activateHint')"
       :error-messages="error"
       persistent-hint
-      outlined
-      dense
+      variant="outlined"
+      density="compact"
       inputmode="numeric"
       autocomplete="off"
       spellcheck="false"
       class="card-activate__input g-num"
       :disabled="submitting"
-      @input="onInput"
+      @update:model-value="onInput"
       @blur="touched = true"
     />
 

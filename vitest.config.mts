@@ -3,11 +3,13 @@ import { resolve } from 'path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import Vue from '@vitejs/plugin-vue2';
+import Vue from '@vitejs/plugin-vue';
+import { localeMessagesPlugin } from './scripts/i18n-compiler.mjs';
 
 export default defineConfig({
   plugins: [
-    Vue(),
+    Vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'gero-swap' } } }),
+    localeMessagesPlugin(),
     wasm(),
     topLevelAwait(),
     nodePolyfills({
@@ -19,10 +21,17 @@ export default defineConfig({
       include: ['crypto', 'buffer', 'stream', 'util'],
     }),
   ],
+  define: {
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_I18N_FULL_INSTALL__: true,
+    __VUE_I18N_LEGACY_API__: false,
+    __INTLIFY_DROP_MESSAGE_COMPILER__: true,
+  },
   test: {
     globals: true,
     environment: 'happy-dom',
-    setupFiles: [],
+    setupFiles: ['test/setup.ts'],
     testTimeout: 30000,
     // `.claude/worktrees/*` holds per-developer agent worktrees — full checkouts
     // of other branches, gitignored (see .gitignore's `.claude/`). Without this
@@ -50,21 +59,24 @@ export default defineConfig({
         // @cardano-sdk/hardware-ledger's ESM build imports
         // '@cardano-foundation/ledgerjs-hw-app-cardano/dist/utils/address' with no extension,
         // which Node's ESM loader rejects. Inlined, Vite resolves it, as the app build does.
-        inline: ['@cardano-sdk/hardware-ledger'],
+        inline: ['@cardano-sdk/hardware-ledger', 'vuetify'],
       },
     },
   },
   resolve: {
-    alias: {
-      '@/': `${resolve(__dirname, 'src')}/`,
-      'buffer': 'buffer',
-      '@noble/ciphers/chacha': '@noble/ciphers/chacha.js',
-      '@noble/hashes/pbkdf2': '@noble/hashes/pbkdf2.js',
-      '@noble/hashes/sha2': '@noble/hashes/sha2.js',
+    alias: [
+      { find: '@/', replacement: `${resolve(__dirname, 'src')}/` },
+      { find: '@test/', replacement: `${resolve(__dirname, 'test')}/` },
+      { find: 'vuedraggable', replacement: resolve(__dirname, 'node_modules/vuedraggable/src/vuedraggable.js') },
+      { find: /^vue-i18n$/, replacement: 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js' },
+      { find: 'buffer', replacement: 'buffer' },
+      { find: '@noble/ciphers/chacha', replacement: '@noble/ciphers/chacha.js' },
+      { find: '@noble/hashes/pbkdf2', replacement: '@noble/hashes/pbkdf2.js' },
+      { find: '@noble/hashes/sha2', replacement: '@noble/hashes/sha2.js' },
       // Test-only: the browser emurgo message-signing WASM can't load in the node
       // test runner; the nodejs variant has an identical API + a Node-loadable WASM.
-      '@emurgo/cardano-message-signing-browser': '@emurgo/cardano-message-signing-nodejs',
-    },
+      { find: '@emurgo/cardano-message-signing-browser', replacement: '@emurgo/cardano-message-signing-nodejs' },
+    ],
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
     mainFields: ['module', 'main'],
   },

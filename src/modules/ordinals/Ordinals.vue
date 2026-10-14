@@ -10,20 +10,20 @@
         <div class="text-caption text--secondary">{{ $t('ordinals.subtitle') }}</div>
       </div>
       <v-spacer />
-      <v-btn small icon :loading="loading" @click="refresh">
-        <v-icon small>mdi-refresh</v-icon>
+      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh">
+        <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
 
     <!-- Tabs -->
-    <v-card outlined class="liquid-glass mb-3" style="border-radius: 12px !important; overflow: hidden;">
-      <v-tabs v-model="tab" background-color="transparent" height="44">
+    <v-card variant="outlined" class="liquid-glass mb-3" style="border-radius: 12px !important; overflow: hidden;">
+      <v-tabs v-model="tab" bg-color="transparent" height="44">
         <v-tab class="text-capitalize tab-item">
-          <v-icon small left>mdi-image-outline</v-icon>
+          <v-icon size="small" start>mdi-image-outline</v-icon>
           {{ $t('ordinals.inscriptions') }}
           <v-chip
             v-if="inscriptionTotal > 0"
-            x-small
+            size="x-small"
             class="ml-2"
             color="primary"
             style="height: 16px; font-size: 9px;"
@@ -32,11 +32,11 @@
           </v-chip>
         </v-tab>
         <v-tab class="text-capitalize tab-item">
-          <v-icon small left>mdi-hexagon-outline</v-icon>
+          <v-icon size="small" start>mdi-hexagon-outline</v-icon>
           {{ $t('ordinals.runes') }}
           <v-chip
             v-if="runeBalances.length > 0"
-            x-small
+            size="x-small"
             class="ml-2"
             color="warning"
             style="height: 16px; font-size: 9px;"
@@ -47,9 +47,9 @@
       </v-tabs>
     </v-card>
 
-    <v-tabs-items v-model="tab" style="background: transparent !important;">
+    <v-window v-model="tab" style="background: transparent !important;">
       <!-- Inscriptions Tab -->
-      <v-tab-item style="background: transparent;">
+      <v-window-item style="background: transparent;">
         <!-- Skeleton -->
         <v-row no-gutters v-if="loading && inscriptions.length === 0">
           <v-col v-for="i in 8" :key="i" cols="6" sm="4" md="3" class="pa-1">
@@ -60,8 +60,8 @@
         <!-- Pending inscriptions notice -->
         <v-alert
           v-if="!loading && hasPendingBitcoinTx"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           type="info"
           class="mb-3"
           style="border-radius: 10px; font-size: 12px;"
@@ -90,7 +90,7 @@
             md="3"
             class="pa-1"
           >
-            <v-card outlined class="inscription-card" @click="viewInscription(inscription)">
+            <v-card variant="outlined" class="inscription-card" @click="viewInscription(inscription)">
               <!-- Image preview -->
               <div class="inscription-preview">
                 <img
@@ -118,7 +118,7 @@
                 <!-- Rarity badge overlay -->
                 <div class="rarity-overlay">
                   <v-chip
-                    x-small
+                    size="x-small"
                     :color="rarityColor(inscription.sat_rarity)"
                     text-color="white"
                     style="height: 16px; font-size: 8px; font-weight: 600; letter-spacing: 0.03em;"
@@ -139,15 +139,15 @@
 
         <!-- Load more -->
         <div v-if="inscriptions.length > 0 && inscriptions.length < inscriptionTotal" class="text-center mt-4">
-          <v-btn text color="primary" @click="loadMoreInscriptions" :loading="loadingMore" small>
-            <v-icon left small>mdi-chevron-down</v-icon>
+          <v-btn variant="text" color="primary" @click="loadMoreInscriptions" :loading="loadingMore" size="small">
+            <v-icon start size="small">mdi-chevron-down</v-icon>
             {{ $t('common.loadMore') }} ({{ inscriptionTotal - inscriptions.length }} remaining)
           </v-btn>
         </div>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- Runes Tab -->
-      <v-tab-item style="background: transparent;">
+      <v-window-item style="background: transparent;">
         <v-skeleton-loader v-if="loading && runeBalances.length === 0" type="list-item-two-line@5" />
 
         <div v-if="!loading && runeBalances.length === 0" class="empty-state text-center py-10">
@@ -163,7 +163,7 @@
         <v-card
           v-for="rune in runeBalances"
           :key="rune.rune.id"
-          outlined
+          variant="outlined"
           class="liquid-glass mb-2 rune-card"
           style="border-radius: 10px !important;"
           @click="viewRune(rune.rune.id)"
@@ -180,13 +180,13 @@
                 {{ $t('ordinals.balance') }}: <span class="font-weight-medium">{{ formatRuneBalance(rune.balance) }}</span>
               </div>
             </div>
-            <v-btn icon x-small @click.stop="viewRuneOnOrdinals(rune.rune.id)">
-              <v-icon x-small color="grey">mdi-open-in-new</v-icon>
+            <v-btn icon variant="text" size="x-small" @click.stop="viewRuneOnOrdinals(rune.rune.id)">
+              <v-icon size="x-small" color="grey">mdi-open-in-new</v-icon>
             </v-btn>
           </div>
         </v-card>
-      </v-tab-item>
-    </v-tabs-items>
+      </v-window-item>
+    </v-window>
 
     <!-- Inscription Detail Dialog -->
     <v-dialog v-model="detailDialog" max-width="480">
@@ -196,8 +196,8 @@
             {{ $t('ordinals.inscription') }} #{{ selectedInscription.number.toLocaleString() }}
           </span>
           <v-spacer />
-          <v-btn icon small @click="detailDialog = false">
-            <v-icon small>mdi-close</v-icon>
+          <v-btn icon variant="text" size="small" @click="detailDialog = false">
+            <v-icon size="small">mdi-close</v-icon>
           </v-btn>
         </div>
         <v-divider style="opacity: 0.12;" />
@@ -222,7 +222,7 @@
           <!-- Metadata -->
           <div class="detail-row d-flex justify-space-between align-center py-2">
             <span class="text-caption text--secondary">{{ $t('ordinals.satRarity') }}</span>
-            <v-chip x-small :color="rarityColor(selectedInscription.sat_rarity)" text-color="white">
+            <v-chip size="x-small" :color="rarityColor(selectedInscription.sat_rarity)" text-color="white">
               {{ selectedInscription.sat_rarity }}
             </v-chip>
           </div>
@@ -247,8 +247,8 @@
 
         <v-card-actions class="pb-4 px-4">
           <v-spacer />
-          <v-btn color="primary" outlined small @click="openOnOrdinals(selectedInscription.id)">
-            <v-icon left x-small>mdi-open-in-new</v-icon>
+          <v-btn color="primary" variant="outlined" size="small" @click="openOnOrdinals(selectedInscription.id)">
+            <v-icon start size="x-small">mdi-open-in-new</v-icon>
             {{ $t('ordinals.viewOnOrdinals') }}
           </v-btn>
         </v-card-actions>
@@ -270,7 +270,7 @@ const { loggedWallet, transactions: storeTxs } = toRefs(walletStore);
 
 // True when there are unconfirmed Bitcoin transactions (inscriptions only index after confirmation)
 const hasPendingBitcoinTx = computed(() =>
-  (storeTxs.value as any[]).some((tx: any) => tx.pending)
+  storeTxs.value.some(tx => 'pending' in tx && tx.pending)
 );
 
 const tab = ref(0);

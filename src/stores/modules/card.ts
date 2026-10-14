@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import type {
   AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo, ExchangeRate, CardData,
   KycLinkResponse, CardOrderResponse, CardOrderStatus,
@@ -22,7 +22,7 @@ export interface OrderPhysicalCardPayload {
   deliveryMethod: string;
 }
 
-export const cardStore = Vue.observable<CardState>({
+export const cardStore = reactive<CardState>({
   accessToken: null,
   refreshToken: null,
   tokenExpiry: null,
@@ -331,7 +331,7 @@ export default {
     });
 
     if (index >= 0) {
-      Vue.set(cardStore.cards, index, cardInfo);
+      cardStore.cards[index] = cardInfo;
     } else {
       cardStore.cards.push(cardInfo);
 

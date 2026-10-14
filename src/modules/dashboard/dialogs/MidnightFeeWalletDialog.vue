@@ -61,9 +61,9 @@
              user must weigh. What pre-selecting does is on the info icon. -->
         <p class="fwd-note">
           {{ t('midnight.sponsor.disclosureLinkability') }}
-          <v-tooltip top max-width="280" content-class="custom-tooltip">
-            <template #activator="{ on, attrs }">
-              <v-icon x-small v-bind="attrs" v-on="on">mdi-information-outline</v-icon>
+          <v-tooltip location="top"  max-width="280" content-class="custom-tooltip">
+            <template #activator="{ props: activatorProps }">
+              <v-icon size="x-small" v-bind="activatorProps" >mdi-information-outline</v-icon>
             </template>
             <span>{{ t('midnight.sponsor.tipUnlock') }}</span>
           </v-tooltip>

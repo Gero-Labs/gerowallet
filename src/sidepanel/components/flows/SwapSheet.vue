@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="onSheetInput" :title="$t('miniGero.swapTitle')" height="68%" persistent>
+  <BottomSheet :model-value="modelValue" @update:model-value="onSheetInput" :title="$t('miniGero.swapTitle')" height="68%" persistent>
     <div class="swap-sheet">
       <!-- ═══════ MAINTENANCE OVERLAY (isSwapEnabled gate, preserved from the old flow) ═══════ -->
       <div v-if="!isSwapEnabled" class="maintenance-overlay">
@@ -18,13 +18,13 @@ import BottomSheet from '../BottomSheet.vue';
 import GeroSwapEmbed from '@/modules/swap/components/GeroSwapEmbed.vue';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 
-defineProps<{ value: boolean }>();
-const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
+defineProps<{ modelValue: boolean }>();
+const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
 const isSwapEnabled = computed(() => featureFlagsStore.isSwapEnabled());
 
 function onSheetInput(val: boolean) {
-  emit('input', val);
+  emit('update:modelValue', val);
 }
 </script>
 

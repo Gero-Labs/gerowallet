@@ -27,25 +27,25 @@
         <v-spacer />
         <v-btn
           v-if="hasSelection"
-          small
+          size="small"
           color="primary"
           class="confirm-btn"
           :loading="saving"
           @click="confirmSelection"
         >
-          <v-icon small class="mr-1">mdi-check</v-icon>
+          <v-icon size="small" class="mr-1">mdi-check</v-icon>
           {{ $t('common.confirm') }}
         </v-btn>
       </div>
 
       <!-- Tab selector -->
-      <v-btn-toggle v-model="activeTab" mandatory dense class="tab-toggle mb-4">
-        <v-btn small :value="'upload'" class="tab-btn">
-          <v-icon small class="mr-1">mdi-cloud-upload-outline</v-icon>
+      <v-btn-toggle v-model="activeTab" mandatory density="compact" class="tab-toggle mb-4">
+        <v-btn size="small" :value="'upload'" class="tab-btn">
+          <v-icon size="small" class="mr-1">mdi-cloud-upload-outline</v-icon>
           {{ $t('settings.uploadFromDevice') }}
         </v-btn>
-        <v-btn small :value="'nft'" class="tab-btn">
-          <v-icon small class="mr-1">mdi-image-multiple-outline</v-icon>
+        <v-btn size="small" :value="'nft'" class="tab-btn">
+          <v-icon size="small" class="mr-1">mdi-image-multiple-outline</v-icon>
           {{ $t('settings.selectFromNFTs') }}
         </v-btn>
       </v-btn-toggle>
@@ -72,7 +72,7 @@
             <v-img :src="previewImage" />
           </v-avatar>
           <div class="drop-zone-change-hint mt-3">
-            <v-icon x-small color="var(--g-text-1)" class="mr-1">mdi-swap-horizontal</v-icon>
+            <v-icon size="x-small" color="var(--g-text-1)" class="mr-1">mdi-swap-horizontal</v-icon>
             {{ $t('settings.clickToChange') }}
           </div>
         </div>
@@ -100,8 +100,8 @@
 
         <!-- Breadcrumb / Back button when inside a collection -->
         <div v-if="openCollectionId" class="collection-breadcrumb mb-3">
-          <v-btn text x-small class="px-1" @click="openCollectionId = null" style="text-transform: none; letter-spacing: 0;">
-            <v-icon small class="mr-1">mdi-arrow-left</v-icon>
+          <v-btn variant="text" size="x-small" class="px-1" @click="openCollectionId = null" style="text-transform: none; letter-spacing: 0;">
+            <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
             {{ $t('common.back') }}
           </v-btn>
           <span class="breadcrumb-name">{{ openCollectionName }}</span>
@@ -112,8 +112,8 @@
         <v-text-field
           v-model="nftSearch"
           :placeholder="openCollectionId ? $t('settings.searchNFTs') : $t('settings.searchCollections')"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           hide-details
           prepend-inner-icon="mdi-magnify"
           class="mb-3 nft-search"
@@ -145,13 +145,13 @@
             >
               <v-avatar size="40" rounded class="collection-thumb">
                 <v-img v-if="col.img" :src="col.img" />
-                <v-icon v-else small>mdi-image-outline</v-icon>
+                <v-icon v-else size="small">mdi-image-outline</v-icon>
               </v-avatar>
               <div class="collection-info">
                 <div class="collection-name">{{ col.name }}</div>
                 <div class="collection-count">{{ col.itemCount }} {{ col.itemCount === 1 ? 'item' : 'items' }}</div>
               </div>
-              <v-icon small color="var(--g-text-3)" class="collection-arrow">mdi-chevron-right</v-icon>
+              <v-icon size="small" color="var(--g-text-3)" class="collection-arrow">mdi-chevron-right</v-icon>
             </div>
           </div>
         </template>
@@ -584,7 +584,7 @@ defineExpose({ open });
 }
 
 /* ── NFT search ── */
-.nft-search ::v-deep .v-input__slot {
+.nft-search :deep(.v-field) {
   border-radius: var(--g-r-control) !important;
 }
 
@@ -742,7 +742,7 @@ defineExpose({ open });
   transition: opacity var(--g-dur-fast);
 }
 
-.fade-enter,
+.fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }

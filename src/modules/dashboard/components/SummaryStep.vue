@@ -13,7 +13,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { toRefs, computed, ref } from 'vue';
+import { toRefs, computed, nextTick, ref, shallowRef, watch } from 'vue';
 import { DappScore } from '@/models/cardano-shield-types';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
@@ -34,13 +34,17 @@ import type { SendRecipient } from '@/models/send-flow.types';
 interface Props {
   recipients: SendRecipient[];
   txData?: Cardano.Tx;
+  active?: boolean;
 }
 
-const props = defineProps<Props>();
-defineExpose({ scanTx });
+const props = withDefaults(defineProps<Props>(), { active: true });
+defineExpose({ isReadyFor });
 
 const loading = ref<boolean>(false);
-const tx = ref<Cardano.Tx | undefined>(undefined);
+const tx = computed(() => props.txData);
+const renderedTx = shallowRef<Cardano.Tx>();
+const renderedCbor = ref('');
+const renderedContext = ref('');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const risks = ref<any>({ score: undefined });
 
@@ -169,6 +173,10 @@ const primaryRecipientAddress = computed(() =>
   props.recipients[0]?.resolvedAddress ?? props.recipients[0]?.address ?? ''
 );
 const changeAddress = computed(() => loggedWallet.value?.baseAddress);
+const walletContext = computed(() => JSON.stringify([
+  loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
+  changeAddress.value, walletStore.isLocked,
+]));
 
 const getCborHex = (): string => {
   if (!tx.value) return '';
@@ -180,44 +188,79 @@ const getCborHex = (): string => {
   }
 };
 
-async function scanTx(txData: Cardano.Tx) {
-  risks.value.score = undefined;
-  tx.value = txData;
-
-  // Cardano Shield only covers Cardano MAINNET. On any other chain/network the
-  // scan endpoint has no data and just times out (5s) — skip it and report
-  // unknown risk so the summary isn't gated on a doomed request.
-  const w = loggedWallet.value;
-  if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) {
-    risks.value = { addressRisk: 'unknown' };
-    loading.value = false;
-    return;
-  }
-
-  loading.value = true;
-  const cborHex = getCborHex();
-  const toAddress = primaryRecipientAddress.value;
-  const scanWithTimeout = Promise.race([
-    cardanoShieldApi.scanTx({
-      cborHex,
-      toAddress,
-      fromAddress: changeAddress.value,
-      url: 'https://gerowallet.io',
-    }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
-    ),
-  ]);
-
-  try {
-    risks.value = await scanWithTimeout;
-  } catch (e) {
-    console.warn('Cardano Shield scan failed or timed out:', e);
-    risks.value = { addressRisk: 'unknown' };
-  } finally {
-    loading.value = false;
-  }
+// Check the bytes again at authorization time, including mutations of SDK
+// objects marked raw (which cannot trigger a Vue watcher or render).
+function isReadyFor(candidate: Cardano.Tx | undefined): boolean {
+  return props.active && !walletStore.isLocked && !!candidate &&
+    candidate === tx.value && candidate === renderedTx.value &&
+    walletContext.value === renderedContext.value && !!renderedCbor.value &&
+    getCborHex() === renderedCbor.value;
 }
+
+// Native stepper windows mount lazily. Derive the details from the input on
+// mount, rather than relying on a parent calling a ref before this exists.
+watch(
+  [() => props.active, tx, walletContext, primaryRecipientAddress],
+  async (_, __, onCleanup) => {
+    renderedTx.value = undefined;
+    renderedCbor.value = '';
+    renderedContext.value = '';
+    risks.value = { score: undefined };
+    loading.value = false;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => {
+      cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+    });
+
+    if (!props.active || !tx.value || walletStore.isLocked) return;
+    const candidate = tx.value;
+    const cborHex = getCborHex();
+    const context = walletContext.value;
+    if (!cborHex) return;
+    const current = () => !cancelled && props.active && candidate === tx.value &&
+      context === walletContext.value && cborHex === getCborHex();
+
+    // Details must have reached the DOM before any approval path can start.
+    // The optional risk service does not block review or signing.
+    await nextTick();
+    if (!current()) return;
+    renderedTx.value = candidate;
+    renderedCbor.value = cborHex;
+    renderedContext.value = context;
+
+    const w = loggedWallet.value;
+    if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) {
+      risks.value = { addressRisk: 'unknown' };
+      return;
+    }
+    loading.value = true;
+    try {
+      const result = await Promise.race([
+        cardanoShieldApi.scanTx({
+          cborHex,
+          toAddress: primaryRecipientAddress.value,
+          fromAddress: changeAddress.value,
+          url: 'https://gerowallet.io',
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000);
+        }),
+      ]);
+      if (current()) risks.value = result;
+    } catch (e) {
+      if (current()) {
+        console.warn('Cardano Shield scan failed or timed out:', e);
+        risks.value = { addressRisk: 'unknown' };
+      }
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      if (current()) loading.value = false;
+    }
+  },
+  { immediate: true, deep: true, flush: 'sync' },
+);
 </script>
 
 <style scoped>

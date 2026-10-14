@@ -3,7 +3,7 @@
     <div v-if="errorState" class="portal-state">
       <v-icon size="40" color="#F97066" class="mb-2">mdi-alert-circle-outline</v-icon>
       <p class="grey--text mb-3">{{ $t('cashback.portalLoadError') }}</p>
-      <v-btn class="geroButton" rounded depressed :loading="loading" @click="bootstrap()">{{ $t('cashback.retry') }}</v-btn>
+      <v-btn class="geroButton" rounded variant="flat" :loading="loading" @click="bootstrap()">{{ $t('cashback.retry') }}</v-btn>
     </div>
     <div v-else-if="loading && !portalUrl" class="portal-state">
       <v-progress-circular indeterminate color="primary" />

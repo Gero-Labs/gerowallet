@@ -7,7 +7,7 @@
         : $t('miniGero.pendingRequestBannerNoDomain') }}
     </span>
     <span v-if="pendingCount > 1" class="banner-count">
-      {{ $tc('miniGero.pendingRequestCount', pendingCount, { count: pendingCount }) }}
+      {{ $t('miniGero.pendingRequestCount', { count: pendingCount }, pendingCount) }}
     </span>
   </div>
 </template>

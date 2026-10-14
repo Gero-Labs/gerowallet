@@ -6,7 +6,7 @@
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
-    @close="emit('close')"
+    @close="approval.invalidate(); emit('close')"
     scrollable
     max-width="850"
     :width="500"
@@ -17,8 +17,8 @@
       <v-form ref="form" v-model="valid">
         <PassKeyPasswordField
           ref="passwordField"
-          :value="currentPassword"
-          @input="currentPassword = $event"
+          :model-value="currentPassword"
+          @update:model-value="currentPassword = $event"
           :label="t('dashboard.currentPassword')"
           dense
           outlined
@@ -28,25 +28,25 @@
         />
         <v-divider class="mb-3"></v-divider>
         <v-text-field
-          :append-icon="show2 ? 'mdi-eye-off' : 'mdi-eye'"
+          :append-inner-icon="show2 ? 'mdi-eye-off' : 'mdi-eye'"
           :type="show2 ? 'text' : 'password'"
           :label="$t('dashboard.newPassword')"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           v-model="newPassword"
           :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter, (newPassword !== currentPassword) || $t('dashboard.newPasswordMustDifferent')]"
-          @click:append="show2 = !show2"
+          @click:append-inner="show2 = !show2"
           style="width: 350px"
         ></v-text-field>
         <v-text-field
-          :append-icon="show3 ? 'mdi-eye-off' : 'mdi-eye'"
+          :append-inner-icon="show3 ? 'mdi-eye-off' : 'mdi-eye'"
           :type="show3 ? 'text' : 'password'"
           :label="$t('dashboard.confirmNewPassword')"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           v-model="confirmNewPassword"
           :rules="[rules.required(), (newPassword === confirmNewPassword) || $t('dashboard.passwordsMustMatch')]"
-          @click:append="show3 = !show3"
+          @click:append-inner="show3 = !show3"
           style="width: 350px"
         ></v-text-field>
       </v-form>
@@ -55,7 +55,8 @@
       <v-btn
         class="geroButton ml-2"
         style="color: black!important;"
-        :disabled="!valid"
+        :disabled="!valid || updating"
+        :loading="updating"
         @click="updateSpendingPassword"
       >
         {{ $t('dashboard.updatePassword') }}
@@ -77,6 +78,7 @@ import { getDb } from '@/db/wallet-db';
 import { encryptSpendingPasswordWithPrf } from '@/shared/utils/webauthn-prf';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
 
 interface Props {
   isOpen: boolean;
@@ -90,6 +92,7 @@ const show1 = ref<boolean>(false);
 const show2 = ref<boolean>(false);
 const show3 = ref<boolean>(false);
 const valid = ref<boolean>(false);
+const updating = ref(false);
 
 const currentPassword = ref<string>('');
 const newPassword = ref<string>('');
@@ -97,7 +100,7 @@ const confirmNewPassword = ref<string>('');
 const passwordField = ref<{ showError: (message: string) => void } | null>(null);
 
 const vmProxy = getCurrentInstance()!.proxy as unknown as {
-  $refs: { form: { validate: () => boolean; resetValidation: () => void } };
+  $refs: { form: { validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } };
 };
 
 watch(() => props.isOpen, (newValue, _oldValue) => {
@@ -107,16 +110,30 @@ watch(() => props.isOpen, (newValue, _oldValue) => {
 });
 
 const { loggedWallet } = toRefs(walletStore);
+const approval = useApprovalFreshness(
+  () => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked],
+  () => props.isOpen,
+  () => resetDialog(),
+);
 
 const handlePassKeyError = (error: string) => {
   console.error('PassKey autofill error in ChangePasswordDialog:', error);
   snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
-const updateSpendingPassword = async (): Promise<void> => {
-  if (vmProxy.$refs.form.validate()) {
+const updateSpendingPassword = (): Promise<void> => approval.run(async () => {
+  const current = approval.capture();
+  const walletId = loggedWallet.value?.id;
+  const oldPassword = currentPassword.value;
+  const replacementPassword = newPassword.value;
+  const confirmation = confirmNewPassword.value;
+  updating.value = true;
+  try {
+    const validation = await vmProxy.$refs.form.validate();
+    if (!validation.valid || !current() || walletId == null || oldPassword !== currentPassword.value ||
+        replacementPassword !== newPassword.value || confirmation !== confirmNewPassword.value) return;
     try {
-      await geroStore.updateSpendingPassword(loggedWallet.value.id, currentPassword.value, newPassword.value)
+      await geroStore.updateSpendingPassword(walletId, oldPassword, replacementPassword);
 
       // SECURITY: the DB ciphertext is now rotated, but the in-memory copies still
       // hold the OLD blob the OLD password can decrypt — the background WalletBg
@@ -126,7 +143,7 @@ const updateSpendingPassword = async (): Promise<void> => {
       try {
         await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.REFRESH_LOGGED_WALLET_SECRET,
-          data: { walletId: loggedWallet.value.id },
+          data: { walletId },
         });
       } catch (refreshErr) {
         console.error('Failed to refresh in-memory wallet secret after password change:', refreshErr);
@@ -134,19 +151,19 @@ const updateSpendingPassword = async (): Promise<void> => {
 
       // Check if PassKey autofill is enabled and auto-update encrypted password
       try {
-        const db = await getDb(loggedWallet.value.id);
+        const db = await getDb(walletId);
         const configTable = db.table('config');
 
         // Check if PassKey autofill is enabled
         const passKeyAutofillConfig = await configTable.where({ key: 'passKeyForPasswordAutofill' }).first();
         const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
-        if (passKeyAutofillConfig?.value && credentialConfig?.value) {
+        if (current() && passKeyAutofillConfig?.value && credentialConfig?.value) {
           // Re-encrypt new password with PassKey PRF
           const encryptedPassword = await encryptSpendingPasswordWithPrf(
-            newPassword.value,
+            replacementPassword,
             credentialConfig.value,
-            loggedWallet.value.id
+            walletId
           );
 
           // Update stored encrypted password
@@ -162,23 +179,27 @@ const updateSpendingPassword = async (): Promise<void> => {
         // A copy that could not be re-encrypted still holds the OLD password: drop it,
         // so autofill asks for the password again instead of offering a stale one.
         try {
-          const db = await getDb(loggedWallet.value.id);
+          const db = await getDb(walletId);
           await db.table('config').where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
         } catch {
           // The snackbar below already tells the user PassKey autofill needs attention.
         }
         // Log but don't fail the password change if PassKey update fails
         console.error('⚠️ Failed to update PassKey encrypted password:', passKeyError);
-        snackbar.setError(t('security.passKeyPasswordUpdateFailed'));
+        if (current()) snackbar.setError(t('security.passKeyPasswordUpdateFailed'));
       }
 
-      snackbar.fireSuccess(t('dashboard.spendingPasswordChanged'))
-      emit('close')
+      if (current()) {
+        snackbar.fireSuccess(t('dashboard.spendingPasswordChanged'));
+        emit('close');
+      }
     } catch (e) {
-      passwordField.value?.showError(t('errors.wrongPassword'));
+      if (current()) passwordField.value?.showError(t('errors.wrongPassword'));
     }
+  } finally {
+    updating.value = false;
   }
-}
+});
 
 const resetDialog = (): void => {
   show1.value = false;
@@ -189,7 +210,7 @@ const resetDialog = (): void => {
   newPassword.value = '';
   confirmNewPassword.value = '';
   nextTick(() => {
-    vmProxy.$refs.form.resetValidation();
+    vmProxy.$refs.form?.resetValidation();
   })
 };
 </script>

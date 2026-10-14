@@ -2,14 +2,14 @@
   <div id="risk-wrap">
     <div id="risk-title">
       {{ $t('security.transactionRisk') }}
-      <v-tooltip bottom content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
+      <v-tooltip location="bottom"  content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
           <v-icon
             class="ml-1"
-            small
+            size="small"
             color="#C4C4C4"
-            v-bind="attrs"
-            v-on="on"
+            v-bind="activatorProps"
+
           >
             mdi-information-outline
           </v-icon>
@@ -23,7 +23,7 @@
 
       <div id="risk-loader" v-if="loading">
         <span class="custom-loader">
-          <v-icon x-large>mdi-cog</v-icon>
+          <v-icon size="x-large">mdi-cog</v-icon>
         </span>
       </div>
       <div id="risk-label" v-else>{{ label }}</div>

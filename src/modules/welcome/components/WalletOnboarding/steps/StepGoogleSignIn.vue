@@ -4,7 +4,7 @@
     <div class="google-signin-panel">
       <div class="google-signin-icon">
         <v-avatar size="56" color="rgba(255,255,255,0.05)">
-          <v-img :src="google" contain width="28" />
+          <v-img :src="google"  width="28" />
         </v-avatar>
       </div>
 
@@ -13,13 +13,13 @@
         <div class="google-signin-desc">{{ $t('welcome.onboardingDescGoogleSignIn') }}</div>
         <v-btn
           class="onb-btn google-signin-btn"
-          depressed
-          outlined
+          variant="outlined"
+
           :loading="signingIn"
           @click="signIn()"
         >
           <v-avatar size="18" class="mr-2">
-            <v-img :src="google" contain />
+            <v-img :src="google"  />
           </v-avatar>
           {{ $t('welcome.googleSignInButton') }}
         </v-btn>
@@ -27,9 +27,9 @@
           v-if="errorMessage"
           color="error"
           icon="mdi-alert-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mt-3 mb-0"
         >
           <span class="text-body-2">{{ $t(errorMessage) }}</span>
@@ -38,16 +38,16 @@
 
       <template v-else>
         <div class="google-signin-title">{{ $t('welcome.googleSignedInAs', { email }) }}</div>
-        <v-btn text small color="primary" class="mt-1" @click="changeAccount()">
+        <v-btn variant="text" size="small" color="primary" class="mt-1" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
         </v-btn>
         <v-alert
           v-if="existingWallet"
           color="info"
           icon="mdi-information-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mpc-info-alert mt-3 mb-0"
         >
           <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletAlreadyExists', { name: existingWallet.name }) }}</span>
@@ -56,9 +56,9 @@
           v-else-if="enrolledOnBackend"
           color="info"
           icon="mdi-information-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mpc-info-alert mt-3 mb-0"
         >
           <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
@@ -69,12 +69,12 @@
 
     <!-- Navigation (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         v-if="existingWallet"
         class="onb-btn onb-continue"
-        depressed
+        variant="flat"
         color="primary"
         @click="openUnlockExisting()"
       >
@@ -83,7 +83,7 @@
       <v-btn
         v-else-if="enrolledOnBackend"
         class="onb-btn onb-continue"
-        depressed
+        variant="flat"
         color="primary"
         @click="restoreExisting()"
       >
@@ -92,7 +92,7 @@
       <v-btn
         v-else
         class="onb-btn onb-continue"
-        depressed
+        variant="flat"
         color="primary"
         :disabled="!email"
         @click="onContinue()"

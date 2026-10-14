@@ -684,9 +684,10 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
       // not on `errorKey`: a stale-session abort reports no error at all (its
       // thread is gone), and a concurrent reset can clear the key before this
       // runs, either of which would strand the bubble. Safe on the success path
-      // too — a reconciled echo was spliced out already, so indexOf is -1.
+      // too: a reconciled echo has a positive server id. Match the stable local
+      // id because Vue's reactive collection can wrap or replace object identity.
       if (optimistic && !delivered) {
-        const index = messages.value.indexOf(optimistic);
+        const index = messages.value.findIndex(message => message.id === optimistic.id);
         if (index !== -1) messages.value.splice(index, 1);
       }
       busy.value = false;

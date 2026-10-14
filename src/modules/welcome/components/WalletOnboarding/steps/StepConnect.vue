@@ -19,7 +19,7 @@
       style="width: 230px; height: 126px; align-self: center;"
       :alt="t('wallet.connectKeystone')"
     />
-    <v-alert color="primary" dense outlined type="info" border="left" class="connect-info text-left">
+    <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
@@ -39,7 +39,7 @@
       <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('welcome.unlockKeystone') }}</li>
-          <li>{{ $t('welcome.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
+          <li>{{ $t('welcome.selectScanQR') }} <v-icon size="small">mdi-line-scan</v-icon></li>
           <li>{{ $t('welcome.scanQRWithKeystone') }}</li>
           <li>{{ $t('welcome.approveOnKeystone') }}</li>
         </ul>
@@ -77,7 +77,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px; text-align: initial;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn class="onb-continue" color="primary" @click="walletCreationStep2()">{{ $t('common.continue') }}</v-btn>
     </div>
@@ -165,7 +165,8 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
     debugLog('[Keystone] QR code scanned', ur.type);
 
     if (props.network?.blockchain === Blockchain.BITCOIN) {
-      const bitcoinUR = UR.from(ur.cbor, 'hex');
+      // Keep the scanned type: UR.from() would label it 'bytes' and parseBitcoinAccount rejects that.
+      const bitcoinUR = new UR(Buffer.from(ur.cbor, 'hex'), ur.type);
       const bitcoinAccount = parseBitcoinAccount(bitcoinUR);
 
       const payload: ConnectionPayload = {

@@ -6,7 +6,7 @@
           <v-img :src="walletIcon" />
         </v-avatar>
         <v-avatar v-if="networkIcon" size="14" class="chain-badge">
-          <v-img contain :src="networkIcon" />
+          <v-img  :src="networkIcon" />
         </v-avatar>
       </div>
 
@@ -22,7 +22,7 @@
       <v-img
         v-if="isMpcGoogleWallet"
         :src="assets.googleSvg"
-        contain
+
         width="14"
         height="14"
         class="google-badge mr-1"
@@ -30,37 +30,37 @@
       <v-icon size="14" color="var(--g-text-3)" class="chevron-icon">mdi-chevron-down</v-icon>
     </div>
     <div class="header-right">
-      <v-tooltip v-if="connectedSiteEntry" bottom content-class="custom-tooltip">
-        <template v-slot:activator="{ on }">
-          <v-btn icon x-small @click="disconnectActiveSite" class="toolbar-btn" v-on="on">
+      <v-tooltip location="bottom" v-if="connectedSiteEntry"  content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <v-btn v-bind="activatorProps" icon variant="text" size="x-small" @click="disconnectActiveSite" class="toolbar-btn" >
             <v-icon size="16" color="success">mdi-link-variant</v-icon>
           </v-btn>
         </template>
         <span>{{ $t('miniGero.connectedToSite', { domain: connectedSiteEntry.domain }) }}</span>
       </v-tooltip>
-      <v-tooltip bottom content-class="custom-tooltip">
-        <template v-slot:activator="{ on }">
-          <v-btn icon x-small @click="toggleHideBalances()" class="toolbar-btn" v-on="on">
+      <v-tooltip location="bottom"  content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <v-btn v-bind="activatorProps" icon variant="text" size="x-small" @click="toggleHideBalances()" class="toolbar-btn" >
             <v-icon size="18" color="var(--g-text-3)">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
           </v-btn>
         </template>
         <span>{{ hideBalances ? $t('dashboard.showBalances') : $t('dashboard.hideBalances') }}</span>
       </v-tooltip>
-      <v-tooltip bottom content-class="custom-tooltip">
-        <template v-slot:activator="{ on }">
-          <v-btn icon x-small @click="openFullDashboard" class="toolbar-btn" v-on="on">
+      <v-tooltip location="bottom"  content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <v-btn v-bind="activatorProps" icon variant="text" size="x-small" @click="openFullDashboard" class="toolbar-btn" >
             <v-icon size="20" color="var(--g-text-3)">mdi-fullscreen</v-icon>
           </v-btn>
         </template>
         <span>{{ $t('miniGero.openFullDashboard') }}</span>
       </v-tooltip>
       <!-- The bell: the same inbox as the dashboard's, in a bottom sheet (B-M3). -->
-      <v-btn icon x-small @click="$emit('notifications')" class="toolbar-btn" :aria-label="$t('navigation.notifications')">
-        <v-badge :value="inboxUnread > 0" :content="String(inboxUnread)" color="var(--g-accent)" overlap>
+      <v-btn icon variant="text" size="x-small" @click="$emit('notifications')" class="toolbar-btn" :aria-label="$t('navigation.notifications')">
+        <v-badge :model-value="inboxUnread > 0" :content="String(inboxUnread)" color="var(--g-accent)" overlap>
           <v-icon size="18" color="var(--g-text-3)">mdi-bell-outline</v-icon>
         </v-badge>
       </v-btn>
-      <v-btn icon x-small @click="$emit('settings')" class="toolbar-btn">
+      <v-btn icon variant="text" size="x-small" @click="$emit('settings')" class="toolbar-btn">
         <v-icon size="18" color="var(--g-text-3)">mdi-cog-outline</v-icon>
       </v-btn>
     </div>

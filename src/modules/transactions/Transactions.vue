@@ -8,7 +8,7 @@
         :class="['tx-tab', { 'tx-tab--active': activeTab === 0 }]"
         @click="activeTab = 0"
       >
-        <v-icon small>mdi-history</v-icon>
+        <v-icon size="small">mdi-history</v-icon>
         {{ $t('transactions.history') }}
         <span class="tx-tab__count g-num">{{ txCount }}</span>
       </button>
@@ -20,7 +20,7 @@
         @click="selectUtxosTab()"
       >
         <NotificationDot :show="isFeatureNew('transactions.utxos')" color="error" overlap bordered>
-          <v-icon small>mdi-cube-outline</v-icon>
+          <v-icon size="small">mdi-cube-outline</v-icon>
         </NotificationDot>
         {{ $t('transactions.utxos') }}
         <span class="tx-tab__count g-num">{{ utxoCount }}</span>
@@ -105,7 +105,7 @@ const route = vmProxy.$route;
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 
-const activeTab = ref(route.query?.tab === 'utxos' ? 1 : 0);
+const activeTab = ref(route.query?.['tab'] === 'utxos' ? 1 : 0);
 const utxosVisited = ref(activeTab.value === 1);
 const isReportDialogOpen = ref(false);
 // Row shape is Cardano's StoredTransaction or Midnight's MidnightTransaction
@@ -116,8 +116,6 @@ const transactionInfo = ref<any>(null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const selectedUtxo = ref<any>(null);
 const reportSite = ref('');
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const transactionsCard = ref<any>(null);
 
 // Midnight's history/UTxO set lives in its own store (midnightStore), never
 // walletStore — see midnightStore.ts's file header. Cardano's counts below
@@ -157,7 +155,7 @@ const handleOnUtxoRowClick = (row: any) => {
 const selectTransactionFromQuery = () => {
   // The live route, not the one captured at setup: a notification opened while this page is
   // already showing navigates to the same path with a different `tx`.
-  const txId = vmProxy.$route.query?.tx?.toString();
+  const txId = vmProxy.$route.query?.['tx']?.toString();
   if (!txId) return false;
 
   const found = isMidnight.value
@@ -195,13 +193,13 @@ watch(() => walletStore.transactions, (transactions) => {
 
 // A new `tx` in the query while the page stays mounted (a push notification, the bell, global
 // search) selects that transaction even though one is already open.
-watch(() => vmProxy.$route.query?.tx, (txId, previous) => {
+watch(() => vmProxy.$route.query?.['tx'], (txId, previous) => {
   if (txId && txId !== previous) selectTransactionFromQuery();
 });
 
 // Same for `?tab=utxos`: the page sits in ContentLayout's keep-alive, so the
 // setup-time read above only covers its first visit.
-watch(() => vmProxy.$route.query?.tab, (tab) => {
+watch(() => vmProxy.$route.query?.['tab'], (tab) => {
   if (tab === 'utxos') selectUtxosTab();
 });
 

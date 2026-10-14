@@ -4,7 +4,7 @@
       <!-- Hottest column -->
       <div class="stat-col">
         <div class="stat-header" @click="expanded = !expanded">
-          <v-icon x-small color="orange" class="mr-1">mdi-fire</v-icon>
+          <v-icon size="x-small" color="orange" class="mr-1">mdi-fire</v-icon>
           <span class="stat-label">{{ $t('market.hottest') }}</span>
           <span class="stat-ticker stat-ticker--link ml-1" @click.stop="$emit('token-click', hottest[0].unit)">{{ hottest[0].ticker }}</span>
           <span class="stat-value ml-1">${{ formatCompact(hottest[0].volume24h) }}</span>
@@ -28,7 +28,7 @@
       <!-- Top Gainer column -->
       <div class="stat-col">
         <div class="stat-header" @click="expanded = !expanded">
-          <v-icon x-small color="success" class="mr-1">mdi-trending-up</v-icon>
+          <v-icon size="x-small" color="success" class="mr-1">mdi-trending-up</v-icon>
           <span class="stat-label">{{ $t('market.topGainer') }}</span>
           <span class="stat-ticker stat-ticker--link ml-1" @click.stop="$emit('token-click', gainers[0].unit)">{{ gainers[0].ticker }}</span>
           <span class="stat-value ml-1 g-num delta-up">{{ formatSignedChange(gainers[0].change24h) }}</span>
@@ -52,7 +52,7 @@
       <!-- Top Loser column -->
       <div class="stat-col">
         <div class="stat-header" @click="expanded = !expanded">
-          <v-icon x-small color="error" class="mr-1">mdi-trending-down</v-icon>
+          <v-icon size="x-small" color="error" class="mr-1">mdi-trending-down</v-icon>
           <span class="stat-label">{{ $t('market.topLoser') }}</span>
           <span class="stat-ticker stat-ticker--link ml-1" @click.stop="$emit('token-click', losers[0].unit)">{{ losers[0].ticker }}</span>
           <span class="stat-value ml-1 g-num delta-down">{{ formatSignedChange(losers[0].change24h) }}</span>
@@ -76,15 +76,15 @@
       <!-- Total Volume -->
       <div class="stat-col stat-col--fixed">
         <div class="stat-header" @click="expanded = !expanded">
-          <v-icon x-small color="primary" class="mr-1">mdi-chart-bar</v-icon>
+          <v-icon size="x-small" color="primary" class="mr-1">mdi-chart-bar</v-icon>
           <span class="stat-label">{{ $t('market.totalVolume') }}</span>
           <span class="stat-value ml-1">${{ formatCompact(totalVolume) }}</span>
         </div>
       </div>
 
       <!-- Expand toggle -->
-      <v-btn icon x-small @click="expanded = !expanded" class="expand-btn">
-        <v-icon x-small>{{ expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+      <v-btn icon variant="text" size="x-small" @click="expanded = !expanded" class="expand-btn">
+        <v-icon size="x-small">{{ expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
       </v-btn>
     </div>
   </v-card>

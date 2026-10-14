@@ -1,9 +1,9 @@
 <template>
   <BottomSheet
-    :value="value"
+    :model-value="modelValue"
     :title="$t('vaults.depositTo', { name: vaultName })"
     height="85%"
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="vdeposit-content">
 
@@ -51,14 +51,14 @@
       <v-text-field
         v-model="password"
         :label="$t('perpetuals.spendingPassword')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="perp-input mt-3"
         :type="showPassword ? 'text' : 'password'"
-        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append="showPassword = !showPassword"
+        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showPassword = !showPassword"
       />
 
       <!-- ── Status Banners ── -->
@@ -79,7 +79,7 @@
       <!-- ── Deposit Button ── -->
       <v-btn
         block
-        depressed
+        variant="flat"
         :loading="isDepositing"
         :disabled="!canDeposit"
         class="action-btn mt-4"
@@ -104,17 +104,17 @@ import { ref, computed, watch, nextTick } from 'vue';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import PerpsAmountField from './PerpsAmountField.vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
-import { walletStore } from '@/stores/walletStore';
+import { useAdaLovelace } from '@/sidepanel/composables/useAdaLovelace';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
   vaultId: string;
   vaultName: string;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'deposited'): void;
 }>();
 
@@ -142,13 +142,8 @@ const amountNum = computed(() => {
   return isNaN(n) || n < 0 ? 0 : n;
 });
 
-const maxAda = computed(() => {
-  const balances = walletStore.state.balances;
-  if (!balances) return 0;
-  const lovelace = balances.lovelace ?? balances.ada ?? 0;
-  const ada = Number(lovelace) / 1_000_000;
-  return Math.max(0, ada - 2);
-});
+const { adaLovelace } = useAdaLovelace();
+const maxAda = computed(() => Math.max(0, adaLovelace.value / 1_000_000 - 2));
 
 const estimatedUsd = computed(() => {
   if (amountNum.value <= 0) return '$0.00';
@@ -183,7 +178,7 @@ async function handleDeposit() {
 }
 
 // Reset on close
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   if (!val) {
     amount.value = '';
     password.value = '';
@@ -204,7 +199,8 @@ watch(() => props.value, (val) => {
 }
 
 /* ── Inputs ── */
-.perp-input :deep(.v-input__slot) {
+.perp-input :deep(.v-field) {
+  --v-input-control-height: 40px;
   background: var(--g-hairline-1) !important;
   min-height: 40px !important;
 }
@@ -212,7 +208,7 @@ watch(() => props.value, (val) => {
   font-size: 12px !important;
   color: var(--g-text-3) !important;
 }
-.perp-input :deep(input) {
+.perp-input :deep(input.v-field__input) {
   font-size: 13px !important;
   font-family: var(--g-font-mono) !important;
   color: var(--g-text-1) !important;
@@ -223,11 +219,12 @@ watch(() => props.value, (val) => {
   color: var(--g-text-3) !important;
   font-weight: 600 !important;
 }
-.perp-input :deep(fieldset) {
-  border-color: var(--g-hairline-2) !important;
+.perp-input :deep(.v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2) !important;
 }
-.perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
+.perp-input :deep(.v-field--focused .v-field__outline) {
+  color: var(--g-accent) !important;
 }
 
 /* ── Preview Card ── */
@@ -331,7 +328,7 @@ watch(() => props.value, (val) => {
 
 /* ── Transitions ── */
 .fade-slide-enter-active, .fade-slide-leave-active { transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease; }
-.fade-slide-enter, .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
+.fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
 
 .mt-3 { margin-top: 12px; }
 .mt-4 { margin-top: 16px; }

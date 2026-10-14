@@ -16,12 +16,12 @@
       <v-btn
         class="geroButton onb-hero__cta"
         rounded
-        x-large
-        depressed
+        size="x-large"
+        variant="flat"
         @click="$emit('get-started')"
       >
         {{ variant === 'first-run' ? $t('welcome.createFirstWallet') : $t('welcome.getStarted') }}
-        <v-icon right>mdi-arrow-right</v-icon>
+        <v-icon end>mdi-arrow-right</v-icon>
       </v-btn>
     </div>
 

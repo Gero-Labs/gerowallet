@@ -1,11 +1,11 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <DAO />
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">

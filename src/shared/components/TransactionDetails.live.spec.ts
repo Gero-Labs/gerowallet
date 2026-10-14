@@ -1,11 +1,13 @@
-import Vue, { nextTick } from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({
   transactions: [], loggedWallet: { chain: 'Cardano', network: 'Preprod' }, keys: {}, contacts: {}, config: {},
 }) }));
-vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.observable({ adaUsd: null }) }));
+vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.reactive({ adaUsd: null }) }));
 vi.mock('@/stores/stakingStore', () => ({ default: { loadPoolById: vi.fn().mockResolvedValue(null), state: {} } }));
 vi.mock('@/api/blockchain-api', () => ({ default: { getPoolById: vi.fn(), getDRepById: vi.fn() } }));
 vi.mock('@/db', () => ({ getBlockchainDb: vi.fn() }));
@@ -28,10 +30,7 @@ describe('transaction details', () => {
   it('follows the confirmed record when the pending one the pane was opened with is replaced', async () => {
     walletStore.transactions = [pending];
     // The pane keeps the object that was clicked; the store replaces it on confirmation
-    const wrapper = mount(TransactionDetails, {
-      propsData: { transactionInfo: pending },
-      mocks: { $t: (key: string) => key },
-    });
+    const wrapper = mount(TransactionDetails, { props: { transactionInfo: pending }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } } });
     try {
       expect(wrapper.find('.tx-status').text()).toContain('transactions.pending');
 
@@ -44,7 +43,7 @@ describe('transaction details', () => {
       expect(wrapper.find('.tx-status').text()).toContain('transactions.confirmed');
       expect(wrapper.text()).toContain('4,100,000');
     } finally {
-      wrapper.destroy();
+      wrapper.unmount();
     }
   });
 });

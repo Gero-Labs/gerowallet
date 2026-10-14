@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :is-open="value"
+    :is-open="modelValue"
     :title="t('security.lockPassword')"
     :subtitle="t('security.useLockPasswordToUnlock')"
     :width="500"
@@ -21,12 +21,12 @@
                 v-model="newPassword"
                 :label="$t('security.lockPassword')"
                 :type="showNewPassword ? 'text' : 'password'"
-                :append-icon="showNewPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                @click:append="showNewPassword = !showNewPassword"
+                :append-inner-icon="showNewPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                @click:append-inner="showNewPassword = !showNewPassword"
                 @keyup.enter="handleNewPasswordFinish"
                 autofocus
-                outlined
-                dense
+                variant="outlined"
+                density="compact"
                 :rules="[rules.required(), rules.minCharacters(8)]"
                 hide-details="auto"
               ></v-text-field>
@@ -44,13 +44,13 @@
                 v-model="confirmPassword"
                 :label="$t('security.confirmLockPassword')"
                 :type="showConfirmPassword ? 'text' : 'password'"
-                :append-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                @click:append="showConfirmPassword = !showConfirmPassword"
+                :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                @click:append-inner="showConfirmPassword = !showConfirmPassword"
                 @keyup.enter="handleConfirmPasswordFinish"
                 :error-messages="confirmPasswordError"
                 autofocus
-                outlined
-                dense
+                variant="outlined"
+                density="compact"
                 hide-details="auto"
               ></v-text-field>
             </v-card-text>
@@ -61,7 +61,7 @@
 
     <v-card-actions class="px-6 pb-6">
       <v-btn
-        text
+        variant="text"
         @click="handleCancel"
         :disabled="loading"
       >
@@ -92,15 +92,15 @@ import rules from '@/utils/rules';
 const { t } = useTranslation();
 
 interface Props {
-  value: boolean;
+  modelValue: boolean;
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['input', 'updated']);
+const emit = defineEmits(['update:modelValue', 'updated']);
 
 // Template refs
-const newPasswordInputRef = ref<any>(null);
-const confirmPasswordInputRef = ref<any>(null);
+const newPasswordInputRef = ref<{ focus(): void } | null>(null);
+const confirmPasswordInputRef = ref<{ focus(): void } | null>(null);
 
 // Reactive state
 const step = ref<'new' | 'confirm'>('new');
@@ -120,7 +120,7 @@ const canProceed = computed(() => {
 });
 
 // Watch props
-watch(() => props.value, async (newVal) => {
+watch(() => props.modelValue, async (newVal) => {
   if (!newVal) {
     // Delay reset to avoid visual glitch during close animation
     setTimeout(() => {
@@ -198,22 +198,22 @@ async function handleSave() {
     snackbar.fireSuccess(t('security.lockPasswordSetupSuccess'));
 
     // Close dialog and emit update
-    emit('input', false);
+    emit('update:modelValue', false);
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving lock password:', error);
-    confirmPasswordError.value = error.message || t('security.lockPasswordSetupFailed');
+    confirmPasswordError.value = (error instanceof Error ? error.message : '') || t('security.lockPasswordSetupFailed');
   } finally {
     loading.value = false;
   }
 }
 
 function handleCancel() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function handleClose() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function resetForm() {

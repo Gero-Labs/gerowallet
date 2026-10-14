@@ -3,9 +3,9 @@
     <!-- Header: title + pool info + source toggle -->
     <div class="d-flex align-center justify-space-between mb-1">
       <span class="text-caption text--secondary">{{ $t('market.orderBook') }}</span>
-      <v-btn-toggle v-model="source" dense mandatory class="ob-toggle">
-        <v-btn x-small value="simulated">AMM</v-btn>
-        <v-btn x-small value="real">Orders</v-btn>
+      <v-btn-toggle v-model="source" density="compact" mandatory class="ob-toggle">
+        <v-btn size="x-small" value="simulated">AMM</v-btn>
+        <v-btn size="x-small" value="real">Orders</v-btn>
       </v-btn-toggle>
     </div>
 
@@ -21,7 +21,7 @@
     </div>
     <div v-else-if="errorMsg" class="text-center py-4 text-caption" style="color: var(--g-error)">{{ errorMsg }}</div>
     <div v-else-if="!orderBook" class="text-center py-4 text--secondary text-caption">
-      <v-icon small class="mb-1" style="opacity: 0.3">mdi-book-open-outline</v-icon>
+      <v-icon size="small" class="mb-1" style="opacity: 0.3">mdi-book-open-outline</v-icon>
       <div>{{ $t('market.noOrderBookData') }}</div>
     </div>
 
@@ -124,7 +124,7 @@ async function loadOrderBook() {
 
     poolInfo.value = { dex: ob.dex || topPool.dex, currentPrice: ob.currentPrice, tvlAda: ob.tvlAda || topPool.tvlAda };
     orderBook.value = ob;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.warn('OrderBookTable: failed to load', err);
     errorMsg.value = t('market.failedToLoadOrderBook');
     orderBook.value = null;

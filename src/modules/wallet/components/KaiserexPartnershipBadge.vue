@@ -7,7 +7,7 @@
     </div>
     <GButton tier="tertiary" compact :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer">
       {{ t('card.learnMoreKaiserex') }}
-      <v-icon small right>mdi-open-in-new</v-icon>
+      <v-icon size="small" end>mdi-open-in-new</v-icon>
     </GButton>
   </aside>
 </template>

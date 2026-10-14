@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="onSheetInput" :title="sheetTitle" height="92%" persistent>
+  <BottomSheet :model-value="modelValue" @update:model-value="onSheetInput" :title="sheetTitle" height="92%" :persistent="sendDispatched">
     <div class="midnight-send-sheet" ref="stepperEl">
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
@@ -13,7 +13,7 @@
         <div class="text-caption grey--text mt-1 text-center">{{ $t('miniGero.txSubmittedDesc') }}</div>
         <button v-if="txId" type="button" class="tx-id-box mt-4" @click="copyTxId">
           <span class="text-caption grey--text">{{ truncate(txId) }}</span>
-          <v-icon x-small :color="primaryColor" class="ml-1">mdi-content-copy</v-icon>
+          <v-icon size="x-small" :color="primaryColor" class="ml-1">mdi-content-copy</v-icon>
         </button>
         <v-btn block :color="primaryColor" class="black--text font-weight-bold mt-6" @click="finish">
           {{ $t('miniGero.done') }}
@@ -21,12 +21,12 @@
       </div>
 
       <template v-else>
-        <v-btn small text @click="openFullDashboard()">{{ t('midnight.privateBalances.openFullWallet') }}</v-btn>
+        <v-btn size="small" variant="text" @click="openFullDashboard()">{{ t('midnight.privateBalances.openFullWallet') }}</v-btn>
         <!-- ═══════ STEP 1: RECIPIENT ═══════ -->
         <div class="stepper-step" :class="{ active: step === 1, done: step > 1 }">
           <button type="button" class="step-header" @click="editStep(1)">
             <div class="step-circle" :class="step > 1 ? 'done' : step === 1 ? 'active' : ''">
-              <v-icon v-if="step > 1" x-small color="var(--g-on-grad)">mdi-check</v-icon>
+              <v-icon v-if="step > 1" size="x-small" color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>1</span>
             </div>
             <div class="step-info">
@@ -38,20 +38,20 @@
           <v-expand-transition>
             <div v-show="step === 1" class="step-body">
               <div class="quick-row">
-                <v-btn x-small outlined :color="primaryColor" @click="showQR = true">
-                  <v-icon x-small class="mr-1">mdi-qrcode</v-icon>{{ $t('wallet.qrScan') }}
+                <v-btn size="x-small" variant="outlined" :color="primaryColor" @click="showQR = true">
+                  <v-icon size="x-small" class="mr-1">mdi-qrcode</v-icon>{{ $t('wallet.qrScan') }}
                 </v-btn>
-                <v-btn x-small outlined :color="primaryColor" class="ml-2" @click="pasteFromClipboard">
-                  <v-icon x-small class="mr-1">mdi-content-paste</v-icon>{{ $t('common.paste') }}
+                <v-btn size="x-small" variant="outlined" :color="primaryColor" class="ml-2" @click="pasteFromClipboard">
+                  <v-icon size="x-small" class="mr-1">mdi-content-paste</v-icon>{{ $t('common.paste') }}
                 </v-btn>
               </div>
 
               <v-text-field
                 v-model="recipient"
                 :placeholder="$t('common.recipientAddress')"
-                outlined
-                dense
-                dark
+                variant="outlined"
+                density="compact"
+                theme="dark"
                 hide-details="auto"
                 class="mt-2"
                 :error-messages="recipientError"
@@ -83,7 +83,7 @@
         <div class="stepper-step" :class="{ active: step === 2, done: step > 2, locked: step < 2 }">
           <button type="button" class="step-header" @click="editStep(2)">
             <div class="step-circle" :class="step > 2 ? 'done' : step === 2 ? 'active' : ''">
-              <v-icon v-if="step > 2" x-small color="var(--g-on-grad)">mdi-check</v-icon>
+              <v-icon v-if="step > 2" size="x-small" color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>2</span>
             </div>
             <div class="step-info">
@@ -105,10 +105,10 @@
                     v-model="selectedToken"
                     :items="assetOptions"
                     item-value="value"
-                    item-text="ticker"
-                    dense
-                    outlined
-                    dark
+                    item-title="ticker"
+                    density="compact"
+                    variant="outlined"
+                    theme="dark"
                     hide-details
                     attach
                     class="asset-select"
@@ -133,16 +133,16 @@
                     type="number"
                     min="0"
                     :step="amountStep"
-                    outlined
-                    dense
-                    dark
+                    variant="outlined"
+                    density="compact"
+                    theme="dark"
                     hide-details="auto"
                     placeholder="0"
                     class="flex-grow-1"
                     :error-messages="amountError"
                     :disabled="submitting"
                   />
-                  <v-btn x-small text :color="primaryColor" class="ml-2" @click="setMax">
+                  <v-btn size="x-small" variant="text" :color="primaryColor" class="ml-2" @click="setMax">
                     {{ $t('miniGero.max') }}
                   </v-btn>
                 </div>
@@ -154,10 +154,10 @@
                 </div>
                 <MidnightSponsorPicker
                   v-if="mayLackDust && loggedWallet"
-                  :value="sponsorWalletId"
+                  :model-value="sponsorWalletId"
                   :sender-wallet-id="loggedWallet.id"
                   :network="loggedWallet.network"
-                  @input="sponsorWalletId = $event"
+                  @update:model-value="sponsorWalletId = $event"
                 />
                 <div v-if="sponsorWallet" class="sponsor-unlock">
                   <template v-if="sponsorNeedsPassword">
@@ -165,9 +165,9 @@
                       v-model="sponsorPassword"
                       type="password"
                       autocomplete="off"
-                      dense
-                      outlined
-                      dark
+                      density="compact"
+                      variant="outlined"
+                      theme="dark"
                       hide-details="auto"
                       :label="$t('midnight.sponsor.passwordLabel', { name: sponsorWallet.name })"
                     />
@@ -180,7 +180,7 @@
                   <!-- The panel cannot host WebAuthn, so a sponsor PassKey opens
                        a popup. Say so before it happens. -->
                   <div v-else class="sponsor-unlock__passkey">
-                    <v-icon small class="mr-2">mdi-fingerprint</v-icon>
+                    <v-icon size="small" class="mr-2">mdi-fingerprint</v-icon>
                     <span>
                       {{ $t('midnight.sponsor.passkeyNotice', {
                         name: sponsorWallet.name,
@@ -194,7 +194,7 @@
               </div>
 
               <div class="step-actions-row mt-4">
-                <v-btn text small color="var(--g-text-3)" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
                 <v-btn
                   :color="primaryColor"
                   class="black--text font-weight-bold flex-grow-1 ml-2"
@@ -212,7 +212,7 @@
         <div class="stepper-step" :class="{ active: step === 3, done: step > 3, locked: step < 3 }">
           <button type="button" class="step-header" @click="editStep(3)">
             <div class="step-circle" :class="step > 3 ? 'done' : step === 3 ? 'active' : ''">
-              <v-icon v-if="step > 3" x-small color="var(--g-on-grad)">mdi-check</v-icon>
+              <v-icon v-if="step > 3" size="x-small" color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>3</span>
             </div>
             <div class="step-info">
@@ -250,7 +250,7 @@
               </div>
 
               <div class="step-actions-row mt-4">
-                <v-btn text small color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
                 <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" @click="goToStep(4)">
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
@@ -278,14 +278,14 @@
                 <v-text-field
                   v-model="spendingPassword"
                   :type="showPassword ? 'text' : 'password'"
-                  outlined
-                  dense
-                  dark
+                  variant="outlined"
+                  density="compact"
+                  theme="dark"
                   hide-details="auto"
                   :placeholder="$t('miniGero.enterPassword')"
-                  :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                  :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
                   :disabled="submitting"
-                  @click:append="showPassword = !showPassword"
+                  @click:append-inner="showPassword = !showPassword"
                   @keydown.enter="signAndSubmit()"
                 />
                 <v-btn
@@ -296,7 +296,7 @@
                   :loading="submitting"
                   @click="signAndSubmit()"
                 >
-                  <v-icon left small>mdi-send</v-icon>
+                  <v-icon start size="small">mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
               </template>
@@ -315,7 +315,7 @@
                   :loading="submitting"
                   @click="signAndSubmitPrf()"
                 >
-                  <v-icon left small>mdi-fingerprint</v-icon>
+                  <v-icon start size="small">mdi-fingerprint</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
               </template>
@@ -346,7 +346,7 @@
               </div>
 
               <div class="step-actions-row mt-3">
-                <v-btn text small color="var(--g-text-3)" block :disabled="submitting" @click="editStep(3)">
+                <v-btn variant="text" size="small" color="var(--g-text-3)" block :disabled="sendDispatched" @click="editStep(3)">
                   {{ $t('miniGero.back') }}
                 </v-btn>
               </div>
@@ -399,13 +399,14 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useChainContext } from '../../composables/useChainContext';
 import snackbar from '@/plugins/snackbar';
 import { debugLog } from '@/utils/debug';
+import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 
 const { t } = useTranslation();
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
-const props = defineProps<{ value: boolean }>();
-const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
+const props = defineProps<{ modelValue: boolean }>();
+const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
 const { loggedWallet } = toRefs(walletStore);
 
@@ -426,6 +427,7 @@ const txId = ref('');
 
 type SendStageOrIdle = MidnightSendStage | 'idle';
 const sendStage = ref<SendStageOrIdle>('idle');
+const sendDispatched = computed(() => submitting.value && sendStage.value !== 'idle' && sendStage.value !== 'authorizing');
 
 // ── Wallet / network ──
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
@@ -634,12 +636,14 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
 
 // ── Step navigation ──
 function editStep(target: number) {
-  if (target < step.value && !submitting.value) {
+  if (target < step.value && !sendDispatched.value) {
+    approval.invalidate();
     step.value = target;
   }
 }
 
 function goToStep(target: number) {
+  if (submitting.value) return;
   if (target === 2 && !isAddressValid.value) return;
   if (target === 3 && !isAmountValid.value) return;
   step.value = target;
@@ -676,7 +680,7 @@ function copyTxId() {
 // ── Sign & submit (mirrors MidnightSendDialog.vue's sendUnshielded exactly:
 //    same service call, same credentials shape, same onStage callback, same
 //    addPendingMidnightTx follow-up call after a successful submit). ──
-async function addOptimisticPendingTx(hash: string) {
+async function addOptimisticPendingTx(hash: string, current: () => boolean) {
   const amountBig = parseAmount(amount.value);
   const to = recipient.value.trim();
   // Captured with the amount: without it a token send shows as NIGHT in
@@ -684,6 +688,7 @@ async function addOptimisticPendingTx(hash: string) {
   const token = selectedToken.value;
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
+    if (!current()) return;
     await addPendingMidnightTx(hash, amountBig, to, false, token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
@@ -693,7 +698,25 @@ async function addOptimisticPendingTx(hash: string) {
 const consentOpen = ref(false);
 const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
+let pendingAuthorization: (() => boolean) | null = null;
+const pendingPopups = new Set<() => void>();
+const approval = useApprovalFreshness(() => [
+  loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
+  loggedWallet.value?.webAuthnCredentialId, walletStore.isLocked,
+  recipient.value, amount.value, selectedToken.value, sponsorWalletId.value,
+  sponsorWallet.value?.webAuthnCredentialId, sponsorPassword.value, step.value,
+  midnightStore.proofServer,
+], () => props.modelValue, () => {
+  pendingPopups.forEach(cancel => cancel());
+  pendingPopups.clear();
+  pendingCredentials.value?.prfSecret?.fill(0);
+  pendingCredentials.value = null;
+  pendingAuthorization = null;
+  consentOpen.value = false;
+  spendingPassword.value = '';
+});
 function cancelConsent() {
+  approval.invalidate();
   consentOpen.value = false;
   pendingCredentials.value?.prfSecret?.fill(0);
   pendingCredentials.value = null;
@@ -703,28 +726,33 @@ function cancelConsent() {
 async function acceptConsent() {
   consentOpen.value = false;
   const credentials = pendingCredentials.value;
+  const current = pendingAuthorization;
   pendingCredentials.value = null;
-  if (!credentials) return;
+  pendingAuthorization = null;
+  if (!credentials || !current?.()) { credentials?.prfSecret?.fill(0); return; }
   const mode = midnightStore.proofServer.mode;
   if (mode !== 'local' && (mode === 'zkpaas' ? 'zkpaas' : 'cloud') !== consentProvider.value) {
-    await routeSend(credentials);
+    await approval.run(() => routeSend(credentials, current));
     return;
   }
-  await submitSend(credentials);
+  await approval.run(() => submitSend(credentials, current));
 }
-async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
+  if (!current()) { credentials.prfSecret?.fill(0); return; }
   const mode = midnightStore.proofServer.mode;
   if (mode !== 'local' && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
     pendingCredentials.value = credentials;
+    pendingAuthorization = current;
     consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
     consentOpen.value = true;
     submitting.value = false;
     return;
   }
-  await submitSend(credentials);
+  await submitSend(credentials, current);
 }
 
-async function submitSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function submitSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
+  if (!current()) { credentials.prfSecret?.fill(0); return; }
   const wallet = loggedWallet.value;
   if (!wallet) {
     passwordError.value = t('errors.noWalletLogged');
@@ -734,8 +762,11 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
   passwordError.value = '';
   submitting.value = true;
   sendStage.value = 'authorizing';
+  let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
-    const { sendUnshieldedNight } = await import('@/services/midnight-tx.service');
+    const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
+    sponsor = await buildSponsorArg(current);
+    if (!current()) { sponsor?.prfSecret?.fill(0); return; }
     const result = await sendUnshieldedNight(
       wallet.network,
       {
@@ -748,9 +779,12 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
-      (stage) => { sendStage.value = stage; },
-      await buildSponsorArg(),
+      (stage) => { if (current()) sendStage.value = stage; },
+      sponsor,
+      false,
+      current,
     );
+    if (!current()) return;
     debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
       'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
@@ -787,13 +821,16 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
-    void addOptimisticPendingTx(historyHash);
+    if (!current()) return;
+    void addOptimisticPendingTx(historyHash, current);
     txId.value = historyHash;
     txSuccess.value = true;
     snackbar.fireSuccess(t('miniGero.txSubmitted'));
   } catch (e) {
+    if (!current()) return;
     passwordError.value = e instanceof Error ? e.message : String(e);
   } finally {
+    sponsor?.prfSecret?.fill(0);
     credentials.prfSecret?.fill(0);
     spendingPassword.value = '';
     submitting.value = false;
@@ -802,15 +839,18 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
 }
 
 async function signAndSubmit() {
-  if (!spendingPassword.value || submitting.value) return;
-  await routeSend({ password: spendingPassword.value });
+  if (!spendingPassword.value || submitting.value || !isAddressValid.value || !isAmountValid.value) return;
+  const current = approval.capture();
+  const password = spendingPassword.value;
+  await approval.run(() => routeSend({ password }, current));
 }
 
 // PRF (PassKey) — side panels cannot host WebAuthn directly, so this reuses
 // the exact cross-window popup workaround DAppOverlay.vue's
 // signMidnightTransferPrf() implements (mode=rawPrf), since Midnight decrypts
 // its mnemonic from the raw PRF output rather than a Cardano private key.
-function requestRawPrf(walletId?: number): Promise<Uint8Array> {
+function requestRawPrf(current: () => boolean, walletId?: number): Promise<Uint8Array> {
+  if (!current()) return Promise.reject(new StaleApprovalError());
   // `walletId` unlocks a wallet OTHER than the logged-in one — a DUST sponsor.
   // Omitted, the popup evaluates the active wallet exactly as before.
   const target = walletId == null ? '' : `&walletId=${encodeURIComponent(String(walletId))}`;
@@ -820,20 +860,32 @@ function requestRawPrf(walletId?: number): Promise<Uint8Array> {
 
   return new Promise((resolve, reject) => {
     const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+    const cleanup = () => {
+      window.removeEventListener('message', handler);
+      clearTimeout(timeout);
+      pendingPopups.delete(cancel);
+      popup.close();
+    };
+    const cancel = () => { cleanup(); reject(new StaleApprovalError()); };
     const handler = (event: MessageEvent) => {
-      if (event.origin !== extensionOrigin) return;
-      if (event.data.type === 'PASSKEY_AUTH_RESULT') {
-        window.removeEventListener('message', handler);
+      if (event.origin !== extensionOrigin || event.source !== popup) return;
+      if (event.data?.type === 'PASSKEY_AUTH_RESULT') {
+        cleanup();
         const { success, prfOutput, error } = event.data.payload;
-        if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+        if (success && prfOutput) {
+          const bytes = new Uint8Array(prfOutput);
+          if (!current()) { bytes.fill(0); reject(new StaleApprovalError()); }
+          else resolve(bytes);
+        }
         else reject(new Error(error || t('security.passKeyAuthFailed')));
       }
     };
     window.addEventListener('message', handler);
-    setTimeout(() => {
-      window.removeEventListener('message', handler);
+    const timeout = setTimeout(() => {
+      cleanup();
       reject(new Error(t('errors.authenticationTimeout')));
     }, 60000);
+    pendingPopups.add(cancel);
   });
 }
 
@@ -846,12 +898,12 @@ function requestRawPrf(walletId?: number): Promise<Uint8Array> {
  * by definition not the logged-in wallet, so the popup has to be told which
  * credential to evaluate.
  */
-async function buildSponsorArg() {
+async function buildSponsorArg(current: () => boolean) {
   const sponsor = sponsorWallet.value;
   if (!sponsor) return undefined;
 
   if (sponsor.encryptionMethod === 'prf') {
-    const prfBytes = await requestRawPrf(sponsor.id);
+    const prfBytes = await requestRawPrf(current, sponsor.id);
     return { walletId: sponsor.id, prfSecret: prfBytes };
   }
 
@@ -866,8 +918,10 @@ async function buildSponsorArg() {
 async function restoreSponsorPreference() {
   const wallet = loggedWallet.value;
   if (!wallet) return;
+  const current = approval.capture();
   const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
   const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
+  if (!current()) return;
   // Re-check: the capacity may have flipped while the links were loading.
   sponsorWalletId.value = mayLackDust.value ? (link?.sponsorWalletId ?? null) : null;
 }
@@ -883,28 +937,36 @@ watch(mayLackDust, (needsSponsor) => {
 }, { immediate: true });
 
 async function signAndSubmitPrf() {
-  if (submitting.value) return;
+  if (submitting.value || !isAddressValid.value || !isAmountValid.value) return;
+  const current = approval.capture();
+  await approval.run(async () => {
   passwordError.value = '';
   submitting.value = true;
+  sendStage.value = 'authorizing';
   try {
-    const prfBytes = await requestRawPrf();
-    await routeSend({ prfSecret: prfBytes });
+    const prfBytes = await requestRawPrf(current);
+    await routeSend({ prfSecret: prfBytes }, current);
   } catch (e) {
-    passwordError.value = e instanceof Error ? e.message : String(e);
+    if (current()) passwordError.value = e instanceof Error ? e.message : String(e);
+  } finally {
     submitting.value = false;
+    sendStage.value = 'idle';
   }
+  });
 }
 
 // ── Close / reset ──
 function finish() {
-  emit('input', false);
+  approval.invalidate();
+  emit('update:modelValue', false);
 }
 
 // Block dismissal while a send is running (the BG work continues even if the
 // sheet closes, so keep the confirm step visible until it resolves).
 function onSheetInput(val: boolean) {
-  if (!val && submitting.value) return;
-  emit('input', val);
+  if (!val && sendDispatched.value) return;
+  if (!val) approval.invalidate();
+  emit('update:modelValue', val);
 }
 
 function resetAll() {
@@ -925,7 +987,7 @@ function resetAll() {
   txId.value = '';
 }
 
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   if (val) resetAll();
 });
 

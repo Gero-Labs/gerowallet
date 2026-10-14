@@ -19,7 +19,7 @@
       </CardOption>
     </div>
     <p class="t-caption order-shipping__eta">
-      <v-icon x-small>mdi-truck-outline</v-icon>
+      <v-icon size="x-small">mdi-truck-outline</v-icon>
       {{ t('card.estimatedDelivery') }}
     </p>
   </div>

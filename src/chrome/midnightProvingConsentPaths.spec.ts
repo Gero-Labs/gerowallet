@@ -38,8 +38,7 @@ describe('dapp proving consent gates', () => {
       const start = overlay.indexOf(fn);
       const body = overlay.slice(start, overlay.indexOf('\n}\n', start));
       expect(body).toContain('const approvedProver = transferProver.value;');
-      expect(body).toContain('}, approvedProver);');
-      expect(body).toContain('await buildMidnightTransferTx(');
+      expect(body).toMatch(/await awaitFreshApproval\(async \(\) => \(buildMidnightTransferTx\(\{ (?:password: spendingPassword\.value|prfSecret: prfBytes) \}, approvedProver\)\), approvalCurrent\)/);
     }
     expect(read('services/midnight-tx.service.ts')).toContain('assertWalletProving(target, expectedProver);');
   });

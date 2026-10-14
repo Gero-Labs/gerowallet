@@ -5,13 +5,13 @@
         {{ t('signTx.transactionDetails') }}
       </span>
       <div class="d-flex align-center">
-        <v-tooltip v-if="riskBadge" top content-class="custom-tooltip" max-width="240">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="top" v-if="riskBadge"  content-class="custom-tooltip" max-width="240">
+          <template v-slot:activator="{ props: activatorProps }">
             <span
               class="risk-badge"
               :style="{ color: riskBadge.color, borderColor: riskBadge.color }"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="activatorProps"
+
             >
               <v-icon :color="riskBadge.color" size="11" class="mr-1">{{ riskBadge.icon }}</v-icon>
               {{ t(`signTx.risk.${riskBadge.label}`) }}
@@ -27,9 +27,9 @@
           color="grey"
         />
         <v-divider class="ml-2 mr-1" vertical />
-        <v-tooltip v-if="cborHex" top content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <span v-bind="attrs" v-on="on" class="ml-1 d-inline-flex">
+        <v-tooltip location="top" v-if="cborHex"  content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <span v-bind="activatorProps"  class="ml-1 d-inline-flex">
               <CopyButton x-small :value="cborHex" />
             </span>
           </template>
@@ -49,14 +49,14 @@
         class="tx-output-row"
       >
         <div class="tx-output-left">
-          <v-tooltip top content-class="custom-tooltip" max-width="260">
-            <template v-slot:activator="{ on, attrs }">
+          <v-tooltip location="top"  content-class="custom-tooltip" max-width="260">
+            <template v-slot:activator="{ props: activatorProps }">
               <v-icon
                 size="14"
                 :color="iconColorForKind(out.kind)"
                 class="mr-1"
-                v-bind="attrs"
-                v-on="on"
+                v-bind="activatorProps"
+
               >
                 {{ iconForKind(out.kind) }}
               </v-icon>
@@ -70,14 +70,14 @@
             class="text-caption font-weight-medium"
             :style="{ color: iconColorForKind(out.kind) }"
           >{{ out.ada }} {{ unit }}</span>
-          <v-tooltip
+          <v-tooltip location="top"
             v-if="(out.assets && out.assets.length > 0) || (out.assetCount && out.assetCount > 0)"
-            top
+
             content-class="custom-tooltip tx-asset-tooltip"
             max-width="260"
           >
-            <template v-slot:activator="{ on, attrs }">
-              <span class="tx-asset-pill ml-1" v-bind="attrs" v-on="on">
+            <template v-slot:activator="{ props: activatorProps }">
+              <span class="tx-asset-pill ml-1" v-bind="activatorProps" >
                 {{ out.assetPillLabel || `+${out.assets?.length ?? out.assetCount}` }}
               </span>
             </template>
@@ -108,9 +108,9 @@
 
       <div v-if="withdrawal" class="tx-output-row">
         <div class="tx-output-left">
-          <v-tooltip top content-class="custom-tooltip" max-width="260">
-            <template v-slot:activator="{ on, attrs }">
-              <v-icon size="14" color="success" class="mr-1" v-bind="attrs" v-on="on">
+          <v-tooltip location="top"  content-class="custom-tooltip" max-width="260">
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-icon size="14" color="success" class="mr-1" v-bind="activatorProps" >
                 mdi-cash-refund
               </v-icon>
             </template>

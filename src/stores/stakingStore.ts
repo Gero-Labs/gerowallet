@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import blockchainApi from '@/api/blockchain-api';
 import { PaginatedResponse, PaginationParams, PaginationMeta } from '@/models/types';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
@@ -28,7 +28,7 @@ export interface StakingStore {
   };
 }
 
-export const stakingStore = Vue.observable<StakingStore>({
+export const stakingStore = reactive<StakingStore>({
   pools: [],
   poolsFor: null,
   currentPool: null,

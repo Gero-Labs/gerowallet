@@ -8,15 +8,15 @@
     <v-row no-gutters class="pb-2">
       <v-spacer></v-spacer>
       <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
-        <v-btn small value="12">
+        <v-btn size="small" value="12">
           <v-icon style="right: -5px">mdi-numeric-1</v-icon>
           <v-icon style="left: -5px">mdi-numeric-2</v-icon>
         </v-btn>
-        <v-btn small value="15">
+        <v-btn size="small" value="15">
           <v-icon style="right: -5px">mdi-numeric-1</v-icon>
           <v-icon style="left: -5px">mdi-numeric-5</v-icon>
         </v-btn>
-        <v-btn small value="24">
+        <v-btn size="small" value="24">
           <v-icon style="right: -5px">mdi-numeric-2</v-icon>
           <v-icon style="left: -5px">mdi-numeric-4</v-icon>
         </v-btn>
@@ -40,7 +40,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         class="onb-continue"
@@ -180,12 +180,18 @@ const handleContinue = (): void => {
 .mnemonic-grid ::v-deep {
   .v-input {
     font-size: 12px;
+    --v-input-control-height: 30px;
   }
-  .v-input__slot {
+  .v-field {
+    --v-field-padding-start: 6px;
+    --v-field-padding-end: 6px;
+    --v-field-input-padding-top: 0px;
+    --v-field-input-padding-bottom: 0px;
+  }
+  .v-field__input {
     min-height: 30px !important;
-    padding: 0 6px !important;
   }
-  .v-input__prepend-outer {
+  .v-input__prepend {
     margin-top: 4px !important;
     margin-right: 2px !important;
 
@@ -194,14 +200,14 @@ const handleContinue = (): void => {
       min-width: 18px !important;
     }
   }
-  .v-text-field--outlined fieldset {
-    border-width: 1px;
+  .v-field--variant-outlined .v-field__outline {
+    --v-field-border-width: 1px;
   }
   input {
     padding: 2px 0 !important;
     font-size: 11px;
   }
-  .v-input__append-inner {
+  .v-field__append-inner {
     margin-top: 2px !important;
     padding-left: 0 !important;
 

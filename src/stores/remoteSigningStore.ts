@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import {
@@ -38,7 +38,7 @@ interface RemoteSigningState {
   loading: boolean;
 }
 
-const state = Vue.observable<RemoteSigningState>({
+const state = reactive<RemoteSigningState>({
   settings: defaultRemoteSigningSettings(),
   devices: [],
   needsProof: false,

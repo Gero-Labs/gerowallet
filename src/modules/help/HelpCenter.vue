@@ -61,7 +61,7 @@
 import { computed, onBeforeUnmount, watch } from 'vue';
 import i18n from '@/plugins/i18n';
 import { helpLocale, type HelpResult } from '@/api/help.api';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -89,10 +89,12 @@ const router = useRouter();
 const { chain, destination, answerDestination, selectChain } = useHelpNavigation();
 const { track } = useHelpTracking();
 const view = computed(() => route.path.startsWith('/help/articles/') ? 'article' : route.path.startsWith('/help/topics/') ? 'topic' : route.path === '/help/search' ? 'search' : route.path === '/help/updates' ? 'updates' : 'home');
+const topic = computed(() => typeof route.params['topic'] === 'string' ? route.params['topic'] : '');
+const slug = computed(() => typeof route.params['slug'] === 'string' ? route.params['slug'] : '');
 // Home is a dashboard; the reader and updates pages share a tighter top gutter, and results follow them.
 const layout = computed(() => view.value === 'home' ? 'home' : view.value === 'article' ? 'reader' : view.value === 'updates' ? 'updates' : 'results');
 const request = computed(() => ({ view: view.value, locale: helpLocale(i18n.locale), chain: chain.value,
-  topic: route.params.topic || '', slug: route.params.slug || '', q: typeof route.query.q === 'string' ? route.query.q : '', basic: route.query.basic === '1' }));
+  topic: topic.value, slug: slug.value, q: typeof route.query['q'] === 'string' ? route.query['q'] : '', basic: route.query['basic'] === '1' }));
 const { home: remoteHome, article: remoteArticle, results: remoteResults, total: remoteTotal, nextCursor, loading, failed, resolved, stale, loadMore, retry } = useHelpContent(request);
 const remoteCatalog = computed(() => remoteHome.value?.topics.flatMap(topic => topic.articles.map(asAnswer)) ?? []);
 const basicCatalog = computed(() => request.value.basic || remoteCatalog.value.length === 0);
@@ -100,7 +102,7 @@ const catalog = computed(() => basicCatalog.value ? answers : remoteCatalog.valu
 // Record the initial wallet default in the URL before an in-place lock can
 // remove wallet context. Explicit selections always win after unlock.
 watch(() => route.fullPath, () => {
-  if (!parseHelpChain(route.query.chain) && isHelpReady(walletStore)) {
+  if (!parseHelpChain(route.query['chain']) && isHelpReady(walletStore)) {
     void router.replace({ path: route.path, query: { ...route.query, chain: chain.value } }).catch(() => {});
   }
 }, { immediate: true });
@@ -117,9 +119,9 @@ const context = computed(() => ({
   walletType: isHelpReady(walletStore) && walletHelpChain(walletStore.loggedWallet?.chain) === chain.value ? walletStore.loggedWallet?.type : undefined,
 }));
 const index = computed(() => topicIndex(context.value, catalog.value));
-const selectedTopic = computed(() => index.value.find(topic => topic.id === route.params.topic));
+const selectedTopic = computed(() => index.value.find(entry => entry.id === topic.value));
 const article = computed(() => remoteArticle.value ? asAnswer(remoteArticle.value.article) : request.value.basic || failed.value || !resolved.value
-  ? answers.find(answer => answer.id === route.params.slug) : undefined);
+  ? answers.find(answer => answer.id === slug.value) : undefined);
 const articleHtml = computed(() => remoteArticle.value ? renderHelpArticle(remoteArticle.value.article, import.meta.env['VITE_BACKEND_URL']) : '');
 const articleApplies = computed(() => !!article.value && applies(article.value, context.value));
 const featured = computed(() => (basicCatalog.value ? featuredAnswers(chain.value)
@@ -131,7 +133,7 @@ const related = computed(() => catalog.value.filter(answer => answer.id !== arti
 const remoteResultsActive = computed(() => resolved.value && !request.value.basic);
 const filteredRemoteResults = computed(() => remoteResults.value.filter(answer => applies(asAnswer(answer), context.value)));
 const heading = computed(() => selectedTopic.value ? t('help.topic.' + selectedTopic.value.id) : t('help.answers'));
-const results = computed(() => searchAnswers(view.value === 'search' && typeof route.query.q === 'string' ? route.query.q : '', context.value, route.params.topic));
+const results = computed(() => searchAnswers(view.value === 'search' ? request.value.q : '', context.value, topic.value));
 // A submitted search is counted once its outcome is known: the published results, or the bundled ones when
 // the service is unreachable. Only "results" or "empty" is recorded, never the words that were typed.
 const searchOutcome = computed<'results' | 'empty' | null>(() => {

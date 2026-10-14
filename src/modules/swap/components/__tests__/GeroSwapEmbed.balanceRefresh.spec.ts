@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import Vue, { ref } from 'vue';
+import { ref } from 'vue';
 
 // Same module doubles as GeroSwapEmbed.spec.ts, except walletStore is reactive here so
 // the component's walletStore.utxos watch can fire.
@@ -10,7 +10,6 @@ vi.mock('@/modules/market/composables/useMarketData', () => ({
   marketTokensRef: ref([]),
 }));
 
-Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
 
 vi.mock('../../composables/useNativeSwapSigner', () => ({
   useNativeSwapSigner: () => ({
@@ -51,7 +50,7 @@ async function flushRebuild(wrapper: ReturnType<typeof mount>) {
 
 describe('GeroSwapEmbed balance refresh', () => {
   it('re-sends the catalog when the wallet UTxOs change, so the widget re-reads its balance', async () => {
-    const wrapper = mount(GeroSwapEmbed, { propsData: { tokenOut: 'SNEK' } });
+    const wrapper = mount(GeroSwapEmbed, { props: { tokenOut: 'SNEK' } });
     const el = wrapper.find('gero-swap').element as SwapEl;
 
     // Settle the token-set key with a first market-data tick.
@@ -70,6 +69,6 @@ describe('GeroSwapEmbed balance refresh', () => {
     await flushRebuild(wrapper);
     expect(el.tokens).not.toBe(settled);
 
-    wrapper.destroy();
+    wrapper.unmount();
   });
 });

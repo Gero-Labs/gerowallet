@@ -1,16 +1,16 @@
 <template>
-  <v-layout class="dao-theme">
+  <div class="d-flex flex-wrap flex-grow-1 dao-theme">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
           <v-card-text class="px-2">
             <!-- ═══ YOUR STATUS BAR ═══ -->
-            <v-card outlined flat class="glass-panel pa-0 mb-4">
+            <v-card variant="outlined" flat class="glass-panel pa-0 mb-4">
               <div class="d-flex align-center flex-wrap pa-3" style="gap: 12px">
                 <!-- Membership Status -->
                 <div class="d-flex align-center">
                   <v-avatar size="32" :color="isMember ? 'success' : 'grey darken-1'" class="mr-2">
-                    <v-icon small color="white">{{ isMember ? 'mdi-check' : 'mdi-account-outline' }}</v-icon>
+                    <v-icon size="small" color="white">{{ isMember ? 'mdi-check' : 'mdi-account-outline' }}</v-icon>
                   </v-avatar>
                   <div>
                     <div class="text-caption grey--text text--lighten-1" style="line-height: 1.1">{{ $t('governance.status') }}</div>
@@ -28,9 +28,9 @@
                   <div>
                     <div class="d-flex align-center" style="line-height: 1.1">
                       <span class="text-caption grey--text text--lighten-1">{{ $t('governance.votingPower') }}</span>
-                      <v-tooltip v-if="votingPowerCalcs.length > 0" bottom max-width="320" content-class="custom-tooltip">
-                        <template v-slot:activator="{ on, attrs }">
-                          <v-icon v-bind="attrs" v-on="on" x-small class="ml-1 grey--text" style="cursor: help">mdi-information-outline</v-icon>
+                      <v-tooltip location="bottom" v-if="votingPowerCalcs.length > 0"  max-width="320" content-class="custom-tooltip">
+                        <template v-slot:activator="{ props: activatorProps }">
+                          <v-icon v-bind="activatorProps"  size="x-small" class="ml-1 grey--text" style="cursor: help">mdi-information-outline</v-icon>
                         </template>
                         <div>
                           <div class="font-weight-medium mb-1">{{ $t('governance.votingPowerRules') }}</div>
@@ -59,13 +59,13 @@
 
                 <!-- Stats -->
                 <div class="d-flex align-center">
-                  <v-icon color="primary" class="mr-2" small>mdi-account-group</v-icon>
+                  <v-icon color="primary" class="mr-2" size="small">mdi-account-group</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text">{{ memberCount }}</span>
                   <span class="text-caption grey--text text--lighten-1 ml-1">{{ $t('governance.members') }}</span>
                 </div>
 
                 <div class="d-flex align-center">
-                  <v-icon color="warning" class="mr-1" small>mdi-shield-crown</v-icon>
+                  <v-icon color="warning" class="mr-1" size="small">mdi-shield-crown</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text">{{ adminCount }}</span>
                   <span class="text-caption grey--text text--lighten-1 ml-1">{{ $t('governance.admin') }}</span>
                 </div>
@@ -75,17 +75,17 @@
                 <!-- Actions -->
                 <v-btn
                   v-if="!isMember && loggedWallet"
-                  small
+                  size="small"
                   class="geroButton"
                   style="color: var(--g-on-grad) !important"
                   :loading="joiningDao"
                   @click="showJoinFlow()"
                 >
-                  <v-icon small class="mr-1">mdi-account-plus</v-icon>
+                  <v-icon size="small" class="mr-1">mdi-account-plus</v-icon>
                   {{ $t('governance.joinDao') }}
                 </v-btn>
-                <v-chip v-else-if="isMember" small color="success" outlined>
-                  <v-icon small left>mdi-check-circle</v-icon>
+                <v-chip v-else-if="isMember" size="small" color="success" variant="outlined">
+                  <v-icon size="small" start>mdi-check-circle</v-icon>
                   {{ $t('governance.member') }}
                 </v-chip>
               </div>
@@ -93,9 +93,9 @@
 
 
             <!-- ═══ Member Growth + Voting Power ═══ -->
-            <v-card outlined flat class="glass-panel pa-4 mb-4">
+            <v-card variant="outlined" flat class="glass-panel pa-4 mb-4">
                   <div class="d-flex align-center mb-2">
-                    <v-icon color="primary" class="mr-2" small>mdi-chart-line</v-icon>
+                    <v-icon color="primary" class="mr-2" size="small">mdi-chart-line</v-icon>
                     <span class="text-subtitle-2 font-weight-semibold white--text">{{ $t('governance.memberGrowth') }}</span>
                   </div>
                   <div style="height: 180px">
@@ -109,11 +109,11 @@
               <!-- About & How It Works -->
               <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('about')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
-                  <v-icon color="primary" class="mr-2" small>mdi-information-outline</v-icon>
+                  <v-icon color="primary" class="mr-2" size="small">mdi-information-outline</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
                     {{ $t('governance.aboutDao') }}
                   </span>
-                  <v-icon small class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.about ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
+                  <v-icon size="small" class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.about ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
                 </div>
               </v-card>
               <v-expand-transition>
@@ -123,7 +123,7 @@
                     <v-row no-gutters>
                       <v-col v-for="pillar in pillars" :key="pillar.icon" cols="12" sm="6" class="pa-2">
                         <div class="d-flex align-start">
-                          <v-icon color="primary" small class="mr-2 mt-1 flex-shrink-0">{{ pillar.icon }}</v-icon>
+                          <v-icon color="primary" size="small" class="mr-2 mt-1 flex-shrink-0">{{ pillar.icon }}</v-icon>
                           <div>
                             <div class="text-caption font-weight-medium white--text">{{ pillar.title }}</div>
                             <div class="text-caption grey--text text--lighten-1" style="line-height: 1.5; white-space: normal; word-break: break-word">
@@ -140,11 +140,11 @@
               <!-- Governance Mechanics -->
               <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('mechanics')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
-                  <v-icon color="primary" class="mr-2" small>mdi-cog-outline</v-icon>
+                  <v-icon color="primary" class="mr-2" size="small">mdi-cog-outline</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
                     {{ $t('governance.governanceMechanicsTimelines') }}
                   </span>
-                  <v-icon small class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.mechanics ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
+                  <v-icon size="small" class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.mechanics ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
                 </div>
               </v-card>
               <v-expand-transition>
@@ -153,7 +153,7 @@
                     <div class="text-caption grey--text text--lighten-1 mb-3" style="line-height: 1.5; white-space: normal; word-break: break-word">
                       {{ $t('governance.mechanicsDescription') }}
                     </div>
-                    <v-simple-table dense class="transparent dao-table">
+                    <v-table density="compact" class="transparent dao-table">
                       <template v-slot:default>
                         <thead>
                           <tr>
@@ -170,7 +170,7 @@
                           </tr>
                         </tbody>
                       </template>
-                    </v-simple-table>
+                    </v-table>
                   </div>
                 </div>
               </v-expand-transition>
@@ -178,17 +178,17 @@
               <!-- Action Permissions -->
               <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('permissions')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
-                  <v-icon color="primary" class="mr-2" small>mdi-shield-key</v-icon>
+                  <v-icon color="primary" class="mr-2" size="small">mdi-shield-key</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
                     {{ $t('governance.actionPermissions') }}
                   </span>
-                  <v-icon small class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.permissions ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
+                  <v-icon size="small" class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.permissions ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
                 </div>
               </v-card>
               <v-expand-transition>
                 <div v-show="expandedSections.permissions">
                   <div class="dao-collapsible-body glass-panel px-4 pb-4 pt-2">
-                    <v-simple-table dense class="transparent dao-table">
+                    <v-table density="compact" class="transparent dao-table">
                       <template v-slot:default>
                         <thead>
                           <tr>
@@ -202,20 +202,20 @@
                           <tr v-for="perm in permissions" :key="perm.name">
                             <td class="text-left text-caption" style="white-space: normal; word-break: break-word">
                               {{ perm.name }}
-                              <v-tooltip bottom>
-                                <template v-slot:activator="{ on, attrs }">
-                                  <v-icon v-bind="attrs" v-on="on" x-small class="ml-1 grey--text">mdi-information-outline</v-icon>
+                              <v-tooltip location="bottom" >
+                                <template v-slot:activator="{ props: activatorProps }">
+                                  <v-icon v-bind="activatorProps"  size="x-small" class="ml-1 grey--text">mdi-information-outline</v-icon>
                                 </template>
                                 <span style="max-width: 280px; display: block; white-space: normal">{{ perm.description }}</span>
                               </v-tooltip>
                             </td>
-                            <td class="text-center"><v-icon v-if="perm.everyone" small color="success">mdi-check-circle</v-icon></td>
-                            <td class="text-center"><v-icon v-if="perm.allMembers" small color="success">mdi-check-circle</v-icon></td>
-                            <td class="text-center"><v-icon v-if="perm.admin" small color="success">mdi-check-circle</v-icon></td>
+                            <td class="text-center"><v-icon v-if="perm.everyone" size="small" color="success">mdi-check-circle</v-icon></td>
+                            <td class="text-center"><v-icon v-if="perm.allMembers" size="small" color="success">mdi-check-circle</v-icon></td>
+                            <td class="text-center"><v-icon v-if="perm.admin" size="small" color="success">mdi-check-circle</v-icon></td>
                           </tr>
                         </tbody>
                       </template>
-                    </v-simple-table>
+                    </v-table>
                   </div>
                 </div>
               </v-expand-transition>
@@ -223,11 +223,11 @@
               <!-- Getting Involved & Tokenomics -->
               <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('involved')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
-                  <v-icon color="primary" class="mr-2" small>mdi-rocket-launch</v-icon>
+                  <v-icon color="primary" class="mr-2" size="small">mdi-rocket-launch</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
                     {{ $t('governance.gettingInvolved') }}
                   </span>
-                  <v-icon small class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.involved ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
+                  <v-icon size="small" class="white--text" style="transition: transform 0.2s ease" :style="{ transform: expandedSections.involved ? 'rotate(180deg)' : '' }">mdi-chevron-down</v-icon>
                 </div>
               </v-card>
               <v-expand-transition>
@@ -252,7 +252,7 @@
                       {{ $t('governance.participationDescription') }}
                     </div>
                     <div v-for="req in requirements" :key="req.text" class="d-flex align-center mb-1">
-                      <v-icon x-small :color="req.met === false ? 'error' : 'success'" class="mr-2">
+                      <v-icon size="x-small" :color="req.met === false ? 'error' : 'success'" class="mr-2">
                         {{ req.met === false ? 'mdi-close-circle' : 'mdi-check-circle' }}
                       </v-icon>
                       <span class="text-caption white--text" style="white-space: normal; word-break: break-word">{{ req.text }}</span>
@@ -262,9 +262,9 @@
 
                     <div class="text-caption font-weight-medium white--text mb-2">{{ $t('governance.tokenomics') }}</div>
                     <div class="d-flex flex-wrap" style="gap: 6px">
-                      <v-chip small outlined color="primary">{{ $t('governance.totalSupply') }}</v-chip>
-                      <v-chip small outlined>{{ $t('governance.circulatingSupply') }}</v-chip>
-                      <v-chip small outlined>{{ $t('governance.teamAllocation') }}</v-chip>
+                      <v-chip size="small" variant="outlined" color="primary">{{ $t('governance.totalSupply') }}</v-chip>
+                      <v-chip size="small" variant="outlined">{{ $t('governance.circulatingSupply') }}</v-chip>
+                      <v-chip size="small" variant="outlined">{{ $t('governance.teamAllocation') }}</v-chip>
                     </div>
                   </div>
                 </div>
@@ -283,7 +283,7 @@
                 :alt="$t('governance.clarityLogo')"
                 width="48"
                 max-width="48"
-                contain
+
               />
             </div>
           </v-card-text>
@@ -308,7 +308,7 @@
             <div class="text-caption font-weight-medium white--text mb-2">{{ $t('governance.membershipProcess') }}</div>
             <v-card flat class="liquid-glass-subtle pa-3">
               <div v-for="item in workflowInfo" :key="item.label" class="d-flex align-center mb-1">
-                <v-icon x-small :color="item.color" class="mr-2">{{ item.icon }}</v-icon>
+                <v-icon size="x-small" :color="item.color" class="mr-2">{{ item.icon }}</v-icon>
                 <span class="text-caption grey--text text--lighten-1" style="font-size: 11px !important">
                   {{ item.label }}
                 </span>
@@ -326,7 +326,7 @@
           <v-card flat class="liquid-glass-subtle pa-3 mb-3">
             <div class="text-caption font-weight-medium white--text mb-1">{{ $t('governance.requirements') }}</div>
             <div v-for="req in requirements" :key="'j-' + req.text" class="d-flex align-center mb-1">
-              <v-icon x-small :color="req.met === false ? 'error' : 'success'" class="mr-2">
+              <v-icon size="x-small" :color="req.met === false ? 'error' : 'success'" class="mr-2">
                 {{ req.met === false ? 'mdi-close-circle' : 'mdi-check-circle' }}
               </v-icon>
               <span class="text-caption grey--text text--lighten-1" style="white-space: normal; word-break: break-word; font-size: 11px !important">{{ req.text }}</span>
@@ -344,24 +344,24 @@
           </v-card>
         </v-card-text>
         <v-card-actions class="px-6 pb-4">
-          <v-btn text small @click="joinDialog = false" class="grey--text">{{ $t('common.cancel') }}</v-btn>
+          <v-btn variant="text" size="small" @click="joinDialog = false" class="grey--text">{{ $t('common.cancel') }}</v-btn>
           <v-spacer />
           <v-btn
-            small
+            size="small"
             class="geroButton"
             style="color: var(--g-on-grad) !important"
             :loading="joiningDao"
             :disabled="!loggedWallet?.stakeAddress || !meetsRequirements"
             @click="confirmJoinDao()"
           >
-            <v-icon small class="mr-1">mdi-check</v-icon>
+            <v-icon size="small" class="mr-1">mdi-check</v-icon>
             {{ $t('governance.confirmJoin') }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">

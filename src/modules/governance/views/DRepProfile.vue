@@ -19,7 +19,7 @@
       <div class="drep-profile__header">
         <div class="drep-profile__identity">
           <v-avatar rounded size="56" color="var(--g-raised)" class="drep-profile__avatar">
-            <v-img v-if="image" :src="image" contain>
+            <v-img v-if="image" :src="image" >
               <template v-slot:error>
                 <v-icon size="26" color="var(--g-text-3)">mdi-account</v-icon>
               </template>
@@ -34,7 +34,7 @@
               </span>
               <!-- Tri-state, and it never says "invalid" for "nobody checked". -->
               <span class="t-caption drep-profile__pill" :class="`drep-profile__pill--${anchorTone}`">
-                <v-icon x-small class="drep-profile__pill-icon">{{ anchorIcon }}</v-icon>
+                <v-icon size="x-small" class="drep-profile__pill-icon">{{ anchorIcon }}</v-icon>
                 {{ anchorLabel }}
               </span>
             </div>
@@ -117,9 +117,9 @@
         <section class="drep-profile__record glass-panel">
           <div class="drep-profile__record-head">
             <span class="t-label">{{ $t('governance.votingRecord') }}</span>
-            <v-chip-group :value="voteFilter" column @change="onVoteFilter">
-              <v-chip :value="'all'" small outlined>{{ $t('common.all') }}</v-chip>
-              <v-chip :value="'rationale'" small outlined>{{ $t('governance.filterWithRationale') }}</v-chip>
+            <v-chip-group :model-value="voteFilter" column @update:model-value="onVoteFilter">
+              <v-chip :value="'all'" size="small" variant="outlined">{{ $t('common.all') }}</v-chip>
+              <v-chip :value="'rationale'" size="small" variant="outlined">{{ $t('governance.filterWithRationale') }}</v-chip>
             </v-chip-group>
           </div>
 
@@ -153,7 +153,7 @@
                 class="t-caption drep-profile__rationale"
                 @click="openRationale(vote)"
               >
-                {{ $t('governance.readWhy') }}<v-icon x-small class="ml-1">mdi-message-text-outline</v-icon>
+                {{ $t('governance.readWhy') }}<v-icon size="x-small" class="ml-1">mdi-message-text-outline</v-icon>
               </button>
             </div>
           </div>
@@ -210,7 +210,7 @@
               target="_blank"
               rel="noopener noreferrer"
             >
-              <v-icon x-small class="mr-1">{{ link.icon }}</v-icon>{{ link.href }}
+              <v-icon size="x-small" class="mr-1">{{ link.icon }}</v-icon>{{ link.href }}
             </a>
             <span class="t-caption">{{ $t('governance.externalLinksNote') }}</span>
           </div>
@@ -239,7 +239,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore, { networkStore } from '@/stores/networkStore';
 import governanceActionsStore from '@/stores/governanceActionsStore';

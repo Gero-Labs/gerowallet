@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gero Mini</title>
+  <!-- Establish the native cascade before any bundled component stylesheet.
+       The wallet must not depend on the swap widget to declare this order. -->
+  <link rel="stylesheet" href="../shared/styles/vuetify-layers.css?no-inline" media="all" />
   <!-- Fonts are self-hosted and bundled: see the @fontsource imports at the top of main.ts. -->
   <!-- media="all" (Vite's documented escape hatch, vitejs/vite#6748) stops Vite's HTML transform
        from merging this stylesheet into the app's own bundled CSS at build time. It still gets

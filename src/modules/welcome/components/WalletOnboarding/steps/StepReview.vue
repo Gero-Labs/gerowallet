@@ -5,7 +5,7 @@
       <v-card flat class="transparent" :disabled="creatingWalletLoader">
 
         <!-- Wallet summary card -->
-        <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+        <v-card class="mb-3" variant="outlined" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
           <v-card-text class="pa-3">
             <div class="d-flex align-center mb-2">
               <v-avatar size="32" class="mr-2">
@@ -15,7 +15,8 @@
                 <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
                 <v-text-field
                   v-model="walletName"
-                  dense
+                  variant="plain"
+                  density="compact"
                   hide-details
                   class="wallet-name-field mt-0 pt-0"
                   :placeholder="$t('welcome.walletNamePlaceholder')"
@@ -37,7 +38,7 @@
               <v-col cols="6" class="pl-3">
                 <div class="d-flex align-center">
                   <v-avatar size="20" class="mr-2">
-                    <v-img :src="network ? network.icon : ''" contain></v-img>
+                    <v-img :src="network ? network.icon : ''" ></v-img>
                   </v-avatar>
                   <div>
                     <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
@@ -70,7 +71,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="approval.invalidate(); $emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         class="onb-continue"
@@ -94,6 +95,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import type { NetworkInfo } from '@/utils/networks';
+import { useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import snackbar from '@/plugins/snackbar';
 
 interface ConnectionPayload {
   publicKey: string;
@@ -118,7 +122,7 @@ const emit = defineEmits<{
 const vmProxy = getCurrentInstance()!.proxy;
 const router = vmProxy?.$router;
 
-const form3 = ref<{ validate: () => boolean } | null>(null);
+const form3 = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null);
 const valid3 = ref(false);
 const creatingWalletLoader = ref(false);
 // Wallet name is owned by the orchestrator (single source); edit two-way.
@@ -127,33 +131,40 @@ const walletName = computed<string>({
   set: (v: string) => emit('update:name', v),
 });
 const termsChecked = ref(false);
+const { t } = useTranslation();
+const approval = useApprovalFreshness(() => [props.network, props.connection, props.walletType, props.name, termsChecked.value]);
 
 const walletIconSrc = computed(() => {
   const iconKey = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
-  return (assets as Record<string, string>)[`${iconKey}Svg`] || '';
+  const asset = assets[`${iconKey}Svg` as keyof typeof assets];
+  return typeof asset === 'string' ? asset : '';
 });
 
-const walletCreationStep3 = async (): Promise<void> => {
+const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
+  const current = approval.capture();
+  const approved = {
+    ...props.connection,
+    name: walletName.value,
+    type: props.walletType,
+    theme: Theme.GERO,
+    chain: props.network?.blockchain,
+    network: props.network?.network,
+    icon: networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || ''),
+  };
+  creatingWalletLoader.value = true;
   try {
-    if (form3.value?.validate()) {
-      creatingWalletLoader.value = true;
-      const wallet = await GeroStore.createNewHardwareWallet({
-        ...props.connection,
-        name: walletName.value,
-        type: props.walletType,
-        theme: Theme.GERO,
-        chain: props.network?.blockchain,
-        network: props.network?.network,
-        icon: networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || ''),
-      });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response: any = await Messaging.sendToBackgroundFromOptions({
+    if ((await form3.value?.validate())?.valid && current()) {
+      const wallet = await GeroStore.createNewHardwareWallet(approved);
+      if (!current()) return;
+      const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
         data: { wallet },
-      });
+      }) as { error?: string } | undefined;
+      if (!current()) return;
 
       if (response && !response.error) {
         nextTick(() => {
+          if (!current()) return;
           emit('created');
           router?.push('/').catch((err: Error) => {
             if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
@@ -164,19 +175,20 @@ const walletCreationStep3 = async (): Promise<void> => {
       } else if (response?.error) {
         console.warn('Login response error:', response.error);
         nextTick(() => {
+          if (!current()) return;
           emit('created');
           router?.push('/').catch(() => {});
         });
       }
     }
   } catch (e) {
+    if (!current()) return;
     console.error('Error creating wallet:', e);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (vmProxy as any)?.['$snackbar']?.setError(vmProxy?.$t('welcome.hardwareConnectionFailed') as string);
+    snackbar.setError(t('welcome.hardwareConnectionFailed'));
   } finally {
     creatingWalletLoader.value = false;
   }
-};
+});
 
 </script>
 
@@ -188,11 +200,6 @@ const walletCreationStep3 = async (): Promise<void> => {
     font-weight: 500;
     color: white;
     padding: 0;
-  }
-
-  ::v-deep .v-input__slot::before,
-  ::v-deep .v-input__slot::after {
-    display: none;
   }
 }
 </style>

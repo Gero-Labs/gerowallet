@@ -10,29 +10,29 @@
     @close="handleClose"
   >
     <v-card-text class="px-3 pb-4">
-      <v-alert type="warning" text dense class="mb-4">
+      <v-alert type="warning" variant="text" density="compact" class="mb-4">
         {{ t('security.mpcRevealWarning') }}
       </v-alert>
 
       <!-- Pre-reveal: require re-auth -->
       <template v-if="!mnemonic">
-        <v-alert v-if="errorMessage" type="error" text dense class="mb-2">
+        <v-alert v-if="errorMessage" type="error" variant="text" density="compact" class="mb-2">
           {{ errorMessage }}
         </v-alert>
 
         <!-- Re-auth, one gesture per step: Google sign-in first (its own click,
              so the browser popup isn't blocked), then the device secret. -->
         <template v-if="!googleIdToken">
-          <v-btn block outlined :loading="signingInGoogle" @click="handleGoogleSignIn">
+          <v-btn block variant="outlined" :loading="signingInGoogle" @click="handleGoogleSignIn">
             <v-avatar size="18" class="mr-2">
-              <v-img :src="assets.google" contain />
+              <v-img :src="assets.google"  />
             </v-avatar>
             {{ t('welcome.googleSignInButton') }}
           </v-btn>
         </template>
         <template v-else-if="isMpcPasskeyWallet && !passkeySecret">
-          <v-btn block outlined color="primary" :loading="verifyingPasskey" @click="handleVerifyPasskey">
-            <v-icon left small>mdi-fingerprint</v-icon>
+          <v-btn block variant="outlined" color="primary" :loading="verifyingPasskey" @click="handleVerifyPasskey">
+            <v-icon start size="small">mdi-fingerprint</v-icon>
             {{ t('security.usePassKey') }}
           </v-btn>
         </template>
@@ -42,10 +42,10 @@
             v-model="devicePassword"
             :label="t('security.spendingPassword')"
             :type="showDevicePw ? 'text' : 'password'"
-            :append-icon="showDevicePw ? 'mdi-eye-off' : 'mdi-eye'"
-            @click:append="showDevicePw = !showDevicePw"
-            outlined
-            dense
+            :append-inner-icon="showDevicePw ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append-inner="showDevicePw = !showDevicePw"
+            variant="outlined"
+            density="compact"
             :disabled="busy"
             class="mb-2"
             @keydown.enter.stop="reveal"
@@ -64,13 +64,13 @@
           </span>
         </div>
         <div class="d-flex justify-space-between align-center mt-2">
-          <v-btn small text color="primary" @click="revealed = !revealed">
-            <v-icon left small>{{ revealed ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+          <v-btn size="small" variant="text" color="primary" @click="revealed = !revealed">
+            <v-icon start size="small">{{ revealed ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
             {{ revealed ? t('security.mpcRevealHide') : t('security.mpcRevealShow') }}
           </v-btn>
           <CopyButton :value="mnemonic" x-small />
         </div>
-        <v-btn block outlined color="primary" class="mt-4" @click="handleClose">
+        <v-btn block variant="outlined" color="primary" class="mt-4" @click="handleClose">
           {{ t('security.mpcRevealDone') }}
         </v-btn>
       </template>

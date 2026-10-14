@@ -3,7 +3,7 @@
     <div class="body-card__head">
       <span class="t-heading body-card__title">{{ bodyLabel }}</span>
       <span v-if="result.met" class="body-card__verdict body-card__verdict--met t-caption">
-        <v-icon x-small color="var(--g-success)" class="mr-1">mdi-check-circle-outline</v-icon>
+        <v-icon size="x-small" color="var(--g-success)" class="mr-1">mdi-check-circle-outline</v-icon>
         {{ $t('governance.thresholdMet') }}
       </span>
       <span v-else-if="canJudge" class="body-card__verdict t-caption">

@@ -6,13 +6,14 @@
       <span v-if="error" class="agent-chart-card__error">{{ $t(error) }}</span>
     </div>
     <div v-if="loading" class="agent-chart-card__loading">{{ $t('copilot.chart.loading') }}</div>
-    <TradingViewChart v-else-if="candles.length" :data="candles" height="180px" />
+    <TradingViewChart v-else-if="candles.length" :data="chartCandles" height="180px" />
     <div v-else-if="!error" class="agent-chart-card__empty">{{ $t('copilot.chart.noData') }}</div>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, ref } from 'vue';
+import { defineComponent, onMounted, ref, computed } from 'vue';
+import type { Time } from 'lightweight-charts';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
 import marketApi, { type CandleResponse } from '@/api/market-api';
 
@@ -43,7 +44,8 @@ export default defineComponent({
       }
     });
 
-    return { candles, loading, error };
+    const chartCandles = computed(() => candles.value.map(candle => ({ ...candle, time: candle.time as Time })));
+    return { candles, chartCandles, loading, error };
   },
 });
 </script>

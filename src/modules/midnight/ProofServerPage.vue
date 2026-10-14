@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12">
         <div class="proof-server-page">
@@ -188,15 +188,15 @@
 
               <v-expansion-panels flat class="ps-advanced">
                 <v-expansion-panel>
-                  <v-expansion-panel-header class="t-caption ps-advanced-header">
+                  <v-expansion-panel-title class="t-caption ps-advanced-header">
                     {{ t('midnight.proofServerPage.advancedUrl') }}
-                  </v-expansion-panel-header>
-                  <v-expansion-panel-content>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
                     <v-text-field
                       v-model="localUrlDraft"
                       :label="t('midnight.proofServer.urlLabelLedger8')"
-                      outlined
-                      dense
+                      variant="outlined"
+                      density="compact"
                       hide-details="auto"
                       class="mt-2 proof-server-url-field"
                       :error-messages="localUrlError ? [localUrlError] : []"
@@ -206,8 +206,8 @@
                     <v-text-field
                       v-model="localUrlLedger9Draft"
                       :label="t('midnight.proofServer.urlLabelLedger9')"
-                      outlined
-                      dense
+                      variant="outlined"
+                      density="compact"
                       hide-details="auto"
                       class="mt-2 proof-server-url-field"
                       :error-messages="localUrlLedger9Error ? [localUrlLedger9Error] : []"
@@ -215,7 +215,7 @@
                       @blur="onLocalUrlLedger9Blur"
                     />
                     <p class="t-caption mt-2">{{ t('midnight.proofServer.urlPerLedgerHint') }}</p>
-                  </v-expansion-panel-content>
+                  </v-expansion-panel-text>
                 </v-expansion-panel>
               </v-expansion-panels>
             </div>
@@ -260,8 +260,8 @@
                     :type="showZkpaasKey ? 'text' : 'password'"
                     :append-icon="showZkpaasKey ? 'mdi-eye-off' : 'mdi-eye'"
                     autocomplete="off"
-                    outlined
-                    dense
+                    variant="outlined"
+                    density="compact"
                     hide-details="auto"
                     class="mt-2 proof-server-url-field"
                     :disabled="proofServerSaving"
@@ -274,8 +274,8 @@
                     :type="showZkpaasSecret ? 'text' : 'password'"
                     :append-icon="showZkpaasSecret ? 'mdi-eye-off' : 'mdi-eye'"
                     autocomplete="off"
-                    outlined
-                    dense
+                    variant="outlined"
+                    density="compact"
                     hide-details="auto"
                     class="mt-3 proof-server-url-field"
                     :disabled="proofServerSaving"
@@ -326,10 +326,10 @@
 
               <v-expansion-panels flat class="ps-advanced">
                 <v-expansion-panel>
-                  <v-expansion-panel-header class="t-caption ps-advanced-header">
+                  <v-expansion-panel-title class="t-caption ps-advanced-header">
                     {{ t('midnight.proofServerPage.advancedUrl') }}
-                  </v-expansion-panel-header>
-                  <v-expansion-panel-content>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
                     <!-- Empty = automatic: the per-network Arkhia endpoint
                          shows as the placeholder so "automatic" is a
                          visible URL, not a mystery. -->
@@ -338,15 +338,15 @@
                       :label="t('midnight.proofServer.urlLabel')"
                       :placeholder="zkpaasEffectiveUrl"
                       persistent-placeholder
-                      outlined
-                      dense
+                      variant="outlined"
+                      density="compact"
                       hide-details="auto"
                       class="mt-2 proof-server-url-field"
                       :error-messages="zkpaasUrlError ? [zkpaasUrlError] : []"
                       :disabled="proofServerSaving"
                       @blur="onZkpaasUrlBlur"
                     />
-                  </v-expansion-panel-content>
+                  </v-expansion-panel-text>
                 </v-expansion-panel>
               </v-expansion-panels>
             </div>
@@ -412,8 +412,8 @@
               <h2 class="t-heading mb-2">{{ t('midnight.proofServerPage.faqTitle') }}</h2>
               <v-expansion-panels flat class="ps-panels">
                 <v-expansion-panel v-for="faq in faqs" :key="faq.q">
-                  <v-expansion-panel-header class="t-body-lg">{{ faq.q }}</v-expansion-panel-header>
-                  <v-expansion-panel-content class="t-body">{{ faq.a }}</v-expansion-panel-content>
+                  <v-expansion-panel-title class="t-body-lg">{{ faq.q }}</v-expansion-panel-title>
+                  <v-expansion-panel-text class="t-body">{{ faq.a }}</v-expansion-panel-text>
                 </v-expansion-panel>
               </v-expansion-panels>
             </div>
@@ -421,7 +421,7 @@
         </div>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">

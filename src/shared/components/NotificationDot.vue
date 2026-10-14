@@ -3,9 +3,9 @@
     :color="color"
     :dot="dot"
     :content="content"
-    :overlap="overlap"
+    :floating="!overlap"
     :bordered="bordered"
-    :value="show"
+    :model-value="show"
     class="notification-badge"
     :class="{ 'notification-badge--pulse': pulse }"
   >

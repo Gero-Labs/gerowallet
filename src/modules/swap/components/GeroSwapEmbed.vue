@@ -9,7 +9,7 @@
     <!-- ═══════ NETWORK GUARD: never mount the widget with network=undefined (e.g. Bitcoin,
          Apex, preview wallets — toNexusNetwork only resolves mainnet/preprod) ═══════ -->
     <div v-else-if="!network" class="gero-swap-embed__maintenance">
-      <v-alert type="info" color="primary" text border="left" dense class="ma-0">
+      <v-alert type="info" color="primary" variant="text" border="start" density="compact" class="ma-0">
         {{ $t('miniGero.swapNetworkNotSupported') }}
       </v-alert>
     </div>
@@ -98,15 +98,15 @@
           <v-text-field
             v-model="pwValue"
             type="password"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             hide-details
             autofocus
             :placeholder="$t('wallet.enterPassword')"
             @keydown.enter="onPasswordConfirm"
           />
           <div class="d-flex align-center mt-4" style="gap: 8px">
-            <v-btn text @click="onPasswordCancel">{{ $t('common.cancel') }}</v-btn>
+            <v-btn variant="text" @click="onPasswordCancel">{{ $t('common.cancel') }}</v-btn>
             <v-spacer />
             <v-btn color="primary" :disabled="!pwValue" @click="onPasswordConfirm">
               {{ $t('common.confirm') }}
@@ -455,10 +455,10 @@ function resolveOwnerPkh(): string | undefined {
 function wireProps() {
   const node = geroSwapEl.value as (HTMLElement & Record<string, unknown>) | null;
   if (!node) return;
-  node.signer = signer;
-  node.resolveToken = resolveToken;
-  node.tokens = buildTokenCatalog(); // optional catalog
-  node.ownerPkh = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
+  node['signer'] = signer;
+  node['resolveToken'] = resolveToken;
+  node['tokens'] = buildTokenCatalog(); // optional catalog
+  node['ownerPkh'] = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
 // Ask the worker to watch this swap for a fill or cancel push. Fire-and-forget: a wallet that has not

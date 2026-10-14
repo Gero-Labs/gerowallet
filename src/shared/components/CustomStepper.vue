@@ -1,16 +1,12 @@
 <template>
-  <v-stepper v-model="activeStep" flat class="stepper-container" non-linear alt-labels>
-    <v-stepper-items>
+  <v-stepper :model-value="currentStep" flat class="stepper-container" non-linear alt-labels>
+    <v-stepper-window :model-value="currentStep" class="ma-0">
       <slot></slot>
-    </v-stepper-items>
+    </v-stepper-window>
   </v-stepper>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
-
-
-
-const props = defineProps({
+defineProps({
   steps: {
     type: Array,
     required: true,
@@ -21,9 +17,6 @@ const props = defineProps({
   },
 });
 
-const activeStep = computed(() => {
-  return props.currentStep;
-});
 </script>
 <style scoped>
 /* The wrapped v-stepper otherwise renders Vuetify's default grey surface
@@ -31,5 +24,13 @@ const activeStep = computed(() => {
    it). Keep it transparent so the dialog surface shows through. */
 .stepper-container {
   background-color: transparent !important;
+}
+
+/* V2 step content supplied this inset. Keep it below component-specific
+   overrides and spacing utilities so compact send/registration flows opt out. */
+@layer vuetify-overrides {
+  .stepper-container :deep(.v-stepper-window-item) {
+    padding: 24px 24px 16px;
+  }
 }
 </style>

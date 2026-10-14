@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :is-open="value"
+    :is-open="modelValue"
     :title="$t('security.setupPattern')"
     :width="500"
     :min-height="400"
@@ -24,13 +24,13 @@
         <v-card-title class="justify-center pt-0">{{ $t('security.confirmPattern') }}</v-card-title>
         <v-card-subtitle class="text-center" style="height: 38px"></v-card-subtitle>
         <v-card-text class="text-center">
-          <v-tooltip
+          <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
             v-model="tooltip.enabled"
-            top
+
             color="red"
           >
-            <template v-slot:activator="{ }">
-              <pattern-lock
+            <template v-slot:activator="{ props: activatorProps }">
+              <pattern-lock v-bind="activatorProps"
                 v-if="!loading"
                 v-model="confirmPattern"
                 @complete="handleConfirmPatternComplete"
@@ -54,7 +54,7 @@
 
     <v-card-actions class="px-6 pb-6">
       <v-btn
-        text
+        variant="text"
         @click="handleCancel"
         :disabled="loading"
       >
@@ -76,11 +76,11 @@ import snackbar from '@/plugins/snackbar';
 const { t } = useTranslation();
 
 interface Props {
-  value: boolean;
+  modelValue: boolean;
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['input', 'updated']);
+const emit = defineEmits(['update:modelValue', 'updated']);
 
 // Reactive state
 const step = ref<'new' | 'confirm'>('new');
@@ -88,13 +88,13 @@ const currentPatternInput = ref<number[]>([]);
 const newPattern = ref<number[]>([]);
 const confirmPattern = ref<number[]>([]);
 const loading = ref<boolean>(false);
-const tooltip = ref<any>({
+const tooltip = ref({
   enabled: false,
   text: ''
 });
 
 // Watch props
-watch(() => props.value, (newVal) => {
+watch(() => props.modelValue, (newVal) => {
   if (!newVal) {
     setTimeout(() => {
       resetForm();
@@ -174,22 +174,22 @@ async function handleSave() {
     snackbar.fireSuccess(t('security.patternSetupSuccess'));
 
     // Close dialog and emit update
-    emit('input', false);
+    emit('update:modelValue', false);
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving pattern:', error);
-    showError(error.message || t('security.patternSetupFailed'));
+    showError((error instanceof Error ? error.message : '') || t('security.patternSetupFailed'));
   } finally {
     loading.value = false;
   }
 }
 
 function handleCancel() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function handleClose() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function resetForm() {

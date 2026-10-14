@@ -7,7 +7,7 @@
     </div>
 
     <div v-if="!connected" class="ls-offline">
-      <v-icon small color="var(--g-text-3)">mdi-server-off</v-icon>
+      <v-icon size="small" color="var(--g-text-3)">mdi-server-off</v-icon>
       <span>{{ $t('poolOperator.nodeRequiredForSchedule') }}</span>
     </div>
 

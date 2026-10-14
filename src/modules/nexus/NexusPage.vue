@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <div class="nexus-page">
@@ -12,9 +12,9 @@
             <div class="nx-hero__ctas">
               <v-btn class="geroButton nx-cta" href="https://nexus.gerowallet.io" target="_blank" rel="noopener">
                 {{ $t('nexus.exploreNexus') }}
-                <v-icon small right>mdi-arrow-top-right</v-icon>
+                <v-icon size="small" end>mdi-arrow-top-right</v-icon>
               </v-btn>
-              <v-btn outlined class="nx-cta nx-cta--ghost" href="https://nexus.gerowallet.io/swagger-ui" target="_blank" rel="noopener">
+              <v-btn variant="outlined" class="nx-cta nx-cta--ghost" href="https://nexus.gerowallet.io/swagger-ui" target="_blank" rel="noopener">
                 {{ $t('nexus.viewDocs') }}
               </v-btn>
             </div>
@@ -83,7 +83,7 @@
             <p class="nx-final__sub">{{ $t('nexus.finalSubtitle') }}</p>
             <v-btn class="geroButton nx-cta" href="https://nexus.gerowallet.io/get-started" target="_blank" rel="noopener">
               {{ $t('nexus.startTrial') }}
-              <v-icon small right>mdi-arrow-top-right</v-icon>
+              <v-icon size="small" end>mdi-arrow-top-right</v-icon>
             </v-btn>
             <p class="nx-final__note">{{ $t('nexus.geroDiscount') }}</p>
           </section>
@@ -91,7 +91,7 @@
         </div>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">

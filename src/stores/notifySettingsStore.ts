@@ -3,7 +3,7 @@
 // the worker's NOTIFY_* handlers and stores the fresh state the reply carries; the
 // worker owns the subscription, the relay-key signatures and every API call.
 
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { NotifyState } from '@/services/notify/notifyBackground';
@@ -23,7 +23,7 @@ interface NotifySettingsState {
   enableRequested: boolean;
 }
 
-const state = Vue.observable<NotifySettingsState>({ state: null, loaded: false, loading: false, lastResult: null, error: null, enableRequested: false });
+const state = reactive<NotifySettingsState>({ state: null, loaded: false, loading: false, lastResult: null, error: null, enableRequested: false });
 
 export interface NotifyRefreshOptions {
   /** Also refetch /config (cached up to 1 h). */

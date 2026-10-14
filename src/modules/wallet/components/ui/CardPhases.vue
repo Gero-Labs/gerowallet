@@ -9,7 +9,7 @@
       :aria-current="stateOf(i) === 'current' ? 'step' : undefined"
     >
       <span class="card-phases__mark" aria-hidden="true">
-        <v-icon v-if="stateOf(i) === 'done'" small>mdi-check</v-icon>
+        <v-icon v-if="stateOf(i) === 'done'" size="small">mdi-check</v-icon>
         <v-progress-circular v-else-if="stateOf(i) === 'current'" indeterminate size="16" width="2" color="primary" />
       </span>
       <span>{{ phase }}</span>

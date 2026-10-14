@@ -1,4 +1,5 @@
-import Vue, { nextTick, reactive, ref } from 'vue';
+import * as Vue from 'vue';
+import { nextTick, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -32,11 +33,11 @@ import { useMidnightDustLive, type MidnightDustLive } from './useMidnightDustLiv
 
 const state = (balance = '42') => ({ dust_balance: balance, dust_generating: '0',
   dust_cap: '1000', night_registered: '1', dust_registration_status: 'Registered' });
-let views: Vue[] = [];
+let views: Vue.App[] = [];
 function mount() {
   let live!: MidnightDustLive;
-  const view = new Vue({ setup() { live = useMidnightDustLive(); return {}; }, render: h => h('div') });
-  view.$mount();
+  const view = Vue.createApp({ setup() { live = useMidnightDustLive(); return {}; }, render: () => Vue.h('div') });
+  view.mount(document.createElement('div'));
   views.push(view);
   return live;
 }
@@ -50,7 +51,7 @@ beforeEach(() => {
   midnightStore.addresses.unshielded = 'wallet-a';
 });
 afterEach(() => {
-  for (const view of views) view.$destroy();
+  for (const view of views) view.unmount();
   views = [];
   vi.useRealTimers();
 });
@@ -64,7 +65,7 @@ describe('DUST account-state polling', () => {
       await vi.advanceTimersByTimeAsync(30_000);
       expect(mocks.get).toHaveBeenCalledTimes(1);
       expect(mocks.log).toHaveBeenCalledTimes(1);
-      views[0].$destroy();
+      views[0].unmount();
       views = [];
       mocks.get.mockResolvedValue(state());
       const reopened = mount();
@@ -116,7 +117,7 @@ describe('DUST account-state polling', () => {
     mount();
     await vi.advanceTimersByTimeAsync(15_000);
     expect(mocks.get).toHaveBeenCalledTimes(1);
-    for (const view of views) view.$destroy();
+    for (const view of views) view.unmount();
     views = [];
     resolve(state('999'));
     await settle();

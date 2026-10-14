@@ -10,18 +10,18 @@
         <div class="text-caption text--secondary">{{ $t('mempool.subtitle') }}</div>
       </div>
       <v-spacer />
-      <v-btn small icon :loading="loading" @click="refresh" class="mr-1">
-        <v-icon small>mdi-refresh</v-icon>
+      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh" class="mr-1">
+        <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
-      <v-btn small icon @click="openMempoolSpace">
-        <v-icon small>mdi-open-in-new</v-icon>
+      <v-btn size="small" icon variant="text" @click="openMempoolSpace">
+        <v-icon size="small">mdi-open-in-new</v-icon>
       </v-btn>
     </div>
 
     <!-- Fee Rate Cards -->
     <v-row no-gutters class="mb-3">
       <v-col v-for="rate in feeRates" :key="rate.label" cols="6" sm="3" class="pa-1">
-        <v-card outlined class="fee-rate-card liquid-glass pa-3 text-center" :style="{ borderColor: rate.color + '40' }">
+        <v-card variant="outlined" class="fee-rate-card liquid-glass pa-3 text-center" :style="{ borderColor: rate.color + '40' }">
           <div
             class="fee-indicator mx-auto mb-2"
             :style="{ background: rate.color + '18', borderColor: rate.color + '40' }"
@@ -39,7 +39,7 @@
     <!-- Mempool Stats Row -->
     <v-row no-gutters class="mb-3">
       <v-col cols="12" sm="4" class="pa-1">
-        <v-card outlined class="liquid-glass pa-3 stat-card">
+        <v-card variant="outlined" class="liquid-glass pa-3 stat-card">
           <div class="d-flex align-center" style="gap: 10px;">
             <div class="stat-icon-wrapper" style="background: var(--g-warning-fill);">
               <v-icon size="16" color="warning">mdi-clock-outline</v-icon>
@@ -56,7 +56,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="4" class="pa-1">
-        <v-card outlined class="liquid-glass pa-3 stat-card">
+        <v-card variant="outlined" class="liquid-glass pa-3 stat-card">
           <div class="d-flex align-center" style="gap: 10px;">
             <div class="stat-icon-wrapper" style="background: color-mix(in srgb, var(--g-info) 12%, transparent);">
               <v-icon size="16" color="info">mdi-harddisk</v-icon>
@@ -73,7 +73,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="4" class="pa-1">
-        <v-card outlined class="liquid-glass pa-3 stat-card">
+        <v-card variant="outlined" class="liquid-glass pa-3 stat-card">
           <div class="d-flex align-center" style="gap: 10px;">
             <div class="stat-icon-wrapper" style="background: rgba(247,147,26,0.12);">
               <v-icon size="16" color="#F7931A">mdi-bitcoin</v-icon>
@@ -93,20 +93,20 @@
     </v-row>
 
     <!-- Fee Histogram -->
-    <v-card outlined class="liquid-glass pa-4 mb-3" v-if="feeHistogram.length > 0">
+    <v-card variant="outlined" class="liquid-glass pa-4 mb-3" v-if="feeHistogram.length > 0">
       <div class="d-flex align-center mb-3">
-        <v-icon small color="#F7931A" class="mr-2">mdi-chart-bar</v-icon>
+        <v-icon size="small" color="#F7931A" class="mr-2">mdi-chart-bar</v-icon>
         <span class="text-subtitle-2 font-weight-bold">{{ $t('mempool.feeDistribution') }}</span>
       </div>
       <div class="fee-histogram">
-        <v-tooltip
+        <v-tooltip location="top"
           v-for="bucket in feeHistogram"
           :key="bucket.fee"
-          top
+
           :open-delay="100"
         >
-          <template #activator="{ on }">
-            <div class="histogram-bar-wrapper" v-on="on">
+          <template #activator="{ props: activatorProps }">
+            <div class="histogram-bar-wrapper" v-bind="activatorProps">
               <div
                 class="histogram-bar"
                 :style="{
@@ -128,14 +128,14 @@
     <!-- Recent Blocks -->
     <div class="mb-3">
       <div class="d-flex align-center mb-2" style="gap: 8px;">
-        <v-icon small color="#F7931A">mdi-cube-outline</v-icon>
+        <v-icon size="small" color="#F7931A">mdi-cube-outline</v-icon>
         <span class="text-subtitle-2 font-weight-bold">{{ $t('mempool.recentBlocks') }}</span>
       </div>
       <v-skeleton-loader v-if="loading && blocks.length === 0" type="list-item-two-line@4" />
       <v-card
         v-for="block in blocks.slice(0, 6)"
         :key="block.id"
-        outlined
+        variant="outlined"
         class="liquid-glass mb-2 block-card"
         @click="openBlock(block.id)"
         style="cursor: pointer;"
@@ -154,32 +154,32 @@
               {{ timeAgo(block.timestamp) }}
             </div>
           </div>
-          <v-icon small color="grey">mdi-chevron-right</v-icon>
+          <v-icon size="small" color="grey">mdi-chevron-right</v-icon>
         </div>
       </v-card>
     </div>
 
     <!-- Transaction Lookup -->
-    <v-card outlined class="liquid-glass pa-4">
+    <v-card variant="outlined" class="liquid-glass pa-4">
       <div class="d-flex align-center mb-3" style="gap: 8px;">
-        <v-icon small color="#F7931A">mdi-magnify</v-icon>
+        <v-icon size="small" color="#F7931A">mdi-magnify</v-icon>
         <span class="text-subtitle-2 font-weight-bold">{{ $t('mempool.lookupTx') }}</span>
       </div>
       <div class="d-flex" style="gap: 8px;">
         <v-text-field
           v-model="txSearch"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           :placeholder="$t('mempool.txidPlaceholder')"
           hide-details
           class="flex-grow-1"
           @keydown.enter="lookupTx"
         >
           <template #prepend-inner>
-            <v-icon small color="grey" class="mr-1">mdi-magnify</v-icon>
+            <v-icon size="small" color="grey" class="mr-1">mdi-magnify</v-icon>
           </template>
         </v-text-field>
-        <v-btn color="primary" outlined @click="lookupTx" height="40">
+        <v-btn color="primary" variant="outlined" @click="lookupTx" height="40">
           {{ $t('common.search') }}
         </v-btn>
       </div>
@@ -189,8 +189,8 @@
         <v-divider class="mb-3" />
         <div class="tx-result-row d-flex justify-space-between align-center mb-2">
           <span class="text-caption text--secondary">{{ $t('mempool.status') }}</span>
-          <v-chip x-small :color="txResult.status.confirmed ? 'success' : 'warning'" text-color="white">
-            <v-icon x-small left>{{ txResult.status.confirmed ? 'mdi-check-circle' : 'mdi-clock-outline' }}</v-icon>
+          <v-chip size="x-small" :color="txResult.status.confirmed ? 'success' : 'warning'" text-color="white">
+            <v-icon size="x-small" start>{{ txResult.status.confirmed ? 'mdi-check-circle' : 'mdi-clock-outline' }}</v-icon>
             {{ txResult.status.confirmed ? $t('mempool.confirmed') : $t('mempool.unconfirmed') }}
           </v-chip>
         </div>
@@ -206,13 +206,13 @@
           <span class="text-caption text--secondary">{{ $t('mempool.size') }}</span>
           <span class="text-caption font-weight-medium">{{ txResult.size }} bytes · {{ txResult.weight }} wu</span>
         </div>
-        <v-btn text color="primary" small @click="openTxOnMempool(txResult.txid)" class="mt-2 px-0">
-          <v-icon left x-small>mdi-open-in-new</v-icon>
+        <v-btn variant="text" color="primary" size="small" @click="openTxOnMempool(txResult.txid)" class="mt-2 px-0">
+          <v-icon start size="x-small">mdi-open-in-new</v-icon>
           {{ $t('mempool.openOnMempool') }}
         </v-btn>
       </div>
 
-      <v-alert v-if="txError" type="error" outlined dense class="text-caption mt-3 mb-0" icon="mdi-alert-circle-outline">
+      <v-alert v-if="txError" type="error" variant="outlined" density="compact" class="text-caption mt-3 mb-0" icon="mdi-alert-circle-outline">
         {{ txError }}
       </v-alert>
     </v-card>

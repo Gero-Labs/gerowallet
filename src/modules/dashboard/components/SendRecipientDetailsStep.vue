@@ -5,7 +5,7 @@
         <v-row>
           <v-col cols="12" class="py-0 px-2">
             <Select
-              :value="sendData.selectedWallet"
+              :model-value="sendData.selectedWallet"
               :items="[sendData.selectedWallet]"
               :label="t('wallet.wallet')"
               :readonly="true"
@@ -18,45 +18,45 @@
               v-model="saveContactMenu"
               :close-on-content-click="false"
               :close-on-click="valid"
-              offset-y
+
               max-width="452"
               transition="fade-transition"
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="loading || !isValidAddress">
-                  <v-list-item dense class="px-0">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn variant="outlined" block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="activatorProps"  @click="saveContact" :disabled="loading || !isValidAddress">
+                  <v-list-item density="compact" class="px-0">
                     <v-avatar size="34" class="mx-0">
-                      <v-icon small color="var(--g-accent)">
+                      <v-icon size="small" color="var(--g-accent)">
                         {{ contacts && contacts[paymentAddress] != null ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline'}}
                       </v-icon>
                     </v-avatar>
-                    <v-list-item-content>
+                    <div class="g-list-content">
                       <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                         {{ contacts && contacts[paymentAddress] != null ? $t('wallet.editContact') : $t('wallet.saveContact')}}
                       </v-list-item-title>
-                    </v-list-item-content>
+                    </div>
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card outlined style="background: var(--g-surface) !important; border: 1px solid var(--g-hairline-3) !important; border-radius: var(--g-r-sheet) !important; box-shadow: var(--g-shadow-menu) !important;">
+              <v-card variant="outlined" style="background: var(--g-surface) !important; border: 1px solid var(--g-hairline-3) !important; border-radius: var(--g-r-sheet) !important; box-shadow: var(--g-shadow-menu) !important;">
                 <v-card-title>
                   {{ $t('wallet.contactAdded') }}
                   <v-spacer></v-spacer>
-                  <v-btn icon small @click="saveContactMenu = false" :disabled="!valid">
+                  <v-btn icon variant="text" size="small" @click="saveContactMenu = false" :disabled="!valid">
                     <v-icon>
                       mdi-window-close
                     </v-icon>
                   </v-btn>
                 </v-card-title>
                 <v-card-text class="py-0">
-                  <v-list-item dense class="px-0">
-                    <v-list-item-avatar size="100" v-if="contact?.img" rounded>
-                      <v-img :src="contact?.img" contain :alt="`${asset.name} Logo`">
+                  <v-list-item density="compact" class="px-0">
+                    <v-avatar size="100" v-if="contact?.img" rounded>
+                      <v-img :src="contact?.img"  :alt="`${asset.name} Logo`">
                         <template v-slot:placeholder>
                           <v-row
-                            class="fill-height ma-0"
-                            align="center"
-                            justify="center"
+                            class="fill-height ma-0 align-center justify-center"
+
+
                           >
                             <v-progress-circular
                               indeterminate
@@ -65,13 +65,13 @@
                           </v-row>
                         </template>
                       </v-img>
-                    </v-list-item-avatar>
-                    <v-list-item-content>
+                    </v-avatar>
+                    <div class="g-list-content">
                       <v-list-item-title class="py-2">
                         <v-text-field
                           v-model="contact.name"
-                          dense
-                          outlined
+                          density="compact"
+                          variant="outlined"
                           :label="$t('wallet.name')"
                           hide-details
                           :maxlength="40"
@@ -82,22 +82,22 @@
                       <v-list-item-title class="py-2">
                         <v-text-field
                           v-model="contact.address"
-                          dense
-                          outlined
+                          density="compact"
+                          variant="outlined"
                           :label="$t('wallet.address')"
                           hide-details
                           :disabled="contacts && contacts[contact.address] != null"
                           :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
                         ></v-text-field>
                       </v-list-item-title>
-                    </v-list-item-content>
+                    </div>
                   </v-list-item>
                 </v-card-text>
                 <v-card-actions class="justify-center">
-                  <v-btn text @click="saveContactMenu = false" :disabled="!valid">
+                  <v-btn variant="text" @click="saveContactMenu = false" :disabled="!valid">
                     {{ $t('wallet.done') }}
                   </v-btn>
-                  <v-btn color="primary" text @click="removeCont">
+                  <v-btn color="primary" variant="text" @click="removeCont">
                     {{ $t('wallet.remove') }}
                   </v-btn>
                 </v-card-actions>
@@ -108,46 +108,46 @@
             <v-menu
               v-model="contactsMenu"
               :close-on-content-click="false"
-              offset-y
+
               nudge-left="156"
               min-width="452"
               max-height="400"
               transition="fade-transition"
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="attrs" v-on="on" :disabled="contacts && Object.values(contacts)?.length === 0">
-                  <v-list-item dense class="px-0">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn variant="outlined" block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="activatorProps"  :disabled="contacts && Object.values(contacts)?.length === 0">
+                  <v-list-item density="compact" class="px-0">
                     <v-avatar size="34" class="mx-0">
-                      <v-icon small color="var(--g-accent)">
+                      <v-icon size="small" color="var(--g-accent)">
                         mdi-book-open-variant-outline
                       </v-icon>
                     </v-avatar>
-                    <v-list-item-content>
+                    <div class="g-list-content">
                       <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                         {{ $t('wallet.contacts') }}
                       </v-list-item-title>
-                    </v-list-item-content>
+                    </div>
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card outlined style="background: var(--g-surface) !important; border: 1px solid var(--g-hairline-3) !important; border-radius: var(--g-r-sheet) !important; box-shadow: var(--g-shadow-menu) !important;">
+              <v-card variant="outlined" style="background: var(--g-surface) !important; border: 1px solid var(--g-hairline-3) !important; border-radius: var(--g-r-sheet) !important; box-shadow: var(--g-shadow-menu) !important;">
                 <v-card-title>
                   {{ $t('wallet.contacts') }}
                   <v-spacer></v-spacer>
-                  <v-btn icon small @click="contactsMenu = false">
+                  <v-btn icon variant="text" size="small" @click="contactsMenu = false">
                     <v-icon>
                       mdi-window-close
                     </v-icon>
                   </v-btn>
                 </v-card-title>
                 <v-card-text class="pa-0">
-                  <v-data-table dense class="transparent token-allocation-table" :headers="contactsHeaders" :items="contacts ? Object.values(contacts) : []" hide-default-footer disable-pagination @click:row="selectContact" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
+                  <v-data-table density="compact" class="transparent token-allocation-table" :headers="contactsHeaders" :items="contacts ? Object.values(contacts) : []" hide-default-footer :items-per-page="-1" @click:row="(_, { item }) => selectContact(item)" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
                     <template v-slot:[`item.address`]="{ item }">
                       {{ filters.truncate(item.address) }}<CopyButton x-small :value="item.address" />
                     </template>
                     <template v-slot:[`item.actions`]="{ item }">
-                      <v-btn color="error" icon x-small @click="removeCont(item)">
-                        <v-icon x-small>
+                      <v-btn color="error" icon variant="text" size="x-small" @click.stop="removeCont(item)">
+                        <v-icon size="x-small">
                           mdi-trash-can
                         </v-icon>
                       </v-btn>
@@ -158,18 +158,18 @@
             </v-menu>
           </v-col>
           <v-col cols="4" class="px-2 pt-0">
-            <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas)" class="pl-0" @click="qrScanDialog = true">
-              <v-list-item dense class="px-0">
+            <v-btn variant="outlined" block color="var(--g-raised)" style="background-color: var(--g-canvas)" class="pl-0" @click="qrScanDialog = true">
+              <v-list-item density="compact" class="px-0">
                 <v-avatar size="34" class="mx-0">
-                  <v-icon small color="var(--g-accent)">
+                  <v-icon size="small" color="var(--g-accent)">
                     mdi-qrcode
                   </v-icon>
                 </v-avatar>
-                <v-list-item-content>
+                <div class="g-list-content">
                   <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                     {{ $t('wallet.qrScan') }}
                   </v-list-item-title>
-                </v-list-item-content>
+                </div>
               </v-list-item>
             </v-btn>
             <QRAddressScannerDialog
@@ -187,16 +187,16 @@
               :label="$t('wallet.recipientAddress')"
               :placeholder="loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
               rows="3"
-              outlined
+              variant="outlined"
               :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
               class="recipient-address"
-              @input="resolveAddress"
+              @update:model-value="resolveAddress"
               :loading="loading"
               hide-details
-              dense
+              density="compact"
               clearable
             >
-              <template v-slot:append>
+              <template v-slot:append-inner>
                 <v-progress-circular color="var(--g-text-1)" v-if="loading" size="24" indeterminate></v-progress-circular>
                 <v-icon color="error" v-else-if="!loading && resolved === false">
                   mdi-alert
@@ -208,13 +208,13 @@
             <v-alert
               v-if="handleMismatch.show"
               type="warning"
-              dense
-              outlined
-              border="left"
+              density="compact"
+              variant="outlined"
+              border="start"
               class="mb-2"
               style="font-size: 12px"
-              dismissible
-              @input="handleMismatch.show = false"
+              closable
+              @update:model-value="handleMismatch.show = false"
             >
               <strong>{{ handleMismatch.handle }}</strong> {{ $t('wallet.contactHandleAddressChanged') }}
               <div style="font-size: 11px; margin-top: 4px; opacity: 0.8">
@@ -223,18 +223,18 @@
               <div style="font-size: 11px; opacity: 0.8">
                 {{ $t('wallet.contactCurrentAddress') }}: {{ filters.truncate(handleMismatch.freshAddress) }}
               </div>
-              <v-btn x-small color="warning" class="mt-2" @click="updateContactAddress">
+              <v-btn size="x-small" color="warning" class="mt-2" @click="updateContactAddress">
                 {{ $t('wallet.contactUpdateAddress') }}
               </v-btn>
             </v-alert>
             <v-list-item v-if="resolved" class="px-0">
-              <v-list-item-avatar v-if="asset.img" size="80" rounded>
-                <v-img :src="asset.img" contain>
+              <v-avatar v-if="asset.img" size="80" rounded>
+                <v-img :src="asset.img" >
                   <template v-slot:placeholder>
                     <v-row
-                      class="fill-height ma-0"
-                      align="center"
-                      justify="center"
+                      class="fill-height ma-0 align-center justify-center"
+
+
                     >
                       <v-progress-circular
                         indeterminate
@@ -243,7 +243,7 @@
                     </v-row>
                   </template>
                 </v-img>
-              </v-list-item-avatar>
+              </v-avatar>
               <v-list-item-subtitle style="white-space: normal">
                 {{paymentAddress}}
               </v-list-item-subtitle>
@@ -255,6 +255,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import type { DataTableHeader } from 'vuetify';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch, nextTick } from 'vue';
 import Select from '@/shared/components/Select.vue';
@@ -307,10 +308,10 @@ const isValidAddress = computed(() => {
   return rule(paymentAddress.value) === true
 })
 
-const contactsHeaders = ref([
-  { text: t('common.name') as string, value: 'name' },
-  { text: t('common.address') as string, value: 'address' },
-  { text: '', align: 'right', sortable: false, value: 'actions' },
+const contactsHeaders = ref<DataTableHeader[]>([
+  { title: t('common.name') as string, key: 'name' },
+  { title: t('common.address') as string, key: 'address' },
+  { title: '', align: 'end' as const, sortable: false, key: 'actions' },
 ]);
 
 const selectContact = async (item) => {
@@ -507,13 +508,18 @@ watch(() => props.sendData.recipientAddress, async (newAddress) => {
     text-align: left;
   }
 
-  .recipient-address > .v-input__control > .v-input__slot {
+  .recipient-address > .v-input__control > .v-field {
     background-color: var(--g-raised);
     border-radius: var(--g-r-control);
-    padding: 5px 10px;
+    padding: 0 12px;
+    --v-field-padding-start: 0px;
+    --v-field-padding-end: 12px;
+    --v-field-input-padding-top: 6px;
+    --v-field-input-padding-bottom: 0px;
 
     & textarea {
       resize: none;
+      line-height: 1.75;
     }
   }
 }

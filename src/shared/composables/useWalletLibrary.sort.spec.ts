@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Vue, { ref } from 'vue';
+import * as Vue from 'vue';
+import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { useWalletLibrary, WALLET_SORT_STORAGE_KEY } from './useWalletLibrary';
 import { normalizePreferences } from '@/services/walletLibrary/model';
@@ -40,17 +41,17 @@ const repo = {
 let library: ReturnType<typeof useWalletLibrary>;
 let wrapper: ReturnType<typeof mount>;
 async function mountLibrary() {
-  wrapper = mount(Vue.extend({ setup() {
+  wrapper = mount(Vue.defineComponent({ setup() {
     library = useWalletLibrary(ref(WALLETS), repo);
     return {};
-  }, render(h) { return h('div'); } }));
+  }, render() { return Vue.h('div'); } }));
   await flush();
 }
 const section = (key: string) => library.groups.value.find(group => group.key === key)!.wallets.map(wallet => wallet.id);
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {
-  wrapper.destroy();
+  wrapper.unmount();
   localStorage.clear();
 });
 
@@ -86,7 +87,7 @@ describe('wallet library sorting', () => {
     library.sort.value = 'network';
     await Vue.nextTick();
     expect(localStorage.getItem(WALLET_SORT_STORAGE_KEY)).toBe('network');
-    wrapper.destroy();
+    wrapper.unmount();
     await mountLibrary();
     expect(library.sort.value).toBe('network');
     expect(section('uncategorized')).toEqual([2, 1, 3]);

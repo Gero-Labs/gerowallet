@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Vue, { ref } from 'vue';
+import * as Vue from 'vue';
+import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { useWalletLibrary } from './useWalletLibrary';
 import { favoriteWallet, moveWalletOrder, normalizePreferences } from '@/services/walletLibrary/model';
@@ -34,13 +35,13 @@ const repo = {
 beforeEach(async () => {
   vi.clearAllMocks();
   snapshot = { preferences: normalizePreferences(null), wallets: [{ id: 1, order: 0 }, { id: 2, order: 1 }, { id: 3, order: 2 }] };
-  wrapper = mount(Vue.extend({ setup() {
+  wrapper = mount(Vue.defineComponent({ setup() {
     library = useWalletLibrary(ref(snapshot.wallets.map(wallet => ({ ...wallet, name: `Wallet ${wallet.id}`, chain: 'Cardano', network: 'Mainnet' }))), repo);
     return {};
-  }, render(h) { return h('div'); } }));
+  }, render() { return Vue.h('div'); } }));
   await flush();
 });
-afterEach(() => wrapper.destroy());
+afterEach(() => wrapper.unmount());
 
 describe('responsive wallet organization', () => {
   it('pins immediately while storage is stalled and preserves newer clicks over a stale live query', async () => {

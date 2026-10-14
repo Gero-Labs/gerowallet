@@ -2,7 +2,7 @@
   <div>
     <v-app style="background: transparent !important">
       <v-main style="position: relative; z-index: 1; background: var(--g-canvas) !important">
-        <v-container class="pa-0" style="position: relative">
+        <v-container class="dashboard-container pa-0" style="position: relative">
           <!-- Background - Confined to dashboard working area -->
           <div
             :class="
@@ -29,222 +29,221 @@
             }"
           ></div>
 
-          <v-layout :align-start="true">
+          <v-layout>
             <NavigationDrawer v-model="drawer" />
-            <v-sheet data-help-scroll ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll.native="onSheetScroll">
-              <v-row no-gutters v-if="isBeta">
-                <v-col cols="12">
-                  <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
-                    {{ $t('navigation.betaVersionNoticePrefix') }} <strong>{{ $t('navigation.betaVersionNoticeBold') }}</strong>{{ $t('navigation.betaVersionNoticeSuffix') }}
-                    <a
-                      style="color: black; font-weight: 700"
-                      :href="CHROME_WEB_STORE_URL_SIDEBAR"
-                      target="_blank"
-                      >{{ $t('navigation.geroDashboard') }}</a
-                    >
-                    {{ $t('navigation.inChromeStore') }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-              <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
-                <v-app-bar ref="navBarRef" flat color="transparent" style="max-height: 55px">
-                  <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
-
-                  <!-- Global Search Field -->
-                  <v-tooltip bottom :disabled="!compactNav" content-class="custom-tooltip">
-                    <template v-slot:activator="{ on, attrs }">
-                      <div
-                        ref="searchFieldRef"
-                        :class="['nav-search-field', { 'nav-search-compact': compactNav }]"
-                        @click="openGlobalSearch"
-                        v-bind="attrs"
-                        v-on="on"
-                      >
-                        <v-icon size="16" color="info" class="nav-search-icon">mdi-magnify</v-icon>
-                        <template v-if="!compactNav">
-                          <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
-                          <span class="nav-search-shortcut">Ctrl+K</span>
-                        </template>
-                      </div>
-                    </template>
-                    <span>{{ t('search.globalPlaceholder') }} (Ctrl+K)</span>
-                  </v-tooltip>
-
-                  <v-spacer />
-
-                  <QuickActionsBox :compact="compactNav" :hide-buttons="emptyStateShowing" />
-
-                  <v-spacer />
-
-                  <v-tooltip
-                    bottom
-                    :content-class="
-                      (isMidnight ? isMidnightConnected : connected)
-                        ? 'network-tooltip'
-                        : (isMidnight ? isMidnightConnecting : connecting)
-                        ? 'network-tooltip connecting'
-                        : 'network-tooltip offline'
-                    "
-                  >
-                    <template v-slot:activator="{ on, attrs }">
-                      <div
-                        style="display: flex; align-items: center; gap: 4px"
-                        :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
-                        v-bind="attrs"
-                        v-on="on"
-                      >
-                        <v-icon
-                          small
-                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
-                          :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
-                        >
-                          {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
-                        </v-icon>
-
-                        <!-- Small progress bar (hidden in compact mode).
-                             Cardano: epoch-slot percentage as a definite value.
-                             Midnight/Bitcoin: no epoch concept, so no bar at all —
-                             the connection icon already carries the status. -->
-                        <v-progress-linear
-                          v-if="!compactNav && !isMidnight && !isBitcoin"
-                          class="epoch-progress-liquid-glass"
-                          height="8"
-                          :buffer-value="isMidnight ? 100 : epochSlotPercentage"
-                          :value="isMidnight ? 100 : epochSlotPercentage"
-                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
-                          background-color="transparent"
-                          style="width: 50px"
-                          striped
-                          :stream="isMidnight ? isMidnightConnected : connected"
-                          :indeterminate="isMidnight ? isMidnightConnecting : connecting"
-                        ></v-progress-linear>
-                      </div>
-                    </template>
-
-                    <div class="network-tooltip-content">
-                      <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
-                      <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
-                      <template v-if="isMidnight">
-                        <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
-                      </template>
-                      <template v-else-if="isBitcoin">
-                        <!-- Bitcoin has no epoch — show block height instead. -->
-                        <div><strong>Block:</strong> {{ btcTipHeight ?? 'N/A' }}</div>
-                      </template>
-                      <template v-else>
-                        <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                        <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
-                      </template>
-                      <div>
-                        <strong class="mr-1">{{ t('navigation.status') }}:</strong>
-                        <span
-                          :style="
-                            (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
-                          "
-                          >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
-                        >
-                      </div>
-                    </div>
-                  </v-tooltip>
-
-                  <!-- Notifications Menu -->
-                  <v-menu
-                    v-model="notificationsMenu"
-                    offset-y
-                    nudge-left="75"
-                    :close-on-content-click="false"
-                    transition="none"
-                  >
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
-                        <v-badge :value="kesWarningVisible || inboxUnread > 0" :content="inboxUnread > 0 ? String(inboxUnread) : undefined" :dot="inboxUnread === 0" :color="inboxUnread > 0 ? 'var(--g-accent)' : 'error'" overlap>
-                          <v-icon size="20">mdi-bell-outline</v-icon>
-                        </v-badge>
-                      </v-btn>
-                    </template>
-                    <NotifyInbox
-                      :open="notificationsMenu"
-                      :kes-visible="kesWarningVisible"
-                      :kes-remaining="kesRemainingGlobal"
-                      @kes="navigateToPoolOperator"
-                      @settings="openNotifySettings"
-                      @close="notificationsMenu = false"
-                    />
-                  </v-menu>
-
-                  <v-tooltip bottom content-class="custom-tooltip">
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn icon class="ml-3 toolbar-icon-btn" v-bind="attrs" v-on="on" @click="toggleHideBalances()">
-                        <v-icon size="20">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
-                      </v-btn>
-                    </template>
-                    <span>{{ hideBalances ? t('dashboard.showBalances') : t('dashboard.hideBalances') }}</span>
-                  </v-tooltip>
-
-                  <v-tooltip bottom content-class="custom-tooltip">
-                    <template v-slot:activator="{ on }">
-                      <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
-                        <v-avatar size="23">
-                          <img :src="assets.miniModeSvg" :alt="t('miniGero.miniMode')" />
-                        </v-avatar>
-                      </v-btn>
-                    </template>
-                    <span>{{ t('miniGero.miniMode') }}</span>
-                  </v-tooltip>
-
-                  <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
-                    <v-badge bordered color="error" dot v-if="shouldBackup || hasNewSettingsFeatures">
-                      <v-avatar size="20">
-                        <img :src="assets.settingsSvg" :alt="t('common.settings')" />
-                      </v-avatar>
-                    </v-badge>
-                    <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" :alt="t('common.settings')" />
-                    </v-avatar>
-                  </v-btn>
-                </v-app-bar>
-                <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
+            <v-main tag="div" class="dashboard-content">
+              <v-sheet data-help-scroll ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll="onSheetScroll">
+                <v-row no-gutters v-if="isBeta">
                   <v-col cols="12">
-                    <v-alert
-                      type="error"
-                      prominent
-                      dismissible
-                      rounded
-                      outlined
-                      color="error"
-                      class="py-2 px-4 ma-2"
-                      style="overflow: hidden"
-                    >
-                      <v-list-item>
-                        <v-list-item-content>
-                          <v-list-item-title style="white-space: break-spaces">
-                            {{ $t('settings.backupYourSeedPhrase') }}
-                          </v-list-item-title>
-                          <v-list-item-subtitle style="white-space: break-spaces">
-                            <span>{{ $t('settings.backupSeedPhraseWarning') }}</span>
-                          </v-list-item-subtitle>
-                        </v-list-item-content>
-                        <v-list-item-action>
-                          <v-btn depressed color="error" @click="backupWalletDialog = true">{{ $t('common.backup') }}</v-btn>
-                        </v-list-item-action>
-                      </v-list-item>
+                    <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
+                      {{ $t('navigation.betaVersionNoticePrefix') }} <strong>{{ $t('navigation.betaVersionNoticeBold') }}</strong>{{ $t('navigation.betaVersionNoticeSuffix') }}
+                      <a
+                        style="color: black; font-weight: 700"
+                        :href="CHROME_WEB_STORE_URL_SIDEBAR"
+                        target="_blank"
+                        >{{ $t('navigation.geroDashboard') }}</a
+                      >
+                      {{ $t('navigation.inChromeStore') }}
                     </v-alert>
                   </v-col>
                 </v-row>
-                <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
-                <v-sheet class="transparent pt-2">
-                  <keep-alive>
+                <div class="d-flex flex-column justify-start no-gutters px-4 bg-transparent">
+                  <v-toolbar ref="navBarRef" flat color="transparent" style="max-height: 55px">
+                    <v-app-bar-nav-icon v-if="$vuetify.display.mobile" @click.stop="drawer = !drawer" />
+
+                    <!-- Global Search Field -->
+                    <v-tooltip location="bottom" :disabled="!compactNav" content-class="custom-tooltip">
+                      <template v-slot:activator="{ props: activatorProps }">
+                        <div
+                          :class="['nav-search-field', { 'nav-search-compact': compactNav }]"
+                          @click="openGlobalSearch"
+                          v-bind="activatorProps"
+
+                        >
+                          <v-icon size="16" color="var(--g-accent)" class="nav-search-icon">mdi-magnify</v-icon>
+                          <template v-if="!compactNav">
+                            <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
+                            <span class="nav-search-shortcut">Ctrl+K</span>
+                          </template>
+                        </div>
+                      </template>
+                      <span>{{ t('search.globalPlaceholder') }} (Ctrl+K)</span>
+                    </v-tooltip>
+
+                    <v-spacer />
+
+                    <QuickActionsBox :compact="compactNav" :hide-buttons="emptyStateShowing" />
+
+                    <v-spacer />
+
+                    <v-tooltip
+                      location="bottom"
+                      :content-class="
+                        (isMidnight ? isMidnightConnected : connected)
+                          ? 'network-tooltip'
+                          : (isMidnight ? isMidnightConnecting : connecting)
+                          ? 'network-tooltip connecting'
+                          : 'network-tooltip offline'
+                      "
+                    >
+                      <template v-slot:activator="{ props: activatorProps }">
+                        <div
+                          style="display: flex; align-items: center; gap: 4px"
+                          :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
+                          v-bind="activatorProps"
+
+                        >
+                          <v-icon
+                            size="small"
+                            :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
+                            :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
+                          >
+                            {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
+                          </v-icon>
+
+                          <!-- Small progress bar (hidden in compact mode).
+                               Cardano: epoch-slot percentage as a definite value.
+                               Midnight/Bitcoin: no epoch concept, so no bar at all —
+                               the connection icon already carries the status. -->
+                          <v-progress-linear
+                            v-if="!compactNav && !isMidnight && !isBitcoin"
+                            class="epoch-progress-liquid-glass"
+                            height="8"
+                            :buffer-value="isMidnight ? 100 : epochSlotPercentage"
+                            :model-value="isMidnight ? 100 : epochSlotPercentage"
+                            :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
+                            bg-color="transparent"
+                            style="width: 50px"
+                            striped
+                            :stream="isMidnight ? isMidnightConnected : connected"
+                            :indeterminate="isMidnight ? isMidnightConnecting : connecting"
+                          ></v-progress-linear>
+                        </div>
+                      </template>
+
+                      <div class="network-tooltip-content">
+                        <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
+                        <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                        <template v-if="isMidnight">
+                          <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
+                        </template>
+                        <template v-else-if="isBitcoin">
+                          <!-- Bitcoin has no epoch — show block height instead. -->
+                          <div><strong>Block:</strong> {{ btcTipHeight ?? 'N/A' }}</div>
+                        </template>
+                        <template v-else>
+                          <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip && 'epoch' in tip ? tip.epoch : 'N/A' }}</div>
+                          <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                        </template>
+                        <div>
+                          <strong class="mr-1">{{ t('navigation.status') }}:</strong>
+                          <span
+                            :style="
+                              (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
+                            "
+                            >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
+                          >
+                        </div>
+                      </div>
+                    </v-tooltip>
+
+                    <!-- Notifications Menu -->
+                    <v-menu
+                      v-model="notificationsMenu"
+                      location="bottom end"
+                      :offset="[0, -75]"
+                      :close-on-content-click="false"
+                      transition="none"
+                    >
+                      <template v-slot:activator="{ props: activatorProps }">
+                        <v-btn class="ml-4 toolbar-icon-btn" icon variant="text" v-bind="activatorProps">
+                          <v-badge :model-value="kesWarningVisible || inboxUnread > 0" :content="inboxUnread > 0 ? String(inboxUnread) : undefined" :dot="inboxUnread === 0" :color="inboxUnread > 0 ? 'var(--g-accent)' : 'error'" text-color="var(--g-on-grad)">
+                            <v-icon size="20">mdi-bell-outline</v-icon>
+                          </v-badge>
+                        </v-btn>
+                      </template>
+                      <NotifyInbox
+                        :open="notificationsMenu"
+                        :kes-visible="kesWarningVisible"
+                        :kes-remaining="kesRemainingGlobal"
+                        @kes="navigateToPoolOperator"
+                        @settings="openNotifySettings"
+                        @close="notificationsMenu = false"
+                      />
+                    </v-menu>
+
+                    <v-tooltip location="bottom" content-class="custom-tooltip">
+                      <template v-slot:activator="{ props: activatorProps }">
+                        <v-btn icon variant="text" class="ml-3 toolbar-icon-btn" v-bind="activatorProps" @click="toggleHideBalances()">
+                          <v-icon size="20">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
+                        </v-btn>
+                      </template>
+                      <span>{{ hideBalances ? t('dashboard.showBalances') : t('dashboard.hideBalances') }}</span>
+                    </v-tooltip>
+
+                    <v-tooltip location="bottom" content-class="custom-tooltip">
+                      <template v-slot:activator="{ props: activatorProps }">
+                        <v-btn icon variant="text" class="ml-3 toolbar-icon-btn" v-bind="activatorProps" @click="openMiniMode">
+                          <v-avatar size="23">
+                            <img :src="assets.miniModeSvg" :alt="t('miniGero.miniMode')" />
+                          </v-avatar>
+                        </v-btn>
+                      </template>
+                      <span>{{ t('miniGero.miniMode') }}</span>
+                    </v-tooltip>
+
+                    <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon variant="text">
+                      <v-badge bordered color="error" dot floating v-if="shouldBackup || hasNewSettingsFeatures">
+                        <v-avatar size="20">
+                          <img :src="assets.settingsSvg" :alt="t('common.settings')" />
+                        </v-avatar>
+                      </v-badge>
+                      <v-avatar size="20" v-else>
+                        <img :src="assets.settingsSvg" :alt="t('common.settings')" />
+                      </v-avatar>
+                    </v-btn>
+                  </v-toolbar>
+                  <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
+                    <v-col cols="12">
+                      <v-alert
+                        type="error"
+                        prominent
+                        closable
+                        rounded
+                        variant="outlined"
+                        color="error"
+                        class="py-2 px-4 ma-2"
+                        style="overflow: hidden"
+                      >
+                        <v-list-item>
+                          <div>
+                            <v-list-item-title style="white-space: break-spaces">
+                              {{ $t('settings.backupYourSeedPhrase') }}
+                            </v-list-item-title>
+                            <v-list-item-subtitle style="white-space: break-spaces">
+                              <span>{{ $t('settings.backupSeedPhraseWarning') }}</span>
+                            </v-list-item-subtitle>
+                          </div>
+                          <template #append>
+                            <v-btn variant="flat" color="error" @click="backupWalletDialog = true">{{ $t('common.backup') }}</v-btn>
+                          </template>
+                        </v-list-item>
+                      </v-alert>
+                    </v-col>
+                  </v-row>
+                  <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
+                  <v-sheet class="transparent pt-2">
                     <slot name="help-content">
-                      <router-view @open-backup-dialog="handleOpenBackupDialog" />
+                      <RouteContent @open-backup-dialog="handleOpenBackupDialog" />
                     </slot>
-                  </keep-alive>
-                </v-sheet>
-              </v-layout>
-              <Player
-                v-if="currentPage.name !== 'mediaPlayer' && musicPlaylist?.length > 0 && context.shown"
-                style="position: sticky; bottom: 0"
-              />
-            </v-sheet>
+                  </v-sheet>
+                </div>
+                <Player
+                  v-if="currentPage.name !== 'mediaPlayer' && musicPlaylist?.length > 0 && context.shown"
+                  style="position: sticky; bottom: 0"
+                />
+              </v-sheet>
+            </v-main>
           </v-layout>
         </v-container>
       </v-main>
@@ -281,6 +280,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import RouteContent from '../RouteContent.vue';
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
@@ -372,7 +372,6 @@ const currentDialog = ref<string | null>(null);
 // Compact nav mode — collapse labels to icons when toolbar is narrow
 const compactNav = ref(false);
 const navBarRef = ref(null);
-const searchFieldRef = ref<HTMLElement | null>(null);
 let navBarObserver: ResizeObserver | null = null;
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
@@ -495,7 +494,7 @@ function closeWelcomeDialog() {
 function closeChangeLogDialog() {
   changeLog.enabled = false;
   if (Object.keys(vmProxy.$route.query)?.length > 0) {
-    vmProxy.$router.replace({ query: null });
+    vmProxy.$router.replace({ query: {} });
   }
 }
 function closeDialog() {
@@ -627,8 +626,8 @@ const openSettingsFromFlag = (flag: unknown) => {
   chrome.storage.local.remove('openSettingsOnLoad');
 };
 const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
-  if (area === 'local' && changes.openSettingsOnLoad?.newValue) {
-    openSettingsFromFlag(changes.openSettingsOnLoad.newValue);
+  if (area === 'local' && changes['openSettingsOnLoad']?.newValue) {
+    openSettingsFromFlag(changes['openSettingsOnLoad'].newValue);
   }
 };
 chrome.storage.onChanged.addListener(handleStorageChange);
@@ -644,7 +643,7 @@ onMounted(async () => {
   // registered, so check the flag once on mount. The already-open-tab path
   // is handled by handleStorageChange, which removes the flag before mount.
   chrome.storage.local.get('openSettingsOnLoad', (result) => {
-    if (result.openSettingsOnLoad) openSettingsFromFlag(result.openSettingsOnLoad);
+    if (result['openSettingsOnLoad']) openSettingsFromFlag(result['openSettingsOnLoad']);
   });
 
   // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue
@@ -703,6 +702,15 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+/* Preserve the Vue 2 dashboard frame. The nested layout keeps the drawer and
+   its content offset inside this cap instead of reserving viewport space. */
+.dashboard-container {
+  max-width: 1785px;
+}
+.dashboard-content {
+  min-width: 0;
+}
+
 /* Cardano Background - Confined to dashboard working area */
 .cardano-background-dashboard {
   position: absolute;
@@ -956,15 +964,15 @@ div.v-toolbar__content {
   gap: 8px;
   padding: 5px 12px;
   border-radius: var(--g-r-control);
-  background: rgba(130, 180, 255, 0.08);
-  border: 1px solid rgba(130, 180, 255, 0.25);
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent);
   cursor: pointer;
   min-width: 180px;
   transition: border-color var(--g-dur-base), background var(--g-dur-base), box-shadow var(--g-dur-base);
 }
 .nav-search-field:hover {
-  background: rgba(130, 180, 255, 0.14);
-  border-color: rgba(130, 180, 255, 0.45);
+  background: color-mix(in srgb, var(--g-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent);
 }
 .nav-search-placeholder {
   font-size: 13px;
@@ -998,6 +1006,16 @@ div.v-toolbar__content {
 
 .toolbar-icon-btn .v-icon {
   color: var(--g-text-1) !important;
+}
+
+/* Badges extend beyond the compact button, as they did before VBtn started
+   clipping its content. Keep the bell's original icon box around its 20px glyph. */
+.toolbar-icon-btn:has(.v-badge) {
+  overflow: visible;
+}
+.toolbar-icon-btn .v-badge .v-icon {
+  min-width: var(--g-s-5);
+  min-height: var(--g-s-5);
 }
 
 .liquid-glass-card,
@@ -1034,4 +1052,3 @@ div.v-toolbar__content {
 
 
 </style>
-

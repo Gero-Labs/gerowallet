@@ -1,4 +1,5 @@
-import Vue, { nextTick } from 'vue';
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HelpResult } from '@/api/help.api';
@@ -12,12 +13,12 @@ const h = vi.hoisted(() => ({
   track: vi.fn(),
 }));
 vi.mock('./helpAnalytics', () => ({ trackHelp: h.track }));
-vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
+vi.mock('@/stores/walletStore', async () => ({ walletStore: (h.wallet = Vue.reactive(h.wallet)) }));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { state: { isInitialized: false } } }));
 vi.mock('@/utils/networks', () => ({ default: { resolveGeroCardSupport: () => false } }));
 vi.mock('@/plugins/i18n', () => ({ default: { locale: 'us' } }));
-vi.mock('vue-router/composables', async () => {
-  const route = (await import('vue')).reactive(h.route);
+vi.mock('vue-router', async () => {
+  const route = (h.route = Vue.reactive(h.route));
   return { useRoute: () => route, useRouter: () => ({ replace: vi.fn().mockResolvedValue(undefined), push: vi.fn() }) };
 });
 vi.mock('@/shared/composables/useTranslation', async () => {
@@ -33,13 +34,13 @@ vi.mock('./useHelpContent', async () => {
   } as unknown as typeof h.content) };
 });
 // The sections are covered by their own specs; here each is just a marker.
-vi.mock('./home/HelpHomeDashboard.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('div', { class: 'home' }) } }));
-vi.mock('./HelpReader.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('div', { class: 'reader' }) } }));
-vi.mock('./HelpUpdates.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('div', { class: 'updates' }) } }));
-vi.mock('./HelpChainPills.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('div', { class: 'pills' }) } }));
-vi.mock('./HelpContentStatus.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('div', { class: 'status' }) } }));
-vi.mock('./HelpSearchForm.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('form', { class: 'search' }) } }));
-vi.mock('@/shared/components/GButton/GButton.vue', () => ({ default: { render(this: Vue, c: Vue.CreateElement) { return c('button', { on: this.$listeners }, this.$slots['default']); } } }));
+vi.mock('./home/HelpHomeDashboard.vue', () => ({ default: { render: () => Vue.h('div', { class: 'home' }) } }));
+vi.mock('./HelpReader.vue', () => ({ default: { render: () => Vue.h('div', { class: 'reader' }) } }));
+vi.mock('./HelpUpdates.vue', () => ({ default: { render: () => Vue.h('div', { class: 'updates' }) } }));
+vi.mock('./HelpChainPills.vue', () => ({ default: { render: () => Vue.h('div', { class: 'pills' }) } }));
+vi.mock('./HelpContentStatus.vue', () => ({ default: { render: () => Vue.h('div', { class: 'status' }) } }));
+vi.mock('./HelpSearchForm.vue', () => ({ default: { render: () => Vue.h('form', { class: 'search' }) } }));
+vi.mock('@/shared/components/GButton/GButton.vue', () => ({ default: { render(this: Vue.ComponentPublicInstance) { return Vue.h('button', { ...this.$attrs }, this.$slots['default']?.()); } } }));
 
 const published = (id: string): HelpResult => ({
   id, slug: id, title: 'Keep your recovery phrase safe', summary: 'Back it up', snippet: '', kind: 'guide', topic: 'security', source: 'gero-help', locale: 'en-US', revision: 1, readingMinutes: 2,
@@ -47,7 +48,7 @@ const published = (id: string): HelpResult => ({
 });
 const wrappers: Array<ReturnType<typeof mount>> = [];
 function show() {
-  const wrapper = mount(HelpCenter, { stubs: { 'router-link': { props: ['to'], template: '<a><slot /></a>' } } });
+  const wrapper = mount(HelpCenter, { global: { stubs: { 'router-link': { props: ['to'], template: '<a><slot /></a>' } } } });
   wrappers.push(wrapper);
   return wrapper;
 }
@@ -60,7 +61,7 @@ beforeEach(() => {
   Object.assign(h.route, { path: '/help/search', fullPath: '/help/search?q=backup', query: { q: 'backup' }, params: {} });
   helpSearchIntent.pending = null;
 });
-afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); helpSearchIntent.pending = null; });
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); helpSearchIntent.pending = null; });
 
 describe('Help search outcome', () => {
   it('counts a submitted search as "results" only after the published results have loaded', async () => {
@@ -132,7 +133,7 @@ describe('Help search outcome', () => {
     const wrapper = show();
     await settle({ loading: false, resolved: true });
     expect(counted()).toEqual([]);
-    wrapper.destroy();
+    wrapper.unmount();
     expect(helpSearchIntent.pending).toBeNull();
   });
 

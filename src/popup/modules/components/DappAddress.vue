@@ -11,48 +11,48 @@
     } : {}">
       <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row; text-align: left;">
         <div style="width: 18px; height: 18px" id="dapp-receiver-check">
-          <v-tooltip top content-class="custom-tooltip" v-if="risk">
-            <template v-slot:activator="{ on, attrs }">
+          <v-tooltip location="top"  content-class="custom-tooltip" v-if="risk">
+            <template v-slot:activator="{ props: activatorProps }">
               <img
                 :alt="t('common.trustedAddress')"
                 height="18"
                 width="16"
                 style="margin-right: 2px; cursor: pointer"
                 :src="riskIcon"
-                v-bind="attrs"
-                v-on="on"
+                v-bind="activatorProps"
+
               />
             </template>
             <span>{{ riskTooltip }}</span>
           </v-tooltip>
           <v-progress-circular size="18" indeterminate v-else color="white" width="3"></v-progress-circular>
         </div>
-        <v-list-item class="px-0" dense style="min-height: 10px;">
-          <v-list-item-content class="pa-0">
+        <v-list-item class="px-0" density="compact" style="min-height: 10px;">
+          <div class="pa-0 g-list-content">
             <v-list-item-title style="display: flex; justify-content: space-between; ">
               <CopyButton v-if="address" :value="address" :title="filters.truncate(address)" x-small></CopyButton>
               <div style="place-self: center;">
                 <v-chip
                   v-if="contactInfo && contactInfo.isHandle"
-                  outlined
+                  variant="outlined"
                   class="px-1 mr-1"
-                  x-small
+                  size="x-small"
                   color="white"
                   style="margin-left: 1px; margin-bottom: 1px"
                 ><span style="color: var(--g-success); font-weight: 600">$</span>{{ contactInfo.label.replace(/^\$/, '') }}
                 </v-chip>
                 <v-chip
                   v-else-if="contactInfo"
-                  outlined
+                  variant="outlined"
                   class="px-1 mr-1"
-                  x-small
+                  size="x-small"
                   color="warning"
                   style="margin-left: 1px; margin-bottom: 1px"
-                ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contactInfo.label }}</v-chip>
-                <v-chip outlined x-small v-if="isScriptAddress">Script</v-chip>
+                ><v-icon size="x-small" class="mr-1">mdi-account</v-icon>{{ contactInfo.label }}</v-chip>
+                <v-chip variant="outlined" size="x-small" v-if="isScriptAddress">Script</v-chip>
               </div>
             </v-list-item-title>
-          </v-list-item-content>
+          </div>
         </v-list-item>
 
       </v-card-subtitle>
@@ -88,7 +88,7 @@ const props = defineProps({
 
 const contactMap = computed(() => {
   const map = new Map<string, { label: string; isHandle: boolean }>();
-  Object.values(contacts.value).forEach((contact: any) => {
+  Object.values(contacts.value).forEach((contact) => {
     if (contact.address && contact.name) {
       map.set(contact.address, {
         label: contact.handle || contact.name,

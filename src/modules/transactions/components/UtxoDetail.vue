@@ -40,8 +40,8 @@
 
       <!-- Collateral badge -->
       <div v-if="utxo.isCollateral" class="mt-1">
-        <v-chip small outlined color="orange">
-          <v-icon small class="mr-1">mdi-shield-check</v-icon>
+        <v-chip size="small" variant="outlined" color="orange">
+          <v-icon size="small" class="mr-1">mdi-shield-check</v-icon>
           {{ $t('transactions.collateral') }}
         </v-chip>
       </div>

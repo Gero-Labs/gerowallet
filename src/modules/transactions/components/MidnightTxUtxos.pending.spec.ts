@@ -1,34 +1,30 @@
-import Vue, { nextTick } from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ getTransactionUtxos: vi.fn() }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getTransactionUtxos: mocks.getTransactionUtxos }) }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({ loggedWallet: { chain: 'Midnight', network: 'Mainnet' } }) }));
-vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.observable({ addresses: { unshielded: 'mn_addr1self' } }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: { chain: 'Midnight', network: 'Mainnet' } }) }));
+vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.reactive({ addresses: { unshielded: 'mn_addr1self' } }) }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/shared/components/feedback/ErrorState.vue', () => ({
   // A render function, not a template string: the test build of Vue is runtime-only.
-  default: Vue.extend({
+  default: Vue.defineComponent({
     props: { message: String },
-    render(h) { return h('div', { class: 'error-state' }, this.message); },
+    render() { return Vue.h('div', { class: 'error-state' }, this.message); },
   }),
 }));
 
 import MidnightTxUtxosSfc from './MidnightTxUtxos.vue';
 
-// test-utils v1's mount() typings predate <script setup> components; every
-// component spec in the repo trips TS2769 on this without the cast.
-const MidnightTxUtxos = MidnightTxUtxosSfc as unknown as Parameters<typeof mount>[0];
+const MidnightTxUtxos = MidnightTxUtxosSfc;
 
 const UTXOS = { txHash: 'abc', createdOutputs: [], spentOutputs: [] };
 
 function mountUtxos(txStatus: 'pending' | 'confirmed', txHash = 'abc') {
-  return mount(MidnightTxUtxos, {
-    propsData: { txHash, txStatus, txType: 'send', txToken: 'NIGHT', txCounterparty: 'mn_addr1other' },
-    mocks: { $t: (key: string) => key },
-    stubs: { 'v-progress-circular': true },
-  });
+  return mount(MidnightTxUtxos, { props: { txHash, txStatus, txType: 'send', txToken: 'NIGHT', txCounterparty: 'mn_addr1other' }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { 'v-progress-circular': true } } });
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

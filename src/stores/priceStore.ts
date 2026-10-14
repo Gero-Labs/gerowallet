@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import krakenWebSocketService from '@/services/krakenWebSocket.service';
 import { debugLog } from '@/utils/debug';
 import { getContextType } from '@/utils/storageSync';
@@ -39,7 +39,7 @@ const STORE_NAME = 'priceStore';
 const context = getContextType();
 
 // Create observable price store
-export const priceStore = Vue.observable<PriceStore>({
+export const priceStore = reactive<PriceStore>({
   adaUsd: null,
   btcUsd: null,
   isConnected: false,
@@ -118,9 +118,9 @@ class PriceService {
   private registerTickerCallback(chain: 'Cardano' | 'Bitcoin'): void {
     if (chain === 'Bitcoin') {
       krakenWebSocketService.onBtcTicker((ticker: BtcPriceData) => {
-        Vue.set(priceStore, 'btcUsd', ticker);
-        Vue.set(priceStore, 'isConnected', true);
-        Vue.set(priceStore, 'connectionStatus', 'connected');
+        priceStore['btcUsd'] = ticker;
+        priceStore['isConnected'] = true;
+        priceStore['connectionStatus'] = 'connected';
         broadcastFromBackground({
           btcUsd: ticker,
           isConnected: true,
@@ -129,9 +129,9 @@ class PriceService {
       });
     } else {
       krakenWebSocketService.onTicker((ticker: PriceData) => {
-        Vue.set(priceStore, 'adaUsd', ticker);
-        Vue.set(priceStore, 'isConnected', true);
-        Vue.set(priceStore, 'connectionStatus', 'connected');
+        priceStore['adaUsd'] = ticker;
+        priceStore['isConnected'] = true;
+        priceStore['connectionStatus'] = 'connected';
         broadcastFromBackground({
           adaUsd: ticker,
           isConnected: true,
@@ -142,8 +142,8 @@ class PriceService {
 
     // If Kraken is already connected, set status immediately
     if (krakenWebSocketService.getConnectionStatus()) {
-      Vue.set(priceStore, 'connectionStatus', 'connected');
-      Vue.set(priceStore, 'isConnected', true);
+      priceStore['connectionStatus'] = 'connected';
+      priceStore['isConnected'] = true;
       broadcastFromBackground({ connectionStatus: 'connected', isConnected: true });
     }
   }

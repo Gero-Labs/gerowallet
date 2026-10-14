@@ -46,7 +46,7 @@
         v-else-if="recent.length === 0"
         class="recent-tx-empty d-flex flex-column align-center justify-center flex-grow-1"
       >
-        <v-icon small color="grey">mdi-clipboard-text-outline</v-icon>
+        <v-icon size="small" color="grey">mdi-clipboard-text-outline</v-icon>
         <span class="text-caption text--secondary mt-1">
           {{ $t('transactions.noTransactionsFound') }}
         </span>
@@ -84,7 +84,7 @@
 
     <BitcoinTransactionDetailsDialog
       v-if="transactionInfo && isBitcoin"
-      :transactionInfo="transactionInfo"
+      :transactionInfo="bitcoinTransactionInfo"
       @close="closeDetails"
     />
     <TransactionDetailsDialog
@@ -96,10 +96,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue';
+import { computed, shallowRef, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { StoredTransaction } from '@/models/transaction.types';
+import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
 import { Blockchain } from '@/models/types';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
 import BitcoinTransactionDetailsDialog from '@/modules/dashboard/dialogs/BitcoinTransactionDetailsDialog.vue';
@@ -153,7 +154,11 @@ const busyLabel = computed(() => {
   return '';
 });
 
-const transactionInfo = ref<StoredTransaction | null>(null);
+const transactionInfo = shallowRef<StoredTransaction | null>(null);
+const bitcoinTransactionInfo = computed<UnifiedTransaction | null>(() => {
+  const tx = transactionInfo.value;
+  return isBitcoin.value && tx ? { ...tx, assets: tx.assets.map(asset => ({ ...asset, quantity: String(asset.quantity) })) } : null;
+});
 
 function handleRowClick(tx: StoredTransaction) {
   transactionInfo.value = tx;

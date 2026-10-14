@@ -7,11 +7,11 @@
       :label="$t('poolOperator.metadataUrl')"
       :rules="[(v) => !v || v.length <= 64 || 'Max 64 characters']"
       :hint="$t('poolOperator.metadataUrlHint')"
-      outlined
-      dense
+      variant="outlined"
+      density="compact"
       persistent-hint
       class="mt-2"
-      @input="emitUpdate"
+      @update:model-value="emitUpdate"
     />
 
     <v-text-field
@@ -19,8 +19,8 @@
       :label="$t('poolOperator.metadataHash')"
       :hint="$t('poolOperator.metadataHashHint')"
       readonly
-      outlined
-      dense
+      variant="outlined"
+      density="compact"
       persistent-hint
       class="mt-3 g-mono"
     />
@@ -35,13 +35,13 @@ interface MetadataValue {
   hash: string;
 }
 
-const props = defineProps<{ value: MetadataValue }>();
-const emit = defineEmits(['input']);
+const props = defineProps<{ modelValue: MetadataValue }>();
+const emit = defineEmits(['update:modelValue']);
 
-const url = ref(props.value?.url || '');
-const hash = ref(props.value?.hash || '');
+const url = ref(props.modelValue?.url || '');
+const hash = ref(props.modelValue?.hash || '');
 
 function emitUpdate() {
-  emit('input', { url: url.value, hash: hash.value.trim() });
+  emit('update:modelValue', { url: url.value, hash: hash.value.trim() });
 }
 </script>

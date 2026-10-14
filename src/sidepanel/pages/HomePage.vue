@@ -53,8 +53,8 @@
     <BuySellSheet v-model="showBuySell" />
     <!-- Token Detail Bottom Sheet -->
     <BottomSheet
-      :value="showTokenDetail"
-      @input="showTokenDetail = $event"
+      :model-value="showTokenDetail"
+      @update:model-value="showTokenDetail = $event"
       :title="selectedToken?.ticker || selectedToken?.name || ''"
       height="70%"
     >
@@ -83,7 +83,7 @@
           </div>
         </div>
 
-        <v-divider dark class="my-4" />
+        <v-divider theme="dark" class="my-4" />
 
         <!-- Holdings -->
         <div class="detail-row">
@@ -125,7 +125,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
@@ -166,7 +166,7 @@ interface HomeTokenRow {
   img?: string;
   price?: number;
   change?: number | null;
-  quantity?: number | string;
+  quantity?: number | string | bigint;
   decimals?: number;
 }
 

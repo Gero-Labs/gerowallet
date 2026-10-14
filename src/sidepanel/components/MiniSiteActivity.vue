@@ -6,7 +6,7 @@
   <v-card v-if="visible && activity" flat class="glass-liquid mini-act" role="status">
     <div class="mini-act__row">
       <span class="mini-act__label t-label">
-        <v-icon x-small class="mr-1" color="var(--g-text-3)">mdi-web</v-icon>
+        <v-icon size="x-small" class="mr-1" color="var(--g-text-3)">mdi-web</v-icon>
         {{ domain }}
       </span>
       <span class="mini-act__state" :class="stateClass">
@@ -16,13 +16,13 @@
     </div>
 
     <div class="mini-act__steps">
-      <template v-for="(step, i) in steps">
-        <span :key="step.key" class="mini-act__step" :class="stepClass(i)">
+      <template :key="step.key" v-for="(step, i) in steps">
+        <span  class="mini-act__step" :class="stepClass(i)">
           <v-icon v-if="i < doneCount" size="12" class="mini-act__check">mdi-check</v-icon>
           <span v-else class="mini-act__dot" />
           {{ step.label }}
         </span>
-        <span v-if="i < steps.length - 1" :key="`${step.key}-line`" class="mini-act__line" />
+        <span v-if="i < steps.length - 1"  class="mini-act__line" />
       </template>
     </div>
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Cardano } from '@cardano-sdk/core';
+import type { Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
 import { assembleWitnesses } from './usePoolSigning';
 
 describe('assembleWitnesses', () => {
@@ -9,9 +10,9 @@ describe('assembleWitnesses', () => {
     const fee = { vkey: 'feeVkey', signature: 'feeSig' };
     const sigs = assembleWitnesses(owner, cold, fee);
     expect(sigs.size).toBe(3);
-    expect(sigs.get('coldVkey' as Cardano.Ed25519PublicKeyHex)).toBe('coldSig');
-    expect(sigs.get('feeVkey' as Cardano.Ed25519PublicKeyHex)).toBe('feeSig');
-    expect(sigs.get('ownerVkey' as Cardano.Ed25519PublicKeyHex)).toBe('ownerSig');
+    expect(sigs.get('coldVkey' as Ed25519PublicKeyHex)).toBe('coldSig');
+    expect(sigs.get('feeVkey' as Ed25519PublicKeyHex)).toBe('feeSig');
+    expect(sigs.get('ownerVkey' as Ed25519PublicKeyHex)).toBe('ownerSig');
   });
 
   it('does not mutate the owner signatures map passed in', () => {

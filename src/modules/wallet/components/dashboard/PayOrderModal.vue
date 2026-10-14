@@ -27,7 +27,7 @@
 
       <template v-else-if="details">
         <p v-if="refreshed" class="pay-order__refreshed t-body-sm" role="alert">
-          <v-icon small>mdi-refresh</v-icon>
+          <v-icon size="small">mdi-refresh</v-icon>
           {{ t('card.paymentDetailsRefreshed') }}
         </p>
         <DeliveryFeePanel

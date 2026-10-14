@@ -4,19 +4,19 @@
 
       <!-- Margin mode / Leverage / Position mode -->
       <div class="of-margin-row">
-        <v-btn x-small outlined class="of-top-btn" @click="pendingMarginMode = marginMode; showMarginDialog = true">
+        <v-btn size="x-small" variant="outlined" class="of-top-btn" @click="pendingMarginMode = marginMode; showMarginDialog = true">
           {{ marginMode === 'cross' ? $t('perpetuals.cross') : $t('perpetuals.isolated') }}
         </v-btn>
-        <v-btn x-small outlined class="of-top-btn" @click="pendingLeverage = leverage; showLeverageDialog = true">
+        <v-btn size="x-small" variant="outlined" class="of-top-btn" @click="pendingLeverage = leverage; showLeverageDialog = true">
           {{ leverage }}x
         </v-btn>
-        <v-btn x-small outlined class="of-top-btn" @click="showPosModeDialog = true">
+        <v-btn size="x-small" variant="outlined" class="of-top-btn" @click="showPosModeDialog = true">
           {{ $t('perpetuals.oneWay') }}
         </v-btn>
       </div>
 
       <!-- Margin Mode Dialog -->
-      <v-dialog v-model="showMarginDialog" max-width="420" dark>
+      <v-dialog v-model="showMarginDialog" max-width="420" theme="dark">
         <v-card class="perps-modal">
           <div class="perps-modal__header">
             <span class="perps-modal__title">{{ $t('perpetuals.marginMode') }}</span>
@@ -57,7 +57,7 @@
       </v-dialog>
 
       <!-- Leverage Dialog -->
-      <v-dialog v-model="showLeverageDialog" max-width="420" dark>
+      <v-dialog v-model="showLeverageDialog" max-width="420" theme="dark">
         <v-card class="perps-modal">
           <div class="perps-modal__header">
             <span class="perps-modal__title">{{ $t('perpetuals.adjustLeverage') }}</span>
@@ -96,7 +96,7 @@
       </v-dialog>
 
       <!-- Position Mode Dialog -->
-      <v-dialog v-model="showPosModeDialog" max-width="420" dark>
+      <v-dialog v-model="showPosModeDialog" max-width="420" theme="dark">
         <v-card class="perps-modal">
           <div class="perps-modal__header">
             <span class="perps-modal__title">{{ $t('perpetuals.positionMode') }}</span>
@@ -119,14 +119,14 @@
 
       <!-- Order type tabs -->
       <v-tabs
-        :value="orderTypes.findIndex(tr => tr.value === orderType)"
-        background-color="transparent"
+        :model-value="orderTypes.findIndex(tr => tr.value === orderType)"
+        bg-color="transparent"
         grow
         color="var(--g-text-1)"
         slider-color="success"
         height="32"
         class="of-type-tabs"
-        @change="(i) => orderType = orderTypes[i].value"
+        @update:model-value="(i) => orderType = orderTypes[i].value"
       >
         <v-tab v-for="t in orderTypes" :key="t.value" class="of-type-tab">
           {{ $t(t.label) }}
@@ -134,7 +134,7 @@
       </v-tabs>
 
       <!-- Side toggle: Long/Buy — Short/Sell -->
-      <v-btn-toggle v-model="orderSide" mandatory dense class="of-side-toggle">
+      <v-btn-toggle v-model="orderSide" mandatory density="compact" class="of-side-toggle">
         <v-btn value="buy" class="of-side-btn of-side-btn--buy">
           {{ $t('perpetuals.buyLong') }}
         </v-btn>
@@ -177,14 +177,14 @@
           class="of-field__input"
           :placeholder="t('perpetuals.size')"
         />
-        <v-menu offset-y left :attach="true" content-class="of-asset-menu">
-          <template #activator="{ on, attrs }">
-            <span class="of-field__asset-trigger" v-bind="attrs" v-on="on">
+        <v-menu location="start"   :attach="true" content-class="of-asset-menu">
+          <template #activator="{ props: activatorProps }">
+            <span class="of-field__asset-trigger" v-bind="activatorProps" >
               {{ sizeAsset }}
               <v-icon size="12" class="ml-1">mdi-chevron-down</v-icon>
             </span>
           </template>
-          <v-list dense dark class="of-asset-list">
+          <v-list density="compact" theme="dark" class="of-asset-list">
             <v-list-item
               v-for="a in ['USD', baseAsset]"
               :key="a"
@@ -218,7 +218,7 @@
           v-model="reduceOnly"
           :label="$t('perpetuals.reduceOnly')"
           hide-details
-          dense
+          density="compact"
           color="success"
           class="of-checkbox"
           :ripple="false"
@@ -227,7 +227,7 @@
           v-model="showTpSl"
           :label="$t('perpetuals.tpSl')"
           hide-details
-          dense
+          density="compact"
           color="success"
           class="of-checkbox"
           :ripple="false"
@@ -240,8 +240,8 @@
           v-model="takeProfitPrice"
           :label="$t('perpetuals.takeProfitPriceUsd')"
           type="number"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           hide-details
           class="of-input mb-2"
           prefix="$"
@@ -250,8 +250,8 @@
           v-model="stopLossPrice"
           :label="$t('perpetuals.stopLossPriceUsd')"
           type="number"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           hide-details
           class="of-input"
           prefix="$"
@@ -271,7 +271,7 @@
         {{ insufficientBalance ? $t('errors.insufficientBalance') : belowMinOrder ? $t('perpetuals.minOrderSize') : aboveMaxOrder ? $t('perpetuals.maxOrderSize') : $t('perpetuals.placeOrder') }}
       </v-btn>
 
-      <v-alert v-if="tradingError" type="error" dense class="mt-2" dismissible @input="tradingError = null">
+      <v-alert v-if="tradingError" type="error" density="compact" class="mt-2" closable @update:model-value="tradingError = null">
         {{ tradingError }}
       </v-alert>
 
@@ -282,9 +282,9 @@
           <span class="form-value">{{ estEntryPriceDisplay }}</span>
         </div>
         <div class="of-est-row">
-          <v-tooltip bottom content-class="custom-tooltip" max-width="220">
-            <template #activator="{ on, attrs }">
-              <span class="price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.estLiqPrice') }}</span>
+          <v-tooltip location="bottom"  content-class="custom-tooltip" max-width="220">
+            <template #activator="{ props: activatorProps }">
+              <span class="price-info-label--dashed" v-bind="activatorProps" >{{ $t('perpetuals.estLiqPrice') }}</span>
             </template>
             <span>{{ $t('perpetuals.estLiqPriceTooltip') }}</span>
           </v-tooltip>
@@ -299,9 +299,9 @@
           <span class="form-value">{{ notionalValue }}</span>
         </div>
         <div class="of-est-row">
-          <v-tooltip bottom content-class="custom-tooltip" max-width="240">
-            <template #activator="{ on, attrs }">
-              <span class="price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.estFee') }}</span>
+          <v-tooltip location="bottom"  content-class="custom-tooltip" max-width="240">
+            <template #activator="{ props: activatorProps }">
+              <span class="price-info-label--dashed" v-bind="activatorProps" >{{ $t('perpetuals.estFee') }}</span>
             </template>
             <span>{{ $t('perpetuals.estFeeTooltip') }}</span>
           </v-tooltip>
@@ -309,8 +309,8 @@
         </div>
         <v-alert
           v-if="slippageWarning"
-          dense
-          text
+          density="compact"
+          variant="text"
           color="warning"
           class="of-slippage-alert mt-2"
           icon="mdi-alert-outline"
@@ -996,10 +996,19 @@ async function placeOrderAction() {
   font-size: 12px !important;
 }
 
-.of-input ::v-deep .v-input__slot {
+.of-input :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-padding-top: 0px;
+  --v-field-padding-bottom: 0px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   min-height: 32px !important;
   background: var(--g-raised) !important;
   border-color: var(--g-raised) !important;
+}
+
+.of-input :deep(.v-field:not(.v-field--error, .v-field--focused) .v-field__outline) {
+  color: var(--g-raised);
 }
 
 .of-input ::v-deep input {
@@ -1093,14 +1102,14 @@ async function placeOrderAction() {
   padding: 0 12px !important;
 }
 
-.of-asset-list .v-list-item__title {
+.of-asset-list .v-list-item-title {
   font-size: 12px !important;
   font-weight: 500;
   color: var(--g-text-3);
   text-align: right;
 }
 
-.of-asset-list .v-list-item:hover .v-list-item__title {
+.of-asset-list .v-list-item:hover .v-list-item-title {
   color: var(--g-text-1);
 }
 
@@ -1108,7 +1117,7 @@ async function placeOrderAction() {
   opacity: 1 !important;
 }
 
-.of-asset-list__current-item .v-list-item__title {
+.of-asset-list__current-item .v-list-item-title {
   color: var(--g-text-1) !important;
   font-weight: 600 !important;
 }

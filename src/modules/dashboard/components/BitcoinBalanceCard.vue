@@ -156,9 +156,9 @@ async function refreshBalance(): Promise<void> {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SYNC_BITCOIN,
       data: {},
-    });
-    if (!response.data.success) {
-      console.error('Failed to refresh Bitcoin wallet:', response.data.error);
+    }) as { data?: { success?: boolean; error?: string } };
+    if (!response.data?.success) {
+      console.error('Failed to refresh Bitcoin wallet:', response.data?.error);
     }
   } catch (error) {
     console.error('Failed to refresh Bitcoin wallet:', error);

@@ -16,7 +16,7 @@
   registration lifetime is exactly the dock's.
 -->
 <template>
-  <v-dialog :value="prompt.isOpen.value" max-width="360" @input="onDialogInput">
+  <v-dialog :model-value="prompt.isOpen.value" max-width="360" @update:model-value="onDialogInput">
     <div class="support-auth">
       <div class="support-auth__head">
         <span class="support-auth__title">{{ $t('support.auth.title') }}</span>

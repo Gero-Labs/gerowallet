@@ -12,7 +12,7 @@
     </div>
 
     <!-- Swap Card -->
-    <v-card outlined class="liquid-glass swap-card mb-3" style="border-radius: var(--g-r-sheet) !important;">
+    <v-card variant="outlined" class="liquid-glass swap-card mb-3" style="border-radius: var(--g-r-sheet) !important;">
       <div class="pa-4">
 
         <!-- FROM section -->
@@ -24,10 +24,10 @@
             <v-select
               v-model="fromAsset"
               :items="assetOptions"
-              item-text="label"
+              item-title="label"
               item-value="value"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               hide-details
               class="asset-select"
               attach
@@ -35,41 +35,41 @@
               <template #selection="{ item }">
                 <div class="d-flex align-center" style="gap: 6px;">
                   <div class="asset-icon" :style="{ background: item.color + '20', color: item.color }">
-                    <v-icon x-small :color="item.color">{{ item.icon }}</v-icon>
+                    <v-icon size="x-small" :color="item.color">{{ item.icon }}</v-icon>
                   </div>
                   <span class="font-weight-medium">{{ item.ticker }}</span>
                 </div>
               </template>
-              <template #item="{ item }">
+              <template #item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
                 <div class="d-flex align-center pa-1" style="gap: 8px; width: 100%;">
                   <div class="asset-icon" :style="{ background: item.color + '20', color: item.color }">
-                    <v-icon x-small :color="item.color">{{ item.icon }}</v-icon>
+                    <v-icon size="x-small" :color="item.color">{{ item.icon }}</v-icon>
                   </div>
                   <div>
                     <div class="font-weight-medium" style="font-size: 13px;">{{ item.ticker }}</div>
                     <div class="text-caption text--secondary">{{ item.name }}</div>
                   </div>
                 </div>
-              </template>
+              </template></v-list-item></template>
             </v-select>
             <v-text-field
               v-model="fromAmount"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               type="number"
               :min="0"
               :step="0.0001"
               placeholder="0.00"
               hide-details
               class="flex-grow-1 amount-input"
-              @input="debouncedGetQuote"
+              @update:model-value="debouncedGetQuote"
             />
           </div>
         </div>
 
         <!-- Swap direction button -->
         <div class="swap-arrow-wrapper">
-          <v-btn icon small class="swap-arrow-btn" @click="swapAssets">
+          <v-btn icon variant="text" size="small" class="swap-arrow-btn" @click="swapAssets">
             <v-icon color="var(--g-accent)" size="18">mdi-swap-vertical</v-icon>
           </v-btn>
         </div>
@@ -86,10 +86,10 @@
             <v-select
               v-model="toAsset"
               :items="assetOptions"
-              item-text="label"
+              item-title="label"
               item-value="value"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               hide-details
               class="asset-select"
               attach
@@ -97,28 +97,28 @@
               <template #selection="{ item }">
                 <div class="d-flex align-center" style="gap: 6px;">
                   <div class="asset-icon" :style="{ background: item.color + '20', color: item.color }">
-                    <v-icon x-small :color="item.color">{{ item.icon }}</v-icon>
+                    <v-icon size="x-small" :color="item.color">{{ item.icon }}</v-icon>
                   </div>
                   <span class="font-weight-medium">{{ item.ticker }}</span>
                 </div>
               </template>
-              <template #item="{ item }">
+              <template #item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
                 <div class="d-flex align-center pa-1" style="gap: 8px; width: 100%;">
                   <div class="asset-icon" :style="{ background: item.color + '20', color: item.color }">
-                    <v-icon x-small :color="item.color">{{ item.icon }}</v-icon>
+                    <v-icon size="x-small" :color="item.color">{{ item.icon }}</v-icon>
                   </div>
                   <div>
                     <div class="font-weight-medium" style="font-size: 13px;">{{ item.ticker }}</div>
                     <div class="text-caption text--secondary">{{ item.name }}</div>
                   </div>
                 </div>
-              </template>
+              </template></v-list-item></template>
             </v-select>
             <v-text-field
-              :value="expectedOut"
+              :model-value="expectedOut"
               readonly
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               placeholder="0.00"
               hide-details
               :loading="quoteLoading"
@@ -132,14 +132,14 @@
           <div class="t-label mb-2">{{ $t('thorchain.destinationAddress') }}</div>
           <v-text-field
             v-model="destinationAddress"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             :placeholder="$t('thorchain.destinationPlaceholder')"
             hide-details="auto"
             :rules="[addressRule]"
           >
             <template #prepend-inner>
-              <v-icon small color="grey" class="mr-1">mdi-wallet-outline</v-icon>
+              <v-icon size="small" color="grey" class="mr-1">mdi-wallet-outline</v-icon>
             </template>
           </v-text-field>
         </div>
@@ -150,9 +150,9 @@
             <div class="quote-row d-flex justify-space-between align-center py-1">
               <span class="text-caption text--secondary">{{ $t('thorchain.slippage') }}</span>
               <v-chip
-                x-small
+                size="x-small"
                 :color="quote.fees.slippage_bps > 100 ? 'warning' : 'success'"
-                outlined
+                variant="outlined"
                 style="height: 18px; font-size: 11px;"
               >
                 {{ (quote.fees.slippage_bps / 100).toFixed(2) }}%
@@ -165,7 +165,7 @@
             <div class="quote-row d-flex justify-space-between align-center py-1">
               <span class="text-caption text--secondary">{{ $t('thorchain.estimatedTime') }}</span>
               <span class="text-caption font-weight-medium">
-                <v-icon x-small color="grey" class="mr-1">mdi-clock-outline</v-icon>
+                <v-icon size="x-small" color="grey" class="mr-1">mdi-clock-outline</v-icon>
                 ~{{ Math.round(quote.total_swap_seconds / 60) }} min
               </span>
             </div>
@@ -180,60 +180,60 @@
         </transition>
 
         <!-- Warnings & errors -->
-        <v-alert v-if="quote?.warning" type="warning" outlined dense class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
+        <v-alert v-if="quote?.warning" type="warning" variant="outlined" density="compact" class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
           {{ quote.warning }}
         </v-alert>
-        <v-alert v-if="quoteError" type="error" outlined dense class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
+        <v-alert v-if="quoteError" type="error" variant="outlined" density="compact" class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
           {{ quoteError }}
         </v-alert>
 
         <!-- Action button -->
         <v-btn
           color="var(--g-accent)"
-          dark
+          theme="dark"
           block
-          large
+          size="large"
           :disabled="!isValid || !quote"
           @click="initiateSwap"
           style="border-radius: var(--g-r-control) !important;"
         >
-          <v-icon left>mdi-swap-horizontal</v-icon>
+          <v-icon start>mdi-swap-horizontal</v-icon>
           {{ $t('thorchain.initiateSwap') }}
         </v-btn>
       </div>
     </v-card>
 
     <!-- Info note -->
-    <v-alert type="info" outlined dense class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
+    <v-alert type="info" variant="outlined" density="compact" class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
       {{ $t('thorchain.infoNote') }}
     </v-alert>
 
     <!-- How it works -->
-    <v-card outlined class="liquid-glass" style="border-radius: var(--g-r-card) !important;">
+    <v-card variant="outlined" class="liquid-glass" style="border-radius: var(--g-r-card) !important;">
       <v-expansion-panels flat>
         <v-expansion-panel style="background: transparent !important;">
-          <v-expansion-panel-header class="font-weight-medium" style="font-size: 13px;">
+          <v-expansion-panel-title class="font-weight-medium" style="font-size: 13px;">
             <div class="d-flex align-center" style="gap: 8px;">
-              <v-icon small color="var(--g-accent)">mdi-information-outline</v-icon>
+              <v-icon size="small" color="var(--g-accent)">mdi-information-outline</v-icon>
               {{ $t('thorchain.howItWorks') }}
             </div>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content>
-            <v-timeline dense clipped>
-              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <v-timeline density="compact" clipped>
+              <v-timeline-item size="x-small" color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step1') }}</span>
               </v-timeline-item>
-              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
+              <v-timeline-item size="x-small" color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step2') }}</span>
               </v-timeline-item>
-              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
+              <v-timeline-item size="x-small" color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step3') }}</span>
               </v-timeline-item>
-              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
+              <v-timeline-item size="x-small" color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step4') }}</span>
               </v-timeline-item>
             </v-timeline>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
     </v-card>
@@ -247,7 +247,7 @@
         </div>
         <v-divider style="opacity: 0.12;" />
         <div class="pa-4">
-          <v-alert type="warning" outlined dense class="text-caption mb-4" style="border-radius: var(--g-r-control) !important;">
+          <v-alert type="warning" variant="outlined" density="compact" class="text-caption mb-4" style="border-radius: var(--g-r-control) !important;">
             {{ $t('thorchain.sendExactAmount') }}
           </v-alert>
 
@@ -271,9 +271,9 @@
           </div>
         </div>
         <v-card-actions class="pb-4 px-4">
-          <v-btn outlined @click="confirmDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn variant="outlined" @click="confirmDialog = false">{{ $t('common.cancel') }}</v-btn>
           <v-spacer />
-          <v-btn color="var(--g-accent)" dark @click="executeSwap">
+          <v-btn color="var(--g-accent)" theme="dark" @click="executeSwap">
             {{ $t('thorchain.confirmSwap') }}
           </v-btn>
         </v-card-actions>
@@ -284,6 +284,7 @@
 
 <script setup lang="ts">
 import { ref, computed, toRefs } from 'vue';
+import { isAxiosError } from 'axios';
 import thorchainApi, { type ThorQuote } from '@/api/thorchain-api';
 import { walletStore } from '@/stores/walletStore';
 
@@ -356,8 +357,8 @@ async function fetchQuote() {
       amountInSats,
       destinationAddress.value,
     );
-  } catch (e: any) {
-    quoteError.value = e?.response?.data?.error || 'Failed to get quote';
+  } catch (e: unknown) {
+    quoteError.value = isAxiosError<{ error?: string }>(e) ? e.response?.data?.error || 'Failed to get quote' : 'Failed to get quote';
   } finally {
     quoteLoading.value = false;
   }
@@ -456,7 +457,7 @@ function executeSwap() {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-.fade-enter,
+.fade-enter-from,
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);

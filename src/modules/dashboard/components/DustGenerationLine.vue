@@ -11,18 +11,18 @@
 
       <v-btn
         v-if="canSetUp"
-        text
-        x-small
+        variant="text"
+        size="x-small"
         class="dust-line-cta"
         @click.stop="$emit('setup')"
       >
         {{ ctaLabel }}
-        <v-icon x-small right>mdi-chevron-right</v-icon>
+        <v-icon size="x-small" end>mdi-chevron-right</v-icon>
       </v-btn>
     </div>
 
-    <v-btn icon x-small class="dust-line-close" :title="t('common.remove')" @click.stop="$emit('dismiss')">
-      <v-icon x-small>mdi-close</v-icon>
+    <v-btn icon variant="text" size="x-small" class="dust-line-close" :title="t('common.remove')" @click.stop="$emit('dismiss')">
+      <v-icon size="x-small">mdi-close</v-icon>
     </v-btn>
   </div>
 </template>

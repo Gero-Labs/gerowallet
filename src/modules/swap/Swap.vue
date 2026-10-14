@@ -1,12 +1,12 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
-    <v-layout>
+    <div class="d-flex flex-wrap flex-grow-1">
       <v-row>
         <v-col cols="12" xl="8" lg="8">
-          <v-card flat outlined class="liquid-glass">
+          <v-card flat variant="outlined" class="liquid-glass">
             <v-card-title>{{ $t('swap.swap') }}</v-card-title>
             <v-card-text class="text-center justify-center">
               <GeroSwapEmbed context="page" />
@@ -14,16 +14,16 @@
           </v-card>
         </v-col>
         <v-col cols="12" xl="4" lg="4">
-          <v-card flat outlined class="fill-height liquid-glass">
+          <v-card flat variant="outlined" class="fill-height liquid-glass">
             <v-card-title>{{ $t('swap.pendingOrders') }}</v-card-title>
           </v-card>
         </v-col>
       </v-row>
-    </v-layout>
+    </div>
         </v-card>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 <script setup lang="ts">
 import GeroSwapEmbed from '@/modules/swap/components/GeroSwapEmbed.vue';

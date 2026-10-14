@@ -37,7 +37,7 @@
       :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -93,6 +93,7 @@ const {
   keystoneType,
   keystoneCbor,
   handleSign,
+  captureAuthorization,
   resetState,
   handlePassKeyError,
   handlePassKeyAuthError,
@@ -101,6 +102,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: () => !props.disabled,
   tx: txRef,
   successMessageKey: 'notifications.transactionSubmitted',
   onSuccess: (txId: string) => emit('submitted', txId),
@@ -116,11 +118,15 @@ const canConfirm = computed(() =>
 watch(busy, value => emit('busy', value));
 
 async function build(): Promise<boolean> {
+  const current = captureAuthorization();
   preparing.value = true;
   try {
-    tx.value = await props.prepare();
+    const prepared = await props.prepare();
+    if (!current()) return false;
+    tx.value = prepared;
     return true;
   } catch (error: unknown) {
+    if (!current()) return false;
     snackbar.setError(error instanceof Error && error.message ? error.message : t('errors.buildTransactionFailed'));
     return false;
   } finally {
@@ -130,13 +136,16 @@ async function build(): Promise<boolean> {
 
 async function confirm(): Promise<void> {
   if (!canConfirm.value) return;
+  const approvedPassword = spendingPassword.value;
   if (!isSubmit.value && !(await build())) return;
+  spendingPassword.value = approvedPassword;
   await handleSign();
 }
 
 async function onPassKeySuccess(pk: Uint8Array): Promise<void> {
+  if (busy.value || props.disabled) { pk.fill(0); return; }
+  if (!isSubmit.value && !(await build())) { pk.fill(0); return; }
   privateKeyBytes.value = pk;
-  if (!isSubmit.value && !(await build())) return;
   await handleSign();
 }
 

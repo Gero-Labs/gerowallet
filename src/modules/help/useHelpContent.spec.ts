@@ -1,4 +1,5 @@
-import Vue, { nextTick, ref } from 'vue';
+import * as Vue from 'vue';
+import { nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const api = vi.hoisted(() => ({ home: vi.fn(), article: vi.fn(), page: vi.fn() }));
@@ -9,7 +10,7 @@ const emptyHome = { topics: [], publicFeaturedArticles: [], walletFeaturedArticl
 function setup(initial: Partial<HelpRequest> = {}) {
   const request = ref<HelpRequest>({ view: 'search', locale: 'en-US', chain: 'all', topic: '', slug: '', q: 'proof', basic: false, ...initial });
   let state!: ReturnType<typeof useHelpContent>;
-  const wrapper = mount(Vue.extend({ setup() { state = useHelpContent(request); return {}; }, render: h => h('div') }));
+  const wrapper = mount(Vue.defineComponent({ setup() { state = useHelpContent(request); return {}; }, render: () => Vue.h('div') }));
   return { request, state, wrapper };
 }
 beforeEach(() => { vi.resetAllMocks(); api.home.mockResolvedValue(emptyHome); });
@@ -23,21 +24,21 @@ describe('published Help content requests', () => {
     request.value = { ...request.value, q: 'dust' }; await flush(); await flush();
     expect(signal.aborted).toBe(true); expect(state.results.value[0].id).toBe('new');
     old({ results: [{ id: 'old' }], total: 1, nextCursor: null, sources: [] }); await flush();
-    expect(state.results.value[0].id).toBe('new'); wrapper.destroy();
+    expect(state.results.value[0].id).toBe('new'); wrapper.unmount();
   });
   it('distinguishes authoritative 404/empty results from service failure', async () => {
     api.article.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('offline'));
     const { request, state, wrapper } = setup({ view: 'article', slug: 'withdrawn' }); await flush();
     expect(state.resolved.value).toBe(true); expect(state.failed.value).toBe(false); expect(state.article.value).toBeNull();
     request.value = { ...request.value, slug: 'another' }; await flush();
-    expect(state.resolved.value).toBe(false); expect(state.failed.value).toBe(true); wrapper.destroy();
+    expect(state.resolved.value).toBe(false); expect(state.failed.value).toBe(true); wrapper.unmount();
   });
   it('retains the reader across layout remount and removes withdrawn cached articles', async () => {
     const response = { article: { id: 'cached-guide' }, resolvedLocale: 'en-US', isLocaleFallback: false, sources: [] };
     api.article.mockResolvedValueOnce(response).mockImplementationOnce(() => new Promise(() => {})).mockResolvedValueOnce(null);
-    const first = setup({ view: 'article', slug: 'cached-guide' }); await flush(); first.wrapper.destroy();
+    const first = setup({ view: 'article', slug: 'cached-guide' }); await flush(); first.wrapper.unmount();
     const second = setup({ view: 'article', slug: 'cached-guide' }); expect(second.state.article.value).toEqual(response);
-    await second.state.retry(); expect(second.state.article.value).toBeNull(); second.wrapper.destroy();
+    await second.state.retry(); expect(second.state.article.value).toBeNull(); second.wrapper.unmount();
   });
   it('restarts pagination after a snapshot change and retains URL filters', async () => {
     api.page.mockResolvedValueOnce({ results: [{ id: 'old' }], total: 2, nextCursor: 'old-cursor', sources: [] })
@@ -46,10 +47,10 @@ describe('published Help content requests', () => {
     await state.loadMore();
     expect(state.results.value).toEqual([{ id: 'fresh' }]);
     expect(api.page.mock.calls[2][0]).toMatchObject({ chain: 'midnight', locale: 'de-DE', q: 'proof', cursor: undefined });
-    wrapper.destroy();
+    wrapper.unmount();
   });
   it('explicit basic answers make no content requests', async () => {
     const { wrapper } = setup({ basic: true, view: 'article', slug: 'backup' }); await flush();
-    expect(api.home).not.toHaveBeenCalled(); expect(api.article).not.toHaveBeenCalled(); expect(api.page).not.toHaveBeenCalled(); wrapper.destroy();
+    expect(api.home).not.toHaveBeenCalled(); expect(api.article).not.toHaveBeenCalled(); expect(api.page).not.toHaveBeenCalled(); wrapper.unmount();
   });
 });

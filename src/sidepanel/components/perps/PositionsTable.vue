@@ -66,9 +66,9 @@
               <span class="pt-price-value">${{ formatPrice(row.markPrice) }}</span>
             </div>
             <div class="pt-price-line">
-              <v-tooltip top max-width="240">
-                <template #activator="{ on, attrs }">
-                  <span class="pt-price-label pt-price-label--hint" v-bind="attrs" v-on="on">
+              <v-tooltip location="top"  max-width="240">
+                <template #activator="{ props: activatorProps }">
+                  <span class="pt-price-label pt-price-label--hint" v-bind="activatorProps" >
                     {{ $t('perps.position.liqPrice') }}
                   </span>
                 </template>
@@ -112,8 +112,8 @@
         <!-- Footer: Close button -->
         <div class="pt-footer-row">
           <v-btn
-            depressed
-            x-small
+            variant="flat"
+            size="x-small"
             class="pt-close-btn"
             @click.stop="$emit('close-position', row.pos)"
           >
@@ -139,7 +139,7 @@ import {
 import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
 import { strikeMarketApi } from '@/api/strike-v2.market';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   positions: Position[];
   loading?: boolean;
   /** Optional: account info for cross-margin liquidation calc (wallet balance). */
@@ -665,7 +665,7 @@ function liqClass(row: Row): string {
   max-height: 200px;
 }
 
-.pt-expand-enter,
+.pt-expand-enter-from,
 .pt-expand-leave-to {
   opacity: 0;
   max-height: 0;

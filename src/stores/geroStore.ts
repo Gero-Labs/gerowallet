@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import {
   deleteWallet,
   createNewWallet,
@@ -22,7 +22,7 @@ export interface GeroStore {
   config: any;
 }
 
-export const geroStore: GeroStore =  Vue.observable<GeroStore>({
+export const geroStore: GeroStore =  reactive<GeroStore>({
   wallets: {},
   network: networks[0],
   config: {
@@ -338,9 +338,10 @@ export default {
 
     if (wallet.type === WalletType.Normal) {
       try {
+        if (!wallet.encryptedPrivateKey) throw new Error('Encrypted private key not found');
         // Decrypts with the current password (throws on a wrong one) and seals
         // every password secret under the new one; see passwordRotation.ts.
-        const rotation = await prepareSpendingPasswordRotation(wallet, currentPassword, newPassword);
+        const rotation = await prepareSpendingPasswordRotation({ ...wallet, encryptedPrivateKey: wallet.encryptedPrivateKey }, currentPassword, newPassword);
 
         // Update database
         await dbUpdatePrivateKeyAndMnemonic(walletId, rotation.encryptedPrivateKey, rotation.encryptedMnemonic);

@@ -113,6 +113,16 @@ export function formatSignedChange(change: number): string {
   return `${change > 0 ? '▲' : '▼'} ${formatChange(change)}`;
 }
 
+/**
+ * The 'YYYY-MM-DD' day a v-date-picker selection stands for. Vuetify 4 emits a
+ * local-midnight Date; Vuetify 2 emitted this string, which date filters expect.
+ */
+export function toPickerDay(value: Date | string | null): string | null {
+  if (!(value instanceof Date)) return value;
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
 /** Return a color string for positive/negative/zero change. Canon token values. */
 export function changeColor(change: number): string {
   if (change === 0) return '#7A8088'; // --g-text-3 (was #A3A3A3)

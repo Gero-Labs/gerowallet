@@ -59,7 +59,7 @@
       <div v-if="summary.collateralCount > 0" class="tx-intent-row">
         <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-lock-outline</v-icon>
         <div class="tx-intent-text">
-          <span class="white--text text-caption">{{ $tc('signTx.reservesCollateral', summary.collateralCount, { count: summary.collateralCount }) }}</span>
+          <span class="white--text text-caption">{{ $t('signTx.reservesCollateral', { count: summary.collateralCount }, summary.collateralCount) }}</span>
           <div v-if="summary.totalCollateralAda" class="grey--text text-caption">{{ $t('signTx.totalCollateral', { amount: summary.totalCollateralAda }) }}</div>
           <div v-if="summary.collateralReturn" class="text-caption" :class="summary.collateralReturn.isOwn ? 'grey--text' : 'error--text'">
             {{ $t('signTx.collateralReturnTo', { amount: summary.collateralReturn.ada, address: truncate(summary.collateralReturn.address) }) }}
@@ -69,13 +69,13 @@
 
       <div v-if="summary.referenceInputCount > 0" class="tx-intent-row">
         <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-link-variant</v-icon>
-        <span class="white--text text-caption">{{ $tc('signTx.referenceInputs', summary.referenceInputCount, { count: summary.referenceInputCount }) }}</span>
+        <span class="white--text text-caption">{{ $t('signTx.referenceInputs', { count: summary.referenceInputCount }, summary.referenceInputCount) }}</span>
       </div>
 
       <div v-if="summary.requiredSigners.length > 0" class="tx-intent-row">
         <v-icon size="14" :color="foreignSignerCount > 0 ? 'warning' : 'var(--g-text-3)'" class="mr-1">mdi-key-chain-variant</v-icon>
         <div class="tx-intent-text">
-          <span class="white--text text-caption">{{ $tc('signTx.requiredSigners', summary.requiredSigners.length, { count: summary.requiredSigners.length }) }}</span>
+          <span class="white--text text-caption">{{ $t('signTx.requiredSigners', { count: summary.requiredSigners.length }, summary.requiredSigners.length) }}</span>
           <span v-if="foreignSignerCount > 0" class="warning--text text-caption ml-1">({{ $t('signTx.requiredSignersForeign', { count: foreignSignerCount }) }})</span>
         </div>
       </div>
@@ -100,14 +100,14 @@
         <div class="tx-network-title">{{ $t('signTx.networkMismatchTitle') }}</div>
         <div class="tx-network-body">{{ $t('signTx.networkMismatchBody') }}</div>
         <v-checkbox
-          :input-value="networkAck"
+          :model-value="networkAck"
           color="error"
           hide-details
-          dark
-          dense
+          theme="dark"
+          density="compact"
           class="mt-2"
           :label="$t('signTx.networkMismatchAck')"
-          @change="emit('update:networkAck', !!$event)"
+          @update:model-value="emit('update:networkAck', !!$event)"
         />
       </div>
     </div>

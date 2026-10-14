@@ -15,7 +15,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useTheme } from 'vuetify';
 
 interface Dot {
   x: number;
@@ -25,27 +26,28 @@ interface Dot {
 }
 
 interface Props {
-  value?: number[];
+  modelValue?: number[];
   size?: number;
   dotRadius?: number;
   lineWidth?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  value: () => [],
+  modelValue: () => [],
   size: 4,
   dotRadius: 12,
   lineWidth: 5
 });
 
 const emit = defineEmits<{
-  (e: 'input', value: number[]): void;
+  (e: 'update:modelValue', value: number[]): void;
   (e: 'complete', value: number[]): void;
 }>();
 
 // Get Vuetify theme primary color
-const instance = getCurrentInstance();
-const primaryColor = String(instance?.proxy?.$vuetify?.theme?.currentTheme?.primary || '#1976D2');
+const theme = useTheme();
+const primaryColor = computed(() => String(theme.current.value.colors['primary']));
+watch(primaryColor, () => draw());
 
 // Template refs
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -124,7 +126,7 @@ function draw() {
       // Draw outer perimeter circle (primary color)
       ctx.beginPath();
       ctx.arc(dot.x, dot.y, props.dotRadius, 0, 2 * Math.PI);
-      ctx.strokeStyle = primaryColor;
+      ctx.strokeStyle = primaryColor.value;
       ctx.lineWidth = 3;
       ctx.stroke();
     } else {
@@ -152,7 +154,7 @@ function draw() {
       ctx.lineTo(currentX.value, currentY.value);
     }
 
-    ctx.strokeStyle = primaryColor;
+    ctx.strokeStyle = primaryColor.value;
     ctx.lineWidth = props.lineWidth;
     ctx.stroke();
   }
@@ -231,7 +233,7 @@ function handleEnd(event: MouseEvent | TouchEvent) {
   drawing.value = false;
 
   if (pattern.value.length >= 4) {
-    emit('input', pattern.value);
+    emit('update:modelValue', pattern.value);
     emit('complete', pattern.value);
   }
 

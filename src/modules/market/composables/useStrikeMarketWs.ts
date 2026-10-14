@@ -29,7 +29,7 @@ import { ref } from 'vue';
 import { debugLog } from '@/utils/debug';
 
 const WS_URL =
-  (import.meta.env.VITE_STRIKE_WS_URL as string | undefined) ??
+  (import.meta.env['VITE_STRIKE_WS_URL'] as string | undefined) ??
   'wss://api.strikefinance.org/ws/price';
 
 const RECONNECT_BASE_MS = 5_000;
@@ -68,13 +68,13 @@ function send(msg: Record<string, unknown>): void {
 
 function sendSubscribe(channel: string, symbol?: string): void {
   const msg: Record<string, unknown> = { method: 'subscribe', channel, id: nextId() };
-  if (symbol) msg.symbol = symbol;
+  if (symbol) msg['symbol'] = symbol;
   send(msg);
 }
 
 function sendUnsubscribe(channel: string, symbol?: string): void {
   const msg: Record<string, unknown> = { method: 'unsubscribe', channel, id: nextId() };
-  if (symbol) msg.symbol = symbol;
+  if (symbol) msg['symbol'] = symbol;
   send(msg);
 }
 
@@ -107,7 +107,7 @@ function handleMessage(event: MessageEvent): void {
   }
 
   // Server pong — ignore
-  if (typeof data === 'object' && data !== null && (data as Record<string, unknown>).method === 'pong') return;
+  if (typeof data === 'object' && data !== null && (data as Record<string, unknown>)['method'] === 'pong') return;
   // Subscribe/unsubscribe ack — ignore
   if (typeof data === 'object' && data !== null && 'result' in (data as Record<string, unknown>)) return;
 
@@ -118,7 +118,7 @@ function handleMessage(event: MessageEvent): void {
       routeEvent(item as Record<string, unknown>);
     }
     // Also fire the array channel callbacks with the full array
-    const eventType = (data[0] as Record<string, unknown>)?.e as string;
+    const eventType = (data[0] as Record<string, unknown>)?.['e'] as string;
     if (eventType === 'markPriceUpdate') {
       fireCallbacks('!markprice@arr', undefined, data);
     } else if (eventType === '24hrMiniTicker') {
@@ -134,8 +134,8 @@ function handleMessage(event: MessageEvent): void {
 }
 
 function routeEvent(event: Record<string, unknown>): void {
-  const eventType = event.e as string;
-  const symbol = event.s as string | undefined;
+  const eventType = event['e'] as string;
+  const symbol = event['s'] as string | undefined;
 
   if (!eventType) return;
 
@@ -147,7 +147,7 @@ function routeEvent(event: Record<string, unknown>): void {
     case 'depthUpdate': channel = 'depth'; break;
     case 'trade': channel = 'trade'; break;
     case 'kline': {
-      const interval = (event.k as Record<string, unknown>)?.i as string;
+      const interval = (event['k'] as Record<string, unknown>)?.['i'] as string;
       if (interval) channel = `kline_${interval}`;
       break;
     }

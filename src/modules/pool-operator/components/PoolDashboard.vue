@@ -28,7 +28,7 @@
               </div>
               <div class="hero-id" @click="copyPoolId">
                 <span>{{ truncatePoolId }}</span>
-                <v-icon x-small color="var(--g-text-3)" class="ml-1">mdi-content-copy</v-icon>
+                <v-icon size="x-small" color="var(--g-text-3)" class="ml-1">mdi-content-copy</v-icon>
               </div>
             </div>
           </div>
@@ -38,17 +38,17 @@
               <span class="status-dot" />
               <span>{{ statusText }}</span>
             </div>
-            <v-tooltip v-if="isRegistered" bottom content-class="custom-tooltip">
-              <template v-slot:activator="{ on }">
-                <v-btn icon x-small class="hero-icon-btn update-btn" v-on="on" @click="$emit('update')">
+            <v-tooltip location="bottom" v-if="isRegistered"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn v-bind="activatorProps" icon variant="text" size="x-small" class="hero-icon-btn update-btn"  @click="$emit('update')">
                   <v-icon size="16" color="var(--g-accent)">mdi-pencil-outline</v-icon>
                 </v-btn>
               </template>
               <span>{{ $t('poolOperator.updatePool') }}</span>
             </v-tooltip>
-            <v-tooltip v-if="isRegistered && !isRetiring" bottom content-class="custom-tooltip">
-              <template v-slot:activator="{ on }">
-                <v-btn icon x-small class="hero-icon-btn retire-btn" v-on="on" @click="$emit('retire')">
+            <v-tooltip location="bottom" v-if="isRegistered && !isRetiring"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn v-bind="activatorProps" icon variant="text" size="x-small" class="hero-icon-btn retire-btn"  @click="$emit('retire')">
                   <v-icon size="16" color="error">mdi-power</v-icon>
                 </v-btn>
               </template>
@@ -154,22 +154,22 @@
         <!-- Live Metrics Bar (from API) -->
         <div v-if="isRegistered && poolInfo" class="hero-metrics">
           <div class="hm-item">
-            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-chart-bar</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-chart-bar</v-icon>
             <span class="hm-value">{{ formatAdaShort(poolInfo.live_stake) }}</span>
             <span class="hm-label">{{ $t('poolOperator.liveStake') }}</span>
           </div>
           <div class="hm-item">
-            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-account-group</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-account-group</v-icon>
             <span class="hm-value">{{ (poolInfo.live_delegators || 0).toLocaleString() }}</span>
             <span class="hm-label">{{ $t('poolOperator.delegators') }}</span>
           </div>
           <div class="hm-item">
-            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-cube-outline</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-cube-outline</v-icon>
             <span class="hm-value">{{ (poolInfo.block_count || 0).toLocaleString() }}</span>
             <span class="hm-label">{{ $t('poolOperator.blocksProduced') }}</span>
           </div>
           <div class="hm-item">
-            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-trending-up</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-trending-up</v-icon>
             <span class="hm-value">{{ (poolInfo.ros || 0).toFixed(2) }}%</span>
             <span class="hm-label">{{ $t('poolOperator.ros') }}</span>
           </div>
@@ -183,8 +183,8 @@
               <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-server-network</v-icon>
               {{ $t('poolOperator.infrastructure') }}
             </span>
-            <v-btn text x-small class="infra-add-btn" @click="$emit('add-node')">
-              <v-icon x-small class="mr-1">mdi-plus</v-icon>
+            <v-btn variant="text" size="x-small" class="infra-add-btn" @click="$emit('add-node')">
+              <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
               {{ $t('poolOperator.addNode') }}
             </v-btn>
           </div>
@@ -204,12 +204,12 @@
                 <span class="ssc-text">{{ step.title }}</span>
                 <div v-if="step.code" class="ssc-code" @click="copyText(step.code)">
                   <code>{{ step.code }}</code>
-                  <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+                  <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
                 </div>
               </div>
             </div>
-            <v-btn color="var(--g-accent)" block small class="mt-3 black--text font-weight-bold" style="text-transform: none; border-radius: var(--g-r-control)" @click="$emit('add-node')">
-              <v-icon small left>mdi-plus</v-icon>
+            <v-btn color="var(--g-accent)" block size="small" class="mt-3 black--text font-weight-bold" style="text-transform: none; border-radius: var(--g-r-control)" @click="$emit('add-node')">
+              <v-icon size="small" start>mdi-plus</v-icon>
               {{ $t('poolOperator.addFirstNode') }}
             </v-btn>
           </div>
@@ -226,13 +226,13 @@
             </div>
             <v-btn
               v-if="bpNode.data.kesRemaining < 50"
-              x-small
+              size="x-small"
               :color="bpNode.data.kesRemaining < 20 ? 'error' : 'warning'"
               class="black--text"
               style="text-transform: none; font-weight: 700; border-radius: var(--g-r-control); letter-spacing: normal"
               @click="openKesDialog()"
             >
-              <v-icon x-small left>mdi-key-change</v-icon>
+              <v-icon size="x-small" start>mdi-key-change</v-icon>
               {{ $t('poolOperator.rotateNow') }}
             </v-btn>
           </div>
@@ -250,11 +250,11 @@
                 <span class="nd-name">{{ node.name }}</span>
                 <span v-if="node.connected" class="nd-dot" />
                 <span v-else class="nd-offline-label">{{ $t('poolOperator.offline') }}</span>
-                <v-btn icon x-small class="nd-action" @click.stop="$emit('edit-node', node)">
-                  <v-icon x-small color="var(--g-text-3)">mdi-pencil</v-icon>
+                <v-btn icon variant="text" size="x-small" class="nd-action" @click.stop="$emit('edit-node', node)">
+                  <v-icon size="x-small" color="var(--g-text-3)">mdi-pencil</v-icon>
                 </v-btn>
-                <v-btn icon x-small class="nd-action" @click.stop="$emit('remove-node', node.id)">
-                  <v-icon x-small color="var(--g-text-3)">mdi-close</v-icon>
+                <v-btn icon variant="text" size="x-small" class="nd-action" @click.stop="$emit('remove-node', node.id)">
+                  <v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon>
                 </v-btn>
               </div>
 
@@ -313,7 +313,7 @@
 
               <!-- Update alerts -->
               <div v-if="nodeVersions[node.id]?.updates && Object.keys(nodeVersions[node.id].updates).length > 0" class="nd-update-alert">
-                <v-icon x-small color="warning" class="mr-1">mdi-arrow-up-circle</v-icon>
+                <v-icon size="x-small" color="warning" class="mr-1">mdi-arrow-up-circle</v-icon>
                 <span v-for="(upd, key) in nodeVersions[node.id].updates" :key="key">
                   {{ key === 'cardanoNode' ? 'Node' : key }} {{ upd.current }} → {{ upd.latest }}
                 </span>
@@ -336,7 +336,7 @@
             <v-icon color="warning" class="mr-2">mdi-key-change</v-icon>
             {{ $t('poolOperator.kesRotation') }}
             <v-spacer />
-            <v-btn icon small @click="showKesRotation = false"><v-icon small>mdi-close</v-icon></v-btn>
+            <v-btn icon variant="text" size="small" @click="showKesRotation = false"><v-icon size="small">mdi-close</v-icon></v-btn>
           </v-card-title>
           <v-card-text class="pt-4">
             <!-- Current Status -->
@@ -359,14 +359,14 @@
             <div class="mt-4" v-if="!kesRotateSuccess">
               <p class="kes-step-desc">{{ $t('poolOperator.remoteRotatePassKeyDescription') }}</p>
 
-              <v-alert v-if="kesRotateError" type="error" dense outlined class="mt-3" style="font-size: 13px">
+              <v-alert v-if="kesRotateError" type="error" density="compact" variant="outlined" class="mt-3" style="font-size: 13px">
                 {{ kesRotateError }}
               </v-alert>
 
               <!-- Rotation steps progress -->
               <div v-if="kesRotateSteps.length" class="rotate-steps mt-3">
                 <div v-for="(step, i) in kesRotateSteps" :key="i" class="rotate-step">
-                  <v-icon x-small color="success" class="mr-1">mdi-check</v-icon>
+                  <v-icon size="x-small" color="success" class="mr-1">mdi-check</v-icon>
                   <span>{{ step }}</span>
                 </div>
               </div>
@@ -381,9 +381,9 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn v-if="kesRotateSuccess" text @click="closeKesDialog">{{ $t('common.close') }}</v-btn>
+            <v-btn v-if="kesRotateSuccess" variant="text" @click="closeKesDialog">{{ $t('common.close') }}</v-btn>
             <template v-else>
-              <v-btn text @click="closeKesDialog">{{ $t('common.cancel') }}</v-btn>
+              <v-btn variant="text" @click="closeKesDialog">{{ $t('common.cancel') }}</v-btn>
               <v-btn
                 color="warning"
                 class="black--text"
@@ -391,7 +391,7 @@
                 :loading="kesRotating"
                 @click="rotateKesRemote"
               >
-                <v-icon left small>{{ coldKeyEncryption === 'prf' ? 'mdi-fingerprint' : 'mdi-key-change' }}</v-icon>
+                <v-icon start size="small">{{ coldKeyEncryption === 'prf' ? 'mdi-fingerprint' : 'mdi-key-change' }}</v-icon>
                 {{ $t('poolOperator.rotateNow') }}
               </v-btn>
             </template>
@@ -511,7 +511,7 @@ const currentNextCountdown = computed(() => {
 // Find connected nodes
 const bpNode = computed(() => poolOperatorStore.nodes.find(n => n.type === 'bp' && n.connected));
 const allNodes = computed(() => poolOperatorStore.nodes);
-const _connectedNodes = computed(() => poolOperatorStore.nodes.filter(n => n.connected && n.data));
+
 
 const setupSteps = [
   { title: t('poolOperator.step1Title'), code: 'curl -sSL https://raw.githubusercontent.com/Gero-Labs/gero-node-monitor/main/gero-node-monitor-server.py -o ~/gero-node-monitor-server.py' },
@@ -546,11 +546,7 @@ const kesDaysLeft = computed(() => {
   return `~${days} days`;
 });
 
-const _kesBarPct = computed(() => {
-  if (kesRemaining.value == null) return 0;
-  // Max KES periods = 62 (for standard config)
-  return Math.min((kesRemaining.value / 62) * 100, 100);
-});
+
 
 const kesColor = computed(() => {
   const r = kesRemaining.value;
@@ -576,21 +572,9 @@ const kesUrgencyClass = computed(() => {
   return 'kes-healthy';
 });
 
-const _bpNodeHost = computed(() => {
-  try {
-    return bpNode.value?.url ? new globalThis.URL(bpNode.value.url).hostname : 'your-node';
-  } catch {
-    return 'your-node';
-  }
-});
 
-const _kesBarClass = computed(() => {
-  const r = kesRemaining.value;
-  if (r == null) return '';
-  if (r < 20) return 'bar-critical';
-  if (r < 50) return 'bar-warning';
-  return 'bar-healthy';
-});
+
+
 
 const statusClass = computed(() => {
   if (isRetiring.value) return 'status--retiring';
@@ -727,10 +711,7 @@ function closeKesDialog() {
   kesRotateSuccess.value = false;
 }
 
-function _copyCmd(cmd: string) {
-  navigator.clipboard.writeText(cmd);
-  snackbar.fireSuccess(t('common.copied'));
-}
+
 
 async function refreshAfterRotation() {
   showKesRotation.value = false;

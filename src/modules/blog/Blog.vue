@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <div class="blog-page">
@@ -11,12 +11,11 @@
               v-model="search"
               clearable
               hide-details
-              solo
-              flat
-              dense
+              variant="solo"
+
+              density="compact"
               prepend-inner-icon="mdi-magnify"
               :label="$t('blog.search')"
-              outlined
             ></v-text-field>
           </div>
 
@@ -86,13 +85,13 @@
         </div>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useIntersectionObserver } from '@vueuse/core';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import { getBlogPosts, type BlogPost } from '@/api/blog.api';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';

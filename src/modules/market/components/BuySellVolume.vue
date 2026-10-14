@@ -2,9 +2,9 @@
   <div class="buy-sell-volume">
     <!-- Header -->
     <div class="d-flex align-center mb-2">
-      <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span class="text-caption text--secondary font-weight-medium" v-bind="attrs" v-on="on">
+      <v-tooltip location="bottom"  :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ props: activatorProps }">
+          <span class="text-caption text--secondary font-weight-medium" v-bind="activatorProps" >
             {{ $t('market.buySellVolume') }}
           </span>
         </template>

@@ -7,8 +7,8 @@
   >
     <v-carousel
       ref="carousel"
-      :value="modelValue"
-      @change="$emit('update:modelValue', $event)"
+      :model-value="modelValue"
+      @update:model-value="$emit('update:modelValue', $event)"
       :cycle="false"
       height="100%"
       hide-delimiter-background
@@ -97,7 +97,7 @@
       <slot name="progress-bar" :progress-value="progressValue">
         <v-progress-linear
           :key="progressKey"
-          :value="progressValue"
+          :model-value="progressValue"
           color="primary"
           height="3"
           class="carousel-progress-bar"

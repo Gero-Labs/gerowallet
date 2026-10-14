@@ -1,11 +1,11 @@
 <template>
-  <v-dialog v-model="modelValue" max-width="480" @input="$emit('update:modelValue', $event)">
+  <v-dialog :model-value="modelValue" max-width="480" @update:model-value="$emit('update:modelValue', $event)">
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon color="primary" class="mr-2">mdi-arrow-up-circle-outline</v-icon>
         {{ $t('gomining.withdrawEarnings') }}
         <v-spacer />
-        <v-btn icon @click="close">
+        <v-btn icon variant="text" @click="close">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -14,7 +14,7 @@
 
       <v-card-text class="pt-4">
         <!-- Balance info -->
-        <v-alert type="info" outlined dense class="mb-4">
+        <v-alert type="info" variant="outlined" density="compact" class="mb-4">
           <div class="d-flex justify-space-between">
             <span>{{ $t('gomining.availableBalance') }}</span>
             <span class="font-weight-bold">{{ formatBtc(balance?.btc ?? 0) }} BTC</span>
@@ -27,15 +27,15 @@
             {{ $t('gomining.destinationAddress') }}
           </div>
           <v-text-field
-            :value="btcAddress"
+            :model-value="btcAddress"
             readonly
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             hide-details
             class="monospace-field"
           >
             <template #prepend-inner>
-              <v-icon small color="success" class="mr-1">mdi-check-circle</v-icon>
+              <v-icon size="small" color="success" class="mr-1">mdi-check-circle</v-icon>
             </template>
           </v-text-field>
         </div>
@@ -47,8 +47,8 @@
           </div>
           <v-text-field
             v-model="amount"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             type="number"
             :min="0"
             :max="balance?.btc ?? 0"
@@ -57,10 +57,10 @@
             :rules="[amountRule]"
             :suffix="'BTC'"
           >
-            <template #append>
+            <template #append-inner>
               <v-btn
-                x-small
-                text
+                size="x-small"
+                variant="text"
                 color="primary"
                 @click="setMax"
               >
@@ -75,23 +75,23 @@
           <div class="text-caption text--secondary mb-2">{{ $t('gomining.withdrawalType') }}</div>
           <v-btn-toggle v-model="withdrawType" mandatory class="d-flex" style="gap: 8px;">
             <v-btn
-              small
-              outlined
+              size="small"
+              variant="outlined"
               value="fast"
               style="flex: 1; border-radius: 8px !important;"
               :color="withdrawType === 'fast' ? 'primary' : ''"
             >
-              <v-icon small left>mdi-lightning-bolt</v-icon>
+              <v-icon size="small" start>mdi-lightning-bolt</v-icon>
               {{ $t('gomining.fastWithdrawal') }}
             </v-btn>
             <v-btn
-              small
-              outlined
+              size="small"
+              variant="outlined"
               value="24h"
               style="flex: 1; border-radius: 8px !important;"
               :color="withdrawType === '24h' ? 'primary' : ''"
             >
-              <v-icon small left>mdi-clock-outline</v-icon>
+              <v-icon size="small" start>mdi-clock-outline</v-icon>
               {{ $t('gomining.standardWithdrawal') }}
             </v-btn>
           </v-btn-toggle>
@@ -115,7 +115,7 @@
       </v-card-text>
 
       <v-card-actions class="pb-4 px-4">
-        <v-btn outlined @click="close" :disabled="submitting">
+        <v-btn variant="outlined" @click="close" :disabled="submitting">
           {{ $t('common.cancel') }}
         </v-btn>
         <v-spacer />
@@ -125,7 +125,7 @@
           :disabled="!isValid || submitting"
           @click="submit"
         >
-          <v-icon left small>mdi-arrow-up-circle-outline</v-icon>
+          <v-icon start size="small">mdi-arrow-up-circle-outline</v-icon>
           {{ $t('gomining.confirmWithdraw') }}
         </v-btn>
       </v-card-actions>

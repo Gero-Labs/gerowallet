@@ -50,6 +50,7 @@ class StoreMessagingService {
   private reconnectDelay = 1000; // Start with 1 second
   private reconnectTimeouts = new Set<NodeJS.Timeout>(); // Track reconnect timeouts
   private chunkBuffers = new Map<string, ChunkBuffer>();
+  private destroyed = false;
 
   constructor() {
     // Auto-initialize on construction - don't await to avoid blocking
@@ -84,6 +85,7 @@ class StoreMessagingService {
    * Establish connection to background script
    */
   private async connect(): Promise<void> {
+    if (this.destroyed) return;
     // If already connected, return immediately
     if (this.port?.name) {
       debugLog('📡 Already connected, skipping connection');
@@ -94,15 +96,17 @@ class StoreMessagingService {
       try {
 
         // Create port with a specific name for store updates
-        this.port = chrome.runtime.connect({ name: 'store-sync' });
+        const port = chrome.runtime.connect({ name: 'store-sync' });
+        this.port = port;
 
         // Handle incoming messages
-        this.port.onMessage.addListener((message: Message) => {
-          this.handleMessage(message);
+        port.onMessage.addListener((message: Message) => {
+          if (this.port === port && !this.destroyed) this.handleMessage(message);
         });
 
         // Handle disconnection
-        this.port.onDisconnect.addListener(() => {
+        port.onDisconnect.addListener(() => {
+          if (this.port !== port || this.destroyed) return;
           debugLog('📡 Store messaging disconnected');
           this.port = null;
           // Drop any partial chunks — sender will resend fresh on reconnect.
@@ -135,6 +139,7 @@ class StoreMessagingService {
         resolve();
       } catch (error) {
         console.error('❌ Failed to connect store messaging:', error);
+        this.scheduleReconnect();
         // Don't reject, just resolve to avoid blocking
         resolve();
       }
@@ -145,6 +150,7 @@ class StoreMessagingService {
    * Schedule a reconnection attempt with exponential backoff
    */
   private scheduleReconnect() {
+    if (this.destroyed) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('❌ Max reconnection attempts reached for store messaging');
       return;
@@ -283,8 +289,13 @@ class StoreMessagingService {
    * Manually trigger reconnection (useful for error recovery)
    */
   public reconnect() {
-    this.port?.disconnect();
+    this.reconnectTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+    this.reconnectTimeouts.clear();
+    const previous = this.port;
     this.port = null;
+    previous?.disconnect();
+    this.chunkBuffers.clear();
+    this.destroyed = false;
     this.reconnectAttempts = 0;
     return this.connect();
   }
@@ -293,6 +304,7 @@ class StoreMessagingService {
    * Clean up all connections and timeouts to prevent memory leaks
    */
   public destroy(): void {
+    this.destroyed = true;
     debugLog('🧹 Destroying store messaging service');
 
     // Clear all reconnect timeouts

@@ -6,7 +6,7 @@
       <div class="submit-api-title">
         <h3>
           {{ t('settings.submitApi.title') }}
-          <v-icon v-if="isNew" color="error" x-small class="ml-1">mdi-circle</v-icon>
+          <v-icon v-if="isNew" color="error" size="x-small" class="ml-1">mdi-circle</v-icon>
         </h3>
         <span class="t-caption">{{ statusText }}</span>
       </div>
@@ -15,8 +15,8 @@
     </v-col>
     <!-- Same button as the Re-sync row above. -->
     <v-col cols="3" class="submit-api-row-action">
-      <v-btn block outlined color="white" @click="openDialog()">
-        <v-icon left dark class="mr-1">mdi-tune-variant</v-icon>
+      <v-btn block variant="outlined" color="white" @click="openDialog()">
+        <v-icon start theme="dark" class="mr-1">mdi-tune-variant</v-icon>
         {{ t('settings.submitApi.configure') }}
       </v-btn>
     </v-col>

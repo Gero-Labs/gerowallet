@@ -1,6 +1,6 @@
 <template>
-  <v-tab-item>
-    <v-layout class="py-2" column>
+  <v-window-item>
+    <div class="d-flex flex-column py-2">
       <v-row no-gutters class="py-2" v-if="networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)">
         <v-col cols="9" class="text-left">
           <h3 style="color: white">{{ $t('settings.shopEarnPopups') }}</h3>
@@ -27,7 +27,7 @@
         <v-col cols="9" class="text-left">
           <h3 style="color: white">
             {{ $t('settings.autoWithdrawRewards') }}
-            <v-icon color="error" x-small class="ml-1" v-if="isAutoWithdrawRewardsNew">
+            <v-icon color="error" size="x-small" class="ml-1" v-if="isAutoWithdrawRewardsNew">
               mdi-circle
             </v-icon>
           </h3>
@@ -41,7 +41,7 @@
         <v-col cols="9" class="text-left">
           <h3 style="color: white">
             {{ $t('settings.extensionClickAction') }}
-            <v-icon color="error" x-small class="ml-1" v-if="isDefaultExtensionModeNew">
+            <v-icon color="error" size="x-small" class="ml-1" v-if="isDefaultExtensionModeNew">
               mdi-circle
             </v-icon>
           </h3>
@@ -70,15 +70,15 @@
         <v-col cols="3" style="align-content: center;">
           <v-btn
             block
-            outlined
+            variant="outlined"
             color="white"
             @click="reSync"
             :disabled="reSyncLoading"
             :loading="reSyncLoading"
           >
             <v-icon
-              left
-              dark
+              start
+              theme="dark"
               class="mr-1"
             >
               mdi-sync
@@ -86,7 +86,7 @@
             <span class="capitalize">{{ $t('settings.reSync') }}</span>
             <template v-slot:loader>
               <span class="custom-loader">
-                <v-icon light>mdi-cached</v-icon>
+                <v-icon theme="light">mdi-cached</v-icon>
               </span>
             </template>
           </v-btn>
@@ -111,14 +111,14 @@
               {{ proofServerModeDisplay }}
             </p>
           </div>
-          <v-btn small outlined color="white" @click="router.push('/proof-server')">
+          <v-btn size="small" variant="outlined" color="white" @click="router.push('/proof-server')">
             {{ t('midnight.proofServerPage.openPage') }}
           </v-btn>
         </div>
       </template>
 
       <h2 class="text-left pb-2" style="color: #ff6464">{{ $t('settings.dangerZone') }}</h2>
-      <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
+      <v-card variant="outlined" style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
           <v-row no-gutters class="py-2">
             <v-col cols="9" class="text-left pr-1">
@@ -127,14 +127,14 @@
             </v-col>
             <v-col cols="3" style="align-content: center;">
               <v-btn
-                text
+                variant="text"
                 class="px-1"
                 color="error"
                 @click="deleteWalletDialog = true"
                 :disabled="deleteWalletLoading"
                 :loading="deleteWalletLoading"
               >
-                <v-icon right class="mr-1 ml-0">
+                <v-icon end class="mr-1 ml-0">
                   mdi-delete
                 </v-icon>
                 {{ $t('settings.deleteWallet') }}
@@ -151,14 +151,14 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn color="error" text @click="deleteWalletDialog = false" :disabled="deleteWalletLoading">{{ $t('common.cancel') }}</v-btn>
+            <v-btn color="error" variant="text" @click="deleteWalletDialog = false" :disabled="deleteWalletLoading">{{ $t('common.cancel') }}</v-btn>
             <v-btn color="error" @click="deleteWalletConfirm" :disabled="deleteWalletLoading" :loading="deleteWalletLoading">{{ $t('common.yes') }}</v-btn>
             <v-spacer></v-spacer>
           </v-card-actions>
         </v-card>
       </v-dialog>
-    </v-layout>
-  </v-tab-item>
+    </div>
+  </v-window-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';

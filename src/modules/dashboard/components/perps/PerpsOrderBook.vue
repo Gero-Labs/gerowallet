@@ -19,7 +19,7 @@
     </div>
 
     <!-- Order Book view -->
-    <div v-if="obView === 'book'" ref="obContainerRef" class="ob-content">
+    <div v-if="obView === 'book'" :ref="setOrderBookContainer" class="ob-content">
       <!-- Filter icons + tick size -->
       <div class="ob-filter-row">
         <div class="ob-filter-icons">
@@ -46,14 +46,14 @@
             <span class="ob-filter-bar ob-filter-bar--red ob-filter-bar--big" />
           </span>
         </div>
-        <v-menu offset-y left :attach="true" content-class="ob-tick-menu">
-          <template #activator="{ on, attrs }">
-            <span class="ob-tick-trigger" v-bind="attrs" v-on="on">
+        <v-menu location="start"   :attach="true" content-class="ob-tick-menu">
+          <template #activator="{ props: activatorProps }">
+            <span class="ob-tick-trigger" v-bind="activatorProps" >
               {{ obTickSize }}
               <v-icon size="12" class="ml-1">mdi-chevron-down</v-icon>
             </span>
           </template>
-          <v-list dense dark class="ob-tick-list">
+          <v-list density="compact" theme="dark" class="ob-tick-list">
             <v-list-item
               v-for="ts in tickSizeOptions"
               :key="ts"
@@ -181,6 +181,7 @@ const {
   displayAsks, displayBids, spreadValue, spreadPercent, buyRatioPct,
   recentTrades,
 } = useOrderBook(selectedSymbolRef);
+const setOrderBookContainer = (element: unknown) => { obContainerRef.value = element instanceof HTMLElement ? element : null; };
 </script>
 
 <style scoped>
@@ -276,14 +277,14 @@ const {
   min-height: 28px !important;
 }
 
-.ob-tick-list .v-list-item__title {
+.ob-tick-list .v-list-item-title {
   font-size: 11px !important;
   font-weight: 500;
   color: var(--g-text-1);
   font-family: var(--g-font-mono);
 }
 
-.ob-tick-list__item--active .v-list-item__title {
+.ob-tick-list__item--active .v-list-item-title {
   color: var(--g-success);
   font-weight: 600;
 }

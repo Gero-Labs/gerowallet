@@ -1,0 +1,6 @@
+node_modules/
+targets/*/node_modules/
+targets/*/.stage/
+targets/*/dist/
+artifacts/
+!src/env.d.ts

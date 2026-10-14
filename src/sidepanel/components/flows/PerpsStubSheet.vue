@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="$emit('input', $event)" :title="$t('miniGero.perpsTitle')" height="55%">
+  <BottomSheet :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" :title="$t('miniGero.perpsTitle')" height="55%">
     <div class="perps-sheet">
       <div class="perps-placeholder">
         <v-icon size="64" color="var(--g-text-3)">mdi-chart-line</v-icon>
@@ -11,12 +11,12 @@
 
       <v-btn
         block
-        outlined
+        variant="outlined"
         :color="primaryColor"
         class="mt-6"
         @click="openDashboard"
       >
-        <v-icon left small>mdi-open-in-new</v-icon>
+        <v-icon start size="small">mdi-open-in-new</v-icon>
         {{ $t('miniGero.openInDashboard') }}
       </v-btn>
     </div>
@@ -32,11 +32,11 @@ const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
 }>();
 
 function openDashboard() {

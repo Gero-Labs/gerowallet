@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :is-open="value" :title="$t('poolOperator.wizardTitle')" icon="mdi-server-network"
+    :is-open="modelValue" :title="$t('poolOperator.wizardTitle')" icon="mdi-server-network"
     size="md" :persistent="busy" @close="close"
   >
     <div class="pa-4">
@@ -8,7 +8,7 @@
       <div class="wizard-dots mb-5">
         <div v-for="(s, i) in steps" :key="s.id" class="wizard-dot-wrap">
           <div class="wizard-dot" :class="{ active: i === currentIndex, done: isDone(s.id) }">
-            <v-icon v-if="isDone(s.id)" x-small color="white">mdi-check</v-icon>
+            <v-icon v-if="isDone(s.id)" size="x-small" color="white">mdi-check</v-icon>
             <span v-else>{{ i + 1 }}</span>
           </div>
           <span class="wizard-dot-label t-label">{{ $t(s.labelKey) }}</span>
@@ -34,8 +34,8 @@ import ColdKeyStep from './steps/ColdKeyStep.vue';
 import VrfStep from './steps/VrfStep.vue';
 import ConfirmStep from './steps/ConfirmStep.vue';
 
-const props = defineProps<{ value: boolean }>();
-const emit = defineEmits(['input', 'configured']);
+const props = defineProps<{ modelValue: boolean }>();
+const emit = defineEmits(['update:modelValue', 'configured']);
 
 const { coldKeySource, poolId, vrfKeyHash } = toRefs(poolOperatorStore);
 const chain = computed(() => walletStore.loggedWallet?.chain || '');
@@ -58,7 +58,7 @@ function firstIncomplete(): 'cold' | 'vrf' | 'confirm' {
 }
 
 const current = ref<'cold' | 'vrf' | 'confirm'>(firstIncomplete());
-watch(() => props.value, (v) => { if (v) current.value = firstIncomplete(); });
+watch(() => props.modelValue, (v) => { if (v) current.value = firstIncomplete(); });
 
 const currentIndex = computed(() => steps.findIndex((s) => s.id === current.value));
 function isDone(id: string) {
@@ -70,7 +70,7 @@ function isDone(id: string) {
 function onColdDone() { current.value = 'vrf'; }
 function onVrfDone() { current.value = 'confirm'; }
 function onFinish() { emit('configured'); close(); }
-function close() { if (!busy.value) emit('input', false); }
+function close() { if (!busy.value) emit('update:modelValue', false); }
 </script>
 
 <style lang="scss" scoped>

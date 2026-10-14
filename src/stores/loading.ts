@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -27,7 +28,7 @@ export interface LoadingState {
 }
 
 // Create an observable state
-export const loadingState = Vue.observable<LoadingState>({
+export const loadingState = reactive<LoadingState>({
   loading: false,
   text: '',
   progress: 0,
@@ -102,7 +103,7 @@ function broadcastFromBackground(updates: Partial<LoadingState>, immediate = fal
         clearTimeout(storageWriteTimeout);
         storageWriteTimeout = null;
       }
-      chrome.storage.local.set({ [STORE_NAME]: loadingState });
+      chrome.storage.local.set(plainStoreSnapshot({ [STORE_NAME]: loadingState }));
     } else {
       // Debounced storage write for other updates to reduce I/O
       if (storageWriteTimeout) {
@@ -110,7 +111,7 @@ function broadcastFromBackground(updates: Partial<LoadingState>, immediate = fal
       }
 
       storageWriteTimeout = setTimeout(() => {
-        chrome.storage.local.set({ [STORE_NAME]: loadingState });
+        chrome.storage.local.set(plainStoreSnapshot({ [STORE_NAME]: loadingState }));
       }, 300); // 300ms debounce
     }
   }

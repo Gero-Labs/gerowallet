@@ -1,5 +1,5 @@
 <template>
-  <v-card class="tx-list glass-panel fill-height d-flex flex-column" outlined :loading="loadingTxs">
+  <v-card class="tx-list glass-panel fill-height d-flex flex-column" variant="outlined" :loading="loadingTxs">
     <div class="tx-list__head">
       <div class="tx-list__title-row">
         <router-link v-if="!isFullList" to="/transactions" class="tx-list__title t-heading">
@@ -9,17 +9,17 @@
         <span class="tx-list__count g-num">{{ transactions.length }}</span>
         <v-spacer />
 
-        <v-tooltip bottom content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom"  content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
             <button
               type="button"
               class="tx-icon-btn"
-              v-bind="attrs"
+              v-bind="activatorProps"
               :aria-label="sortLabel"
-              v-on="on"
+
               @click="sortDesc = !sortDesc"
             >
-              <v-icon small>{{ sortDesc ? 'mdi-sort-clock-descending-outline' : 'mdi-sort-clock-ascending-outline' }}</v-icon>
+              <v-icon size="small">{{ sortDesc ? 'mdi-sort-clock-descending-outline' : 'mdi-sort-clock-ascending-outline' }}</v-icon>
             </button>
           </template>
           <span>{{ sortLabel }}</span>
@@ -30,7 +30,7 @@
           v-if="isFullList && !isBitcoin"
           v-model="filterMenuOpen"
           :close-on-content-click="false"
-          offset-y
+
           nudge-left="150"
           nudge-bottom="4"
           min-width="240"
@@ -38,13 +38,13 @@
           content-class="filter-menu"
           transition="none"
         >
-          <template v-slot:activator="{ on, attrs }">
-            <button type="button" class="tx-icon-btn" v-bind="attrs" :aria-label="$t('common.filter')" v-on="on">
-              <v-icon small>mdi-tune-variant</v-icon>
+          <template v-slot:activator="{ props: activatorProps }">
+            <button type="button" class="tx-icon-btn" v-bind="activatorProps" :aria-label="$t('common.filter')" >
+              <v-icon size="small">mdi-tune-variant</v-icon>
               <span v-if="activeFilterCount > 0" class="tx-icon-btn__badge g-num">{{ activeFilterCount }}</span>
             </button>
           </template>
-          <v-card class="glass-popover" dark>
+          <v-card class="glass-popover" theme="dark">
             <v-card-text class="pa-3">
               <!-- Date range -->
               <div class="filter-section-label t-label">{{ $t('transactions.dateRange') }}</div>
@@ -52,38 +52,38 @@
                 <v-menu
                   v-model="dateFromMenu"
                   :close-on-content-click="false"
-                  offset-y
+
                   min-width="auto"
                   content-class="date-picker-menu"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-text-field
-                      :value="filterDateFrom || ''"
+                      :model-value="filterDateFrom || ''"
                       :placeholder="$t('transactions.from')"
-                      dense
-                      outlined
+                      density="compact"
+                      variant="outlined"
                       hide-details
                       readonly
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="activatorProps"
+
                       class="filter-date-field"
                       clearable
                       @click:clear="filterDateFrom = null"
                     >
                       <template v-slot:prepend-inner>
-                        <v-icon small class="mt-1 filter-date-icon">mdi-calendar</v-icon>
+                        <v-icon size="small" class="mt-1 filter-date-icon">mdi-calendar</v-icon>
                       </template>
                     </v-text-field>
                   </template>
                   <v-date-picker
-                    :value="filterDateFrom"
-                    @input="filterDateFrom = $event; dateFromMenu = false"
+                    :model-value="filterDateFrom"
+                    @update:model-value="filterDateFrom = toPickerDay($event); dateFromMenu = false"
                     :min="earliestTxDate"
                     :max="filterDateTo || latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
-                    no-title
-                    dark
+                    hide-header
+                    theme="dark"
                     color="var(--g-accent)"
                     class="filter-date-picker"
                   />
@@ -91,38 +91,38 @@
                 <v-menu
                   v-model="dateToMenu"
                   :close-on-content-click="false"
-                  offset-y
+
                   min-width="auto"
                   content-class="date-picker-menu"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-text-field
-                      :value="filterDateTo || ''"
+                      :model-value="filterDateTo || ''"
                       :placeholder="$t('transactions.to')"
-                      dense
-                      outlined
+                      density="compact"
+                      variant="outlined"
                       hide-details
                       readonly
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="activatorProps"
+
                       class="filter-date-field"
                       clearable
                       @click:clear="filterDateTo = null"
                     >
                       <template v-slot:prepend-inner>
-                        <v-icon small class="mt-1 filter-date-icon">mdi-calendar</v-icon>
+                        <v-icon size="small" class="mt-1 filter-date-icon">mdi-calendar</v-icon>
                       </template>
                     </v-text-field>
                   </template>
                   <v-date-picker
-                    :value="filterDateTo"
-                    @input="filterDateTo = $event; dateToMenu = false"
+                    :model-value="filterDateTo"
+                    @update:model-value="filterDateTo = toPickerDay($event); dateToMenu = false"
                     :min="filterDateFrom || earliestTxDate"
                     :max="latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
-                    no-title
-                    dark
+                    hide-header
+                    theme="dark"
                     color="var(--g-accent)"
                     class="filter-date-picker"
                   />
@@ -138,8 +138,8 @@
                   v-for="ft in typeFilterOptions"
                   :key="ft.value"
                   :value="ft.value"
-                  small
-                  outlined
+                  size="small"
+                  variant="outlined"
                   filter
                   class="filter-type-chip"
                 >{{ ft.text }}</v-chip>
@@ -150,30 +150,30 @@
               <!-- Token filter -->
               <div class="filter-section-label t-label">{{ $t('transactions.tokens') }}</div>
               <v-chip-group v-model="filterTokenMode" column>
-                <v-chip value="all" small outlined filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
-                <v-chip value="ada_only" small outlined filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
-                <v-chip value="with_tokens" small outlined filter class="filter-type-chip">{{ $t('transactions.withTokens') }}</v-chip>
+                <v-chip value="all" size="small" variant="outlined" filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
+                <v-chip value="ada_only" size="small" variant="outlined" filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
+                <v-chip value="with_tokens" size="small" variant="outlined" filter class="filter-type-chip">{{ $t('transactions.withTokens') }}</v-chip>
               </v-chip-group>
 
               <v-divider class="my-2 filter-divider" />
 
               <!-- Export CSV -->
-              <v-btn text block small class="justify-start" @click="exportToCsv()">
-                <v-icon small class="mr-2">mdi-download</v-icon>
+              <v-btn variant="text" block size="small" class="justify-start" @click="exportToCsv()">
+                <v-icon size="small" class="mr-2">mdi-download</v-icon>
                 {{ $t('transactions.exportCsv') }}
               </v-btn>
 
               <!-- Clear all -->
               <v-btn
                 :disabled="activeFilterCount === 0"
-                text
+                variant="text"
                 block
-                small
+                size="small"
                 class="justify-start mt-1"
                 color="error"
                 @click="clearAllFilters()"
               >
-                <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
+                <v-icon size="small" class="mr-2">mdi-close-circle-outline</v-icon>
                 {{ $t('common.clearFilters') }}
               </v-btn>
             </v-card-text>
@@ -182,9 +182,8 @@
       </div>
 
       <label class="tx-search">
-        <v-icon small class="tx-search__icon">mdi-magnify</v-icon>
+        <v-icon size="small" class="tx-search__icon">mdi-magnify</v-icon>
         <input
-          ref="searchField"
           v-model="search"
           type="search"
           class="tx-search__input"
@@ -286,7 +285,7 @@
               :title="$t('transactions.removePendingTransaction')"
               @click="handleRemovePendingTransaction(item)"
             >
-              <v-icon small>mdi-delete-outline</v-icon>
+              <v-icon size="small">mdi-delete-outline</v-icon>
             </button>
           </div>
         </section>
@@ -314,12 +313,12 @@
         :total-visible="7"
         circle
         class="compact-pagination ma-0"
-        @input="handlePageChange"
+        @update:model-value="handlePageChange"
       ></v-pagination>
     </v-card-actions>
     <BitcoinTransactionDetailsDialog
       v-if="transactionInfo && isBitcoin && state === '/' && !selectedTransaction"
-      :transactionInfo="transactionInfo"
+      :transactionInfo="bitcoinTransactionInfo"
       @close="handleTransactionModalClose"
     />
     <TransactionDetailsDialog
@@ -331,7 +330,8 @@
 </template>
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
-import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
+import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, toRefs, watch, type PropType } from 'vue';
+import { toPickerDay } from '@/shared/utils/format';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
@@ -352,6 +352,7 @@ import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import debounce from 'lodash/debounce';
 import { isCardanoTx, StoredTransaction, TxAsset } from '@/models/transaction.types';
+import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { getCertificateBaseStatus } from '@/modules/dashboard/utils/transactionStatus';
 import {
@@ -391,7 +392,7 @@ const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const { t } = useTranslation();
 const props = defineProps({
   selectedTransaction: {
-    type: Object,
+    type: Object as PropType<Pick<StoredTransaction, 'id'>>,
     default: null,
   },
   isFullList: {
@@ -416,11 +417,13 @@ const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
 // Wallet addresses, stake address and contacts the classifiers compare against
 const classifyCtx = computed(() => buildClassifyContext(loggedWallet.value, keys.value, contacts.value));
 
-const transactionInfo = ref<StoredTransaction | null>(null);
+const transactionInfo = shallowRef<StoredTransaction | null>(null);
+const bitcoinTransactionInfo = computed<UnifiedTransaction | null>(() => {
+  const tx = transactionInfo.value;
+  return isBitcoin.value && tx ? { ...tx, assets: tx.assets.map(asset => ({ ...asset, quantity: String(asset.quantity) })) } : null;
+});
 const sortDesc = ref<boolean>(true);
 const sortLabel = computed(() => (sortDesc.value ? t('governance.sortNewest') : t('governance.sortOldest')));
-
-const searchField = ref<HTMLInputElement | null>(null);
 
 // Search input and debounced search value
 const searchInput = ref<string>('');
@@ -533,7 +536,7 @@ function exportToCsv() {
 const loadVersion = ref(0);
 
 // Infinite scroll variables
-const displayedTransactions = ref<StoredTransaction[]>([]);
+const displayedTransactions = shallowRef<StoredTransaction[]>([]);
 const currentIndex = ref<number>(0);
 const isLoadingMore = ref<boolean>(false);
 const hasReachedEnd = ref<boolean>(false);
@@ -885,7 +888,7 @@ const loadMoreTransactions = async () => {
       const endIndex = currentIndex.value + itemsPerBatch.value;
       newTransactions = transactions.value.slice(currentIndex.value, endIndex);
 
-      displayedTransactions.value.push(...newTransactions);
+      displayedTransactions.value = [...displayedTransactions.value, ...newTransactions];
       currentIndex.value = endIndex;
 
       // Check if we've reached the end
@@ -1537,28 +1540,34 @@ a.tx-list__title:hover {
   font-size: 12px !important;
 }
 
-.filter-date-field ::v-deep .v-input__slot {
-  min-height: 30px !important;
+.filter-date-field :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
+  --v-field-padding-start: 0px;
+  --v-field-padding-end: 0px;
+  font-size: inherit;
   padding: 0 8px !important;
   align-items: center !important;
 }
 
-.filter-date-field ::v-deep .v-input__prepend-inner {
-  margin-top: 4px !important;
+.filter-date-field :deep(.v-field__prepend-inner) {
   margin-right: 4px !important;
   padding-right: 0 !important;
   display: flex !important;
   align-items: center !important;
-  height: 100% !important;
+  padding-top: 0 !important;
 }
 
-.filter-date-field ::v-deep .v-input__append-inner {
-  margin-top: 4px !important;
+.filter-date-field :deep(.v-field__clearable),
+.filter-date-field :deep(.v-field__append-inner) {
+  padding-top: 0 !important;
   display: flex !important;
   align-items: center !important;
 }
 
-.filter-date-field ::v-deep .v-input__append-inner .v-icon {
+.filter-date-field :deep(.v-field__clearable .v-icon),
+.filter-date-field :deep(.v-field__append-inner .v-icon) {
   font-size: 14px !important;
 }
 

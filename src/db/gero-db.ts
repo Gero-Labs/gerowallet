@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { configureCloneBoundary } from '@/db/cloneBoundary';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import * as bip39 from 'bip39';
 import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTypePurpose } from '@/models/types';
@@ -20,7 +21,7 @@ export async function getDb() {
     return cachedDb;
   }
 
-  const db: Dexie = new Dexie('GeroWalletDatabase');
+  const db = configureCloneBoundary(new Dexie('GeroWalletDatabase'));
 
   // Upgrade
   db.version(10).stores({
@@ -205,7 +206,7 @@ export async function getAllWallets() {
 
 export async function createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
-  const db = new Dexie(walletName);
+  const db = configureCloneBoundary(new Dexie(walletName));
 
   // For new wallets, just use the latest version
   // Migration paths are only needed when opening existing wallets (handled in wallet-db.ts getDb())

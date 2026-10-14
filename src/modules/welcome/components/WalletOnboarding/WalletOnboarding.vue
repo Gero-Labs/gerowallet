@@ -8,11 +8,11 @@
           <v-switch
             v-if="currentStep.key === 'start'"
             class="dev-switch ma-0 pa-0"
-            :input-value="devMode"
-            dense
+            :model-value="devMode"
+            density="compact"
             inset
             hide-details
-            @change="onDevToggle"
+            @update:model-value="onDevToggle"
           >
             <template v-slot:label>
               <span class="dev-switch__label">{{ $t('welcome.developerNetworks') }}</span>

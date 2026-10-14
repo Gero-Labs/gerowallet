@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
 import { StorePersister } from '@/utils/storePersistence';
@@ -175,7 +175,7 @@ function withSpendableControlledAmount(account: Account | null): Account | null 
 }
 
 // Create observable state
-export const walletStore = Vue.observable<WalletStore>({
+export const walletStore = reactive<WalletStore>({
   loggedWallet: null,
   isLocked: false,
   isSyncing: false,  // true during first restore sync — prevents navigation to dashboard
@@ -637,8 +637,10 @@ export default {
     // Clear loading state
     LoadingState.setLoadingTxs(false);
 
-    // Note: We don't broadcast here because the background script
-    // will update with new wallet data shortly
+    // Open UI surfaces must clear immediately too: the next wallet's identity
+    // can arrive before its asynchronous balances/history. Never show the old
+    // wallet's data while waiting for those later updates.
+    broadcastFromBackground(clearedState);
   },
 
   // Expose the observable state

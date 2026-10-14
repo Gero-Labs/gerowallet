@@ -3,7 +3,7 @@
     <div class="card-address__head">
       <span class="t-label">{{ label }}</span>
       <span class="card-address__verified">
-        <v-icon x-small>mdi-shield-check-outline</v-icon>
+        <v-icon size="x-small">mdi-shield-check-outline</v-icon>
         {{ t('card.depositAddressVerified') }}
       </span>
     </div>

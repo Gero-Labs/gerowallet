@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-13T15:54:04.086Z",
+  "repository": "https://github.com/Gero-Labs/gerowallet",
+  "branch": "migration/vue3-vuetify4",
+  "baseCommit": "50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a",
+  "reviewedCommit": "d80397b5da9206541c9fb454ad4f65b77bff4eba",
+  "sourceFixCommit": "4f57b4fb467c3c98eb1221527a1cce5b0c2a31d5",
+  "runtimeFixCommit": "020c7805f86037610ec9bdece9e648525243b1ac",
+  "packagingAndHarnessCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+  "browserHarnessCommit": "0cd2fa9cb6bb92db8b18fe8264b690a833b2bba9",
+  "hostedSourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+  "scope": "User-authorized branch publication and hosted dry run; no production tag, store submission, or rollout.",
+  "packageLockSha256": "1075fddbdf0d3ca79d86b4f59eb993934fe4a078b3c8017370c26feaced132b5",
+  "tests": {
+    "passed": 5075,
+    "total": 5075,
+    "failed": 0,
+    "skipped": 0,
+    "files": 444,
+    "sourceCommit": "020c7805f86037610ec9bdece9e648525243b1ac",
+    "supplementalNavigationTests": 22,
+    "supplementalReport": "final-candidate/navigation-tests.json",
+    "note": "The follow-up only corrects test helper types; hosted test results separately qualify the final packaging commit."
+  },
+  "types": {
+    "before": 56,
+    "after": 56,
+    "introduced": []
+  },
+  "design": {
+    "unchangedBudgets": true,
+    "contrastChecksPassed": 56,
+    "normalCommitHooks": true
+  },
+  "packages": {
+    "production": {
+      "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+      "build": {
+        "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+        "exitCode": 0,
+        "durationSeconds": 98.596,
+        "nodeOptions": "--max-old-space-size=4096 --max-semi-space-size=128",
+        "host": "local Windows; not hosted CI"
+      },
+      "version": "2.7.3",
+      "identityVerified": true,
+      "extensionId": "bgpipimickeadkjlklgciifhnalhdjhe",
+      "identityBasis": "Existing production public key matched canonical store link ID",
+      "files": 1163,
+      "localWasmFiles": 8,
+      "artifactSha256": "a4e9d069dd35d68c7de050b3e5d2dbcfe3d4c08ccb3ba3c4b22b6b8dc0180a24",
+      "artifactReport": "review-fixes-production-artifact.json",
+      "archive": {
+        "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+        "file": "Gero-v2.7.3-vue3-production-review.zip",
+        "sha256": "b855200ba1e3fddd1443c2e334ec65021a2179b3da4cca1496f1b353b59cb3e6",
+        "bytes": 149170415,
+        "entriesVerified": 1163,
+        "allChecksumsMatch": true
+      },
+      "entrypoints": {
+        "passed": true,
+        "pageErrors": 0,
+        "cspViolations": 0,
+        "browserVersion": "151.0.7922.34",
+        "coverage": "Actual extension pages in Chromium tabs, including sidepanel document and dashboard tab handoff; native browser side-panel chrome is not automated."
+      },
+      "tdz": {
+        "known": 27,
+        "introduced": 0
+      }
+    },
+    "beta": {
+      "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+      "build": {
+        "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+        "exitCode": 0,
+        "durationSeconds": 100.369,
+        "nodeOptions": "--max-old-space-size=4096 --max-semi-space-size=128",
+        "host": "local Windows; not hosted CI"
+      },
+      "version": "2.7.3",
+      "identityVerified": true,
+      "extensionId": "iifeegfcfhlhhnilhfoeihllenamcfgc",
+      "identityBasis": "Existing beta public key matched configured beta ID; store-owner release approval remains separate",
+      "files": 1163,
+      "localWasmFiles": 8,
+      "artifactSha256": "d947759c5619aa0b00019b241028acc323a820192a9f3bcf6c7e7b8939453d7b",
+      "artifactReport": "review-fixes-beta-artifact.json",
+      "archive": {
+        "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+        "file": "Gero-v2.7.3-vue3-beta-review.zip",
+        "sha256": "9118ff11d3221729fb5f5cc508b7d42a34bb423a53bea0f6e0fa934b88642204",
+        "bytes": 149159011,
+        "entriesVerified": 1163,
+        "allChecksumsMatch": true
+      },
+      "entrypoints": {
+        "passed": true,
+        "pageErrors": 0,
+        "cspViolations": 0,
+        "browserVersion": "151.0.7922.34",
+        "coverage": "Actual extension pages in Chromium tabs, including sidepanel document and dashboard tab handoff; native browser side-panel chrome is not automated."
+      },
+      "tdz": {
+        "known": 27,
+        "introduced": 0
+      }
+    }
+  },
+  "populatedWatch": {
+    "passed": true,
+    "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+    "artifactSha256": "a4e9d069dd35d68c7de050b3e5d2dbcfe3d4c08ccb3ba3c4b22b6b8dc0180a24",
+    "artifactUnchanged": true,
+    "network": "Cardano Mainnet",
+    "setup": "Only a public Watch wallet record is seeded. All balances, assets, NFTs and transactions come through real production login, public sync, database loaders and broadcasts. No store fields are pinned or overridden.",
+    "approvalBoundary": "Approval presentation uses a previously confirmed public transaction supplied through a fixture popup port. No approval, signature, or submission is dispatched.",
+    "checks": [
+      "Real production Watch login hydrates populated token and transaction stores from public mainnet data",
+      "Populated dashboard renders navigation drawer and portfolio token rows",
+      "Transactions view renders public history with populated asset metadata",
+      "A token-bearing transaction opens its full details without clone errors",
+      "Production sign-tx popup presents an archived token transaction; no signing or approval action is taken"
+    ],
+    "stateCounts": {
+      "tokens": 3,
+      "collections": 0,
+      "transactions": 883,
+      "metadataAssets": 2
+    },
+    "postLoginCounts": {
+      "tokens": 3,
+      "collections": 0,
+      "transactions": 883,
+      "metadataAssets": 2
+    },
+    "holdingsRows": 3,
+    "transactionDetailTokenLabels": 211,
+    "approvalOutputs": 4,
+    "approvalAssetLabels": 9,
+    "pageErrors": 0,
+    "runtimeConsoleErrors": 0,
+    "networkConsoleErrorCount": 19,
+    "otherConsoleErrors": [
+      {
+        "stage": "real public watch login and sync",
+        "message": "🦑 Failed to initialize price service: Event"
+      }
+    ],
+    "browserVersion": "151.0.7922.34",
+    "coverageLimits": [
+      "Fresh profile with a seeded Watch record, not an existing-profile upgrade or hardware-wallet check.",
+      "Only wallet backend and sync hosts are reachable. Third-party prices/images can be unavailable; this checks populated rendering and clone safety, not complete live fiat valuation.",
+      "The supplied public address has no live NFT collections; the empty collectibles view is checked, but populated NFT acceptance remains open."
+    ],
+    "seedDatabaseVersion": 160,
+    "harnessSetup": "Two earlier fresh-profile runs failed before login because seeding preceded worker schema readiness. The corrected harness waits read-only for the worker schema and fails closed; earlier reports are preserved outside the repository.",
+    "privacy": "Public wallet address, balances, asset names, transaction IDs, screenshots, and raw page text are omitted from committed evidence."
+  },
+  "hosted": {
+    "runId": 38424347669,
+    "url": "https://github.com/Gero-Labs/gerowallet/actions/runs/38424347669",
+    "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+    "conclusion": "success",
+    "runner": {
+      "completed_at": "2026-10-13T15:49:21Z",
+      "conclusion": "success",
+      "id": 115389677294,
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "name": "Build and Test",
+      "runner_group_name": "GitHub Actions",
+      "runner_name": "GitHub Actions 1000014503",
+      "started_at": "2026-10-13T15:42:25Z",
+      "status": "completed",
+      "image": "ubuntu-24.04",
+      "imageVersion": "20261004.327.1"
+    },
+    "buildRuntime": {
+      "node": "v24.19.0",
+      "nodeOptions": "--max-old-space-size=4096 --max-semi-space-size=128",
+      "heapLimitBytes": 4697620480,
+      "systemMemoryBytes": 16765374464
+    },
+    "resourceMetrics": {
+      "maxRSSKiB": 4496548,
+      "elapsed": "2:05.05",
+      "elapsedSeconds": 125.05,
+      "exitStatus": 0,
+      "swaps": 0
+    },
+    "artifact": {
+      "ok": true,
+      "version": "2.7.3",
+      "extensionId": "bgpipimickeadkjlklgciifhnalhdjhe",
+      "identityVerified": true,
+      "fileCount": 1163,
+      "wasmCount": 8,
+      "wasmFiles": [
+        "assets/cardano_message_signing_bg.wasm",
+        "assets/midnight_ledger_wasm_bg.wasm",
+        "assets/midnight_ledger_wasm_v9_bg.wasm",
+        "assets/secp256k1.wasm",
+        "background/cardano_message_signing_bg-CvS6lc7Q.wasm",
+        "background/midnight_ledger_wasm_bg-CHAEdvhi.wasm",
+        "background/midnight_ledger_wasm_v9_bg-Bj5Z1h29.wasm",
+        "background/secp256k1-Cao5Swmf.wasm"
+      ],
+      "sourceSha": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+      "workflowRun": "38424347669",
+      "channel": "production",
+      "packageLockSha256": "1075fddbdf0d3ca79d86b4f59eb993934fe4a078b3c8017370c26feaced132b5",
+      "problems": [],
+      "downloadedFilesVerified": 1163,
+      "allDownloadedChecksumsMatch": true,
+      "extensionDirectory": "D:/GeroRepos/gitRepos/output/gerowallet-review-fixes-2026-10-13/hosted-run-38424347669/candidate/extension"
+    },
+    "archivechecksum": "25bde1318995271bc88ce075d084972a769198eb73b371223600c6d50c1f72e6",
+    "archiveVerification": {
+      "archiveName": "Gero-v2.7.3.zip",
+      "sha256": "25bde1318995271bc88ce075d084972a769198eb73b371223600c6d50c1f72e6",
+      "checksumFileMatch": true,
+      "entriesVerified": 1163,
+      "expectedEntries": 1163,
+      "allChecksumsMatch": true,
+      "problems": []
+    },
+    "publishJobSkipped": true,
+    "tests": {
+      "passed": 5076,
+      "total": 5076,
+      "testFilesPassed": 445,
+      "testFilesTotal": 445,
+      "durationSeconds": 195.53
+    },
+    "rawReportHashes": {
+      "run.json": "72bbb8a2d1e92546b97d1932dc94685a3ff9816c804e07dc4e46efabfd64b2b6",
+      "runner.json": "2d75986cf64b0257caf852e2eb1a112e89bf08c77d21e3b141c71316841ac83a",
+      "artifacts-index.json": "c32ed45a9461c8b8be06671eea2533ff427a370d58e7e4148c5e8b18930aa1e3",
+      "full-run.log": "c0069ce2fbdc44deabfe1ed5b635a1679b63b862ebca428f0ffd594be4ae0251",
+      "archive-verification.json": "1575ba6ee10a9116ef8fc0111af85720de86d7a9836c0b504f28e5bad6daf170",
+      "candidate/release-evidence/artifact.json": "fb062cc50f8b6102d0eede9d8e33e309f13f2be28d33947030f07cae3bbb6056",
+      "candidate/release-evidence/build-runtime.json": "7d8a1c996073ce841215e30a2f0b57e8a3277079f73d1c320d543832f22d10ff",
+      "candidate/release-evidence/build-resources.txt": "19f597b15daf32477b87c84adf86fdcc04286e5d6c4c930d16939707e02c3e0a",
+      "candidate/release-evidence/SHA256SUMS": "d4a3943b999825bd597bd190055e76347c58b2309d6a62a2b7b76cf6e923963f",
+      "diagnostics/artifact.json": "fb062cc50f8b6102d0eede9d8e33e309f13f2be28d33947030f07cae3bbb6056",
+      "diagnostics/build-runtime.json": "7d8a1c996073ce841215e30a2f0b57e8a3277079f73d1c320d543832f22d10ff",
+      "diagnostics/build-resources.txt": "19f597b15daf32477b87c84adf86fdcc04286e5d6c4c930d16939707e02c3e0a"
+    },
+    "priorFailure": {
+      "runId": 38422687595,
+      "summary": "hosted-run-38422687595/summary.json",
+      "reason": "Manifest referenced public/2.6.0.png while notification copy target emitted it under public/notifications; corrected canonical copy destination and added empty-output regression."
+    },
+    "artifactReport": "review-fixes-hosted-artifact.json"
+  },
+  "earlierHostedFailure": {
+    "runId": 38422687595,
+    "url": "https://github.com/Gero-Labs/gerowallet/actions/runs/38422687595",
+    "sourceCommit": "f1116a95611b4dc07b3c82f1af0d6e0b03624aa4",
+    "conclusion": "failure",
+    "runner": {
+      "completed_at": "2026-10-13T15:36:12Z",
+      "conclusion": "failure",
+      "id": 115383885743,
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "name": "Build and Test",
+      "runner_group_name": "GitHub Actions",
+      "runner_name": "GitHub Actions 1000014502",
+      "started_at": "2026-10-13T15:30:45Z",
+      "status": "completed",
+      "image": "ubuntu-24.04",
+      "imageVersion": "20261004.327.1"
+    },
+    "buildRuntime": null,
+    "resourceMetrics": {
+      "maxRSSKiB": null,
+      "elapsed": null,
+      "exitStatus": null
+    },
+    "buildStep": {
+      "conclusion": "success",
+      "startedAt": "2026-10-13T15:34:25Z",
+      "completedAt": "2026-10-13T15:36:08Z",
+      "elapsedSeconds": 103,
+      "configuredNode": "24.19.0",
+      "configuredNodeOptions": "--max-old-space-size=4096 --max-semi-space-size=128"
+    },
+    "artifact": {
+      "validated": false,
+      "expectedExtensionId": "bgpipimickeadkjlklgciifhnalhdjhe",
+      "problems": [
+        "Web-accessible resource is missing: public/2.6.0.png"
+      ],
+      "uploaded": false
+    },
+    "archivechecksum": null,
+    "publishJobSkipped": true,
+    "tests": {
+      "passed": 5075,
+      "total": 5075,
+      "testFilesPassed": 444,
+      "testFilesTotal": 444
+    },
+    "evidenceLimitation": "The build passed, but the artifact gate failed before upload. Runtime/resource and artifact JSON files remained on the hosted runner and were not retained by this workflow revision; do not infer maximum RSS or V8 heap from the configured values.",
+    "rawReportHashes": {
+      "run.json": "e8313b76570af6d61b64df6e6528a3647307e4278edfcc01a7c2d1ef7d92cfac",
+      "runner.json": "4c08da51a66fd0fbee03ee3ac0615bd94622d16077406068070cdf0b999538e6",
+      "artifacts-index.json": "bf6638afd0bdbf03a3236bb78ff0fe1a70b76eb9f5ba9b8102624fde8ac48cef",
+      "failed-step.log": "5c63848e966d24175e77d7fd4e18e83f44ab793a504c6832c319668c2f907cc9",
+      "full-run.log": "d63d56d6d6593521d2b649193f12526c67edd9b472b51db050186c3bf17940fe"
+    }
+  },
+  "rawReports": {
+    "navigation-full-tests.json": {
+      "sha256": "bd41044525abaaaa58135f39a2417af3c4e4e81e57807dce14817d6b57be24ed"
+    },
+    "navigation-native-before.json": {
+      "sha256": "e4048996615a0f3ff469f18bab3d9f67ac6c51a63a2d985c7db8031e157ebee0"
+    },
+    "navigation-native-after.json": {
+      "sha256": "43c030b214d1c8c13ec51daa7f456bf9373fbf0fbf54eb1a3915a82291f69e28"
+    },
+    "reactive-boundaries-before.json": {
+      "sha256": "503ef69228f48837be0b2ccb9ca2461a2989c8b329e030aa801636e9d6b5bfa1"
+    },
+    "reactive-boundaries-focused.json": {
+      "sha256": "ba80ed1f3b46493c1f4f976e000e126867fa21494a347e41535b42ced4d563e6"
+    },
+    "midnight-table-before.json": {
+      "sha256": "278dbc17cfd669811ef84580153184c4faaa86252182191fdb53ad00e6db07fb"
+    },
+    "midnight-table-after.json": {
+      "sha256": "dd2f13f27381e5b9f2ca6a36927e8befbdaaf4c87593b4efacf8eb60c9464c19"
+    },
+    "locale-tests.json": {
+      "sha256": "2e4430ad08e7645afbfb2165f5401cbfbe1a5bf6ce7f20a0792e43875975d9e9"
+    },
+    "runtime-aliases.json": {
+      "sha256": "e1a8bafa9714547740ac60ae1071112ecd1c18547ac910d659b6f16900fd1885"
+    },
+    "final-candidate/type-comparison.json": {
+      "sha256": "5971032f4eae2cf6865fb3876b715a62117fefea515155c79c2df89b22b26f43"
+    },
+    "final-candidate/navigation-tests.json": {
+      "sha256": "84790e0242e8cd817752ac655ebd7cc133f6fc041aa5a3473e59696f8cb9ca99"
+    },
+    "latest-clean-candidate/populated-watch/populated-watch-report.json": {
+      "sha256": "d1a835d1a1da76e7b8be7077b510968c89ae4c84d0ee1bd4277b1b33255aa670"
+    }
+  },
+  "rawEvidenceLocation": "D:\\GeroRepos\\gitRepos\\output\\gerowallet-review-fixes-2026-10-13",
+  "remainingAcceptance": [
+    "Live populated NFT wallet (supplied public address has no collections)",
+    "Physical authentication and supported hardware/platform matrix",
+    "Existing-profile upgrade and forward recovery",
+    "Complete provider/platform/locale acceptance",
+    "Release version, store access, beta observation, and separately authorized publication"
+  ],
+  "hostedBrowser": {
+    "sourceCommit": "e872dd0928e9a4302cbe3fe6bc123080b98b0363",
+    "browserHarnessCommit": "0cd2fa9cb6bb92db8b18fe8264b690a833b2bba9",
+    "artifactSha256": "fac1aa9006b6efdb68112f5a85ca78a4e730f4bc8b9e23b74896409839213cac",
+    "artifactUnchanged": true,
+    "passed": true,
+    "checks": [
+      "Real production Watch login hydrates populated token and transaction stores from public mainnet data",
+      "Populated dashboard renders navigation drawer and portfolio token rows",
+      "Transactions view renders public history with populated asset metadata",
+      "A token-bearing transaction opens its full details without clone errors",
+      "Production sign-tx popup presents an archived token transaction; no signing or approval action is taken"
+    ],
+    "stateCounts": {
+      "tokens": 3,
+      "collections": 0,
+      "transactions": 883,
+      "metadataAssets": 2
+    },
+    "holdingsRows": 3,
+    "pageErrors": 0,
+    "runtimeConsoleErrors": 0,
+    "entrypointCspViolations": 0,
+    "entrypointPageErrors": 0,
+    "browserVersion": "151.0.7922.34",
+    "coverageLimits": [
+      "Fresh profile with a seeded Watch record, not an existing-profile upgrade or hardware-wallet check.",
+      "Only wallet backend and sync hosts are reachable. Third-party prices/images can be unavailable; this checks populated rendering and clone safety, not complete live fiat valuation.",
+      "The supplied public address has no live NFT collections; the empty collectibles view is checked, but populated NFT acceptance remains open."
+    ],
+    "setup": "Only a public Watch wallet record is seeded. All balances, assets, NFTs and transactions come through real production login, public sync, database loaders and broadcasts. No store fields are pinned or overridden.",
+    "approvalBoundary": "Approval presentation uses a previously confirmed public transaction supplied through a fixture popup port. No approval, signature, or submission is dispatched.",
+    "reportSha256": "549349eb03bd27421b0210f02bffe29936b448d909b8e3531f0dd57917a9c6e9"
+  }
+}

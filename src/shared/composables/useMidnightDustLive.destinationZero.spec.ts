@@ -1,4 +1,5 @@
-import Vue, { nextTick, reactive } from 'vue';
+import * as Vue from 'vue';
+import { nextTick, reactive } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -91,11 +92,11 @@ function switchToNewWallet() {
   midnightStore.addresses.dust = `mn_dust1wallet${counter}`;
 }
 
-let views: Vue[] = [];
+let views: Vue.App[] = [];
 function mount(): MidnightDustLive {
   let live!: MidnightDustLive;
-  const view = new Vue({ setup() { live = useMidnightDustLive(); return {}; }, render: (h) => h('div') });
-  view.$mount();
+  const view = Vue.createApp({ setup() { live = useMidnightDustLive(); return {}; }, render: () => Vue.h('div') });
+  view.mount(document.createElement('div'));
   views.push(view);
   return live;
 }
@@ -122,7 +123,7 @@ beforeEach(() => {
   switchToNewWallet();
 });
 afterEach(() => {
-  for (const view of views) view.$destroy();
+  for (const view of views) view.unmount();
   views = [];
   midnightStore.dustState = null;
   vi.useRealTimers();

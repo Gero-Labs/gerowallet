@@ -9,7 +9,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useHelpNavigation } from './helpNavigation';
@@ -20,15 +20,16 @@ const { t } = useTranslation();
 const route = useRoute();
 const router = useRouter();
 const { destination } = useHelpNavigation();
-const query = ref(typeof route.query.q === 'string' ? route.query.q : '');
-watch(() => route.query.q, value => { query.value = typeof value === 'string' ? value : ''; });
+const query = ref(typeof route.query['q'] === 'string' ? route.query['q'] : '');
+watch(() => route.query['q'], value => { query.value = typeof value === 'string' ? value : ''; });
 function submit(): void {
   const q = query.value.trim().slice(0, 200);
   const target = destination('/help/search', { q, basic: '' });
   // Counted by the results page once its outcome is known, and only when this actually runs a new search.
-  const counted = !!q && router.resolve(target).route.fullPath !== route.fullPath;
+  const counted = !!q && router.resolve(target).fullPath !== route.fullPath;
   if (counted) helpSearchIntent.pending = q;
-  void router.push(target).catch(() => { if (counted && helpSearchIntent.pending === q) helpSearchIntent.pending = null; });
+  const forgetFailedSearch = () => { if (counted && helpSearchIntent.pending === q) helpSearchIntent.pending = null; };
+  void router.push(target).then(failure => { if (failure) forgetFailedSearch(); }).catch(forgetFailedSearch);
 }
 </script>
 

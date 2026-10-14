@@ -3,21 +3,21 @@
     <!-- Search -->
     <v-text-field
       v-model="search"
-      dense
-      outlined
+      density="compact"
+      variant="outlined"
       hide-details
       placeholder="Search pools..."
       prepend-inner-icon="mdi-magnify"
       clearable
       class="pool-search mb-3"
-      dark
+      theme="dark"
     />
 
     <!-- Filter toggles -->
     <div class="d-flex mb-2" style="gap: 12px;">
       <v-switch
         v-model="hideSaturated"
-        dense
+        density="compact"
         hide-details
         class="mt-0 pt-0 filter-switch"
       >
@@ -37,7 +37,7 @@
     <div v-else-if="error" class="text-center py-6">
       <v-icon color="error" class="mb-2">mdi-alert-circle-outline</v-icon>
       <div class="grey--text text-caption">{{ error }}</div>
-      <v-btn x-small text :color="primaryColor" class="mt-2" @click="loadPools(1)">Retry</v-btn>
+      <v-btn size="x-small" variant="text" :color="primaryColor" class="mt-2" @click="loadPools(1)">Retry</v-btn>
     </div>
 
     <!-- Pool List -->
@@ -70,7 +70,7 @@
               rounded
               :color="getColor(pool.live_saturation)"
               height="6"
-              :value="pool.live_saturation"
+              :model-value="pool.live_saturation"
               class="saturation-bar"
             />
             <span class="text-caption grey--text">{{ Math.ceil(pool.live_saturation || 0) }}%</span>
@@ -86,21 +86,21 @@
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="pagination-row">
         <v-btn
-          icon
-          x-small
+          icon variant="text"
+          size="x-small"
           :disabled="page <= 1 || loading"
           @click="loadPools(page - 1)"
         >
-          <v-icon small>mdi-chevron-left</v-icon>
+          <v-icon size="small">mdi-chevron-left</v-icon>
         </v-btn>
         <span class="text-caption grey--text">{{ page }} / {{ totalPages }}</span>
         <v-btn
-          icon
-          x-small
+          icon variant="text"
+          size="x-small"
           :disabled="page >= totalPages || loading"
           @click="loadPools(page + 1)"
         >
-          <v-icon small>mdi-chevron-right</v-icon>
+          <v-icon size="small">mdi-chevron-right</v-icon>
         </v-btn>
       </div>
     </div>
@@ -257,17 +257,20 @@ onMounted(() => {
   border-radius: var(--g-r-control);
 }
 
-.pool-search >>> .v-input__slot {
+.pool-search :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-raised) !important;
-  border-color: var(--g-hairline-1) !important;
   min-height: 36px !important;
 }
 
-.pool-search >>> .v-input__slot fieldset {
-  border-color: var(--g-hairline-1) !important;
+.pool-search :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
-.filter-switch >>> .v-input--switch__track {
+.filter-switch :deep(.v-switch__track) {
   opacity: 0.4;
 }
 

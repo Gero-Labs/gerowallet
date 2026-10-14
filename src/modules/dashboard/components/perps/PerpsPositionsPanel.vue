@@ -2,11 +2,11 @@
   <div class="positions-area">
     <v-tabs
       v-model="activeTab"
-      background-color="transparent"
+      bg-color="transparent"
       color="success"
       slider-color="success"
       height="32"
-      @change="onTabChange"
+      @update:model-value="onTabChange"
     >
       <v-tab class="tab-item">
         <span class="tab-text">{{ $t('perpetuals.positions') }}</span>
@@ -27,9 +27,9 @@
       </v-tab>
     </v-tabs>
 
-    <v-tabs-items v-model="activeTab" class="transparent positions-tabs-items">
+    <v-window v-model="activeTab" class="transparent positions-tabs-items">
       <!-- Positions -->
-      <v-tab-item>
+      <v-window-item>
         <div v-if="tabLoading[0]" class="tab-loading">
           <v-progress-circular indeterminate color="success" size="24" />
         </div>
@@ -39,13 +39,12 @@
         </div>
         <v-data-table
           v-else
-          dense
+          density="compact"
           :headers="positionHeaders"
           :items="positionRows"
-          item-key="pos.PositionID"
-          :expanded.sync="expandedRows"
+          item-value="pos.PositionID"
+          :expanded="expandedRows" @update:expanded="expandedRows = $event.slice(-1)"
           show-expand
-          single-expand
           class="transparent perps-table"
           hide-default-footer
           :items-per-page="-1"
@@ -68,13 +67,13 @@
             <span class="font-mono">{{ formatSize(item.pos.Size) }}</span>
           </template>
           <template v-slot:[`item.liquidation_price`]="{ item }">
-            <v-tooltip top max-width="240" :open-delay="120">
-              <template #activator="{ on, attrs }">
+            <v-tooltip location="top"  max-width="240" :open-delay="120">
+              <template #activator="{ props: activatorProps }">
                 <span
                   class="font-mono cell-hint"
                   :class="liqClass(item)"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="activatorProps"
+
                 >
                   {{ formatPrice(item.liqPrice) }}
                   <span class="liq-distance" v-if="item.distanceToLiq != null">
@@ -98,7 +97,7 @@
           </template>
           <template v-slot:[`item.actions`]="{ item }">
             <v-btn
-              x-small text color="error"
+              size="x-small" variant="text" color="error"
               :loading="closingPosition === item.pos.PositionID"
               @click="closePosition(item.pos)"
               class="action-btn"
@@ -106,8 +105,8 @@
               {{ $t('perpetuals.close') }}
             </v-btn>
           </template>
-          <template v-slot:expanded-item="{ headers, item }">
-            <td :colspan="headers.length" class="expanded-cell">
+          <template #expanded-row="{ columns, item }"><tr>
+            <td :colspan="columns.length" class="expanded-cell">
               <div class="expanded-summary">
                 <div class="expanded-title">{{ $t('perps.position.summary') }}</div>
                 <div class="expanded-grid">
@@ -150,14 +149,14 @@
                 </div>
               </div>
             </td>
-          </template>
+          </tr></template>
         </v-data-table>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- Open Orders -->
-      <v-tab-item>
+      <v-window-item>
         <div class="d-flex justify-end pa-1" v-if="openOrders.length > 0">
-          <v-btn x-small text color="error" :loading="cancellingAll" @click="cancelAllOrdersAction()">
+          <v-btn size="x-small" variant="text" color="error" :loading="cancellingAll" @click="cancelAllOrdersAction()">
             {{ $t('perpetuals.cancelAll') }}
           </v-btn>
         </div>
@@ -170,7 +169,7 @@
         </div>
         <v-data-table
           v-else
-          dense
+          density="compact"
           :headers="openOrderHeaders"
           :items="openOrders"
           class="transparent perps-table"
@@ -183,15 +182,15 @@
             </span>
           </template>
           <template v-slot:[`item.actions`]="{ item }">
-            <v-btn x-small text color="error" :loading="cancellingOrder === item.ID" @click="cancelOrderAction(item)" class="action-btn">
+            <v-btn size="x-small" variant="text" color="error" :loading="cancellingOrder === item.ID" @click="cancelOrderAction(item)" class="action-btn">
               {{ $t('perpetuals.cancel') }}
             </v-btn>
           </template>
         </v-data-table>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- Order History -->
-      <v-tab-item>
+      <v-window-item>
         <div v-if="tabLoading[2]" class="tab-loading">
           <v-progress-circular indeterminate color="success" size="24" />
         </div>
@@ -200,22 +199,22 @@
           <p class="mt-1">{{ $t('perpetuals.noOrderHistory') }}</p>
         </div>
         <v-data-table
-          v-else dense
+          v-else density="compact"
           :headers="orderHistoryHeaders"
           :items="orderHistory"
           class="transparent perps-table"
           :items-per-page="20"
-          :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
+          :items-per-page-options="[10, 20, 50]"
         >
           <template v-slot:[`item.side`]="{ item }">
             <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">{{ item.side }}</span>
           </template>
           <template v-slot:[`item.created_at`]="{ item }">{{ formatTime(item.created_at) }}</template>
         </v-data-table>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- Fill History -->
-      <v-tab-item>
+      <v-window-item>
         <div v-if="tabLoading[3]" class="tab-loading">
           <v-progress-circular indeterminate color="success" size="24" />
         </div>
@@ -224,12 +223,12 @@
           <p class="mt-1">{{ $t('perpetuals.noFillHistory') }}</p>
         </div>
         <v-data-table
-          v-else dense
+          v-else density="compact"
           :headers="fillHistoryHeaders"
           :items="fillHistory"
           class="transparent perps-table"
           :items-per-page="20"
-          :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
+          :items-per-page-options="[10, 20, 50]"
         >
           <template v-slot:[`item.side`]="{ item }">
             <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">{{ item.side }}</span>
@@ -241,10 +240,10 @@
           </template>
           <template v-slot:[`item.time`]="{ item }">{{ formatTime(item.time) }}</template>
         </v-data-table>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- Funding History -->
-      <v-tab-item>
+      <v-window-item>
         <div v-if="tabLoading[4]" class="tab-loading">
           <v-progress-circular indeterminate color="success" size="24" />
         </div>
@@ -253,12 +252,12 @@
           <p class="mt-1">{{ $t('perpetuals.noFundingHistory') }}</p>
         </div>
         <v-data-table
-          v-else dense
+          v-else density="compact"
           :headers="fundingHistoryHeaders"
           :items="fundingHistory"
           class="transparent perps-table"
           :items-per-page="20"
-          :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
+          :items-per-page-options="[10, 20, 50]"
         >
           <template v-slot:[`item.income`]="{ item }">
             <span :class="parseFloat(item.income) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
@@ -267,8 +266,8 @@
           </template>
           <template v-slot:[`item.time`]="{ item }">{{ formatTime(item.time) }}</template>
         </v-data-table>
-      </v-tab-item>
-    </v-tabs-items>
+      </v-window-item>
+    </v-window>
   </div>
 </template>
 
@@ -607,7 +606,7 @@ const positionRows = computed<PositionRow[]>(() => {
   });
 });
 
-const expandedRows = ref<PositionRow[]>([]);
+const expandedRows = ref<string[]>([]);
 
 // ---------------------------------------------------------------------------
 // Formatters (tight, scoped — independent of usePerpsFormatters)
@@ -654,53 +653,53 @@ function liqClass(row: PositionRow): string {
 // ---------------------------------------------------------------------------
 
 const positionHeaders = [
-  { text: $t('perpetuals.positions'), value: 'symbol', sortable: true },
-  { text: $t('perpetuals.side'), value: 'Side', sortable: true },
-  { text: $t('perps.position.size'), value: 'Size', sortable: false },
-  { text: `${$t('perps.position.entry')} / ${$t('perps.position.mark')}`, value: 'entryMark', sortable: false },
-  { text: $t('perps.position.liqPrice'), value: 'liquidation_price', sortable: false },
-  { text: $t('perps.position.margin'), value: 'margin', sortable: false },
-  { text: `${$t('perps.position.upnl')} (%)`, value: 'upnl', sortable: false },
-  { text: '', value: 'actions', sortable: false, width: 70 },
-  { text: '', value: 'data-table-expand', width: 28 },
+  { title: $t('perpetuals.positions'), key: 'symbol', sortable: true },
+  { title: $t('perpetuals.side'), key: 'Side', sortable: true },
+  { title: $t('perps.position.size'), key: 'Size', sortable: false },
+  { title: `${$t('perps.position.entry')} / ${$t('perps.position.mark')}`, key: 'entryMark', sortable: false },
+  { title: $t('perps.position.liqPrice'), key: 'liquidation_price', sortable: false },
+  { title: $t('perps.position.margin'), key: 'margin', sortable: false },
+  { title: `${$t('perps.position.upnl')} (%)`, key: 'upnl', sortable: false },
+  { title: '', key: 'actions', sortable: false, width: 70 },
+  { title: '', key: 'data-table-expand', width: 28 },
 ];
 
 const openOrderHeaders = [
-  { text: 'Type', value: 'Type', sortable: true },
-  { text: 'Side', value: 'Side', sortable: true },
-  { text: 'Symbol', value: 'Symbol', sortable: true },
-  { text: 'Price', value: 'Price', sortable: true },
-  { text: 'Size', value: 'Size', sortable: true },
-  { text: 'Filled', value: 'Filled', sortable: true },
-  { text: 'Status', value: 'Status', sortable: true },
-  { text: '', value: 'actions', sortable: false, width: 70 },
+  { title: 'Type', key: 'Type', sortable: true },
+  { title: 'Side', key: 'Side', sortable: true },
+  { title: 'Symbol', key: 'Symbol', sortable: true },
+  { title: 'Price', key: 'Price', sortable: true },
+  { title: 'Size', key: 'Size', sortable: true },
+  { title: 'Filled', key: 'Filled', sortable: true },
+  { title: 'Status', key: 'Status', sortable: true },
+  { title: '', key: 'actions', sortable: false, width: 70 },
 ];
 
 const orderHistoryHeaders = [
-  { text: 'Type', value: 'type', sortable: true },
-  { text: 'Side', value: 'side', sortable: true },
-  { text: 'Symbol', value: 'symbol', sortable: true },
-  { text: 'Price', value: 'price', sortable: true },
-  { text: 'Size', value: 'size', sortable: true },
-  { text: 'Filled', value: 'filled', sortable: true },
-  { text: 'Status', value: 'status', sortable: true },
-  { text: 'Time', value: 'created_at', sortable: true },
+  { title: 'Type', key: 'type', sortable: true },
+  { title: 'Side', key: 'side', sortable: true },
+  { title: 'Symbol', key: 'symbol', sortable: true },
+  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Size', key: 'size', sortable: true },
+  { title: 'Filled', key: 'filled', sortable: true },
+  { title: 'Status', key: 'status', sortable: true },
+  { title: 'Time', key: 'created_at', sortable: true },
 ];
 
 const fillHistoryHeaders = [
-  { text: 'Symbol', value: 'symbol', sortable: true },
-  { text: 'Side', value: 'side', sortable: true },
-  { text: 'Price', value: 'price', sortable: true },
-  { text: 'Qty', value: 'qty', sortable: true },
-  { text: 'Fee', value: 'commission', sortable: true },
-  { text: 'Realized PnL', value: 'realized_pnl', sortable: true },
-  { text: 'Time', value: 'time', sortable: true },
+  { title: 'Symbol', key: 'symbol', sortable: true },
+  { title: 'Side', key: 'side', sortable: true },
+  { title: 'Price', key: 'price', sortable: true },
+  { title: 'Qty', key: 'qty', sortable: true },
+  { title: 'Fee', key: 'commission', sortable: true },
+  { title: 'Realized PnL', key: 'realized_pnl', sortable: true },
+  { title: 'Time', key: 'time', sortable: true },
 ];
 
 const fundingHistoryHeaders = [
-  { text: 'Symbol', value: 'symbol', sortable: true },
-  { text: 'Income', value: 'income', sortable: true },
-  { text: 'Time', value: 'time', sortable: true },
+  { title: 'Symbol', key: 'symbol', sortable: true },
+  { title: 'Income', key: 'income', sortable: true },
+  { title: 'Time', key: 'time', sortable: true },
 ];
 </script>
 

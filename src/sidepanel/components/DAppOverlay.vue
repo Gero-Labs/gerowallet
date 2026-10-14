@@ -1,6 +1,6 @@
 <template>
   <BottomSheet
-    :value="isVisible"
+    :model-value="isVisible"
     variant="trust"
     :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect' || currentRequest?.method === 'wcSessionProposal') ? '70%' : '85%'"
     @escape="onEscapeReject"
@@ -12,7 +12,7 @@
           <span class="grey--text text-caption">
             {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
           </span>
-          <v-btn text x-small color="error" @click="rejectAll()">{{ $t('miniGero.rejectAll') }}</v-btn>
+          <v-btn variant="text" size="x-small" color="error" @click="rejectAll()">{{ $t('miniGero.rejectAll') }}</v-btn>
         </div>
         <div
           v-for="item in requestQueue"
@@ -23,7 +23,7 @@
             <span class="queue-strip-method">{{ queuedItemMethod(item) }}</span>
             <span class="queue-strip-domain">· {{ queuedItemDomain(item) }}</span>
           </span>
-          <v-btn icon x-small :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
+          <v-btn icon variant="text" size="x-small" :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
             <v-icon size="14" color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
         </div>
@@ -87,8 +87,8 @@
         </div>
 
         <div class="action-buttons">
-          <v-btn outlined rounded dark @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed @click="approve(true)">
+          <v-btn variant="outlined" rounded theme="dark" @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" @click="approve(true)">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -135,7 +135,7 @@
         <TxApprovalIntents
           v-if="approvalSummary"
           :summary="approvalSummary"
-          :network-ack.sync="networkMismatchAck"
+          v-model:network-ack="networkMismatchAck"
           :primary-color="primaryColor"
         />
 
@@ -151,8 +151,8 @@
               v-model="decodeFailedAck"
               color="error"
               hide-details
-              dark
-              dense
+              theme="dark"
+              density="compact"
               class="mt-2"
               :label="$t('signTx.decodeFailedAck')"
             />
@@ -170,8 +170,8 @@
               v-model="highRiskAck"
               color="error"
               hide-details
-              dark
-              dense
+              theme="dark"
+              density="compact"
               class="mt-2"
               :label="$t('signTx.highRiskAck')"
             />
@@ -195,11 +195,11 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signNormal"
           />
           <!-- MPC (Google) wallet: nothing to enter — signs with the session-cached
@@ -227,9 +227,9 @@
                 icon-left="mdi-usb"
                 :text-right="$t('wallet.bluetooth')"
                 icon-right="mdi-bluetooth"
-                :value="isBT"
+                :model-value="isBT"
                 :disabled="signing"
-                @input="isBT = $event"
+                @update:model-value="isBT = $event"
               />
             </div>
           </div>
@@ -298,16 +298,16 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signDataNormal"
           />
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || signDataDecodeError" @click="signDataNormal">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -317,8 +317,8 @@
         <template v-else-if="isMpcWallet">
           <p v-if="signError" class="error--text text-caption text-center mb-2 mt-3">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!!signDataDecodeError" @click="signDataNormal">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!!signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -329,8 +329,8 @@
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataPrf">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signDataDecodeError" @click="signDataPrf">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -344,8 +344,8 @@
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -359,8 +359,8 @@
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -374,8 +374,8 @@
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataKeystone">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signDataDecodeError" @click="signDataKeystone">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -385,8 +385,8 @@
         <template v-else>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataNormal">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -422,11 +422,11 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signBtcPsbtNormal"
           />
         </template>
@@ -455,7 +455,7 @@
           </div>
         </div>
 
-        <v-chip x-small color="orange darken-2" text-color="white" class="mb-2">
+        <v-chip size="x-small" color="orange darken-2" text-color="white" class="mb-2">
           {{ btcMessageSigningType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}
         </v-chip>
         <div class="sign-data-message">
@@ -467,16 +467,16 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signBtcMessageNormal"
           />
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signBtcMessageNormal">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword" @click="signBtcMessageNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -485,8 +485,8 @@
           <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="runBtcPrf(signBtcMessagePrf)">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" @click="runBtcPrf(signBtcMessagePrf)">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -497,7 +497,7 @@
         <template v-else>
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('bitcoin.hardwareMessageSigningNotSupported') }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -533,8 +533,8 @@
         </div>
 
         <div class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed @click="approveMidnightConnect">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" @click="approveMidnightConnect">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -572,19 +572,19 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signMidnightDataNormal"
           />
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               class="geroButton"
               rounded
-              depressed
+              variant="flat"
               :loading="signing"
               :disabled="!spendingPassword || !!midnightSignDataDecodeError"
               @click="signMidnightDataNormal"
@@ -598,11 +598,11 @@
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               class="geroButton"
               rounded
-              depressed
+              variant="flat"
               :loading="signing"
               :disabled="!!midnightSignDataDecodeError"
               @click="signMidnightDataPrf"
@@ -617,7 +617,7 @@
         <template v-else>
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark block @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -675,19 +675,19 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signMidnightTransferNormal"
           />
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               class="geroButton"
               rounded
-              depressed
+              variant="flat"
               :loading="signing"
               :disabled="!spendingPassword"
               @click="signMidnightTransferNormal"
@@ -701,11 +701,11 @@
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               class="geroButton"
               rounded
-              depressed
+              variant="flat"
               :loading="signing"
               @click="signMidnightTransferPrf"
             >
@@ -718,7 +718,7 @@
         <template v-else>
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark block @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -755,19 +755,19 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="signMidnightBalanceNormal"
           />
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               class="geroButton"
               rounded
-              depressed
+              variant="flat"
               :loading="signing"
               :disabled="!spendingPassword"
               @click="signMidnightBalanceNormal"
@@ -781,11 +781,11 @@
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               class="geroButton"
               rounded
-              depressed
+              variant="flat"
               :loading="signing"
               @click="signMidnightBalancePrf"
             >
@@ -798,7 +798,7 @@
         <template v-else>
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark block @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -820,7 +820,7 @@
           <p class="t-body mb-1">{{ $t('midnight.connector.privateBalanceLead', { domain: makeTransferDomain }) }}</p>
           <p class="grey--text text-caption mb-0">{{ $t('midnight.connector.privateBalanceWhy') }}</p>
           <template v-if="privateBalanceMode === 'syncing'">
-            <v-progress-linear :value="privateSyncPercentValue" height="6" rounded class="mt-3 mb-2" />
+            <v-progress-linear :model-value="privateSyncPercentValue" height="6" rounded class="mt-3 mb-2" />
             <p class="grey--text text-caption mb-0 g-num">{{ $t('midnight.connector.privateBalanceSyncing', { percent: privateSyncPercentValue }) }}</p>
           </template>
           <p v-else-if="privateSyncStatus === 'error'" class="error--text text-caption mt-3 mb-0">{{ $t('midnight.connector.privateBalanceFailed') }}</p>
@@ -828,8 +828,8 @@
 
         <template v-if="privateBalanceMode === 'syncing'">
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed @click="continueMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceContinue') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" @click="continueMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceContinue') }}</v-btn>
           </div>
         </template>
 
@@ -838,16 +838,16 @@
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             :error-messages="signError"
-            outlined dense dark
+            variant="outlined" density="compact" theme="dark"
             class="password-input"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="unlockMidnightPrivateBalanceNormal"
           />
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="unlockMidnightPrivateBalanceNormal">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword" @click="unlockMidnightPrivateBalanceNormal">
               {{ $t('midnight.connector.privateBalanceUnlock') }}
             </v-btn>
           </div>
@@ -857,8 +857,8 @@
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.privateBalancePassKey') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="unlockMidnightPrivateBalancePrf">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" @click="unlockMidnightPrivateBalancePrf">
               {{ $t('midnight.connector.privateBalanceUnlock') }}
             </v-btn>
           </div>
@@ -867,7 +867,7 @@
         <template v-else>
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
           <div class="action-buttons">
-            <v-btn outlined rounded dark block @click="rejectMidnightPrivateBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightPrivateBalance">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -889,15 +889,15 @@
           <p class="grey--text text-caption mb-2">{{ $t(provingServerBodyKey, { domain: makeTransferDomain, url: provingServerPayload.url }) }}</p>
           <p v-if="(provingServerPayload.attempt || 1) > 1" class="grey--text text-caption mb-2">{{ $t('midnight.connector.provingServerStillDown', { url: provingServerPayload.url }) }}</p>
           <p class="grey--text text-caption mb-2">{{ $t('midnight.connector.provingServerHint') }}</p>
-          <v-btn text small class="px-0" :color="primaryColor" @click="openProofServerSettings">
+          <v-btn variant="text" size="small" class="px-0" :color="primaryColor" @click="openProofServerSettings">
             {{ $t('midnight.proofServer.openSettings') }}
             <v-icon size="14" class="ml-1">mdi-open-in-new</v-icon>
           </v-btn>
         </div>
 
         <div class="action-buttons">
-          <v-btn outlined rounded dark @click="cancelMidnightProving">{{ $t('common.cancel') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed @click="retryMidnightProving">{{ $t('midnight.connector.provingServerRetry') }}</v-btn>
+          <v-btn variant="outlined" rounded theme="dark" @click="cancelMidnightProving">{{ $t('common.cancel') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" @click="retryMidnightProving">{{ $t('midnight.connector.provingServerRetry') }}</v-btn>
         </div>
       </div>
 
@@ -924,7 +924,7 @@
           <v-chip
             v-for="chain in wcRequestedChainNames"
             :key="chain"
-            small outlined :color="primaryColor"
+            size="small" variant="outlined" :color="primaryColor"
             class="mr-1 mb-1"
           >{{ chain }}</v-chip>
           <div v-if="wcHasUnsupportedChains" class="decode-error text-caption mt-1">
@@ -937,11 +937,11 @@
         </div>
 
         <div class="action-buttons">
-          <v-btn outlined rounded dark @click="reject()">{{ $t('walletConnect.reject') }}</v-btn>
+          <v-btn variant="outlined" rounded theme="dark" @click="reject()">{{ $t('walletConnect.reject') }}</v-btn>
           <!-- The consent gate is gone, the CAPABILITY gate stays: an unsupported
                chain means we genuinely cannot honour the session. -->
           <v-btn
-            class="geroButton" rounded depressed
+            class="geroButton" rounded variant="flat"
             :disabled="wcHasUnsupportedChains"
             @click="approveWcSession"
           >{{ $t('walletConnect.approve') }}</v-btn>
@@ -970,48 +970,48 @@
       <template v-if="currentRequest.method === 'signTx'">
         <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
           <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn
               v-if="!isPrfWallet"
-              class="geroButton" rounded depressed :loading="signing"
+              class="geroButton" rounded variant="flat" :loading="signing"
               :disabled="(!spendingPassword && !isMpcWallet) || signTxBlocked" @click="signNormal"
             >{{ $t('miniGero.sign') }}</v-btn>
             <v-btn
               v-else
-              class="geroButton" rounded depressed :loading="signing"
+              class="geroButton" rounded variant="flat" :loading="signing"
               :disabled="signTxBlocked" @click="signPrf"
             >{{ $t('miniGero.sign') }}</v-btn>
           </div>
         </template>
         <div v-else-if="walletType === WalletType.Ledger" class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signTxBlocked" @click="signLedger">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
         <div v-else-if="walletType === WalletType.Trezor" class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
         <div v-else-if="walletType === WalletType.Keystone" class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
 
         <!-- Live TTL countdown — centered, monospaced so digits don't shift
              width as it ticks. Hidden once expired (the red banner replaces it). -->
-        <v-tooltip
+        <v-tooltip location="top"
           v-if="ttlDisplay.relative && !ttlDisplay.expired"
-          top
+
           content-class="custom-tooltip"
           max-width="260"
         >
-          <template v-slot:activator="{ on, attrs }">
-            <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
+          <template v-slot:activator="{ props: activatorProps }">
+            <div class="tx-ttl-footer" v-bind="activatorProps" >
               <span>{{ $t('signTx.expiresIn') }}</span>
               <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
             </div>
@@ -1023,22 +1023,22 @@
       <!-- Bitcoin PSBT: Normal/PRF only, matching the pane above -->
       <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
         <div class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signBtcPsbtNormal">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword" @click="signBtcPsbtNormal">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
       </template>
       <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
         <div class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :loading="signing" @click="runBtcPrf(signBtcPsbtPrf)">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" @click="runBtcPrf(signBtcPsbtPrf)">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
       </template>
       <div v-else class="action-buttons">
-        <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+        <v-btn variant="outlined" rounded theme="dark" block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
       </div>
     </template>
     <ShieldedProvingConsentDialog
@@ -1051,6 +1051,7 @@
 </template>
 
 <script setup lang="ts">
+import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -1103,7 +1104,27 @@ import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
-const { isVisible, currentRequest, requestQueue, approve, reject, rejectQueued, rejectAll, setOverlayReady } = useDAppOverlay();
+// The hub keeps opaque payloads; this view renders the established background
+// approval protocol. Individual signing branches still validate their payload.
+interface ApprovalPayload {
+  website?: string;
+  favIconUrl?: string;
+  tx?: string;
+  partialSign?: boolean;
+  mergeWitnesses?: boolean;
+  address?: string;
+  payload?: string;
+  cip45Authorization?: Cip45Authorization;
+  data?: {
+    data?: string;
+    options?: { encoding?: MidnightSignDataEncoding };
+    tx?: string;
+    desiredOutputs?: ConnectorDesiredOutput[];
+  };
+}
+type RenderedRequest = Omit<DAppRequest, 'payload'> & { payload: ApprovalPayload };
+const { isVisible, currentRequest: opaqueRequest, requestQueue, approve, reject, rejectQueued, rejectAll, setOverlayReady } = useDAppOverlay();
+const currentRequest = computed(() => opaqueRequest.value as RenderedRequest | null);
 
 // This overlay renders only when the wallet is unlocked + active (v-if in
 // App.vue). Tell the hub when we're actually able to show a request, so a
@@ -1240,7 +1261,7 @@ const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMet
 const isMpcWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'mpc');
 const loggedWallet = computed(() => WalletStore.state.loggedWallet);
 const keys = computed(() => WalletStore.state.keys);
-const utxos = computed(() => WalletStore.state.utxos);
+const utxos = computed(() => loggedWallet.value?.chain === Blockchain.CARDANO ? WalletStore.state.utxos as Cardano.Utxo[] : []);
 // Ledger transport picker (false = WebUSB, true = WebBLE). User-selected, not
 // derived: `connectionType` was never persisted on the wallet record, so the old
 // computed was always false and every side-panel Ledger sign forced WebUSB —
@@ -1440,39 +1461,48 @@ const btcMessageSigningType = computed<'ecdsa' | 'bip322-simple'>(() => {
 });
 
 async function signBtcPsbtNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || !spendingPassword.value) return;
   signing.value = true;
   signError.value = '';
   try {
     const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
       data: { psbtHex, options, password: spendingPassword.value },
-    }) as { data: { success: boolean; signedHex?: string; error?: string } };
+    })), approvalCurrent) as { data: { success: boolean; signedHex?: string; error?: string } };
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
     approve(response.data.signedHex);
     spendingPassword.value = '';
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Bitcoin PSBT sign error:', e);
     signError.value = e instanceof Error ? e.message : 'Signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 async function signBtcPsbtPrf(pkBytes: Uint8Array) {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
   try {
     const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
       data: { psbtHex, options, privateKeyBytes: Array.from(pkBytes) },
-    }) as { data: { success: boolean; signedHex?: string; error?: string } };
+    })), approvalCurrent) as { data: { success: boolean; signedHex?: string; error?: string } };
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
     approve(response.data.signedHex);
   } catch (e) {
+    if (e instanceof StaleApprovalError) throw e;
     console.error('[DApp] Bitcoin PSBT PRF sign error:', e);
     signError.value = e instanceof Error ? e.message : 'PassKey signing failed';
   } finally {
@@ -1481,37 +1511,46 @@ async function signBtcPsbtPrf(pkBytes: Uint8Array) {
 }
 
 async function signBtcMessageNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || !spendingPassword.value) return;
   signing.value = true;
   signError.value = '';
   try {
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
       data: { message: btcMessageText.value, type: btcMessageSigningType.value, password: spendingPassword.value },
-    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    })), approvalCurrent) as { data: { success: boolean; signature?: unknown; error?: string } };
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
     approve(response.data.signature);
     spendingPassword.value = '';
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Bitcoin message sign error:', e);
     signError.value = e instanceof Error ? e.message : 'Signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 async function signBtcMessagePrf(pkBytes: Uint8Array) {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
   try {
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
       data: { message: btcMessageText.value, type: btcMessageSigningType.value, privateKeyBytes: Array.from(pkBytes) },
-    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    })), approvalCurrent) as { data: { success: boolean; signature?: unknown; error?: string } };
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
     approve(response.data.signature);
   } catch (e) {
+    if (e instanceof StaleApprovalError) throw e;
     console.error('[DApp] Bitcoin message PRF sign error:', e);
     signError.value = e instanceof Error ? e.message : 'PassKey signing failed';
   } finally {
@@ -1522,13 +1561,16 @@ async function signBtcMessagePrf(pkBytes: Uint8Array) {
 // PRF wallets need the WebAuthn ceremony (same cross-window pattern as
 // signPrf/signDataPrf above) before either Bitcoin signer can run.
 async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
   try {
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
-    const pkBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const pkBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
@@ -1544,13 +1586,16 @@ async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
         window.removeEventListener('message', handler);
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
-    });
-    await onSuccess(pkBytes);
+    })), approvalCurrent);
+    await awaitFreshApproval(async () => (onSuccess(pkBytes)), approvalCurrent);
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Bitcoin PRF auth error:', e);
     signError.value = e instanceof Error ? e.message : 'PassKey authentication failed';
     signing.value = false;
   }
+
+  });
 }
 
 // ── Midnight DApp Connector: signData preview ──────────────────────────────
@@ -2015,10 +2060,12 @@ watch(
 
 // Keystone state
 const showKeystoneDialog = ref(false);
+let keystoneRequestId = '';
+let keystoneApprovalCurrent: (() => boolean) | null = null;
 const keystoneType = ref('');
 const keystoneCbor = ref('');
 const keystoneUseHash = ref(false);
-let keystoneSigningRequest: DAppRequest | null = null;
+let keystoneSigningRequest: RenderedRequest | null = null;
 // CIP-8 data signing reuses the same dialog, but the device answers with a
 // different UR type and the COSE structures have to be finished off the
 // builder created when the request was generated.
@@ -2033,6 +2080,12 @@ const keystoneUrTypes = computed(() => (
 // declared EARLY (right after signDataDomain) — a `watch(loggedWallet)` and
 // several computeds above reference them, so declaring them here (late) is a
 // temporal-dead-zone crash in setup(). Do not move them back down.
+
+const approval = useApprovalFreshness(
+  () => [currentRequest.value, loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId],
+  () => !!currentRequest.value && !!loggedWallet.value && !WalletStore.state.isLocked,
+  () => { showKeystoneDialog.value = false; keystoneApprovalCurrent = null; keystoneSigningRequest = null; spendingPassword.value = ''; },
+);
 
 // Reset state when request changes
 watch(currentRequest, () => {
@@ -2053,6 +2106,7 @@ watch(currentRequest, () => {
 });
 
 function rejectSign() {
+  approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
   reject('user_rejected');
@@ -2062,6 +2116,9 @@ function rejectSign() {
 // MPC (Google) wallets reach here too — they carry no spending password (the
 // background resolves the session-cached key), so only require one for non-MPC.
 async function signNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   if (!isMpcWallet.value && !spendingPassword.value) return;
@@ -2069,9 +2126,9 @@ async function signNormal() {
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const payload = signingRequest.payload;
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+    const witnessResult = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
         cip45Authorization: signingRequest?.payload?.cip45Authorization,
@@ -2083,34 +2140,40 @@ async function signNormal() {
         addresses: keys.value,
         mergeWitnesses: payload.mergeWitnesses || false,
       }
-    }) as { data: { witnesses?: string; error?: string } };
+    })), approvalCurrent) as { data: { witnesses?: string; error?: string } };
 
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve(witnessResult.data.witnesses);
     spendingPassword.value = '';
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Normal sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── PRF wallet: PassKey signing ──
 async function signPrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
 
-    const pkBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const pkBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
@@ -2126,10 +2189,10 @@ async function signPrf() {
         window.removeEventListener('message', handler);
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
-    });
+    })), approvalCurrent);
 
     const payload = signingRequest.payload;
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+    const witnessResult = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
         cip45Authorization: signingRequest?.payload?.cip45Authorization,
@@ -2142,18 +2205,21 @@ async function signPrf() {
         mergeWitnesses: payload.mergeWitnesses || false,
         privateKeyBytes: Array.from(pkBytes),
       }
-    }) as { data: { witnesses?: string; error?: string } };
+    })), approvalCurrent) as { data: { witnesses?: string; error?: string } };
 
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve(witnessResult.data.witnesses);
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 /**
@@ -2180,14 +2246,16 @@ async function signPrf() {
  * page) and from this exact tab.
  */
 async function signLedgerViaBleWindow(txCbor: string, cip45Authorization?: Cip45Authorization): Promise<string> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const url = chrome.runtime.getURL('index.html#/ledger-ble-sign');
-  const win = await chrome.windows.create({
+  const win = await awaitFreshApproval(async () => (chrome.windows.create({
     url,
     type: 'normal', // MUST stay 'normal': 'popup' has no toolbar for the chooser to anchor to
     width: 460,
     height: 680,
     focused: true,
-  });
+  })), approvalCurrent);
   const tabId = win?.tabs?.[0]?.id;
   if (tabId === undefined) throw new Error(t('wallet.ledgerBleSignFailed'));
 
@@ -2249,18 +2317,21 @@ async function signLedgerViaBleWindow(txCbor: string, cip45Authorization?: Cip45
 
 // ── Ledger wallet signing ──
 async function signLedger() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value || !loggedWallet.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const txCbor = signingRequest.payload.tx;
 
     if (isBT.value) {
-      const bleWitnesses = await signLedgerViaBleWindow(txCbor, signingRequest.payload.cip45Authorization);
-      await validateCip45Signing(signingRequest?.payload);
+      const bleWitnesses = await awaitFreshApproval(async () => (signLedgerViaBleWindow(txCbor, signingRequest.payload.cip45Authorization)), approvalCurrent);
+      await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
       if (currentRequest.value !== signingRequest) return;
       approve(bleWitnesses);
       return;
@@ -2271,20 +2342,21 @@ async function signLedger() {
     // Only on the WebUSB path — the BLE branch above returned already, and its
     // separate signing window carries its own device status.
     hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+    const signatures: Cardano.Signatures = await awaitFreshApproval(async () => (ledgerUtils.txToLedger(
       tx,
       keys.value,
       utxos.value,
       true, // WebUSB — the BLE path returned above via the popup
       networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
       txCbor,
-    );
+    )), approvalCurrent);
 
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve(witnessSet.toCbor());
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] Ledger sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
@@ -2292,10 +2364,15 @@ async function signLedger() {
     signing.value = false;
     hardwareLoading.end();
   }
+
+  });
 }
 
 // ── Trezor wallet signing ──
 async function signTrezor() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
@@ -2305,15 +2382,15 @@ async function signTrezor() {
   // call — connecting through the confirmation the device is waiting on.
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const txCbor = signingRequest.payload.tx;
     const data = { method: 'signTx', txCbor, cip45Authorization: signingRequest?.payload?.cip45Authorization };
     const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
-      ? await dispatchTrezor(data)
-      : await Messaging.sendToBackgroundFromOptions({
+      ? await awaitFreshApproval(async () => (dispatchTrezor(data)), approvalCurrent)
+      : await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
         data,
-      })) as BackgroundResponse<SignTxResponse>;
+      })), approvalCurrent)) as BackgroundResponse<SignTxResponse>;
 
     if (!response.data.success) {
       throw new Error(response.data.error || 'Trezor signing failed');
@@ -2322,10 +2399,11 @@ async function signTrezor() {
     const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
     const signatures: Cardano.Signatures = new Map(signaturesArray);
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve(witnessSet.toCbor());
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Trezor sign error:', e);
     const message = e instanceof Error ? e.message : '';
     if (message.includes('Failure_ActionCancelled') || message.includes('cancelled')) {
@@ -2337,16 +2415,21 @@ async function signTrezor() {
     signing.value = false;
     hardwareLoading.end();
   }
+
+  });
 }
 
 // ── Keystone wallet signing ──
 async function signKeystone() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value || !loggedWallet.value) return;
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const txCbor = signingRequest.payload.tx;
     const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
     const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
@@ -2355,39 +2438,51 @@ async function signKeystone() {
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
+    keystoneRequestId = signRequestResponse.requestId;
     keystoneSigningRequest = signingRequest;
+    keystoneApprovalCurrent = approvalCurrent;
     showKeystoneDialog.value = true;
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Failed to create Keystone sign request';
   }
+
+  });
 }
 
 async function onKeystoneScan(ur: UR) {
+  return approval.run(async () => {
+  const approvalCurrent = keystoneApprovalCurrent;
+  if (!approvalCurrent?.() || !showKeystoneDialog.value) return;
+  keystoneApprovalCurrent = null;
   const signingRequest = keystoneSigningRequest;
   if (!signingRequest || signingRequest !== currentRequest.value) return;
   if (keystoneDataMode.value) {
-    await onKeystoneDataScan(ur, signingRequest);
+    await awaitFreshApproval(async () => (onKeystoneDataScan(ur, signingRequest, approvalCurrent)), approvalCurrent);
     return;
   }
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const signature = parseSignature(ur);
-    if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
+    if (!keystoneRequestId || signature?.requestId !== keystoneRequestId || !signature?.witnessSet || typeof signature.witnessSet !== 'string') {
       throw new Error('Invalid Keystone signature');
     }
     showKeystoneDialog.value = false;
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve(signature.witnessSet);
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) throw e;
     console.error('[DApp] Keystone scan error:', e);
     signError.value = (e instanceof Error ? e.message : '') || 'Keystone QR scan error';
     showKeystoneDialog.value = false;
   }
+  });
 }
 
 function onKeystoneClose() {
+  approval.invalidate();
   showKeystoneDialog.value = false;
   keystoneDataMode.value = false;
   keystoneDataBuilder = null;
@@ -2404,12 +2499,15 @@ function onKeystoneError(error: string) {
 // wallet fell through to signDataNormal(), which returns immediately on an
 // empty spending password — the Sign button did nothing at all.
 async function signDataKeystone() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!signingRequest || !loggedWallet.value) return;
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const { address, payload } = signingRequest.payload as { address: string; payload: string };
 
     // The dApp may hand us either bech32 or a hex-encoded address; the key
@@ -2433,7 +2531,7 @@ async function signDataKeystone() {
     const role = parseInt(pathParts[4].replace(/'/g, ''), 10);
     const keyIndex = parseInt(pathParts[5].replace(/'/g, ''), 10);
 
-    const { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } = await import('@/chrome/serialization');
+    const { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } = await awaitFreshApproval(async () => (import('@/chrome/serialization')), approvalCurrent);
     let derivedKey;
     if (role === 0) {
       derivedKey = getPaymentKeyExternal(xpubBech32, keyIndex);
@@ -2445,40 +2543,47 @@ async function signDataKeystone() {
       throw new Error(`Unknown derivation role: ${role}`);
     }
 
-    const { ur, builder, addressBytes } = createKeystoneDataSignRequest(
+    const { ur, builder, addressBytes, requestId } = createKeystoneDataSignRequest(
       address, payload, xfp, derivedKey.hex(), foundKey.path
     );
 
+    keystoneRequestId = requestId;
     keystoneDataBuilder = builder;
     keystoneDataAddressBytes = addressBytes;
     keystoneDataMode.value = true;
     keystoneType.value = ur.type;
     keystoneCbor.value = ur.cbor.toString('hex');
     keystoneSigningRequest = signingRequest;
+    keystoneApprovalCurrent = approvalCurrent;
     showKeystoneDialog.value = true;
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || t('wallet.keystoneSigningFailed');
   }
+
+  });
 }
 
-async function onKeystoneDataScan(ur: UR, signingRequest: DAppRequest) {
+async function onKeystoneDataScan(ur: UR, signingRequest: RenderedRequest, approvalCurrent: () => boolean) {
+  if (!approvalCurrent()) throw new StaleApprovalError();
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (!keystoneDataBuilder || !keystoneDataAddressBytes) {
       throw new Error('Missing builder or address bytes');
     }
-    const signatureData = parseDataSignature(ur, keystoneDataBuilder, keystoneDataAddressBytes);
+    const signatureData = parseDataSignature(ur, keystoneDataBuilder, keystoneDataAddressBytes, keystoneRequestId);
     // parseDataSignature frees the builder internally — never reuse it.
     keystoneDataBuilder = null;
     keystoneDataAddressBytes = null;
 
     showKeystoneDialog.value = false;
     keystoneDataMode.value = false;
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve({ signature: signatureData.signature, key: signatureData.key });
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) throw e;
     console.error('[DApp] Keystone sign data scan error:', e);
     signError.value = (e instanceof Error ? e.message : '') || t('wallet.keystoneQRScanError');
     showKeystoneDialog.value = false;
@@ -2488,6 +2593,9 @@ async function onKeystoneDataScan(ur: UR, signingRequest: DAppRequest) {
 
 // ── Sign Data: Normal wallet (password) ──
 async function signDataNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   // MPC (Google) wallets reach here with no spending password (session-cached key).
   if (!currentRequest.value) return;
@@ -2496,9 +2604,9 @@ async function signDataNormal() {
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const { address, payload } = signingRequest.payload;
-    const res = await Messaging.sendToBackgroundFromOptions({
+    const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
         cip45Authorization: signingRequest?.payload?.cip45Authorization,
@@ -2508,7 +2616,7 @@ async function signDataNormal() {
         accountIndex: 0,
         isUsb: true,
       },
-    }) as { data: { key?: string; signature?: string; error?: string } };
+    })), approvalCurrent) as { data: { key?: string; signature?: string; error?: string } };
 
     // The background resolves (does not reject) on failure, returning
     // { error }. Without this guard the error object was handed to the dApp as
@@ -2519,33 +2627,39 @@ async function signDataNormal() {
       throw new Error('Wallet returned an empty signature payload');
     }
 
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
 
     if (currentRequest.value !== signingRequest) return;
 
     approve(res.data);
     spendingPassword.value = '';
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── Sign Data: PRF wallet (PassKey) ──
 async function signDataPrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
 
-    const pkBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const pkBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
@@ -2561,11 +2675,11 @@ async function signDataPrf() {
         window.removeEventListener('message', handler);
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
-    });
+    })), approvalCurrent);
 
     const { address, payload } = signingRequest.payload;
-    const { buildSignatureAndCoseKey } = await import('@/shared/utils/converter');
-    const { Bip32PrivateKey } = await import('@cardano-sdk/crypto');
+    const { buildSignatureAndCoseKey } = await awaitFreshApproval(async () => (import('@/shared/utils/converter')), approvalCurrent);
+    const { Bip32PrivateKey } = await awaitFreshApproval(async () => (import('@cardano-sdk/crypto')), approvalCurrent);
 
     const rootKey = Bip32PrivateKey.fromBytes(pkBytes);
 
@@ -2596,21 +2710,27 @@ async function signDataPrf() {
       ? Buffer.from(Cardano.Address.fromBech32(address).toBytes(), 'hex')
       : Buffer.from(address, 'hex');
 
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const signatureData = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
     approve(signatureData);
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── Sign Data: Hardware wallet (Ledger/Trezor via background) ──
 async function signDataHw() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
@@ -2626,7 +2746,7 @@ async function signDataHw() {
   );
 
   try {
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const { address, payload } = signingRequest.payload;
 
     // Trezor: route through the Trezor handler (WebUSB when isTrezorWebUsbEnabled
@@ -2637,16 +2757,16 @@ async function signDataHw() {
     if (walletType.value === WalletType.Trezor) {
       const data = { method: 'signData', address, payload, accountIndex: 0, cip45Authorization: signingRequest?.payload?.cip45Authorization };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
-        ? await dispatchTrezor(data)
-        : await Messaging.sendToBackgroundFromOptions({
+        ? await awaitFreshApproval(async () => (dispatchTrezor(data)), approvalCurrent)
+        : await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.TREZOR,
           data,
-        })) as BackgroundResponse<{ signatureData?: { signatureHex: string; signingPublicKeyHex: string }; error?: string }>;
+        })), approvalCurrent)) as BackgroundResponse<{ success: boolean; signatureData?: { signatureHex: string; signingPublicKeyHex: string }; error?: string }>;
 
       if (!response.data.success || !response.data.signatureData) {
         throw new Error(response.data.error || 'Trezor signing failed');
       }
-      await validateCip45Signing(signingRequest?.payload);
+      await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
       if (currentRequest.value !== signingRequest) return;
       approve({
         signature: response.data.signatureData.signatureHex,
@@ -2656,7 +2776,7 @@ async function signDataHw() {
     }
 
     // Ledger (and any other USB HW handled by the SW SIGN_DATA path)
-    const res = await Messaging.sendToBackgroundFromOptions({
+    const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
         cip45Authorization: signingRequest?.payload?.cip45Authorization,
@@ -2666,25 +2786,28 @@ async function signDataHw() {
         accountIndex: 0,
         isUsb: true,
       },
-    }) as { data: { key?: string; signature?: string; error?: string } };
+    })), approvalCurrent) as { data: { key?: string; signature?: string; error?: string } };
 
     if (res?.data?.error) throw new Error(res.data.error);
     if (!res?.data?.signature || !res?.data?.key) {
       throw new Error('Wallet returned an empty signature payload');
     }
 
-    await validateCip45Signing(signingRequest?.payload);
+    await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
 
     if (currentRequest.value !== signingRequest) return;
 
     approve(res.data);
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] HW sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
   }
+
+  });
 }
 
 // ── Midnight DApp Connector ────────────────────────────────────────────────
@@ -2708,10 +2831,12 @@ function approveMidnightConnect() {
 }
 
 function rejectMidnightConnect() {
+  approval.invalidate();
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the connection request'));
 }
 
 function rejectMidnightSignData() {
+  approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the signing request'));
@@ -2722,6 +2847,7 @@ function rejectMidnightSignData() {
 // useDAppOverlay's default plain string, so route through those instead of
 // calling reject() bare for those two methods.
 function onEscapeReject() {
+  approval.invalidate();
   if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {
@@ -2740,29 +2866,38 @@ function onEscapeReject() {
 }
 
 async function signMidnightDataNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || !spendingPassword.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
     const { data, options } = currentRequest.value.payload.data;
-    const res = await Messaging.sendToBackgroundFromOptions({
+    const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA,
       data: { data, options, password: spendingPassword.value },
-    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    })), approvalCurrent) as { data: { success: boolean; signature?: unknown; error?: string } };
 
     if (!res?.data?.success) throw new Error(res?.data?.error || 'Failed to sign data');
     approve(res.data.signature);
     spendingPassword.value = '';
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 async function signMidnightDataPrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
@@ -2776,7 +2911,7 @@ async function signMidnightDataPrf() {
     const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
 
-    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const prfBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
@@ -2792,22 +2927,25 @@ async function signMidnightDataPrf() {
         window.removeEventListener('message', handler);
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
-    });
+    })), approvalCurrent);
 
     const { data, options } = currentRequest.value.payload.data;
-    const res = await Messaging.sendToBackgroundFromOptions({
+    const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA,
       data: { data, options, prfSecret: Array.from(prfBytes) },
-    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    })), approvalCurrent) as { data: { success: boolean; signature?: unknown; error?: string } };
 
     if (!res?.data?.success) throw new Error(res?.data?.error || 'Failed to sign data');
     approve(res.data.signature);
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── Midnight makeTransfer (DApp Connector) ─────────────────────────────────
@@ -2818,6 +2956,7 @@ async function signMidnightDataPrf() {
 // tx is built identically to a normal send. The mnemonic is decrypted only in
 // the background; the panel passes credentials and never sees keys.
 function rejectMidnightMakeTransfer() {
+  approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the transfer request'));
@@ -2827,6 +2966,8 @@ async function buildMidnightTransferTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
   approvedProver: 'local' | 'cloud' | 'zkpaas',
 ): Promise<{ tx: string }> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const wallet = loggedWallet.value;
   if (!wallet) throw new Error('No wallet logged in');
   const outputs = makeTransferOutputs.value.map((o) => ({
@@ -2836,7 +2977,7 @@ async function buildMidnightTransferTx(
     // native token for a request that named a different one.
     token: outputToken(o),
   }));
-  const { buildAndSignUnshieldedTransfer } = await import('@/services/midnight-tx.service');
+  const { buildAndSignUnshieldedTransfer } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
   // The service re-checks that this is still the prover in use, and that it
   // has consent, after authentication: the setting can change while a
   // PassKey prompt is open (PRIV-01 review).
@@ -2845,6 +2986,7 @@ async function buildMidnightTransferTx(
     { fromAddress: wallet.baseAddress, outputs, ttlMs: Date.now() + 5 * 60_000 },
     credentials,
     approvedProver,
+    approvalCurrent,
   );
 }
 
@@ -2871,6 +3013,9 @@ function transferNeedsProvingConsent(): boolean {
 }
 
 async function signMidnightTransferNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || !spendingPassword.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -2884,11 +3029,12 @@ async function signMidnightTransferNormal() {
   signError.value = '';
 
   try {
-    const { tx } = await buildMidnightTransferTx({ password: spendingPassword.value }, approvedProver);
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightTransferTx({ password: spendingPassword.value }, approvedProver)), approvalCurrent);
     if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
     approve({ tx });
     spendingPassword.value = '';
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight makeTransfer error:', e);
     // A remote prover without consent (setting changed during authentication): ask for it.
     if ((e as Error)?.name === 'ProvingConsentRequiredError') transferConsentOpen.value = true;
@@ -2896,9 +3042,14 @@ async function signMidnightTransferNormal() {
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 async function signMidnightTransferPrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -2915,7 +3066,7 @@ async function signMidnightTransferPrf() {
     const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
 
-    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const prfBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
@@ -2931,12 +3082,13 @@ async function signMidnightTransferPrf() {
         window.removeEventListener('message', handler);
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
-    });
+    })), approvalCurrent);
 
-    const { tx } = await buildMidnightTransferTx({ prfSecret: prfBytes }, approvedProver);
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightTransferTx({ prfSecret: prfBytes }, approvedProver)), approvalCurrent);
     if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
     approve({ tx });
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF makeTransfer error:', e);
     // A remote prover without consent (setting changed during authentication): ask for it.
     if ((e as Error)?.name === 'ProvingConsentRequiredError') transferConsentOpen.value = true;
@@ -2944,6 +3096,8 @@ async function signMidnightTransferPrf() {
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── Midnight DApp Connector: balanceUnsealedTransaction ───────────────────
@@ -2967,6 +3121,7 @@ function contributionTicker(c: ConnectorContribution): string {
 }
 
 function rejectMidnightBalance() {
+  approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
@@ -2975,13 +3130,18 @@ function rejectMidnightBalance() {
 async function buildMidnightBalanceTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
 ): Promise<{ tx: string }> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
   if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
-  const { balanceConnectorTransaction } = await import('@/services/midnight-tx.service');
-  return balanceConnectorTransaction(data.tx, credentials);
+  const { balanceConnectorTransaction } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
+  return balanceConnectorTransaction(data.tx, credentials, approvalCurrent);
 }
 
 async function signMidnightBalanceNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || !spendingPassword.value) return;
   // Capture the request identity BEFORE the multi-second balance round-trip
   // (see signMidnightTransferNormal): never deliver this tx to a superseded request.
@@ -2989,19 +3149,25 @@ async function signMidnightBalanceNormal() {
   signing.value = true;
   signError.value = '';
   try {
-    const { tx } = await buildMidnightBalanceTx({ password: spendingPassword.value });
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightBalanceTx({ password: spendingPassword.value })), approvalCurrent);
     if (currentRequest.value?.requestId !== reqId) return;
     approve({ tx });
     spendingPassword.value = '';
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight balanceUnsealedTransaction error:', e);
     signError.value = (e as Error)?.message || 'Balancing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 async function signMidnightBalancePrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
@@ -3011,7 +3177,7 @@ async function signMidnightBalancePrf() {
     // doesn't reliably work from inside the side panel's own window.
     const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
-    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const prfBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
@@ -3027,16 +3193,19 @@ async function signMidnightBalancePrf() {
         window.removeEventListener('message', handler);
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
-    });
-    const { tx } = await buildMidnightBalanceTx({ prfSecret: prfBytes });
+    })), approvalCurrent);
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightBalanceTx({ prfSecret: prfBytes })), approvalCurrent);
     if (currentRequest.value?.requestId !== reqId) return;
     approve({ tx });
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF balanceUnsealedTransaction error:', e);
     signError.value = (e as Error)?.message || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── Midnight DApp Connector: private balance access ───────────────────────
@@ -3065,6 +3234,7 @@ watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]
 });
 
 function rejectMidnightPrivateBalance() {
+  approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
   privateScanStarted.value = false;
@@ -3099,52 +3269,66 @@ function awaitRawPrfFromPopup(): Promise<Uint8Array> {
 }
 
 async function startPrivateSyncFromPanel(credentials: { password?: string; prfSecret?: Uint8Array }): Promise<void> {
-  const response = await Messaging.sendToBackgroundFromOptions({
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.START_MIDNIGHT_PRIVATE_SYNC,
     data: {
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
-  }) as { data?: { success?: boolean; error?: string } };
+  })), approvalCurrent) as { data?: { success?: boolean; error?: string } };
   if (!response?.data?.success) throw new Error(response?.data?.error || 'Unable to unlock private token synchronization');
 }
 
 async function unlockMidnightPrivateBalanceNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || !spendingPassword.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
   signError.value = '';
   try {
-    await startPrivateSyncFromPanel({ password: spendingPassword.value });
+    await awaitFreshApproval(async () => (startPrivateSyncFromPanel({ password: spendingPassword.value })), approvalCurrent);
     if (currentRequest.value?.requestId !== reqId) return;
     // Stay open in the progress view (design: "Scanning… / Share when done");
     // the background already answers the dApp when the scan completes.
     privateScanStarted.value = true;
     spendingPassword.value = '';
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight private balance unlock error:', e);
     signError.value = (e as Error)?.message || 'Unlock failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 async function unlockMidnightPrivateBalancePrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
   signError.value = '';
   try {
-    const prfBytes = await awaitRawPrfFromPopup();
-    await startPrivateSyncFromPanel({ prfSecret: prfBytes });
+    const prfBytes = await awaitFreshApproval(async () => (awaitRawPrfFromPopup()), approvalCurrent);
+    await awaitFreshApproval(async () => (startPrivateSyncFromPanel({ prfSecret: prfBytes })), approvalCurrent);
     if (currentRequest.value?.requestId !== reqId) return;
     privateScanStarted.value = true;
   } catch (e) {
+    if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF private balance unlock error:', e);
     signError.value = (e as Error)?.message || 'PassKey authentication failed';
   } finally {
     signing.value = false;
   }
+
+  });
 }
 
 // ── Midnight DApp Connector: proof server needed ──────────────────────────
@@ -3170,6 +3354,7 @@ function retryMidnightProving() {
 }
 
 function cancelMidnightProving() {
+  approval.invalidate();
   reject(midnightError(MidnightErrorCode.Rejected, 'User cancelled proving because no proof server was available'));
 }
 

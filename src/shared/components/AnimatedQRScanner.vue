@@ -7,11 +7,11 @@
         <p class="mt-4">{{ $t('wallet.accessingCamera') }}</p>
       </div>
       <div v-else-if="cameraStatus === CameraStatus.NO_WEBCAM" class="status-message error">
-        <v-icon large color="error">mdi-camera-off</v-icon>
+        <v-icon size="large" color="error">mdi-camera-off</v-icon>
         <p class="mt-4">{{ $t('wallet.noWebcamFound') }}</p>
       </div>
       <div v-else-if="cameraStatus === CameraStatus.PERMISSION_NEEDED" class="status-message permission-needed">
-        <v-icon large color="primary">mdi-camera-lock</v-icon>
+        <v-icon size="large" color="primary">mdi-camera-lock</v-icon>
         <p class="mt-4 permission-text">{{ $t('wallet.cameraPermissionNeeded') }}</p>
         <p v-if="permissionDenied" class="mt-1 permission-hint">{{ $t('wallet.cameraPermissionDeniedHint') }}</p>
         <p v-else class="mt-1 permission-hint">{{ $t('wallet.cameraPermissionHint') }}</p>
@@ -20,7 +20,7 @@
         </v-btn>
       </div>
       <div v-else-if="cameraStatus === CameraStatus.UNKNOWN_ERROR" class="status-message error">
-        <v-icon large color="error">mdi-alert-circle</v-icon>
+        <v-icon size="large" color="error">mdi-alert-circle</v-icon>
         <p class="mt-4">{{ $t('wallet.unknownCameraError') }}</p>
       </div>
     </div>
@@ -42,7 +42,7 @@
     <!-- Progress Indicator -->
     <div v-if="progress > 0 && progress < 100" class="progress-container">
       <v-progress-linear
-        :value="progress"
+        :model-value="progress"
         height="25"
         color="primary"
       >

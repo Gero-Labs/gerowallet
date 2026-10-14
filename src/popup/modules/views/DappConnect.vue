@@ -25,10 +25,10 @@
           </section>
     </v-card-text>
     <v-card-actions class="justify-center py-2 px-0">
-      <v-layout>
+      <div class="flex-grow-1">
         <v-row>
           <v-col cols="6">
-            <v-btn block outlined color="error" style="text-transform: capitalize;" @click="decline">
+            <v-btn block variant="outlined" color="error" style="text-transform: capitalize;" @click="decline">
               {{ $t('navigation.decline') }}
             </v-btn>
           </v-col>
@@ -38,7 +38,7 @@
             </v-btn>
           </v-col>
         </v-row>
-      </v-layout>
+      </div>
     </v-card-actions>
   </PopupHeader>
 </template>
@@ -65,7 +65,6 @@ const { loggedWallet } = toRefs(walletStore);
 // Reactive data
 const consent = ref<boolean>(false);
 const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
-const popupHeader = ref<unknown>(null);
 // Browser-derived embedding site, set by the background on the request.
 const embeddedIn = ref<unknown>(null);
 
@@ -85,7 +84,7 @@ const confirm = async () => {
   // hostname entry would also authorise http:// and other ports of that name.
   let origin = '';
   try {
-    origin = new URL(String(vmProxy.$route.query?.website ?? '')).origin;
+    origin = new URL(String(vmProxy.$route.query?.['website'] ?? '')).origin;
   } catch {
     origin = '';
   }
@@ -119,7 +118,7 @@ onMounted(() => {
 
   // Set document title with domain
   const route = vmProxy.$route;
-  const website = route.query?.website;
+  const website = route.query?.['website'];
   if (website) {
     const domain = filters.extractHostname(website);
     document.title = `Gero Dashboard | ${t('common.connectTo')} ${domain}`;

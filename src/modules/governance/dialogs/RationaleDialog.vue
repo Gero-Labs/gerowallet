@@ -76,7 +76,7 @@
           target="_blank"
           rel="noopener noreferrer"
         >
-          {{ $t('governance.openDocument') }}<v-icon x-small class="ml-1">mdi-open-in-new</v-icon>
+          {{ $t('governance.openDocument') }}<v-icon size="x-small" class="ml-1">mdi-open-in-new</v-icon>
         </a>
         <p class="t-caption rationale-dialog__note">{{ $t('governance.rationaleExternalNote') }}</p>
       </div>

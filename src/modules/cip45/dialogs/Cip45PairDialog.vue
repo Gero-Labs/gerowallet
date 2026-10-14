@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :isOpen="value"
+    :isOpen="modelValue"
     @close="close"
     icon="mdi-access-point"
     :title="$t('cip45.title')"
@@ -13,7 +13,7 @@
       <v-tabs
         v-model="tab"
         grow
-        background-color="transparent"
+        bg-color="transparent"
         color="var(--g-accent)"
         slider-color="var(--g-accent)"
         class="cip45-tabs mb-4"
@@ -22,9 +22,9 @@
         <v-tab class="cip45-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
       </v-tabs>
 
-      <v-tabs-items v-model="tab" class="transparent">
+      <v-window v-model="tab" class="transparent">
         <!-- Paste peer ID -->
-        <v-tab-item>
+        <v-window-item>
           <!-- Caption above the field instead of a floating label: outlined
                fields mounted inside a dialog compute a zero-width label notch,
                so the border strikes through the label text. -->
@@ -35,18 +35,18 @@
             id="cip45-peer-id-input"
             v-model="uri"
             :placeholder="$t('cip45.idPlaceholder')"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             clearable
             hide-details="auto"
             :error-messages="errorMessage"
             class="cip45-input"
             @keyup.enter="pair()"
           />
-        </v-tab-item>
+        </v-window-item>
 
         <!-- QR Scanner -->
-        <v-tab-item>
+        <v-window-item>
           <div v-if="tab === 1" class="cip45-scanner">
             <AnimatedQRScanner
               mode="text"
@@ -57,8 +57,8 @@
           <div v-if="qrError" class="t-caption delta-down text-center mt-2">
             {{ qrError }}
           </div>
-        </v-tab-item>
-      </v-tabs-items>
+        </v-window-item>
+      </v-window>
     </v-card-text>
 
     <v-card-actions v-if="tab === 0" class="px-0 pt-4 pb-0">
@@ -87,11 +87,11 @@ import { cip45Service } from '@/services/cip45/cip45.service';
 const { t } = useTranslation();
 
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'paired'): void;
 }>();
 
@@ -111,7 +111,7 @@ const isValidInput = computed(() => {
 });
 
 // Reset state when dialog opens
-watch(() => props.value, (open) => {
+watch(() => props.modelValue, (open) => {
   if (open) {
     uri.value = '';
     errorMessage.value = '';
@@ -164,7 +164,7 @@ const onQrError = (error: string) => {
 };
 
 const close = () => {
-  emit('input', false);
+  emit('update:modelValue', false);
 };
 </script>
 
@@ -181,7 +181,7 @@ const close = () => {
   color: var(--g-text-3);
 }
 
-.cip45-tab.v-tab--active {
+.cip45-tab.v-tab--selected {
   color: var(--g-text-1);
 }
 
@@ -195,7 +195,7 @@ const close = () => {
   padding-top: var(--g-s-2);
 }
 
-.cip45-input :deep(.v-input__slot) {
+.cip45-input :deep(.v-field) {
   border-radius: var(--g-r-control);
 }
 

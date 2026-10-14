@@ -1,9 +1,9 @@
 <template>
-  <BaseDialog persistent :width="850" :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="t('staking.withdrawStakingRewards')" :loading="loading"
+  <BaseDialog persistent :width="850" :isOpen="isOpen" @close="resetState(); $emit('close')" :min-height="300" :title="t('staking.withdrawStakingRewards')" :loading="loading"
               :subtitle="t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
-        border="left"
+        border="start"
         color="primary"
         type="info"
         prominent
@@ -20,9 +20,9 @@
 
     <!-- CIP-0149: DRep Compensation Breakdown -->
     <v-card-text class="px-3 pt-0" v-if="compensationInfo && !compensationInfo.belowMinimum && !skipCompensation">
-      <v-card flat outlined class="rounded-lg pa-3" style="border-color: var(--v-primary-base) !important">
+      <v-card flat variant="outlined" class="rounded-lg pa-3" style="border-color: var(--v-primary-base) !important">
         <div class="d-flex align-center mb-2">
-          <v-icon small color="primary" class="mr-2">mdi-gift-outline</v-icon>
+          <v-icon size="small" color="primary" class="mr-2">mdi-gift-outline</v-icon>
           <span class="text-subtitle-2 white--text font-weight-medium">{{ $t('governance.drepCompensation') }}</span>
         </div>
         <p class="text-caption text--secondary mb-3">
@@ -45,10 +45,10 @@
           <span>{{ toCurrency(withdrawals - compensationInfo.donationLovelace) }}</span>
         </div>
         <v-checkbox
-          :input-value="skipCompensation"
-          @change="emit('update:skipCompensation', $event)"
+          :model-value="skipCompensation"
+          @update:model-value="emit('update:skipCompensation', $event)"
           :label="$t('governance.skipCompensationThisTime')"
-          dense
+          density="compact"
           hide-details
           class="mt-2 pt-0"
         />
@@ -57,7 +57,7 @@
 
     <!-- CIP-0149: Below minimum notice -->
     <v-card-text class="px-3 pt-0" v-if="compensationInfo && compensationInfo.belowMinimum">
-      <v-alert type="info" dense text border="left" colored-border class="text-caption mb-0">
+      <v-alert type="info" density="compact" variant="text" border="start" colored-border class="text-caption mb-0">
         {{ $t('governance.compensationSkippedBelowMinimum', {
           amount: toCurrency(compensationInfo.donationLovelace),
           min: toCurrency(compensationInfo.minUtxo)
@@ -70,8 +70,8 @@
         <v-row no-gutters>
           <v-col :cols="cols">
             <h4>{{ $t('staking.rewardsAmount') }}
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
+              <v-btn size="x-small" icon variant="text">
+                <v-icon size="small">mdi-information-outline</v-icon>
               </v-btn>
             </h4>
             <h4><strong>{{ toCurrency(withdrawals) }}</strong></h4>
@@ -149,7 +149,7 @@
       :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -224,6 +224,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: () => props.isOpen,
   tx: txRef,
   successMessageKey: 'staking.withdrawalSubmitted',
   // Zero the local rewards balance so a second withdrawal/send before the
@@ -260,10 +261,9 @@ const netWithdrawal = computed(() => {
 const currentDRepName = computed(() => {
   const drep = governanceStore.currentDRep;
   if (!drep) return '';
-  if (drep.metadata?.meta_json?.body?.givenName) {
-    const name = drep.metadata.meta_json.body.givenName;
-    return name['@value'] || name;
-  }
+  const name = drep.metadata?.meta_json?.body?.['givenName'];
+  if (typeof name === 'string') return name;
+  if (name && typeof name === 'object' && '@value' in name && typeof name['@value'] === 'string') return name['@value'];
   return drep.drep_id || '';
 });
 

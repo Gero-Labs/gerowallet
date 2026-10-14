@@ -20,14 +20,14 @@
       </div>
       <div v-if="title" class="bottom-sheet-header">
         <span class="text-subtitle-1 white--text font-weight-bold">{{ title }}</span>
-        <v-btn v-if="variant !== 'trust'" icon small @click="close" class="white--text">
-          <v-icon small>mdi-close</v-icon>
+        <v-btn v-if="variant !== 'trust'" icon variant="text" size="small" :disabled="closeDisabled" @click="close" class="white--text">
+          <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </div>
       <div class="bottom-sheet-content" ref="contentRef">
         <slot />
       </div>
-      <div v-if="$slots.footer" class="bottom-sheet-footer">
+      <div v-if="$slots['footer']" class="bottom-sheet-footer">
         <slot name="footer" />
       </div>
     </div>
@@ -40,23 +40,25 @@ import { createSpring, projectMomentum, rubberBand } from '../composables/sheetP
 import { useSheetVisibility } from '../composables/useSheetVisibility';
 
 const props = withDefaults(defineProps<{
-  value: boolean;
+  modelValue: boolean;
   title?: string;
   height?: string;
   persistent?: boolean;
+  closeDisabled?: boolean;
   showHandle?: boolean;
   draggable?: boolean;
   variant?: 'standard' | 'trust';
 }>(), {
   height: '85%',
   persistent: false,
+  closeDisabled: false,
   showHandle: true,
   draggable: true,
   variant: 'standard',
 });
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'close'): void;
   (e: 'escape'): void;
 }>();
@@ -72,9 +74,9 @@ const phase = ref<'entering' | 'open' | 'leaving' | 'closed'>('closed');
 // Trust sheets never show a handle (nothing suggests dismissal-by-drag).
 const effectiveShowHandle = computed(() => props.variant === 'trust' ? false : props.showHandle);
 // Can a drag DISMISS this sheet? Trust and persistent sheets: never.
-const canDragDismiss = computed(() => props.draggable && props.variant !== 'trust' && !props.persistent);
+const canDragDismiss = computed(() => props.draggable && props.variant !== 'trust' && !props.persistent && !props.closeDisabled);
 // Can the user drag it at all (rubber-band feedback even when not dismissible)?
-const canDrag = computed(() => props.draggable);
+const canDrag = computed(() => props.draggable && !props.closeDisabled);
 
 const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -138,7 +140,7 @@ let previouslyFocused: HTMLElement | null = null;
 const { markSheetOpened, markSheetClosed } = useSheetVisibility();
 let holdsOpenCredit = false; // guards against double-increment/decrement
 
-watch(() => props.value, async (val) => {
+watch(() => props.modelValue, async (val) => {
   if (val) {
     if (!holdsOpenCredit) { holdsOpenCredit = true; markSheetOpened(); }
     previouslyFocused = document.activeElement as HTMLElement | null;
@@ -177,18 +179,27 @@ function focusIntoSheet() {
 }
 
 function finishClose() {
+  // A non-cancellable operation may start while a dismissal is animating.
+  // Parent-driven closure still wins (for example, a wallet lock).
+  if (props.modelValue && props.closeDisabled) {
+    phase.value = 'open';
+    spring.setValue(0);
+    translateY.value = 0;
+    return;
+  }
   visible.value = false;
   phase.value = 'closed';
   spring.setValue(0);
   translateY.value = 0;
   if (holdsOpenCredit) { holdsOpenCredit = false; markSheetClosed(); }
-  emit('input', false);
+  emit('update:modelValue', false);
   emit('close');
   previouslyFocused?.focus?.();
   previouslyFocused = null;
 }
 
 function close() {
+  if (props.closeDisabled) return;
   animateDismiss();
 }
 
@@ -208,6 +219,7 @@ function onBackdropClick() {
 }
 
 function onEscape() {
+  if (props.closeDisabled) return;
   if (props.variant === 'trust') {
     // Deliberate keypress: the consumer decides (maps to its explicit reject).
     emit('escape');

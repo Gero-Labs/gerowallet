@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :is-open="value"
+    :is-open="modelValue"
     :title="t('security.pin')"
     :subtitle="t('security.4To6DigitCode')"
     :width="500"
@@ -20,20 +20,20 @@
               <v-btn-toggle
                 v-model="pinLength"
                 mandatory
-                dense
+                density="compact"
                 color="primary"
               >
-                <v-btn :value="4" small @click="refocusInput">
+                <v-btn :value="4" size="small" @click="refocusInput">
                   <v-icon>
                     mdi-numeric-4
                   </v-icon>
                 </v-btn>
-                <v-btn :value="5" small @click="refocusInput">
+                <v-btn :value="5" size="small" @click="refocusInput">
                   <v-icon>
                     mdi-numeric-5
                   </v-icon>
                 </v-btn>
-                <v-btn :value="6" small @click="refocusInput">
+                <v-btn :value="6" size="small" @click="refocusInput">
                   <v-icon>
                     mdi-numeric-6
                   </v-icon>
@@ -72,7 +72,7 @@
 
     <v-card-actions class="px-6 pb-6">
       <v-btn
-        text
+        variant="text"
         @click="handleCancel"
         :disabled="loading"
       >
@@ -94,15 +94,15 @@ import snackbar from '@/plugins/snackbar';
 const { t } = useTranslation();
 
 interface Props {
-  value: boolean;
+  modelValue: boolean;
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['input', 'updated']);
+const emit = defineEmits(['update:modelValue', 'updated']);
 
 // Template refs
-const newPinInputRef = ref<any>(null);
-const confirmPinInputRef = ref<any>(null);
+const newPinInputRef = ref<{ focus(): void } | null>(null);
+const confirmPinInputRef = ref<{ focus(): void } | null>(null);
 
 // Reactive state
 const step = ref<'new' | 'confirm'>('new');
@@ -113,7 +113,7 @@ const confirmPinError = ref<string>('');
 const loading = ref<boolean>(false);
 
 // Watch props
-watch(() => props.value, async (newVal) => {
+watch(() => props.modelValue, async (newVal) => {
   if (!newVal) {
     // Delay reset to avoid visual glitch during close animation
     setTimeout(() => {
@@ -200,22 +200,22 @@ async function handleSave() {
     snackbar.fireSuccess(t('security.pinSetupSuccess'));
 
     // Close dialog and emit update
-    emit('input', false);
+    emit('update:modelValue', false);
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PIN:', error);
-    confirmPinError.value = error.message || t('security.pinSetupFailed');
+    confirmPinError.value = (error instanceof Error ? error.message : '') || t('security.pinSetupFailed');
   } finally {
     loading.value = false;
   }
 }
 
 function handleCancel() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function handleClose() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function resetForm() {

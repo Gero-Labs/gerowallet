@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // The Keystone send flow's device round-trip can only be exercised by a human
 // with the hardware. What CAN be pinned down is everything on either side of the
 // device: that the sheet hands the SAME request to the QR encoder it was given,
@@ -5,8 +7,8 @@
 // data signing answer with different ones), and that a device-shaped response
 // reaches the parent unchanged.
 import { describe, it, expect, vi } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 import { UR } from '@keystonehq/keystone-sdk';
 import { CardanoSignature } from '@keystonehq/bc-ur-registry-cardano';
 import { parseSignature } from '@/shared/utils/keystone';
@@ -24,40 +26,36 @@ vi.mock('@/shared/components/AnimatedQRCode.vue', () => ({
   default: {
     name: 'AnimatedQRCodeStub',
     props: ['type', 'cbor', 'size', 'capacity'],
-    render(h: (t: string, o: unknown) => unknown) {
-      return h('div', { attrs: { 'data-qr-type': this.type, 'data-qr-cbor': this.cbor, 'data-qr-size': String(this.size) } });
-    },
+    render(this: { type: string; cbor: string; size: number }) {
+    return Vue.h('div', { 'data-qr-type': this.type, 'data-qr-cbor': this.cbor, 'data-qr-size': String(this.size) });
+},
   },
 }));
 vi.mock('@/shared/components/AnimatedQRScanner.vue', () => ({
   default: {
     name: 'AnimatedQRScannerStub',
     props: ['urTypes', 'purpose', 'width', 'height'],
-    render(h: (t: string, o: unknown) => unknown) {
-      return h('div', { attrs: { 'data-ur-types': (this.urTypes || []).join(',') } });
-    },
+    render(this: { urTypes: string[] }) {
+    return Vue.h('div', { 'data-ur-types': (this.urTypes || []).join(',') });
+},
   },
 }));
 
 // $t is mocked to the identity, so buttons carry their i18n key as text. Index
 // position would be brittle: the header close button is index 0.
-function click(w: Wrapper<Vue>, label: string): Promise<void> {
-  const btn = w.findAll('button').wrappers.find((b) => b.text().includes(label));
-  if (!btn) throw new Error(`no button matching ${label}; saw: ${w.findAll('button').wrappers.map((b) => b.text()).join(' | ')}`);
+function click(w: VueWrapper, label: string): Promise<void> {
+  const btn = w.findAll('button').find((b) => b.text().includes(label));
+  if (!btn) throw new Error(`no button matching ${label}; saw: ${w.findAll('button').map((b) => b.text()).join(' | ')}`);
   btn.trigger('click');
   return w.vm.$nextTick();
 }
 
-function mountSheet(props: Record<string, unknown> = {}): Wrapper<Vue> {
-  return mount(KeystoneSignSheet, {
-    propsData: { isOpen: true, keystoneType: 'cardano-sign-request', keystoneCbor: 'a1', ...props },
-    mocks: { $t },
-    stubs: {
+function mountSheet(props: Record<string, unknown> = {}): VueWrapper {
+  return mount(KeystoneSignSheet, { props: { isOpen: true, keystoneType: 'cardano-sign-request', keystoneCbor: 'a1', ...props }, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: {
       'v-bottom-sheet': { template: '<div><slot /></div>' },
-      'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+      'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
       'v-icon': true,
-    },
-  });
+    } } });
 }
 
 describe('KeystoneSignSheet', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import Vue, { ref } from 'vue';
+import { ref } from 'vue';
 
 // useMarketData.ts uses module-level auto-imported `ref` (undefined under vitest);
 // the catalog builder needs getTokenByUnit/getTokenImage for token logos, and
@@ -16,7 +16,6 @@ vi.mock('@/modules/market/composables/useMarketData', () => ({
 
 // Mirrors sidepanel/options main.ts: <gero-swap> self-registers as a real custom
 // element, so Vue must not try to resolve it as a component (avoids dev-mode noise).
-Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
 
 vi.mock('../../composables/useNativeSwapSigner', () => ({
   useNativeSwapSigner: () => ({
@@ -50,7 +49,7 @@ beforeEach(() => {
 
 describe('GeroSwapEmbed', () => {
   it('renders <gero-swap native> and sets signer + resolveToken as element properties', async () => {
-    const wrapper = mount(GeroSwapEmbed, { propsData: { tokenOut: 'SNEK' } });
+    const wrapper = mount(GeroSwapEmbed, { props: { tokenOut: 'SNEK' } });
     const el = wrapper.find('gero-swap').element as HTMLElement & { signer?: unknown; resolveToken?: unknown };
     expect(el).toBeTruthy();
     expect(el.getAttribute('mode')).toBe('native');
@@ -62,7 +61,7 @@ describe('GeroSwapEmbed', () => {
 
   it('forwards arbitrary token units, including native lovelace, as token-in', async () => {
     const tokenIn = '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
-    const wrapper = mount(GeroSwapEmbed, { propsData: { tokenIn, tokenOut: 'lovelace' } });
+    const wrapper = mount(GeroSwapEmbed, { props: { tokenIn, tokenOut: 'lovelace' } });
     const el = wrapper.find('gero-swap').element;
     expect(el.getAttribute('token-in')).toBe(tokenIn);
     expect(el.getAttribute('token-out')).toBe('lovelace');
@@ -86,7 +85,7 @@ describe('GeroSwapEmbed', () => {
       '': { unit: '', ticker: 'ADA', decimals: 6, verified: true },
       'policyabc.foo': { unit: 'policyabc.foo', ticker: 'FOO', decimals: 0 },
     };
-    const wrapper = mount(GeroSwapEmbed, { propsData: { tokenOut: 'SNEK' } });
+    const wrapper = mount(GeroSwapEmbed, { props: { tokenOut: 'SNEK' } });
     await wrapper.vm.$nextTick();
     const el = wrapper.find('gero-swap').element as HTMLElement & { tokens?: Array<{ unit: string; ticker?: string; balance?: string }> };
     const adaRows = (el.tokens ?? []).filter(t => t.unit === 'lovelace' || (t.ticker ?? '').toUpperCase() === 'ADA');

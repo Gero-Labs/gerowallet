@@ -2,20 +2,20 @@
   <div class="switch">
     <p class="left‐text my-auto "
        :style="{
-      color: !props.value ? '#ffffff' : '',
+      color: !props.modelValue ? '#ffffff' : '',
       fontSize: props.fontSize,
     }">
       {{ props.textLeft }}
-      <v-icon :color="props.value ? '#ffffff' : 'primary'" small v-if="props.iconLeft">
+      <v-icon :color="props.modelValue ? '#ffffff' : 'primary'" size="small" v-if="props.iconLeft">
         {{ props.iconLeft }}
       </v-icon>
     </p>
     <v-switch
       inset
-      dense
+      size="small"
+      density="compact"
       v-model="model"
-      @change="toggleSwitch"
-      color="inherit"
+      color="primary"
       hide-details
       style="margin-top: 0; align-items: center;"
       class="toggleSwitch"
@@ -23,10 +23,10 @@
     ></v-switch>
     <p class="right‐text my-auto"
        :style="{
-      color: props.value ? '#ffffff' : '',
+      color: props.modelValue ? '#ffffff' : '',
       fontSize: props.fontSize,
     }">
-      <v-icon :color="props.value ? 'primary' : '#ffffff'" small v-if="props.iconRight">
+      <v-icon :color="props.modelValue ? 'primary' : '#ffffff'" size="small" v-if="props.iconRight">
         {{ props.iconRight }}
       </v-icon>
       {{ props.textRight }}
@@ -35,8 +35,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+
 const props = defineProps({
-  value: {
+  modelValue: {
     type: Boolean,
     required: true
   },
@@ -65,17 +67,15 @@ const props = defineProps({
     default: '14px'
   }
 });
-const emit = defineEmits(['input', 'update:modelValue'])
+const emit = defineEmits(['update:modelValue'])
 
 const toggleSwitch = (value: boolean) => {
-  // Emit both events for Vue 2.7 compatibility
-  emit('input', value);
   emit('update:modelValue', value);
 }
 
 const model = computed<boolean>({
   get() {
-    return props.value
+    return props.modelValue
   },
   set(newVal: boolean) {
     toggleSwitch(newVal)
@@ -84,13 +84,11 @@ const model = computed<boolean>({
 </script>
 
 <style>
-.toggleSwitch .v-input--selection-controls__input {
-  margin-left: 16px!important;
-}
 .switch {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  column-gap: var(--g-s-2);
 }
 
 .left‐text {
@@ -99,19 +97,20 @@ const model = computed<boolean>({
 
 .toggleSwitch {
   justify-self: center; /* always center column */
+  --v-input-control-height: 28px;
 }
 
 .right‐text {
   justify-self: start; /* push right text up against the switch */
 }
 
-.toggleSwitch .v-input--switch__track {
-  color: #ffffff2b !important;
+.toggleSwitch .v-switch__track {
+  background-color: #ffffff2b !important;
   opacity: 1;
   border: 1px solid #ffffff12;
 }
 
-.toggleSwitch .v-input--switch__thumb {
-  color: var(--v-primary-base)!important;
+.toggleSwitch .v-switch__thumb {
+  background-color: var(--v-primary-base)!important;
 }
 </style>

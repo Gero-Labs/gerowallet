@@ -21,7 +21,7 @@
         <GButton tier="secondary" @click="emit('manage')">{{ t('card.cardControls') }}</GButton>
         <v-btn
           icon
-          outlined
+          variant="outlined"
           class="card-balance__eye"
           :loading="detailsLoading"
           :aria-label="showCardDetails ? t('card.hideCardDetails') : t('card.showCardDetails')"
@@ -61,8 +61,8 @@
         {{ t('card.enjoyZeroFeesUntil') }}
       </CardChip>
       <ul class="card-order__checks">
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
       </ul>
       <GButton tier="primary" @click="emit('open-order-card-flow')">{{ t('card.orderNewCard') }}</GButton>
     </section>

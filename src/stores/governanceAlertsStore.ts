@@ -1,4 +1,4 @@
-import Vue, { watch } from 'vue';
+import { reactive, watch } from 'vue';
 
 import {
   DEFAULT_DREP_ACTIVITY_EPOCHS,
@@ -321,7 +321,7 @@ export function isAlertActive(alert: GovernanceAlert, currentEpoch: number | nul
 // Store
 // ---------------------------------------------------------------------------
 
-const state = Vue.observable<GovernanceAlertsState>({
+const state = reactive<GovernanceAlertsState>({
   alerts: [],
   settings: defaultSettings(),
   snoozes: {},
@@ -398,7 +398,7 @@ function pruneSnoozes(alerts: GovernanceAlert[]): void {
   let changed = false;
   for (const id of Object.keys(state.snoozes)) {
     if (!live.has(id)) {
-      Vue.delete(state.snoozes, id);
+      delete state.snoozes[id];
       changed = true;
     }
   }
@@ -534,8 +534,8 @@ const actions = {
     const index = state.alerts.findIndex((entry) => entry.id === alertId);
     if (index === -1 || state.alerts[index].kind === 'retired') return;
 
-    Vue.set(state.snoozes, alertId, untilEpoch);
-    Vue.set(state.alerts, index, { ...state.alerts[index], dismissedUntilEpoch: untilEpoch });
+    state.snoozes[alertId] = untilEpoch;
+    state.alerts[index] = { ...state.alerts[index], dismissedUntilEpoch: untilEpoch };
     void persist(ALERT_SNOOZES_KEY, { ...state.snoozes });
   },
 

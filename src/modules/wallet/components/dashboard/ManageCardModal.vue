@@ -32,7 +32,7 @@
           <div class="card-controls__pin-actions">
             <v-btn
               icon
-              outlined
+              variant="outlined"
               class="card-controls__icon-btn"
               :loading="loadingPin"
               :aria-label="showPin ? t('card.hidePin') : t('card.showPin')"
@@ -53,11 +53,11 @@
         <p class="t-body-sm">{{ t('card.blockingCardWarning') }}</p>
         <div>
           <GButton v-if="isBlocked" tier="secondary" :loading="blocking" @click="toggleBlock">
-            <v-icon small left>mdi-lock-open-variant-outline</v-icon>
+            <v-icon size="small" start>mdi-lock-open-variant-outline</v-icon>
             {{ t('card.unblockCard') }}
           </GButton>
           <GButton v-else tier="destructive" :loading="blocking" @click="toggleBlock">
-            <v-icon small left>mdi-lock-outline</v-icon>
+            <v-icon size="small" start>mdi-lock-outline</v-icon>
             {{ t('card.blockCard') }}
           </GButton>
         </div>
@@ -74,13 +74,13 @@
       <div class="card-controls__field">
         <span id="card-new-pin" class="t-label">{{ t('card.newPin') }}</span>
         <div role="group" aria-labelledby="card-new-pin">
-          <NumericOtpInput :value="newPin" :length="4" @input="newPin = $event" />
+          <NumericOtpInput :model-value="newPin" :length="4" @update:model-value="newPin = $event" />
         </div>
       </div>
       <div class="card-controls__field">
         <span id="card-confirm-pin" class="t-label">{{ t('card.confirmNewPin') }}</span>
         <div role="group" aria-labelledby="card-confirm-pin">
-          <NumericOtpInput :value="confirmPin" :length="4" @input="confirmPin = $event" />
+          <NumericOtpInput :model-value="confirmPin" :length="4" @update:model-value="confirmPin = $event" />
         </div>
       </div>
       <p class="t-caption" :class="{ 'card-controls__error': pinError }" aria-live="polite">

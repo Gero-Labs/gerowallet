@@ -1,4 +1,5 @@
-import Vue, { nextTick, reactive } from 'vue';
+import * as Vue from 'vue';
+import { nextTick, reactive } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -61,11 +62,11 @@ function switchToNewWallet(): string {
   return midnightStore.addresses.dust;
 }
 
-let views: Vue[] = [];
+let views: Vue.App[] = [];
 function mount(): DustPathB {
   let pathB!: DustPathB;
-  const view = new Vue({ setup() { pathB = useDustPathB(); return {}; }, render: (h) => h('div') });
-  view.$mount();
+  const view = Vue.createApp({ setup() { pathB = useDustPathB(); return {}; }, render: () => Vue.h('div') });
+  view.mount(document.createElement('div'));
   views.push(view);
   return pathB;
 }
@@ -85,7 +86,7 @@ beforeEach(() => {
   switchToNewWallet();
 });
 afterEach(() => {
-  for (const view of views) view.$destroy();
+  for (const view of views) view.unmount();
   views = [];
   vi.useRealTimers();
 });

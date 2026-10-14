@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // Two things the row now says that it did not before, and one it must never
 // say:
 //
@@ -7,9 +9,8 @@
 //  2. The remaining epochs also read as a rough calendar day.
 //  3. An unknown epoch produces NO date. Not today's, not the epoch 0 date —
 //     nothing, because we do not know.
-import { describe, it, expect } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { describe, it, expect, vi } from 'vitest';
+import { mount, type VueWrapper } from '@vue/test-utils';
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import ActionRow from './ActionRow.vue';
@@ -44,12 +45,8 @@ function proposal(over: Partial<GovProposal> = {}): GovProposal {
  * lexically, so it renders for real — which is the point of the "the pill is
  * still the cue" assertions below.
  */
-function mountRow(props: Record<string, unknown> = {}): Wrapper<Vue> {
-  return mount(ActionRow, {
-    mocks: { $t },
-    propsData: { action: proposal(), currentEpoch: 650, ...props },
-    stubs: { 'v-icon': true },
-  });
+function mountRow(props: Record<string, unknown> = {}): VueWrapper {
+  return mount(ActionRow, { props: { action: proposal(), currentEpoch: 650, ...props }, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: { 'v-icon': true } } });
 }
 
 describe('ActionRow lifetime', () => {
@@ -61,7 +58,7 @@ describe('ActionRow lifetime', () => {
     expect(wrapper.find('.action-row__expires').exists()).toBe(true);
     // The "≈" is the approximation, so the key that carries it is the one used.
     expect(wrapper.html()).toContain('governance.approxExpiryDate');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('renders no date at all when the current epoch is unknown', () => {
@@ -71,14 +68,14 @@ describe('ActionRow lifetime', () => {
     expect(wrapper.find('.action-row__expires').exists()).toBe(false);
     expect(wrapper.html()).not.toContain('governance.approxExpiryDate');
     expect(wrapper.html()).not.toContain('governance.epochsRemaining');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('renders no date when upstream carries no expiry epoch', () => {
     const wrapper = mountRow({ action: proposal({ expiresEpoch: null }) });
 
     expect(wrapper.find('.action-row__expires').exists()).toBe(false);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('names an actual year in the date, not a placeholder', () => {
@@ -89,7 +86,7 @@ describe('ActionRow lifetime', () => {
 
     expect(text).toMatch(/\d{4}/);
     expect(text).not.toContain('1970');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 });
 
@@ -97,14 +94,14 @@ describe('ActionRow status weight', () => {
   it('leaves a live row at full contrast', () => {
     const wrapper = mountRow();
 
-    expect(wrapper.classes()).not.toContain('action-row--concluded');
-    wrapper.destroy();
+    expect(wrapper.find('.action-row').classes()).not.toContain('action-row--concluded');
+    wrapper.unmount();
   });
 
   it.each(['ratified', 'enacted', 'expired', 'dropped'])('quiets a %s row', status => {
     const wrapper = mountRow({ action: proposal({ status }) });
 
-    expect(wrapper.classes()).toContain('action-row--concluded');
+    expect(wrapper.find('.action-row').classes()).toContain('action-row--concluded');
     // Quiet, not silent: the pill is still there and still carries the word,
     // so the row's state never rests on its tone alone. `$t` here echoes the
     // key, which StatusPill treats as a missing translation and falls back to
@@ -112,7 +109,7 @@ describe('ActionRow status weight', () => {
     const pill = wrapper.find('.status-pill');
     expect(pill.exists()).toBe(true);
     expect(pill.text()).toBe(status);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('gives a concluded row no lifetime figures to be quiet about', () => {
@@ -121,7 +118,7 @@ describe('ActionRow status weight', () => {
 
     expect(wrapper.html()).not.toContain('governance.epochsRemaining');
     expect(wrapper.find('.action-row__expires').exists()).toBe(false);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('treats an unrecognised status as concluded rather than as live', () => {
@@ -130,7 +127,7 @@ describe('ActionRow status weight', () => {
     // one.
     const wrapper = mountRow({ action: proposal({ status: 'something-new' }) });
 
-    expect(wrapper.classes()).toContain('action-row--concluded');
-    wrapper.destroy();
+    expect(wrapper.find('.action-row').classes()).toContain('action-row--concluded');
+    wrapper.unmount();
   });
 });

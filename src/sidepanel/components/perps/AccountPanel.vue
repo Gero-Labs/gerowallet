@@ -53,22 +53,22 @@
     <!-- Action buttons -->
     <div class="ap-actions">
       <v-btn
-        depressed
-        small
+        variant="flat"
+        size="small"
         class="ap-btn ap-btn--deposit"
         @click="$emit('deposit')"
       >
-        <v-icon left size="14">mdi-arrow-down-circle-outline</v-icon>
+        <v-icon start size="14">mdi-arrow-down-circle-outline</v-icon>
         {{ $t('perpetuals.deposit') }}
       </v-btn>
       <v-btn
-        depressed
-        small
-        outlined
+        variant="outlined"
+        size="small"
+
         class="ap-btn ap-btn--withdraw"
         @click="$emit('withdraw')"
       >
-        <v-icon left size="14">mdi-arrow-up-circle-outline</v-icon>
+        <v-icon start size="14">mdi-arrow-up-circle-outline</v-icon>
         {{ $t('perpetuals.withdraw') }}
       </v-btn>
     </div>

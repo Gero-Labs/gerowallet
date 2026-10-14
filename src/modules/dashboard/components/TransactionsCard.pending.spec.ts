@@ -1,14 +1,17 @@
-import Vue, { nextTick } from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('vue-router', () => ({ useRoute: () => ({ path: '/transactions', query: {} }), useRouter: () => ({ push: vi.fn() }) }));
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { Cardano } from '@cardano-sdk/core';
 
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({
   transactions: [], loggedWallet: { chain: 'Cardano', network: 'Preprod' }, keys: {}, contacts: {}, config: {},
 }) }));
-vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.observable({ assets: {} }) }));
-vi.mock('@/stores/loading', () => ({ loadingState: Vue.observable({ loadingTxs: false }) }));
-vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.observable({ adaUsd: null }) }));
+vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.reactive({ assets: {} }) }));
+vi.mock('@/stores/loading', () => ({ loadingState: Vue.reactive({ loadingTxs: false }) }));
+vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.reactive({ adaUsd: null }) }));
 vi.mock('@/api/blockchain-api', () => ({ default: { getPoolById: vi.fn() } }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string, params?: { pool?: string }) => params?.pool ? `${key}:${params.pool}` : key }) }));
 vi.mock('@/shared/composables/useCurrencyConverter', () => ({ useCurrencyConverter: () => ({ convertFiat: (n: number) => n, getCurrencySymbol: () => '$' }) }));
@@ -24,14 +27,11 @@ import staking from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
 
 function mountHistory() {
-  return mount(TransactionsCard, {
-      mocks: { $route: { path: '/transactions' }, $t: (key: string, params?: { pool?: string }) => params?.pool ? `${key}:${params.pool}` : key },
-      stubs: {
+  return mount(TransactionsCard, { global: { config: { globalProperties: mockGlobalProperties({ $route: { path: '/transactions' }, $t: (key: string, params?: { pool?: string }) => params?.pool ? `${key}:${params.pool}` : key }) }, stubs: {
         'v-data-table': { props: ['items'], template: '<div><div v-for="item in items" :key="item.id" :data-id="item.id"><slot name="item.tx_timestamp" :item="item" /></div></div>' },
         'v-tooltip': { template: '<span><slot name="activator" :on="{}" :attrs="{}" /></span>' },
         'v-menu': true, 'v-select': true, 'v-text-field': true, 'v-pagination': true,
-      },
-    });
+      } } });
 }
 
 describe('pending history rows', () => {
@@ -62,7 +62,7 @@ describe('pending history rows', () => {
       expect(wrapper.find('[data-id="new-send"] .pending-indicator').exists()).toBe(false);
     } finally {
       release({ ticker: 'POOL' });
-      wrapper.destroy();
+      wrapper.unmount();
     }
   });
 });
@@ -71,10 +71,7 @@ describe('pending history rows', () => {
 describe('recent pending rows', () => {
   it('shows a new row and a pending indicator, then clears the indicator on confirmation', async () => {
     walletStore.transactions = [];
-    const wrapper = mount(RecentTransactionsCard, {
-      mocks: { $t: (key: string, params?: { pool?: string }) => params?.pool ? `${key}:${params.pool}` : key },
-      stubs: { 'router-link': true, 'v-progress-circular': { template: '<span role="progressbar" v-bind="$attrs" />' } },
-    });
+    const wrapper = mount(RecentTransactionsCard, { global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string, params?: { pool?: string }) => params?.pool ? `${key}:${params.pool}` : key }) }, stubs: { 'router-link': true, 'v-progress-circular': { template: '<span role="progressbar" v-bind="$attrs" />' } } } });
     try {
       walletStore.transactions = [{ id: 'new-send', pending: true, tx_timestamp: Math.floor(Date.now() / 1000),
         ada: -200000, sentAmount: 200000, receivedAmount: 0, assets: [],
@@ -87,7 +84,7 @@ describe('recent pending rows', () => {
       expect(wrapper.findAll('.recent-tx-row')).toHaveLength(1);
       expect(wrapper.find('[role="progressbar"]').exists()).toBe(false);
     } finally {
-      wrapper.destroy();
+      wrapper.unmount();
     }
   });
 });
@@ -151,6 +148,6 @@ it('keeps labels tied to their pool across overlapping history batches', async (
     });
   } finally {
     for (const resolve of resolvers.values()) resolve({ ticker: 'cleanup' });
-    wrapper.destroy();
+    wrapper.unmount();
   }
 });

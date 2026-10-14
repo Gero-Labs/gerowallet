@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="realfi-page">
         <!-- Header: the partner lockup is the only place the RealFi brand appears -->
@@ -249,7 +249,7 @@
               <p class="t-body-lg mb-1">{{ $t('realfi.attention.title') }}</p>
               <p class="t-body-sm realfi-notice__body">
                 {{
-                  $tc(
+                  $t(
                     canTransact ? 'realfi.attention.bodyInWallet' : 'realfi.attention.body',
                     actionableOrders.length,
                   )
@@ -265,7 +265,7 @@
                 compact
                 @click="cancelOrders(actionableOrders)"
               >
-                {{ $tc('realfi.attention.cancelCta', actionableOrders.length) }}
+                {{ $t('realfi.attention.cancelCta', actionableOrders.length) }}
               </GButton>
             </template>
             <GButton v-else tier="secondary" compact @click="openRealFiApp()">
@@ -278,7 +278,7 @@
             <div class="realfi-notice__text">
               <p class="t-body-lg mb-1">{{ $t('realfi.failed.title') }}</p>
               <p class="t-body-sm realfi-notice__body">
-                {{ $tc('realfi.failed.body', failedOrders.length) }}
+                {{ $t('realfi.failed.body', failedOrders.length) }}
               </p>
             </div>
             <GButton tier="secondary" compact @click="openRealFiSupport()">
@@ -291,7 +291,7 @@
             <div class="realfi-notice__text">
               <p class="t-body-lg mb-1">{{ $t('realfi.review.title') }}</p>
               <p class="t-body-sm realfi-notice__body">
-                {{ $tc('realfi.review.body', reviewOrders.length) }}
+                {{ $t('realfi.review.body', reviewOrders.length) }}
               </p>
             </div>
           </section>
@@ -474,7 +474,7 @@
         />
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">

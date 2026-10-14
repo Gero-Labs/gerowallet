@@ -8,7 +8,7 @@
         </v-card-title>
 
         <!-- PSBT summary -->
-        <v-card flat outlined style="background-color: #141414!important;" class="pa-2 mb-3">
+        <v-card flat variant="outlined" style="background-color: #141414!important;" class="pa-2 mb-3">
           <div class="psbt-row">
             <span class="psbt-label">{{ $t('bitcoin.inputs') }}</span>
             <span class="psbt-value">{{ psbtInfo.inputs }}</span>
@@ -25,14 +25,14 @@
       </v-card-text>
 
       <v-card-actions class="justify-center pb-0 pt-2 px-0">
-        <v-layout>
+        <div class="flex-grow-1">
           <v-row>
             <!-- Password field for normal wallets -->
             <v-col cols="12" v-if="isNormalWallet && !isPrfWallet" class="pb-0">
               <PassKeyPasswordField
                 ref="passwordField"
-                :value="spendingPassword"
-                @input="spendingPassword = $event"
+                :model-value="spendingPassword"
+                @update:model-value="spendingPassword = $event"
                 dense outlined hide-details="auto"
                 :placeholder="$t('navigation.typeYourSpendingPassword')"
                 :label="$t('wallet.spendingPassword')"
@@ -59,27 +59,27 @@
             <!-- Ledger -->
             <v-col cols="12" v-else-if="isLedger" class="pb-0">
               <v-card-subtitle class="pa-0 text-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" :value="isBT" @input="isBT = $event" :disabled="loading" />
+                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" :model-value="isBT" @update:model-value="isBT = $event" :disabled="loading" />
               </v-card-subtitle>
             </v-col>
 
             <!-- Trezor -->
             <v-col cols="12" v-else-if="isTrezor" class="pb-0">
-              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0">
+              <v-alert type="info" color="primary" variant="text" border="start" density="compact" class="py-1 my-0">
                 <span style="color: white; font-size: 12px">{{ $t('wallet.confirmOnTrezor') }}</span>
               </v-alert>
             </v-col>
 
             <!-- Keystone -->
             <v-col cols="12" v-else-if="isKeystone" class="pb-0">
-              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0">
+              <v-alert type="info" color="primary" variant="text" border="start" density="compact" class="py-1 my-0">
                 <span style="color: white; font-size: 12px">{{ $t('wallet.scanQRWithKeystone') }}</span>
               </v-alert>
             </v-col>
 
             <!-- Decline / Sign -->
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="error" style="text-transform: capitalize;" @click="decline" :disabled="loading">
+              <v-btn block variant="outlined" color="error" style="text-transform: capitalize;" @click="decline">
                 {{ $t('common.decline') }}
               </v-btn>
             </v-col>
@@ -89,21 +89,23 @@
               </v-btn>
             </v-col>
           </v-row>
-        </v-layout>
+        </div>
       </v-card-actions>
 
       <!-- Keystone QR overlay -->
-      <v-overlay :absolute="true" opacity="0.99" :value="keystoneOverlay" class="hardwareOverlay">
-        <v-alert color="white" dense outlined type="info" border="left" v-if="!keystoneScan" class="mt-2 mb-2" prominent>
+      <v-overlay  opacity="0.99" :model-value="keystoneOverlay" persistent
+        contained
+        class="hardwareOverlay align-center justify-center">
+        <v-alert color="white" density="compact" variant="outlined" type="info" border="start" v-if="!keystoneScan" class="mt-2 mb-2" prominent>
           <b style="font-size: 12px">{{ $t('wallet.instructions') }}</b>
           <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
             <li>{{ $t('wallet.unlockKeystone') }}</li>
-            <li>{{ $t('wallet.selectScanQR') }} <v-icon x-small>mdi-line-scan</v-icon></li>
+            <li>{{ $t('wallet.selectScanQR') }} <v-icon size="x-small">mdi-line-scan</v-icon></li>
             <li>{{ $t('wallet.useKeystoneToScan') }}</li>
             <li>{{ $t('wallet.approveAndScanNext') }}</li>
           </ul>
         </v-alert>
-        <v-alert color="white" dense outlined type="info" border="left" v-else class="mt-2 mb-2" prominent>
+        <v-alert color="white" density="compact" variant="outlined" type="info" border="start" v-else class="mt-2 mb-2" prominent>
           <b style="font-size: 12px">{{ $t('wallet.scanQRCode') }}</b>
         </v-alert>
         <div v-if="!keystoneScan && keystoneCbor" style="max-width: 286px; margin: 0 auto;">
@@ -113,10 +115,10 @@
           <AnimatedQRScanner purpose="sign" :urTypes="['crypto-psbt']" width="100%" height="220px" @scan="onKeystoneScan" @error="onKeystoneError" />
         </div>
         <div class="text-center pt-2">
-          <v-btn text small @click="backKeystoneScan" class="mr-2">
+          <v-btn variant="text" size="small" @click="backKeystoneScan" class="mr-2">
             {{ keystoneScan ? $t('common.back') : $t('common.cancel') }}
           </v-btn>
-          <v-btn v-if="!keystoneScan" small class="geroButton" style="color: black!important;" @click="keystoneScan = true">
+          <v-btn v-if="!keystoneScan" size="small" class="geroButton" style="color: black!important;" @click="keystoneScan = true">
             {{ $t('common.next') }}
           </v-btn>
         </div>
@@ -126,6 +128,7 @@
 </template>
 
 <script setup lang="ts">
+import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
 import { computed, getCurrentInstance, onMounted, ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from '@/utils/rules';
@@ -133,6 +136,7 @@ import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import type { Psbt } from 'bitcoinjs-lib';
+import { assertApprovedPsbt } from '@/chains/bitcoin/psbtApproval';
 
 interface BtcSignPsbtOptions {
   autoFinalized?: boolean;
@@ -152,6 +156,7 @@ import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
@@ -166,7 +171,7 @@ const form = ref(null);
 const valid = ref(false);
 const loading = ref(false);
 const spendingPassword = ref('');
-const passwordField = ref(null);
+
 const privateKeyBytes = ref<Uint8Array | null>(null);
 const controller = ref(null);
 const request = ref<BtcSignPsbtRequest | null>(null);
@@ -179,12 +184,13 @@ const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
 const keystoneType = ref('');
 const keystoneCbor = ref('');
+let keystoneApprovalCurrent: (() => boolean) | null = null;
 
 const psbtInfo = ref({ inputs: 0, outputs: 0, autoFinalized: undefined as boolean | undefined });
 
 const hasWebsite = computed(() => {
   const q = vmProxy.$route?.query;
-  return !(q?.website === 'undefined' || !q || Object.keys(q).length === 0);
+  return !(q?.['website'] === 'undefined' || !q || Object.keys(q).length === 0);
 });
 
 const isNormalWallet = computed(() => loggedWallet.value?.type === WalletType.Normal);
@@ -201,9 +207,15 @@ const canSign = computed(() => {
   return true;
 });
 
+
+const approval = useApprovalFreshness(
+  () => [request.value, loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId, loggedWallet.value?.encryptionMethod],
+  () => !!request.value && !!loggedWallet.value && !walletStore.isLocked,
+  () => { privateKeyBytes.value?.fill(0); privateKeyBytes.value = null; keystoneApprovalCurrent = null; keystoneOverlay.value = false; keystoneScan.value = false; keystoneCbor.value = ''; signed.value = false; signedHex.value = ""; },
+);
 const handlePassKeyAuthSuccess = async (pkBytes: Uint8Array) => {
   privateKeyBytes.value = pkBytes;
-  await doSign();
+  await sign();
 };
 
 const handlePassKeyAuthError = (error: Error) => {
@@ -212,16 +224,21 @@ const handlePassKeyAuthError = (error: Error) => {
 };
 
 const decline = async () => {
+  approval.invalidate();
   await controller.value.returnData({ error: { code: 4001, message: 'User rejected the request' } });
   window.close();
 };
 
 const returnSigned = async () => {
-  await controller.value.returnData({ data: signedHex.value });
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
+  await awaitFreshApproval(async () => (controller.value.returnData({ data: signedHex.value })), approvalCurrent);
   window.close();
 };
 
 const doSign = async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   loading.value = true;
   try {
     const { psbtHex, options } = request.value.data;
@@ -233,10 +250,10 @@ const doSign = async () => {
       signingData.password = spendingPassword.value;
     }
 
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
       data: signingData,
-    }) as { data: { success: boolean; error?: string; signedHex?: string } };
+    })), approvalCurrent) as { data: { success: boolean; error?: string; signedHex?: string } };
 
     if (!response.data.success) throw new Error(response.data.error || 'Signing failed');
 
@@ -244,62 +261,64 @@ const doSign = async () => {
     signed.value = true;
 
     // Auto-confirm (txAutoSubmit or after PRF)
-    await controller.value.returnData({ data: signedHex.value });
+    await awaitFreshApproval(async () => (controller.value.returnData({ data: signedHex.value })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, 'Failed to sign PSBT') || 'Failed to sign PSBT');
     loading.value = false;
   }
 };
 
-const sign = async () => {
+const sign = () => approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   if (isNormalWallet.value) {
     if (isPrfWallet.value) {
-      // PRF handled by PassKeyAuthButton → handlePassKeyAuthSuccess
+      if (privateKeyBytes.value) await awaitFreshApproval(() => doSign(), approvalCurrent);
       return;
     }
-    if (!form.value?.validate()) return;
-    await doSign();
+    if (!(await awaitFreshApproval(async () => (form.value?.validate()), approvalCurrent))?.valid) return;
+    await awaitFreshApproval(async () => (doSign()), approvalCurrent);
   } else if (isLedger.value) {
-    await signWithLedger();
+    await awaitFreshApproval(async () => (signWithLedger()), approvalCurrent);
   } else if (isTrezor.value) {
-    await signWithTrezor();
+    await awaitFreshApproval(async () => (signWithTrezor()), approvalCurrent);
   } else if (isKeystone.value) {
-    await showKeystoneQR();
+    await awaitFreshApproval(async () => (showKeystoneQR()), approvalCurrent);
   }
-};
+});
 
 const signWithLedger = async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   loading.value = true;
   // The device holds the PSBT on its own screen; without this the view shows
   // only a spinner that cannot resolve until the user acts on it.
   hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
   try {
-    const { signPsbtWithLedger } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
-    const result = await signPsbtWithLedger(
-      request.value.data.psbtHex,
-      loggedWallet.value.publicKey,
-      loggedWallet.value.network,
-      loggedWallet.value.addressType,
-      !isBT.value
-    );
-    if (!result.success || !result.signedPsbtHex) throw new Error(result.error || 'Ledger signing failed');
+    const { default: ledger } = await awaitFreshApproval(() => import('@/shared/utils/ledger'), approvalCurrent);
+    const signedPsbtHex = await awaitFreshApproval(() => ledger.signBitcoinTransaction(
+      request.value.data.psbtHex, loggedWallet.value.addressType, 0, !isBT.value,
+    ), approvalCurrent);
 
+    assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
     const options = request.value.data.options;
-    let returnHex = result.signedPsbtHex;
+    let returnHex = signedPsbtHex;
     if (options?.autoFinalized !== false) {
       // Finalize in browser context
-      const bitcoin = await import('bitcoinjs-lib');
-      const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+      const bitcoin = await awaitFreshApproval(async () => (import('bitcoinjs-lib')), approvalCurrent);
+      const { getBitcoinNetwork } = await awaitFreshApproval(async () => (import('@/chains/bitcoin/bitcoinPsbtBuilder')), approvalCurrent);
       const network = getBitcoinNetwork(loggedWallet.value.network);
-      const psbt = bitcoin.Psbt.fromHex(result.signedPsbtHex, { network });
+      const psbt = bitcoin.Psbt.fromHex(signedPsbtHex, { network });
       psbt.finalizeAllInputs();
       returnHex = psbt.extractTransaction().toHex();
     }
 
-    await controller.value.returnData({ data: returnHex });
+    await awaitFreshApproval(async () => (controller.value.returnData({ data: returnHex })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, t('wallet.ledgerDeviceError', { message: '' })) || t('wallet.ledgerDeviceError', { message: '' }));
     loading.value = false;
   } finally {
@@ -308,33 +327,38 @@ const signWithLedger = async () => {
 };
 
 const signWithTrezor = async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   loading.value = true;
   // Trezor reports no intermediate stages, so this one label covers the whole
   // call — connecting through the confirmation it is waiting on.
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
-    const { signPsbtWithTrezor } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
-    const result = await signPsbtWithTrezor(
-      request.value.data.psbtHex,
-      loggedWallet.value.addressType,
-      loggedWallet.value.network
-    );
-    if (!result.success || !result.signedPsbtHex) throw new Error(result.error || 'Trezor signing failed');
+    let signedPsbtHex: string;
+    if (featureFlagsStore.state.flags.isTrezorWebUsbEnabled) {
+      const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezorWeb'), approvalCurrent);
+      signedPsbtHex = await awaitFreshApproval(() => trezor.signTransaction(request.value.data.psbtHex, loggedWallet.value.addressType), approvalCurrent);
+    } else {
+      const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezor'), approvalCurrent);
+      signedPsbtHex = await awaitFreshApproval(() => trezor.signBitcoinTransaction(request.value.data.psbtHex, loggedWallet.value.addressType), approvalCurrent);
+    }
 
+    assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
     const options = request.value.data.options;
-    let returnHex = result.signedPsbtHex;
+    let returnHex = signedPsbtHex;
     if (options?.autoFinalized !== false) {
-      const bitcoin = await import('bitcoinjs-lib');
-      const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+      const bitcoin = await awaitFreshApproval(async () => (import('bitcoinjs-lib')), approvalCurrent);
+      const { getBitcoinNetwork } = await awaitFreshApproval(async () => (import('@/chains/bitcoin/bitcoinPsbtBuilder')), approvalCurrent);
       const network = getBitcoinNetwork(loggedWallet.value.network);
-      const psbt = bitcoin.Psbt.fromHex(result.signedPsbtHex, { network });
+      const psbt = bitcoin.Psbt.fromHex(signedPsbtHex, { network });
       psbt.finalizeAllInputs();
       returnHex = psbt.extractTransaction().toHex();
     }
 
-    await controller.value.returnData({ data: returnHex });
+    await awaitFreshApproval(async () => (controller.value.returnData({ data: returnHex })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, t('wallet.trezorSigningFailed')) || t('wallet.trezorSigningFailed'));
     loading.value = false;
   } finally {
@@ -343,47 +367,57 @@ const signWithTrezor = async () => {
 };
 
 const showKeystoneQR = async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   try {
-    const { generateKeystonePsbtQR } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
-    const result = await generateKeystonePsbtQR(request.value.data.psbtHex);
-    if (!result.success) throw new Error(result.error || 'QR generation failed');
-    keystoneType.value = result.keystoneQrType!;
-    keystoneCbor.value = result.keystoneQrCbor!;
+    const { generateBitcoinPSBTQR } = await awaitFreshApproval(() => import('@/shared/utils/keystone'), approvalCurrent);
+    const { URDecoder } = await awaitFreshApproval(() => import('@ngraveio/bc-ur'), approvalCurrent);
+    const decoder = new URDecoder();
+    decoder.receivePart(String(generateBitcoinPSBTQR(request.value.data.psbtHex).data));
+    const ur = decoder.resultUR();
+    keystoneType.value = ur.type;
+    keystoneCbor.value = ur.cbor.toString('hex');
+    keystoneApprovalCurrent = approvalCurrent;
     keystoneOverlay.value = true;
     keystoneScan.value = false;
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, 'Failed to generate Keystone QR code') || 'Failed to generate Keystone QR code');
   }
 };
 
-const onKeystoneScan = async (ur: UR) => {
+const onKeystoneScan = (ur: UR) => approval.run(async () => {
+  const approvalCurrent = keystoneApprovalCurrent;
+  if (!approvalCurrent?.() || !keystoneOverlay.value) return;
+  keystoneApprovalCurrent = null;
   try {
-    const { parseKeystoneSignedPsbt } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
-    const result = await parseKeystoneSignedPsbt(ur, request.value.data.psbtHex, loggedWallet.value.network);
-    if (!result.success || !result.signedPsbtHex) throw new Error(result.error || 'Failed to parse Keystone signature');
+    const { parseBitcoinSignature } = await awaitFreshApproval(() => import('@/shared/utils/keystone'), approvalCurrent);
+    const signedPsbtHex = parseBitcoinSignature(ur);
 
     keystoneOverlay.value = false;
     keystoneScan.value = false;
 
+    assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
     const options = request.value.data.options;
-    let returnHex = result.signedPsbtHex;
+    let returnHex = signedPsbtHex;
     if (options?.autoFinalized !== false) {
-      const bitcoin = await import('bitcoinjs-lib');
-      const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+      const bitcoin = await awaitFreshApproval(async () => (import('bitcoinjs-lib')), approvalCurrent);
+      const { getBitcoinNetwork } = await awaitFreshApproval(async () => (import('@/chains/bitcoin/bitcoinPsbtBuilder')), approvalCurrent);
       const network = getBitcoinNetwork(loggedWallet.value.network);
-      const psbt = bitcoin.Psbt.fromHex(result.signedPsbtHex, { network });
+      const psbt = bitcoin.Psbt.fromHex(signedPsbtHex, { network });
       psbt.finalizeAllInputs();
       returnHex = psbt.extractTransaction().toHex();
     }
 
-    await controller.value.returnData({ data: returnHex });
+    await awaitFreshApproval(async () => (controller.value.returnData({ data: returnHex })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, t('wallet.keystoneQRScanError')) || t('wallet.keystoneQRScanError'));
     keystoneOverlay.value = false;
     keystoneScan.value = false;
   }
-};
+});
 
 const onKeystoneError = (error: string) => {
   snackbar.setError(error || t('wallet.keystoneScanError'));
@@ -391,7 +425,7 @@ const onKeystoneError = (error: string) => {
 
 const backKeystoneScan = () => {
   if (keystoneScan.value) keystoneScan.value = false;
-  else keystoneOverlay.value = false;
+  else { approval.invalidate(); keystoneOverlay.value = false; }
 };
 
 const decodePsbt = async (psbtHex: string, options: BtcSignPsbtOptions | undefined) => {

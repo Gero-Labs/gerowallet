@@ -194,7 +194,11 @@ export function usePoolSigning(options: {
 }) {
   const { t } = useTranslation();
   const { loggedWallet, utxos, keys } = toRefs(walletStore);
-  const { epochParams, tip } = toRefs(networkStore);
+  const { epochParams } = toRefs(networkStore);
+  const tip = computed(() => {
+    const currentTip = networkStore.tip;
+    return currentTip && 'slot' in currentTip ? currentTip : null;
+  });
 
   const loading = ref(false);
   const spendingPassword = ref('');

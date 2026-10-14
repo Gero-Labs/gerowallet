@@ -33,16 +33,16 @@
       <div v-if="kycStatus !== 'verified'" class="kyc-action">
         <GButton tier="primary" :loading="openingKyc" @click="startKYC">
           {{ verificationFailed ? t('card.restartVerification') : t('card.startKYCProcess') }}
-          <v-icon small right>mdi-open-in-new</v-icon>
+          <v-icon size="small" end>mdi-open-in-new</v-icon>
         </GButton>
         <span class="t-caption">{{ t('card.kycOpensNewTab') }}</span>
       </div>
 
       <div class="kyc-status glass-panel">
         <span class="t-body-sm">{{ t('card.yourKYCStatus') }}</span>
-        <v-tooltip bottom max-width="350" :open-delay="300">
-          <template #activator="{ on, attrs }">
-            <span class="kyc-status__chip" tabindex="0" v-bind="attrs" v-on="on">
+        <v-tooltip location="bottom"  max-width="350" :open-delay="300">
+          <template #activator="{ props: activatorProps }">
+            <span class="kyc-status__chip" tabindex="0" v-bind="activatorProps" >
               <CardChip :tone="verificationFailed ? 'warning' : 'neutral'">{{ statusLabel }}</CardChip>
             </span>
           </template>

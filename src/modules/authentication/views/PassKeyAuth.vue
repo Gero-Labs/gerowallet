@@ -1,13 +1,13 @@
 <template>
   <v-app>
     <v-container fluid fill-height class="pa-0">
-      <v-row align="center" justify="center" class="fill-height">
+      <v-row   class="fill-height align-center justify-center">
         <v-col cols="12" class="text-center">
           <v-card flat class="transparent">
             <v-card-text>
               <div class="mb-4">
                 <v-avatar size="80" color="primary">
-                  <v-img :src="assets.passKeySvg" contain width="50" height="50" />
+                  <v-img :src="assets.passKeySvg"  width="50" height="50" />
                 </v-avatar>
               </div>
 
@@ -25,7 +25,7 @@
               <v-alert
                 v-if="error"
                 type="error"
-                text
+                variant="text"
                 class="mt-4"
               >
                 {{ error }}

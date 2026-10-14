@@ -11,14 +11,14 @@
     <!-- Icon + Title as list-item row -->
     <v-list-item class="px-4 pt-0" :class="benefits && benefits.length ? 'pb-1' : 'pb-3'" style="background: transparent;">
       <v-avatar :color="iconColor" size="24" class="mr-3 my-0 align-self-center">
-        <v-icon dark small>{{ icon }}</v-icon>
+        <v-icon theme="dark" size="small">{{ icon }}</v-icon>
       </v-avatar>
-      <v-list-item-content class="py-0">
+      <div class="py-0 g-list-content">
         <v-list-item-title class="text-subtitle-1 white--text font-weight-medium d-flex align-center" style="white-space: normal;">
           {{ title }}
-          <v-tooltip v-if="learnMoreContent" bottom max-width="300" content-class="custom-tooltip">
-            <template v-slot:activator="{ on }">
-              <v-icon x-small class="ml-1 info-icon" color="grey lighten-1" v-on="on" @click.stop>mdi-information-outline</v-icon>
+          <v-tooltip location="bottom" v-if="learnMoreContent"  max-width="300" content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-icon v-bind="activatorProps" size="x-small" class="ml-1 info-icon" color="grey lighten-1"  @click.stop>mdi-information-outline</v-icon>
             </template>
             <span class="text-body-2">{{ learnMoreContent }}</span>
           </v-tooltip>
@@ -26,8 +26,8 @@
         <v-list-item-subtitle v-if="description" class="text-body-2" style="white-space: normal;">
           {{ description }}
         </v-list-item-subtitle>
-      </v-list-item-content>
-      <v-chip v-if="recommended" color="primary" x-small class="ml-2 align-self-center">
+      </div>
+      <v-chip v-if="recommended" color="primary" size="x-small" class="ml-2 align-self-center">
         {{ $t('welcome.recommended') }}
       </v-chip>
     </v-list-item>
@@ -39,7 +39,7 @@
         :key="index"
         class="d-flex align-center mb-1"
       >
-        <v-icon small color="success" class="mr-2">mdi-check</v-icon>
+        <v-icon size="small" color="success" class="mr-2">mdi-check</v-icon>
         <span class="text-body-2">{{ benefit }}</span>
       </div>
     </v-card-text>

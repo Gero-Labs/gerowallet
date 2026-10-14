@@ -539,14 +539,18 @@ describe('cancel, timeout, failure, dispose', () => {
   // timers under it makes the flush unable to drain the very frames we assert on.
   // A 60ms job budget keeps this fast enough to be a normal unit test.
   it('times the job out and frees the slot', async () => {
-    const { t, deps } = makeDeps({ jobTimeoutMs: 60 });
+    let busyWhenHealthChecked: boolean | undefined;
+    const { t, deps } = makeDeps({
+      jobTimeoutMs: 60,
+      checkProverHealth: async () => { busyWhenHealthChecked = svc.isBusy(); return true; },
+    });
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await settle();
-    expect(svc.isBusy()).toBe(true);
-    await new Promise((r) => { setTimeout(r, 80); });
+    // Observe the allocated slot synchronously at the real health boundary.
+    // A fixed settle can outlive the whole 60ms budget on a loaded runner.
     expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('timeout');
+    expect(busyWhenHealthChecked).toBe(true);
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });
@@ -557,14 +561,17 @@ describe('cancel, timeout, failure, dispose', () => {
   it('bounds the job by the signed expiresAt when that is sooner than the budget', async () => {
     // now = 1_000_900ms => nowSec 1000, so expiresAt 1001 is still fresh but
     // only 100ms away, well inside the 5s default budget.
-    const { t, deps } = makeDeps({ now: () => 1_000_900, jobTimeoutMs: 5_000 });
+    let busyWhenHealthChecked: boolean | undefined;
+    const { t, deps } = makeDeps({
+      now: () => 1_000_900,
+      jobTimeoutMs: 5_000,
+      checkProverHealth: async () => { busyWhenHealthChecked = svc.isBusy(); return true; },
+    });
     const svc = createProveService(deps);
     const phone = await makePhone('req-ttl', PAYLOAD, { expiresAt: 1001 });
     t.deliver(phone.init);
-    await settle();
-    expect(svc.isBusy()).toBe(true);
-    await new Promise((r) => { setTimeout(r, 160); });
     expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('timeout');
+    expect(busyWhenHealthChecked).toBe(true);
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });

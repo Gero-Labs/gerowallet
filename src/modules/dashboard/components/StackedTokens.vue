@@ -1,7 +1,7 @@
 <template>
   <div class="stackedTokens" style="max-width: 132px">
     <v-btn
-      icon
+      icon variant="text"
       :height="props.tokenSize"
       :width="props.tokenSize"
       v-for="(token, index) in collect"
@@ -19,7 +19,7 @@
       </v-avatar>
     </v-btn>
     <v-btn
-      icon
+      icon variant="text"
       :height="props.tokenSize"
       :width="props.tokenSize"
       v-if="residue > 0"
@@ -40,7 +40,7 @@ import { resolveAsset } from '@/shared/utils/resolver';
 import assts from '@/utils/assets';
 
 interface Props {
-  tokens?: Array<any>
+  tokens?: Array<unknown>
   tokenSize?: number
 }
 

@@ -1,11 +1,12 @@
+import { plainStoreSnapshot } from '@/stores/serialization';
 // src/stores/copilotPrefsStore.ts
 // Persisted user preferences for the proactive Copilot feed (vibe sensitivity +
 // active categories + first-run flag). Mirrors copilotFeedStore's lightweight
-// pattern: a Vue.observable + chrome.storage.local with a debounced write and a
+// pattern: a reactive + chrome.storage.local with a debounced write and a
 // load-on-init read. UI-mutated only, so no background broadcast - but it DOES
 // listen for cross-surface changes so the sidepanel and dashboard stay in sync
 // when both are open (self-echo guarded to avoid write churn).
-import Vue from 'vue';
+import { reactive } from 'vue';
 import {
   defaultPrefs,
   normalizePrefs,
@@ -16,7 +17,7 @@ import {
 
 const STORE_KEY = 'copilotPrefsStore';
 
-export const copilotPrefsState = Vue.observable<CopilotPrefs>(defaultPrefs());
+export const copilotPrefsState = reactive<CopilotPrefs>(defaultPrefs());
 
 const hasChromeStorage = typeof chrome !== 'undefined' && !!chrome.storage?.local;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -54,7 +55,7 @@ function persist(): void {
   if (!hasChromeStorage) return;
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = setTimeout(() => {
-    chrome.storage.local.set({ [STORE_KEY]: snapshot() });
+    chrome.storage.local.set(plainStoreSnapshot({ [STORE_KEY]: snapshot() }));
   }, 300);
 }
 

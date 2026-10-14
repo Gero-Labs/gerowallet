@@ -1,5 +1,5 @@
 import { computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import { isHelpReady } from '@/modules/navigation/helpAccess';
 import { parseHelpChain, walletHelpChain, type HelpAnswer, type HelpChain } from './helpContent';

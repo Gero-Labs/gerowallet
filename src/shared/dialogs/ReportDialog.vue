@@ -11,9 +11,9 @@
     <v-card-title style="display: block" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
         <v-stepper-header>
-          <template v-for="(item, index) in steps">
+          <template :key="item.name" v-for="(item, index) in steps">
             <div
-              :key="item.name"
+
               class="custom-step"
               :class="{
                 active: currentStep === index + 1,
@@ -29,7 +29,7 @@
               <span class="step-label">{{ item.label }}</span>
             </div>
             <div
-              :key="`divider-${index}`"
+
               class="divider"
               :class="{ 'active-divider': currentStep > index + 1 }"
               v-if="index < steps.length - 1"
@@ -44,20 +44,20 @@
       :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px' } : {}"
     >
       <CustomStepper :currentStep="currentStep" :steps="steps">
-        <v-stepper-content step="1">
+        <v-stepper-window-item :value="1">
           <v-form ref="form" v-model="valid" >
             <div class="d-flex mb-1" v-if="reportSite">
-              <v-label small class="white--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}:</v-label>
+              <v-label size="small" class="white--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}:</v-label>
               {{ reportSite }}
             </div>
             <div class="d-flex mb-3" v-if="reportTx">
-              <v-label small class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
+              <v-label size="small" class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
               <div>
                 <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="reportTxUrl" target="_blank" rel="noopener noreferrer">{{ truncate(reportTx) }}</a>
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               </div>
             </div>
-            <v-select
+            <v-select item-title="text"
               v-model="label"
               :items="labels"
               :label="$t('navigation.markAs')"
@@ -65,14 +65,14 @@
               required
               hide-details
               :rules="[rules.required()]"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               attach
             ></v-select>
             <v-textarea
               :label="$t('navigation.descriptionOfScam')"
               rows="3"
-              outlined
+              variant="outlined"
               v-model="description"
               :placeholder="$t('navigation.writeDescriptionHere')"
               required
@@ -81,7 +81,7 @@
               :rules="[rules.required(), rules.maxCharacters(250)]"
             ></v-textarea>
             <v-textarea
-              outlined
+              variant="outlined"
               rows="3"
               v-model="evidence"
               :label="$t('navigation.evidence')"
@@ -102,67 +102,67 @@
             <v-file-input
               class="mt-4"
               v-model="uploadFile"
-              dense hide-details
-              outlined type="file"
+              density="compact" hide-details
+              variant="outlined" type="file"
               ref="fileInput"
-              @change="onFileChange"
+              @update:model-value="onFileChange"
               :label="$t('navigation.referenceFile')"
               accept=".jpg, .jpeg, .png, .webp"
               color="primary"
               counter
               :show-size="1000"
             >
-              <template v-slot:selection="{ text }">
-                <v-chip
+              <template v-slot:selection="{ fileNames }">
+                <v-chip v-for="fileName in fileNames" :key="fileName"
                   color="primary"
-                  dark
+                  theme="dark"
                   label
-                  small
+                  size="small"
                 >
-                  {{ text }}
+                  {{ fileName }}
                 </v-chip>
               </template>
             </v-file-input>
           </v-form>
-        </v-stepper-content>
-        <v-stepper-content step="2">
+        </v-stepper-window-item>
+        <v-stepper-window-item :value="2">
           <div class="mb-1" style="align-items: center;">
-            <v-label v-if="reportSite" small class="grey--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}</v-label>
+            <v-label v-if="reportSite" size="small" class="grey--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}</v-label>
             <p class="d-flex" v-if="reportSite" style="align-items: center;">
               {{ reportSite }}
-              <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
+              <v-chip class="ml-1" size="x-small" variant="outlined" :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
-            <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">{{ $t('navigation.transactionId') }}</v-label>
+            <v-label size="small" class="grey--text" style="align-content: center;" v-if="reportTx">{{ $t('navigation.transactionId') }}</v-label>
             <p class="d-flex" v-if="reportTx" style="align-items: center;">
               <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="reportTxUrl" target="_blank" rel="noopener noreferrer">{{ truncate(reportTx) }}</a>
               <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
-              <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
+              <v-chip class="ml-1" size="x-small" variant="outlined" :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
           </div>
-          <v-label small class="grey--text">{{ $t('navigation.descriptionOfScam') }}</v-label>
+          <v-label size="small" class="grey--text">{{ $t('navigation.descriptionOfScam') }}</v-label>
           <p>{{ description }}</p>
-          <v-label small class="grey--text mb-2">{{ $t('navigation.evidence') }}</v-label>
+          <v-label size="small" class="grey--text mb-2">{{ $t('navigation.evidence') }}</v-label>
           <p>{{ evidence }}</p>
           <p v-if="uploadFile" class="mb-0">{{ $t('navigation.selectedFile') }} {{ uploadFile.name }}</p>
           <div class="d-flex justify-center">
             <v-img v-if="imageUrl" :src="imageUrl" max-width="300" class="mt-4"></v-img>
           </div>
-        </v-stepper-content>
+        </v-stepper-window-item>
       </CustomStepper>
     </v-card-text>
     <v-card-actions>
-      <v-btn text v-if="currentStep === 2" @click="prevStep" :disabled="loading">
-        <v-icon small class="mr-1">mdi-arrow-left</v-icon>
+      <v-btn variant="text" v-if="currentStep === 2" @click="prevStep" :disabled="loading">
+        <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
         {{ $t('navigation.back') }}
       </v-btn>
       <v-spacer></v-spacer>
       <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton" style="color: var(--g-on-grad)!important">
         {{ $t('navigation.continue') }}
-        <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
+        <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-arrow-right</v-icon>
       </v-btn>
       <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton" style="color: var(--g-on-grad)!important">
         {{ $t('navigation.submitReport') }}
-        <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-file-document-outline</v-icon>
+        <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-file-document-outline</v-icon>
       </v-btn>
     </v-card-actions>
   </BaseDialog>
@@ -215,7 +215,7 @@ const uploadFile = ref<File | null>(null);
 const labels = ['Not Safe', 'Safe'];
 const valid = ref(false);
 const loading = ref(false);
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 const fileInput = ref<{ reset: () => void } | null>(null);
 
 const steps = [
@@ -232,7 +232,8 @@ const steps = [
 // Mock loggedWallet for the template - you might need to import actual store
 const loggedWallet = ref({ type: WalletType.Normal });
 
-const onFileChange = (file: File | null) => {
+const onFileChange = (files: File | File[] | null) => {
+  const file = Array.isArray(files) ? files[0] : files;
   const maxSize = 3 * 1024 * 1024; // 3 MB
   if (file && file.size > maxSize) {
     alert(String(t('navigation.fileTooLarge')));
@@ -257,8 +258,8 @@ const createImage = (file: File) => {
   reader.readAsDataURL(file);
 };
 
-const nextStep = () => {
-  if (form.value?.validate()) {
+const nextStep = async () => {
+  if ((await form.value?.validate())?.valid) {
     currentStep.value++;
   }
 };
@@ -336,8 +337,9 @@ watch(() => props.isOpen, (val) => {
   background-color: transparent;
 }
 
-.stepper-container .v-stepper__header {
+.stepper-container :deep(.v-stepper-header) {
   box-shadow: none;
+  align-items: stretch;
 }
 .custom-step {
   display: flex;

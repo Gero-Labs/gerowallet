@@ -1,16 +1,16 @@
 <template>
   <v-dialog
-    :value="value"
+    :model-value="modelValue"
     max-width="480"
     scrollable
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="perps-action-dialog">
       <v-card-title class="dialog-title">
         <span class="text-subtitle-1 font-weight-bold">{{ $t('perpetuals.deposit') }}</span>
         <v-spacer />
-        <v-btn icon small @click="closeAndReset()">
-          <v-icon small>mdi-close</v-icon>
+        <v-btn icon variant="text" size="small" @click="closeAndReset()">
+          <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </v-card-title>
       <v-divider />
@@ -56,7 +56,7 @@
 
         <v-btn
           block
-          depressed
+          variant="flat"
           :loading="depositStatus === 'quoting'"
           :disabled="!canQuote"
           class="action-btn mt-4"
@@ -109,8 +109,8 @@
               </template>
             </span>
             <v-btn
-              x-small
-              text
+              size="x-small"
+              variant="text"
               class="ml-auto refresh-btn"
               :loading="depositStatus === 'quoting'"
               @click="refreshQuote()"
@@ -125,15 +125,15 @@
           v-if="needsPassword"
           v-model="password"
           :label="$t('perpetuals.spendingPassword')"
-          outlined
-          dense
-          dark
+          variant="outlined"
+          density="compact"
+          theme="dark"
           hide-details
           class="perp-input mt-3"
           :type="showPassword ? 'text' : 'password'"
-          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+          :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
           :disabled="quoteCountdown <= 0"
-          @click:append="showPassword = !showPassword"
+          @click:append-inner="showPassword = !showPassword"
         />
 
         <!-- PRF (passkey) wallets confirm by authenticating with their PassKey -->
@@ -155,13 +155,13 @@
         </transition>
 
         <div class="action-row mt-4">
-          <v-btn text small class="back-btn" @click="goBackToAmount()">
+          <v-btn variant="text" size="small" class="back-btn" @click="goBackToAmount()">
             <v-icon size="14" class="mr-1">mdi-arrow-left</v-icon>
             {{ $t('common.back') }}
           </v-btn>
           <v-btn
             v-if="needsPassword"
-            depressed
+            variant="flat"
             :loading="isSigning"
             :disabled="!canConfirm"
             class="action-btn flex-grow-1"
@@ -181,7 +181,7 @@
           />
           <v-btn
             v-else
-            depressed
+            variant="flat"
             class="action-btn flex-grow-1"
             @click="copyAddress()"
           >
@@ -249,7 +249,7 @@
         <div class="action-row mt-4" v-if="depositStatus === 'credited' || depositStatus === 'confirmed' || depositStatus === 'error'">
           <v-btn
             v-if="depositStatus === 'error'"
-            depressed
+            variant="flat"
             class="action-btn flex-grow-1"
             @click="retryFromError()"
           >
@@ -258,7 +258,7 @@
           </v-btn>
           <v-btn
             v-else
-            depressed
+            variant="flat"
             class="action-btn flex-grow-1"
             @click="closeAndReset()"
           >
@@ -290,11 +290,11 @@ import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'deposited'): void;
 }>();
 
@@ -532,11 +532,11 @@ function retryFromError() {
 }
 
 function closeAndReset() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 // ── Reset on close ────────────────────────────────────────────────────────────
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   if (!val) {
     amount.value = '';
     password.value = '';
@@ -614,7 +614,8 @@ watch(() => props.value, (val) => {
 .balance-value:hover { opacity: 0.85; }
 
 /* ── Inputs ── */
-.perp-input :deep(.v-input__slot) {
+.perp-input :deep(.v-field) {
+  --v-input-control-height: 40px;
   background: var(--g-hairline-1) !important;
   min-height: 40px !important;
 }
@@ -622,7 +623,7 @@ watch(() => props.value, (val) => {
   font-size: 12px !important;
   color: var(--g-text-3) !important;
 }
-.perp-input :deep(input) {
+.perp-input :deep(input.v-field__input) {
   font-size: 13px !important;
   font-family: var(--g-font-mono) !important;
   color: var(--g-text-1) !important;
@@ -633,11 +634,12 @@ watch(() => props.value, (val) => {
   color: var(--g-text-3) !important;
   font-weight: 600 !important;
 }
-.perp-input :deep(fieldset) {
-  border-color: var(--g-hairline-2) !important;
+.perp-input :deep(.v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2) !important;
 }
-.perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
+.perp-input :deep(.v-field--focused .v-field__outline) {
+  color: var(--g-accent) !important;
 }
 
 /* ── Preview Card ── */
@@ -893,7 +895,7 @@ watch(() => props.value, (val) => {
   transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease;
 }
 
-.fade-slide-enter,
+.fade-slide-enter-from,
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-6px);

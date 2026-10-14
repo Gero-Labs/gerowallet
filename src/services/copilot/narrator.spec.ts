@@ -1,9 +1,9 @@
 // src/services/copilot/narrator.spec.ts
 import { describe, it, expect } from 'vitest';
 import { narrate, NARRATION_TEXT_KEYS } from './narrator';
-import type { FeedEvent } from './detectors';
+import type { PriceMoveEvent } from './detectors';
 
-const ev = (over: Partial<FeedEvent>): FeedEvent => ({
+const ev = (over: Partial<PriceMoveEvent>): PriceMoveEvent => ({
   key: 'priceUp:24h:u:day-1', kind: 'priceUp', unit: 'u', ticker: 'SNEK', held: true, window: '24h', pct: 22, ...over,
 });
 

@@ -33,7 +33,7 @@
         <li v-for="(stage, i) in view.stages" :key="stage.id" :class="`is-${stage.state}`" :aria-current="stage.state === 'current' ? 'step' : undefined">
           <span class="order-tracker__rail" aria-hidden="true">
             <span class="order-tracker__dot">
-              <v-icon v-if="stage.state === 'done'" x-small>mdi-check</v-icon>
+              <v-icon v-if="stage.state === 'done'" size="x-small">mdi-check</v-icon>
             </span>
             <span v-if="i < view.stages.length - 1" class="order-tracker__line"></span>
           </span>
@@ -46,7 +46,7 @@
 
       <div v-if="view.needsPayment" class="order-tracker__pay">
         <span v-if="countdown" class="t-body-sm order-tracker__countdown">
-          <v-icon small>mdi-clock-outline</v-icon>
+          <v-icon size="small">mdi-clock-outline</v-icon>
           {{ t('card.addressValidFor', { time: countdown }) }}
         </span>
         <GButton tier="primary" @click="emit('pay')">{{ t('card.completePayment') }}</GButton>
@@ -60,7 +60,7 @@
       />
 
       <p class="order-tracker__note t-caption">
-        <v-icon x-small>mdi-refresh</v-icon>
+        <v-icon size="x-small">mdi-refresh</v-icon>
         {{ t('card.trackerAutoRefresh') }}
       </p>
     </template>

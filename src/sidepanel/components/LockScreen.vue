@@ -24,13 +24,13 @@
           <template v-if="!googleEmail && !mpcSessionActive">
             <v-btn
               block
-              outlined
+              variant="outlined"
               class="mb-1 mpc-google-btn"
               :loading="signingInGoogle"
               @click="signInWithGoogle"
             >
               <v-avatar size="18" class="mr-2">
-                <v-img :src="assets.google" contain />
+                <v-img :src="assets.google"  />
               </v-avatar>
               {{ $t('welcome.googleSignInButton') }}
             </v-btn>
@@ -45,11 +45,11 @@
               class="geroButton"
               block
               rounded
-              depressed
+              variant="flat"
               :loading="loading"
               @click="handleMpcUnlock"
             >
-              <v-icon left small>mdi-fingerprint</v-icon>
+              <v-icon start size="small">mdi-fingerprint</v-icon>
               {{ $t('security.usePassKey') }}
             </v-btn>
           </template>
@@ -60,13 +60,13 @@
               v-model="password"
               :type="showPassword ? 'text' : 'password'"
               :placeholder="$t('miniGero.enterPassword')"
-              outlined
-              dense
-              dark
+              variant="outlined"
+              density="compact"
+              theme="dark"
               hide-details
               class="mb-3"
-              :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-              @click:append="showPassword = !showPassword"
+              :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              @click:append-inner="showPassword = !showPassword"
               @keydown.enter="handleMpcUnlock"
               :error="!!error"
             />
@@ -77,7 +77,7 @@
               class="geroButton"
               block
               rounded
-              depressed
+              variant="flat"
               :loading="loading"
               :disabled="!password"
               @click="handleMpcUnlock"
@@ -91,7 +91,7 @@
         <template v-else-if="unlockMethod === 'pin'">
           <p class="text-caption grey--text mb-3 text-center">{{ $t('security.enterPinToUnlock') }}</p>
           <NumericOtpInput
-            ref="pinInputRef"
+
             v-model="pinCode"
             :length="pinLength"
             :error="pinError"
@@ -104,11 +104,11 @@
           <p class="text-caption grey--text mb-3 text-center">{{ $t('security.drawPatternToUnlock') }}</p>
           <v-btn
             block
-            outlined
+            variant="outlined"
             class="mb-3 dashboard-btn"
             @click="openDashboard"
           >
-            <v-icon small class="mr-2">mdi-open-in-new</v-icon>
+            <v-icon size="small" class="mr-2">mdi-open-in-new</v-icon>
             {{ $t('miniGero.unlockInDashboard') }}
           </v-btn>
         </template>
@@ -119,13 +119,13 @@
             v-model="password"
             :type="showPassword ? 'text' : 'password'"
             :placeholder="$t('miniGero.enterPassword')"
-            outlined
-            dense
-            dark
+            variant="outlined"
+            density="compact"
+            theme="dark"
             hide-details
             class="mb-3"
-            :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-            @click:append="showPassword = !showPassword"
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append-inner="showPassword = !showPassword"
             @keydown.enter="handlePasswordUnlock"
             :error="!!error"
           />
@@ -136,7 +136,7 @@
             class="geroButton"
             block
             rounded
-            depressed
+            variant="flat"
             :loading="loading"
             :disabled="!password"
             @click="handlePasswordUnlock"
@@ -146,7 +146,7 @@
         </template>
 
         <!-- Cancel the switch (pre-switch) or logout (normal lock) -->
-        <v-btn text small class="mt-4 logout-btn" @click="onFooterAction" :loading="loggingOut">
+        <v-btn variant="text" size="small" class="mt-4 logout-btn" @click="onFooterAction" :loading="loggingOut">
           {{ isPreSwitch ? $t('common.cancel') : $t('security.logoutInstead') }}
         </v-btn>
       </template>
@@ -217,7 +217,7 @@ const mpcSessionActive = ref(false);
 const pinCode = ref('');
 const pinLength = ref(6);
 const pinError = ref('');
-const pinInputRef = ref<{ resetValidation?: () => void } | null>(null);
+
 
 const unlockMethod = ref<string | null>(null);
 const configLoaded = ref(false);
@@ -276,10 +276,10 @@ async function handlePinFinish(pin: string) {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UNLOCK,
       data: { unlockCredential: pin, unlockMethod: 'pin' },
-    });
+    }) as { data?: { success?: boolean; error?: string } };
 
-    if (!response.data.success) {
-      pinError.value = response.data.error || 'Incorrect PIN';
+    if (!response.data?.success) {
+      pinError.value = response.data?.error || 'Incorrect PIN';
       pinCode.value = '';
     }
   } catch (e: unknown) {
@@ -303,10 +303,10 @@ async function handlePasswordUnlock() {
         unlockMethod: unlockMethod.value || 'password',
         password: password.value,
       },
-    });
+    }) as { data?: { success?: boolean; error?: string } };
 
-    if (!response.data.success) {
-      error.value = response.data.error || 'Invalid password';
+    if (!response.data?.success) {
+      error.value = response.data?.error || 'Invalid password';
     }
   } catch (e: unknown) {
     error.value = getErrorMessage(e, 'Unlock failed');

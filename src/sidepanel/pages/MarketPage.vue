@@ -6,9 +6,9 @@
         v-model="searchQuery"
         :placeholder="$t('miniGero.marketSearch')"
         prepend-inner-icon="mdi-magnify"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         clearable
         class="search-input"
@@ -64,7 +64,7 @@
               {{ token.ticker || token.name }}
               <v-icon
                 v-if="token.verified"
-                x-small
+                size="x-small"
                 color="primary"
                 class="ml-1"
                 style="margin-top: -2px"
@@ -104,8 +104,8 @@
 
     <!-- Token Detail Bottom Sheet -->
     <BottomSheet
-      :value="showDetail"
-      @input="showDetail = $event"
+      :model-value="showDetail"
+      @update:model-value="showDetail = $event"
       :title="selectedToken?.ticker || selectedToken?.name || ''"
       height="70%"
     >
@@ -133,7 +133,7 @@
           </div>
         </div>
 
-        <v-divider dark class="my-4" />
+        <v-divider theme="dark" class="my-4" />
 
         <!-- Market data rows -->
         <div class="detail-row" v-if="selectedToken.mcap">
@@ -162,7 +162,7 @@
         </div>
 
         <!-- Change timeframes -->
-        <v-divider dark class="my-3" />
+        <v-divider theme="dark" class="my-3" />
         <div class="change-row">
           <div class="change-item" v-if="selectedToken.change1h">
             <span class="text-caption grey--text">1h</span>
@@ -195,7 +195,7 @@
 
         <!-- Holdings (if user owns this token) -->
         <template v-if="selectedTokenBalance">
-          <v-divider dark class="my-3" />
+          <v-divider theme="dark" class="my-3" />
           <div class="detail-row">
             <span class="text-caption grey--text">{{ $t('miniGero.yourBalance') }}</span>
             <span class="text-body-2 white--text">{{ selectedTokenBalance }}</span>
@@ -212,6 +212,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 import { getBalance } from '@/chrome/serialization';
+import type { Cardano } from '@cardano-sdk/core';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import BottomSheet from '../components/BottomSheet.vue';
 import { useChainContext } from '../composables/useChainContext';
@@ -307,7 +308,7 @@ const selectedTokenBalance = computed(() => {
 
   if (token.isNative || token.unit === 'lovelace') {
     // ADA balance
-    const utxos = walletStore.utxos;
+    const utxos = walletStore.utxos.filter((utxo): utxo is Cardano.Utxo => Array.isArray(utxo));
     if (!utxos || utxos.length === 0) return '';
     try {
       const balance = getBalance(utxos, walletStore.collateral);
@@ -358,7 +359,7 @@ function formatCompact(value: number): string {
   return '$' + value.toFixed(2);
 }
 
-function getTokenImg(token: any): string {
+function getTokenImg(token: { ticker?: string; name?: string; img?: string }): string {
   return applyTokenImageOverride(token.ticker || token.name, token.img || '');
 }
 
@@ -390,11 +391,18 @@ function onImgError(event: Event) {
   padding: 0 14px 8px;
 }
 
-.search-input >>> .v-input__slot {
+.search-input :deep(.v-field) {
+  --v-input-control-height: 38px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-hairline-1) !important;
-  border-color: var(--g-hairline-1) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 38px !important;
+}
+
+.search-input :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
 .filter-chips {

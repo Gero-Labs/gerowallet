@@ -1,5 +1,5 @@
 <template>
-  <v-overlay :value="hardware.loading" opacity="0.9" :z-index="zIndex" class="hw-sign-prompt">
+  <v-overlay :model-value="hardware.loading" persistent opacity="0.9" :z-index="zIndex" class="hw-sign-prompt align-center justify-center">
     <div class="hw-sign-prompt__card">
       <v-progress-circular indeterminate color="var(--g-accent)" size="52" width="3">
         <v-icon size="22" color="var(--g-accent)">{{ deviceIcon }}</v-icon>
@@ -34,10 +34,10 @@ import { computed } from 'vue';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
-// Above Vuetify's active-dialog stacking context (202) — every signing surface
+// Above Vuetify's active-dialog stacking context (2000+) — every signing surface
 // that shows this is itself a v-dialog, so a lower value renders the prompt
 // behind the dialog that is waiting on it.
-withDefaults(defineProps<{ zIndex?: number | string }>(), { zIndex: 300 });
+withDefaults(defineProps<{ zIndex?: number | string }>(), { zIndex: 3000 });
 
 const { t } = useTranslation();
 

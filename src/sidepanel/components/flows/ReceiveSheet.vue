@@ -1,15 +1,15 @@
 <template>
-  <BottomSheet :value="value" @input="$emit('input', $event)" :title="$t('miniGero.receiveAda')" height="75%">
+  <BottomSheet :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" :title="$t('miniGero.receiveAda')" height="75%">
     <div class="receive-sheet">
       <!-- Midnight: Public / Private / DUST address tabs -->
       <div v-if="isMidnight" class="midnight-tab-strip">
         <v-tabs
           v-model="midnightTab"
-          background-color="transparent"
+          bg-color="transparent"
           :color="primaryColor"
           :slider-color="primaryColor"
-          centered
-          dense
+          align-tabs="center"
+          density="compact"
         >
           <v-tab>{{ $t('midnight.common.public') }}</v-tab>
           <v-tab>{{ $t('midnight.common.private') }}</v-tab>
@@ -32,7 +32,7 @@
         <div class="text-caption grey--text mb-2">{{ addressLabel }}</div>
         <div v-if="receiveAddress" class="address-box" @click="copyAddress">
           <span class="address-text">{{ receiveAddress }}</span>
-          <v-icon small :color="primaryColor" class="ml-2">mdi-content-copy</v-icon>
+          <v-icon size="small" :color="primaryColor" class="ml-2">mdi-content-copy</v-icon>
         </div>
         <div v-else class="address-box address-box--empty">
           <span class="address-text address-text--muted">{{ $t('midnight.receive.pendingSdk') }}</span>
@@ -47,7 +47,7 @@
         class="mt-4 black--text font-weight-bold"
         @click="copyAddress"
       >
-        <v-icon left small>mdi-content-copy</v-icon>
+        <v-icon start size="small">mdi-content-copy</v-icon>
         {{ copied ? $t('miniGero.copied') : $t('miniGero.copyAddress') }}
       </v-btn>
 
@@ -71,11 +71,11 @@ const { themeColors, isMidnight } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
 }>();
 
 const qrCanvas = ref<HTMLCanvasElement | null>(null);
@@ -112,7 +112,7 @@ const addressLabel = computed(() => isMidnight.value ? activeMidnightTab.value.l
 const addressInfo = computed(() => isMidnight.value ? activeMidnightTab.value.info : t('miniGero.shareAddress'));
 
 // Generate QR code when sheet opens and address is available
-watch([() => props.value, receiveAddress], async ([isOpen, addr]) => {
+watch([() => props.modelValue, receiveAddress], async ([isOpen, addr]) => {
   if (isOpen && addr) {
     await nextTick();
     generateQrCode(addr);
@@ -120,7 +120,7 @@ watch([() => props.value, receiveAddress], async ([isOpen, addr]) => {
 }, { immediate: true });
 
 // Reset to the Public tab each time the sheet is dismissed.
-watch(() => props.value, (open) => {
+watch(() => props.modelValue, (open) => {
   if (!open) midnightTab.value = 0;
 });
 

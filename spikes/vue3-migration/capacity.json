@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "issue": 1283,
+  "epic": 1282,
+  "confirmedByUser": "2026-10-13",
+  "teamModel": "Codex implementation and verification, with the user providing review and decisions",
+  "roles": [
+    {
+      "owner": "Codex",
+      "responsibilities": [
+        "Implement one migration ticket at a time in dependency order",
+        "Run automated checks and maintain reproducible evidence",
+        "Use parallel internal audits where useful",
+        "Prepare local PRs and address review findings"
+      ],
+      "availability": "On-demand during active sessions; no human full-time-equivalent assumption"
+    },
+    {
+      "owner": "User",
+      "responsibilities": [
+        "Review local PRs and make product/release decisions",
+        "Provide hardware/store access and perform device checks where automation cannot",
+        "Approve changes to scope and release timing"
+      ],
+      "availability": "Not yet quantified; no assumed weekly hours or workweek"
+    }
+  ],
+  "formerStaffingAssumption": {
+    "engineeringLanes": 3,
+    "qaEngineers": 1,
+    "status": "Superseded by the user's two-participant execution model; not committed capacity"
+  },
+  "historicalHumanEffort": {
+    "basePersonDays": [
+      74,
+      116
+    ],
+    "reserveFraction": 0.2,
+    "withReservePersonDays": [
+      88.8,
+      139.2
+    ],
+    "earlyBatchPersonDays": 81,
+    "status": "Relative workload/risk reference only. Do not convert these numbers into assistant calendar capacity."
+  },
+  "delivery": {
+    "productionTarget": "2026-12-23",
+    "completionObjective": "2026-12-31T23:59:00+02:00",
+    "timezone": "Asia/Jerusalem",
+    "forecast": "Uncalibrated; target retained, commitment not established",
+    "calendarBuffer": "December 24–31 for store delays/hotfixes, not interchangeable with implementation capacity",
+    "reserve": "Retain 20% additional effort above the refined estimate. Allocate measured session/review capacity after calibration; do not claim the reserve is funded yet."
+  },
+  "calibration": [
+    {
+      "checkpoint": "V01",
+      "measure": [
+        "Technical pilot elapsed execution time",
+        "Baseline failures requiring repair",
+        "User review turnaround",
+        "Missing external/device access"
+      ],
+      "decision": "Record initial throughput and remaining V01 acceptance before starting dependent acceptance"
+    },
+    {
+      "checkpoint": "First production conversion (V03/V04)",
+      "measure": [
+        "Actual source conversion and debugging effort",
+        "Review and CI turnaround",
+        "Regression/fix effort",
+        "Parallel development drift"
+      ],
+      "decision": "Replace human staffing estimate with a measured ticket/weekly forecast and explicitly allocate reserve"
+    },
+    {
+      "checkpoint": "Every ticket and weekly",
+      "measure": [
+        "Accepted scope versus remaining work",
+        "Review queue",
+        "Hardware/store lead times"
+      ],
+      "decision": "Reforecast immediately when a gate or reserve cannot fit; preserve mandatory security/data gates"
+    }
+  ],
+  "acceptanceStatus": "Open: actual user availability, measured production conversion throughput, capacity/reserve allocation, and reviewed forecast are still required.",
+  "integrationBranch": "migration/vue3-vuetify4",
+  "firstTicketBranch": "migration/v01-foundation-pilot"
+}

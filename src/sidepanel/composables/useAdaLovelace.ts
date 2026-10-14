@@ -1,6 +1,7 @@
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { getBalance } from '@/chrome/serialization';
+import type { Cardano } from '@cardano-sdk/core';
 
 /**
  * Reactive ADA balance (in lovelace) derived from the active wallet's UTxOs.
@@ -14,7 +15,9 @@ export function useAdaLovelace() {
   const adaLovelace = computed(() => {
     if (!utxos.value || utxos.value.length === 0) return 0;
     try {
-      const balance = getBalance(utxos.value, collateral.value);
+      const cardanoUtxos = utxos.value.filter((utxo): utxo is Cardano.Utxo => Array.isArray(utxo));
+      if (cardanoUtxos.length === 0) return 0;
+      const balance = getBalance(cardanoUtxos, collateral.value);
       return Number(balance.coin().toString());
     } catch {
       return 0;

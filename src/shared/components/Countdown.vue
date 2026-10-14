@@ -61,7 +61,7 @@ const endTime = computed(() => {
 });
 
 const isCompleted = computed(() => {
-  return (new Date()).getTime() - endTime.value! > 0
+  return !!endTime.value && now.value * 1000 >= endTime.value.getTime()
 });
 
 const seconds = computed(() => {

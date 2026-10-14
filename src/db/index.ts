@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { configureCloneBoundary } from '@/db/cloneBoundary';
 import {
   blockChainDBSchema,
   blockChainDBVersion,
@@ -19,15 +20,15 @@ export async function getBlockchainDb(chain: string, network: string): Promise<D
   }
 
   try {
-    const db: Dexie = new Dexie(dbName);
+    const db = configureCloneBoundary(new Dexie(dbName));
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
     await db.open();
     blockchainDbCache.set(dbName, db);
     return db;
-  } catch (error: DexieError | any) {
+  } catch (error: unknown) {
     debugLog('Blockchain database error:', error)
-    if (error.name === 'NoSuchDatabaseError') {
-      const db: Dexie = new Dexie(dbName);
+    if (error instanceof Error && error.name === 'NoSuchDatabaseError') {
+      const db = configureCloneBoundary(new Dexie(dbName));
       db.version(blockChainDBVersion).stores(blockChainDBSchema);
       await db.open();
       blockchainDbCache.set(dbName, db);
@@ -55,13 +56,13 @@ export default {
   async checkAndCreateBlockchainDatabase(dbName: string) {
     try {
       // Attempt to open the database
-      const db: Dexie = new Dexie(dbName);
+      const db = configureCloneBoundary(new Dexie(dbName));
       return db.open();
-    } catch (error: DexieError | any) {
+    } catch (error: unknown) {
       console.log(error)
-      if (error.name === 'NoSuchDatabaseError') {
+      if (error instanceof Error && error.name === 'NoSuchDatabaseError') {
         // Database does not exist, create it
-        const db: Dexie = new Dexie(dbName);
+        const db = configureCloneBoundary(new Dexie(dbName));
         this.setBlockchainDBVersionSchema(db)
         return db.open();
       } else {
@@ -72,9 +73,11 @@ export default {
     }
   },
   setBlockchainDBVersionSchema(db: Dexie) {
+    configureCloneBoundary(db);
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
   },
   setWalletDBVersionSchema(db: Dexie) {
+    configureCloneBoundary(db);
     console.log('setWalletDBVersionSchema')
     db.version(walletDBVersion).stores(walletDBSchema);
   },

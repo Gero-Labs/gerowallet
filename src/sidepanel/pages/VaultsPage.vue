@@ -4,7 +4,7 @@
     <!-- ── Sticky Header ── -->
     <div class="vaults-header pa-3">
       <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn icon small @click="$router.push('/')">
+        <v-btn icon variant="text" size="small" @click="$router.push('/')">
           <v-icon color="white">mdi-arrow-left</v-icon>
         </v-btn>
         <span class="vaults-title">{{ $t('vaults.title') }}</span>
@@ -65,9 +65,9 @@
           v-model="searchQuery"
           :placeholder="$t('vaults.searchPlaceholder')"
           prepend-inner-icon="mdi-magnify"
-          outlined
-          dense
-          dark
+          variant="outlined"
+          density="compact"
+          theme="dark"
           hide-details
           class="vaults-search"
           clearable
@@ -90,11 +90,11 @@
         <v-select
           v-model="sortBy"
           :items="sortOptions"
-          item-text="label"
+          item-title="label"
           item-value="id"
-          outlined
-          dense
-          dark
+          variant="outlined"
+          density="compact"
+          theme="dark"
           hide-details
           class="sort-select"
           attach
@@ -114,7 +114,7 @@
       >
         <v-icon size="40" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
         <div class="text-body-2 grey--text mt-3 text-center">{{ $t('vaults.noVaultsFound') }}</div>
-        <v-btn x-small text :color="primaryColor" class="mt-2" @click="clearFilters()">
+        <v-btn size="x-small" variant="text" :color="primaryColor" class="mt-2" @click="clearFilters()">
           {{ $t('common.clearFilters') }}
         </v-btn>
       </div>
@@ -140,8 +140,8 @@
         <!-- Load More -->
         <div v-if="hasMore" class="text-center mt-3 mb-4">
           <v-btn
-            small
-            text
+            size="small"
+            variant="text"
             :color="primaryColor"
             :loading="loading"
             @click="loadMore()"
@@ -157,8 +157,8 @@
     <VaultDetailSheet
       v-if="selectedVaultId"
       :vault-id="selectedVaultId"
-      :value="showDetail"
-      @input="showDetail = $event"
+      :model-value="showDetail"
+      @update:model-value="showDetail = $event"
       @deposit="onDepositRequest()"
       @withdraw="onWithdrawRequest()"
     />
@@ -168,8 +168,8 @@
       v-if="selectedVaultId && showDeposit"
       :vault-id="selectedVaultId"
       :vault-name="selectedVaultName"
-      :value="showDeposit"
-      @input="showDeposit = $event"
+      :model-value="showDeposit"
+      @update:model-value="showDeposit = $event"
     />
 
     <!-- ── Withdraw Sheet ── -->
@@ -177,8 +177,9 @@
       v-if="selectedVaultId && showWithdraw"
       :vault-id="selectedVaultId"
       :vault-name="selectedVaultName"
-      :value="showWithdraw"
-      @input="showWithdraw = $event"
+      :model-value="showWithdraw"
+      :current-value="userPositions.find(position => position.vault_id === selectedVaultId)?.current_value || '0'"
+      @update:model-value="showWithdraw = $event"
     />
 
   </div>

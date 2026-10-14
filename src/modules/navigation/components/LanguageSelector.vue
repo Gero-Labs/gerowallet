@@ -1,52 +1,52 @@
 <template>
-  <v-menu offset-y eager transition="none">
-    <template v-slot:activator="{ on, attrs, value }">
-      <v-btn large plain v-bind="attrs" v-on="on" :ripple="false" width="140" style="font-weight: 600">
+  <v-menu v-model="menuOpen" eager transition="none">
+    <template v-slot:activator="{ props: activatorProps }">
+      <v-btn size="large" variant="plain" v-bind="activatorProps"  :ripple="false" width="140" style="font-weight: 600">
         <v-avatar size="20">
           <flag :iso="currentLanguage.iso" style="font-size: 20px;"></flag>
         </v-avatar>
         &nbsp;&nbsp;{{currentLanguage.short}}&nbsp;
-        <v-icon class="toggleUpDown" :class='{ "rotate": value }' small>mdi-chevron-down</v-icon>
+        <v-icon class="toggleUpDown" :class='{ "rotate": menuOpen }' size="small">mdi-chevron-down</v-icon>
       </v-btn>
     </template>
-    <v-card outlined class="glass-popover">
-      <v-list dense class="pa-0 transparent">
-        <v-list-item-group v-model="selectedLang" mandatory>
-          <v-list-item v-for="(item, index) in availableLanguages" :key="index">
-            <v-list-item-avatar size="20">
+    <v-card variant="outlined" class="glass-popover">
+      <v-list density="compact" class="pa-0 transparent">
+
+          <v-list-item v-for="(item, index) in availableLanguages" :key="index" :active="selectedLang === index" @click="selectedLang = index">
+            <template #prepend><v-avatar size="20">
               <flag :iso="item.iso" style="font-size: 20px;"></flag>
-            </v-list-item-avatar>
-            <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
+            </v-avatar>
+            </template><v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
           </v-list-item>
-        </v-list-item-group>
+
       </v-list>
     </v-card>
   </v-menu>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import GeroStore from '@/stores/geroStore';
 import languages from '@/plugins/languages';
-import { loadLanguage } from '@/plugins/i18n';
+import i18n, { loadLanguage } from '@/plugins/i18n';
 import { READY_LANGUAGES } from '@/plugins/i18n.config';
 
 const selectedLang = ref(-1);
-const instance = getCurrentInstance();
+const menuOpen = ref(false);
 
 // Filter to only show ready languages
 const availableLanguages = computed(() => {
   return Object.entries(languages)
-    .filter(([key]) => READY_LANGUAGES.includes(key))
+    .filter(([key]) => READY_LANGUAGES.some(locale => locale === key))
     .map(([, value]) => value);
 });
 
 const availableLanguageKeys = computed(() => {
-  return Object.keys(languages).filter(key => READY_LANGUAGES.includes(key));
+  return Object.keys(languages).filter(key => READY_LANGUAGES.some(locale => locale === key));
 });
 
 const currentLanguage = computed(() => {
-  return languages[instance?.proxy?.$i18n?.locale || 'us']
+  return languages[i18n.locale as keyof typeof languages] || languages.us
 });
 
 const currentLocale = computed(() => {
@@ -55,12 +55,16 @@ const currentLocale = computed(() => {
   return geroStore.config?.locale || 'us';
 });
 
-watch(selectedLang, async (val) => {
-  const localeKey = availableLanguageKeys.value[val]
+watch(selectedLang, async (val, _old, onCleanup) => {
+  const localeKey = availableLanguageKeys.value[val];
+  if (!localeKey || localeKey === currentLocale.value) return;
+  let cancelled = false;
+  onCleanup(() => { cancelled = true; });
 
   // CRITICAL FIX: Load language file before switching (race condition fix)
   try {
     await loadLanguage(localeKey);
+    if (cancelled) return;
 
     // Update geroStore directly (source of truth for global locale preference)
     // This updates i18n.locale internally and persists to database

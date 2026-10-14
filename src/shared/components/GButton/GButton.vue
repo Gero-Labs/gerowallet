@@ -4,20 +4,16 @@
     :disabled="disabled || loading"
     :loading="loading"
     :block="block"
-    depressed
+    variant="flat"
     v-bind="$attrs"
-    v-on="$listeners"
+
   >
     <slot />
   </v-btn>
 </template>
 
 <script lang="ts">
-// inheritAttrs: false + v-bind="$attrs" is required on Vue 2. GButton's root is
-// itself a component (v-btn), so inherited attrs would land on v-btn's root DOM
-// node instead of being read as v-btn PROPS -- href/target/ripple would silently
-// stop working. `class` and `style` are not part of $attrs and still merge onto
-// the root as usual.
+// Forward attributes and listeners together, once, to the Vuetify button.
 export default { inheritAttrs: false };
 </script>
 

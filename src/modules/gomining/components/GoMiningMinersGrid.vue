@@ -1,14 +1,14 @@
 <template>
-  <v-card outlined class="liquid-glass">
+  <v-card variant="outlined" class="liquid-glass">
     <v-card-title class="d-flex align-center" style="gap: 8px;">
-      <v-icon color="primary" small>mdi-pickaxe</v-icon>
+      <v-icon color="primary" size="small">mdi-pickaxe</v-icon>
       <span class="text-subtitle-1 font-weight-bold">{{ $t('gomining.myMiners') }}</span>
-      <v-chip x-small color="primary" class="ml-1" v-if="miners.length">
+      <v-chip size="x-small" color="primary" class="ml-1" v-if="miners.length">
         {{ miners.length }}
       </v-chip>
       <v-spacer />
-      <v-btn text small color="primary" @click="$emit('buy-more')">
-        <v-icon small left>mdi-plus</v-icon>
+      <v-btn variant="text" size="small" color="primary" @click="$emit('buy-more')">
+        <v-icon size="small" start>mdi-plus</v-icon>
         {{ $t('gomining.buyMore') }}
       </v-btn>
     </v-card-title>
@@ -21,7 +21,7 @@
       <div class="text-body-1 font-weight-medium mb-2">{{ $t('gomining.noMinersYet') }}</div>
       <div class="text-caption text--secondary mb-4">{{ $t('gomining.noMinersDescription') }}</div>
       <v-btn color="primary" @click="$emit('buy-more')">
-        <v-icon left small>mdi-cart-plus</v-icon>
+        <v-icon start size="small">mdi-cart-plus</v-icon>
         {{ $t('gomining.browseMinerShop') }}
       </v-btn>
     </div>
@@ -46,16 +46,16 @@
           md="4"
           lg="3"
         >
-          <v-card outlined class="miner-card pa-3">
+          <v-card variant="outlined" class="miner-card pa-3">
             <!-- Miner image -->
             <v-img
               :src="miner.imageUrl || defaultMinerImage"
               height="120"
-              contain
+
               class="mb-3 rounded"
             >
               <template #placeholder>
-                <v-row class="fill-height ma-0" align="center" justify="center">
+                <v-row class="fill-height ma-0 align-center justify-center"  >
                   <v-icon size="48" color="#F7931A40">mdi-pickaxe</v-icon>
                 </v-row>
               </template>
@@ -82,11 +82,11 @@
 
             <!-- Status chip -->
             <v-chip
-              x-small
+              size="x-small"
               :color="miner.status === 'active' ? 'success' : 'grey'"
               class="mt-1"
             >
-              <v-icon x-small left>
+              <v-icon size="x-small" start>
                 {{ miner.status === 'active' ? 'mdi-circle' : 'mdi-circle-outline' }}
               </v-icon>
               {{ miner.status === 'active' ? $t('gomining.active') : $t('gomining.inactive') }}

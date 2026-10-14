@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import { useMiniNavigation, NavTab } from '../composables/useMiniNavigation';
 
 const router = useRouter();

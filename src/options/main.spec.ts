@@ -1,6 +1,6 @@
-import Vue from 'vue';
-import VueRouter from 'vue-router';
-import type { CreateElement } from 'vue';
+import { h, nextTick, type App } from 'vue';
+import { createRouter, createMemoryHistory, type Router } from 'vue-router';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const env = vi.hoisted(() => ({
@@ -8,27 +8,43 @@ const env = vi.hoisted(() => ({
   hydration: () => Promise.resolve(),
   language: () => Promise.resolve(),
   i18n: { locale: 'us' },
-  router: null as unknown as VueRouter,
+  router: null as unknown as Router,
+  apps: [] as App[],
+  mounted: vi.fn(),
 }));
+vi.mock('vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue')>();
+  return { ...actual, createApp: (...args: Parameters<typeof actual.createApp>) => {
+    const app = actual.createApp(...args);
+    const mount = app.mount.bind(app);
+    app.mount = (...mountArgs: Parameters<typeof app.mount>) => {
+      env.mounted(...mountArgs);
+      return mount(...mountArgs);
+    };
+    env.apps.push(app);
+    return app;
+  } };
+});
 vi.mock('@/stores/walletStore', async () => {
-  const { default: Vue } = await import('vue');
-  return { walletStore: Vue.observable(env.wallet), hydrateWalletStore: () => env.hydration() };
+  const { reactive } = await import('vue');
+  env.wallet = reactive(env.wallet);
+  return { walletStore: env.wallet, hydrateWalletStore: () => env.hydration() };
 });
 vi.mock('@/stores/geroStore', () => ({ geroStore: { config: { locale: 'us' } } }));
 vi.mock('@/stores/featureFlagsStore', () => ({ default: { initialize: async () => {} } }));
 vi.mock('@/services/activityTracker.service', () => ({ activityTracker: { start: vi.fn(), stop: vi.fn() } }));
-vi.mock('@/plugins/i18n', () => ({ default: env.i18n, loadLanguage: () => env.language() }));
-vi.mock('@/plugins/vuetify', () => ({ default: undefined }));
+vi.mock('@/plugins/i18n', () => ({ default: env.i18n, i18nPlugin: { install() {} }, loadLanguage: () => env.language() }));
+vi.mock('@/plugins/vuetify', () => ({ default: { install() {} } }));
 vi.mock('@/modules/navigation/router', () => ({ get default() { return env.router; } }));
-vi.mock('vue-flag-icon', () => ({ default: { install: () => {} } }));
-vi.mock('@voerro/vue-notifications', () => ({ default: { render: (h: CreateElement) => h('div') } }));
-vi.mock('vuetify/lib/directives', () => ({ ClickOutside: {} }));
-vi.mock('./App.vue', () => ({ default: { render: (h: CreateElement) => h('div', { attrs: { id: 'startup-app' } }) } }));
+vi.mock('@/shared/components/FlagIcon.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/shared/components/ToastNotifications.vue', () => ({ default: { render: () => null } }));
+vi.mock('vuetify/directives', () => ({ ClickOutside: {} }));
+vi.mock('./App.vue', () => ({ default: { render: () => h('div', { id: 'startup-app' }) } }));
 
 const tick = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
   await vi.advanceTimersByTimeAsync(0);
-  await Vue.nextTick();
+  await nextTick();
 };
 let mount: ReturnType<typeof vi.spyOn>;
 let storage: ReturnType<typeof vi.fn>;
@@ -42,11 +58,12 @@ beforeEach(() => {
   env.wallet.isLocked = true;
   env.wallet.isSyncing = false;
   env.i18n.locale = 'us';
+  env.mounted.mockClear();
   env.hydration = async () => {};
   env.language = async () => {};
-  Vue.use(VueRouter);
-  const component = { render: (h: CreateElement) => h('div') };
-  env.router = new VueRouter({ mode: 'abstract', routes: [
+
+  const component = { render: () => h('div') };
+  env.router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/', component }, { path: '/welcome', component },
     { path: '/governance', component },
     { path: '/help/articles/:slug', component, meta: { public: true } },
@@ -63,11 +80,11 @@ beforeEach(() => {
   storage = vi.fn((_keys: string | string[], callback: (value: unknown) => void) => callback({}));
   vi.stubGlobal('chrome', { runtime: {}, storage: { local: { get: storage } } });
   document.body.innerHTML = '<div id="app"></div>';
-  mount = vi.spyOn(Vue.prototype, '$mount');
+  mount = env.mounted;
 });
 
 afterEach(() => {
-  for (const result of mount.mock.results) if (result.type === 'return') (result.value as Vue).$destroy();
+  env.apps.splice(0).forEach(app => app.unmount());
   document.body.innerHTML = '';
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -79,13 +96,13 @@ describe('options entry point', () => {
     await env.router.push(path);
     await import('./main');
     await tick();
-    expect(env.router.currentRoute.fullPath).toBe(path);
+    expect(env.router.currentRoute.value.fullPath).toBe(path);
     env.wallet.loggedWallet = { id: 1 };
     env.wallet.isLocked = false;
     await tick();
     env.wallet.isLocked = true;
     await tick();
-    expect(env.router.currentRoute.fullPath).toBe(path);
+    expect(env.router.currentRoute.value.fullPath).toBe(path);
   });
 
   it('still evicts private content on lock', async () => {
@@ -96,7 +113,7 @@ describe('options entry point', () => {
     await tick();
     env.wallet.isLocked = true;
     await tick();
-    expect(env.router.currentRoute.path).toBe('/welcome');
+    expect(env.router.currentRoute.value.path).toBe('/welcome');
   });
 
   it('mounts once after five seconds when all storage remains pending', async () => {
@@ -149,12 +166,12 @@ describe('options entry point', () => {
     await env.router.push('/governance').catch(() => {});
     await import('./main');
     await vi.advanceTimersByTimeAsync(5000);
-    expect(env.router.currentRoute.path).toBe('/welcome');
+    expect(env.router.currentRoute.value.path).toBe('/welcome');
     env.wallet.loggedWallet = { id: 1 };
     env.wallet.isLocked = false;
     resolve();
     await tick();
-    expect(env.router.currentRoute.path).toBe('/governance');
+    expect(env.router.currentRoute.value.path).toBe('/governance');
     expect(mount.mock.calls.filter(([target]) => target === '#app')).toHaveLength(1);
   });
 
@@ -164,7 +181,7 @@ describe('options entry point', () => {
     await tick();
     env.wallet.loggedWallet = { id: 1 };
     await tick();
-    expect(env.router.currentRoute.path).toBe('/welcome');
+    expect(env.router.currentRoute.value.path).toBe('/welcome');
   });
 
   it.each(['/passkey-auth', '/ledger-ble-sign', '/welcome?addWallet=1'])('preserves %s when hydration finishes', async (path) => {
@@ -174,6 +191,6 @@ describe('options entry point', () => {
     env.wallet.loggedWallet = { id: 1 };
     env.wallet.isLocked = false;
     await tick();
-    expect(env.router.currentRoute.fullPath).toBe(path);
+    expect(env.router.currentRoute.value.fullPath).toBe(path);
   });
 });

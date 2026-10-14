@@ -1,14 +1,14 @@
 <template>
-  <v-card flat outlined class="fill-height glass-panel cashback-card cashback-card-with-bg">
+  <v-card flat variant="outlined" class="fill-height glass-panel cashback-card cashback-card-with-bg">
     <v-card-title>{{ $t('cashback.title') }}</v-card-title>
     <v-card-text class="pa-0" style="height: calc(100% - 64px); display: flex; flex-direction: column;">
       <div>
         <!-- Promo Section -->
         <div class="cashback-combined-row cashback-rewards-section">
           <div class="cashback-section">
-            <v-list-item-avatar size="32" tile class="mr-2">
-              <v-img :src="assets.giftSvg" contain></v-img>
-            </v-list-item-avatar>
+            <v-avatar size="32" rounded="0" class="mr-2">
+              <v-img :src="assets.giftSvg" ></v-img>
+            </v-avatar>
             <div class="cashback-content">
               <div class="cashback-title">{{ $t('cashback.payAndReceive') }}</div>
             </div>

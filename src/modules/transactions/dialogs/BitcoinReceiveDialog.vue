@@ -4,37 +4,37 @@
       <v-card-title class="text-h5">
         {{ $t('receive.receiveTitle') }}
         <v-spacer></v-spacer>
-        <v-btn icon @click="closeDialog">
+        <v-btn icon variant="text" @click="closeDialog">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
 
       <v-card-text>
         <!-- Address Type Selector -->
-        <v-select
+        <v-select item-title="text"
           v-model="selectedAddressType"
           :items="addressTypeOptions"
           :label="$t('receive.addressType')"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           class="mb-4"
           attach
-          @change="updateAddress"
+          @update:model-value="updateAddress"
         >
           <template v-slot:selection="{ item }">
-            <v-chip small>{{ item.text }}</v-chip>
+            <v-chip size="small">{{ item.text }}</v-chip>
           </template>
         </v-select>
 
         <!-- Address Display -->
-        <v-card outlined class="mb-4">
+        <v-card variant="outlined" class="mb-4">
           <v-card-text>
             <div class="text-caption mb-2">{{ $t('receive.yourAddress') }}</div>
             <div class="d-flex align-center">
               <div class="text-body-2 monospace flex-grow-1" style="word-break: break-all;">
                 {{ currentAddress }}
               </div>
-              <v-btn icon @click="copyAddress" class="ml-2">
+              <v-btn icon variant="text" @click="copyAddress" class="ml-2">
                 <v-icon>{{ copiedAddress ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
               </v-btn>
             </div>
@@ -42,7 +42,7 @@
         </v-card>
 
         <!-- QR Code Display -->
-        <v-card outlined class="mb-4">
+        <v-card variant="outlined" class="mb-4">
           <v-card-text class="text-center">
             <div ref="qrCodeContainer" class="qr-code-container"></div>
             <div v-if="amountInSats > 0" class="text-caption mt-2">
@@ -54,18 +54,18 @@
         <!-- Optional Amount -->
         <v-expansion-panels v-model="showAmountPanel" flat>
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               {{ $t('receive.specifyAmount') }} ({{ $t('common.optional') }})
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <v-text-field
                 v-model="amountBtc"
                 :label="$t('receive.amount') + ' (BTC)'"
                 type="number"
                 step="0.00000001"
-                outlined
-                dense
-                @input="updateQrCode"
+                variant="outlined"
+                density="compact"
+                @update:model-value="updateQrCode"
               >
                 <template v-slot:append>
                   <span class="text-caption">BTC</span>
@@ -75,42 +75,42 @@
               <div v-if="amountInSats > 0" class="text-caption">
                 ≈ {{ amountInSats.toLocaleString() }} satoshis
               </div>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
 
         <!-- Optional Label/Message -->
         <v-expansion-panels v-model="showLabelPanel" flat class="mt-2">
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               {{ $t('receive.addLabel') }} ({{ $t('common.optional') }})
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <v-text-field
                 v-model="label"
                 :label="$t('receive.label')"
-                outlined
-                dense
+                variant="outlined"
+                density="compact"
                 counter="50"
                 maxlength="50"
-                @input="updateQrCode"
+                @update:model-value="updateQrCode"
               ></v-text-field>
 
               <v-text-field
                 v-model="message"
                 :label="$t('receive.message')"
-                outlined
-                dense
+                variant="outlined"
+                density="compact"
                 counter="100"
                 maxlength="100"
-                @input="updateQrCode"
+                @update:model-value="updateQrCode"
               ></v-text-field>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
 
         <!-- Address Index Navigation -->
-        <v-card outlined class="mt-4">
+        <v-card variant="outlined" class="mt-4">
           <v-card-text>
             <div class="d-flex align-center justify-space-between">
               <div class="text-caption">
@@ -118,14 +118,14 @@
               </div>
               <div>
                 <v-btn
-                  icon
-                  small
+                  icon variant="text"
+                  size="small"
                   @click="previousAddress"
                   :disabled="currentAddressIndex === 0"
                 >
                   <v-icon>mdi-chevron-left</v-icon>
                 </v-btn>
-                <v-btn icon small @click="nextAddress">
+                <v-btn icon variant="text" size="small" @click="nextAddress">
                   <v-icon>mdi-chevron-right</v-icon>
                 </v-btn>
               </div>
@@ -134,7 +134,7 @@
         </v-card>
 
         <!-- Info -->
-        <v-alert type="info" outlined dense class="mt-4">
+        <v-alert type="info" variant="outlined" density="compact" class="mt-4">
           <div class="text-caption">
             {{ getAddressTypeDescription(selectedAddressType) }}
           </div>
@@ -142,8 +142,8 @@
       </v-card-text>
 
       <v-card-actions>
-        <v-btn text @click="shareAddress" v-if="canShare">
-          <v-icon left>mdi-share-variant</v-icon>
+        <v-btn variant="text" @click="shareAddress" v-if="canShare">
+          <v-icon start>mdi-share-variant</v-icon>
           {{ $t('receive.share') }}
         </v-btn>
         <v-spacer></v-spacer>
@@ -168,17 +168,17 @@ const { loggedWallet } = toRefs(walletStore);
 
 // Props
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
 }>();
 
 // Dialog state
 const dialog = computed({
-  get: () => props.value,
-  set: (val) => emit('input', val),
+  get: () => props.modelValue,
+  set: (val) => emit('update:modelValue', val),
 });
 
 // Address state

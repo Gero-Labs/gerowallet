@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // src/sidepanel/components/AgentDock.spec.ts
 //
 // Covers the support (live chat) layer of AgentDock.vue — the DOCK's own
@@ -15,7 +16,7 @@
 // GeroSwapEmbed.spec.ts's pattern of stubbing every collaborator a component
 // imports.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
+import { mount, type VueWrapper, type DOMWrapper } from '@vue/test-utils';
 // Type-only import: erased at compile time, so it is unaffected by the
 // vi.mock of this module below and keeps the spec pinned to the REAL contract.
 import type { SupportAttachment } from '@/sidepanel/composables/useSupportChat';
@@ -79,7 +80,7 @@ interface MockWalletStore {
 // vi.hoisted only "works" if nothing forces it to resolve before that `const` runs,
 // which is a fragile accident of file order, not a guarantee.
 // See https://vitest.dev/api/vi.html#vi-hoisted.
-const { mockSupportChat, mockDock, flagsHolder, sheetVisibility, mockWalletStore } = vi.hoisted(() => {
+let { mockSupportChat, mockDock, flagsHolder, sheetVisibility, mockWalletStore } = vi.hoisted(() => {
   return {
     mockSupportChat: {
       enter: vi.fn().mockResolvedValue(undefined),
@@ -136,9 +137,11 @@ vi.mock('@/sidepanel/composables/useSheetVisibility', () => ({
 // mocked for the same isolation reason as useSupportChat/useAgentDock above.
 // AgentDock only ever reads walletStore.loggedWallet?.chain (for the FAB's
 // chain-accent mark), so the mock's surface is that one property.
-vi.mock('@/stores/walletStore', () => ({
-  walletStore: mockWalletStore,
-}));
+vi.mock('@/stores/walletStore', async () => {
+  const { reactive } = await import('vue');
+  mockWalletStore = reactive(mockWalletStore);
+  return { walletStore: mockWalletStore };
+});
 
 // The spending-auth dialog is stubbed out wholesale rather than stubbed at mount:
 // its real module graph reaches PassKeyAuthButton -> webauthn-prf and
@@ -146,10 +149,11 @@ vi.mock('@/stores/walletStore', () => ({
 // Its own contract (registering/settling the promptAuth hook) is covered by
 // useSupportAuthPrompt.spec.ts.
 vi.mock('@/sidepanel/components/SupportAuthPrompt.vue', () => ({
-  default: { name: 'SupportAuthPrompt', render: (h: (tag: string) => unknown) => h('div') },
+  default: { name: 'SupportAuthPrompt', render: () => Vue.h('div') },
 }));
 
-import Vue, { ref } from 'vue';
+import * as Vue from 'vue';
+import { ref } from 'vue';
 // Real imports (not mocked): both are pure, side-effect-free constant/asset
 // data — the same category as renderMarkdown/i18n below, not a collaborator
 // like useSupportChat that needs isolating. Importing the real Blockchain
@@ -167,7 +171,6 @@ function setWalletChain(chain?: string): void {
 // AgentDock.vue renders raw <v-icon> (Vuetify isn't installed/registered in this
 // test's Vue instance) — ignore it as a custom element so Vue doesn't warn on every
 // render, mirroring GeroSwapEmbed.spec.ts's handling of its own <gero-swap> element.
-Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'v-icon'];
 
 // `ref` is only live from this point on. Reassigning (not Object.assign-merging)
 // `flagsHolder.isLiveChatEnabled` to a closure over a real ref is what makes the flag
@@ -196,7 +199,7 @@ function setCopilotEnabled(on: boolean): void {
 // later render (mount() only happens inside a test's it() callback, well after this
 // module has finished initializing).
 Object.assign(sheetVisibility, { isAnySheetOpen: ref(false) });
-Vue.observable(mockWalletStore);
+
 
 Object.assign(mockSupportChat, {
   messages: ref<SupportMessage[]>([]),
@@ -215,7 +218,7 @@ Object.assign(mockDock, {
 
 // Imported for real, unlike every mocked collaborator above: it is a leaf module
 // with no network/Dexie/WASM dependencies, and under happy-dom (no `chrome`) it
-// is just an in-memory Vue.observable — mocking it would only hide the behavior
+// is just an in-memory Vue.reactive — mocking it would only hide the behavior
 // the hide tests exist to check.
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { clearHelpSupport, helpSupportIntent, openWalletSupport } from '@/modules/help/supportIntent';
@@ -246,14 +249,14 @@ interface AgentDockVm {
 // mark-as-seen watcher) stay live against the shared mockDock/mockSupportChat
 // singletons for as long as the component instance exists, so a wrapper left
 // mounted from a prior test can still react to state the NEXT test mutates.
-let activeWrapper: Wrapper<Vue> | null = null;
+let activeWrapper: VueWrapper | null = null;
 
-function mountDock(): Wrapper<Vue> {
-  activeWrapper = mount(AgentDock, { mocks: { $t } });
+function mountDock(): VueWrapper {
+  activeWrapper = mount(AgentDock, { global: { config: { globalProperties: mockGlobalProperties({ $t }) } } });
   return activeWrapper;
 }
 
-function vmOf(wrapper: Wrapper<Vue>): AgentDockVm {
+function vmOf(wrapper: VueWrapper): AgentDockVm {
   return wrapper.vm as unknown as AgentDockVm;
 }
 
@@ -261,18 +264,18 @@ function vmOf(wrapper: Wrapper<Vue>): AgentDockVm {
 // no aria-label duplicates it, see AgentDock.vue) rather than positional
 // `buttons.at(0/1)`, so the test still finds the right button if the toggle's
 // markup order ever changes.
-function findModeButton(wrapper: Wrapper<Vue>, mode: 'copilot' | 'support'): Wrapper<Vue> {
+function findModeButton(wrapper: VueWrapper, mode: 'copilot' | 'support'): DOMWrapper<Element> {
   const label = mode === 'copilot' ? 'support.toggle.copilot' : 'support.toggle.support';
-  const match = wrapper.findAll('.agent-dock__mode-btn').wrappers.find((w) => w.text().includes(label));
+  const match = wrapper.findAll('.agent-dock__mode-btn').find((w) => w.text().includes(label));
   if (!match) throw new Error(`mode toggle button not found for: ${mode}`);
   return match;
 }
 
-async function clickSupportToggle(wrapper: Wrapper<Vue>): Promise<void> {
+async function clickSupportToggle(wrapper: VueWrapper): Promise<void> {
   await findModeButton(wrapper, 'support').trigger('click');
 }
 
-async function clickCopilotToggle(wrapper: Wrapper<Vue>): Promise<void> {
+async function clickCopilotToggle(wrapper: VueWrapper): Promise<void> {
   await findModeButton(wrapper, 'copilot').trigger('click');
 }
 
@@ -289,7 +292,7 @@ function makeFile(name: string, size: number, type = 'text/plain'): File {
 // jsdom) makes `.files` a read-only accessor on the real element, so tests
 // shadow it with an own property before dispatching the `change` AgentDock
 // listens on — the same workaround used across the ecosystem for this input.
-async function pickFiles(wrapper: Wrapper<Vue>, files: File[]): Promise<void> {
+async function pickFiles(wrapper: VueWrapper, files: File[]): Promise<void> {
   const input = wrapper.find('input[type="file"]');
   Object.defineProperty(input.element, 'files', { value: files, configurable: true });
   await input.trigger('change');
@@ -317,7 +320,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  activeWrapper?.destroy();
+  activeWrapper?.unmount();
   activeWrapper = null;
   clearHelpSupport();
 });
@@ -328,13 +331,13 @@ describe('AgentDock Help entry', () => {
     const first = mountDock(); await clickCopilotToggle(first);
     vmOf(first).draft = 'Assistant question';
     // Crossing layouts (dashboard -> Help) mounts the new dock before destroying the old one.
-    const second = mount(AgentDock, { mocks: { $t } });
-    first.destroy(); activeWrapper = second;
+    const second = mount(AgentDock, { global: { config: { globalProperties: mockGlobalProperties({ $t }) } } });
+    first.unmount(); activeWrapper = second;
     expect(vmOf(second).mode).toBe('copilot'); expect(vmOf(second).draft).toBe('Assistant question');
     await clickSupportToggle(second);
     vmOf(second).draft = 'Support question'; vmOf(second).pendingFiles = [makeFile('notes.txt', 8)];
-    const third = mount(AgentDock, { mocks: { $t } });
-    second.destroy(); activeWrapper = third;
+    const third = mount(AgentDock, { global: { config: { globalProperties: mockGlobalProperties({ $t }) } } });
+    second.unmount(); activeWrapper = third;
     expect(vmOf(third).mode).toBe('support'); expect(vmOf(third).draft).toBe('Support question');
     expect(vmOf(third).pendingFiles.map(file => file.name)).toEqual(['notes.txt']);
   });
@@ -342,7 +345,7 @@ describe('AgentDock Help entry', () => {
     mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
     const first = mountDock(); await clickCopilotToggle(first);
     vmOf(first).draft = 'Assistant question';
-    first.destroy(); activeWrapper = null;
+    first.unmount(); activeWrapper = null;
     const later = mountDock();
     expect(vmOf(later).mode).toBe('support'); expect(vmOf(later).draft).toBe(''); expect(vmOf(later).pendingFiles).toEqual([]);
   });
@@ -903,7 +906,7 @@ describe('AgentDock — support attachment bubbles', () => {
     const wrapper = mountDock();
     await clickSupportToggle(wrapper);
 
-    const names = wrapper.findAll('.agent-dock__attach-name').wrappers.map((w) => w.text());
+    const names = wrapper.findAll('.agent-dock__attach-name').map((w) => w.text());
     expect(names).toEqual(['invoice-march.pdf', 'invoice-april.pdf', 'invoice-may.pdf', 'PDF']);
   });
 
@@ -1063,7 +1066,7 @@ describe('AgentDock — attachment picker and pending chips', () => {
     await pickFiles(wrapper, [makeFile('a.txt', 10), makeFile('b.txt', 10), makeFile('c.txt', 10), makeFile('d.txt', 10)]);
     await pickFiles(wrapper, [makeFile('e.txt', 10), makeFile('f.txt', 10)]);
 
-    const names = wrapper.findAll('.agent-dock__pending-chip').wrappers.map((w) => w.find('.agent-dock__pending-name').text());
+    const names = wrapper.findAll('.agent-dock__pending-chip').map((w) => w.find('.agent-dock__pending-name').text());
     expect(names).toEqual(['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt']);
     expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.tooManyFiles');
   });
@@ -1235,17 +1238,11 @@ describe('AgentDock — Support connection (auto-enter)', () => {
     await clickCopilotToggle(wrapper);
     mockSupportChat.enter.mockClear();
 
-    // Before the flip: Assistant is the active, aria-selected tab. Vue 2 drops
-    // a non-enumerated aria-* attribute entirely when its bound expression is
-    // false (it is not in the isEnumeratedAttr list that gets a literal
-    // "false" string, unlike the Assistant button's own aria-disabled, which
-    // is deliberately wrapped in String(...) below for exactly that reason) —
-    // so the not-selected tab has no aria-selected attribute at all, not one
-    // set to "false".
+    // Vue 3 serializes a false aria-selected binding as the literal string "false".
     expect(findModeButton(wrapper, 'copilot').classes()).toContain('is-active');
     expect(findModeButton(wrapper, 'copilot').attributes('aria-selected')).toBe('true');
     expect(findModeButton(wrapper, 'support').classes()).not.toContain('is-active');
-    expect(findModeButton(wrapper, 'support').attributes('aria-selected')).toBeUndefined();
+    expect(findModeButton(wrapper, 'support').attributes('aria-selected')).toBe('false');
 
     setCopilotEnabled(false);
     await wrapper.vm.$nextTick();
@@ -1262,7 +1259,7 @@ describe('AgentDock — Support connection (auto-enter)', () => {
     expect(supportBtn.classes()).toContain('is-active');
     expect(supportBtn.attributes('aria-selected')).toBe('true');
     expect(assistantBtn.classes()).not.toContain('is-active');
-    expect(assistantBtn.attributes('aria-selected')).toBeUndefined();
+    expect(assistantBtn.attributes('aria-selected')).toBe('false');
     expect(assistantBtn.attributes('disabled')).toBeDefined();
   });
 });
@@ -1398,10 +1395,10 @@ describe('AgentDock — hiding the dock', () => {
     agentDockPrefsStore.setHidden(false);
   });
 
-  function findHideButton(wrapper: Wrapper<Vue>): Wrapper<Vue> {
+  function findHideButton(wrapper: VueWrapper): DOMWrapper<Element> {
     const match = wrapper
       .findAll('.agent-dock__head-btn')
-      .wrappers.find((w) => w.attributes('aria-label') === 'support.hide.action');
+      .find((w) => w.attributes('aria-label') === 'support.hide.action');
     if (!match) throw new Error('hide button not found');
     return match;
   }

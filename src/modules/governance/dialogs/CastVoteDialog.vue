@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :isOpen="isOpen"
-    @close="$emit('close')"
+    @close="resetState(); $emit('close')"
     :title="t('governance.castVote')"
     icon="mdi-vote-outline"
     :loading="loading || building"
@@ -21,14 +21,14 @@
       <!-- Capability gate: when this wallet type cannot complete the flow, say
            why and disable confirm — never let the signing layer throw. -->
       <div v-if="!capability.canVote" class="cast-vote__banner cast-vote__banner--blocked">
-        <v-icon small class="mr-2" color="var(--g-warning)">mdi-alert-circle-outline</v-icon>
+        <v-icon size="small" class="mr-2" color="var(--g-warning)">mdi-alert-circle-outline</v-icon>
         <span class="t-caption">{{ t(capability.reasonKey || 'governance.watchWalletReadOnly') }}</span>
       </div>
 
       <!-- Which selected actions the liveness pre-check dropped, and why. The
            user must see exactly what fell out of the batch before signing. -->
       <div v-for="(notice, i) in droppedNotices" :key="`dropped-${i}`" class="cast-vote__banner cast-vote__banner--blocked">
-        <v-icon small class="mr-2" color="var(--g-warning)">mdi-minus-circle-outline</v-icon>
+        <v-icon size="small" class="mr-2" color="var(--g-warning)">mdi-minus-circle-outline</v-icon>
         <span class="t-caption">{{ notice }}</span>
       </div>
 
@@ -61,7 +61,7 @@
         </div>
 
         <div v-if="buildError" class="cast-vote__banner cast-vote__banner--blocked">
-          <v-icon small class="mr-2" color="var(--g-error)">mdi-alert-circle-outline</v-icon>
+          <v-icon size="small" class="mr-2" color="var(--g-error)">mdi-alert-circle-outline</v-icon>
           <span class="t-caption">{{ buildError }}</span>
         </div>
 
@@ -82,7 +82,7 @@
       <template v-else>
         <div class="cast-vote__summary-head">
           <GButton tier="tertiary" compact @click="backToChoices()">
-            <v-icon small class="mr-1">mdi-arrow-left</v-icon>
+            <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
             {{ t('governance.back') }}
           </GButton>
           <span class="t-heading">{{ actions.length > 1 ? t('governance.yourVotes') : t('governance.yourVote') }}</span>
@@ -322,13 +322,14 @@ const {
   handlePassKeyAuthError,
   setPasswordFieldRef,
 } = useTransactionSigning({
+  active: () => props.isOpen,
   tx: txRef,
   successMessageKey: 'governance.voteTxSubmitted',
   onSuccess: (txId: string) => emit('submitted', txId),
   onClose: () => emit('close'),
 });
 
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 
 function statusLabel(status: string | undefined): string {
   const key = `governance.status.${String(status ?? '').toLowerCase()}`;

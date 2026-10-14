@@ -1,3 +1,4 @@
+import * as Vue from 'vue';
 import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,8 +14,8 @@ const h = vi.hoisted(() => ({
   track: vi.fn(),
 }));
 vi.mock('./helpAnalytics', () => ({ trackHelp: h.track }));
-vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
-vi.mock('vue-router/composables', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: h.replace, push: vi.fn() }) }));
+vi.mock('@/stores/walletStore', async () => ({ walletStore: (h.wallet = Vue.reactive(h.wallet)) }));
+vi.mock('vue-router', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: h.replace, push: vi.fn() }) }));
 vi.mock('@/shared/composables/useTranslation', async () => {
   const { translate, translateChoice } = await import('./helpTestSupport');
   return { useTranslation: () => ({ t: translate, tc: translateChoice }) };
@@ -30,10 +31,10 @@ const html = '<h2>Before you start</h2><p>Read first.</p><h2>Steps</h2><ol><li><
 const base = { article: bundled, response: null, html: '', related: [], applicable: true, basic: true, loading: false, failed: false, stale: false };
 const stubs = { 'v-btn': vBtnStub, 'v-icon': true, 'router-link': { props: ['to'], template: '<a :href="to.path"><slot /></a>' } };
 const wrappers: Array<ReturnType<typeof mount>> = [];
-const show = (propsData: Record<string, unknown> = {}) => { const wrapper = mount(HelpReader, { propsData: { ...base, ...propsData }, stubs, attachTo: document.body }); wrappers.push(wrapper); return wrapper; };
-const buttonNamed = (wrapper: ReturnType<typeof show>, text: string) => wrapper.findAll('button').wrappers.find(button => button.text() === text);
+const show = (propsData: Record<string, unknown> = {}) => { const wrapper = mount(HelpReader, { props: { ...base, ...propsData }, attachTo: document.body, global: { stubs } }); wrappers.push(wrapper); return wrapper; };
+const buttonNamed = (wrapper: ReturnType<typeof show>, text: string) => wrapper.findAll('button').find(button => button.text() === text);
 beforeEach(() => { clearHelpSupport(); h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.route.query = {}; h.track.mockReset(); });
-afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); clearHelpSupport(); });
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); clearHelpSupport(); });
 
 describe('article reader', () => {
   it('acknowledges Yes and No in place of the buttons, and sends nothing', async () => {
@@ -63,7 +64,7 @@ describe('article reader', () => {
     expect(crumbs.at(2).text()).toBe('Security & recovery');
     expect(crumbs.at(2).find('a').attributes('href')).toBe('/help/topics/security');
     expect(wrapper.find('[aria-current="page"]').text()).toBe(bundled.title);
-    expect(wrapper.findAll('.help-chip').wrappers.map(chip => chip.text())).toEqual(['Quick answer', 'Security & recovery']);
+    expect(wrapper.findAll('.help-chip').map(chip => chip.text())).toEqual(['Quick answer', 'Security & recovery']);
     expect(wrapper.find('h1').text()).toBe(bundled.title);
     expect(wrapper.find('.article-body p').text()).toBe(bundled.body);
     expect(wrapper.find('.toc').exists()).toBe(false);
@@ -75,11 +76,11 @@ describe('article reader', () => {
   });
   it('gives a published tutorial its kind, verification and rail facts, and links the headings', async () => {
     const wrapper = show({ article: asAnswer(published.article), response: published, html, basic: false });
-    expect(wrapper.findAll('.help-chip').wrappers.map(chip => chip.text())).toEqual(['Tutorial', 'Security & recovery']);
+    expect(wrapper.findAll('.help-chip').map(chip => chip.text())).toEqual(['Tutorial', 'Security & recovery']);
     expect(wrapper.find('.article-summary').text()).toBe('Pair a device.');
     expect(wrapper.find('.article-verified').text()).toBe('Checked for Gero 2.7.2 · Oct 2, 2026');
     const toc = wrapper.findAll('.toc-link');
-    expect(toc.wrappers.map(link => link.text())).toEqual(['Before you start', 'Steps']);
+    expect(toc.map(link => link.text())).toEqual(['Before you start', 'Steps']);
     expect(toc.at(0).attributes('aria-current')).toBe('location');
     expect(wrapper.find('#help-section-2').text()).toBe('Steps');
     const scroll = vi.fn(); (wrapper.find('#help-section-2').element as HTMLElement).scrollIntoView = scroll;
@@ -112,7 +113,7 @@ describe('article reader', () => {
     await buttonNamed(wrapper, 'Contact support about this guide')!.trigger('click');
     expect(helpSupportIntent.request?.articleId).toBe('backup');
     const tiles = wrapper.findAll('.related-tile');
-    expect(tiles.wrappers.map(tile => tile.find('.related-title').text())).toEqual(['Restore an existing wallet', 'Set up your first Gero wallet']);
+    expect(tiles.map(tile => tile.find('.related-title').text())).toEqual(['Restore an existing wallet', 'Set up your first Gero wallet']);
     expect(tiles.at(0).find('.t-caption').text()).toBe('Get started · Quick answer');
     expect(tiles.at(0).attributes('href')).toBe('/help/articles/restore');
   });

@@ -2,7 +2,7 @@
   <div class="topup-done">
     <div class="topup-done__status" role="status" aria-live="polite">
       <template v-if="credited">
-        <v-icon small class="topup-done__ok">mdi-check-circle-outline</v-icon>
+        <v-icon size="small" class="topup-done__ok">mdi-check-circle-outline</v-icon>
         <span class="t-body">{{ t('card.topUpCredited') }}</span>
       </template>
       <template v-else-if="watching">
@@ -10,7 +10,7 @@
         <span class="t-body">{{ t('card.waitingForBalance') }}</span>
       </template>
       <template v-else>
-        <v-icon small>mdi-clock-outline</v-icon>
+        <v-icon size="small">mdi-clock-outline</v-icon>
         <span class="t-body">{{ t('card.topUpSubmittedDesc') }}</span>
       </template>
     </div>
@@ -23,7 +23,7 @@
       </span>
       <a :href="explorerUrl" target="_blank" rel="noopener noreferrer" class="topup-done__link">
         {{ t('market.viewOnExplorer') }}
-        <v-icon x-small>mdi-open-in-new</v-icon>
+        <v-icon size="x-small">mdi-open-in-new</v-icon>
       </a>
     </div>
   </div>

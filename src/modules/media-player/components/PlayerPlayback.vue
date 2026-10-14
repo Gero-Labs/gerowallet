@@ -4,8 +4,8 @@
       <div class="player-playback__time">{{ formatTime(Math.round(context.seek)) }}</div>
       <div class="player-playback__progress-bar">
         <v-slider
-          :value="Math.round(context.seek / context.duration * 100)"
-          @change="onProgressChange"
+          :model-value="Math.round(context.seek / context.duration * 100)"
+          @update:model-value="onProgressChange"
           :tooltip="false"
           :dot-size="15"
           :process-style="{ background: '#1db954' }"

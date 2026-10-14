@@ -45,16 +45,16 @@
     <div class="action-list__filters">
       <div class="action-list__filter-group">
         <span class="t-label action-list__filter-label">{{ $t('common.type') }}</span>
-        <v-chip-group :value="state.filters.type" column @change="onTypeFilter">
-          <v-chip :value="null" small outlined>{{ $t('common.all') }}</v-chip>
-          <v-chip v-for="ty in ACTION_TYPES" :key="ty" :value="ty" small outlined>{{ typeLabel(ty) }}</v-chip>
+        <v-chip-group :model-value="state.filters.type" column @update:model-value="onTypeFilter">
+          <v-chip :value="null" size="small" variant="outlined">{{ $t('common.all') }}</v-chip>
+          <v-chip v-for="ty in ACTION_TYPES" :key="ty" :value="ty" size="small" variant="outlined">{{ typeLabel(ty) }}</v-chip>
         </v-chip-group>
       </div>
       <div class="action-list__filter-group">
         <span class="t-label action-list__filter-label">{{ $t('governance.status') }}</span>
-        <v-chip-group :value="state.filters.status" column @change="onStatusFilter">
-          <v-chip :value="null" small outlined>{{ $t('common.all') }}</v-chip>
-          <v-chip v-for="st in ACTION_STATUSES" :key="st" :value="st" small outlined>{{ statusLabel(st) }}</v-chip>
+        <v-chip-group :model-value="state.filters.status" column @update:model-value="onStatusFilter">
+          <v-chip :value="null" size="small" variant="outlined">{{ $t('common.all') }}</v-chip>
+          <v-chip v-for="st in ACTION_STATUSES" :key="st" :value="st" size="small" variant="outlined">{{ statusLabel(st) }}</v-chip>
         </v-chip-group>
       </div>
     </div>
@@ -101,12 +101,12 @@
 
     <div v-if="totalPages > 1" class="text-center">
       <v-pagination
-        :value="state.page"
+        :model-value="state.page"
         :length="totalPages"
         :total-visible="5"
         circle
         class="compact-pagination"
-        @input="onPage"
+        @update:model-value="onPage"
       ></v-pagination>
     </div>
 
@@ -129,7 +129,7 @@
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import governanceActionsStore, { awaitingVoteCount } from '@/stores/governanceActionsStore';

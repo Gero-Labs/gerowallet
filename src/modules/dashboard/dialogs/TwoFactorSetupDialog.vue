@@ -1,6 +1,6 @@
 <template>
   <BaseDialog persistent
-    :isOpen="value"
+    :isOpen="modelValue"
     :icon="dialogIcon"
     :title="dialogTitle"
     :titleInfo="dialogTitleInfo"
@@ -35,25 +35,25 @@
         <div class="text-center mt-4">
           <div class="caption">{{ $t('security.orEnterManually') }}</div>
           <v-text-field
-            :value="totpSecret"
+            :model-value="totpSecret"
             readonly
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             class="mt-2"
             label="Authentication Key"
           >
-            <template v-slot:append>
+            <template v-slot:append-inner>
               <CopyButton small :value="totpSecret" class="mb-2" />
             </template>
           </v-text-field>
 
           <v-btn
-            text
-            small
+            variant="text"
+            size="small"
             color="primary"
             @click="regenerateSecret"
           >
-            <v-icon left small>mdi-refresh</v-icon>
+            <v-icon start size="small">mdi-refresh</v-icon>
             {{ $t('security.regenerateQRCode') }}
           </v-btn>
         </div>
@@ -62,14 +62,14 @@
       <!-- Step 2: Verify Code -->
       <div v-else-if="step === 'verify'" class="step-container">
         <v-list-item>
-          <v-list-item-content style="align-self: start;">
+          <div class="g-list-content" style="align-self: start;">
             <v-list-item-title class="text-center">{{ $t('security.verifyAuthenticatorCode') }}</v-list-item-title>
             <v-list-item-subtitle class="text-center">{{ $t('security.enterCodeFromApp') }}</v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
-        <v-tooltip v-model="showInvalidCodeTooltip" top color="error">
-          <template v-slot:activator="{ }">
-            <v-otp-input
+        <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top" v-model="showInvalidCodeTooltip"  color="error">
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-otp-input v-bind="activatorProps"
               v-model="verificationCode"
               length="6"
               type="number"
@@ -83,10 +83,10 @@
       <!-- Step 3: Backup Codes -->
       <div v-else-if="step === 'backup'" class="step-container">
         <v-list-item>
-          <v-list-item-content style="align-self: start;" class="pt-0">
+          <div style="align-self: start;" class="pt-0 g-list-content">
             <v-list-item-title class="text-center">{{ $t('security.saveBackupCodes') }}</v-list-item-title>
             <v-list-item-subtitle class="text-center">{{ $t('security.backupCodesWarning') }}</v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
 
         <div class="backup-codes-grid">
@@ -100,10 +100,10 @@
         </div>
 
         <div class="text-center mt-4">
-          <v-tooltip v-model="showCopiedTooltip" top color="success">
-            <template v-slot:activator="{ }">
-              <v-btn small outlined color="primary" @click="copyBackupCodes">
-                <v-icon left>mdi-content-copy</v-icon>
+          <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top" v-model="showCopiedTooltip"  color="success">
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-btn v-bind="activatorProps" size="small" variant="outlined" color="primary" @click="copyBackupCodes">
+                <v-icon start>mdi-content-copy</v-icon>
                 {{ $t('security.copyBackupCodes') }}
               </v-btn>
             </template>
@@ -115,15 +115,15 @@
       <!-- Step 4: Spending Password -->
       <div v-else-if="step === 'password'" class="step-container password-step">
         <v-list-item>
-          <v-list-item-content style="align-self: start;" class="pt-0">
+          <div style="align-self: start;" class="pt-0 g-list-content">
             <v-list-item-title class="text-center">{{ $t('security.enterSpendingPassword') }}</v-list-item-title>
             <v-list-item-subtitle class="text-center">{{ $t('security.passwordRequiredToEncrypt') }}</v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <div class="password-field-wrapper">
           <PassKeyPasswordField
-            :value="password"
-            @input="password = $event"
+            :model-value="password"
+            @update:model-value="password = $event"
             :label="$t('security.spendingPassword')"
             outlined
             dense
@@ -136,7 +136,7 @@
       <v-alert
         v-if="errorMessage"
         type="error"
-        dense
+        density="compact"
         class="mt-4"
       >
         {{ errorMessage }}
@@ -146,7 +146,7 @@
       <v-alert
         v-if="successMessage"
         type="success"
-        dense
+        density="compact"
         class="mt-4"
       >
         {{ successMessage }}
@@ -156,7 +156,7 @@
     <v-card-actions class="px-6 pb-6">
       <v-btn
         v-if="step === 'verify' || step === 'backup' || step === 'password'"
-        text
+        variant="text"
         @click="handleBack"
         :disabled="loading"
       >
@@ -217,14 +217,14 @@ import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 
 // Props
 interface Props {
-  value: boolean;
+  modelValue: boolean;
 }
 
 const props = defineProps<Props>();
 
 // Emits
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'updated'): void;
 }>();
 
@@ -284,7 +284,7 @@ const dialogTitleInfo = computed(() => {
 });
 
 // Watch for dialog open/close
-watch(() => props.value, (newVal) => {
+watch(() => props.modelValue, (newVal) => {
   if (newVal) {
     loadCurrent2FAStatus();
   } else {
@@ -453,7 +453,7 @@ async function handleSave() {
 
     // Close dialog after short delay
     setTimeout(() => {
-      emit('input', false);
+      emit('update:modelValue', false);
       emit('updated');
     }, 1500);
   } catch (error) {
@@ -487,7 +487,7 @@ async function handleDisable2FA() {
 
     // Close dialog after short delay
     setTimeout(() => {
-      emit('input', false);
+      emit('update:modelValue', false);
       emit('updated');
     }, 1500);
   } catch (error) {
@@ -536,7 +536,7 @@ function handleBack() {
 }
 
 function handleCancel() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function resetForm() {

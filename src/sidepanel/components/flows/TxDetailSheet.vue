@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="$emit('input', $event)" :title="String($t('miniGero.txDetail'))" height="85%">
+  <BottomSheet :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" :title="String($t('miniGero.txDetail'))" height="85%">
     <div v-if="tx" class="tx-detail">
       <!-- Amount -->
       <div class="tx-amount-section">
@@ -20,7 +20,7 @@
           <span class="detail-label">{{ $t('miniGero.txId') }}</span>
           <span class="detail-value clickable" @click="copyToClipboard(tx.id)">
             {{ truncate(tx.id) }}
-            <v-icon x-small color="var(--g-text-3)" class="ml-1">mdi-content-copy</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)" class="ml-1">mdi-content-copy</v-icon>
           </span>
         </div>
 
@@ -76,7 +76,7 @@
         <div class="detail-label mb-2">{{ $t('miniGero.tokens') }}</div>
         <div v-for="(asset, i) in txAssets" :key="i" class="asset-chip">
           <v-avatar v-if="asset.img" size="20" class="mr-2">
-            <v-img :src="asset.img" contain />
+            <v-img :src="asset.img"  />
           </v-avatar>
           <span :class="Number(asset.quantity) > 0 ? 'accent--text' : 'error--text'">
             {{ formatAssetQty(asset) }}
@@ -88,13 +88,13 @@
       <!-- Explorer link -->
       <v-btn
         block
-        outlined
-        small
+        variant="outlined"
+        size="small"
         :color="primaryColor"
         class="mt-4"
         @click="openExplorer"
       >
-        <v-icon small left>mdi-open-in-new</v-icon>
+        <v-icon size="small" start>mdi-open-in-new</v-icon>
         {{ $t('miniGero.viewOnExplorer') }}
       </v-btn>
     </div>
@@ -137,14 +137,14 @@ type TxDetail = {
 // which rejects the pre-selection `null` — declare the runtime default explicitly.
 const props = withDefaults(
   defineProps<{
-    value: boolean;
+    modelValue: boolean;
     tx?: TxDetail | null;
   }>(),
   { tx: null },
 );
 
 defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
 }>();
 
 /**

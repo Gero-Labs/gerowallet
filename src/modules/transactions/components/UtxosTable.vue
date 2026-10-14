@@ -1,13 +1,13 @@
 <template>
-  <v-card class="liquid-glass fill-height d-flex flex-column" outlined>
+  <v-card class="liquid-glass fill-height d-flex flex-column" variant="outlined">
     <v-card-title class="pb-2 flex-grow-0">
       <span>{{ $t('transactions.utxos') }}</span>
       <v-spacer />
       <v-text-field
         v-model="search"
-        dense
-        flat
-        solo
+        density="compact"
+
+        variant="solo"
         hide-details
         :placeholder="$t('common.search')"
         prepend-inner-icon="mdi-magnify"
@@ -23,18 +23,18 @@
           :items="filteredUtxos"
           :headers="headers"
           class="transparent utxos-table"
-          :sort-by.sync="sortBy"
-          :sort-desc.sync="sortDesc"
+          v-model:sort-by="sortBy"
           :items-per-page="-1"
           hide-default-footer
-          dense
+          density="compact"
           @click:row="handleRowClick"
-          :item-class="getRowClass"
+          :row-props="({ item }) => ({ class: getRowClass(item) })"
+          item-value="id"
         >
           <!-- UTxO Reference + Address -->
           <template v-slot:[`item.ref`]="{ item }">
-            <v-list-item two-line class="px-0 py-1" style="height: 55px">
-              <v-list-item-content class="px-0 py-1">
+            <v-list-item lines="two" class="px-0 py-1" style="height: 55px">
+              <div class="px-0 py-1 g-list-content">
                 <v-list-item-title class="activity-title">
                   <span class="activity-text">{{ truncateHash(item.txHash) }}#{{ item.outputIndex }}</span>
                 </v-list-item-title>
@@ -42,13 +42,13 @@
                   {{ truncateAddress(item.address) }}
                   <v-chip
                     v-if="item.isCollateral"
-                    x-small
-                    outlined
+                    size="x-small"
+                    variant="outlined"
                     class="px-1 ml-1"
                     color="orange"
                   >{{ $t('transactions.collateral') }}</v-chip>
                 </v-list-item-subtitle>
-              </v-list-item-content>
+              </div>
             </v-list-item>
           </template>
 
@@ -76,18 +76,18 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, ref, toRefs } from 'vue';
+import type { DataTableHeader, DataTableSortItem } from 'vuetify';
 import { walletStore } from '@/stores/walletStore';
 import { Cardano } from '@cardano-sdk/core';
 
 const vm = getCurrentInstance()!.proxy;
 const t = (key: string) => vm.$t(key) as string;
 const emit = defineEmits(['row-click']);
-const props = defineProps<{ selectedUtxo?: any }>();
+const props = defineProps<{ selectedUtxo?: { id: string } }>();
 
 const { utxos, collateral } = toRefs(walletStore);
 const search = ref('');
-const sortBy = ref<string>('ada');
-const sortDesc = ref<boolean>(true);
+const sortBy = ref<DataTableSortItem[]>([{ key: 'ada', order: 'desc' }]);
 
 interface UtxoRow {
   id: string;
@@ -99,15 +99,15 @@ interface UtxoRow {
   tokenCount: number;
   assets: Map<string, bigint> | undefined;
   datumHash: string | null;
-  datum: any;
-  scriptReference: any;
+  datum: Cardano.TxOut['datum'];
+  scriptReference: Cardano.TxOut['scriptReference'];
   isCollateral: boolean;
   raw: Cardano.Utxo;
 }
 
-const headers = computed(() => [
-  { text: t('transactions.utxoRef'), align: 'start', sortable: true, value: 'ref' },
-  { text: t('transactions.amount'), align: 'end', sortable: true, value: 'ada' },
+const headers = computed<DataTableHeader[]>(() => [
+  { title: t('transactions.utxoRef'), align: 'start', sortable: true, key: 'ref' },
+  { title: t('transactions.amount'), align: 'end', sortable: true, key: 'ada' },
 ]);
 
 const utxoItems = computed<UtxoRow[]>(() => {
@@ -172,22 +172,22 @@ function getRowClass(item: UtxoRow): string {
   return props.selectedUtxo?.id === item.id ? 'selected-utxo' : '';
 }
 
-function handleRowClick(item: UtxoRow) {
+function handleRowClick(_event: Event, { item }: { item: UtxoRow }) {
   emit('row-click', item);
 }
 </script>
 
 <style scoped>
-.utxos-table >>> .v-data-table__wrapper {
+.utxos-table :deep(.v-table__wrapper) {
   overflow-y: auto;
 }
-.utxos-table >>> tr {
+.utxos-table :deep(tr) {
   cursor: pointer;
 }
-.utxos-table >>> tr:hover {
+.utxos-table :deep(tr:hover) {
   background: rgba(255, 255, 255, 0.05) !important;
 }
-.utxos-table >>> tr.selected-utxo {
+.utxos-table :deep(tr.selected-utxo) {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 .table-container {
@@ -218,28 +218,9 @@ function handleRowClick(item: UtxoRow) {
   background: transparent !important;
 }
 
-.top-level-search >>> .v-input__slot {
+.top-level-search :deep(.v-field) {
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.top-level-search >>> .v-input__control {
-  background: transparent !important;
-}
-
-.top-level-search >>> .v-text-field__slot {
-  background: transparent !important;
-}
-
-.top-level-search >>> .v-input__slot:before {
-  border: none !important;
-}
-
-.top-level-search >>> .v-input__slot:after {
-  border: none !important;
-}
-
-.top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
-  background: transparent !important;
-}
 </style>

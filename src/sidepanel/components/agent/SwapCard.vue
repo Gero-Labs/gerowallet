@@ -160,7 +160,8 @@ export default defineComponent({
     // so we pass the wallet's base address + empty utxos here.
     // -------------------------------------------------------------------
     async function quoteFn(req: { tokenIn: string; tokenOut: string; amountIn: string }) {
-      return nexusSwapApi.quote({ ...req });
+      const quote = await nexusSwapApi.quote({ ...req });
+      return { ...quote, routes: quote.routes.map(route => ({ ...route })) };
     }
 
     async function buildFn(route: unknown) {

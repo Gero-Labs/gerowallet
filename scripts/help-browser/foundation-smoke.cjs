@@ -57,6 +57,8 @@ const WELCOME_QUERY = 'unlikely zebra words';
     assert.equal(await page.locator('.topic-tile').count(), 6);
     assert.equal(await page.locator('.topic-tile--muted').count(), 0);
     await chainPills.getByRole('button', { name: 'Midnight', exact: true }).click();
+    // The pressed state follows the asynchronous router navigation.
+    await chainPills.getByRole('button', { name: 'Midnight', exact: true, pressed: true }).waitFor();
     assert.equal(await chainPills.getByRole('button', { name: 'Midnight', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await chainPills.getByRole('button', { name: 'All chains', exact: true }).getAttribute('aria-pressed'), 'false');
     await page.locator('.topic-tile--muted').first().waitFor();
@@ -220,7 +222,10 @@ const WELCOME_QUERY = 'unlikely zebra words';
     await goReader();
     await readerBody.waitFor();
     await page.evaluate(async () => {
-      const m = await import('./js/activityTracker.service.js');
+      const [wallets, gero, flags] = await Promise.all([
+        import('./js/walletStore.js'), import('./js/geroStore.js'), import('./js/featureFlagsStore.js'),
+      ]);
+      const m = { walletStore: wallets.walletStore, geroStore: gero.geroStore, featureFlagsStore: flags.featureFlagsStore };
       window.helpSmokeStores = m;
       const wallet = { id: 90001, name: 'Help smoke wallet', chain: 'Midnight', network: 'Mainnet', type: 'Normal', icon: 'gero' };
       m.geroStore.wallets = { [wallet.id]: wallet };

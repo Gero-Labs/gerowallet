@@ -158,7 +158,7 @@ const loadingRate = ref(false);
 const placing = ref(false);
 const signBusy = ref(false);
 const signPhase = ref(0);
-const addressStep = ref<{ validate: () => boolean } | null>(null);
+const addressStep = ref<{ validate: () => Promise<boolean> } | null>(null);
 const signSection = ref<{ reset: () => void } | null>(null);
 
 const cards = computed(() => cardStore.state.cards || []);
@@ -248,8 +248,9 @@ async function continueFromType(): Promise<void> {
   }
 }
 
-function continueFromAddress(): void {
-  if (addressStep.value?.validate()) step.value = 3;
+async function continueFromAddress(): Promise<void> {
+  const approvedAddress = JSON.stringify(address.value);
+  if (await addressStep.value?.validate() && step.value === 2 && JSON.stringify(address.value) === approvedAddress) step.value = 3;
 }
 
 async function continueFromShipping(): Promise<void> {

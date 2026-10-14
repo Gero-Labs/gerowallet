@@ -41,9 +41,9 @@
       v-if="showPriceInput"
       v-model="price"
       :label="$t('perpetuals.price')"
-      outlined
-      dense
-      dark
+      variant="outlined"
+      density="compact"
+      theme="dark"
       hide-details
       class="perp-input mb-2"
       suffix="USD"
@@ -56,9 +56,9 @@
       v-if="showTriggerInput"
       v-model="stopPrice"
       :label="$t('perpetuals.triggerPrice')"
-      outlined
-      dense
-      dark
+      variant="outlined"
+      density="compact"
+      theme="dark"
       hide-details
       class="perp-input mb-2"
       suffix="USD"
@@ -70,9 +70,9 @@
     <v-text-field
       v-model="size"
       :label="$t('perpetuals.size')"
-      outlined
-      dense
-      dark
+      variant="outlined"
+      density="compact"
+      theme="dark"
       hide-details
       class="perp-input mb-1"
       :suffix="baseAsset"
@@ -95,12 +95,12 @@
       :min="0"
       :max="100"
       :step="1"
-      dense
+      density="compact"
       hide-details
       class="perp-slider mb-2"
       :color="side === 'buy' ? 'success' : 'error'"
       track-color="rgba(255,255,255,0.1)"
-      @input="onSliderChange"
+      @update:model-value="onSliderChange"
     />
 
     <!-- TP/SL Toggle -->
@@ -114,9 +114,9 @@
       <v-text-field
         v-model="tpPrice"
         :label="$t('perpetuals.takeProfitPrice')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="perp-input mb-2"
         suffix="USD"
@@ -126,9 +126,9 @@
       <v-text-field
         v-model="slPrice"
         :label="$t('perpetuals.stopLossPrice')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="perp-input"
         suffix="USD"
@@ -195,7 +195,7 @@
       <v-btn
         v-if="!showConnect"
         block
-        depressed
+        variant="flat"
         class="place-order-btn place-order-btn--connect"
         @click="showConnect = true"
       >
@@ -209,7 +209,7 @@
     <v-btn
       v-else
       block
-      depressed
+      variant="flat"
       :loading="submitting"
       :disabled="!canSubmit"
       class="place-order-btn"
@@ -244,7 +244,7 @@
             @click="localLeverage = lv"
           >{{ lv }}x</button>
         </div>
-        <v-btn block depressed class="lev-confirm-btn" @click="confirmLeverage()">
+        <v-btn block variant="flat" class="lev-confirm-btn" @click="confirmLeverage()">
           {{ $t('perpetuals.leverage') }}: {{ localLeverage }}x
         </v-btn>
       </div>
@@ -689,9 +689,11 @@ watch(() => account.value, (acc) => {
 }
 
 /* ── Inputs ── */
-.perp-input :deep(.v-input__slot) {
+.perp-input :deep(.v-field) {
+  --v-input-control-height: 34px;
+  --v-input-padding-top: calc((var(--v-input-control-height) - 1.5rem) / 2);
+  --v-field-padding-bottom: var(--v-input-padding-top);
   background: var(--g-hairline-1) !important;
-  border-color: var(--g-hairline-2) !important;
   min-height: 34px !important;
 }
 
@@ -700,7 +702,7 @@ watch(() => account.value, (acc) => {
   color: var(--g-text-3) !important;
 }
 
-.perp-input :deep(input) {
+.perp-input :deep(input.v-field__input) {
   font-size: 12px !important;
   font-family: var(--g-font-mono) !important;
   color: var(--g-text-1) !important;
@@ -720,16 +722,17 @@ watch(() => account.value, (acc) => {
   margin-top: 0 !important;
 }
 
-.perp-input :deep(fieldset) {
-  border-color: var(--g-hairline-2) !important;
+.perp-input :deep(.v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2) !important;
 }
 
-.perp-input :deep(.v-input__slot:hover fieldset) {
-  border-color: var(--g-hairline-3) !important;
+.perp-input :deep(.v-field:hover .v-field__outline) {
+  color: var(--g-hairline-3) !important;
 }
 
-.perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
+.perp-input :deep(.v-field--focused .v-field__outline) {
+  color: var(--g-accent) !important;
 }
 
 /* ── Size % Buttons ── */
@@ -1044,7 +1047,7 @@ watch(() => account.value, (acc) => {
   transition: opacity var(--g-dur-fast) ease, transform var(--g-dur-fast) ease;
 }
 
-.estimates-fade-enter,
+.estimates-fade-enter-from,
 .estimates-fade-leave-to {
   opacity: 0;
   transform: translateY(-2px);

@@ -53,9 +53,9 @@
           <v-alert
             v-show="invalidQR"
             type="warning"
-            dense
-            border="left"
-            outlined
+            density="compact"
+            border="start"
+            variant="outlined"
             class="mb-0"
             style="width: 100%;"
           >
@@ -66,7 +66,7 @@
     </v-card-text>
 
     <v-card-actions class="justify-center pb-4">
-      <v-btn text @click="handleClose">
+      <v-btn variant="text" @click="handleClose">
         {{ t('common.cancel') }}
       </v-btn>
     </v-card-actions>
@@ -171,11 +171,11 @@ async function startScanning() {
     );
     // Camera stream attached — remove the status overlay to reveal the feed
     status.value = 'ready';
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[QRScanner] failed to start:', err);
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    if (err instanceof Error && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
       status.value = 'permission-needed';
-    } else if (err.name === 'NotFoundError') {
+    } else if (err instanceof Error && err.name === 'NotFoundError') {
       status.value = 'no-webcam';
     } else {
       status.value = 'error';

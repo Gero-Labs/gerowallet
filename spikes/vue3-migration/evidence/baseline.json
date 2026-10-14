@@ -1,0 +1,146 @@
+{
+  "sourceSha": "50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a",
+  "node": "v24.19.0",
+  "npm": "10.2.4",
+  "os": "win32",
+  "lockSha256": "eaad12e20c663156127808b81f4805f1eae0071b1d1d4c9717b438f469e2705a",
+  "started": "2026-10-13T11:49:25.164Z",
+  "checks": [
+    {
+      "name": "design",
+      "command": "npm run design:check",
+      "exitCode": 0,
+      "signal": null,
+      "seconds": 1,
+      "error": null
+    },
+    {
+      "name": "tests",
+      "command": "npm test -- --maxWorkers=2 --reporter=json --outputFile=D:\\GeroRepos\\gitRepos\\output\\gerowallet-v01-2026-10-13\\baseline-tests.json",
+      "exitCode": 1,
+      "signal": null,
+      "seconds": 189,
+      "error": null
+    },
+    {
+      "name": "bundles",
+      "command": "node scripts/build-isolated-extension.mjs .",
+      "exitCode": 0,
+      "signal": null,
+      "seconds": 109,
+      "error": null
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint -- --format json --output-file D:\\GeroRepos\\gitRepos\\output\\gerowallet-v01-2026-10-13\\baseline-lint.json",
+      "exitCode": 1,
+      "signal": null,
+      "seconds": 9,
+      "error": null
+    },
+    {
+      "name": "typecheck",
+      "command": "npm run typecheck",
+      "exitCode": 2,
+      "signal": null,
+      "seconds": 8,
+      "error": null
+    },
+    {
+      "name": "preflight",
+      "command": "npm run preflight",
+      "exitCode": 1,
+      "signal": null,
+      "seconds": 0,
+      "error": null
+    }
+  ],
+  "completed": "2026-10-13T11:54:41.695Z",
+  "interpretation": "Unmodified development source baseline, not migration acceptance or remote CI evidence. Each check retains its original exit status.",
+  "installation": {
+    "command": "npm ci --no-audit --no-fund",
+    "exitCode": 0,
+    "installedPackages": 1766,
+    "logSha256": "d9ea0b8592d642a805271ccff75829d4fe4b2d6fb8d44db5719a72b5552b1736",
+    "environmentCaveat": "First attempt on archive without .git failed in Stellar SDK Windows postinstall; repeat in initialized disposable Git repository succeeded. No peer or script bypass."
+  },
+  "tests": {
+    "files": 413,
+    "total": 4829,
+    "passed": 4826,
+    "failed": 3,
+    "pending": 0,
+    "reportSha256": "4908559945387ee22d4d82477652af02ff1670c309efe2fd186a48cffaa3a1db",
+    "failures": [
+      {
+        "file": "test/shared/explorer.test.ts",
+        "assertions": [
+          "getExplorerUrl returns apexscan tx URL for Apex Prime",
+          "getExplorerUrl returns apexscan tx URL for Apex Vector (uses same explorer)"
+        ],
+        "owner": "V02 (#1284)"
+      },
+      {
+        "file": "src/services/crossDevice/proveService.spec.ts",
+        "assertions": [
+          "cancel, timeout, failure, dispose times the job out and frees the slot"
+        ],
+        "owner": "V02 (#1284)"
+      }
+    ],
+    "isolation": [
+      {
+        "file": "test/shared/explorer.test.ts",
+        "passed": 7,
+        "failed": 2,
+        "classification": "Reproducible existing assertions conflict with current implementation and newer explorer tests; reconcile intended behavior in V02.",
+        "reportSha256": "d407e73eceb7fa1ede631d5b694122a7d25bec9829eef3703f9fd72052d5a4dd"
+      },
+      {
+        "file": "src/services/crossDevice/proveService.spec.ts",
+        "passed": 30,
+        "failed": 0,
+        "repeats": 2,
+        "classification": "Passed twice in isolation; likely load-sensitive real-timer assertion. Original full-suite failure remains recorded.",
+        "reportSha256": "1818e5bf91001c70110d599a50febb8af740814539021713f27ce6b638d62176",
+        "repeatReportSha256": "c7801032266975a7a09b1a0cebab701e0048e3142d99e6502ded89a948deea2e"
+      }
+    ]
+  },
+  "lint": {
+    "files": 1434,
+    "errors": 268,
+    "warnings": 0,
+    "reportSha256": "fb6163fe50c6761845991a1cdd0fac9d8429475686c37bb971137fb1c7a0d564",
+    "classification": "Existing full-tree debt; touched-file lint remains mandatory."
+  },
+  "typecheck": {
+    "errors": 242,
+    "logSha256": "76ac0742fb66cba372cddd05f190d198a4f9cbb7b7350ad245936a0c7db81252",
+    "classification": "Existing root tsc debt after generated build declarations; V03 must establish scoped Vue3 SFC checking."
+  },
+  "builds": {
+    "targets": [
+      "background",
+      "content",
+      "inject",
+      "web",
+      "prepare"
+    ],
+    "exitCode": 0,
+    "logSha256": "a87c15dac636a277e3318b35d9dd908c8d0600eff417c92a8b977a31f1d76179",
+    "artifactFiles": 1019,
+    "artifactBytes": 207761792,
+    "artifactManifestSha256": "9e350887bfc162c9184dfdecc94c5ff2ac701b3ac73b3cf4fb30b4e73e79233b",
+    "classification": "Synthetic isolated production build with generated public extension key; not a store-ready artifact or a performance budget."
+  },
+  "unavailable": {
+    "preflight": "No script in package.json. Recorded invocation exits1; use documented contributing gates.",
+    "format": "No script in package.json."
+  },
+  "remainingEvidence": [
+    "Full-wallet browser/visual/performance measurements (V02)",
+    "Human review and capacity forecast (V01)",
+    "Pilot evidence is separate from this production Vue2 baseline"
+  ]
+}

@@ -100,8 +100,8 @@
         <v-text-field
           v-model="pwValue"
           type="password"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           hide-details
           autofocus
           :placeholder="$t('wallet.enterPassword')"

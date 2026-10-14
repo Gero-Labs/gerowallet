@@ -1,10 +1,10 @@
 <template>
   <div class="col-account">
     <div class="of-deposit-row">
-      <v-btn small outlined class="of-deposit-btn" color="#26FAB0" @click="showDepositDialog = true">
+      <v-btn size="small" variant="outlined" class="of-deposit-btn" color="#26FAB0" @click="showDepositDialog = true">
         {{ $t('perpetuals.deposit') }}
       </v-btn>
-      <v-btn small outlined class="of-deposit-btn" color="#848e9c" @click="showWithdrawDialog = true">
+      <v-btn size="small" variant="outlined" class="of-deposit-btn" color="#848e9c" @click="showWithdrawDialog = true">
         {{ $t('perpetuals.withdraw') }}
       </v-btn>
     </div>

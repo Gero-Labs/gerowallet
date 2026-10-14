@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // WCAG 2.2 target size (minimum) is 24x24 CSS px, and a vote row carries two
 // controls that only just clear it: the voter name and the rationale control,
 // both buttons rather than links because they open in-app, the latter with a
@@ -13,9 +15,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it, expect } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { describe, it, expect, vi } from 'vitest';
+import { mount, type VueWrapper } from '@vue/test-utils';
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import VoteRow from './VoteRow.vue';
@@ -69,12 +70,8 @@ function committeeRow(over: Partial<PositionRow> = {}): PositionRow {
 }
 
 /** A row carrying both of its controls: a named, routable voter with a rationale. */
-function mountRow(props: Record<string, unknown> = {}): Wrapper<Vue> {
-  return mount(VoteRow, {
-    mocks: { $t },
-    propsData: { row: row(), name: 'CryptoCrow', route: { name: 'drep-detail' }, ...props },
-    stubs: { 'v-icon': true },
-  });
+function mountRow(props: Record<string, unknown> = {}): VueWrapper {
+  return mount(VoteRow, { props: { row: row(), name: 'CryptoCrow', route: { name: 'drep-detail' }, ...props }, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: { 'v-icon': true } } });
 }
 
 /** The declaration block of one rule in the component's scoped stylesheet. */
@@ -102,7 +99,7 @@ describe('VoteRow target size', () => {
     // The label makes it wider than 24px on its own; the height is what a
     // control styled like a text link otherwise lacks.
     expect(pxOf('.vote-row__name--link', 'min-height')).toBeGreaterThanOrEqual(24);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('keeps a 24px floor on both axes of the rationale button', () => {
@@ -115,7 +112,7 @@ describe('VoteRow target size', () => {
     // This one can shrink on both axes: its content is a short caption and an
     // x-small icon, so the width floor is load-bearing too.
     expect(pxOf('.vote-row__rationale', 'min-width')).toBeGreaterThanOrEqual(24);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('has no third control that would need a floor of its own', () => {
@@ -127,7 +124,7 @@ describe('VoteRow target size', () => {
     expect(controls).toHaveLength(2);
     expect(controls.at(0).classes()).toContain('vote-row__name--link');
     expect(controls.at(1).classes()).toContain('vote-row__rationale');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('renders the name as plain text, and no control at all, when nothing routes', () => {
@@ -141,7 +138,7 @@ describe('VoteRow target size', () => {
 
     expect(wrapper.find('.vote-row__name--link').exists()).toBe(false);
     expect(wrapper.findAll('button, a')).toHaveLength(0);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 });
 
@@ -158,7 +155,7 @@ describe('VoteRow layout', () => {
     // name of its own, so assistive tech skips it rather than announcing it.
     expect(avatar.attributes('aria-hidden')).toBe('true');
     expect(avatar.element.tagName).toBe('SPAN');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('puts the id beside the name, on the same line', () => {
@@ -172,7 +169,7 @@ describe('VoteRow layout', () => {
     // Siblings in one flex line, which is what saves the second row of height.
     expect(id.element.parentElement).toBe(name.element.parentElement);
     expect(rule('.vote-row__identity')).not.toMatch(/flex-direction:\s*column/);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('does not repeat the id when the id IS the name', () => {
@@ -182,7 +179,7 @@ describe('VoteRow layout', () => {
 
     expect(wrapper.find('.vote-row__name').exists()).toBe(true);
     expect(wrapper.find('.vote-row__id').exists()).toBe(false);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('keeps the row slimmer than a panel row without dropping below the target floors', () => {
@@ -203,7 +200,7 @@ describe('VoteRow layout', () => {
 
     expect(wrapper.classes()).toContain('vote-row--yours');
     expect(wrapper.find('.vote-row__chip--yours').text()).toBe('governance.yours');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   // Every row carries a picture slot, whichever body the voter sits in. What
@@ -218,7 +215,7 @@ describe('VoteRow layout', () => {
 
     expect(img.exists()).toBe(true);
     expect(img.attributes('src')).toContain(`/api/ipfs?path=${CID_V1}`);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('gives a named committee member the same initial fallback as a DRep', () => {
@@ -234,7 +231,7 @@ describe('VoteRow layout', () => {
 
     expect(wrapper.find('.vote-row__avatar .drep-avatar__initial').text()).toBe('T');
     expect(wrapper.find('.vote-row__name').text()).toBe('Tingvard');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('leaves an unnamed committee member anonymous rather than inventing one', () => {
@@ -244,7 +241,7 @@ describe('VoteRow layout', () => {
     expect(wrapper.find('.drep-avatar__initial').exists()).toBe(false);
     // The hash is what stands in, and it is the row's own.
     expect(wrapper.find('.vote-row__name').text()).toContain(CC_HOT.slice(0, 6));
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('opens the rationale in-app, handing the row up rather than linking out', async () => {
@@ -258,23 +255,23 @@ describe('VoteRow layout', () => {
       rationaleHash: 'ab'.repeat(32),
     });
     expect(wrapper.find('.vote-row__rationale').attributes('href')).toBeUndefined();
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('offers the rationale for an ipfs anchor too, since the dialog proxies it', () => {
     const wrapper = mountRow({ row: row({ rationaleUrl: 'ipfs://QmSomething' }) });
     expect(wrapper.find('.vote-row__rationale').exists()).toBe(true);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('renders the choice, the date and the rationale control in that order', () => {
     const wrapper = mountRow();
     const cells = wrapper.findAll('.vote-row > *');
-    const classes = cells.wrappers.map(cell => cell.classes().join(' '));
+    const classes = cells.map(cell => cell.classes().join(' '));
 
     expect(classes.join(' | ')).toMatch(
       /vote-row__avatar.*vote-row__role.*vote-row__identity.*vote-row__pill.*vote-row__when.*vote-row__rationale/,
     );
-    wrapper.destroy();
+    wrapper.unmount();
   });
 });

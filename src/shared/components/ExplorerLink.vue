@@ -6,8 +6,8 @@
     v-if="url"
     class="px-1"
     icon
-    :x-small="xSmall"
-    :small="small"
+    variant="text"
+    :size="buttonSize"
     :href="url"
     target="_blank"
     rel="noopener noreferrer"
@@ -16,7 +16,7 @@
     :style="xSmall ? { width: '16px', height: '16px', marginTop: '0px' } : {}"
     @click.stop
   >
-    <v-icon :x-small="xSmall" :small="small">mdi-open-in-new</v-icon>
+    <v-icon :size="iconSize">mdi-open-in-new</v-icon>
   </v-btn>
 </template>
 
@@ -37,6 +37,9 @@ const props = defineProps({
 });
 
 const { explorerUrl } = useExplorer();
+
+const buttonSize = computed(() => props.xSmall ? 'x-small' : props.small ? 'small' : 'default');
+const iconSize = computed(() => props.xSmall ? 12 : props.small ? 16 : 24);
 
 const url = computed(() =>
   explorerUrl(props.type as ExplorerEntity, props.id, { chain: props.chain, network: props.network }),

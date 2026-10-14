@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <article class="post-page">
@@ -52,12 +52,12 @@
         </article>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import { documentToHtmlString } from '@contentful/rich-text-html-renderer';
 import { BLOCKS, INLINES } from '@contentful/rich-text-types';
 import { getBlogPostBySlug, type BlogPost } from '@/api/blog.api';
@@ -114,7 +114,7 @@ const bodyHtml = computed<string>(() => {
   return documentToHtmlString(doc, {
     renderNode: {
       [BLOCKS.EMBEDDED_ASSET]: (node) => {
-        const id = (node.data?.target as { sys?: { id?: string } })?.sys?.id;
+        const id = (node.data?.['target'] as { sys?: { id?: string } })?.sys?.id;
         const asset = id ? p.assets[id] : undefined;
         if (!asset?.url || !(asset.contentType || '').startsWith('image/')) return '';
         // Only allow https image sources, and escape every interpolated value:
@@ -125,7 +125,7 @@ const bodyHtml = computed<string>(() => {
         return `<img src="${escapeAttr(src)}" alt="${escapeAttr(asset.title || '')}" loading="lazy" />`;
       },
       [INLINES.HYPERLINK]: (node, next) => {
-        const uri = (node.data?.uri as string) || '';
+        const uri = (node.data?.['uri'] as string) || '';
         const href = safeUrl(uri);
         const inner = next(node.content); // already-rendered, escaped HTML
         // A disallowed protocol (javascript:, data:, ...) renders as plain text,

@@ -182,7 +182,10 @@ class BackgroundStoreMessaging {
     }
 
     if (serialized.length <= SIZE_THRESHOLD_CODE_UNITS) {
-      return [{ type: 'STORE_UPDATE', storeName, updates, timestamp }];
+      // Match the chunked path's JSON boundary for Vue 3 proxies too. Passing
+      // the original object leaks reactive state to the transport and may fail
+      // structured cloning; every subscriber must receive a detached snapshot.
+      return [{ type: 'STORE_UPDATE', storeName, updates: JSON.parse(serialized), timestamp }];
     }
 
     const updateId = `${timestamp}-${++this.updateSeq}`;

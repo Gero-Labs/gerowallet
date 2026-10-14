@@ -140,7 +140,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 
 import AlertSettings from '@/modules/governance/components/alerts/AlertSettings.vue';
 import AsOf from '@/modules/governance/components/actions/AsOf.vue';
@@ -308,7 +308,7 @@ function goToProfile(drepId: string | null): void {
   if (!drepId) return;
   const path = `/governance/dreps/${drepId}`;
   const resolved = router.resolve(path);
-  if (resolved.route.matched.length > 0) {
+  if (resolved.matched.some(record => record.name === 'governanceDRep')) {
     router.push(path).catch(() => undefined);
     return;
   }

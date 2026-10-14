@@ -1,6 +1,6 @@
 <template>
   <!-- A toggle pill. The pressed state is the only thing that changes the fill, so it never relies on colour alone: weight and border change too. -->
-  <button type="button" class="help-pill" :aria-pressed="pressed ? 'true' : 'false'" v-on="$listeners">
+  <button type="button" class="help-pill" :aria-pressed="pressed ? 'true' : 'false'" >
     <slot />
   </button>
 </template>

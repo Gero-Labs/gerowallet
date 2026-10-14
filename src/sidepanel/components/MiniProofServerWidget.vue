@@ -5,7 +5,7 @@
   <v-card flat class="glass-liquid mini-ps">
     <div class="mini-ps__row">
       <span class="mini-ps__label t-label">
-        <v-icon x-small class="mr-1" color="var(--g-text-3)">mdi-server-security</v-icon>
+        <v-icon size="x-small" class="mr-1" color="var(--g-text-3)">mdi-server-security</v-icon>
         {{ t('midnight.proofServerPage.title') }}
       </span>
       <button type="button" class="mini-ps__link" @click="openFullPage">

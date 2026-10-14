@@ -48,7 +48,7 @@
       <div class="recipient-card recipient-card--upgrade" v-else>
         <div class="recipient-label t-label">{{ t('midnight.dustRecipientAddress') }}</div>
         <div class="upgrade-body">
-          <v-icon small color="amber" class="mr-2">mdi-alert-outline</v-icon>
+          <v-icon size="small" color="amber" class="mr-2">mdi-alert-outline</v-icon>
           <span class="upgrade-text">
             {{ isPrfWallet ? t('midnight.upgradeAddressesNoticePrf') : t('midnight.upgradeAddressesNotice') }}
           </span>
@@ -58,8 +58,8 @@
           v-model="upgradePassword"
           :label="t('wallet.spendingPassword')"
           type="password"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           hide-details
           class="mt-2"
           :disabled="upgradeBusy"
@@ -70,14 +70,14 @@
         </div>
         <v-btn
           block
-          small
+          size="small"
           color="primary"
           class="mt-3"
           :loading="upgradeBusy"
           :disabled="!isPrfWallet && !upgradePassword"
           @click="runUpgrade"
         >
-          <v-icon small left>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-key-variant' }}</v-icon>
+          <v-icon size="small" start>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-key-variant' }}</v-icon>
           {{ isPrfWallet ? t('midnight.authorizeWithPasskey') : t('midnight.deriveDustAddress') }}
         </v-btn>
       </div>
@@ -87,27 +87,27 @@
       <div class="flow-diagram">
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--cardano">
-            <v-icon small color="white">mdi-link-variant</v-icon>
+            <v-icon size="small" color="white">mdi-link-variant</v-icon>
           </div>
           <div class="flow-stop-label">Cardano cNIGHT</div>
         </div>
         <div class="flow-arrow">
-          <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
+          <v-icon size="small" color="var(--g-text-3)">mdi-arrow-right</v-icon>
           <span class="flow-arrow-label t-label">{{ t('midnight.flowSign') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--validator">
-            <v-icon small color="white">mdi-shield-key</v-icon>
+            <v-icon size="small" color="white">mdi-shield-key</v-icon>
           </div>
           <div class="flow-stop-label">{{ t('midnight.flowValidator') }}</div>
         </div>
         <div class="flow-arrow">
-          <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
+          <v-icon size="small" color="var(--g-text-3)">mdi-arrow-right</v-icon>
           <span class="flow-arrow-label t-label">{{ t('midnight.relayFewHours') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--midnight">
-            <v-icon small color="white">mdi-star-four-points</v-icon>
+            <v-icon size="small" color="white">mdi-star-four-points</v-icon>
           </div>
           <div class="flow-stop-label">{{ t('midnight.flowDust') }}</div>
         </div>
@@ -134,7 +134,7 @@
           rounded
           color="var(--g-accent)"
           height="6"
-          :value="capProgress"
+          :model-value="capProgress"
           striped
           class="mt-2"
         />
@@ -151,25 +151,25 @@
         <template v-if="!inSigningPhase">
           <v-btn
             block
-            large
+            size="large"
             class="geroButton"
             :disabled="!dustAddress"
             @click="startRegistration"
           >
-            <v-icon left>mdi-shield-plus</v-icon>
+            <v-icon start>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
 
           <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
                sources panel), with the external portal kept as a low-prominence
                fallback. -->
-          <v-btn block outlined class="mt-3" @click="sourcesOpen = true">
-            <v-icon left small>mdi-source-branch</v-icon>
+          <v-btn block variant="outlined" class="mt-3" @click="sourcesOpen = true">
+            <v-icon start size="small">mdi-source-branch</v-icon>
             {{ t('midnight.dustSourcesTitle') }}
           </v-btn>
           <div class="text-center mt-2">
-            <v-btn small text color="var(--g-text-2)" @click="openRedemptionPortal">
-              <v-icon small left>mdi-open-in-new</v-icon>
+            <v-btn size="small" variant="text" color="var(--g-text-2)" @click="openRedemptionPortal">
+              <v-icon size="small" start>mdi-open-in-new</v-icon>
               {{ t('midnight.openRedemptionPortal') }}
             </v-btn>
           </div>
@@ -183,8 +183,8 @@
             v-model="localPassword"
             :label="t('wallet.spendingPassword')"
             type="password"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             :disabled="submitBusy"
             @keydown.enter="confirmRegistration"
             class="mb-2"
@@ -196,18 +196,18 @@
 
           <v-btn
             block
-            large
+            size="large"
             class="geroButton"
             :loading="submitBusy"
             :disabled="!canConfirmRegistration"
             @click="confirmRegistration"
           >
-            <v-icon left>{{ isPrfWalletForSign ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
+            <v-icon start>{{ isPrfWalletForSign ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
             {{ isPrfWalletForSign ? t('midnight.authorizeWithPasskey') : t('midnight.signAndRegister') }}
           </v-btn>
 
           <div class="text-center mt-2">
-            <v-btn small text :disabled="submitBusy" @click="resetRegistrationState">
+            <v-btn size="small" variant="text" :disabled="submitBusy" @click="resetRegistrationState">
               {{ t('common.cancel') }}
             </v-btn>
           </div>
@@ -217,20 +217,20 @@
       <v-btn
         v-else-if="registrationStatus === 'Pending'"
         block
-        large
-        outlined
+        size="large"
+        variant="outlined"
         @click="$emit('close')"
       >
-        <v-icon left>mdi-clock-outline</v-icon>
+        <v-icon start>mdi-clock-outline</v-icon>
         {{ t('common.close') }}
       </v-btn>
       <template v-else>
-        <v-btn block large outlined @click="$emit('close')">
+        <v-btn block size="large" variant="outlined" @click="$emit('close')">
           {{ t('common.done') }}
         </v-btn>
         <div class="text-center mt-2">
-          <v-btn small text color="var(--g-text-2)" @click="sourcesOpen = true">
-            <v-icon small left>mdi-source-branch</v-icon>
+          <v-btn size="small" variant="text" color="var(--g-text-2)" @click="sourcesOpen = true">
+            <v-icon size="small" start>mdi-source-branch</v-icon>
             {{ t('midnight.dustSourcesTitle') }}
           </v-btn>
         </div>

@@ -1,7 +1,7 @@
 <template>
   <div class="step-google-confirm">
     <div class="step-scroll">
-    <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+    <v-card class="mb-3" variant="outlined" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
       <v-card-text class="pa-3">
         <div class="d-flex align-center mb-2">
           <v-avatar size="32" class="mr-2">
@@ -27,7 +27,7 @@
           <v-col cols="6" class="pl-3">
             <div class="d-flex align-center">
               <v-avatar size="20" class="mr-2">
-                <v-img :src="network ? network.icon : ''" contain></v-img>
+                <v-img :src="network ? network.icon : ''" ></v-img>
               </v-avatar>
               <div>
                 <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
@@ -43,9 +43,9 @@
       v-if="errorMessage"
       color="error"
       icon="mdi-alert-outline"
-      outlined
-      dense
-      border="left"
+      variant="outlined"
+      density="compact"
+      border="start"
       class="mb-0"
     >
       <span class="text-body-2">{{ errorMessage }}</span>
@@ -95,7 +95,8 @@ const errorMessage = ref('');
 
 const walletIconSrc = computed(() => {
   const iconKey = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
-  return (assets as Record<string, string>)[`${iconKey}Svg`] || '';
+  const icon = assets[`${iconKey}Svg` as keyof typeof assets];
+  return typeof icon === 'string' ? icon : '';
 });
 
 const finish = async (): Promise<void> => {

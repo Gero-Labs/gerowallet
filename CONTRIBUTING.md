@@ -10,8 +10,8 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- Node.js 24.19.0 (24.x)
+- npm 11.1.0, matching the clean-install CI job
 - Git
 
 ### Development Setup
@@ -24,7 +24,7 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
    ```
 3. Install dependencies:
    ```bash
-   npm install
+   npm ci
    ```
 4. Create your environment file (see the README's "Configure Environment"
    for the three variables it needs):
@@ -78,6 +78,9 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
    npx vitest run <specs near your change>
    npm run build:web -- --mode production  # the real buildability gate
    ```
+   `npm run typecheck` (also `typecheck:vue`) checks templates and TypeScript.
+   `npm run typecheck:ts` retains the older TypeScript-only diagnostic command. Compare
+   diagnostics with the baseline and fix errors introduced by your change.
    For anything user-visible, run `npm run dev` and try it in the browser.
 5. Commit with clear messages:
    ```bash
@@ -110,7 +113,10 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 ### Vue Components
 
 - Use Composition API (`<script setup>`) for new components
-- Follow Vuetify 2.7 patterns
+- Follow Vuetify 4.2 patterns: `modelValue` / `update:modelValue`, native
+  activator props, and `await form.validate()` with its `{ valid }` result.
+- After asynchronous validation or authentication, recheck the approval scope
+  before signing or submitting. Use the shared freshness helpers.
 - Use i18n for all user-facing text: `$t('key')`
 - Keep templates readable with proper indentation
 

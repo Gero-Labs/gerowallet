@@ -29,9 +29,8 @@
     <section v-if="items.length" class="glass-panel updates-list" :aria-label="sourceLabel(source)">
       <ul>
         <li v-for="item in items" :key="item.id">
-          <!-- Both listeners: a plain link takes @click, router-link needs @click.native; either way the open is counted once. Capture, because
-               router-link navigates in its own bubble handler and the row can unmount before a later listener runs. -->
-          <component :is="rowTag(item)" class="update-row" v-bind="rowProps(item)" @click="openItem(item)" @click.native.capture="openItem(item)">
+          <!-- Count once before RouterLink's navigation handler can unmount the row. -->
+          <component :is="rowTag(item)" class="update-row" v-bind="rowProps(item)" @click.capture="openItem(item)">
             <HelpSourceBadge :source="item.source" class="update-icon" />
             <div class="update-body" :class="{ 'update-body--social': item.kind === 'social' }">
               <p class="t-caption g-num update-caption">{{ caption(item) }}</p>
@@ -71,7 +70,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import i18n from '@/plugins/i18n';
 import { helpLocale, type HelpSource, type HelpUpdate } from '@/api/help.api';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -89,7 +88,7 @@ import HelpSourceBadge from './HelpSourceBadge.vue';
 const props = defineProps<{ chain: string }>();
 const route = useRoute(), router = useRouter(), { t, tc } = useTranslation();
 const { track, updateOpened } = useHelpTracking();
-const source = computed(() => updateSource(route.query.source));
+const source = computed(() => updateSource(route.query['source']));
 const request = computed(() => ({ source: source.value, chain: props.chain, locale: helpLocale(i18n.locale) }));
 const { page, loading, failed, retry, loadMore } = useHelpUpdates(request);
 const items = computed(() => page.value?.items ?? []);

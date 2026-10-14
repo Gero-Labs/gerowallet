@@ -7,9 +7,9 @@
         <div class="metrics-header-row">
           <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
-          <v-tooltip v-if="!isApex && !adaOnly" bottom content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <div class="mode-segmented-toggle" v-bind="attrs" v-on="on">
+          <v-tooltip location="bottom" v-if="!isApex && !adaOnly"  content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
+              <div class="mode-segmented-toggle" v-bind="activatorProps" >
                 <button
                   class="mode-segment"
                   :class="{ active: portfolioMode === 'ada-only' }"
@@ -24,8 +24,8 @@
             </template>
             <span>{{ portfolioMode === 'ada-only' ? $t('dashboard.adaOnlyTooltip') : $t('dashboard.fullPortfolioTooltip') }}</span>
           </v-tooltip>
-          <v-btn icon x-small @click="handleRefresh" :disabled="isRefreshing">
-            <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
+          <v-btn icon variant="text" size="x-small" @click="handleRefresh" :disabled="isRefreshing">
+            <v-icon size="small" :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
           </v-btn>
         </div>
 
@@ -72,12 +72,13 @@
           <template v-else-if="totalRealizedPnl != null || totalUnrealizedPnl != null">
             <div class="pnl-item">
               <span class="pnl-label">{{ $t('market.unrealizedPnlDetail') }}</span>
-              <v-tooltip v-if="pnlIncomplete" bottom max-width="220" content-class="custom-tooltip">
-                <template v-slot:activator="{ on }">
+              <v-tooltip location="bottom" v-if="pnlIncomplete"  max-width="220" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
                   <span
+                    v-bind="activatorProps"
                     class="pnl-value"
                     :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
-                    v-on="on"
+
                   >
                     {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' ₳' }}
                   </span>
@@ -94,12 +95,13 @@
             </div>
             <div class="pnl-item">
               <span class="pnl-label">{{ $t('market.realizedPnlDetail') }}</span>
-              <v-tooltip v-if="pnlIncomplete" bottom max-width="220" content-class="custom-tooltip">
-                <template v-slot:activator="{ on }">
+              <v-tooltip location="bottom" v-if="pnlIncomplete"  max-width="220" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
                   <span
+                    v-bind="activatorProps"
                     class="pnl-value"
                     :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
-                    v-on="on"
+
                   >
                     {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' ₳' }}
                   </span>
@@ -836,7 +838,7 @@ const initChart = () => {
       }
 
       const data = param.seriesData.get(areaSeries);
-      if (!data || data.value === undefined) {
+      if (!data || !('value' in data) || typeof data.value !== 'number') {
         el.style.display = 'none';
         return;
       }
@@ -1215,7 +1217,7 @@ onBeforeUnmount(() => {
   transition: opacity var(--g-dur-base) ease, filter var(--g-dur-base) ease;
 }
 
-.balance-fade-enter,
+.balance-fade-enter-from,
 .balance-fade-leave-to {
   opacity: 0;
   filter: blur(4px);

@@ -1,6 +1,6 @@
 <template>
-  <v-tab-item>
-    <v-layout class="py-0" column>
+  <v-window-item>
+    <div class="d-flex flex-column py-0">
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3 style="color: white">{{ $t('settings.walletName') }}</h3>
@@ -28,22 +28,22 @@
         <v-col cols="7" class="text-left">
           <h3 style="color: white">
             {{ $t('settings.walletProfilePicture') }}
-            <v-icon color="error" x-small class="ml-1" v-if="hasNewProfilePicture">
+            <v-icon color="error" size="x-small" class="ml-1" v-if="hasNewProfilePicture">
               mdi-circle
             </v-icon>
           </h3>
           <span class="helper">{{ $t('settings.chooseProfilePicture') }}</span>
         </v-col>
         <v-col cols="5" class="d-flex justify-center" style="align-content: center">
-          <v-tooltip top content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <NotificationDot :show="hasNewProfilePicture" overlap bordered pulse>
+          <v-tooltip location="top"  content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
+              <NotificationDot v-bind="activatorProps" :show="hasNewProfilePicture" overlap bordered pulse>
                 <v-avatar
                   size="96"
                   rounded
                   class="profile-avatar-clickable"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="activatorProps"
+
                   @click="openProfilePicDialog"
                 >
                   <v-img v-if="loggedWallet" :src="avatar" />
@@ -66,12 +66,12 @@
         <v-col cols="5" style="align-content: center">
           <v-select
             :items="currencies"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             v-model="selectedCurrency"
             hide-details
             attach
-            item-text="text"
+            item-title="text"
             item-value="value"
           ></v-select>
         </v-col>
@@ -84,24 +84,24 @@
         <v-col cols="5" style="align-content: center">
           <v-select
             :items="explorerOptions"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             v-model="selectedExplorer"
             :hint="explorerHint"
             :persistent-hint="!!explorerHint"
             :hide-details="!explorerHint"
             attach
-            item-text="name"
+            item-title="name"
             item-value="id"
           >
-            <template v-slot:item="{ item }">
-              <v-list-item-avatar size="20">
+            <template v-slot:item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
+              <v-avatar size="20">
                 <v-img :src="EXPLORER_LOGOS[item.id]" alt="" />
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title>{{ item.name }}</v-list-item-title>
-              </v-list-item-content>
-            </template>
+              </div>
+            </template></v-list-item></template>
             <template v-slot:selection="{ item }">
               <v-avatar size="20" class="mr-2">
                 <v-img :src="EXPLORER_LOGOS[item.id]" alt="" />
@@ -115,7 +115,7 @@
         <v-col cols="7" class="text-left">
           <h3 style="color: white">
             {{ $t('settings.displayLanguage') }}
-            <v-icon color="error" x-small class="ml-1" v-if="hasNewLanguage">
+            <v-icon color="error" size="x-small" class="ml-1" v-if="hasNewLanguage">
               mdi-circle
             </v-icon>
           </h3>
@@ -125,30 +125,30 @@
           <v-select
             v-model="loc"
             :items="availableLanguages"
-            item-text="name"
+            item-title="name"
             item-value="iso"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             hide-details
             attach
             @focus="handleLanguageSelectorFocus"
           >
-            <template v-slot:item="{ item }">
-              <v-list-item-avatar size="20">
+            <template v-slot:item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
+              <v-avatar size="20">
                 <flag :iso="item.iso" style="font-size: 20px"></flag>
-              </v-list-item-avatar>
-              <v-list-item-content>
+              </v-avatar>
+              <div class="g-list-content">
                 <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
-              </v-list-item-content>
-            </template>
+              </div>
+            </template></v-list-item></template>
             <template v-slot:selection="{ item }">
-              <v-list-item dense style="min-height: 32px; height: 32px">
-                <v-list-item-avatar size="20">
+              <v-list-item density="compact" style="min-height: 32px; height: 32px">
+                <v-avatar size="20">
                   <flag :iso="item.iso" style="font-size: 20px"></flag>
-                </v-list-item-avatar>
-                <v-list-item-content class="py-0">
+                </v-avatar>
+                <div class="py-0 g-list-content">
                   <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
-                </v-list-item-content>
+                </div>
               </v-list-item>
             </template>
           </v-select>
@@ -161,7 +161,7 @@
           <span class="helper">{{ $t('settings.regionHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
-          <v-text-field outlined disabled dense :value="$t('settings.regionValue')" hide-details></v-text-field>
+          <v-text-field variant="outlined" disabled density="compact" :model-value="$t('settings.regionValue')" hide-details></v-text-field>
         </v-col>
       </v-row>
       <v-row no-gutters class="pt-2">
@@ -170,13 +170,13 @@
           <span class="helper">{{ $t('settings.welcomeGuideHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
-          <v-btn block outlined color="grey" @click="showGuide">
+          <v-btn block variant="outlined" color="grey" @click="showGuide">
             <span>{{ $t('settings.showGuide') }}</span>
           </v-btn>
         </v-col>
       </v-row>
-    </v-layout>
-  </v-tab-item>
+    </div>
+  </v-window-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -214,7 +214,7 @@ const hasNewProfilePicture = computed(() => isFeatureNew('settings.profile.profi
 
 // Filter to only show ready languages
 const availableLanguages = computed(() => {
-  return Object.values(languages).filter(lang => READY_LANGUAGES.includes(lang.iso));
+  return Object.values(languages).filter(lang => READY_LANGUAGES.some(locale => locale === lang.iso));
 });
 
 // Get store instance

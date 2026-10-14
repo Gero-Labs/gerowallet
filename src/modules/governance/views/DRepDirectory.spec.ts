@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // The DRep directory as rendered.
 //
 // `drepDirectory.sort.spec.ts` pins the ordering rule itself; this file pins
@@ -10,8 +11,8 @@
 // `<script setup>` imports that Vue 2.7 resolves lexically, so they render for
 // real and the buttons under test are real buttons.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper, type DOMWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 
 // `vi.mock` factories are hoisted above every const in this file, and the view's
 // own imports are hoisted above them again — so anything a factory touches has
@@ -85,7 +86,7 @@ vi.mock('@/shared/utils/pendingDelegation', () => ({
   takePendingDRepDelegation: async () => null,
 }));
 vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn(), setSuccess: vi.fn() } }));
-vi.mock('vue-router/composables', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
 const $t = (key: string, values?: Record<string, unknown>): string =>
   values ? `${key}:${JSON.stringify(values)}` : key;
@@ -139,10 +140,8 @@ function drep(
   };
 }
 
-function mountPage(): Wrapper<Vue> {
-  return mount(DRepDirectory, {
-    mocks: { $t, $route: { query: {} } },
-    stubs: {
+function mountPage(): VueWrapper {
+  return mount(DRepDirectory, { global: { config: { globalProperties: mockGlobalProperties({ $t, $route: { query: {} } }) }, stubs: {
       'v-icon': true,
       'v-avatar': true,
       'v-img': true,
@@ -152,10 +151,9 @@ function mountPage(): Wrapper<Vue> {
       AsOf: true,
       'v-btn': {
         inheritAttrs: false,
-        template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>',
+        template: '<button v-bind="$attrs"><slot /></button>',
       },
-    },
-  });
+    } } });
 }
 
 async function settle(): Promise<void> {
@@ -165,20 +163,20 @@ async function settle(): Promise<void> {
   }
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 /** The rendered order, by display name. */
-function renderedNames(w: Wrapper<Vue>): string[] {
-  return w.findAll('.drep-directory__name').wrappers.map(n => n.text());
+function renderedNames(w: VueWrapper): string[] {
+  return w.findAll('.drep-directory__name').map(n => n.text());
 }
 
 /** One sortable column header, by its label key. */
-function header(w: Wrapper<Vue>, labelKey: string): Wrapper<Vue> {
+function header(w: VueWrapper, labelKey: string): DOMWrapper<Element> {
   const found = w
     .findAll('.drep-directory__sort')
-    .wrappers.find(button => button.text().startsWith(labelKey));
+    .find(button => button.text().startsWith(labelKey));
   if (!found) throw new Error(`no sortable header for ${labelKey}`);
-  return found as Wrapper<Vue>;
+  return found;
 }
 
 beforeEach(() => {
@@ -199,7 +197,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
 });
 
@@ -211,14 +209,14 @@ describe('DRepDirectory: the header is the sort control', () => {
     // The active header carries a direction glyph; strip it to compare labels.
     const labels = wrapper
       .findAll('.drep-directory__sort')
-      .wrappers.map(b => b.text().replace(/[↑↓]/g, '').trim());
+      .map(b => b.text().replace(/[↑↓]/g, '').trim());
     expect(labels).toContain('governance.colParticipation');
     expect(labels).toContain('governance.colRationale');
     expect(labels).toContain('governance.delegators');
     expect(labels).toContain('governance.lastVote');
     expect(labels).toContain('governance.votingPower');
     // Every one of them is a <button>, not a div wearing a click handler.
-    for (const button of wrapper.findAll('.drep-directory__sort').wrappers) {
+    for (const button of wrapper.findAll('.drep-directory__sort')) {
       expect(button.element.tagName).toBe('BUTTON');
       expect(button.attributes('type')).toBe('button');
     }
@@ -233,7 +231,7 @@ describe('DRepDirectory: the header is the sort control', () => {
     expect(renderedNames(wrapper)).toEqual(['steady', 'quiet']);
     const participation = wrapper
       .findAll('[role="columnheader"]')
-      .wrappers.find(cell => cell.text().startsWith('governance.colParticipation'));
+      .find(cell => cell.text().startsWith('governance.colParticipation'));
     expect(participation?.attributes('aria-sort')).toBe('descending');
   });
 
@@ -245,7 +243,7 @@ describe('DRepDirectory: the header is the sort control', () => {
     expect(renderedNames(wrapper)[0]).toBe('steady');
     const power = wrapper
       .findAll('[role="columnheader"]')
-      .wrappers.find(cell => cell.text().startsWith('governance.votingPower'));
+      .find(cell => cell.text().startsWith('governance.votingPower'));
     expect(power?.attributes('aria-sort')).toBe('none');
   });
 
@@ -272,7 +270,7 @@ describe('DRepDirectory: the header is the sort control', () => {
     await settle();
 
     expect(renderedNames(wrapper)).toEqual(['quiet', 'steady']);
-    const cells = wrapper.findAll('[role="columnheader"]').wrappers;
+    const cells = wrapper.findAll('[role="columnheader"]');
     expect(cells.find(c => c.text().startsWith('governance.votingPower'))?.attributes('aria-sort')).toBe(
       'descending',
     );
@@ -288,7 +286,7 @@ describe('DRepDirectory: the row action', () => {
     await settle();
 
     // Second row after the default sort is `quiet`.
-    const rows = wrapper.findAll('.drep-directory__row').wrappers;
+    const rows = wrapper.findAll('.drep-directory__row');
     expect(rows).toHaveLength(2);
     const secondAction = rows[1].find('.drep-directory__col-action button');
     await secondAction.trigger('click');
@@ -308,7 +306,7 @@ describe('DRepDirectory: the row action', () => {
     await settle();
 
     // `quiet` is now FIRST. The same position must now delegate to it.
-    const rows = wrapper.findAll('.drep-directory__row').wrappers;
+    const rows = wrapper.findAll('.drep-directory__row');
     await rows[0].find('.drep-directory__col-action button').trigger('click');
     await settle();
 
@@ -319,7 +317,7 @@ describe('DRepDirectory: the row action', () => {
     wrapper = mountPage();
     await settle();
 
-    const row = wrapper.findAll('.drep-directory__row').wrappers[0];
+    const row = wrapper.findAll('.drep-directory__row')[0];
     const action = row.find('.drep-directory__col-action');
     expect(action.exists()).toBe(true);
     expect(action.find('button').exists()).toBe(true);
@@ -332,11 +330,11 @@ describe('DRepDirectory: the row action', () => {
     wrapper = mountPage();
     await settle();
 
-    const first = wrapper.findAll('.drep-directory__row').wrappers[0];
+    const first = wrapper.findAll('.drep-directory__row')[0];
     expect(first.find('.drep-directory__name').text()).toBe('steady');
     const button = first.find('.drep-directory__col-action button');
     expect(button.text()).toBe('governance.delegated');
-    expect(button.attributes('disabled')).toBeTruthy();
+    expect(button.attributes('disabled')).toBeDefined();
   });
 });
 
@@ -393,7 +391,7 @@ describe('DRepDirectory: a client-computed column orders every page', () => {
     expect(firstPage).toHaveLength(15);
     h.getDRepsPaginated.mockClear();
 
-    wrapper.find('v-pagination-stub').vm.$emit('input', 2);
+    wrapper.findComponent({ name: 'v-pagination' }).vm.$emit('update:modelValue', 2);
     await settle();
 
     // Page 2 is rows 16-30 of the GLOBAL order, and it cost nothing.
@@ -490,8 +488,8 @@ describe('DRepDirectory: a server-sortable column is pushed to the endpoint', ()
 });
 
 /** Type into the search field the way the user does: through the field itself. */
-async function typeSearch(w: Wrapper<Vue>, term: string): Promise<void> {
-  w.find('v-text-field-stub').vm.$emit('input', term);
+async function typeSearch(w: VueWrapper, term: string): Promise<void> {
+  w.findComponent({ name: 'v-text-field' }).vm.$emit('update:modelValue', term);
   await Vue.nextTick();
   await new Promise(resolve => setTimeout(resolve, 450)); // the field's own debounce
   await settle();
@@ -582,9 +580,9 @@ describe('DRepDirectory: an order it cannot deliver is never implied', () => {
     wrapper = mountPage();
     await Vue.nextTick();
 
-    expect(wrapper.find('.drep-directory__loading-note').text()).toContain(
+    await vi.waitFor(() => expect(wrapper!.find('.drep-directory__loading-note').text()).toContain(
       'governance.orderingRegister',
-    );
+    ));
     release?.();
     await settle();
     expect(wrapper.find('.drep-directory__loading-note').exists()).toBe(false);

@@ -12,12 +12,12 @@
     </div>
 
     <!-- Input -->
-    <v-card outlined class="pa-4 mb-4">
+    <v-card variant="outlined" class="pa-4 mb-4">
       <div class="text-subtitle-2 font-weight-bold mb-3">{{ $t('lightning.resolve') }}</div>
       <v-text-field
         v-model="input"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         :placeholder="$t('lightning.inputPlaceholder')"
         hide-details="auto"
         clearable
@@ -26,25 +26,25 @@
         @click:clear="clear"
       >
         <template #prepend-inner>
-          <v-icon small :color="inputTypeColor" class="mr-1">{{ inputTypeIcon }}</v-icon>
+          <v-icon size="small" :color="inputTypeColor" class="mr-1">{{ inputTypeIcon }}</v-icon>
         </template>
       </v-text-field>
       <div class="text-caption text--secondary mt-1">
         {{ $t('lightning.inputHint') }}
       </div>
       <v-btn color="primary" class="mt-3" :loading="resolving" :disabled="!input.trim()" @click="resolve">
-        <v-icon left small>mdi-magnify</v-icon>
+        <v-icon start size="small">mdi-magnify</v-icon>
         {{ $t('lightning.resolveBtn') }}
       </v-btn>
     </v-card>
 
     <!-- Error -->
-    <v-alert v-if="error" type="error" outlined dismissible class="mb-4" @input="error = null">
+    <v-alert v-if="error" type="error" variant="outlined" closable class="mb-4" @update:model-value="error = null">
       {{ error }}
     </v-alert>
 
     <!-- LNURL-pay Result -->
-    <v-card v-if="lnurlEndpoint" outlined class="pa-4 mb-4">
+    <v-card v-if="lnurlEndpoint" variant="outlined" class="pa-4 mb-4">
       <div class="d-flex align-center mb-3" style="gap: 12px;">
         <v-avatar v-if="metadataImage" size="48" rounded>
           <img :src="metadataImage" style="width: 100%; height: 100%; object-fit: contain;" />
@@ -67,8 +67,8 @@
         <div class="text-caption text--secondary mb-1">{{ $t('lightning.payAmount') }}</div>
         <v-text-field
           v-model="payAmount"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           type="number"
           suffix="sats"
           :min="minSats"
@@ -85,8 +85,8 @@
         <div class="text-caption text--secondary mb-1">{{ $t('lightning.comment') }}</div>
         <v-text-field
           v-model="comment"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           :maxlength="lnurlEndpoint.commentAllowed"
           :counter="lnurlEndpoint.commentAllowed"
           :placeholder="$t('lightning.optionalComment')"
@@ -95,80 +95,80 @@
       </div>
 
       <!-- Submarine swap note -->
-      <v-alert type="info" outlined dense class="text-caption mb-3">
+      <v-alert type="info" variant="outlined" density="compact" class="text-caption mb-3">
         {{ $t('lightning.submarineNote') }}
       </v-alert>
 
       <div class="d-flex" style="gap: 8px;">
         <v-btn color="primary" :loading="requestingInvoice" :disabled="!isPayAmountValid" @click="requestInvoice">
-          <v-icon left small>mdi-lightning-bolt</v-icon>
+          <v-icon start size="small">mdi-lightning-bolt</v-icon>
           {{ $t('lightning.getInvoice') }}
         </v-btn>
-        <v-btn outlined @click="openBoltz">
-          <v-icon left small>mdi-open-in-new</v-icon>
+        <v-btn variant="outlined" @click="openBoltz">
+          <v-icon start size="small">mdi-open-in-new</v-icon>
           {{ $t('lightning.openBoltz') }}
         </v-btn>
       </div>
     </v-card>
 
     <!-- BOLT11 Invoice Result -->
-    <v-card v-if="bolt11" outlined class="pa-4 mb-4">
+    <v-card v-if="bolt11" variant="outlined" class="pa-4 mb-4">
       <div class="d-flex align-center mb-2" style="gap: 8px;">
         <v-icon color="#9B59B6">mdi-qrcode</v-icon>
         <div class="font-weight-bold">{{ $t('lightning.bolt11Invoice') }}</div>
       </div>
       <v-divider class="mb-3" />
 
-      <v-list dense>
+      <v-list density="compact">
         <v-list-item v-if="bolt11.amount">
-          <v-list-item-content>
+          <div class="g-list-content">
             <v-list-item-subtitle>{{ $t('lightning.amount') }}</v-list-item-subtitle>
             <v-list-item-title>{{ formatMsats(bolt11.amount) }}</v-list-item-title>
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div class="g-list-content">
             <v-list-item-subtitle>{{ $t('lightning.network') }}</v-list-item-subtitle>
             <v-list-item-title>{{ bolt11.network }}</v-list-item-title>
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item v-if="bolt11.expiry">
-          <v-list-item-content>
+          <div class="g-list-content">
             <v-list-item-subtitle>{{ $t('lightning.expiry') }}</v-list-item-subtitle>
             <v-list-item-title>{{ bolt11.expiry / 60 }} {{ $t('lightning.minutes') }}</v-list-item-title>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
 
-      <v-alert type="info" outlined dense class="text-caption mt-3">
+      <v-alert type="info" variant="outlined" density="compact" class="text-caption mt-3">
         {{ $t('lightning.submarineNote') }}
       </v-alert>
 
-      <v-btn class="mt-3" outlined @click="openBoltz">
-        <v-icon left small>mdi-open-in-new</v-icon>
+      <v-btn class="mt-3" variant="outlined" @click="openBoltz">
+        <v-icon start size="small">mdi-open-in-new</v-icon>
         {{ $t('lightning.payViaBoltz') }}
       </v-btn>
     </v-card>
 
     <!-- Generated invoice display -->
-    <v-card v-if="generatedInvoice" outlined class="pa-4 mb-4">
+    <v-card v-if="generatedInvoice" variant="outlined" class="pa-4 mb-4">
       <div class="font-weight-bold mb-2">{{ $t('lightning.paymentRequest') }}</div>
       <v-textarea
-        :value="generatedInvoice"
+        :model-value="generatedInvoice"
         readonly
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         rows="4"
         style="font-family: monospace; font-size: 11px;"
         hide-details
       />
       <div class="d-flex mt-2" style="gap: 8px;">
-        <v-btn outlined small @click="copyInvoice">
-          <v-icon left x-small>mdi-content-copy</v-icon>
+        <v-btn variant="outlined" size="small" @click="copyInvoice">
+          <v-icon start size="x-small">mdi-content-copy</v-icon>
           {{ $t('common.copy') }}
         </v-btn>
-        <v-btn outlined small color="primary" @click="openBoltzWithInvoice(generatedInvoice)">
-          <v-icon left x-small>mdi-open-in-new</v-icon>
+        <v-btn variant="outlined" size="small" color="primary" @click="openBoltzWithInvoice(generatedInvoice)">
+          <v-icon start size="x-small">mdi-open-in-new</v-icon>
           {{ $t('lightning.payViaBoltz') }}
         </v-btn>
       </div>
@@ -177,14 +177,14 @@
     <!-- Info about Lightning -->
     <v-expansion-panels flat>
       <v-expansion-panel>
-        <v-expansion-panel-header class="text-caption font-weight-medium pa-0">
+        <v-expansion-panel-title class="text-caption font-weight-medium pa-0">
           {{ $t('lightning.whatIsLightning') }}
-        </v-expansion-panel-header>
-        <v-expansion-panel-content>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
           <div class="text-caption text--secondary">
             {{ $t('lightning.lightningExplainer') }}
           </div>
-        </v-expansion-panel-content>
+        </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>
   </v-container>
@@ -278,8 +278,8 @@ async function resolve() {
     } else if (result.bolt11) {
       bolt11.value = result.bolt11;
     }
-  } catch (e: any) {
-    error.value = e.message || 'Failed to resolve';
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'Failed to resolve';
   } finally {
     resolving.value = false;
   }
@@ -297,8 +297,8 @@ async function requestInvoice() {
       comment.value || undefined,
     );
     generatedInvoice.value = result.pr;
-  } catch (e: any) {
-    error.value = e.message || 'Failed to get invoice';
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'Failed to get invoice';
   } finally {
     requestingInvoice.value = false;
   }

@@ -33,7 +33,7 @@ function dismiss(id: number) { notifySnackStore.dismiss(id); }
 
 function open(snack: NotifySnack) {
   if (snack.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: snack.settingsTab } });
-  if (router && router.currentRoute.fullPath !== snack.path) router.push(snack.path).catch(() => undefined);
+  if (router && router.currentRoute.value.fullPath !== snack.path) router.push(snack.path).catch(() => undefined);
   dismiss(snack.id);
 }
 </script>
@@ -102,6 +102,6 @@ function open(snack: NotifySnack) {
 }
 .notify-snack-enter-active,
 .notify-snack-leave-active { transition: opacity var(--g-dur-base), transform var(--g-dur-base); }
-.notify-snack-enter,
+.notify-snack-enter-from,
 .notify-snack-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

@@ -5,11 +5,11 @@
       v-model="file"
       :label="$t('poolOperator.coldKeyFile')"
       accept=".skey,.json"
-      outlined dense prepend-icon="mdi-file-key"
-      @change="onFile"
+      variant="outlined" density="compact" prepend-icon="mdi-file-key"
+      @update:model-value="onFile"
     />
     <div v-if="parsedType" class="mb-3">
-      <v-chip small color="success" outlined>{{ parsedType }}</v-chip>
+      <v-chip size="small" color="success" variant="outlined">{{ parsedType }}</v-chip>
     </div>
 
     <template v-if="parsedType">
@@ -22,25 +22,25 @@
       <template v-if="!prfSupported || usePassword">
         <v-text-field
           v-model="password" :label="isNormalWallet ? $t('wallet.spendingPassword') : $t('poolOperator.coldKeyPassword')"
-          type="password" outlined dense
+          type="password" variant="outlined" density="compact"
           :hint="isNormalWallet ? $t('poolOperator.coldKeyEncryptionHint') : $t('poolOperator.coldKeyPasswordHint')"
           persistent-hint
         />
         <v-text-field
           v-if="!isNormalWallet" v-model="passwordConfirm" :label="$t('poolOperator.confirmPassword')"
-          type="password" outlined dense class="mt-2"
+          type="password" variant="outlined" density="compact" class="mt-2"
           :error-messages="passwordConfirm && password !== passwordConfirm ? [$t('welcome.passwordsMustMatch')] : []"
         />
       </template>
     </template>
 
-    <v-alert v-if="error" type="error" dense outlined class="mt-3">{{ error }}</v-alert>
+    <v-alert v-if="error" type="error" density="compact" variant="outlined" class="mt-3">{{ error }}</v-alert>
 
     <div class="mt-4 d-flex flex-column" style="gap: 8px">
       <v-btn
         v-if="parsedType && prfSupported && !usePassword" color="primary" block :loading="importing" @click="doPassKey"
       >
-        <v-icon left>mdi-fingerprint</v-icon>{{ $t('poolOperator.importWithPassKey') }}
+        <v-icon start>mdi-fingerprint</v-icon>{{ $t('poolOperator.importWithPassKey') }}
       </v-btn>
       <v-btn
         v-if="parsedType && (!prfSupported || usePassword)" color="primary" block
@@ -48,10 +48,10 @@
       >
         {{ $t('poolOperator.importAndEncrypt') }}
       </v-btn>
-      <v-btn v-if="parsedType && prfSupported && !usePassword" text x-small color="grey" @click="usePassword = true">
+      <v-btn v-if="parsedType && prfSupported && !usePassword" variant="text" size="x-small" color="grey" @click="usePassword = true">
         {{ $t('poolOperator.usePasswordInstead') }}
       </v-btn>
-      <v-btn v-if="parsedType && prfSupported && usePassword" text x-small color="grey" @click="usePassword = false">
+      <v-btn v-if="parsedType && prfSupported && usePassword" variant="text" size="x-small" color="grey" @click="usePassword = false">
         {{ $t('poolOperator.usePassKeyInstead') }}
       </v-btn>
     </div>

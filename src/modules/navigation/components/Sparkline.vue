@@ -1,6 +1,6 @@
 <template>
   <div style="width: 120px; min-width: 50px; display: inline-flex" v-if="chart.length > 0">
-    <v-sparkline :value="chart"
+    <v-sparkline :model-value="chart"
                  :gradient="priceChange > 0 ? ['#47cd89'] : ['#f97066']"
                  :smooth="radius || false"
                  :padding="padding"
@@ -24,11 +24,12 @@ const width = ref<number>(2);
 const radius = ref<number>(0);
 const padding = ref<number>(0);
 const lineCap = ref<string>('round');
-const _gradient = ref<string[]>(['#fff']);
-const type = ref<string>('trend');
+const type = ref<'trend' | 'bar'>('trend');
 const autoLineWidth = ref<boolean>(false);
 const chart = ref<number[]>([]);
-const intervalId = ref<number>(null);
+const intervalId = ref<ReturnType<typeof setInterval> | null>(null);
+let initialDelay: ReturnType<typeof setTimeout> | null = null;
+let disposed = false;
 
 
 const priceChange = computed(() => {
@@ -43,7 +44,8 @@ const priceChange = computed(() => {
 
 const fetch = async () => {
   try {
-    chart.value = await cryptoApi.fetchHistory()
+    const history = await cryptoApi.fetchHistory();
+    if (!disposed) chart.value = Array.isArray(history) ? history.map(Number).filter(Number.isFinite) : [];
   } catch (error) {
     console.error(error)
   }
@@ -52,8 +54,9 @@ const fetch = async () => {
 onMounted(async () => {
   // OPTIMIZATION: Defer chart data loading to improve initial page load
   // Load after 500ms to not block wallet initialization
-  setTimeout(async () => {
-    await fetch()
+  initialDelay = setTimeout(async () => {
+    await fetch();
+    if (disposed) return;
     intervalId.value = setInterval(async () => {
       await fetch()
     }, 60000);
@@ -61,7 +64,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  clearInterval(intervalId.value);
+  disposed = true;
+  if (initialDelay) clearTimeout(initialDelay);
+  if (intervalId.value) clearInterval(intervalId.value);
 })
 </script>
 

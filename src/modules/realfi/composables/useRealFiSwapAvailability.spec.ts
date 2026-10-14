@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import * as Vue from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAINNET_USDCX_UNIT, REALFI_ASSETS } from '../assets';
@@ -35,12 +35,12 @@ async function withCatalog(tokens: Record<string, unknown>) {
     catalog.state = catalog;
     return true;
   });
-  wrapper = mount(Vue.extend({
+  wrapper = mount(Vue.defineComponent({
     setup() {
       availability = useRealFiSwapAvailability();
       return {};
     },
-    render: (h) => h('div'),
+    render: () => Vue.h('div'),
   }));
   for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -49,7 +49,7 @@ beforeEach(() => {
   catalog.tokens = {};
   catalog.loadTokens.mockReset();
 });
-afterEach(() => wrapper.destroy());
+afterEach(() => wrapper.unmount());
 
 describe('useRealFiSwapAvailability', () => {
   it('offers ADA → USDCx when only USDCx is listed, and holds USDCx → USDrf', async () => {

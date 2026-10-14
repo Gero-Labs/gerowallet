@@ -1,11 +1,11 @@
 <template>
-  <v-dialog v-model="modelValue" max-width="480" @input="$emit('update:modelValue', $event)">
+  <v-dialog :model-value="modelValue" max-width="480" @update:model-value="$emit('update:modelValue', $event)">
     <v-card v-if="collection">
       <v-card-title class="d-flex align-center">
         <v-icon color="primary" class="mr-2">mdi-cart-plus</v-icon>
         {{ $t('gomining.buyMiner') }}
         <v-spacer />
-        <v-btn icon @click="close">
+        <v-btn icon variant="text" @click="close">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -19,11 +19,11 @@
             :src="collection.imageUrl"
             width="80"
             height="80"
-            contain
+
             class="rounded"
           >
             <template #placeholder>
-              <v-row class="fill-height ma-0" align="center" justify="center">
+              <v-row class="fill-height ma-0 align-center justify-center"  >
                 <v-icon size="36" color="#F7931A40">mdi-pickaxe</v-icon>
               </v-row>
             </template>
@@ -33,7 +33,7 @@
             <div class="text-caption text--secondary">
               {{ collection.hashrate }} TH/s · ${{ collection.efficiency.toFixed(2) }}/TH
             </div>
-            <v-chip x-small color="success" class="mt-1">
+            <v-chip size="x-small" color="success" class="mt-1">
               {{ collection.available }} {{ $t('gomining.available') }}
             </v-chip>
           </div>
@@ -43,19 +43,19 @@
         <div class="mb-4">
           <div class="text-caption text--secondary mb-1">{{ $t('gomining.quantity') }}</div>
           <div class="d-flex align-center" style="gap: 12px;">
-            <v-btn icon small outlined @click="quantity = Math.max(1, quantity - 1)">
-              <v-icon small>mdi-minus</v-icon>
+            <v-btn icon size="small" variant="outlined" @click="quantity = Math.max(1, quantity - 1)">
+              <v-icon size="small">mdi-minus</v-icon>
             </v-btn>
             <span class="text-h6 font-weight-bold" style="min-width: 32px; text-align: center;">
               {{ quantity }}
             </span>
             <v-btn
               icon
-              small
-              outlined
+              size="small"
+              variant="outlined"
               @click="quantity = Math.min(collection.available, quantity + 1)"
             >
-              <v-icon small>mdi-plus</v-icon>
+              <v-icon size="small">mdi-plus</v-icon>
             </v-btn>
           </div>
         </div>
@@ -75,13 +75,13 @@
         </div>
 
         <!-- Info note -->
-        <v-alert type="info" outlined dense class="mt-4 text-caption">
+        <v-alert type="info" variant="outlined" density="compact" class="mt-4 text-caption">
           {{ $t('gomining.buyRedirectNote') }}
         </v-alert>
       </v-card-text>
 
       <v-card-actions class="pb-4 px-4">
-        <v-btn outlined @click="close" :disabled="submitting">
+        <v-btn variant="outlined" @click="close" :disabled="submitting">
           {{ $t('common.cancel') }}
         </v-btn>
         <v-spacer />
@@ -90,7 +90,7 @@
           :loading="submitting"
           @click="submit"
         >
-          <v-icon left small>mdi-open-in-new</v-icon>
+          <v-icon start size="small">mdi-open-in-new</v-icon>
           {{ $t('gomining.proceedToCheckout') }}
         </v-btn>
       </v-card-actions>

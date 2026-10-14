@@ -21,9 +21,9 @@
          DUST drains with nothing on screen to explain it. -->
     <div v-if="outgoing.length" class="pf">
       <div class="pf-row">
-        <v-tooltip top max-width="260" content-class="custom-tooltip">
-          <template #activator="{ on, attrs }">
-            <span class="pf-t" v-bind="attrs" v-on="on">
+        <v-tooltip location="top"  max-width="260" content-class="custom-tooltip">
+          <template #activator="{ props: activatorProps }">
+            <span class="pf-t" v-bind="activatorProps" >
               {{ t('midnight.sponsor.paysFeesFor') }}
             </span>
           </template>

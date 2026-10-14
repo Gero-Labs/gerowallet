@@ -1,48 +1,47 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // The claim approval prompt's software paths: a password wallet verifies the
 // spending password first and signs through the extension-owned SIGN_DATA
 // handler (never the CIP-30 one); a PassKey wallet signs with the bytes the
 // PassKey button hands over and zeroes them afterwards. Hardware paths hand
 // control to a device and are exercised against real devices, not here.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 import { WalletType } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 
 // `<script setup>` imports are not registered by name, so the `stubs` option
 // cannot replace them; each child is mocked as a module instead.
+const form = vi.hoisted(() => ({ validate: vi.fn(async () => ({ valid: true, errors: [] })) }));
 const stubs = vi.hoisted(() => ({
   // Render functions, not templates: the test build of Vue has no template compiler.
   BaseDialog: {
     name: 'BaseDialogStub',
     props: ['isOpen'],
-    render(h: (tag: string, data: object, children?: unknown) => unknown) {
-      return h('div', { attrs: { 'data-open': String(this.isOpen) } }, this.$slots.default);
+    render(this: { isOpen: boolean; $slots: Vue.Slots }) {
+      return Vue.h('div', { 'data-open': String(this.isOpen) }, this.$slots['default']?.());
     },
   },
   PasswordField: {
     name: 'PasswordFieldStub',
-    props: ['value'],
-    render(h: (tag: string, data: object) => unknown) {
-      return h('input', {
-        attrs: { 'data-testid': 'password', value: this.value },
-        on: { input: (event: Event) => this.$emit('input', (event.target as HTMLInputElement).value) },
-      });
+    props: ['modelValue'],
+    render(this: { modelValue: string; $emit: (event: string, value: string) => void }) {
+      return Vue.h('input', { 'data-testid': 'password', value: this.modelValue, onInput: (event: Event) => this.$emit('update:modelValue', (event.target as HTMLInputElement).value) });
     },
     methods: { showError() { /* the real field renders a tooltip */ } },
   },
   PassKeyButton: {
     name: 'PassKeyButtonStub',
-    render(h: (tag: string, data: object) => unknown) { return h('button', { attrs: { 'data-testid': 'passkey' } }); },
+    render() { return Vue.h('button', { 'data-testid': 'passkey' }); },
   },
-  Toggle: { name: 'ToggleStub', render(h: (tag: string) => unknown) { return h('div'); } },
+  Toggle: { name: 'ToggleStub', render() { return Vue.h('div'); } },
 }));
 vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({ default: stubs.BaseDialog }));
 vi.mock('@/shared/components/PassKeyPasswordField.vue', () => ({ default: stubs.PasswordField }));
 vi.mock('@/shared/components/PassKeyAuthButton.vue', () => ({ default: stubs.PassKeyButton }));
 vi.mock('@/shared/components/ToggleSwitch.vue', () => ({ default: stubs.Toggle }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: vi.fn() } }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({ loggedWallet: null as unknown, keys: null }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: null as unknown, keys: null, isLocked: false }) }));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { state: { flags: {} } } }));
 vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn(), setSuccess: vi.fn() } }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: vi.fn(), end: vi.fn() } }));
@@ -63,28 +62,24 @@ const MESSAGE = 'Claim 12.5 ADA nonce 42';
 const MESSAGE_HEX = Buffer.from(MESSAGE, 'utf8').toString('hex');
 
 
-let wrapper: Wrapper<Vue>;
+let wrapper: VueWrapper;
 const send = vi.mocked(Messaging.sendToBackgroundFromOptions);
 
 function mountDialog() {
-  wrapper = mount(CashbackSignDialog, {
-    propsData: { isOpen: false, requestId: 1, message: MESSAGE, address: ADDRESS, origin: 'https://portal.bringweb3.io' },
-    mocks: { $t },
-    stubs: {
+  wrapper = mount(CashbackSignDialog, { props: { isOpen: false, requestId: 1, message: MESSAGE, address: ADDRESS, origin: 'https://portal.bringweb3.io' }, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: {
       // Reports itself valid whenever it renders, the way the real form does once
       // its rules pass; the prompt resets validity on open and expects that.
       'v-form': {
         template: '<form><slot /></form>',
-        mounted() { this.$emit('input', true); },
-        updated() { this.$emit('input', true); },
-        methods: { validate: () => true, resetValidation: vi.fn() },
+        mounted() { this.$emit('update:modelValue', true); },
+        updated() { this.$emit('update:modelValue', true); },
+        methods: { validate: form.validate, resetValidation: vi.fn() },
       },
       'v-card-text': { template: '<div><slot /></div>' },
       'v-card-actions': { template: '<div><slot /></div>' },
       'v-alert': { template: '<div><slot /></div>' },
-      'v-btn': { inheritAttrs: false, template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>' },
-    },
-  });
+      'v-btn': { inheritAttrs: false, template: '<button v-bind="$attrs"><slot /></button>' },
+    } } });
   return wrapper;
 }
 
@@ -100,10 +95,12 @@ async function flush() {
 
 describe('cashback claim approval', () => {
   beforeEach(() => {
+    form.validate.mockReset().mockResolvedValue({ valid: true, errors: [] });
+    walletStore.isLocked = false;
     walletStore.loggedWallet = { id: 1, type: WalletType.Normal, chain: 'cardano', network: 'mainnet' };
   });
   afterEach(() => {
-    wrapper?.destroy();
+    wrapper?.unmount();
     // Reset, not clear: a queued once-value a test never consumed must not leak.
     send.mockReset();
     vi.clearAllMocks();
@@ -133,24 +130,76 @@ describe('cashback claim approval', () => {
     expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
   });
 
-  it('signs the challenge that was approved, not one that replaced it while the password was being verified', async () => {
-    send
-      .mockImplementationOnce(async () => {
-        // A second claim arrives from the portal before verification returns.
-        await wrapper.setProps({ requestId: 2, message: 'Claim 99 ADA nonce 43' });
-        return { data: { success: true } };
-      })
-      .mockResolvedValueOnce({ data: { signature: 'sig', key: 'key' } });
+  it('requires fresh approval after a request replaces pending password authentication', async () => {
+    let release!: (result: { data: { success: boolean } }) => void;
+    send.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    mountDialog();
+    await open();
+    await wrapper.find('[data-testid="password"]').setValue('hunter22');
+    await wrapper.find('[data-testid="cashback-sign-confirm"]').trigger('click');
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    await wrapper.setProps({ requestId: 2, message: 'Claim 99 ADA nonce 43' });
+    release({ data: { success: true } });
+    await flush();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('signed')).toBeUndefined();
+
+    send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { signature: 'replacement-sig', key: 'key' } });
+    await wrapper.find('[data-testid="password"]').setValue('fresh-password');
+    await wrapper.find('[data-testid="cashback-sign-confirm"]').trigger('click');
+    await flush();
+    expect(send).toHaveBeenNthCalledWith(2, {
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD, data: { password: 'fresh-password' },
+    });
+    expect(send).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      method: MessageTypes.SIGN_DATA,
+      data: expect.objectContaining({ payload: Buffer.from('Claim 99 ADA nonce 43').toString('hex') }),
+    }));
+    expect(wrapper.emitted('signed')).toEqual([[{ requestId: 2, signature: 'replacement-sig', key: 'key' }]]);
+  });
+
+  for (const phase of ['validation', 'password'] as const) {
+    it.each(['cancel', 'close', 'request', 'wallet', 'network', 'lock'] as const)(
+      'suppresses all subsequent dispatch when %s occurs during pending ' + phase,
+      async interruption => {
+        let releaseValidation!: (result: { valid: boolean; errors: never[] }) => void;
+        let releasePassword!: (result: { data: { success: boolean } }) => void;
+        if (phase === 'validation') {
+          form.validate.mockImplementationOnce(() => new Promise(resolve => { releaseValidation = resolve; }));
+        } else {
+          send.mockImplementationOnce(() => new Promise(resolve => { releasePassword = resolve; }));
+        }
+        mountDialog();
+        await open();
+        await wrapper.find('[data-testid="password"]').setValue('hunter22');
+        await wrapper.find('[data-testid="cashback-sign-confirm"]').trigger('click');
+        await vi.waitFor(() => expect(phase === 'validation' ? form.validate : send).toHaveBeenCalledTimes(1));
+        if (interruption === 'cancel') await wrapper.find('[data-testid="cashback-sign-cancel"]').trigger('click');
+        if (interruption === 'close') await wrapper.setProps({ isOpen: false });
+        if (interruption === 'request') await wrapper.setProps({ requestId: 2, message: 'replacement' });
+        if (interruption === 'wallet') walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 2 };
+        if (interruption === 'network') walletStore.loggedWallet = { ...walletStore.loggedWallet, network: 'preprod' };
+        if (interruption === 'lock') walletStore.isLocked = true;
+        if (phase === 'validation') releaseValidation({ valid: true, errors: [] });
+        else releasePassword({ data: { success: true } });
+        await flush();
+        expect(send).toHaveBeenCalledTimes(phase === 'validation' ? 0 : 1);
+        expect(send.mock.calls.some(([message]) => message.method === MessageTypes.SIGN_DATA)).toBe(false);
+        expect(wrapper.emitted('signed')).toBeUndefined();
+      },
+    );
+  }
+
+  it('awaits and respects an invalid form result before authentication', async () => {
+    form.validate.mockResolvedValueOnce({ valid: false, errors: [] });
     mountDialog();
     await open();
     await wrapper.find('[data-testid="password"]').setValue('hunter22');
     await wrapper.find('[data-testid="cashback-sign-confirm"]').trigger('click');
     await flush();
-    expect(send).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      method: MessageTypes.SIGN_DATA,
-      data: expect.objectContaining({ payload: MESSAGE_HEX }),
-    }));
-    expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
+    expect(form.validate).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('does not sign with a wrong password', async () => {
@@ -239,8 +288,8 @@ describe('cashback claim approval', () => {
     await wrapper.find('[data-testid="cashback-sign-confirm"]').trigger('click');
     await flush();
     expect(wrapper.emitted('signed')).toBeUndefined();
-    expect(wrapper.emitted('close')).toHaveLength(1);
-    expect(snackbar.setError).toHaveBeenCalledWith('cashback.signWalletChanged');
+    expect(wrapper.emitted('close')).toBeUndefined();
+    expect(snackbar.setError).not.toHaveBeenCalled();
   });
 
   it('offers only Cancel to a wallet type it cannot sign with', async () => {

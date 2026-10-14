@@ -5,11 +5,11 @@
        that reuses TransactionAuthSection (the chain-agnostic password / PRF /
        submit UI), so no auth state machine is duplicated per chain. -->
   <div class="send-dialog-root">
-  <MidnightSendDialog v-if="isMidnight" :is-open="isOpen" @close="emit('close')" />
+  <MidnightSendDialog v-if="isMidnight" :is-open="isOpen" @close="resetState(); emit('close')" />
   <BaseDialog
     v-else
     :isOpen="isOpen"
-    @close="emit('close')"
+    @close="resetState(); emit('close')"
     :title="t('wallet.quickSend')"
     :loading="txSignLoading"
     :min-height="0"
@@ -31,11 +31,11 @@
             {{ $t('wallet.emptyWalletSendDescription', { currency: nativeTicker }) }}
           </div>
           <v-btn
-            outlined
+            variant="outlined"
             color="var(--g-accent)"
             @click="openReceiveDialog"
           >
-            <v-icon small class="mr-1">mdi-qrcode</v-icon>
+            <v-icon size="small" class="mr-1">mdi-qrcode</v-icon>
             {{ $t('wallet.emptyWalletReceive', { currency: nativeTicker }) }}
           </v-btn>
         </div>
@@ -48,10 +48,10 @@
       <v-card-title style="display: block;" class="pa-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
-            <template v-for="(item, index) in steps">
+            <template :key="item.name" v-for="(item, index) in steps">
               <div
                 class="custom-step"
-                :key="item.name"
+
                 :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
               >
                 <div class="icon-container">
@@ -64,7 +64,7 @@
                 </div>
                 <span class="step-label">{{ item.label }}</span>
               </div>
-              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }"
                    v-if="index < steps.length - 1"></div>
             </template>
           </v-stepper-header>
@@ -75,7 +75,7 @@
       <v-card-text class="send-dialog-content pa-0">
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <!-- Step 1: Recipients -->
-          <v-stepper-content step="1">
+          <v-stepper-window-item :value="1">
             <div class="step-recipients-wrapper">
               <div class="step-recipients-inner">
                 <SendRecipientCard
@@ -99,8 +99,8 @@
 
                 <!-- Add another recipient link -->
                 <div v-if="showAddLink" class="add-recipient-link">
-                  <v-btn text x-small color="var(--g-accent)" @click="addRecipient()">
-                    <v-icon x-small class="mr-1">mdi-plus</v-icon>
+                  <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="addRecipient()">
+                    <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
                     {{ $t('wallet.addAnotherRecipient') }}
                   </v-btn>
                 </div>
@@ -133,18 +133,19 @@
                 </div>
               </div>
             </div>
-          </v-stepper-content>
+          </v-stepper-window-item>
 
           <!-- Step 2: Summary -->
-          <v-stepper-content step="2">
+          <v-stepper-window-item :value="2">
             <SummaryStep
               ref="summaryRef"
               :recipients="recipients"
               :tx-data="tx"
+              :active="isOpen && currentStep === 2"
               @next="handleSign"
               @prev="prevStep"
             />
-          </v-stepper-content>
+          </v-stepper-window-item>
         </CustomStepper>
 
         <!-- Keystone Sign Dialog -->
@@ -152,7 +153,7 @@
           :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
           :keystoneType="keystoneType"
           :keystoneCbor="keystoneCbor"
-          @close="overlay = false"
+          @close="resetState()"
           @scan="onKeystoneScan"
           @error="onKeystoneError"
           @progress="onKeystoneProgress"
@@ -172,7 +173,7 @@
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="isSubmit"
-            :loading="txSignLoading"
+            :loading="txSignLoading || !summaryReady"
             :password="spendingPassword"
             @update:password="spendingPassword = $event"
             :password-label="t('wallet.spendingPassword')"
@@ -195,13 +196,13 @@
         </div>
         <div>
           <v-btn
-            text
+            variant="text"
             @click="prevStep"
             v-if="currentStep > 1"
             class="mr-2"
             :disabled="txSignLoading"
           >
-            <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
+            <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
           </v-btn>
           <!-- Step 1: Continue button -->
           <v-btn
@@ -211,7 +212,7 @@
             :disabled="!isValid || txSignLoading"
             :loading="txSignLoading"
           >{{ $t('common.continue') + ' ' }}
-            <v-icon style="color: var(--g-canvas)!important;" small class="ml-1">mdi-arrow-right</v-icon>
+            <v-icon style="color: var(--g-canvas)!important;" size="small" class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
           <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
                disabled while a "require remote" policy is active (unless already
@@ -227,13 +228,13 @@
           <!-- Step 2: Sign on another device (flag-gated, dark by default) -->
           <v-btn
             v-if="currentStep === 2 && canSignOnAnotherDevice"
-            text
+            variant="text"
             class="ml-2"
             @click="signOnAnotherDevice()"
-            :disabled="txSignLoading"
+            :disabled="txSignLoading || !summaryReady"
             :loading="txSignLoading"
           >
-            <v-icon small class="mr-1">mdi-cellphone-link</v-icon>
+            <v-icon size="small" class="mr-1">mdi-cellphone-link</v-icon>
             {{ $t('crossDevice.signOnAnotherDevice') }}
           </v-btn>
         </div>
@@ -367,6 +368,14 @@ const steps = ref([
 ]);
 
 const tx = ref<Cardano.Tx | undefined>(undefined);
+const summaryRef = ref<InstanceType<typeof SummaryStep>>();
+
+function isSummaryReady(): boolean {
+  return props.isOpen && currentStep.value === 2 && txValid.value &&
+    !feePending.value && !walletStore.isLocked &&
+    !!summaryRef.value?.isReadyFor(tx.value);
+}
+const summaryReady = computed(isSummaryReady);
 
 // Transaction signing composable (handles sign, submit, password, hardware wallets, Keystone)
 const {
@@ -394,6 +403,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: isSummaryReady,
   tx,
   successMessageKey: 'wallet.txSubmittedSuccess',
   onSuccess: () => {
@@ -447,7 +457,7 @@ const isWalletEmpty = computed(() => {
 
 const isValid = computed(() => {
   if (currentStep.value === 1) {
-    if (!txValid.value) return false;
+    if (!txValid.value || !tx.value || feePending.value) return false;
     return recipients.value.every((r: SendRecipient) => {
       const addr = r.resolvedAddress ?? r.address;
       const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -460,6 +470,7 @@ const isValid = computed(() => {
     });
   }
   if (currentStep.value === 2) {
+    if (!isSummaryReady()) return false;
     if (isSubmit.value) return true; // Already signed, just need confirm click
     if (loggedWallet.value?.type === WalletType.Normal) {
       if (isPrfWallet.value) return true; // PRF handled by TransactionAuthSection
@@ -784,12 +795,9 @@ async function buildTx(options?: { selectAll?: boolean }) {
   }
 }
 
-const summaryRef = ref<InstanceType<typeof SummaryStep>>();
-
 async function nextStep() {
   if (currentStep.value === 1) {
     if (!isValid.value) return;
-    summaryRef.value?.scanTx(tx.value);
     currentStep.value++;
   } else if (currentStep.value === 2) {
     if (!isValid.value) return;
@@ -1526,8 +1534,10 @@ onMounted(() => {
 .stepper-container {
   background-color: transparent !important;
 
-  & .v-stepper__header {
+  & :deep(.v-stepper-header) {
     box-shadow: none;
+    align-items: stretch;
+    margin-bottom: 8px;
   }
 
   .custom-step {
@@ -1582,7 +1592,7 @@ onMounted(() => {
   }
 }
 
-.v-stepper__content {
+:deep(.v-stepper-window-item) {
   padding: 0;
 }
 </style>

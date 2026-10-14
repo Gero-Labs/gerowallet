@@ -64,7 +64,7 @@ const addFundTransferStatus = (
 export const buildBasicStatus = (item: StoredTransaction, t: Translator): string => {
   const statuses: string[] = [];
 
-  if (item.type) {
+  if ('type' in item && item.type) {
     switch (item.type) {
       case 'receive':
         return t('transactions.receivedFunds');

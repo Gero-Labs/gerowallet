@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Vue from 'vue';
+import * as Vue from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
@@ -13,10 +13,10 @@ import { useDelegation } from './useDelegation';
 import { useUnstake } from './useUnstake';
 import { useDRepDelegation } from '@/modules/governance/composables/useDRepDelegation';
 
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({
   loggedWallet: null, account: null, keys: null, utxos: [], collateral: null, transactions: [],
 }) }));
-vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.observable({ epochParams: { stakeKeyDeposit: '2000000' }, tip: { slot: 100 } }) }));
+vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.reactive({ epochParams: { stakeKeyDeposit: '2000000' }, tip: { slot: 100 } }) }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: vi.fn() } }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/stores/stakingStore', () => ({ default: {} }));

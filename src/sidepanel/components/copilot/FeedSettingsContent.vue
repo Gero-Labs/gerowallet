@@ -11,11 +11,11 @@
     />
 
     <div class="settings-content__actions">
-      <v-btn text small class="settings-content__btn" @click="$emit('rerun')">
+      <v-btn variant="text" size="small" class="settings-content__btn" @click="$emit('rerun')">
         <v-icon size="16" class="mr-1">mdi-refresh</v-icon>
         {{ $t('copilot.settings.rerun') }}
       </v-btn>
-      <v-btn text small class="settings-content__btn settings-content__btn--muted" @click="$emit('reset')">
+      <v-btn variant="text" size="small" class="settings-content__btn settings-content__btn--muted" @click="$emit('reset')">
         {{ $t('copilot.settings.reset') }}
       </v-btn>
     </div>

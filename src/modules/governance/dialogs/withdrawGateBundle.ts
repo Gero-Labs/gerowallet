@@ -55,6 +55,9 @@ export type BuildTxFn = (params: {
   withdrawals?: Cardano.Withdrawal[];
   implicitCoin?: bigint;
   utxos: Cardano.Utxo[];
+  epochParams: AbstainWithdrawalTxContext['epochParams'];
+  changeAddress: string;
+  tip: AbstainWithdrawalTxContext['tip'];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the builder's epochParams/tip/walletContext types are structural and pass straight through
   [key: string]: any;
 }) => Promise<Cardano.Tx>;

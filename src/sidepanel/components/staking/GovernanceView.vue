@@ -7,8 +7,8 @@
       </div>
       <div class="drep-id-row" v-if="drepId">
         <span class="text-caption white--text">{{ truncate(drepId) }}</span>
-        <v-btn icon x-small class="ml-1" @click="copyToClipboard(drepId)">
-          <v-icon x-small color="grey">mdi-content-copy</v-icon>
+        <v-btn icon variant="text" size="x-small" class="ml-1" @click="copyToClipboard(drepId)">
+          <v-icon size="x-small" color="grey">mdi-content-copy</v-icon>
         </v-btn>
         <ExplorerLink type="drep" :id="drepId" x-small />
       </div>
@@ -16,11 +16,11 @@
 
       <div class="info-links mt-2">
         <a href="https://gov.tools/" target="_blank" class="gov-link">
-          <v-icon x-small :color="primaryColor" class="mr-1">mdi-open-in-new</v-icon>
+          <v-icon size="x-small" :color="primaryColor" class="mr-1">mdi-open-in-new</v-icon>
           <span class="text-caption">Governance Tools</span>
         </a>
         <a href="https://www.1694.io/en" target="_blank" class="gov-link">
-          <v-icon x-small :color="primaryColor" class="mr-1">mdi-open-in-new</v-icon>
+          <v-icon size="x-small" :color="primaryColor" class="mr-1">mdi-open-in-new</v-icon>
           <span class="text-caption">CIP-1694</span>
         </a>
       </div>
@@ -28,19 +28,19 @@
 
     <!-- Quick Delegation -->
     <div class="quick-delegate mb-3">
-      <v-select
+      <v-select item-title="text"
         v-model="delegationModel"
         :items="delegationOptions"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         hide-details
         placeholder="Quick delegate..."
         class="delegation-select"
         attach
-        dark
+        theme="dark"
       />
       <v-btn
-        small
+        size="small"
         class="delegate-action-btn ml-2"
         :disabled="!delegationModel || delegateLoading"
         :loading="delegateLoading"
@@ -53,14 +53,14 @@
     <!-- Search DReps -->
     <v-text-field
       v-model="search"
-      dense
-      outlined
+      density="compact"
+      variant="outlined"
       hide-details
       placeholder="Search DReps..."
       prepend-inner-icon="mdi-magnify"
       clearable
       class="drep-search mb-3"
-      dark
+      theme="dark"
     />
 
     <!-- Loading -->
@@ -73,7 +73,7 @@
     <div v-else-if="error" class="text-center py-6">
       <v-icon color="error" class="mb-2">mdi-alert-circle-outline</v-icon>
       <div class="grey--text text-caption">{{ error }}</div>
-      <v-btn x-small text :color="primaryColor" class="mt-2" @click="loadDReps(1)">Retry</v-btn>
+      <v-btn size="x-small" variant="text" :color="primaryColor" class="mt-2" @click="loadDReps(1)">Retry</v-btn>
     </div>
 
     <!-- DRep List -->
@@ -91,10 +91,10 @@
       >
         <div class="drep-item-left">
           <v-avatar size="28" rounded class="mr-2" v-if="drep.image">
-            <v-img :src="drep.image" contain />
+            <v-img :src="drep.image"  />
           </v-avatar>
           <v-avatar size="28" rounded class="mr-2 drep-avatar-placeholder" v-else>
-            <v-icon small color="grey">mdi-account</v-icon>
+            <v-icon size="small" color="grey">mdi-account</v-icon>
           </v-avatar>
           <div class="drep-info">
             <div class="drep-name">{{ drep.name }}</div>
@@ -110,21 +110,21 @@
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="pagination-row">
         <v-btn
-          icon
-          x-small
+          icon variant="text"
+          size="x-small"
           :disabled="currentPage <= 1 || loading"
           @click="loadDReps(currentPage - 1)"
         >
-          <v-icon small>mdi-chevron-left</v-icon>
+          <v-icon size="small">mdi-chevron-left</v-icon>
         </v-btn>
         <span class="text-caption grey--text">{{ currentPage }} / {{ totalPages }}</span>
         <v-btn
-          icon
-          x-small
+          icon variant="text"
+          size="x-small"
           :disabled="currentPage >= totalPages || loading"
           @click="loadDReps(currentPage + 1)"
         >
-          <v-icon small>mdi-chevron-right</v-icon>
+          <v-icon size="small">mdi-chevron-right</v-icon>
         </v-btn>
       </div>
     </div>
@@ -139,7 +139,7 @@
         <div class="confirm-drep-info">
           <div class="d-flex align-center mb-2">
             <v-avatar size="32" rounded class="mr-2" v-if="selectedDRep.image">
-              <v-img :src="selectedDRep.image" contain />
+              <v-img :src="selectedDRep.image"  />
             </v-avatar>
             <div>
               <div class="text-subtitle-2 white--text font-weight-bold">{{ selectedDRep.name }}</div>
@@ -173,6 +173,7 @@
 import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import governanceStoreActions, { governanceStore as governanceStoreState } from '@/stores/governanceStore';
+import { drepImageSource } from '@/modules/governance/utils/govAnchor';
 import filtersUtil from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
@@ -224,9 +225,9 @@ const totalPages = computed(() => {
   return paginationMeta.value?.total_pages || 1;
 });
 
-const formatVotingPower = (amount: number) => {
+const formatVotingPower = (amount: number | string | bigint) => {
   if (!amount) return `${currencySymbol.value}0`;
-  return toCurrency(amount, false, 2, currencySymbol.value, '', true);
+  return toCurrency(String(amount), false, 2, currencySymbol.value, '', true);
 };
 
 const drepsList = computed(() => {
@@ -234,14 +235,10 @@ const drepsList = computed(() => {
 
   return governanceDReps.value.map(drep => {
     let name = 'N/A';
-    const meta = drep.metadata?.meta_json?.body?.givenName;
-    if (meta) {
-      name = meta['@value'] || meta;
-    }
-    let image;
-    if (drep.metadata?.meta_json?.body?.image?.contentUrl) {
-      image = drep.metadata.meta_json.body.image.contentUrl;
-    }
+    const meta = drep.metadata?.meta_json?.body?.['givenName'];
+    if (typeof meta === 'string') name = meta;
+    else if (meta && typeof meta === 'object' && '@value' in meta && typeof meta['@value'] === 'string') name = meta['@value'];
+    const image = drepImageSource(drep);
     return {
       id: drep.drep_id,
       name,
@@ -395,13 +392,17 @@ onMounted(async () => {
   flex: 1;
 }
 
-.delegation-select ::v-deep .v-input__slot {
+.delegation-select :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
-.delegation-select ::v-deep .v-input__slot fieldset {
-  border-color: var(--g-hairline-1) !important;
+.delegation-select :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
 .delegate-action-btn {
@@ -417,13 +418,17 @@ onMounted(async () => {
   color: var(--g-text-1) !important;
 }
 
-.drep-search ::v-deep .v-input__slot {
+.drep-search :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
-.drep-search ::v-deep .v-input__slot fieldset {
-  border-color: var(--g-hairline-1) !important;
+.drep-search :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
 .drep-list {

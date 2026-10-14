@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="onClose" :title="sheetTitle" height="92%" persistent>
+  <BottomSheet :model-value="modelValue" @update:model-value="onClose" :title="sheetTitle" height="92%" persistent :close-disabled="broadcasting">
     <div class="send-stepper" ref="stepperEl">
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
@@ -9,7 +9,7 @@
         <div class="text-caption grey--text mt-1 text-center">{{ $t('miniGero.txSubmittedDesc') }}</div>
         <div v-if="txId" class="tx-id-box mt-4" @click="copyTxId">
           <span class="text-caption grey--text">{{ truncateAddr(txId) }}</span>
-          <v-icon x-small :color="primaryColor" class="ml-1">mdi-content-copy</v-icon>
+          <v-icon size="x-small" :color="primaryColor" class="ml-1">mdi-content-copy</v-icon>
         </div>
         <v-btn block :color="primaryColor" class="black--text font-weight-bold mt-6" @click="onClose(false)">
           {{ $t('miniGero.done') }}
@@ -21,15 +21,15 @@
         <div class="stepper-step" :class="{ active: step === 1, done: step > 1 }">
           <div class="step-header" @click="editStep(1)">
             <div class="step-circle" :class="step > 1 ? 'done' : step === 1 ? 'active' : ''">
-              <v-icon v-if="step > 1" x-small color="var(--g-on-grad)">mdi-check</v-icon>
+              <v-icon v-if="step > 1" size="x-small" color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>1</span>
             </div>
             <div class="step-info">
               <span class="step-label">{{ $t('miniGero.recipientAddress') }}</span>
               <span v-if="step > 1" class="step-summary">{{ handleName || truncateAddr(paymentAddress) }}</span>
             </div>
-            <v-btn v-if="step > 1 && !submitting" icon x-small @click.stop="editStep(1)">
-              <v-icon small :color="primaryColor">mdi-pencil</v-icon>
+            <v-btn v-if="step > 1 && !submitting" icon variant="text" size="x-small" @click.stop="editStep(1)">
+              <v-icon size="small" :color="primaryColor">mdi-pencil</v-icon>
             </v-btn>
           </div>
 
@@ -37,16 +37,16 @@
             <div v-show="step === 1" class="step-body">
               <!-- Quick actions row -->
               <div class="quick-row">
-                <v-btn small outlined color="var(--g-hairline-3)" class="quick-btn" @click="showContacts = !showContacts" :disabled="!hasContacts">
-                  <v-icon x-small :color="primaryColor" class="mr-1">mdi-book-open-variant-outline</v-icon>
+                <v-btn size="small" variant="outlined" color="var(--g-hairline-3)" class="quick-btn" @click="showContacts = !showContacts" :disabled="!hasContacts">
+                  <v-icon size="x-small" :color="primaryColor" class="mr-1">mdi-book-open-variant-outline</v-icon>
                   {{ $t('miniGero.contacts') }}
                 </v-btn>
-                <v-btn small outlined color="var(--g-hairline-3)" class="quick-btn" @click="showQR = true">
-                  <v-icon x-small :color="primaryColor" class="mr-1">mdi-qrcode</v-icon>
+                <v-btn size="small" variant="outlined" color="var(--g-hairline-3)" class="quick-btn" @click="showQR = true">
+                  <v-icon size="x-small" :color="primaryColor" class="mr-1">mdi-qrcode</v-icon>
                   {{ $t('wallet.qrScan') }}
                 </v-btn>
-                <v-btn small outlined color="var(--g-hairline-3)" class="quick-btn" @click="pasteFromClipboard">
-                  <v-icon x-small :color="primaryColor" class="mr-1">mdi-content-paste</v-icon>
+                <v-btn size="small" variant="outlined" color="var(--g-hairline-3)" class="quick-btn" @click="pasteFromClipboard">
+                  <v-icon size="x-small" :color="primaryColor" class="mr-1">mdi-content-paste</v-icon>
                   {{ $t('common.paste') }}
                 </v-btn>
               </div>
@@ -55,21 +55,21 @@
               <v-textarea
                 v-model="address"
                 :placeholder="isMainnet ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
-                outlined
-                dense
-                dark
+                variant="outlined"
+                density="compact"
+                theme="dark"
                 rows="2"
                 no-resize
                 hide-details="auto"
                 :error-messages="addressError"
                 class="mini-input mt-2"
                 :loading="handleLoading"
-                @input="onAddressInput"
+                @update:model-value="onAddressInput"
               >
-                <template v-slot:append>
+                <template v-slot:append-inner>
                   <v-progress-circular v-if="handleLoading" size="18" width="2" indeterminate :color="primaryColor" />
-                  <v-icon v-else-if="handleResolved === false" color="error" small>mdi-alert</v-icon>
-                  <v-icon v-else-if="handleResolved === true" color="success" small>mdi-check-circle</v-icon>
+                  <v-icon v-else-if="handleResolved === false" color="error" size="small">mdi-alert</v-icon>
+                  <v-icon v-else-if="handleResolved === true" color="success" size="small">mdi-check-circle</v-icon>
                 </template>
               </v-textarea>
 
@@ -115,15 +115,15 @@
         <div class="stepper-step" :class="{ active: step === 2, done: step > 2, locked: step < 2 }">
           <div class="step-header" @click="editStep(2)">
             <div class="step-circle" :class="step > 2 ? 'done' : step === 2 ? 'active' : ''">
-              <v-icon v-if="step > 2" x-small color="var(--g-on-grad)">mdi-check</v-icon>
+              <v-icon v-if="step > 2" size="x-small" color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>2</span>
             </div>
             <div class="step-info">
               <span class="step-label">{{ $t('wallet.assetsToSend') }}</span>
               <span v-if="step > 2" class="step-summary">{{ assetsSummary }}</span>
             </div>
-            <v-btn v-if="step > 2 && !submitting" icon x-small @click.stop="editStep(2)">
-              <v-icon small :color="primaryColor">mdi-pencil</v-icon>
+            <v-btn v-if="step > 2 && !submitting" icon variant="text" size="x-small" @click.stop="editStep(2)">
+              <v-icon size="small" :color="primaryColor">mdi-pencil</v-icon>
             </v-btn>
           </div>
 
@@ -143,9 +143,9 @@
                   <v-text-field
                     v-model="adaAmount"
                     type="number"
-                    outlined
-                    dense
-                    dark
+                    variant="outlined"
+                    density="compact"
+                    theme="dark"
                     hide-details="auto"
                     :error-messages="adaError"
                     class="mini-input amount-field"
@@ -153,7 +153,7 @@
                     step="0.1"
                     min="0"
                   />
-                  <v-btn x-small text :color="primaryColor" class="max-btn" @click="setAdaMax">
+                  <v-btn size="x-small" variant="text" :color="primaryColor" class="max-btn" @click="setAdaMax">
                     {{ $t('miniGero.max') }}
                   </v-btn>
                 </div>
@@ -176,32 +176,32 @@
                   <span class="white--text text-body-2 font-weight-bold">{{ token.ticker || token.name }}</span>
                   <v-spacer />
                   <span class="grey--text text-caption">{{ formatTokenBalance(token) }}</span>
-                  <v-btn icon x-small class="ml-1" @click="removeExtraToken(idx)">
-                    <v-icon small color="error">mdi-close</v-icon>
+                  <v-btn icon variant="text" size="x-small" class="ml-1" @click="removeExtraToken(idx)">
+                    <v-icon size="small" color="error">mdi-close</v-icon>
                   </v-btn>
                 </div>
                 <div class="amount-row">
                   <v-text-field
                     v-model="token.sendAmount"
                     type="number"
-                    outlined
-                    dense
-                    dark
+                    variant="outlined"
+                    density="compact"
+                    theme="dark"
                     hide-details="auto"
                     class="mini-input amount-field"
                     placeholder="0"
                     step="1"
                     min="0"
                   />
-                  <v-btn x-small text :color="primaryColor" class="max-btn" @click="setTokenMax(idx)">
+                  <v-btn size="x-small" variant="text" :color="primaryColor" class="max-btn" @click="setTokenMax(idx)">
                     {{ $t('miniGero.max') }}
                   </v-btn>
                 </div>
               </div>
 
               <!-- Add Token button -->
-              <v-btn v-if="availableTokens.length > 0" small text :color="primaryColor" class="mt-2" @click="showTokenPicker = !showTokenPicker">
-                <v-icon small class="mr-1">mdi-plus</v-icon>
+              <v-btn v-if="availableTokens.length > 0" size="small" variant="text" :color="primaryColor" class="mt-2" @click="showTokenPicker = !showTokenPicker">
+                <v-icon size="small" class="mr-1">mdi-plus</v-icon>
                 {{ $t('assets.addToken') }}
               </v-btn>
 
@@ -211,9 +211,9 @@
                   <v-text-field
                     v-model="tokenSearch"
                     :placeholder="$t('assets.searchAssets')"
-                    outlined
-                    dense
-                    dark
+                    variant="outlined"
+                    density="compact"
+                    theme="dark"
                     hide-details
                     class="mini-input mb-1"
                     prepend-inner-icon="mdi-magnify"
@@ -243,8 +243,8 @@
 
               <!-- NFTs/Collectibles -->
               <div v-if="collectiblesList.length > 0" class="nft-section mt-3">
-                <v-btn small text :color="primaryColor" @click="showNfts = !showNfts">
-                  <v-icon small class="mr-1">{{ showNfts ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+                <v-btn size="small" variant="text" :color="primaryColor" @click="showNfts = !showNfts">
+                  <v-icon size="small" class="mr-1">{{ showNfts ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
                   {{ $t('assets.chooseCollectibles') }} ({{ collectiblesList.length }})
                   <span v-if="selectedNfts.length > 0" class="ml-1 nft-badge">{{ selectedNfts.length }}</span>
                 </v-btn>
@@ -254,9 +254,9 @@
                     <v-text-field
                       v-model="nftSearch"
                       :placeholder="$t('assets.searchAssets')"
-                      outlined
-                      dense
-                      dark
+                      variant="outlined"
+                      density="compact"
+                      theme="dark"
                       hide-details
                       class="mini-input mb-1"
                       prepend-inner-icon="mdi-magnify"
@@ -295,7 +295,7 @@
               </div>
 
               <div class="step-actions-row mt-4">
-                <v-btn text small color="var(--g-text-3)" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
                 <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!isAssetsValid" :loading="buildingTx" @click="goToStep(3)">
                   {{ $t('miniGero.review') }}
                 </v-btn>
@@ -308,7 +308,7 @@
         <div class="stepper-step" :class="{ active: step === 3, done: step > 3, locked: step < 3 }">
           <div class="step-header" @click="editStep(3)">
             <div class="step-circle" :class="step > 3 ? 'done' : step === 3 ? 'active' : ''">
-              <v-icon v-if="step > 3" x-small color="var(--g-on-grad)">mdi-check</v-icon>
+              <v-icon v-if="step > 3" size="x-small" color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>3</span>
             </div>
             <div class="step-info">
@@ -346,7 +346,7 @@
               </div>
 
               <div class="step-actions-row mt-4">
-                <v-btn text small color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
                 <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!txBuilt" @click="goToStep(4)">
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
@@ -374,15 +374,15 @@
                 <v-text-field
                   v-model="spendingPassword"
                   :type="showPassword ? 'text' : 'password'"
-                  outlined
-                  dense
-                  dark
+                  variant="outlined"
+                  density="compact"
+                  theme="dark"
                   hide-details="auto"
                   :error-messages="passwordError"
                   class="mini-input"
                   :placeholder="$t('miniGero.enterPassword')"
-                  :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                  @click:append="showPassword = !showPassword"
+                  :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                  @click:append-inner="showPassword = !showPassword"
                   @keydown.enter="signAndSubmit"
                 />
                 <v-btn
@@ -393,7 +393,7 @@
                   :loading="submitting"
                   @click="signAndSubmit"
                 >
-                  <v-icon left small>mdi-send</v-icon>
+                  <v-icon start size="small">mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
                 <div v-if="requiresRemoteForSend" class="text-caption grey--text text-center mt-2">
@@ -402,14 +402,14 @@
                 <v-btn
                   v-if="canSignOnAnotherDevice"
                   block
-                  outlined
+                  variant="outlined"
                   :color="primaryColor"
                   class="font-weight-bold mt-3"
                   :disabled="submitting"
                   :loading="submitting"
                   @click="signOnAnotherDevice()"
                 >
-                  <v-icon left small>mdi-cellphone-link</v-icon>
+                  <v-icon start size="small">mdi-cellphone-link</v-icon>
                   {{ $t('crossDevice.signOnAnotherDevice') }}
                 </v-btn>
               </template>
@@ -436,7 +436,7 @@
                   :loading="submitting"
                   @click="submitSignedTx"
                 >
-                  <v-icon left small>mdi-send</v-icon>
+                  <v-icon start size="small">mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
                 <div v-if="requiresRemoteForSend" class="text-caption grey--text text-center mt-2">
@@ -450,11 +450,11 @@
                   <v-icon size="40" :color="primaryColor" class="mb-2">mdi-usb</v-icon>
                   <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.connectLedger') }}</div>
                   <div v-if="loggedWallet?.btSupported" class="d-flex align-center justify-center mb-2" style="gap: 8px;">
-                    <v-btn x-small :outlined="isBT" :color="!isBT ? primaryColor : 'var(--g-text-3)'" class="black--text" @click="isBT = false">
-                      <v-icon x-small class="mr-1">mdi-usb</v-icon> USB
+                    <v-btn size="x-small" :variant="isBT ? 'outlined' : 'elevated'" :color="!isBT ? primaryColor : 'var(--g-text-3)'" class="black--text" @click="isBT = false">
+                      <v-icon size="x-small" class="mr-1">mdi-usb</v-icon> USB
                     </v-btn>
-                    <v-btn x-small :outlined="!isBT" :color="isBT ? primaryColor : 'var(--g-text-3)'" class="black--text" @click="isBT = true">
-                      <v-icon x-small class="mr-1">mdi-bluetooth</v-icon> BT
+                    <v-btn size="x-small" :variant="!isBT ? 'outlined' : 'elevated'" :color="isBT ? primaryColor : 'var(--g-text-3)'" class="black--text" @click="isBT = true">
+                      <v-icon size="x-small" class="mr-1">mdi-bluetooth</v-icon> BT
                     </v-btn>
                   </div>
                 </div>
@@ -466,7 +466,7 @@
                   :loading="submitting"
                   @click="signLedger"
                 >
-                  <v-icon left small>mdi-draw</v-icon>
+                  <v-icon start size="small">mdi-draw</v-icon>
                   {{ $t('wallet.sign') }}
                 </v-btn>
               </template>
@@ -485,7 +485,7 @@
                   :loading="submitting"
                   @click="signTrezor"
                 >
-                  <v-icon left small>mdi-draw</v-icon>
+                  <v-icon start size="small">mdi-draw</v-icon>
                   {{ $t('wallet.sign') }}
                 </v-btn>
               </template>
@@ -504,7 +504,7 @@
                   :loading="submitting"
                   @click="signKeystone"
                 >
-                  <v-icon left small>mdi-qrcode-scan</v-icon>
+                  <v-icon start size="small">mdi-qrcode-scan</v-icon>
                   {{ $t('wallet.sign') }}
                 </v-btn>
               </template>
@@ -515,7 +515,7 @@
               </div>
 
               <div class="step-actions-row mt-3">
-                <v-btn text small color="var(--g-text-3)" block @click="editStep(3)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn variant="text" size="small" color="var(--g-text-3)" block @click="editStep(3)">{{ $t('miniGero.back') }}</v-btn>
               </div>
             </div>
           </v-expand-transition>
@@ -539,13 +539,13 @@
       :keystoneCbor="keystoneCbor"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
-      @close="showKeystoneDialog = false"
+      @close="closeKeystone"
     />
   </BottomSheet>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, toRefs } from 'vue';
+import { ref, computed, watch, nextTick, toRefs, shallowRef, onScopeDispose, provide } from 'vue';
 import debounce from 'lodash/debounce';
 import BottomSheet from '../BottomSheet.vue';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
@@ -578,12 +578,14 @@ import i18n from '@/plugins/i18n';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { useChainContext } from '../../composables/useChainContext';
+import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
+import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
-const props = defineProps<{ value: boolean }>();
-const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
+const props = defineProps<{ modelValue: boolean }>();
+const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
 const { loggedWallet, utxos, tokens: resolvedAssets, keys, contacts, collections: resolvedCollections, config: _config } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);
@@ -666,7 +668,7 @@ let nftObserver: IntersectionObserver | null = null;
 const minAda = ref(0);
 
 // Step 3: Review
-const tx = ref<Cardano.Tx | undefined>(undefined);
+const tx = shallowRef<Cardano.Tx | undefined>(undefined);
 const txFee = ref<bigint>(BigInt(0));
 const txBuilt = ref(false);
 const txBuildError = ref('');
@@ -677,6 +679,7 @@ const spendingPassword = ref('');
 const passwordError = ref('');
 const showPassword = ref(false);
 const submitting = ref(false);
+const broadcasting = ref(false);
 const txSuccess = ref(false);
 const txId = ref('');
 const txCbor = ref('');
@@ -723,6 +726,89 @@ const requiresRemoteForSend = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO &&
   isNormalWallet.value
 );
+
+interface SendApproval {
+  current: () => boolean;
+  cbor: string;
+  transaction: Cardano.Tx;
+  inputs: typeof utxos.value;
+  addresses: typeof keys.value;
+  wallet: typeof loggedWallet.value;
+  password: string;
+  dispatched: boolean;
+}
+let authorizedSend: SendApproval | null = null;
+let keystoneApproval: { attempt: SendApproval; requestId: string } | null = null;
+const approval = useApprovalFreshness(() => [
+  loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
+  loggedWallet.value?.webAuthnCredentialId, walletStore.isLocked,
+  address.value, paymentAddress.value, adaAmount.value, extraTokens.value,
+  selectedNfts.value, tx.value, step.value, requiresRemoteForSend.value,
+], () => props.modelValue && !!loggedWallet.value?.id && !walletStore.isLocked, () => {
+  authorizedSend = null;
+  keystoneApproval = null;
+  txCbor.value = '';
+  txWitnesses.value = '';
+  privateKeyBytes.value?.fill(0);
+  privateKeyBytes.value = null;
+  spendingPassword.value = '';
+  showKeystoneDialog.value = false;
+});
+
+// A raw SDK object can be mutated outside Vue; bind the PassKey ceremony to its
+// bytes as well as the reactive form context.
+provide(authorizationScopeKey, { capture: () => {
+  const current = approval.capture();
+  const transaction = tx.value;
+  const cbor = transaction ? serializeCardanoJsSdkTx(transaction) : '';
+  return () => {
+    if (!current() || tx.value !== transaction) return false;
+    try { return (transaction ? serializeCardanoJsSdkTx(transaction) : '') === cbor; }
+    catch { return false; }
+  };
+} });
+
+function captureSend(): SendApproval | null {
+  if (!tx.value || txSuccess.value || !approval.capture()()) return null;
+  const transaction = tx.value;
+  const cbor = serializeCardanoJsSdkTx(transaction);
+  const fresh = approval.capture();
+  return {
+    current: () => {
+      if (!fresh() || tx.value !== transaction) return false;
+      try { return serializeCardanoJsSdkTx(transaction) === cbor; }
+      catch { return false; }
+    },
+    cbor,
+    transaction: Serialization.Transaction.fromCbor(HexBlob(cbor)).toCore(),
+    inputs: utxos.value.slice(),
+    addresses: keys.value,
+    wallet: { ...loggedWallet.value },
+    password: spendingPassword.value,
+    dispatched: false,
+  };
+}
+
+async function withSigning(work: (attempt: SendApproval) => Promise<void>, attempt = captureSend()) {
+  if (!attempt || !attempt.current()) return;
+  await approval.run(async () => {
+    if (!attempt.current()) return;
+    submitting.value = true;
+    passwordError.value = '';
+    authorizedSend = attempt;
+    txCbor.value = attempt.cbor;
+    try { await work(attempt); }
+    catch (error) {
+      if (attempt.current() && !(error instanceof StaleApprovalError)) {
+        passwordError.value = getErrorMessage(error, 'Transaction failed') || 'Transaction failed';
+      }
+    } finally {
+      attempt.password = '';
+      spendingPassword.value = '';
+      submitting.value = false;
+    }
+  });
+}
 
 const contactsList = computed(() => {
   const c = contacts.value;
@@ -843,6 +929,9 @@ function onAddressInput(val: string) {
   handleResolved.value = undefined;
   handleAsset.value = null;
   handleName.value = '';
+  handleLoading.value = false;
+  paymentAddress.value = '';
+  resolveAdaHandle.cancel();
 
   if (addr.startsWith('$') && isMainnet.value) {
     resolveAdaHandle(addr);
@@ -852,6 +941,8 @@ function onAddressInput(val: string) {
 }
 
 const resolveAdaHandle = debounce(async (val: string) => {
+  const current = approval.capture();
+  if (!current() || address.value !== val) return;
   if (val.length <= 1) {
     handleResolved.value = false;
     return;
@@ -859,6 +950,7 @@ const resolveAdaHandle = debounce(async (val: string) => {
   handleLoading.value = true;
   try {
     const res = await adaHandleApi.resolve(val.replace('$', ''));
+    if (!current() || address.value !== val) return;
     if (res.status === 200 && res.data?.resolved_addresses?.ada) {
       handleAsset.value = {
         name: res.data.name,
@@ -871,9 +963,9 @@ const resolveAdaHandle = debounce(async (val: string) => {
       handleResolved.value = false;
     }
   } catch {
-    handleResolved.value = false;
+    if (current() && address.value === val) handleResolved.value = false;
   } finally {
-    handleLoading.value = false;
+    if (address.value === val) handleLoading.value = false;
   }
 }, 1000);
 
@@ -890,8 +982,10 @@ function onQRScan(addr: string) {
 }
 
 async function pasteFromClipboard() {
+  const current = approval.capture();
   try {
     const text = await navigator.clipboard.readText();
+    if (!current()) return;
     address.value = text.trim();
     onAddressInput(address.value);
   } catch (e) {
@@ -964,6 +1058,9 @@ function formatTokenBalance(token: SendToken): string {
 
 // ── Step 3: Build transaction ──
 async function buildTransaction() {
+  if (buildingTx.value || !isAssetsValid.value || !isAddressValid.value) return false;
+  const current = approval.capture();
+  if (!current()) return false;
   txBuilt.value = false;
   txBuildError.value = '';
   buildingTx.value = true;
@@ -971,16 +1068,16 @@ async function buildTransaction() {
   try {
     // Sync network data if missing
     if (!tip.value || !epochParams.value) {
-      const response = await Messaging.sendToBackgroundFromOptions({
+      const response = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SYNC_VIA_REST,
         data: {}
-      }) as BackgroundResponse<{ success: boolean }>;
+      }), current) as BackgroundResponse<{ success: boolean }>;
       if (response.data.success) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await awaitFreshApproval(() => new Promise(resolve => setTimeout(resolve, 200)), current);
       }
       if (!tip.value || !epochParams.value) {
         txBuildError.value = 'Network data not available. Please try again.';
-        return;
+        return false;
       }
     }
 
@@ -1011,7 +1108,7 @@ async function buildTransaction() {
 
     // Enforce minimum ADA for outputs with multi-assets using the same SDK function as the builder
     if (assetsMap.size > 0 && epochParams.value?.coinsPerUtxoByte) {
-      const getMinCoin = computeMinimumCoinQuantity(BigInt(epochParams.value.coinsPerUtxoByte));
+      const getMinCoin = computeMinimumCoinQuantity(Number(epochParams.value.coinsPerUtxoByte));
       const checkOutput: Cardano.TxOut = {
         address: recipientAddr,
         value: { coins: coinsAmount as Cardano.Lovelace, assets: assetsMap }
@@ -1040,13 +1137,15 @@ async function buildTransaction() {
         requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
       }),
     };
-    const { tx_cbor } = await nexusTxApi.buildTransferTx(request, loggedWallet.value.network);
+    const { tx_cbor } = await awaitFreshApproval(() => nexusTxApi.buildTransferTx(request, loggedWallet.value.network), current);
     if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
     tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
 
     txFee.value = tx.value.body.fee;
     txBuilt.value = true;
+    return true;
   } catch (e: unknown) {
+    if (!current() || e instanceof StaleApprovalError) return false;
     const msg = typeof e === 'string' ? e : (getErrorMessage(e, String(e)) || String(e));
     if (msg.includes('Insufficient input')) {
       txBuildError.value = 'Insufficient balance to cover this transaction + fees.';
@@ -1064,6 +1163,7 @@ async function buildTransaction() {
       txBuildError.value = msg;
     }
     console.error('Build tx error:', e);
+    return false;
   } finally {
     buildingTx.value = false;
   }
@@ -1089,7 +1189,7 @@ function recalcMinAda() {
   try {
     // Use the exact same SDK function the transaction builder uses (computeMinimumCoinQuantity)
     // This is the authoritative Cardano protocol calculation for minimum UTXO value
-    const getMinCoin = computeMinimumCoinQuantity(BigInt(epochParams.value.coinsPerUtxoByte));
+    const getMinCoin = computeMinimumCoinQuantity(Number(epochParams.value.coinsPerUtxoByte));
     const mockOutput: Cardano.TxOut = {
       address: paymentAddress.value as Cardano.PaymentAddress,
       value: { coins: BigInt(0) as Cardano.Lovelace, assets: assetsMap }
@@ -1103,292 +1203,187 @@ function recalcMinAda() {
 
 // ── Step 4: Sign & Submit ──
 async function signAndSubmit() {
-  if (!tx.value) return;
-  // Policy gate: local signing disabled, Send must be approved on a trusted device.
   if (requiresRemoteForSend.value) {
     passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
     return;
   }
-  passwordError.value = '';
-  submitting.value = true;
-
-  try {
-    // Verify password
-    const pwResult = await Messaging.sendToBackgroundFromOptions({
+  await withSigning(async attempt => {
+    const pwResult = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value }
-    }) as BackgroundResponse<VerifyPasswordResponse>;
-
+      data: { password: attempt.password },
+    }), attempt.current) as BackgroundResponse<VerifyPasswordResponse>;
     if (!pwResult.data.success) {
       passwordError.value = 'Wrong spending password';
       return;
     }
-
-    // Sign
-    const txCbor = serializeCardanoJsSdkTx(tx.value);
-    const signResult = await Messaging.sendToBackgroundFromOptions({
+    const signResult = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
-        txCbor,
-        partialSign: false,
-        password: spendingPassword.value,
-        accountIndex: 0,
-        utxos: utxos.value,
-        addresses: keys.value,
-        mergeWitnesses: false,
-      }
-    }) as { data: { witnesses?: string; error?: string } };
-
+        txCbor: attempt.cbor, partialSign: false, password: attempt.password,
+        accountIndex: 0, utxos: attempt.inputs, addresses: attempt.addresses, mergeWitnesses: false,
+      },
+    }), attempt.current) as { data: { witnesses?: string; error?: string } };
     if (signResult.data.error) throw new Error(signResult.data.error);
-
-    // Submit
-    const submitResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor,
-        witnessHex: signResult.data.witnesses,
-        utxos: utxos.value
-      }
-    }) as { data: { txId?: string; error?: string } };
-
-    if (submitResult.data.error) throw new Error(submitResult.data.error);
-
-    txId.value = submitResult.data.txId || '';
-    txSuccess.value = true;
-    snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
-  } catch (e: unknown) {
-    console.error('Sign/submit error:', e);
-    passwordError.value = getErrorMessage(e, 'Transaction failed') || 'Transaction failed';
-  } finally {
-    spendingPassword.value = '';
-    submitting.value = false;
-  }
+    await submitApproved(attempt, signResult.data.witnesses || '');
+  });
 }
 
-// ── Cross-device signing (this device proposes, another device signs) ──
 async function signOnAnotherDevice() {
-  if (!tx.value) return;
-  passwordError.value = '';
-  submitting.value = true;
-  try {
-    // Serialize the ORIGINAL unsigned tx and hand it to the other device.
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const result = await Messaging.sendToBackgroundFromOptions({
+  if (!canSignOnAnotherDevice.value) return;
+  await withSigning(async attempt => {
+    const result = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
       data: {
-        unsignedCbor: txCbor.value,
+        unsignedCbor: attempt.cbor,
         intent: i18n.t('crossDevice.intentSend', { amount: adaAmount.value || '0' }) as string,
-        stakeAddress: loggedWallet.value?.stakeAddress,
+        stakeAddress: attempt.wallet.stakeAddress,
         ttlMs: 180000,
       },
-    }) as { data: { decision?: string; witnessSetCbor?: string; reason?: string } };
-
-    const decision = result.data.decision;
-    if (decision === 'approved' && result.data.witnessSetCbor) {
-      // Apply the externally-signed witness set via the existing submit path.
-      // SUBMIT_TX re-checks the body hash before submitting.
-      txWitnesses.value = result.data.witnessSetCbor;
-      await submitSignedTx();
-    } else if (result.data.reason === 'expired') {
-      passwordError.value = i18n.t('crossDevice.requestExpired') as string;
+    }), attempt.current) as { data: { decision?: string; witnessSetCbor?: string; reason?: string } };
+    if (result.data.decision === 'approved' && result.data.witnessSetCbor) {
+      await submitApproved(attempt, result.data.witnessSetCbor);
     } else {
-      passwordError.value = i18n.t('crossDevice.requestRejected') as string;
+      passwordError.value = i18n.t(result.data.reason === 'expired'
+        ? 'crossDevice.requestExpired' : 'crossDevice.requestRejected') as string;
     }
-  } catch (e: unknown) {
-    console.error('Cross-device sign error:', e);
-    const rejected = i18n.t('crossDevice.requestRejected') as string;
-    passwordError.value = getErrorMessage(e, rejected) || rejected;
-  } finally {
-    submitting.value = false;
-  }
+  });
 }
 
-// ── PRF (PassKey) signing ──
 async function onPassKeySuccess(pkBytes: Uint8Array) {
-  privateKeyBytes.value = pkBytes;
-  // Sign and submit using the private key bytes
-  if (!tx.value) return;
-  // Policy gate: local signing disabled, Send must be approved on a trusted device.
-  if (requiresRemoteForSend.value) {
-    passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
-    return;
-  }
-  passwordError.value = '';
-  submitting.value = true;
   try {
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const signResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: {
-        txCbor: txCbor.value,
-        partialSign: false,
-        accountIndex: 0,
-        utxos: utxos.value,
-        addresses: keys.value,
-        mergeWitnesses: false,
-        privateKeyBytes: Array.from(pkBytes),
-      }
-    }) as { data: { witnesses?: string; error?: string } };
-
-    if (signResult.data.error) throw new Error(signResult.data.error);
-    txWitnesses.value = signResult.data.witnesses || '';
-
-    // Auto-submit
-    await submitSignedTx();
-  } catch (e: unknown) {
-    console.error('PRF sign/submit error:', e);
-    passwordError.value = getErrorMessage(e, 'Transaction failed') || 'Transaction failed';
+    if (requiresRemoteForSend.value) {
+      passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
+      return;
+    }
+    await withSigning(async attempt => {
+      privateKeyBytes.value = pkBytes;
+      const signResult = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SIGN_TX,
+        data: {
+          txCbor: attempt.cbor, partialSign: false, accountIndex: 0,
+          utxos: attempt.inputs, addresses: attempt.addresses, mergeWitnesses: false,
+          privateKeyBytes: Array.from(pkBytes),
+        },
+      }), attempt.current) as { data: { witnesses?: string; error?: string } };
+      if (signResult.data.error) throw new Error(signResult.data.error);
+      await submitApproved(attempt, signResult.data.witnesses || '');
+    });
   } finally {
-    submitting.value = false;
+    pkBytes.fill(0);
+    if (privateKeyBytes.value === pkBytes) privateKeyBytes.value = null;
   }
 }
 
 function onPassKeyError(error: Error) {
-  console.error('PassKey authentication error:', error);
-  passwordError.value = error.message || 'PassKey authentication failed';
+  if (approval.capture()()) passwordError.value = error.message || 'PassKey authentication failed';
+  privateKeyBytes.value?.fill(0);
   privateKeyBytes.value = null;
 }
 
-// ── Ledger signing ──
 async function signLedger() {
-  if (!tx.value) return;
-  submitting.value = true;
-  passwordError.value = '';
-  // The device holds the transaction on its own screen; without this the sheet
-  // shows only a button spinner that cannot resolve until the user acts on it.
-  hardwareLoading.begin('Ledger', i18n.t('wallet.ledgerPreparingTransaction') as string);
-  try {
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
-      tx.value,
-      keys.value,
-      utxos.value,
-      !isBT.value,
-      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
-    );
-    const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
-    txWitnesses.value = transactionWitnessSet.toCbor();
-    await submitSignedTx();
-  } catch (e: unknown) {
-    ledgerUtils.ledgerErrorHandling(e);
-    passwordError.value = getErrorMessage(e, 'Ledger signing failed') || 'Ledger signing failed';
-  } finally {
-    submitting.value = false;
-    hardwareLoading.end();
-  }
+  await withSigning(async attempt => {
+    hardwareLoading.begin('Ledger', i18n.t('wallet.ledgerPreparingTransaction') as string);
+    try {
+      const signatures = await awaitFreshApproval(() => ledgerUtils.txToLedger(
+        attempt.transaction, attempt.addresses, attempt.inputs as Cardano.Utxo[], !isBT.value,
+        networks.resolveNetwork(attempt.wallet.chain, attempt.wallet.network),
+      ), attempt.current);
+      const witness = Serialization.TransactionWitnessSet.fromCore({ signatures }).toCbor();
+      await submitApproved(attempt, witness);
+    } catch (error) {
+      if (attempt.current() && !(error instanceof StaleApprovalError)) ledgerUtils.ledgerErrorHandling(error);
+      throw error;
+    } finally { hardwareLoading.end(); }
+  });
 }
 
-// ── Trezor signing ──
 async function signTrezor() {
-  if (!tx.value) return;
-  submitting.value = true;
-  passwordError.value = '';
-  // Trezor reports no intermediate stages, so this one label covers the whole
-  // call — connecting through the confirmation the device is waiting on.
-  hardwareLoading.begin('Trezor', i18n.t('wallet.confirmOnTrezor') as string);
-  try {
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const data = {
-      method: 'signTx',
-      txCbor: txCbor.value,
-    };
-    const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
-      ? await dispatchTrezor(data)
-      : await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.TREZOR,
-        data,
-      })) as BackgroundResponse<SignTxResponse>;
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Trezor signing failed');
-    }
-
-    // Device work is done — drop the prompt before the network submit below,
-    // which is not something the user does anything about on the device.
-    hardwareLoading.end();
-
-    const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
-    const signatures: Cardano.Signatures = new Map(signaturesArray);
-    const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
-    txWitnesses.value = transactionWitnessSet.toCbor();
-    await submitSignedTx();
-  } catch (e: unknown) {
-    if (e instanceof Error) {
-      if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
-        passwordError.value = 'Transaction cancelled on Trezor';
-      } else {
-        passwordError.value = e.message;
-      }
-    } else {
-      passwordError.value = 'Trezor signing failed';
-    }
-  } finally {
-    submitting.value = false;
-    hardwareLoading.end();
-  }
+  await withSigning(async attempt => {
+    hardwareLoading.begin('Trezor', i18n.t('wallet.confirmOnTrezor') as string);
+    try {
+      const data = { method: 'signTx', txCbor: attempt.cbor };
+      const response = await awaitFreshApproval(() => featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+        ? dispatchTrezor(data)
+        : Messaging.sendToBackgroundFromOptions({ method: MessageTypes.TREZOR, data }),
+      attempt.current) as BackgroundResponse<SignTxResponse>;
+      if (!response.data.success) throw new Error(response.data.error || 'Trezor signing failed');
+      hardwareLoading.end();
+      const signatures = new Map(response.data.signatures as unknown as Array<[string, string]>) as Cardano.Signatures;
+      const witness = Serialization.TransactionWitnessSet.fromCore({ signatures }).toCbor();
+      await submitApproved(attempt, witness);
+    } finally { hardwareLoading.end(); }
+  });
 }
 
-// ── Keystone signing ──
 function signKeystone() {
-  if (!tx.value) return;
+  if (submitting.value) return;
+  const attempt = captureSend();
+  if (!attempt) return;
   passwordError.value = '';
   try {
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor.value));
     const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
-      txSerialized, loggedWallet.value, utxos.value, keys.value
+      Serialization.Transaction.fromCbor(HexBlob(attempt.cbor)), attempt.wallet,
+      attempt.inputs as Cardano.Utxo[], attempt.addresses,
     );
+    authorizedSend = attempt;
+    keystoneApproval = { attempt, requestId: signRequestResponse.requestId };
+    txCbor.value = attempt.cbor;
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
     showKeystoneDialog.value = true;
-  } catch (e: unknown) {
-    console.error('Keystone sign request error:', e);
-    passwordError.value = getErrorMessage(e, 'Failed to create Keystone sign request') || 'Failed to create Keystone sign request';
+  } catch (error) {
+    if (attempt.current()) passwordError.value = getErrorMessage(error, 'Failed to create Keystone sign request');
   }
 }
 
 async function onKeystoneScan(ur: UR) {
-  try {
+  const qr = keystoneApproval;
+  if (!qr || !showKeystoneDialog.value || !qr.attempt.current() || submitting.value) return;
+  await withSigning(async attempt => {
     const signature = parseSignature(ur);
-    if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-      throw new Error('Invalid Keystone signature');
+    if (signature.requestId !== qr.requestId || !signature.witnessSet || typeof signature.witnessSet !== 'string') {
+      throw new Error('Keystone signature does not match this approval');
     }
-    txWitnesses.value = signature.witnessSet;
+    keystoneApproval = null;
     showKeystoneDialog.value = false;
-    submitting.value = true;
-    await submitSignedTx();
-  } catch (e: unknown) {
-    console.error('[Keystone] Error processing QR code:', e);
-    passwordError.value = getErrorMessage(e, 'Keystone QR scan error') || 'Keystone QR scan error';
-    showKeystoneDialog.value = false;
+    await submitApproved(attempt, signature.witnessSet);
+  }, qr.attempt);
+}
+
+function closeKeystone() { approval.invalidate(); }
+
+function onKeystoneError(error: string) {
+  if (keystoneApproval?.attempt.current()) passwordError.value = error || 'Keystone scan error';
+  closeKeystone();
+}
+
+async function submitApproved(attempt: SendApproval, witnessHex: string) {
+  if (!attempt.current() || authorizedSend !== attempt || attempt.dispatched) throw new StaleApprovalError();
+  if (!witnessHex) throw new Error('Missing transaction witnesses');
+  txWitnesses.value = witnessHex;
+  attempt.dispatched = true;
+  // Dispatch cannot be cancelled. Keep its result visible, but retain normal
+  // cancellation while authentication or signing is still pending.
+  broadcasting.value = true;
+  try {
+    const result = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: { txCbor: attempt.cbor, witnessHex, utxos: attempt.inputs },
+    }), attempt.current) as { data: { txId?: string; error?: string } };
+    if (result.data.error) throw new Error(result.data.error);
+    txId.value = result.data.txId || '';
+    txSuccess.value = true;
+    snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
   } finally {
-    submitting.value = false;
+    broadcasting.value = false;
   }
 }
 
-function onKeystoneError(error: string) {
-  console.error('[Keystone] Scanner error:', error);
-  passwordError.value = error || 'Keystone scan error';
-  showKeystoneDialog.value = false;
-}
-
-// ── Submit signed transaction ──
 async function submitSignedTx() {
-  const submitResult = await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.SUBMIT_TX,
-    data: {
-      txCbor: txCbor.value,
-      witnessHex: txWitnesses.value,
-      utxos: utxos.value,
-    }
-  }) as { data: { txId?: string; error?: string } };
-
-  if (submitResult.data.error) throw new Error(submitResult.data.error);
-
-  txId.value = submitResult.data.txId || '';
-  txSuccess.value = true;
-  snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
+  const attempt = authorizedSend;
+  const witnesses = txWitnesses.value;
+  if (attempt) await withSigning(() => submitApproved(attempt, witnesses), attempt);
 }
 
 // ── Navigation ──
@@ -1399,14 +1394,15 @@ function editStep(target: number) {
 }
 
 async function goToStep(target: number) {
+  if (submitting.value || buildingTx.value) return;
   if (target === 2 && !isAddressValid.value) return;
   if (target === 3) {
-    await buildTransaction();
-    if (!txBuilt.value) return;
+    if (!await buildTransaction()) return;
   }
   step.value = target;
+  const current = approval.capture();
   await nextTick();
-  scrollToActiveStep();
+  if (current()) scrollToActiveStep();
 }
 
 function scrollToActiveStep() {
@@ -1428,18 +1424,15 @@ function copyTxId() {
   if (txId.value) navigator.clipboard.writeText(txId.value).catch(() => {});
 }
 
-function _openDashboardSend() {
-  const url = chrome.runtime.getURL('index.html#/dashboard');
-  window.open(url, '_blank');
-}
-
 function onClose(val: boolean) {
-  if (!val) {
-    emit('input', false);
+  if (!val && !broadcasting.value) {
+    approval.invalidate();
+    emit('update:modelValue', false);
   }
 }
 
 function resetAll() {
+  approval.invalidate();
   step.value = 1;
   address.value = '';
   paymentAddress.value = '';
@@ -1483,9 +1476,22 @@ function resetAll() {
 }
 
 // ── Watchers ──
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   if (val) resetAll();
 });
+
+function clearBuiltTransaction() {
+  tx.value = undefined;
+  txBuilt.value = false;
+}
+// Compare primitive sources individually so an equal wallet broadcast does not
+// clear the approved transaction. Asset edits still need synchronous deep watches.
+watch([
+  () => loggedWallet.value?.id, () => loggedWallet.value?.chain, () => loggedWallet.value?.network,
+  address, paymentAddress, adaAmount,
+], clearBuiltTransaction, { flush: 'sync' });
+watch([extraTokens, selectedNfts], clearBuiltTransaction, { deep: true, flush: 'sync' });
+onScopeDispose(() => { resolveAdaHandle.cancel(); teardownNftObserver(); });
 
 // Recalculate minAda when assets change
 watch([extraTokens, selectedNfts], () => {
@@ -1651,13 +1657,19 @@ function teardownNftObserver() {
 }
 
 /* ── Inputs ── */
-.mini-input >>> .v-input__slot {
+.mini-input :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-hairline-1) !important;
-  border-color: var(--g-hairline-2) !important;
   min-height: 36px !important;
 }
-.mini-input >>> .v-text-field__slot input,
-.mini-input >>> .v-text-field__slot textarea {
+.mini-input :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2);
+}
+.mini-input :deep(input.v-field__input),
+.mini-input :deep(textarea.v-field__input) {
   color: var(--g-text-1) !important;
   font-size: 13px;
 }
@@ -1731,7 +1743,7 @@ function teardownNftObserver() {
 .amount-row {
   position: relative;
 }
-.amount-field >>> .v-text-field__slot input {
+.amount-field :deep(input.v-field__input) {
   font-size: 20px !important;
   font-weight: 600;
 }

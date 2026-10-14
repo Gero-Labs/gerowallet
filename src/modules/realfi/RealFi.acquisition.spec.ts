@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
 import { reactive, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +16,7 @@ const tokenCatalogStore = vi.hoisted(() => {
   store.state = store;
   return store;
 });
-const mountedPages: Array<{ destroy: () => void }> = [];
+const mountedPages: Array<{ unmount: () => void }> = [];
 const wallet = reactive<{ id: number; network: string; chain: string; baseAddress: string }>({
   id: 1,
   network: 'Mainnet',
@@ -49,11 +51,11 @@ const state = {
 vi.mock('./composables/useRealFi', () => ({ useRealFi: () => state }));
 vi.mock('./components/RealFiOrderFlow.vue', () => ({
   __esModule: true,
-  default: { name: 'RealFiOrderFlow', render: (h: (tag: string) => unknown) => h('div') },
+  default: { name: 'RealFiOrderFlow', render: () => Vue.h('div') },
 }));
 vi.mock('./components/RealFiAmountDialog.vue', () => ({
   __esModule: true,
-  default: { name: 'RealFiAmountDialog', render: (h: (tag: string) => unknown) => h('div') },
+  default: { name: 'RealFiAmountDialog', render: () => Vue.h('div') },
 }));
 vi.mock('@/stores/featureFlagsStore', () => ({
   default: {
@@ -79,7 +81,7 @@ vi.mock('@/modules/dashboard/dialogs/SwapDialog.vue', () => ({
   default: {
     name: 'SwapDialog',
     props: ['isOpen', 'sellTokenUnit', 'buyTokenUnit'],
-    render: (h: (tag: string) => unknown) => h('div'),
+    render: () => Vue.h('div'),
   },
 }));
 
@@ -98,20 +100,16 @@ async function settle(page: { vm: { $nextTick(): Promise<void> } }) {
 }
 
 async function mountPage() {
-  const page = mount(RealFi, {
-    mocks: {
-      $t: (key: string, values?: Record<string, unknown>) =>
-        values ? `${key}${JSON.stringify(values)}` : key,
-      $tc: (key: string, n: number) => `${key}(${n})`,
-    },
-    stubs: {
+  const page = mount(RealFi, { global: { config: { globalProperties: mockGlobalProperties({
+      $t: (key: string, values?: Record<string, unknown> | number) =>
+        typeof values === 'number' ? `${key}(${values})` : values ? `${key}${JSON.stringify(values)}` : key,
+    }) }, stubs: {
       'v-layout': { template: '<div><slot /></div>' },
       'v-row': { template: '<div><slot /></div>' },
       'v-col': { template: '<div><slot /></div>' },
-      'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+      'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
       'v-progress-circular': true,
-    },
-  });
+    } } });
   await settle(page);
   mountedPages.push(page);
   return page;
@@ -120,7 +118,7 @@ async function mountPage() {
 type Page = Awaited<ReturnType<typeof mountPage>>;
 
 function button(page: Page, label: string) {
-  const found = page.findAll('button').wrappers.find((item) => item.text() === label);
+  const found = page.findAll('button').find((item) => item.text() === label);
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }
@@ -167,7 +165,7 @@ describe('RealFi acquisition', () => {
   });
 
   afterEach(() => {
-    mountedPages.splice(0).forEach((page) => page.destroy());
+    mountedPages.splice(0).forEach((page) => page.unmount());
     vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
@@ -175,7 +173,7 @@ describe('RealFi acquisition', () => {
   it('shows eligibility before either acquisition option and never marks an external click complete', async () => {
     swapEnabled.value = true;
     const page = await mountPage();
-    const labels = page.findAll('.realfi-getting-started__step .t-label').wrappers.map((item) => item.text());
+    const labels = page.findAll('.realfi-getting-started__step .t-label').map((item) => item.text());
     expect(labels.slice(0, 4)).toEqual([
       'realfi.gettingStarted.eligibilityTitle',
       'realfi.gettingStarted.usdcxTitle',
@@ -368,7 +366,7 @@ describe('RealFi acquisition', () => {
     state.canTransact.value = false;
     const page = await mountPage();
     expect(page.text()).toContain('realfi.gettingStarted.getUsdrf');
-    expect(page.findAll('button').wrappers.map((item) => item.text())).not.toContain('realfi.stakeAction');
+    expect(page.findAll('button').map((item) => item.text())).not.toContain('realfi.stakeAction');
     expect(page.find('.realfi-guide-disclosure').exists()).toBe(true);
   });
 
@@ -380,7 +378,7 @@ describe('RealFi acquisition', () => {
     });
 
     function guideButtons(page: Page): string[] {
-      return page.findAll('.realfi-getting-started__actions button').wrappers.map((item) => item.text());
+      return page.findAll('.realfi-getting-started__actions button').map((item) => item.text());
     }
 
     it('offers ADA to USDCx while USDrf is missing from the swap catalogue', async () => {

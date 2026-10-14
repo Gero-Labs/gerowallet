@@ -11,8 +11,8 @@
         <div class="text-caption babylon-subtitle">{{ $t('babylon.subtitle') }}</div>
       </div>
       <v-spacer />
-      <v-btn small icon :loading="loading" @click="refresh" class="refresh-btn">
-        <v-icon small>mdi-refresh</v-icon>
+      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh" class="refresh-btn">
+        <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
 
@@ -20,11 +20,11 @@
     <v-alert
       v-if="error"
       type="warning"
-      outlined
-      dense
-      dismissible
+      variant="outlined"
+      density="compact"
+      closable
       class="mb-3"
-      @input="error = null"
+      @update:model-value="error = null"
       style="border-radius: var(--g-r-control) !important;"
     >{{ error }}</v-alert>
 
@@ -39,13 +39,13 @@
           <div class="intro-body">{{ $t('babylon.intro.body') }}</div>
           <div class="intro-steps mt-2">
             <div v-for="step in introSteps" :key="step.icon" class="intro-step">
-              <v-icon x-small color="primary" class="mr-1">{{ step.icon }}</v-icon>
+              <v-icon size="x-small" color="primary" class="mr-1">{{ step.icon }}</v-icon>
               <span>{{ $t(step.textKey) }}</span>
             </div>
           </div>
         </div>
-        <v-btn icon x-small class="intro-dismiss" @click="dismissIntro">
-          <v-icon small style="opacity: 0.45;">mdi-close</v-icon>
+        <v-btn icon variant="text" size="x-small" class="intro-dismiss" @click="dismissIntro">
+          <v-icon size="small" style="opacity: 0.45;">mdi-close</v-icon>
         </v-btn>
       </div>
     </v-expand-transition>
@@ -58,7 +58,7 @@
         <!-- Left: position summary -->
         <div class="hero-left">
           <div class="hero-eyebrow">
-            <v-icon x-small color="#F7931A" class="mr-1">mdi-bitcoin</v-icon>
+            <v-icon size="x-small" color="#F7931A" class="mr-1">mdi-bitcoin</v-icon>
             <span>{{ $t('babylon.yourPosition') || 'Your Staked Position' }}</span>
           </div>
           <div class="hero-amount">
@@ -66,7 +66,7 @@
             <span class="hero-amount-unit">BTC</span>
           </div>
           <div class="hero-meta" v-if="delegations.length > 0">
-            <v-chip x-small color="rgba(247,147,26,0.2)" text-color="primary" class="mr-1" style="border: 1px solid rgba(247,147,26,0.3);">
+            <v-chip size="x-small" color="rgba(247,147,26,0.2)" text-color="primary" class="mr-1" style="border: 1px solid rgba(247,147,26,0.3);">
               {{ delegations.length }} {{ delegations.length === 1 ? $t('babylon.delegation') || 'delegation' : $t('babylon.delegations') || 'delegations' }}
             </v-chip>
           </div>
@@ -84,7 +84,7 @@
             :loading="loading && !currentParams"
             @click="stakeDialog = true"
           >
-            <v-icon left small>mdi-plus</v-icon>
+            <v-icon start size="small">mdi-plus</v-icon>
             {{ $t('babylon.stakeNow') }}
           </v-btn>
           <div v-if="currentParams" class="cta-hint text-caption">
@@ -99,9 +99,9 @@
           <div class="hstat-val">{{ s.value }}</div>
           <div class="hstat-label">
             <span>{{ s.label }}</span>
-            <v-tooltip bottom max-width="220" content-class="babylon-tooltip">
-              <template #activator="{ on }">
-                <v-icon v-on="on" class="hstat-info">mdi-information-outline</v-icon>
+            <v-tooltip location="bottom"  max-width="220" content-class="babylon-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <v-icon v-bind="activatorProps"  class="hstat-info">mdi-information-outline</v-icon>
               </template>
               <span>{{ s.tooltip }}</span>
             </v-tooltip>
@@ -113,7 +113,7 @@
     <!-- ── STAKING PARAMETERS (compact) ──────────────────── -->
     <div v-if="currentParams" class="params-strip liquid-glass mb-3">
       <div class="params-strip-title">
-        <v-icon x-small color="primary" class="mr-1">mdi-tune-variant</v-icon>
+        <v-icon size="x-small" color="primary" class="mr-1">mdi-tune-variant</v-icon>
         <span class="t-label" style="opacity: 0.7;">
           {{ $t('babylon.stakingParams') || 'Parameters v' }}{{ currentParams.version }}
         </span>
@@ -122,9 +122,9 @@
         <div class="pitem">
           <span class="pitem-label">
             {{ $t('babylon.minStake') }}
-            <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ on }">
-                <v-icon v-on="on" class="pitem-info">mdi-information-outline</v-icon>
+            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
               </template>
               {{ $t('babylon.tooltip.minStake') }}
             </v-tooltip>
@@ -135,9 +135,9 @@
         <div class="pitem">
           <span class="pitem-label">
             {{ $t('babylon.maxStake') }}
-            <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ on }">
-                <v-icon v-on="on" class="pitem-info">mdi-information-outline</v-icon>
+            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
               </template>
               {{ $t('babylon.tooltip.maxStake') }}
             </v-tooltip>
@@ -148,9 +148,9 @@
         <div class="pitem">
           <span class="pitem-label">
             {{ $t('babylon.duration') || 'Duration' }}
-            <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ on }">
-                <v-icon v-on="on" class="pitem-info">mdi-information-outline</v-icon>
+            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
               </template>
               {{ $t('babylon.tooltip.duration') }}
             </v-tooltip>
@@ -161,9 +161,9 @@
         <div class="pitem">
           <span class="pitem-label">
             {{ $t('babylon.unbondingTime') }}
-            <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ on }">
-                <v-icon v-on="on" class="pitem-info">mdi-information-outline</v-icon>
+            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
               </template>
               {{ $t('babylon.tooltip.unbondingTime') }}
             </v-tooltip>
@@ -176,16 +176,16 @@
     <!-- ── MY DELEGATIONS ─────────────────────────────────── -->
     <div v-if="delegations.length > 0" class="mb-4">
       <div class="section-header mb-2">
-        <v-icon small color="primary" class="mr-1">mdi-safe-square-outline</v-icon>
+        <v-icon size="small" color="primary" class="mr-1">mdi-safe-square-outline</v-icon>
         <span class="section-title">{{ $t('babylon.myDelegations') }}</span>
-        <v-chip x-small color="rgba(247,147,26,0.15)" text-color="primary" class="ml-2"
+        <v-chip size="x-small" color="rgba(247,147,26,0.15)" text-color="primary" class="ml-2"
           style="border: 1px solid rgba(247,147,26,0.25);">{{ delegations.length }}</v-chip>
       </div>
 
       <v-card
         v-for="d in delegations"
         :key="d.staking_tx_hash_hex"
-        outlined
+        variant="outlined"
         class="delegation-card liquid-glass mb-2"
       >
         <div class="delegation-inner">
@@ -194,18 +194,18 @@
 
           <div class="delegation-content">
             <div class="d-flex align-center mb-2" style="gap: 8px;">
-              <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
-                <template #activator="{ on }">
-                  <v-chip x-small :color="delegationStateColor(d.state)" text-color="white" style="font-size: 11px; font-weight: 700; letter-spacing: 0.04em;" v-on="on">
-                    <v-icon x-small left>{{ delegationStateIcon(d.state) }}</v-icon>
+              <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+                <template #activator="{ props: activatorProps }">
+                  <v-chip v-bind="activatorProps" size="x-small" :color="delegationStateColor(d.state)" text-color="white" style="font-size: 11px; font-weight: 700; letter-spacing: 0.04em;" >
+                    <v-icon size="x-small" start>{{ delegationStateIcon(d.state) }}</v-icon>
                     {{ $t(`babylon.state.${d.state}`) || d.state }}
                   </v-chip>
                 </template>
                 {{ $t(`babylon.tooltip.state.${d.state}`) || d.state }}
               </v-tooltip>
               <v-spacer />
-              <v-btn icon x-small @click="openTx(d.staking_tx_hash_hex)" style="opacity: 0.5;">
-                <v-icon x-small>mdi-open-in-new</v-icon>
+              <v-btn icon variant="text" size="x-small" @click="openTx(d.staking_tx_hash_hex)" style="opacity: 0.5;">
+                <v-icon size="x-small">mdi-open-in-new</v-icon>
               </v-btn>
             </div>
 
@@ -233,21 +233,21 @@
       <!-- Section header row -->
       <div class="section-header mb-2">
         <div class="d-flex align-center" style="gap: 6px;">
-          <v-icon small color="primary">mdi-shield-half-full</v-icon>
+          <v-icon size="small" color="primary">mdi-shield-half-full</v-icon>
           <span class="section-title">{{ $t('babylon.finalityProviders') }}</span>
-          <v-tooltip bottom max-width="260" content-class="babylon-tooltip">
-            <template #activator="{ on }">
-              <v-icon v-on="on" style="font-size: 13px; opacity: 0.4; cursor: help;">mdi-information-outline</v-icon>
+          <v-tooltip location="bottom"  max-width="260" content-class="babylon-tooltip">
+            <template #activator="{ props: activatorProps }">
+              <v-icon v-bind="activatorProps"  style="font-size: 13px; opacity: 0.4; cursor: help;">mdi-information-outline</v-icon>
             </template>
             {{ $t('babylon.tooltip.finalityProvider') }}
           </v-tooltip>
-          <v-chip v-if="providers.length > 0" x-small outlined style="border-color: rgba(247,147,26,0.3); color: rgba(247,147,26,0.8);">
+          <v-chip v-if="providers.length > 0" size="x-small" variant="outlined" style="border-color: rgba(247,147,26,0.3); color: rgba(247,147,26,0.8);">
             {{ providers.length }}
           </v-chip>
         </div>
         <v-text-field
           v-model="searchQuery"
-          dense
+          density="compact"
           hide-details
           clearable
           :placeholder="$t('babylon.searchProviders')"
@@ -280,9 +280,9 @@
       <div v-if="filteredProviders.length > 0" class="provider-col-headers mb-1">
         <div style="flex: 1;" />
         <div v-for="col in providerCols" :key="col.key" class="pcol">
-          <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
-            <template #activator="{ on }">
-              <span class="pcol-label" v-on="on">{{ col.label }}</span>
+          <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+            <template #activator="{ props: activatorProps }">
+              <span v-bind="activatorProps" class="pcol-label" >{{ col.label }}</span>
             </template>
             {{ col.tooltip }}
           </v-tooltip>
@@ -301,7 +301,7 @@
         <v-card
           v-for="(provider, idx) in filteredProviders"
           :key="provider.btc_pk"
-          outlined
+          variant="outlined"
           class="provider-card liquid-glass"
           :class="{ 'provider-card--expanded': expandedPk === provider.btc_pk }"
           :style="{ animationDelay: `${idx * 30}ms` }"
@@ -321,16 +321,16 @@
               <div class="d-flex align-center" style="gap: 5px;">
                 <span class="provider-name">{{ provider.description.moniker || $t('babylon.unknownProvider') }}</span>
                 <!-- Identity badge -->
-                <v-tooltip v-if="provider.description.identity" bottom max-width="200" content-class="babylon-tooltip">
-                  <template #activator="{ on }">
-                    <v-icon v-on="on" style="font-size: 12px; color: var(--g-accent); opacity: 0.75; cursor: help;">mdi-check-decagram</v-icon>
+                <v-tooltip location="bottom" v-if="provider.description.identity"  max-width="200" content-class="babylon-tooltip">
+                  <template #activator="{ props: activatorProps }">
+                    <v-icon v-bind="activatorProps"  style="font-size: 12px; color: var(--g-accent); opacity: 0.75; cursor: help;">mdi-check-decagram</v-icon>
                   </template>
                   {{ $t('babylon.identityVerified') }}: {{ provider.description.identity }}
                 </v-tooltip>
                 <!-- Website icon -->
                 <v-btn
                   v-if="provider.description.website"
-                  icon x-small
+                  icon variant="text" size="x-small"
                   style="width: 14px; height: 14px; opacity: 0.35;"
                   @click.stop="openWebsite(provider.description.website)"
                 >
@@ -361,7 +361,7 @@
             </div>
 
             <!-- Expand chevron -->
-            <v-icon small class="provider-chevron" :class="{ 'provider-chevron--open': expandedPk === provider.btc_pk }">
+            <v-icon size="small" class="provider-chevron" :class="{ 'provider-chevron--open': expandedPk === provider.btc_pk }">
               mdi-chevron-down
             </v-icon>
           </div>
@@ -388,11 +388,11 @@
                     class="provider-link"
                     @click.stop
                   >
-                    <v-icon x-small class="mr-1">mdi-web</v-icon>
+                    <v-icon size="x-small" class="mr-1">mdi-web</v-icon>
                     {{ provider.description.website }}
                   </a>
                   <span v-if="provider.description.security_contact" class="provider-contact">
-                    <v-icon x-small class="mr-1">mdi-shield-account-outline</v-icon>
+                    <v-icon size="x-small" class="mr-1">mdi-shield-account-outline</v-icon>
                     {{ provider.description.security_contact }}
                   </span>
                 </div>
@@ -433,13 +433,13 @@
                 <!-- Stake CTA -->
                 <v-btn
                   color="primary"
-                  dark
-                  small
+                  theme="dark"
+                  size="small"
                   block
                   class="provider-stake-btn"
                   @click.stop="selectProvider(provider)"
                 >
-                  <v-icon left small>mdi-lock-plus-outline</v-icon>
+                  <v-icon start size="small">mdi-lock-plus-outline</v-icon>
                   {{ $t('babylon.stakeWith', { name: provider.description.moniker || $t('babylon.unknownProvider') }) }}
                 </v-btn>
               </div>
@@ -448,8 +448,8 @@
         </v-card>
       </div>
 
-      <v-btn v-if="hasMore" text color="primary" block @click="loadMore" :loading="loadingMore" small class="mt-2">
-        <v-icon left small>mdi-chevron-down</v-icon>
+      <v-btn v-if="hasMore" variant="text" color="primary" block @click="loadMore" :loading="loadingMore" size="small" class="mt-2">
+        <v-icon start size="small">mdi-chevron-down</v-icon>
         {{ $t('common.loadMore') }}
       </v-btn>
     </div>
@@ -719,7 +719,7 @@ async function refresh() {
 
     if (providersResult) {
       // v2 API may return array under 'data' or 'finality_providers'
-      providers.value = providersResult.data ?? (providersResult as any).finality_providers ?? [];
+      providers.value = providersResult.data ?? [];
       nextKey = providersResult.pagination?.next_key || '';
       hasMore.value = !!nextKey;
     }
@@ -1126,14 +1126,20 @@ onMounted(() => refresh());
 .pcol-label:hover { opacity: 0.6; }
 
 /* ── Provider search ── */
-.provider-search :deep(.v-input__control) {
-  min-height: 34px !important;
-}
-.provider-search :deep(.v-input__slot) {
+.provider-search :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
+  --v-field-padding-start: 0px;
+  --v-field-padding-end: 0px;
   background: var(--bab-glass) !important;
   border: 1px solid var(--bab-border) !important;
   border-radius: var(--g-r-control) !important;
   font-size: 12px;
+  padding-inline: 0;
+}
+.provider-search :deep(.v-field__overlay) {
+  opacity: 0;
 }
 .provider-search :deep(input::placeholder) { opacity: 0.35; }
 

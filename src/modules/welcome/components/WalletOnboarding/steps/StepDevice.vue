@@ -27,9 +27,9 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
-      <v-btn class="onb-btn onb-continue" depressed color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <v-btn class="onb-btn onb-continue" variant="flat" color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>

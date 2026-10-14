@@ -17,7 +17,7 @@
         <v-text-field
           v-model="kesCounter"
           type="number"
-          outlined dense dark hide-details
+          variant="outlined" density="compact" theme="dark" hide-details
           placeholder="0"
           class="glass-input mt-2"
         />
@@ -29,7 +29,7 @@
         <v-text-field
           v-model="kesPeriod"
           type="number"
-          outlined dense dark hide-details
+          variant="outlined" density="compact" theme="dark" hide-details
           placeholder="0"
           class="glass-input mt-2"
         />
@@ -42,7 +42,7 @@
       v-model="password"
       :label="$t('poolOperator.coldKeyPassword')"
       type="password"
-      outlined dense dark hide-details
+      variant="outlined" density="compact" theme="dark" hide-details
       class="glass-input mt-3"
     />
 
@@ -56,7 +56,7 @@
       :loading="loading"
       @click="rotateKes()"
     >
-      <v-icon left small>mdi-key-change</v-icon>
+      <v-icon start size="small">mdi-key-change</v-icon>
       {{ $t('poolOperator.generateKesKeys') }}
     </v-btn>
 
@@ -67,8 +67,8 @@
           <v-icon color="success">mdi-check-circle</v-icon>
           {{ $t('poolOperator.kesKeysGenerated') }}
           <v-spacer />
-          <v-btn icon small @click="showOutput = false">
-            <v-icon small>mdi-close</v-icon>
+          <v-btn icon variant="text" size="small" @click="showOutput = false">
+            <v-icon size="small">mdi-close</v-icon>
           </v-btn>
         </v-card-title>
         <v-card-text class="pt-4">
@@ -81,8 +81,8 @@
               </div>
               <span class="output-file-name">{{ file.name }}</span>
               <v-spacer />
-              <v-btn x-small text :color="file.color" @click="downloadFile(file.name, file.content)" class="dl-btn">
-                <v-icon x-small class="mr-1">mdi-download</v-icon>
+              <v-btn size="x-small" variant="text" :color="file.color" @click="downloadFile(file.name, file.content)" class="dl-btn">
+                <v-icon size="x-small" class="mr-1">mdi-download</v-icon>
                 {{ $t('common.download') }}
               </v-btn>
             </div>
@@ -90,7 +90,7 @@
           </div>
 
           <div class="transfer-notice mt-4">
-            <v-icon x-small color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <v-icon size="x-small" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             {{ $t('poolOperator.kesTransferInstructions') }}
           </div>
         </v-card-text>
@@ -367,12 +367,12 @@ function downloadFile(filename: string, content: string) {
   border-radius: var(--g-r-control);
 }
 
-.glass-input >>> .v-input__slot {
+.glass-input :deep(.v-field) {
   background: var(--g-raised) !important;
   border-color: var(--g-hairline-1) !important;
 }
 
-.glass-input >>> .v-input__slot:hover {
+.glass-input :deep(.v-field:hover) {
   border-color: var(--g-hairline-3) !important;
 }
 </style>

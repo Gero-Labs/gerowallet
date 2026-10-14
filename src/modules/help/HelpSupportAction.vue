@@ -3,8 +3,8 @@
     v-model="dialogOpen"
     max-width="520"
     transition="g-dialog-transition"
-    overlay-color="var(--g-canvas)"
-    overlay-opacity="0.6"
+    scrim="var(--g-canvas)"
+    :opacity="0.6"
     content-class="help-support-dialog"
   >
     <section class="support-sheet glass-overlay" role="document" aria-labelledby="help-support-title">
@@ -80,7 +80,7 @@
             <a class="support-email-link" :href="mailto" @click="trackEmail()">{{ email }}</a>
           </div>
           <GButton compact @click="copyEmail()">
-            <v-icon left size="16">mdi-content-copy</v-icon>{{ t(copied ? 'help.copied' : 'help.copyEmail') }}
+            <v-icon start size="16">mdi-content-copy</v-icon>{{ t(copied ? 'help.copied' : 'help.copyEmail') }}
           </GButton>
         </div>
         <p v-if="copyFailed" role="status" class="t-caption">{{ t('help.copyFailed') }}</p>
@@ -102,7 +102,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { useRoute } from 'vue-router/composables';
+import { useRoute } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
