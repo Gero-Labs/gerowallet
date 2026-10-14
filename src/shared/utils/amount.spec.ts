@@ -37,6 +37,24 @@ describe('decimalToBaseUnits', () => {
     expect(decimalToBaseUnits(1e21, 0)).toBe(BigInt('1000000000000000000000'));
   });
 
+  it.each([
+    ['.5e1', 6, 5000000n],
+    ['.29e1', 2, 290n],
+    ['.5e+1', 2, 500n],
+    ['-.5e1', 2, -500n],
+    ['+1.5e1', 2, 1500n],
+    ['1.e1', 2, 1000n],
+    ['.9007199254740993e16', 0, 9007199254740993n],
+    ['1e-1000000000', 6, 0n],
+    ['0e1000000000', 6, 0n],
+  ] as const)('converts decimal exponent input %s exactly', (amount, decimals, expected) => {
+    expect(decimalToBaseUnits(amount, decimals)).toBe(expected);
+  });
+
+  it.each(['0x10', '0b11', '0o77', '1.2.3', '1e', '.e1', '1e1foo', 'NaN', 'Infinity', '1e309'])('rejects nondecimal or nonfinite input %s', amount => {
+    expect(decimalToBaseUnits(amount, 6)).toBe(0n);
+  });
+
   it('accepts grouped input and plain numbers', () => {
     expect(decimalToBaseUnits('1,234.5', 2)).toBe(BigInt(123450));
     expect(decimalToBaseUnits(0.29, 2)).toBe(BigInt(29));

@@ -17,8 +17,15 @@ The hook (yorkie, from `package.json` `gitHooks`, not husky) runs on every commi
 `node scripts/precommit-lint.mjs && node scripts/design/audit.mjs && node scripts/design/contrast.mjs`.
 Required on `development`: `Production bundle (SFC parse)`, `npm ci (lock in sync)`, `ESLint flat config loads`, `Ledger tests and extension bundles`. Plus 1 approving review, branch up to date, and all review threads resolved.
 
-**3. CI runs roughly a quarter of the repo's 285 spec files, and the covered quarter is not where you are working.**
-`npm test` is never invoked in CI. `dev-bundle-gate.yml` runs 18 named spec files (i18n parity among them); `midnight-ledger-verify.yml` runs two whole directories - `src/chains/midnight` (31 files) and `src/services/crossDevice` (22) - plus 6 named specs. So ~77 run, and everything outside those paths merges green no matter what it breaks. The inverse also holds: **Midnight and crossDevice changes are genuinely gated**, so a red required check there is real. Full suite: 285 files / 3395 tests, ~40s and green on an idle machine. Timing-sensitive specs flake under parallel load, so re-run a failing file alone before calling it a regression.
+**3. Required PR checks run selected suites; release packaging runs the full suite.**
+`dev-bundle-gate.yml` runs its explicit regression paths and the design/build
+checks. `midnight-ledger-verify.yml` runs the Midnight and crossDevice directories
+plus named suites, then builds all production entry points. Read those workflows
+for the current covered paths; a green PR does not establish full-suite coverage.
+`ci-cd.yml` runs `npm test -- --maxWorkers=2` before candidate packaging, but is
+triggered on `main` pushes or manual dispatch, not every PR. Record the actual
+candidate SHA, counts, failures, and skips. Re-run timing-sensitive failures in
+isolation to distinguish load sensitivity from a regression; keep both results.
 
 ## Before writing code
 
@@ -72,9 +79,9 @@ Each of these thoughts has cost someone a day in this repo.
 
 | Thought | Reality |
 |---|---|
-| "typecheck is red, I broke something" | It is red on a clean tree, ~173 errors, none of them yours. |
-| "lint is red, I broke something" | 390 pre-existing `any` errors. Lint only your own files. |
-| "CI is green, so it works" | CI runs no full build, no full test suite, and never opens the extension. |
+| "typecheck is red, I broke something" | Compare Vue-aware diagnostics with the same baseline; historical debt does not excuse a new error. |
+| "lint is red, I broke something" | Repo-wide lint has historical debt. Lint touched files and fix every error in those files. |
+| "CI is green, so it works" | PR checks build all entries and run selected tests; packaging runs the full suite. Neither establishes the complete hardware, profile-upgrade, provider, or production rollout matrix. |
 | "I'll `--no-verify` past this hook" | You just skipped the design ratchet and WCAG gate too. CI catches it, later and louder. |
 | "The ratchet failed but my diff has no colours" | In a `.vue`/`.scss`/`.css` file, a `#` plus 3-8 hex digits counts, comments included. In a `.ts` file, the only metric that can fire is a forked formatter. |
 | "I added the English string, German and Spanish can follow" | The parity spec fails the required `Production bundle (SFC parse)` check. Add all three in the same commit. |

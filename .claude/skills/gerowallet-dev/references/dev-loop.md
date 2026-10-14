@@ -2,9 +2,12 @@
 
 ## One-time setup
 
+Use Node 24.19.0 and npm 11.1.0, matching the release workflow. Keep the Node
+selection local to this shell when maintaining an older Vue 2 checkout too.
+
 ```bash
 git clone https://github.com/Gero-Labs/gerowallet.git && cd gerowallet
-npm install          # npm ci works too; both run yorkie's install script, which writes the hook
+npm ci               # use the committed lockfile; installs the yorkie hook
 touch .env.development
 ```
 
@@ -24,7 +27,9 @@ Those three point at a **backend you still have to run**, or the extension boots
 | The page to render and route | No |
 | Balances, transactions, sync, prices, feature flags - i.e. any real click-through | Yes |
 
-`VITE_DEBUG_STORES=true` is worth adding to the same file from day one - it is the only switch that makes 512 `debugLog` call sites emit anything. See `debugging.md`.
+Enable `VITE_DEBUG_STORES=true` only for a scoped local debugging session with
+synthetic data. Store logs can contain wallet records and authentication
+metadata. Release packaging pins this flag off. See `debugging.md`.
 
 Verify the hook installed:
 
@@ -102,9 +107,17 @@ Before you believe such a failure, check your install. The guard's keys are comp
 ## Packaging
 
 ```bash
-npm run build          # full production build - ~24GB peak, do not use as a check
-npm run pack           # .zip / .crx from extension/
+npm run build          # four production builds run sequentially, then prepare and remote-code guard
+node scripts/check-secret-envelope-readers.mjs
+node scripts/check-bundle-tdz.mjs
 ```
 
-For a memory-constrained machine, run the four builds serially instead of `run-p`:
-`npm run build:background -- --mode production`, then content, inject, web, then `npm run build:prepare`.
+The production build honors the caller's `NODE_OPTIONS`; the release workflow
+uses a 4 GB old-space limit. Build in an isolated checkout or output directory
+while another checkout serves the user's development extension.
+
+Use the reviewed [release and recovery procedure](../../../../spikes/vue3-migration/RELEASE-READINESS.md)
+for release packaging. It verifies version, channel identity, CSP, local WASM,
+and hashes before archiving outside `extension/`. The manual workflow defaults
+to a dry run; store submission requires separate release authorization. Legacy
+`pack:*` commands alone do not perform these qualification gates.

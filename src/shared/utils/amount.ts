@@ -10,44 +10,26 @@
  */
 
 /**
- * Expand scientific notation to a plain decimal string.
- *
- * `Number#toFixed` cannot be used for this: it only expands below 1e21, so
- * `(1e21).toFixed(0)` returns "1e+21" unchanged. That string then reached the
- * digit-stripping below, which silently turned "1e+21" into "121" — garbage,
- * not merely imprecision. Shift the decimal point on the digits instead.
- */
-function expandExponential(value: string): string {
-  const match = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(value);
-  if (!match) return value;
-  const [, sign, intPart, fracPart = '', expRaw] = match;
-  const digits = intPart + fracPart;
-  const pointPos = intPart.length + parseInt(expRaw, 10);
-  if (pointPos <= 0) return sign + '0.' + '0'.repeat(-pointPos) + digits;
-  if (pointPos >= digits.length) return sign + digits + '0'.repeat(pointPos - digits.length);
-  return sign + digits.slice(0, pointPos) + '.' + digits.slice(pointPos);
-}
-
-/**
  * Convert a human decimal amount (e.g. "0.29") to base units (e.g. 29n for a
  * 2-decimal token). Extra fractional digits beyond `decimals` are truncated
- * (floor semantics, matching the previous behavior for valid inputs).
+ * toward zero. Comma-grouped input and scientific notation are supported.
  * Invalid input yields 0n.
  */
 export function decimalToBaseUnits(amount: string | number | null | undefined, decimals: number): bigint {
-  let str = String(amount ?? '').trim().replace(/,/g, '');
-  if (!str || !Number.isFinite(Number(str))) return BigInt(0);
-  // Normalize scientific notation ("1e-7") to plain decimal before splitting
-  if (/e/i.test(str)) {
-    str = expandExponential(str);
-  }
-  const negative = str.startsWith('-');
-  const unsigned = negative ? str.slice(1) : str;
-  const [wholeRaw = '', fracRaw = ''] = unsigned.split('.');
-  const whole = wholeRaw.replace(/\D/g, '') || '0';
-  const frac = fracRaw.replace(/\D/g, '').slice(0, decimals).padEnd(Math.max(decimals, 0), '0');
-  const units = BigInt(whole + frac);
-  return negative ? -units : units;
+  const str = String(amount ?? '').trim().replace(/,/g, '');
+  const match = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/.exec(str);
+  // Preserve the existing non-finite-input guard; Number never supplies digits
+  // for the conversion, so integers above 2^53 retain their exact value.
+  if (!match || !Number.isFinite(Number(str))) return BigInt(0);
+  const [, sign, whole = '', fraction = '', leadingFraction = '', exponent = '0'] = match;
+  const digits = whole + (fraction || leadingFraction);
+  if (!/[1-9]/.test(digits)) return BigInt(0);
+  const position = whole.length + parseInt(exponent, 10) + decimals;
+  // Shift directly to base units, including valid number inputs like ".5e1".
+  // Tiny exponents truncate to zero without allocating their leading zeroes.
+  if (position <= 0) return BigInt(0);
+  const units = BigInt(position < digits.length ? digits.slice(0, position) : digits.padEnd(position, '0'));
+  return sign === '-' ? -units : units;
 }
 
 /**
