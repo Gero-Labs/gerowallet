@@ -20,7 +20,7 @@
       </div>
       <div v-if="title" class="bottom-sheet-header">
         <span class="text-subtitle-1 white--text font-weight-bold">{{ title }}</span>
-        <v-btn v-if="variant !== 'trust'" icon variant="text" size="small" @click="close" class="white--text">
+        <v-btn v-if="variant !== 'trust'" icon variant="text" size="small" :disabled="closeDisabled" @click="close" class="white--text">
           <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </div>
@@ -44,12 +44,14 @@ const props = withDefaults(defineProps<{
   title?: string;
   height?: string;
   persistent?: boolean;
+  closeDisabled?: boolean;
   showHandle?: boolean;
   draggable?: boolean;
   variant?: 'standard' | 'trust';
 }>(), {
   height: '85%',
   persistent: false,
+  closeDisabled: false,
   showHandle: true,
   draggable: true,
   variant: 'standard',
@@ -72,9 +74,9 @@ const phase = ref<'entering' | 'open' | 'leaving' | 'closed'>('closed');
 // Trust sheets never show a handle (nothing suggests dismissal-by-drag).
 const effectiveShowHandle = computed(() => props.variant === 'trust' ? false : props.showHandle);
 // Can a drag DISMISS this sheet? Trust and persistent sheets: never.
-const canDragDismiss = computed(() => props.draggable && props.variant !== 'trust' && !props.persistent);
+const canDragDismiss = computed(() => props.draggable && props.variant !== 'trust' && !props.persistent && !props.closeDisabled);
 // Can the user drag it at all (rubber-band feedback even when not dismissible)?
-const canDrag = computed(() => props.draggable);
+const canDrag = computed(() => props.draggable && !props.closeDisabled);
 
 const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -177,6 +179,14 @@ function focusIntoSheet() {
 }
 
 function finishClose() {
+  // A non-cancellable operation may start while a dismissal is animating.
+  // Parent-driven closure still wins (for example, a wallet lock).
+  if (props.modelValue && props.closeDisabled) {
+    phase.value = 'open';
+    spring.setValue(0);
+    translateY.value = 0;
+    return;
+  }
   visible.value = false;
   phase.value = 'closed';
   spring.setValue(0);
@@ -189,6 +199,7 @@ function finishClose() {
 }
 
 function close() {
+  if (props.closeDisabled) return;
   animateDismiss();
 }
 
@@ -208,6 +219,7 @@ function onBackdropClick() {
 }
 
 function onEscape() {
+  if (props.closeDisabled) return;
   if (props.variant === 'trust') {
     // Deliberate keypress: the consumer decides (maps to its explicit reject).
     emit('escape');

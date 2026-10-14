@@ -4,6 +4,7 @@ import type { Cardano } from '@cardano-sdk/core';
 import type { UR } from '@keystonehq/keystone-sdk';
 import { deferred } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import { createTestVuetify } from '@test/helpers/vuetify';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), build: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, utxos: [], keys: {}, tokens: {}, collections: {}, contacts: {}, config: {}, isLocked: false }) }));
@@ -35,7 +36,6 @@ vi.mock('../../composables/useChainContext', async () => {
   const { ref } = await import('vue');
   return { useChainContext: () => ({ themeColors: ref({ primary: 'green' }) }) };
 });
-vi.mock('../BottomSheet.vue', () => ({ default: { template: '<section><slot /></section>' } }));
 vi.mock('@/modules/dashboard/dialogs/QRAddressScannerDialog.vue', () => ({ default: { template: '<span />' } }));
 vi.mock('@/shared/components/PassKeyAuthButton.vue', () => ({ default: { template: '<span />' } }));
 vi.mock('../KeystoneSignSheet.vue', () => ({ default: { template: '<span />' } }));
@@ -47,7 +47,8 @@ import { Blockchain, Network, WalletType } from '@/models/types';
 
 interface View {
   tx: Cardano.Tx | undefined; step: number; address: string; paymentAddress: string; adaAmount: string;
-  spendingPassword: string; txSuccess: boolean; txBuilt: boolean;
+  spendingPassword: string; txSuccess: boolean; txBuilt: boolean; passwordError: string;
+  extraTokens: { unit: string; sendAmount: string }[]; selectedNfts: { unit: string; toSendQuantity: number }[];
   signAndSubmit(): Promise<void>; signLedger(): Promise<void>; signTrezor(): Promise<void>;
   signOnAnotherDevice(): Promise<void>; onPassKeySuccess(key: Uint8Array): Promise<void>;
   signKeystone(): void; onKeystoneScan(ur: UR): Promise<void>; onClose(open: boolean): void;
@@ -55,9 +56,11 @@ interface View {
 }
 const transaction = (id = 'original') => ({ body: { id, fee: 1 } }) as unknown as Cardano.Tx;
 const methods = () => mocks.send.mock.calls.map(([message]) => message.method);
-function render() {
-  const wrapper = shallowMount(SendSheet, { props: { modelValue: true }, global: {
+function render(realBottomSheet = false) {
+  const wrapper = shallowMount(SendSheet, { props: { modelValue: !realBottomSheet }, global: {
     renderStubDefaultSlot: true,
+    plugins: realBottomSheet ? [createTestVuetify()] : [],
+    stubs: realBottomSheet ? { BottomSheet: false, VBtn: false, VIcon: false } : {},
     config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }), warnHandler: () => {} },
   } });
   const view = wrapper.vm as unknown as View;
@@ -78,7 +81,158 @@ beforeEach(() => {
   });
 });
 
+describe('side-panel submission dismissal', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    const matchMedia = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => {
+      const media = matchMedia(query);
+      if (query === '(prefers-reduced-motion: reduce)') Object.defineProperty(media, 'matches', { value: true });
+      return media;
+    });
+  });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  async function openSheet() {
+    const result = render(true);
+    await result.wrapper.setProps({ modelValue: true });
+    result.view.step = 4;
+    result.view.tx = transaction();
+    result.view.spendingPassword = 'approved';
+    await flushPromises();
+    return result;
+  }
+
+  it.each(['close button', 'Escape'] as const)('preserves a dispatched transaction after %s and allows dismissal after success', async action => {
+    const { wrapper, view } = await openSheet();
+    const submission = deferred<unknown>();
+    mocks.send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { witnesses: 'witness' } })
+      .mockReturnValueOnce(submission.promise);
+    const running = view.signAndSubmit();
+    await flushPromises();
+    expect(methods()).toContain(MessageTypes.SUBMIT_TX);
+    expect(wrapper.get('.bottom-sheet-header button').attributes('disabled')).toBeDefined();
+    if (action === 'close button') await wrapper.get('.bottom-sheet-header button').trigger('click');
+    else await wrapper.get('.bottom-sheet-container').trigger('keydown', { key: 'Escape' });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    // The parent must also reject a late child dismissal event during dispatch.
+    view.onClose(false);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    submission.resolve({ data: { txId: 'submitted' } });
+    await running;
+    await flushPromises();
+    expect(view.txSuccess).toBe(true);
+    expect(mocks.success).toHaveBeenCalledOnce();
+    expect(wrapper.get('.success-overlay button').attributes('disabled')).toBeUndefined();
+    await wrapper.get('.success-overlay button').trigger('click');
+    await vi.advanceTimersByTimeAsync(250);
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
+  });
+
+  it.each(['response error', 'rejection'] as const)('restores dismissal and exposes submission %s', async failure => {
+    const { wrapper, view } = await openSheet();
+    const submission = deferred<unknown>();
+    mocks.send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { witnesses: 'witness' } })
+      .mockReturnValueOnce(submission.promise);
+    const running = view.signAndSubmit();
+    await flushPromises();
+    expect(wrapper.get('.bottom-sheet-header button').attributes('disabled')).toBeDefined();
+    if (failure === 'response error') submission.resolve({ data: { error: 'Submission failed' } });
+    else submission.reject(new Error('Submission failed'));
+    await running;
+    await flushPromises();
+    expect(view.passwordError).toBe('Submission failed');
+    expect(view.txSuccess).toBe(false);
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(wrapper.get('.bottom-sheet-header button').attributes('disabled')).toBeUndefined();
+    await wrapper.get('.bottom-sheet-header button').trigger('click');
+    await vi.advanceTimersByTimeAsync(250);
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
+  });
+
+  it('keeps explicit cancellation available during password verification', async () => {
+    const { wrapper, view } = await openSheet();
+    const password = deferred<unknown>();
+    mocks.send.mockReturnValueOnce(password.promise);
+    const running = view.signAndSubmit();
+    await flushPromises();
+    expect(wrapper.get('.bottom-sheet-header button').attributes('disabled')).toBeUndefined();
+    await wrapper.get('.bottom-sheet-header button').trigger('click');
+    await vi.advanceTimersByTimeAsync(250);
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
+    password.resolve({ data: { success: true } });
+    await running;
+    expect(methods()).toEqual([MessageTypes.VERIFY_SPENDING_PASSWORD]);
+  });
+});
+
 describe('side-panel Cardano approval', () => {
+  it('preserves approval when an equal wallet snapshot arrives during password verification', async () => {
+    const { view } = render();
+    const approvedTransaction = view.tx;
+    view.txBuilt = true;
+    const password = deferred<unknown>();
+    mocks.send.mockReturnValueOnce(password.promise);
+    const running = view.signAndSubmit();
+    walletStore.loggedWallet = { ...walletStore.loggedWallet };
+    password.resolve({ data: { success: true } });
+    await running;
+    expect(view.tx).toBe(approvedTransaction);
+    expect(view.txBuilt).toBe(true);
+    expect(methods()).toEqual([MessageTypes.VERIFY_SPENDING_PASSWORD, MessageTypes.SIGN_TX, MessageTypes.SUBMIT_TX]);
+    expect(view.txSuccess).toBe(true);
+    expect(mocks.success).toHaveBeenCalledOnce();
+  });
+  it('preserves submission confirmation when an equal wallet snapshot arrives after dispatch', async () => {
+    const { view } = render();
+    const approvedTransaction = view.tx;
+    view.txBuilt = true;
+    const submission = deferred<unknown>();
+    mocks.send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { witnesses: 'witness' } })
+      .mockReturnValueOnce(submission.promise);
+    const running = view.signAndSubmit();
+    await flushPromises();
+    expect(methods()).toContain(MessageTypes.SUBMIT_TX);
+    walletStore.loggedWallet = { ...walletStore.loggedWallet };
+    submission.resolve({ data: { txId: 'submitted' } });
+    await running;
+    expect(view.tx).toBe(approvedTransaction);
+    expect(view.txBuilt).toBe(true);
+    expect(view.txSuccess).toBe(true);
+    expect(mocks.success).toHaveBeenCalledOnce();
+  });
+  it.each(['wallet', 'chain', 'network', 'recipient', 'payment-address', 'amount', 'token-amount', 'nft-quantity'] as const)(
+    'synchronously clears the transaction and invalidates approval for a real %s change', async change => {
+      const { view } = render();
+      view.extraTokens = [{ unit: 'token', sendAmount: '1' }];
+      view.selectedNfts = [{ unit: 'nft', toSendQuantity: 1 }];
+      view.tx = transaction();
+      view.txBuilt = true;
+      view.spendingPassword = 'approved';
+      const password = deferred<unknown>();
+      mocks.send.mockReturnValueOnce(password.promise);
+      const running = view.signAndSubmit();
+      if (change === 'wallet') walletStore.loggedWallet.id = 2;
+      if (change === 'chain') walletStore.loggedWallet.chain = Blockchain.BITCOIN;
+      if (change === 'network') walletStore.loggedWallet.network = Network.PREPROD;
+      if (change === 'recipient') view.address = 'replacement-address';
+      if (change === 'payment-address') view.paymentAddress = 'replacement-address';
+      if (change === 'amount') view.adaAmount = '9';
+      if (change === 'token-amount') view.extraTokens[0].sendAmount = '2';
+      if (change === 'nft-quantity') view.selectedNfts[0].toSendQuantity = 2;
+      const clearedSynchronously = view.tx === undefined && !view.txBuilt;
+      password.resolve({ data: { success: true } });
+      await running;
+      expect(clearedSynchronously).toBe(true);
+      expect(methods()).toEqual([MessageTypes.VERIFY_SPENDING_PASSWORD]);
+      expect(mocks.success).not.toHaveBeenCalled();
+    },
+  );
   it.each(['close', 'wallet', 'network', 'lock', 'transaction', 'raw-body', 'recipient', 'amount'] as const)(
     'does not sign or submit after %s changes during password verification', async change => {
       const { wrapper, view } = render();

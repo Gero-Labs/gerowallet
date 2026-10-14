@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :model-value="modelValue" @update:model-value="onClose" :title="sheetTitle" height="92%" persistent>
+  <BottomSheet :model-value="modelValue" @update:model-value="onClose" :title="sheetTitle" height="92%" persistent :close-disabled="broadcasting">
     <div class="send-stepper" ref="stepperEl">
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
@@ -679,6 +679,7 @@ const spendingPassword = ref('');
 const passwordError = ref('');
 const showPassword = ref(false);
 const submitting = ref(false);
+const broadcasting = ref(false);
 const txSuccess = ref(false);
 const txId = ref('');
 const txCbor = ref('');
@@ -1362,14 +1363,21 @@ async function submitApproved(attempt: SendApproval, witnessHex: string) {
   if (!witnessHex) throw new Error('Missing transaction witnesses');
   txWitnesses.value = witnessHex;
   attempt.dispatched = true;
-  const result = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.SUBMIT_TX,
-    data: { txCbor: attempt.cbor, witnessHex, utxos: attempt.inputs },
-  }), attempt.current) as { data: { txId?: string; error?: string } };
-  if (result.data.error) throw new Error(result.data.error);
-  txId.value = result.data.txId || '';
-  txSuccess.value = true;
-  snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
+  // Dispatch cannot be cancelled. Keep its result visible, but retain normal
+  // cancellation while authentication or signing is still pending.
+  broadcasting.value = true;
+  try {
+    const result = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: { txCbor: attempt.cbor, witnessHex, utxos: attempt.inputs },
+    }), attempt.current) as { data: { txId?: string; error?: string } };
+    if (result.data.error) throw new Error(result.data.error);
+    txId.value = result.data.txId || '';
+    txSuccess.value = true;
+    snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
+  } finally {
+    broadcasting.value = false;
+  }
 }
 
 async function submitSignedTx() {
@@ -1417,7 +1425,7 @@ function copyTxId() {
 }
 
 function onClose(val: boolean) {
-  if (!val) {
+  if (!val && !broadcasting.value) {
     approval.invalidate();
     emit('update:modelValue', false);
   }
@@ -1472,11 +1480,17 @@ watch(() => props.modelValue, (val) => {
   if (val) resetAll();
 });
 
-watch(() => [loggedWallet.value?.id, loggedWallet.value?.network, address.value, paymentAddress.value,
-  adaAmount.value, extraTokens.value, selectedNfts.value], () => {
+function clearBuiltTransaction() {
   tx.value = undefined;
   txBuilt.value = false;
-}, { deep: true, flush: 'sync' });
+}
+// Compare primitive sources individually so an equal wallet broadcast does not
+// clear the approved transaction. Asset edits still need synchronous deep watches.
+watch([
+  () => loggedWallet.value?.id, () => loggedWallet.value?.chain, () => loggedWallet.value?.network,
+  address, paymentAddress, adaAmount,
+], clearBuiltTransaction, { flush: 'sync' });
+watch([extraTokens, selectedNfts], clearBuiltTransaction, { deep: true, flush: 'sync' });
 onScopeDispose(() => { resolveAdaHandle.cancel(); teardownNftObserver(); });
 
 // Recalculate minAda when assets change
