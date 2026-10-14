@@ -1244,13 +1244,15 @@ export class WalletManager {
     debugLog('WalletManager: Starting unlock process');
 
     try {
-      if (!this.walletBg || !walletStore.loggedWallet) {
+      const walletBg = this.walletBg;
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletBg || walletId === undefined) {
         throw new Error('No wallet to unlock');
       }
 
       // Verify credentials using shared method (with walletBg for password verification)
       const isValid = await this.verifyUnlockCredentials(
-        walletStore.loggedWallet.id,
+        walletId,
         unlockCredential,
         totpCode,
         password,
@@ -1262,6 +1264,10 @@ export class WalletManager {
         console.warn('Invalid unlock credential');
         return false;
       }
+
+      // Password/PassKey verification is asynchronous. A wallet switch or
+      // logout while it is pending must not unlock the replacement wallet.
+      if (this.walletBg !== walletBg || walletStore.loggedWallet?.id !== walletId) return false;
 
       // Unlock successful - restore keys and clear locked state
       WalletStore.setLocked(false);

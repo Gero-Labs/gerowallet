@@ -19,6 +19,7 @@ import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@
 import { isConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
+import { unlockAfterStartup } from '@/chrome/unlockStartup';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { embeddingSite } from '@/chrome/originBinding';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
@@ -3806,7 +3807,12 @@ app.addToOptions(MessageTypes.LOCK, async (request, sendResponse) => {
 app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
   try {
     const { unlockCredential, totpCode, password, unlockMethod } = request.data;
-    const success = await walletManager.unlock(unlockCredential, totpCode, password, unlockMethod);
+    const success = await unlockAfterStartup(
+      workerBooted,
+      request.data.walletId,
+      () => walletStore.loggedWallet?.id,
+      () => walletManager.unlock(unlockCredential, totpCode, password, unlockMethod),
+    );
     sendResponse({
       id: request.id,
       data: { success },

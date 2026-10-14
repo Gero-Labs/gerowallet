@@ -275,7 +275,7 @@ async function handlePinFinish(pin: string) {
   try {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UNLOCK,
-      data: { unlockCredential: pin, unlockMethod: 'pin' },
+      data: { walletId: walletStore.loggedWallet?.id, unlockCredential: pin, unlockMethod: 'pin' },
     }) as { data?: { success?: boolean; error?: string } };
 
     if (!response.data?.success) {
@@ -299,6 +299,7 @@ async function handlePasswordUnlock() {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UNLOCK,
       data: {
+        walletId: walletStore.loggedWallet?.id,
         unlockCredential: password.value,
         unlockMethod: unlockMethod.value || 'password',
         password: password.value,

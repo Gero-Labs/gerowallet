@@ -823,7 +823,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: messageType,
       data: {
-        walletId: props.preLoginWalletId, // Only used for pre-login unlock
+        walletId: props.preLoginWalletId || walletStore.loggedWallet?.id,
         unlockCredential, // PassKey auth signaled via special value 'passkey-authenticated'
         unlockMethod: unlockMethod.value,
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
