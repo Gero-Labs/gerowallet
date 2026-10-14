@@ -60,7 +60,7 @@
                           v-bind="activatorProps"
 
                         >
-                          <v-icon size="16" color="info" class="nav-search-icon">mdi-magnify</v-icon>
+                          <v-icon size="16" color="var(--g-accent)" class="nav-search-icon">mdi-magnify</v-icon>
                           <template v-if="!compactNav">
                             <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
                             <span class="nav-search-shortcut">Ctrl+K</span>
@@ -964,15 +964,15 @@ div.v-toolbar__content {
   gap: 8px;
   padding: 5px 12px;
   border-radius: var(--g-r-control);
-  background: rgba(130, 180, 255, 0.08);
-  border: 1px solid rgba(130, 180, 255, 0.25);
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent);
   cursor: pointer;
   min-width: 180px;
   transition: border-color var(--g-dur-base), background var(--g-dur-base), box-shadow var(--g-dur-base);
 }
 .nav-search-field:hover {
-  background: rgba(130, 180, 255, 0.14);
-  border-color: rgba(130, 180, 255, 0.45);
+  background: color-mix(in srgb, var(--g-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent);
 }
 .nav-search-placeholder {
   font-size: 13px;
