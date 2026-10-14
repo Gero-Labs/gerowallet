@@ -1,3 +1,5 @@
+import { reactive } from 'vue';
+
 export class ChangeLog {
 
   enabled: boolean = false;
@@ -7,4 +9,5 @@ export class ChangeLog {
   }
 }
 
-export default new ChangeLog();
+// Both the navigation action and the layout must observe the same proxy.
+export default reactive(new ChangeLog());

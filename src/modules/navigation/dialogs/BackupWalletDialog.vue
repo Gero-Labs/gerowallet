@@ -86,8 +86,10 @@
                       <li>{{ $t('wallet.saveSeedPhraseSafe') }}</li>
                     </ul>
                   </v-alert>
+                  <!-- Reserve room for authentication after reset clears every seed word. -->
                   <v-hover v-slot="{ isHovering: hover, props: hoverProps }">
                     <v-card v-bind="hoverProps" flat variant="outlined" class="mb-4 position-relative"
+                            :min-height="overlay ? 280 : undefined"
                             :style="overlay ? {backgroundColor: 'black'} : {backgroundColor: 'transparent'}">
                       <v-row no-gutters>
                         <v-col class="pa-2" cols="12" md="3" sm="4" v-for="(item,index) in seedPhrase" :key="index">
