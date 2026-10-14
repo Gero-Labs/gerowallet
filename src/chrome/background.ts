@@ -3804,6 +3804,12 @@ app.addToOptions(MessageTypes.LOCK, async (request, sendResponse) => {
   }
 });
 
+// Read-only wake probe. Credential-bearing requests are sent only after the
+// message router is listening; UNLOCK itself also waits for wallet hydration.
+app.addToOptions(MessageTypes.BACKGROUND_READY, (request, sendResponse) => {
+  sendResponse({ id: request.id, data: { ready: true }, target: TARGET, sender: SENDER.extension });
+});
+
 app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
   try {
     const { unlockCredential, totpCode, password, unlockMethod } = request.data;
