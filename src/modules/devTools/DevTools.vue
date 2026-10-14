@@ -166,7 +166,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, shallowRef, computed, watch } from 'vue';
 import { Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -175,7 +175,8 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 const txCborHex = ref<string>('')
 const tx = ref<Cardano.Tx>(null)
 const witnessSetCborHex = ref<string>('')
-const witnesses = ref<Serialization.TransactionWitnessSet>(null)
+// shallowRef: a deep ref proxies the SDK instance and breaks its private fields.
+const witnesses = shallowRef<Serialization.TransactionWitnessSet>(null)
 const addressHex = ref<string>('')
 const address = ref<string>('')
 const addressBech32 = ref<string>('')

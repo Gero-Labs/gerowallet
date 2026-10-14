@@ -457,7 +457,7 @@ function executeSwap() {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-.fade-enter,
+.fade-enter-from,
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);

@@ -77,12 +77,12 @@
                   </template>
                   <v-date-picker
                     :model-value="filterDateFrom"
-                    @update:model-value="filterDateFrom = $event; dateFromMenu = false"
+                    @update:model-value="filterDateFrom = toPickerDay($event); dateFromMenu = false"
                     :min="earliestTxDate"
                     :max="filterDateTo || latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
-                    no-title
+                    hide-header
                     theme="dark"
                     color="var(--g-accent)"
                     class="filter-date-picker"
@@ -116,12 +116,12 @@
                   </template>
                   <v-date-picker
                     :model-value="filterDateTo"
-                    @update:model-value="filterDateTo = $event; dateToMenu = false"
+                    @update:model-value="filterDateTo = toPickerDay($event); dateToMenu = false"
                     :min="filterDateFrom || earliestTxDate"
                     :max="latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
-                    no-title
+                    hide-header
                     theme="dark"
                     color="var(--g-accent)"
                     class="filter-date-picker"
@@ -331,6 +331,7 @@
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, shallowRef, toRefs, watch, type PropType } from 'vue';
+import { toPickerDay } from '@/shared/utils/format';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';

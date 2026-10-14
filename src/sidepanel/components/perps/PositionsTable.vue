@@ -665,7 +665,7 @@ function liqClass(row: Row): string {
   max-height: 200px;
 }
 
-.pt-expand-enter,
+.pt-expand-enter-from,
 .pt-expand-leave-to {
   opacity: 0;
   max-height: 0;

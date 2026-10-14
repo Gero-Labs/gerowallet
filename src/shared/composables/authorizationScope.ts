@@ -13,10 +13,12 @@ export function useAuthenticationFreshness(): AuthorizationScope {
   const parent = getCurrentInstance() ? inject(authorizationScopeKey, null) : null;
   let epoch = 0;
   let disposed = false;
-  watch(() => [
-    walletStore.loggedWallet?.id, walletStore.loggedWallet?.chain,
-    walletStore.loggedWallet?.network, walletStore.loggedWallet?.webAuthnCredentialId,
-    walletStore.isLocked,
+  // Separate sources: a getter returning a fresh array would fire on every
+  // re-broadcast of the same wallet, not only when one of these values changes.
+  watch([
+    () => walletStore.loggedWallet?.id, () => walletStore.loggedWallet?.chain,
+    () => walletStore.loggedWallet?.network, () => walletStore.loggedWallet?.webAuthnCredentialId,
+    () => walletStore.isLocked,
   ], () => { epoch++; }, { flush: 'sync' });
   onScopeDispose(() => { disposed = true; epoch++; });
   return {

@@ -82,7 +82,7 @@
 
 <script setup lang="ts">
 import type { Cardano } from '@cardano-sdk/core';
-import { ref, watch } from 'vue';
+import { ref, toRaw, watch } from 'vue';
 
 
 interface RelayEntry {
@@ -105,7 +105,12 @@ const relayTypes = [
   { text: 'SRV', value: 'srv' },
 ];
 
+// The parent's echo of our own emit carries no relay type for an empty address;
+// rebuilding from it would turn a new IPv6 entry back into IPv4.
+let lastEmitted: unknown = null;
+
 watch(() => props.modelValue, (val) => {
+  if (toRaw(val) === lastEmitted) return;
   localRelays.value = (val || []).map((relay): RelayEntry => {
     if (relay.__typename === 'RelayByName') return { type: 'dns', hostname: relay.hostname, port: relay.port };
     if (relay.__typename === 'RelayByNameMultihost') return { type: 'srv', dnsName: relay.dnsName };
@@ -136,6 +141,7 @@ function emitUpdate() {
       return { __typename: 'RelayByNameMultihost' as const, dnsName: r.dnsName || '' };
     }
   });
+  lastEmitted = relays;
   emit('update:modelValue', relays);
 }
 </script>

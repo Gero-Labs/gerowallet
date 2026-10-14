@@ -498,7 +498,7 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
   transition: opacity var(--g-dur-base) ease;
 }
 
-.fade-transition-enter,
+.fade-transition-enter-from,
 .fade-transition-leave-to {
   opacity: 0;
 }

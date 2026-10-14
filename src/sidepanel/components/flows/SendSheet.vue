@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :model-value="modelValue" @update:model-value="onClose" :title="sheetTitle" height="92%">
+  <BottomSheet :model-value="modelValue" @update:model-value="onClose" :title="sheetTitle" height="92%" persistent>
     <div class="send-stepper" ref="stepperEl">
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
@@ -1380,7 +1380,7 @@ async function submitSignedTx() {
 
 // ── Navigation ──
 function editStep(target: number) {
-  if (target < step.value) {
+  if (target < step.value && !submitting.value) {
     step.value = target;
   }
 }

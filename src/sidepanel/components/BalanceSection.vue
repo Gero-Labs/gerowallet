@@ -245,7 +245,7 @@ const changeColor = computed(() => {
   transition: opacity 0.22s ease, filter 0.22s ease;
 }
 
-.balance-fade-enter,
+.balance-fade-enter-from,
 .balance-fade-leave-to {
   opacity: 0;
   filter: blur(4px);

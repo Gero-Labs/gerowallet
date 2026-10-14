@@ -182,7 +182,7 @@ const sign = () => approval.run(async () => {
     await awaitFreshApproval(async () => (controller.value.returnData({ data: response.data.signature })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, 'Failed to sign message') || 'Failed to sign message');
     loading.value = false;
   }

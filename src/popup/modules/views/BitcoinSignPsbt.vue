@@ -264,7 +264,7 @@ const doSign = async () => {
     await awaitFreshApproval(async () => (controller.value.returnData({ data: signedHex.value })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, 'Failed to sign PSBT') || 'Failed to sign PSBT');
     loading.value = false;
   }
@@ -318,7 +318,7 @@ const signWithLedger = async () => {
     await awaitFreshApproval(async () => (controller.value.returnData({ data: returnHex })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, t('wallet.ledgerDeviceError', { message: '' })) || t('wallet.ledgerDeviceError', { message: '' }));
     loading.value = false;
   } finally {
@@ -358,7 +358,7 @@ const signWithTrezor = async () => {
     await awaitFreshApproval(async () => (controller.value.returnData({ data: returnHex })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, t('wallet.trezorSigningFailed')) || t('wallet.trezorSigningFailed'));
     loading.value = false;
   } finally {
@@ -381,7 +381,7 @@ const showKeystoneQR = async () => {
     keystoneOverlay.value = true;
     keystoneScan.value = false;
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, 'Failed to generate Keystone QR code') || 'Failed to generate Keystone QR code');
   }
 };
@@ -412,7 +412,7 @@ const onKeystoneScan = (ur: UR) => approval.run(async () => {
     await awaitFreshApproval(async () => (controller.value.returnData({ data: returnHex })), approvalCurrent);
     window.close();
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     snackbar.setError(getErrorMessage(e, t('wallet.keystoneQRScanError')) || t('wallet.keystoneQRScanError'));
     keystoneOverlay.value = false;
     keystoneScan.value = false;

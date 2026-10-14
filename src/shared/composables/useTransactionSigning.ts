@@ -106,7 +106,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const loading = ref(false);
   const spendingPassword = ref('');
   const passwordField = ref<PasswordFieldRef | null>(null);
-  const valid = ref(false);
+  // Vuetify 4 writes the form model only once an input registers. Hardware wallets
+  // render none, so start from the empty-form result instead of disabled actions.
+  const valid = ref(true);
   const passwordRules = ref([rules.required()]);
   const isBT = ref(false);
   const txCbor = ref<string>('');
@@ -227,8 +229,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   watch(options.tx, resetState, { deep: true, flush: 'sync' });
-  watch(() => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
-    loggedWallet.value?.webAuthnCredentialId, walletStore.isLocked, options.active?.()], resetState, { flush: 'sync' });
+  // Separate sources so only a changed value resets, not a re-broadcast of the same wallet.
+  watch([() => loggedWallet.value?.id, () => loggedWallet.value?.chain, () => loggedWallet.value?.network,
+    () => loggedWallet.value?.webAuthnCredentialId, () => walletStore.isLocked, () => options.active?.()], () => resetState(), { flush: 'sync' });
   if (getCurrentScope()) onScopeDispose(() => { disposed = true; resetState(); });
 
   const signTx = async (attempt = beginAttempt()): Promise<boolean> => {

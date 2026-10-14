@@ -29,7 +29,7 @@
               {{ $t('swap.learnMore') }}
             </v-btn>
           </span>
-          <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="slippageToleranceType"
+          <v-btn-toggle mandatory selected-class="geroButton" class="transparent" v-model="slippageToleranceType"
                         style="align-items: center;">
             <v-btn size="small" color="black" :value="'auto'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               {{ $t('swap.auto') }}
@@ -40,7 +40,7 @@
           </v-btn-toggle>
         </div>
         <div class="d-flex justify-center">
-          <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="slippageTolerance"
+          <v-btn-toggle mandatory selected-class="geroButton" class="transparent" v-model="slippageTolerance"
                         style="align-items: center;" @update:model-value="onSlippageToleranceChange">
             <v-btn rounded :value="0.5" class="pa-1" style="border-color: black!important; font-size: 11px;" height="36"
                    :disabled="automaticSlippage == 'on' || unlimitedSlippage == 'on'">
@@ -101,7 +101,7 @@
                             </div>
                           </v-tooltip>
                         </span>
-          <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="unlimitedSlippage"
+          <v-btn-toggle mandatory selected-class="geroButton" class="transparent" v-model="unlimitedSlippage"
                         style="align-items: center;" @update:model-value="unlimitedSlippageChange">
             <v-btn size="small" color="black" :value="'off'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               OFF
@@ -132,7 +132,7 @@
                             </div>
                           </v-tooltip>
                         </span>
-          <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="automaticSlippage"
+          <v-btn-toggle mandatory selected-class="geroButton" class="transparent" v-model="automaticSlippage"
                         style="align-items: center;">
             <v-btn size="small" color="black" :value="'off'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               OFF

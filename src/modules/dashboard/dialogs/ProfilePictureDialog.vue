@@ -742,7 +742,7 @@ defineExpose({ open });
   transition: opacity var(--g-dur-fast);
 }
 
-.fade-enter,
+.fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }

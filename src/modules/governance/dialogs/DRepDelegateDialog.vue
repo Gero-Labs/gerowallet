@@ -86,7 +86,7 @@
             <v-chip-group
               v-model="compensationPresetIndex"
               mandatory
-              active-class="primary"
+              selected-class="bg-primary"
               class="mb-1"
             >
               <v-chip size="small" variant="outlined" pill :value="0">0.5%</v-chip>

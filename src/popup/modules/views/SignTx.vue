@@ -293,7 +293,9 @@ interface SignTxRequest {
 }
 const request = ref<SignTxRequest | null>(null);
 const tx = ref<Cardano.Tx | undefined>(undefined);
-const valid = ref(false);
+// Vuetify 4 writes the form model only once an input registers. Hardware wallets
+// render none, so start from the empty-form result instead of a disabled Sign.
+const valid = ref(true);
 const passwordField = ref<{ showError(message: string): void } | null>(null);
 const txSignLoading = ref(false);
 const loading = ref(true);

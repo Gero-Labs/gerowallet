@@ -1626,15 +1626,15 @@ export default defineComponent({
   transition: opacity 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.msg-enter {
+.msg-enter-from {
   opacity: 0;
 }
 
-.agent-dock__msg.assistant.msg-enter {
+.agent-dock__msg.assistant.msg-enter-from {
   transform: translateX(-16px);
 }
 
-.agent-dock__msg.user.msg-enter {
+.agent-dock__msg.user.msg-enter-from {
   transform: translateX(16px);
 }
 

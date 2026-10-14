@@ -19,11 +19,19 @@ export function dialogControls(validate: () => Promise<{ valid: boolean; errors:
     ...Object.fromEntries(['v-card', 'v-card-title', 'v-card-text', 'v-card-actions', 'v-alert', 'v-row', 'v-col',
       'v-stepper', 'v-stepper-header', 'v-stepper-item', 'v-stepper-window', 'v-stepper-window-item',
       'v-list-item', 'v-list-item-title', 'v-list-item-subtitle', 'v-chip'].map(name => [name, slot])),
+    // Like Vuetify 4, only write the model once an input has registered; a form
+    // without inputs leaves the parent's initial `valid` untouched.
     'v-form': defineComponent({
       emits: ['update:modelValue'],
-      mounted() { this.$emit('update:modelValue', true); },
-      updated() { this.$emit('update:modelValue', true); },
-      methods: { validate, resetValidation() {} },
+      mounted() { this.reportValidity(); },
+      updated() { this.reportValidity(); },
+      methods: {
+        validate,
+        resetValidation() {},
+        reportValidity() {
+          if ((this.$el as HTMLElement).querySelector('input, textarea, select')) this.$emit('update:modelValue', true);
+        },
+      },
       template: '<form><slot /></form>',
     }),
     'v-btn': { props: ['disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' },

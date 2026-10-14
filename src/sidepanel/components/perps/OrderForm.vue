@@ -1047,7 +1047,7 @@ watch(() => account.value, (acc) => {
   transition: opacity var(--g-dur-fast) ease, transform var(--g-dur-fast) ease;
 }
 
-.estimates-fade-enter,
+.estimates-fade-enter-from,
 .estimates-fade-leave-to {
   opacity: 0;
   transform: translateY(-2px);

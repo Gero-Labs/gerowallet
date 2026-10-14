@@ -89,12 +89,12 @@
                   </template>
                   <v-date-picker
                     :model-value="filterDateFrom"
-                    @update:model-value="filterDateFrom = $event; dateFromMenu = false"
+                    @update:model-value="filterDateFrom = toPickerDay($event); dateFromMenu = false"
                     :min="earliestTxDate"
                     :max="filterDateTo || latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
-                    no-title
+                    hide-header
                     theme="dark"
                     color="var(--g-accent)"
                   />
@@ -121,12 +121,12 @@
                   </template>
                   <v-date-picker
                     :model-value="filterDateTo"
-                    @update:model-value="filterDateTo = $event; dateToMenu = false"
+                    @update:model-value="filterDateTo = toPickerDay($event); dateToMenu = false"
                     :min="filterDateFrom || earliestTxDate"
                     :max="latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
-                    no-title
+                    hide-header
                     theme="dark"
                     color="var(--g-accent)"
                   />
@@ -241,6 +241,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
+import { toPickerDay } from '@/shared/utils/format';
 import debounce from 'lodash/debounce';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';

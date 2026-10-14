@@ -213,7 +213,9 @@ const privateKeyBytes = ref<Uint8Array | null>(null);
 const passwordField = ref(null);
 const request = ref(null);
 const message = ref('');
-const valid = ref(false);
+// Vuetify 4 writes the form model only once an input registers. Hardware wallets
+// render none, so start from the empty-form result instead of a disabled Sign.
+const valid = ref(true);
 const isBT = ref(false);
 const loading = ref(false);
 const controller = ref(null);
@@ -451,7 +453,7 @@ const signAndReturnTx = async () => {
       await awaitFreshApproval(async () => (confirm()), approvalCurrent);
     }
   } catch (e: unknown) {
-    if (e instanceof StaleApprovalError) return;
+    if (e instanceof StaleApprovalError) { loading.value = false; return; }
     console.error('[SIGN-DATA] Error:', e);
     const errorMessage = e instanceof Error ? e.message : String(e);
     snackbar.setError(errorMessage);

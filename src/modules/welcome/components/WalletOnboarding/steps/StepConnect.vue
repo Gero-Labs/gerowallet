@@ -165,7 +165,8 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
     debugLog('[Keystone] QR code scanned', ur.type);
 
     if (props.network?.blockchain === Blockchain.BITCOIN) {
-      const bitcoinUR = UR.from(ur.cbor, 'hex');
+      // Keep the scanned type: UR.from() would label it 'bytes' and parseBitcoinAccount rejects that.
+      const bitcoinUR = new UR(Buffer.from(ur.cbor, 'hex'), ur.type);
       const bitcoinAccount = parseBitcoinAccount(bitcoinUR);
 
       const payload: ConnectionPayload = {

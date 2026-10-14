@@ -971,7 +971,7 @@ watch(selectedCurrency, () => {
 .tab-fade-leave-active {
   transition: opacity 0.12s ease, transform 0.12s ease;
 }
-.tab-fade-enter {
+.tab-fade-enter-from {
   opacity: 0;
   transform: translateY(6px);
 }

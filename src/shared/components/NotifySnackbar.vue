@@ -102,6 +102,6 @@ function open(snack: NotifySnack) {
 }
 .notify-snack-enter-active,
 .notify-snack-leave-active { transition: opacity var(--g-dur-base), transform var(--g-dur-base); }
-.notify-snack-enter,
+.notify-snack-enter-from,
 .notify-snack-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

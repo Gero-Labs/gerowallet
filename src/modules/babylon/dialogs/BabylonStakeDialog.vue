@@ -618,7 +618,7 @@ watch(() => props.params, (p) => {
 
 .step-fade-enter-active,
 .step-fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
-.step-fade-enter        { opacity: 0; transform: translateX(12px); }
+.step-fade-enter-from        { opacity: 0; transform: translateX(12px); }
 .step-fade-leave-to     { opacity: 0; transform: translateX(-12px); }
 
 /* ── Provider strip ── */
@@ -1110,5 +1110,5 @@ watch(() => props.params, (p) => {
 
 /* ── Transitions ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
-.fade-enter, .fade-leave-to { opacity: 0; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

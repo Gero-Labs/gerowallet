@@ -16,12 +16,35 @@ export async function awaitFreshApproval<T>(work: () => T | PromiseLike<T>, curr
   return result;
 }
 
+/** Value snapshot of an approval context; `null` (unserializable) always counts as a change. */
+function fingerprint(value: unknown): string | null {
+  try {
+    return JSON.stringify(value, (_key, item: unknown) => {
+      if (item === undefined) return '\u0000undefined';
+      if (typeof item === 'bigint') return `${item}n`;
+      if (item instanceof Map || item instanceof Set) return [...item];
+      if (ArrayBuffer.isView(item)) return Array.from(new Uint8Array(item.buffer, item.byteOffset, item.byteLength));
+      return item;
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function useApprovalFreshness(context: () => unknown, active: () => boolean = () => true, onInvalidate: () => void = () => {}) {
   let epoch = 0;
   let disposed = false;
   let running = false;
   const invalidate = () => { epoch += 1; onInvalidate(); };
-  watch(context, invalidate, { deep: true, flush: 'sync' });
+  // A deep watch also re-runs when a dependency is replaced by an equal value
+  // (the store re-broadcasting the same wallet); only a changed value invalidates.
+  let snapshot = fingerprint(context());
+  watch(context, (next) => {
+    const current = fingerprint(next);
+    if (current !== null && current === snapshot) return;
+    snapshot = current;
+    invalidate();
+  }, { deep: true, flush: 'sync' });
   watch(active, invalidate, { flush: 'sync' });
   onScopeDispose(() => { disposed = true; invalidate(); });
   const capture = () => {

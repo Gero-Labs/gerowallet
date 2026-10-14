@@ -210,7 +210,7 @@
         v-for="(nft, idx) in selectedCollectibles"
         :key="nft.fingerprint || idx"
         size="small"
-        close
+        closable
         class="nft-chip"
         @click:close="removeCollectible(idx)"
       >
@@ -544,7 +544,7 @@ function onPasteNumeric(e: ClipboardEvent) {
   const current = target.value;
   const newVal = current.slice(0, start) + cleaned + current.slice(end);
   target.value = newVal;
-  target.dispatchEvent(new Event('update:modelValue'));
+  target.dispatchEvent(new Event('input'));
 }
 
 function onQuantityInput(index: number, val: string) {

@@ -1217,7 +1217,7 @@ onBeforeUnmount(() => {
   transition: opacity var(--g-dur-base) ease, filter var(--g-dur-base) ease;
 }
 
-.balance-fade-enter,
+.balance-fade-enter-from,
 .balance-fade-leave-to {
   opacity: 0;
   filter: blur(4px);

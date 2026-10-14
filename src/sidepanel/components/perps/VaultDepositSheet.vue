@@ -328,7 +328,7 @@ watch(() => props.modelValue, (val) => {
 
 /* ── Transitions ── */
 .fade-slide-enter-active, .fade-slide-leave-active { transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease; }
-.fade-slide-enter, .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
+.fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
 
 .mt-3 { margin-top: 12px; }
 .mt-4 { margin-top: 16px; }
