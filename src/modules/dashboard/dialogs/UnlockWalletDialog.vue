@@ -278,6 +278,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
+import { sendUnlockAfterWake } from '@/chrome/unlockTransport';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
@@ -820,20 +821,23 @@ async function handleUnlock(passKeyAuthenticated = false) {
     const isPreLoginUnlock = !!props.preLoginWalletId;
     const messageType = isPreLoginUnlock ? MessageTypes.VERIFY_PRE_LOGIN_UNLOCK : MessageTypes.UNLOCK;
 
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
+    const response = await sendUnlockAfterWake({
       method: messageType,
       data: {
-        walletId: props.preLoginWalletId, // Only used for pre-login unlock
+        walletId,
         unlockCredential, // PassKey auth signaled via special value 'passkey-authenticated'
         unlockMethod: unlockMethod.value,
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
         password: password.value || undefined
       }
-    }) as BackgroundMessageResponse;
+    }, () => props.modelValue && (props.preLoginWalletId || walletStore.loggedWallet?.id) === walletId) as BackgroundMessageResponse;
     debugLog('Unlock response:', response);
     if (response.data?.success) {
       emit('update:modelValue', false);
       emit('unlocked');
+    } else if (response.error) {
+      showError(t('security.unlockFailed'));
     } else {
       // Show errors for each unlock method
       if (unlockMethod.value === 'pin') {

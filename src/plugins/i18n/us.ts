@@ -2777,6 +2777,7 @@ export default {
   'vaults.depositors': 'Depositors',
   'vaults.deposit': 'Deposit',
   'vaults.withdraw': 'Withdraw',
+  'vaults.transfersUnavailable': 'Vault deposits and withdrawals are not available in GeroWallet yet.',
   'vaults.verified': 'Verified',
   'vaults.protocol': 'Protocol',
   'vaults.user': 'User',

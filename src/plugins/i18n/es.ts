@@ -2712,6 +2712,7 @@ export default {
   'vaults.depositors': 'Depositantes',
   'vaults.deposit': 'Depositar',
   'vaults.withdraw': 'Retirar',
+  'vaults.transfersUnavailable': 'Los depósitos y retiros de bóvedas aún no están disponibles en GeroWallet.',
   'vaults.verified': 'Verificada',
   'vaults.protocol': 'Protocolo',
   'vaults.user': 'Usuario',

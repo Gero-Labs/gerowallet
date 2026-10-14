@@ -177,7 +177,7 @@ async function createWallet(name, awaitInitialSync = false) {
     for (const target of [page, second, side]) await expectState(target, { walletId: first.walletId, locked: true });
     check('Background lock broadcasts reach both options pages and side panel');
     stage = 'unlock';
-    await command(page, 'UNLOCK', { unlockCredential: password, password, unlockMethod: 'password' });
+    await command(page, 'UNLOCK', { walletId: (await snapshot(page)).walletId, unlockCredential: password, password, unlockMethod: 'password' });
     for (const target of [page, second, side]) await expectState(target, { locked: false });
     check('Real password authentication unlocks all subscribed interfaces');
 

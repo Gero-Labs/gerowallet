@@ -19,6 +19,7 @@ import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@
 import { isConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
+import { unlockAfterStartup } from '@/chrome/unlockStartup';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { embeddingSite } from '@/chrome/originBinding';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
@@ -2197,6 +2198,9 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
     const { walletId, idToken } = request.data || {};
     if (!walletId) throw new Error('walletId is required');
+    // Like UNLOCK: let startup hydrate the store first, or its persisted lock
+    // would overwrite the unlock below.
+    await booted();
     // Two ways in: a fresh Google idToken (first unlock of the session) OR a
     // login share already cached from an earlier unlock this session (re-unlock
     // after a lock, no repeat Google sign-in). One of them must be present.
@@ -2255,7 +2259,10 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     // this, an already-logged-in MPC wallet that was re-locked stays stuck:
     // the dashboard router guard (needsAuth && isLocked) bounces to /welcome
     // and the side panel keeps rendering LockScreen (both gate on isLocked).
-    WalletStore.setLocked(false);
+    // The flag belongs to the logged-in wallet, re-checked after the async
+    // reconstruction: a pre-switch or onboarding unlock authenticates another
+    // wallet, whose LOGIN then unlocks it from mpcSessionCache.
+    if (walletStore.loggedWallet?.id === walletId) WalletStore.setLocked(false);
 
     sendResponse({
       id: request.id,
@@ -3803,10 +3810,23 @@ app.addToOptions(MessageTypes.LOCK, async (request, sendResponse) => {
   }
 });
 
+// Read-only wake probe. Credential-bearing requests are sent only after the
+// message router is listening; UNLOCK itself also waits for wallet hydration,
+// capped like the other boot-gated handlers (an unfinished boot then fails closed:
+// no initialized wallet, or a different one, cannot be unlocked).
+app.addToOptions(MessageTypes.BACKGROUND_READY, (request, sendResponse) => {
+  sendResponse({ id: request.id, data: { ready: true }, target: TARGET, sender: SENDER.extension });
+});
+
 app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
   try {
     const { unlockCredential, totpCode, password, unlockMethod } = request.data;
-    const success = await walletManager.unlock(unlockCredential, totpCode, password, unlockMethod);
+    const success = await unlockAfterStartup(
+      booted(),
+      request.data.walletId,
+      () => walletStore.loggedWallet?.id,
+      () => walletManager.unlock(unlockCredential, totpCode, password, unlockMethod),
+    );
     sendResponse({
       id: request.id,
       data: { success },
@@ -3815,12 +3835,14 @@ app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
     });
   } catch (err) {
     console.error('unlock error', err);
+    // A string survives messaging (an Error serializes to {}); the UI shows a
+    // generic failure for any error instead of a wrong-credential message.
     sendResponse({
       id: request.id,
       data: { success: false },
       target: TARGET,
       sender: SENDER.extension,
-      error: err,
+      error: getErrorMessage(err, 'unlock-failed'),
     });
   }
 });

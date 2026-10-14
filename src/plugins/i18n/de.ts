@@ -3028,6 +3028,7 @@ export default {
   'vaults.depositors': 'Einleger',
   'vaults.deposit': 'Einzahlen',
   'vaults.withdraw': 'Auszahlen',
+  'vaults.transfersUnavailable': 'Ein- und Auszahlungen für Vaults sind in GeroWallet noch nicht verfügbar.',
   'vaults.verified': 'Verifiziert',
   'vaults.protocol': 'Protokoll',
   'vaults.user': 'Benutzer',

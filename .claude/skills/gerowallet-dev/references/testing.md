@@ -1,16 +1,21 @@
 # Testing
 
-One runner: Vitest 3.2.7, `vitest.config.mts`, happy-dom, `globals: true`, `testTimeout: 30000`, no setup files.
+The pinned runner is Vitest 4.1.11. `vitest.config.mts` uses happy-dom,
+`globals: true`, `testTimeout: 30000`, and the shared `test/setup.ts` setup file.
 
 ## Where tests live
 
-- 227 `*.spec.ts` colocated with source under `src/`
-- 11 `*.test.ts` under `src/`, mostly in `__tests__/` dirs
-- 7 `*.test.ts` under `test/`
+Source tests live next to their implementation under `src/`; additional suites
+live under `scripts/` and `test/`. Browser harnesses are separate Node scripts.
+Record file/test counts from the run you performed rather than copying a count
+from this guide.
 
-285 files, 3395 tests, ~95s for a full run.
-
-Colocate new tests under `src/`, next to the code. Not for typechecking - nothing in this repo ever runs a meaningful `tsc` (see SKILL.md) - but because both CI workflows address tests by path, and the colocated convention is what everything else follows. (`tsconfig.json` includes `src/**` only, so anything under `test/` is outside it, which matters only if the typecheck debt is ever cleaned up.)
+Colocate new source tests because the PR workflows address suites by path and
+the convention makes coverage easy to find. `npm run typecheck` and
+`typecheck:vue` run Vue-aware template/TypeScript checking; `typecheck:ts` keeps
+the TypeScript-only comparison. Historical diagnostics remain, so compare the
+same baseline and fix introduced errors. Type checking is useful even though a
+repo-wide clean result is not currently a required PR gate.
 
 ## Running
 
@@ -24,15 +29,18 @@ npm run test:watch
 
 `hookTimeout` is Vitest's **default 10s**, not the configured 30s - `testTimeout` does not cover `beforeAll`/`beforeEach`. A slow `beforeAll` needs its own explicit timeout argument.
 
-## A red full-suite run is probably not you
+## Investigate a red full-suite run
 
-On an idle machine the suite is green: 285 files, 3395 tests, ~37s, exit 0. Under load it is a different story - several specs are timing-sensitive and fail intermittently:
+Record the command, source SHA, failures, and skips before interpreting the run.
+Some suites have shown load-sensitive timing failures:
 
 - `src/services/crossDevice/*.spec.ts` (real timers)
 - `src/chains/midnight/midnightKeyManager.ledger.spec.ts` (a `beforeAll` deriving Midnight HD keys for 3 networks, ~9.4s against a **10s** hook timeout)
 - `src/shared/utils/renderMarkdown.spec.ts`
 
-All pass in isolation. **Re-run the failing file alone before calling it a regression**, and expect a different one to fail next time. Conversely, a green run under load is not proof a flake is fixed.
+Re-run a failing file alone to distinguish load sensitivity from a reproducible
+regression. Keep the initial failure and isolated result in the evidence; do not
+rewrite a failed full run as passing because one isolated retry passed.
 
 ```bash
 npx vitest run src/services/crossDevice/proveService.spec.ts
@@ -42,22 +50,28 @@ npx vitest run src/services/crossDevice/proveService.spec.ts
 
 ## What CI actually runs
 
-About 77 files. `npm test` is never invoked in CI.
+Required PR checks run selected suites. The candidate packaging workflow runs
+the full deterministic suite, but is not triggered by every PR.
 
 | Workflow | Runs |
 |---|---|
-| `dev-bundle-gate.yml` | 18 named spec files (i18n parity among them), then `design:check`, then `build:web` |
-| `midnight-ledger-verify.yml` | Two whole **directories** - `src/chains/midnight` (31 files today) and `src/services/crossDevice` (22) - plus 6 named specs; then `scripts/build-isolated-extension.mjs` |
+| `dev-bundle-gate.yml` | Explicit regression paths for secrets, stores, navigation, Help, i18n and other supported behaviors; then `design:check` and `build:web`. Read its current path list. |
+| `midnight-ledger-verify.yml` | `src/chains/midnight` and `src/services/crossDevice`, plus named transaction/store suites; then `scripts/build-isolated-extension.mjs`. |
+| `help-browser-evidence.yml` | Three real extension Help browser harnesses with synthetic API responses on matching changes or manual dispatch. |
+| `ci-cd.yml` | `npm test -- --maxWorkers=2`, reader guard, sequential builds and artifact/TDZ checks on `main` pushes or manual dispatch. |
 
 Because those are directory arguments, the covered set grows on its own whenever someone adds a spec under either path. Count it before quoting a number:
 
 ```bash
-find src/chains/midnight src/services/crossDevice \( -name '*.spec.ts' -o -name '*.test.ts' \) | wc -l
+rg --files src/chains/midnight src/services/crossDevice -g '*.spec.ts' -g '*.test.ts'
 ```
 
 Reproduce either locally by copying the path list from the workflow.
 
-**Consequence: a regression outside those paths merges green forever.** Tests there are for your own confidence, not for the gate. Write them anyway, but do not mistake them for enforcement.
+A green PR does not prove suites outside its workflow path lists passed. Run
+the relevant tests locally and retain full-suite results for the exact release
+candidate. AI review may run additional targeted suites; its report must state
+which ones actually ran.
 
 **The inverse is just as important**: anything under `src/chains/midnight` or `src/services/crossDevice` **is** gated on every PR, so a red `Ledger tests and extension bundles` check is a real failure, not noise. That check is also not path-filtered, so it runs its vitest slice and builds all five production entry points even for a one-file UI PR - budget for the wait.
 
@@ -76,10 +90,10 @@ Under happy-dom, `getContextType()` returns `'content'` (a `window` exists, prot
 
 **Blast radius worth knowing**: `src/stores/governanceAlertsStore.spec.ts` builds a wallet `config` fixture, so any change to the config shape or to `setConfig` fails a spec with no visible relationship to your diff.
 
-## Things that do not exist
+## Limits of the tooling
 
 - **No coverage tooling.** No `@vitest/coverage-*`, no config key, no threshold, no CI step.
-- **No in-repo E2E.** `npm run test:e2e` runs `playwright test`, but Playwright is in neither `package.json` nor the lockfile nor `node_modules`. The real E2E suite is the separate repo `Gero-Labs/gerowallet-e2e-tests`; what this repo keeps of it is `scripts/build-isolated-extension.mjs`.
+- **No configured `playwright test` suite here.** The root package pins Playwright 1.62.1, and a normal `npm ci` installs its Node module. `npm run test:e2e` exposes `playwright test`, but there is no root Playwright test config. The separate `Gero-Labs/gerowallet-e2e-tests` repository and this repo's Node browser harnesses have their own setup. Record both the wallet/artifact SHA and external E2E SHA; an older pinned wallet run does not qualify a new candidate.
 - **No typecheck gate.** See the verification ladder in SKILL.md.
 
 ## The manual browser harness
@@ -92,9 +106,27 @@ PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright node test/wallet-library/
 PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright node test/wallet-library/browser-mini.cjs   # 375x820
 ```
 
-Its config lacks the three `@noble/*` `.js` aliases that `vite.config.mts` and `vitest.config.mts` carry; copy them across or the dep pre-scan errors.
+The fixture aliases stores and data clients. It establishes component behavior,
+not production background synchronization or profile-upgrade acceptance.
+`test/visual-parity/` similarly checks native controls, layout, focus, and the
+vendored widget's theme boundary with synthetic state.
 
-This is the general technique for any component you cannot render in the full app (the full app cannot run headless - crypto init crashes): leaf-mount it with a scratch Vite config.
+The real extension can also be exercised in a disposable browser profile:
+
+- `scripts/migration/entrypoints-browser.cjs` checks the retained artifact's
+  options/sidepanel pages, CSP, and dashboard handoff.
+- `scripts/migration-browser/store-sync-smoke.cjs` creates synthetic wallets
+  through production UI and verifies real background broadcasts/persistence
+  without harness writes to the asserted state. Its offline limits are recorded
+  explicitly; it does not prove every live-provider or upgrade path.
+
+Read each runner's environment options and keep its artifact immutable during
+the run. The Node module installed by `npm ci` does not establish that a
+compatible browser binary is provisioned. Install the required browser with
+the pinned Playwright CLI, for example `npx playwright install chromium`, or
+use the runner's documented browser override. CI may provision its own browser
+and system dependencies. Physical devices, existing-profile upgrades, and
+production release acceptance still need their separate evidence.
 
 ## Don't run this locally
 

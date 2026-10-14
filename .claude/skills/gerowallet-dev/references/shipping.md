@@ -35,9 +35,9 @@ node scripts/precommit-lint.mjs && node scripts/design/audit.mjs && node scripts
 | ESLint errors in a file you barely touched | Fix them. The repo rule is that any file you edit leaves lint clean. That is the price of touching a legacy file. |
 | `OVER <metric>` from the ratchet | `node scripts/design/audit.mjs 2>&1 \| grep OVER` to see which. Tokenize the value. If it is a `#1122`-style reference in a comment, rewrite it as `PR 1122`. See `design-system.md`. |
 | Contrast failure | You changed a token or a chain accent. Fix the colour, do not raise a budget. |
-| `Cannot find module .../yorkie/src/runner.js` | You are in a harness-managed worktree with no yorkie installed. Run the three gates by hand, then `--no-verify` for that commit only. |
+| `Cannot find module .../yorkie/src/runner.js` | Repair the checkout's dependency installation and generated hook, then rerun the normal commit. Do not bypass its gates. |
 
-**Never use `--no-verify` routinely.** The single hook entry chains all three gates, so skipping lint also skips the ratchet and the WCAG check. That exact habit is why `precommit-lint.mjs` was written.
+**Never use `--no-verify`.** The single hook entry chains all three gates, so skipping lint also skips the ratchet and the WCAG check. That exact habit is why `precommit-lint.mjs` was written.
 
 ## Before you push
 
@@ -61,7 +61,7 @@ Required checks on `development` (these are job `name:` strings, not workflow na
 
 | Context | Workflow | What it runs |
 |---|---|---|
-| `Production bundle (SFC parse)` | `dev-bundle-gate.yml` | 18 named vitest files (i18n parity and Copilot no-advice among them), `npm run design:check`, then `build:web` against a synthesized placeholder `.env.production` |
+| `Production bundle (SFC parse)` | `dev-bundle-gate.yml` | Explicit regression suites, including secret readers/migration, stores, navigation and i18n; `npm run design:check`; then `build:web` against a synthesized placeholder `.env.production`. Read the workflow for the current path list. |
 | `npm ci (lock in sync)` | `lockfile-check.yml` | `npm ci --ignore-scripts` |
 | `ESLint flat config loads` | `eslint-check.yml` | `eslint --print-config` on two files. It lints **no source** - it only proves the flat config resolves |
 | `Ledger tests and extension bundles` | `midnight-ledger-verify.yml` | The Midnight + crossDevice vitest slice, then `scripts/build-isolated-extension.mjs` which builds all five production entry points. Deliberately **not** path-filtered, so it runs on every PR |
@@ -81,7 +81,27 @@ Confirm the merge actually landed - a blocked `gh pr merge` prints a hint and ex
 gh pr view <n> --json state,mergedAt,mergeCommit
 ```
 
-`claude-code-review.yml` runs on same-repo PRs, actually executes vitest and eslint, and is **not** a required check. It never runs on fork PRs, and it refuses to run on a PR that edits its own workflow file.
+`claude-code-review.yml` runs on eligible same-repo PRs and installs dependencies
+so the reviewer can execute targeted Vitest and ESLint checks. Read the completed
+review for the checks actually run; a successful action alone is not evidence
+for every test. It skips fork and Dependabot PRs, and the action refuses to review
+a PR that edits its own workflow file.
+
+## Release packaging
+
+`ci-cd.yml` is separate from the PR checks. It runs on `main` pushes or manual
+dispatch with Node 24.19.0, npm 11.1.0, and `npm ci`. Before archiving it runs the
+full deterministic suite, the secret-reader guard, sequential production
+builds, artifact version/identity/CSP/hash checks, and the background TDZ guard.
+Manual runs require the reviewed package version and channel identity settings.
+
+`dry_run=true` is the default and does not tag or publish. With separately
+authorized `dry_run=false`, the tag job rechecks that same run's retained
+artifact and tags its tested source SHA without rebuilding it. Chrome Web Store
+submission remains a separate authorized operation. Follow
+[release and recovery readiness](../../../../spikes/vue3-migration/RELEASE-READINESS.md);
+green packaging does not close physical-device, profile-upgrade, recovery,
+provider, beta, or production-verification gates.
 
 ## If you are contributing from a fork
 

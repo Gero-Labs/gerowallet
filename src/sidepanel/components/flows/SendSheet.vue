@@ -147,7 +147,7 @@
                     density="compact"
                     theme="dark"
                     hide-details="auto"
-                    :error-messages="adaError"
+                    :error-messages="isExactAmount(adaAmount, 6) ? '' : $t('send.invalidAmount')"
                     class="mini-input amount-field"
                     placeholder="0.00"
                     step="0.1"
@@ -158,11 +158,11 @@
                   </v-btn>
                 </div>
                 <div
-                  v-if="minAda > 0 && (parseFloat(adaAmount) || 0) < minAda"
+                  v-if="minAdaLovelace > 0n && decimalToBaseUnits(adaAmount, 6) < minAdaLovelace"
                   class="text-caption mt-1 min-ada-hint"
                   @click="fillMinAda"
                 >
-                  {{ $t('wallet.minAdaRequired', { amount: minAda.toFixed(2) }) }}
+                  {{ $t('wallet.minAdaRequired', { amount: baseUnitsToDecimalString(minAdaLovelace, 6) }) }}
                 </div>
               </div>
 
@@ -188,6 +188,7 @@
                     density="compact"
                     theme="dark"
                     hide-details="auto"
+                    :error-messages="isExactAmount(token.sendAmount, token.decimals ?? 0) ? '' : $t('send.invalidAmount')"
                     class="mini-input amount-field"
                     placeholder="0"
                     step="1"
@@ -325,11 +326,11 @@
                 </div>
                 <div class="review-row">
                   <span class="detail-label">ADA</span>
-                  <span class="detail-value white--text font-weight-bold">{{ adaAmount || '0' }} ₳</span>
+                  <span class="detail-value white--text font-weight-bold">{{ baseUnitsToDecimalString(sentOutput?.value.coins ?? 0n, 6) }} ₳</span>
                 </div>
-                <div v-for="token in extraTokens" :key="'r-' + token.unit" class="review-row">
+                <div v-for="token in reviewTokens" :key="'r-' + token.unit" class="review-row">
                   <span class="detail-label">{{ token.ticker || token.name }}</span>
-                  <span class="detail-value white--text">{{ token.sendAmount || '0' }}</span>
+                  <span class="detail-value white--text">{{ token.quantity }}</span>
                 </div>
                 <div v-for="nft in selectedNfts" :key="'rn-' + nft.unit" class="review-row">
                   <span class="detail-label">{{ nft.name || 'NFT' }}</span>
@@ -580,6 +581,7 @@ import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { useChainContext } from '../../composables/useChainContext';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
+import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -654,7 +656,6 @@ const showQR = ref(false);
 
 // Step 2: Assets
 const adaAmount = ref('');
-const adaError = ref('');
 const extraTokens = ref<SendToken[]>([]);
 const selectedNfts = ref<NftRow[]>([]);
 const showTokenPicker = ref(false);
@@ -665,10 +666,12 @@ const nftDisplayCount = ref(20);
 const nftListEl = ref<HTMLElement | null>(null);
 const nftSentinelEl = ref<HTMLElement | null>(null);
 let nftObserver: IntersectionObserver | null = null;
-const minAda = ref(0);
+const minAdaLovelace = ref(0n);
 
 // Step 3: Review
 const tx = shallowRef<Cardano.Tx | undefined>(undefined);
+// The recipient output exactly as built, so Review shows what is signed.
+const sentOutput = shallowRef<Cardano.TxOut | undefined>(undefined);
 const txFee = ref<bigint>(BigInt(0));
 const txBuilt = ref(false);
 const txBuildError = ref('');
@@ -832,7 +835,7 @@ const isAddressValid = computed(() => {
 
 const adaBalance = computed(() => {
   const account = walletStore.account;
-  return account?.controlled_amount ? Number(account.controlled_amount) : 0;
+  return decimalToBaseUnits(account?.controlled_amount, 0);
 });
 
 // All wallet tokens mapped for send flow (same as dashboard)
@@ -897,20 +900,31 @@ const filteredNfts = computed(() => {
 
 const visibleNfts = computed(() => filteredNfts.value.slice(0, nftDisplayCount.value));
 
+/** Amounts the build would truncate or drop must be corrected, never silently changed. */
+function isExactAmount(amount: string | undefined, decimals: number): boolean {
+  return !exceedsDecimals(amount, decimals) && decimalToBaseUnits(amount, decimals) >= 0n;
+}
+
 const isAssetsValid = computed(() => {
-  const ada = parseFloat(adaAmount.value);
-  const hasAda = !isNaN(ada) && ada > 0;
-  const hasTokens = extraTokens.value.some(t => parseFloat(t.sendAmount ?? '') > 0);
+  if (!isExactAmount(adaAmount.value, 6) || !extraTokens.value.every(t => isExactAmount(t.sendAmount, t.decimals ?? 0))) return false;
+  const hasAda = decimalToBaseUnits(adaAmount.value, 6) > 0n;
+  const hasTokens = extraTokens.value.some(t => decimalToBaseUnits(t.sendAmount, t.decimals ?? 0) > 0n);
   const hasNfts = selectedNfts.value.length > 0;
   return hasAda || hasTokens || hasNfts;
 });
 
+const reviewTokens = computed(() => extraTokens.value.flatMap((token) => {
+  const quantity = sentOutput.value?.value.assets?.get(token.unit as Cardano.AssetId);
+  return quantity ? [{ ...token, quantity: baseUnitsToDecimalString(quantity, token.decimals ?? 0) }] : [];
+}));
+
 const assetsSummary = computed(() => {
   const parts: string[] = [];
-  const ada = parseFloat(adaAmount.value);
-  if (!isNaN(ada) && ada > 0) parts.push(`${ada} ADA`);
+  const ada = decimalToBaseUnits(adaAmount.value, 6);
+  if (ada > 0n) parts.push(`${baseUnitsToDecimalString(ada, 6)} ADA`);
   for (const t of extraTokens.value) {
-    if (parseFloat(t.sendAmount ?? '') > 0) parts.push(`${t.sendAmount} ${t.ticker}`);
+    const quantity = decimalToBaseUnits(t.sendAmount, t.decimals ?? 0);
+    if (quantity > 0n) parts.push(`${baseUnitsToDecimalString(quantity, t.decimals ?? 0)} ${t.ticker}`);
   }
   if (selectedNfts.value.length > 0) parts.push(`${selectedNfts.value.length} NFT${selectedNfts.value.length > 1 ? 's' : ''}`);
   return parts.join(', ') || 'No assets';
@@ -1005,26 +1019,23 @@ function removeExtraToken(idx: number) {
 }
 
 function setAdaMax() {
-  const maxLovelace = adaBalance.value - 500_000; // Reserve for fee
-  if (maxLovelace <= 0) {
+  const maxLovelace = adaBalance.value - 500_000n; // Reserve for fee
+  if (maxLovelace <= 0n) {
     adaAmount.value = '0';
     return;
   }
-  adaAmount.value = (maxLovelace / 1_000_000).toFixed(6);
+  adaAmount.value = baseUnitsToDecimalString(maxLovelace, 6);
 }
 
 function fillMinAda() {
   // Set the ADA amount to the exact minimum required by the protocol
-  adaAmount.value = minAda.value.toFixed(6);
+  adaAmount.value = baseUnitsToDecimalString(minAdaLovelace.value, 6);
 }
 
 function setTokenMax(idx: number) {
   const token = extraTokens.value[idx];
   if (!token) return;
-  const bal = Number(token.balance);
-  const dec = token.decimals || 0;
-  const amount = dec > 0 ? bal / Math.pow(10, dec) : bal;
-  token.sendAmount = String(amount);
+  token.sendAmount = baseUnitsToDecimalString(token.balance, token.decimals ?? 0);
 }
 
 function isNftSelected(nft: NftRow) {
@@ -1040,8 +1051,9 @@ function toggleNft(nft: NftRow) {
   }
 }
 
-function formatBalance(lovelace: number): string {
-  return filters.toCurrency(lovelace);
+function formatBalance(lovelace: bigint): string {
+  // Display formatting may shorten balances; MAX/build paths retain exact units.
+  return filters.toCurrency(Number(lovelace));
 }
 
 function getTokenImg(token: SendToken): string {
@@ -1062,6 +1074,7 @@ async function buildTransaction() {
   const current = approval.capture();
   if (!current()) return false;
   txBuilt.value = false;
+  sentOutput.value = undefined;
   txBuildError.value = '';
   buildingTx.value = true;
 
@@ -1085,19 +1098,13 @@ async function buildTransaction() {
 
     // Build asset map
     const assetsMap = new Map<Cardano.AssetId, bigint>();
-    let coinsAmount = BigInt(0);
-
-    // ADA
-    const ada = parseFloat(adaAmount.value);
-    if (!isNaN(ada) && ada > 0) {
-      coinsAmount = BigInt(Math.floor(ada * 1_000_000));
-    }
+    let coinsAmount = decimalToBaseUnits(adaAmount.value, 6);
+    if (coinsAmount < 0n) coinsAmount = 0n;
 
     // Extra tokens
     for (const token of extraTokens.value) {
-      const amt = parseFloat(token.sendAmount ?? '');
-      if (isNaN(amt) || amt <= 0) continue;
-      const quantity = BigInt(Math.floor(amt * Math.pow(10, token.decimals || 0)));
+      const quantity = decimalToBaseUnits(token.sendAmount, token.decimals ?? 0);
+      if (quantity <= 0n) continue;
       assetsMap.set(token.unit as Cardano.AssetId, quantity);
     }
 
@@ -1142,6 +1149,7 @@ async function buildTransaction() {
     tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
 
     txFee.value = tx.value.body.fee;
+    sentOutput.value = outputs[0];
     txBuilt.value = true;
     return true;
   } catch (e: unknown) {
@@ -1171,20 +1179,20 @@ async function buildTransaction() {
 
 // Calculate minAda when assets change — uses the same SDK function as the transaction builder
 function recalcMinAda() {
-  if (!epochParams.value || !paymentAddress.value) { minAda.value = 0; return; }
+  if (!epochParams.value || !paymentAddress.value) { minAdaLovelace.value = 0n; return; }
 
   const assetsMap = new Map<Cardano.AssetId, bigint>();
   for (const token of extraTokens.value) {
-    const amt = parseFloat(token.sendAmount ?? '');
-    if (!isNaN(amt) && amt > 0) {
-      assetsMap.set(token.unit as Cardano.AssetId, BigInt(Math.floor(amt * Math.pow(10, token.decimals || 0))));
+    const quantity = decimalToBaseUnits(token.sendAmount, token.decimals ?? 0);
+    if (quantity > 0n) {
+      assetsMap.set(token.unit as Cardano.AssetId, quantity);
     }
   }
   for (const nft of selectedNfts.value) {
     assetsMap.set(nft.unit as Cardano.AssetId, BigInt(nft.toSendQuantity || 1));
   }
 
-  if (assetsMap.size === 0) { minAda.value = 0; return; }
+  if (assetsMap.size === 0) { minAdaLovelace.value = 0n; return; }
 
   try {
     // Use the exact same SDK function the transaction builder uses (computeMinimumCoinQuantity)
@@ -1195,9 +1203,9 @@ function recalcMinAda() {
       value: { coins: BigInt(0) as Cardano.Lovelace, assets: assetsMap }
     };
     const minLovelace = getMinCoin(mockOutput);
-    minAda.value = Number(minLovelace) / 1_000_000;
+    minAdaLovelace.value = minLovelace;
   } catch {
-    minAda.value = 0;
+    minAdaLovelace.value = 0n;
   }
 }
 
@@ -1444,7 +1452,6 @@ function resetAll() {
   showContacts.value = false;
   showQR.value = false;
   adaAmount.value = '';
-  adaError.value = '';
   extraTokens.value = [];
   selectedNfts.value = [];
   showTokenPicker.value = false;
@@ -1453,8 +1460,9 @@ function resetAll() {
   nftSearch.value = '';
   nftDisplayCount.value = 20;
   teardownNftObserver();
-  minAda.value = 0;
+  minAdaLovelace.value = 0n;
   tx.value = undefined;
+  sentOutput.value = undefined;
   txFee.value = BigInt(0);
   txBuilt.value = false;
   txBuildError.value = '';
@@ -1482,6 +1490,7 @@ watch(() => props.modelValue, (val) => {
 
 function clearBuiltTransaction() {
   tx.value = undefined;
+  sentOutput.value = undefined;
   txBuilt.value = false;
 }
 // Compare primitive sources individually so an equal wallet broadcast does not

@@ -56,7 +56,11 @@ vi.mock('@/chrome/mpcLoginShareCache', () => ({ mpcLoginShareCache: {} }));
 vi.mock('@/services/midnight-sync.service', () => ({ default: {} }));
 vi.mock('@/chains/midnight/midnightPrivateSyncSession', () => ({}));
 
-type Internals = { initializeWallet: () => Promise<void>; initializeLastActivityTimestamp: () => Promise<void> };
+type Internals = {
+  initializeWallet: () => Promise<void>;
+  initializeLastActivityTimestamp: () => Promise<void>;
+  verifyUnlockCredentials: () => Promise<boolean>;
+};
 const wallet = { id: 1, name: 'Test wallet', chain: 'Cardano', network: 'Preprod' };
 function deferred() {
   let resolve!: () => void;
@@ -86,6 +90,22 @@ async function manager() {
 }
 
 describe('wallet login after worker startup', () => {
+  it.each(['switch', 'logout'])('does not unlock after %s during credential verification', async action => {
+    const { instance } = await manager();
+    await instance.login(wallet);
+    env.state.isLocked = true;
+    const verified = deferred();
+    vi.spyOn(instance as unknown as Internals, 'verifyUnlockCredentials')
+      .mockImplementation(async () => { await verified.promise; return true; });
+    const result = instance.unlock('public-test-password');
+    if (action === 'switch') await instance.login({ ...wallet, id: 2 });
+    else await instance.logout();
+    env.locked.mockClear();
+    verified.resolve();
+    await expect(result).rejects.toThrow('unlock-target-changed');
+    expect(env.locked).not.toHaveBeenCalled();
+    expect(env.state.isLocked).toBe(true);
+  });
   it('does not restart syncing or unlock an already initialized wallet', async () => {
     const { instance } = await manager();
     const first = await instance.login(wallet);

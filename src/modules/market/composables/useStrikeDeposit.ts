@@ -11,6 +11,7 @@ import { Messaging, type BackgroundResponse, type VerifyPasswordResponse } from 
 import { MessageTypes } from '@/models/MessageTypes';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { debugLog } from '@/utils/debug';
+import i18n from '@/plugins/i18n';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
 
 /**
@@ -194,18 +195,22 @@ export function useStrikeDeposit() {
    *
    * @param password - The wallet's spending password. Pass an empty string
    *   for hardware wallets (currently unsupported here — see comment below).
-   * @param _vaultId - Reserved for future vault-deposit support. Currently
-   *   ignored; the wallet always deposits to the user's main account.
+   * @param vaultId - Unsupported: reject vault funding rather than silently
+   *   crediting the user's general trading account.
    */
   async function buildAndSign(
     password: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _vaultId?: string,
+    vaultId?: string,
     // Pre-decrypted root key bytes for PRF (passkey) wallets, obtained from
     // PassKeyAuthButton. When present we skip password verification and pass
     // these as privateKeyBytes to SIGN_TX (mirrors useTransactionSigning).
     pkBytes?: Uint8Array,
   ): Promise<boolean> {
+    if (vaultId !== undefined) {
+      error.value = i18n.t('vaults.transfersUnavailable');
+      status.value = 'error';
+      return false;
+    }
     if (!quote.value || !requestId.value) {
       error.value = 'No active deposit quote. Call requestQuote() first.';
       status.value = 'error';
@@ -335,7 +340,7 @@ export function useStrikeDeposit() {
 
       // Deposit complete from the wallet's side. We emit 'confirmed' as the
       // terminal status because legacy consumers (the dashboard
-      // PerpsAccountSection / VaultDepositSheet) listen for 'confirmed'; the
+      // PerpsAccountSection) listen for 'confirmed'; the
       // side-panel sheet treats 'credited' and 'confirmed' as equivalent. The
       // balance updates on Strike once on-chain confirmations land.
       status.value = 'confirmed';

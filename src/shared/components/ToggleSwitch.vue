@@ -10,7 +10,9 @@
         {{ props.iconLeft }}
       </v-icon>
     </p>
+    <!-- Vuetify 4 renders a plain checkbox; restore the switch semantics Vuetify 2 exposed. -->
     <v-switch
+      role="switch"
       inset
       size="small"
       density="compact"

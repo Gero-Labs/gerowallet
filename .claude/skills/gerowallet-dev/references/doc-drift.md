@@ -6,7 +6,7 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 
 | Says | Reality |
 |---|---|
-| "Ensure all tests pass: `npm run typecheck` / `npm run lint`" (PR template; CONTRIBUTING.md carried the same line until it was corrected) | Both are systemically red on a clean tree: ~173 tsc errors and 390 lint errors when last measured. Neither is a gate, and the tsc count drifts - never compare absolute numbers. See the verification ladder in SKILL.md |
+| "Ensure all tests pass: `npm run typecheck` / `npm run lint`" (PR template; CONTRIBUTING.md carried the same line until it was corrected) | Both retain historical diagnostics. `typecheck` now uses `vue-tsc` and checks templates; compare the same baseline and fix new diagnostics rather than relying on old counts. Lint touched files. See the verification ladder in SKILL.md. |
 
 ## CLAUDE.md
 
@@ -16,7 +16,7 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 | "Popup context: `Messaging.sendToBackground()`" | Routing is by the `sender` string, not by window. Every wallet UI surface, popup included, uses `sendToBackgroundFromOptions` for `MessageTypes.*` |
 | "Chrome messaging timeout: use `return true` for async handlers" | The handler's return value is discarded; `listen()` already returns `true`. What matters is calling `sendResponse` on every path |
 | "WASM loading: files must be in `public/`" | Zero `.wasm` files in the repo and no `public/` dir. All WASM ships inside npm packages |
-| `popup/  # Extension popup entry` | `src/popup/{index.html,main.ts,Popup.vue}` is dead code - not a Vite input, no `action.default_popup`. The live popup views are `src/popup/modules/views/*.vue`, routed by the **options** router |
+| `popup/  # Extension popup entry` | The obsolete `src/popup/{index.html,main.ts,Popup.vue}` bootstrap was removed. The live popup views remain in `src/popup/modules/views/*.vue`, routed by the **options** router. There is no separate popup Vite input or `action.default_popup`. |
 | "`minFee()` adds witness overhead (witnessCount x 110 bytes x minFeeCoefficient)" | No such arithmetic exists. It inserts N dummy witnesses, lets the SDK size the CBOR, and adds a flat `80 * minFeeCoefficient` margin |
 | "Data layer: Nexus - blockchain data all brokered server-side, the client carries no third-party data keys" | True for Cardano. `BitcoinApi` calls Esplora directly (including broadcast), Midnight uses direct Foundation/Arkhia URLs, and `src/api/spo-api.ts` calls Koios directly |
 | "`api/` - data clients routed through gero-backend/Nexus: ... spo-api" | `spo-api.ts` has a hardcoded per-network Koios URL map and no env var |
@@ -41,10 +41,10 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 
 ## Not a drift, but surprising
 
-- `package.json` still exposes `npm run test:e2e` (`playwright test`), but Playwright is in neither `dependencies` nor `devDependencies` and there is no Playwright config. The E2E suite is a separate repo. Neither README.md nor CLAUDE.md mentions it.
+- `package.json` pins Playwright 1.62.1, so a normal `npm ci` installs the Node module. Browser binaries require separate provisioning. `npm run test:e2e` exposes `playwright test`, but no root Playwright test config exists. The external E2E suite is separate; this repo also has real extension and synthetic component browser harnesses. See [testing](testing.md) for setup, evidence boundaries, and exact-candidate requirements.
 - `.env.example` does not exist and is not coming back (it carried `MANIFEST_KEY`). `.gitignore` keeps a `!.env.example` negation for a file that is not committed. Enumerate variables with `grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u`.
 - `.prettierrc` exists, but prettier is not a dependency, has no script, and appears nowhere in CI. Do not run it - a reformat diff collides with the design ratchet's per-file metrics. Match the surrounding style; `.editorconfig` is the practical guide.
-- `ci-cd.yml` is legacy: its `publish` job would fail today (it reads a `src/manifest.json` that does not exist, requires `semver` which is not a dependency, and uses the removed `::set-output`). PR validation comes entirely from the four `ubuntu-latest` workflows.
+- `ci-cd.yml` was repaired during the Vue 3 migration. It runs the full suite, builds sequentially, validates the committed/generated version and identity, and retains artifact hashes/provenance. Dry runs do not publish. A separately authorized tag job rechecks the same run's artifact without rebuilding; Chrome Web Store submission remains separate. See [shipping](shipping.md) and the [release runbook](../../../../spikes/vue3-migration/RELEASE-READINESS.md). Green CI is not final device, upgrade/recovery, beta, or store acceptance.
 
 ## If you find another one
 

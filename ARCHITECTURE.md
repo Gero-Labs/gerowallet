@@ -788,7 +788,7 @@ npm run build
 2. Build background worker (Rollup bundle)
 3. Build content scripts (injected into pages)
 4. Build inject scripts (window.cardano API)
-5. Build web apps (options, popup, sidepanel)
+5. Build web apps (options and sidepanel; popup approval views use the options router)
 6. Copy manifest.json and static assets
 7. Copy WASM files to `extension/`
 
@@ -800,7 +800,7 @@ npm run build
 - `vite-plugin-wasm` - WebAssembly support (cryptography)
 - `vite-plugin-top-level-await` - Async WASM loading
 - `vite-plugin-node-polyfills` - Node.js compatibility (Buffer, process, etc.)
-- `@vitejs/plugin-vue2` - Vue.js 3.5 support
+- `@vitejs/plugin-vue` - Vue.js 3.5 single-file component support
 - `unplugin-auto-import` - Auto-import Vue, Vuetify
 - `unplugin-vue-components` - Auto-import components
 

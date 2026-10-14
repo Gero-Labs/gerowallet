@@ -155,9 +155,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
+import { sendUnlockAfterWake } from '@/chrome/unlockTransport';
 import { MessageTypes } from '@/models/MessageTypes';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { useChainContext } from '../composables/useChainContext';
@@ -199,6 +200,8 @@ const showPassword = ref(false);
 const loading = ref(false);
 const loggingOut = ref(false);
 const error = ref('');
+let disposed = false;
+onBeforeUnmount(() => { disposed = true; });
 
 // MPC "Sign in with Google" unlock state — never logged (idToken).
 const isMpcWallet = computed(() => lockWallet.value?.encryptionMethod === 'mpc');
@@ -273,13 +276,14 @@ async function handlePinFinish(pin: string) {
   pinError.value = '';
 
   try {
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const walletId = walletStore.loggedWallet?.id;
+    const response = await sendUnlockAfterWake({
       method: MessageTypes.UNLOCK,
-      data: { unlockCredential: pin, unlockMethod: 'pin' },
-    }) as { data?: { success?: boolean; error?: string } };
+      data: { walletId, unlockCredential: pin, unlockMethod: 'pin' },
+    }, () => !disposed && walletStore.loggedWallet?.id === walletId) as BackgroundMessageResponse;
 
     if (!response.data?.success) {
-      pinError.value = response.data?.error || 'Incorrect PIN';
+      pinError.value = response.error ? t('security.unlockFailed') : response.data?.error || t('security.incorrectPin');
       pinCode.value = '';
     }
   } catch (e: unknown) {
@@ -296,17 +300,19 @@ async function handlePasswordUnlock() {
   error.value = '';
 
   try {
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const walletId = walletStore.loggedWallet?.id;
+    const response = await sendUnlockAfterWake({
       method: MessageTypes.UNLOCK,
       data: {
+        walletId,
         unlockCredential: password.value,
         unlockMethod: unlockMethod.value || 'password',
         password: password.value,
       },
-    }) as { data?: { success?: boolean; error?: string } };
+    }, () => !disposed && walletStore.loggedWallet?.id === walletId) as BackgroundMessageResponse;
 
     if (!response.data?.success) {
-      error.value = response.data?.error || 'Invalid password';
+      error.value = response.error ? t('security.unlockFailed') : response.data?.error || t('errors.wrongPassword');
     }
   } catch (e: unknown) {
     error.value = getErrorMessage(e, 'Unlock failed');

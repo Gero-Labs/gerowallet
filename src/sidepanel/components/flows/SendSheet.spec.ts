@@ -6,7 +6,7 @@ import { deferred } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { createTestVuetify } from '@test/helpers/vuetify';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), build: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn() }));
+const mocks = vi.hoisted(() => ({ send: vi.fn(), build: vi.fn(), minCoin: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, utxos: [], keys: {}, tokens: {}, collections: {}, contacts: {}, config: {}, isLocked: false }) }));
 vi.mock('@/stores/networkStore', async () => ({ networkStore: (await import('vue')).reactive({ tip: {}, epochParams: {} }) }));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isCrossDeviceSigningEnabled: () => true, state: { flags: { isTrezorWebUsbEnabled: true } } } }));
@@ -18,7 +18,7 @@ vi.mock('@cardano-sdk/core', () => ({ Serialization: {
   TransactionWitnessSet: { fromCore: () => ({ toCbor: () => 'hardware-witness' }) },
 } }));
 vi.mock('@cardano-sdk/util', () => ({ HexBlob: (value: string) => value }));
-vi.mock('@cardano-sdk/tx-construction', () => ({ computeMinimumCoinQuantity: () => () => 1n }));
+vi.mock('@cardano-sdk/tx-construction', () => ({ computeMinimumCoinQuantity: () => mocks.minCoin }));
 vi.mock('@/api/nexus-tx-api', () => ({ nexusTxApi: { buildTransferTx: mocks.build }, walletUtxosToNexusInputs: () => [], txOutToNexusOutput: (v: unknown) => v, requiredAssetsFromOutputs: () => [] }));
 vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: mocks.ledger, ledgerErrorHandling: vi.fn() } }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: mocks.trezor }));
@@ -42,17 +42,19 @@ vi.mock('../KeystoneSignSheet.vue', () => ({ default: { template: '<span />' } }
 
 import SendSheet from './SendSheet.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
 
 interface View {
   tx: Cardano.Tx | undefined; step: number; address: string; paymentAddress: string; adaAmount: string;
   spendingPassword: string; txSuccess: boolean; txBuilt: boolean; passwordError: string;
-  extraTokens: { unit: string; sendAmount: string }[]; selectedNfts: { unit: string; toSendQuantity: number }[];
+  extraTokens: { unit: string; sendAmount: string; decimals?: number; balance?: string }[]; selectedNfts: { unit: string; toSendQuantity: number }[];
   signAndSubmit(): Promise<void>; signLedger(): Promise<void>; signTrezor(): Promise<void>;
   signOnAnotherDevice(): Promise<void>; onPassKeySuccess(key: Uint8Array): Promise<void>;
   signKeystone(): void; onKeystoneScan(ur: UR): Promise<void>; onClose(open: boolean): void;
   goToStep(step: number): Promise<void>;
+  setAdaMax(): void; setTokenMax(index: number): void; fillMinAda(): void;
 }
 const transaction = (id = 'original') => ({ body: { id, fee: 1 } }) as unknown as Cardano.Tx;
 const methods = () => mocks.send.mock.calls.map(([message]) => message.method);
@@ -74,10 +76,120 @@ beforeEach(() => {
   vi.clearAllMocks();
   walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
   walletStore.isLocked = false;
+  // Module-level mock stores outlive each test; reset what individual tests assign.
+  walletStore.account = undefined as never;
+  networkStore.epochParams = {} as never;
+  mocks.minCoin.mockReturnValue(1n);
   mocks.send.mockImplementation(async ({ method }) => {
     if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
     if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
     return { data: { txId: 'submitted' } };
+  });
+});
+
+describe('side-panel exact transaction amounts', () => {
+  beforeEach(() => {
+    mocks.build.mockResolvedValue({ tx_cbor: JSON.stringify(transaction()) });
+    networkStore.epochParams = { coinsPerUtxoByte: 1 } as never;
+  });
+  const recipient = () => {
+    const { view } = render();
+    view.step = 2;
+    view.address = 'recipient';
+    view.paymentAddress = 'recipient';
+    return view;
+  };
+  const output = (): Cardano.TxOut => mocks.build.mock.calls[0][0].outputs[0];
+
+  it.each(['', 'invalid', '0', '-1', '0.0000001'])('does not build when ADA input %s has no positive base-unit amount', async amount => {
+    const view = recipient();
+    view.adaAmount = amount;
+    await view.goToStep(3);
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(view.step).toBe(2);
+  });
+
+  it('does not build a token-only transfer smaller than one token base unit', async () => {
+    const view = recipient();
+    view.extraTokens = [{ unit: 'token', sendAmount: '0.001', decimals: 2 }];
+    await view.goToStep(3);
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(view.step).toBe(2);
+  });
+
+  it.each([['2', '0.001'], ['2', '1.239'], ['2', '-1'], ['2.0000001', '1']])('does not build ADA %s with token %s when the build would change an amount', async (ada, amount) => {
+    const view = recipient();
+    view.adaAmount = ada;
+    view.extraTokens = [{ unit: 'token', sendAmount: amount, decimals: 2 }];
+    await view.goToStep(3);
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(view.step).toBe(2);
+  });
+
+  it('reviews the exact built output, including the minimum-ADA top-up', async () => {
+    mocks.minCoin.mockReturnValue(1500000n);
+    const { wrapper, view } = render();
+    Object.assign(view, { step: 2, address: 'recipient', paymentAddress: 'recipient', adaAmount: '' });
+    view.extraTokens = [{ unit: 'token', sendAmount: '.29e1', decimals: 2 }];
+    await view.goToStep(3);
+    await flushPromises();
+    const review = wrapper.get('.review-card').text();
+    expect(review).toContain('1.5 ₳');
+    expect(review).toContain('2.9');
+    expect(review).not.toContain('.29e1');
+  });
+
+  it.each([
+    ['0.29', 2, 29n],
+    ['.5e1', 2, 500n],
+    ['.29e1', 2, 290n],
+    ['9007199254740993', 0, 9007199254740993n],
+    ['9007199254.740993', 6, 9007199254740993n],
+  ] as const)('preserves token %s at %i decimals in minimum-ADA calculation and build output', async (amount, decimals, units) => {
+    const view = recipient();
+    view.extraTokens = [{ unit: 'token', sendAmount: amount, decimals }];
+    await flushPromises();
+    expect(mocks.minCoin).toHaveBeenCalled();
+    expect((mocks.minCoin.mock.calls[0][0] as Cardano.TxOut).value.assets?.get('token' as Cardano.AssetId)).toBe(units);
+    await view.goToStep(3);
+    expect(view.txBuilt).toBe(true);
+    expect(output().value.assets?.get('token' as Cardano.AssetId)).toBe(units);
+  });
+
+  it.each([['1.005', 1005000n], ['.5e1', 5000000n], ['.29e1', 2900000n], ['9007199254.740993', 9007199254740993n]] as const)('preserves ADA input %s in build output', async (amount, lovelace) => {
+    const view = recipient();
+    view.adaAmount = amount;
+    await view.goToStep(3);
+    expect(output().value.coins).toBe(lovelace);
+  });
+
+  it('preserves token MAX above the safe-integer limit through the build', async () => {
+    const view = recipient();
+    view.extraTokens = [{ unit: 'token', sendAmount: '', decimals: 6, balance: '9007199254740993' }];
+    view.setTokenMax(0);
+    expect(view.extraTokens[0].sendAmount).toBe('9007199254.740993');
+    await view.goToStep(3);
+    expect(output().value.assets?.get('token' as Cardano.AssetId)).toBe(9007199254740993n);
+  });
+
+  it('subtracts the ADA MAX fee reserve without rounding the available lovelace', async () => {
+    const view = recipient();
+    walletStore.account = { controlled_amount: '9007199254740993' } as never;
+    view.setAdaMax();
+    expect(view.adaAmount).toBe('9007199254.240993');
+    await view.goToStep(3);
+    expect(output().value.coins).toBe(9007199254240993n);
+  });
+
+  it('copies the protocol minimum without rounding and builds that exact ADA value', async () => {
+    const view = recipient();
+    mocks.minCoin.mockReturnValue(1234567n);
+    view.extraTokens = [{ unit: 'token', sendAmount: '0.29', decimals: 2 }];
+    await flushPromises();
+    view.fillMinAda();
+    expect(view.adaAmount).toBe('1.234567');
+    await view.goToStep(3);
+    expect(output().value.coins).toBe(1234567n);
   });
 });
 
