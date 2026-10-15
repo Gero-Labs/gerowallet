@@ -1397,6 +1397,7 @@ export default {
   'dashboard.letsGetStarted': 'Let\'s get started by adding some {assetType} to your wallet!',
   'dashboard.letsGetYouStarted': 'Let\'s get you started with some {currency} to explore the {blockchain} ecosystem',
   'dashboard.loadingChart': 'Loading Chart',
+  'dashboard.fetchingWalletHistory': 'Fetching your wallet\'s full history. This can take a few minutes for wallets with many transactions.',
   'dashboard.march': 'March',
   'dashboard.marketData': 'Market Data',
   'dashboard.marketOverview': 'Market Overview',

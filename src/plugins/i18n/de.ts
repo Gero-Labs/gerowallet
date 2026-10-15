@@ -1510,6 +1510,7 @@ export default {
   'dashboard.letsGetStarted': 'Füge etwas {assetType} zu deiner Wallet hinzu, um loszulegen!',
   'dashboard.letsGetYouStarted': 'Wir starten dich mit etwas {currency}, damit du das {blockchain}-Ökosystem erkunden kannst.',
   'dashboard.loadingChart': 'Diagramm wird geladen',
+  'dashboard.fetchingWalletHistory': 'Der vollständige Verlauf deiner Wallet wird abgerufen. Bei Wallets mit vielen Transaktionen kann das ein paar Minuten dauern.',
   'dashboard.march': 'März',
   'dashboard.marketData': 'Marktdaten',
   'dashboard.marketOverview': 'Marktübersicht',

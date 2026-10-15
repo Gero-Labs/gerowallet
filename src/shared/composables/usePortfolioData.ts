@@ -1,8 +1,8 @@
+import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue';
 import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
+import { pendingRetryDelayMs, WALLET_PENDING_MAX_WAIT_MS } from '@/api/market-api';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { debugLog } from '@/utils/debug';
-
-// Note: computed, ref, watch are auto-imported globally by unplugin-auto-import
 
 // Singleton service — shared across all composable callers
 let sharedService: PortfolioCacheService | null = null;
@@ -23,6 +23,27 @@ export function usePortfolioData() {
 
   // Loading state
   const isLoading = ref(false);
+  // The wallet's full history is still being fetched upstream (202 PENDING): the series are
+  // empty because nothing is ready yet, not because the wallet has no history.
+  const historyPending = ref(false);
+
+  // Only the latest request may write state or schedule a retry; a newer one (timeframe,
+  // mode, wallet) or unmount cancels a pending retry.
+  let requestSeq = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingSince: number | null = null;
+  let pendingAddress: string | null = null;
+  let disposed = false;
+  const clearRetry = () => {
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+  };
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      disposed = true;
+      clearRetry();
+    });
+  }
 
   // Data refs
   const adaData = ref<PortfolioDataPoint[]>([]);
@@ -52,14 +73,37 @@ export function usePortfolioData() {
     if (!address) return;
 
     debugLog(`📊 composable loadForTimeframe: timeframe=${timeframe}, adaOnly=${adaOnly}`);
+    clearRetry();
+    const seq = ++requestSeq;
     isLoading.value = true;
     try {
       const result = await service.loadForTimeframe(address, timeframe, adaOnly);
+      if (seq !== requestSeq || disposed) return;
       debugLog(`📊 composable: received adaData=${result.adaData.length}, usdData=${result.usdData.length}`);
 
       adaData.value = result.adaData;
       usdData.value = result.usdData;
       eurData.value = result.eurData;
+
+      if (result.pendingRetryAfterSeconds != null) {
+        historyPending.value = true;
+        if (pendingAddress !== address || pendingSince == null) {
+          pendingAddress = address;
+          pendingSince = Date.now();
+        }
+        const delay = pendingRetryDelayMs(result.pendingRetryAfterSeconds);
+        // Past the cap the chart stays pending; the next visit or refresh asks again.
+        if (Date.now() - pendingSince + delay <= WALLET_PENDING_MAX_WAIT_MS) {
+          retryTimer = setTimeout(() => {
+            retryTimer = null;
+            void loadForTimeframe(address, timeframe, adaOnly);
+          }, delay);
+        }
+      } else {
+        historyPending.value = false;
+        pendingSince = null;
+        pendingAddress = null;
+      }
 
       if (!firstLoadedCurrency.value) {
         if (result.adaData.length > 0) firstLoadedCurrency.value = 'ADA';
@@ -68,7 +112,7 @@ export function usePortfolioData() {
     } catch (error) {
       console.error('Error loading portfolio data:', error);
     } finally {
-      isLoading.value = false;
+      if (seq === requestSeq) isLoading.value = false;
     }
   };
 
@@ -87,6 +131,7 @@ export function usePortfolioData() {
 
     // Loading
     isLoading,
+    historyPending,
     firstLoadedCurrency,
 
     // Latest values

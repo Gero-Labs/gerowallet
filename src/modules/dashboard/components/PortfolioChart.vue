@@ -153,9 +153,9 @@
       <!-- Chart Area -->
       <div class="chart-area">
         <!-- Loading State -->
-        <div v-if="globalLoading" class="loading-container">
+        <div v-if="globalLoading || showHistoryPending" class="loading-container">
           <v-progress-circular indeterminate color="primary" :size="40" :width="3"></v-progress-circular>
-          <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
+          <div class="loading-text">{{ showHistoryPending ? $t('dashboard.fetchingWalletHistory') : $t('dashboard.loadingChart') }}</div>
         </div>
 
         <!-- Lightweight Charts Container -->
@@ -172,7 +172,7 @@
         </div>
 
         <!-- Empty State -->
-        <div v-if="!hasAnyChartData && !globalLoading" class="empty-state text-center">
+        <div v-if="!hasAnyChartData && !globalLoading && !showHistoryPending" class="empty-state text-center">
           <v-avatar size="24">
             <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
           </v-avatar>
@@ -341,6 +341,12 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // The wallet's full history is still being fetched upstream (the history API answered
+  // 202 PENDING). An empty chart then means "not ready yet", never "no data in wallet".
+  historyPending: {
+    type: Boolean,
+    default: false,
+  },
   // Lock the chart to ADA-only: force ada-only mode + ADA currency, hide the
   // full/ada toggle and fiat currencies. Used on non-mainnet Cardano
   // (preprod/preview), where tokens have no market price so fiat is meaningless.
@@ -497,6 +503,8 @@ const globalLoading = computed(() => {
   // imported wallet) — those must fall through to the empty state instead.
   return props.loading && !hasAnyChartData.value;
 });
+
+const showHistoryPending = computed(() => props.historyPending && !hasAnyChartData.value);
 
 const isReadyToRender = computed(() => {
   return hasAnyChartData.value;
