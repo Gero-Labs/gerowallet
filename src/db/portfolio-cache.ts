@@ -53,6 +53,12 @@ interface PortfolioResult {
   adaData: PortfolioDataPoint[];
   usdData: PortfolioDataPoint[];
   eurData: PortfolioDataPoint[];
+  /**
+   * Set when the history is not ready yet (202 PENDING: the wallet's full history is still
+   * being fetched upstream). The series are then empty because there is nothing to show yet,
+   * not because the wallet has no history. Ask again after this many seconds.
+   */
+  pendingRetryAfterSeconds?: number;
 }
 
 export class PortfolioCacheService {
@@ -63,20 +69,25 @@ export class PortfolioCacheService {
    */
   async loadForTimeframe(address: string, timeframe: string, adaOnly: boolean = false): Promise<PortfolioResult> {
     if (!address) {
-      return { adaData: [], usdData: [] };
+      return { adaData: [], usdData: [], eurData: [] };
     }
 
     const stakeAddress = walletStore.loggedWallet?.stakeAddress;
     if (!stakeAddress) {
       console.warn('No stake address available for portfolio data');
-      return { adaData: [], usdData: [] };
+      return { adaData: [], usdData: [], eurData: [] };
     }
 
     const resolution = getResolutionForTimeframe(timeframe);
     debugLog(`📊 loadForTimeframe: timeframe=${timeframe}, resolution=${resolution}, adaOnly=${adaOnly}`);
 
     try {
-      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
+      const history = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
+      if (history.state === 'pending') {
+        debugLog(`📊 loadForTimeframe: history pending, retry after ${history.retryAfterSeconds}s`);
+        return { adaData: [], usdData: [], eurData: [], pendingRetryAfterSeconds: history.retryAfterSeconds };
+      }
+      const snapshots = history.data;
       debugLog(`📊 loadForTimeframe: received ${snapshots.length} snapshots`);
 
       const adaData = snapshotsToDataPoints(snapshots, 'ADA', this.usdToEurRate);

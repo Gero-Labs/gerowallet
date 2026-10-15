@@ -1381,6 +1381,7 @@ export default {
   'dashboard.letsGetStarted': '¡Comencemos agregando algo de {assetType} a tu billetera!',
   'dashboard.letsGetYouStarted': 'Comencemos con algo de {currency} para explorar el ecosistema de {blockchain}',
   'dashboard.loadingChart': 'Cargando gráfico',
+  'dashboard.fetchingWalletHistory': 'Estamos obteniendo el historial completo de tu billetera. Puede tardar unos minutos en billeteras con muchas transacciones.',
   'dashboard.march': 'Marzo',
   'dashboard.marketData': 'Datos del mercado',
   'dashboard.marketOverview': 'Resumen del mercado',

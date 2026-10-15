@@ -170,7 +170,8 @@
             :total-realized-pnl="isMainnetCardano ? (pnlSummary?.totalRealizedPnlAda ?? null) : null"
             :total-unrealized-pnl="isMainnetCardano ? (pnlSummary?.totalUnrealizedPnlAda ?? null) : null"
             :pnl-incomplete="isMainnetCardano && (pnlSummary?.tokens?.some(to => to.costBasisComplete === false) ?? false)"
-            :pnl-loading="isMainnetCardano && pnlLoading"
+            :pnl-loading="isMainnetCardano && (pnlLoading || pnlPending)"
+            :history-pending="historyPending"
             @refresh="refreshPortfolioChart"
             @timeframe-change="handleChartTimeframeChange"
             @mode-change="handleChartModeChange"
@@ -330,7 +331,7 @@
               :show-holdings-columns="activeView === 'holdings'"
               :show-owned-badge="activeView !== 'holdings'"
               :loading="isMainnetCardano && marketLoading"
-              :pnl-loading="isMainnetCardano && pnlLoading"
+              :pnl-loading="isMainnetCardano && (pnlLoading || pnlPending)"
               @token-click="openToken"
               @dust-setup="cnightDialogOpen = true"
             />
@@ -448,7 +449,7 @@ const {
   wsConnected: marketWsConnected,
 } = useMarketData();
 const { isWatched, watchlistCount } = useWatchlist();
-const { pnlSummary, pnlLoading, fetchPnl, getTokenPnl } = useWalletPnl();
+const { pnlSummary, pnlLoading, pnlPending, fetchPnl, getTokenPnl } = useWalletPnl();
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
@@ -489,6 +490,7 @@ const {
   usdData: usdChartData,
   eurData: eurChartData,
   isLoading: portfolioLoading,
+  historyPending,
   refreshPortfolioData,
   loadForTimeframe,
   firstLoadedCurrency,

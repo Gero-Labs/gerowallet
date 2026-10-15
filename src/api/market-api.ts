@@ -121,6 +121,54 @@ export interface WalletSnapshot {
   nftValueAda: number;
 }
 
+/**
+ * The 202 body wallet P&L and history answer while a wallet's full on-chain history is still
+ * being fetched upstream (cardano-market-data). It carries no numbers. gero-backend forwards
+ * the status and body but not the Retry-After header, so the hint is read from here.
+ */
+export interface WalletBackfillPending {
+  status: 'PENDING';
+  wallets?: { stakeAddress: string; backfill: 'COMPLETE' | 'IN_PROGRESS' | 'FAILED' }[];
+  retryAfterSeconds?: number;
+  message?: string;
+}
+
+/**
+ * A wallet P&L or history answer: the data, or "not ready, ask again after retryAfterSeconds".
+ * A string discriminant, because a boolean one does not narrow without strictNullChecks.
+ */
+export type WalletAnalyticsResult<T> =
+  | { state: 'ready'; data: T }
+  | { state: 'pending'; retryAfterSeconds: number };
+
+const DEFAULT_PENDING_RETRY_SECONDS = 30;
+/** How long a page keeps re-asking for a pending wallet before it leaves it pending. */
+export const WALLET_PENDING_MAX_WAIT_MS = 30 * 60_000;
+
+/** Delay before asking again after a PENDING answer: the server's hint, clamped to 5 s .. 5 min. */
+export function pendingRetryDelayMs(retryAfterSeconds: number): number {
+  const seconds = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+    ? retryAfterSeconds
+    : DEFAULT_PENDING_RETRY_SECONDS;
+  return Math.min(Math.max(seconds, 5), 300) * 1000;
+}
+
+function isWalletBackfillPending(body: unknown): body is WalletBackfillPending {
+  return !!body && typeof body === 'object' && !Array.isArray(body)
+    && (body as { status?: unknown }).status === 'PENDING';
+}
+
+function toWalletAnalyticsResult<T>(status: number, body: unknown): WalletAnalyticsResult<T> {
+  if (status === 202 || isWalletBackfillPending(body)) {
+    const hint = isWalletBackfillPending(body) ? Number(body.retryAfterSeconds) : Number.NaN;
+    return {
+      state: 'pending',
+      retryAfterSeconds: Number.isFinite(hint) && hint > 0 ? hint : DEFAULT_PENDING_RETRY_SECONDS,
+    };
+  }
+  return { state: 'ready', data: body as T };
+}
+
 export interface LiquidityPool {
   poolId: string;
   dex: string;
@@ -299,17 +347,19 @@ export default {
 
   // ── Wallet Service ──────────────────────────────────────────────────────────
 
-  async getWalletPnl(stakeAddress: string): Promise<WalletPnlSummary> {
-    const { data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/pnl`, { timeout: 60000 });
-    return data;
+  /** Pending (202) until the wallet's full history is fetched upstream; see {@link WalletBackfillPending}. */
+  async getWalletPnl(stakeAddress: string): Promise<WalletAnalyticsResult<WalletPnlSummary>> {
+    const { status, data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/pnl`, { timeout: 60000 });
+    return toWalletAnalyticsResult<WalletPnlSummary>(status, data);
   },
 
-  async getWalletHistory(stakeAddress: string, resolution: string = '1D', adaOnly: boolean = true): Promise<WalletSnapshot[]> {
-    const { data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/history`, { params: { resolution, adaOnly } });
-    return data;
+  /** Pending (202) until the wallet's full history is fetched upstream; see {@link WalletBackfillPending}. */
+  async getWalletHistory(stakeAddress: string, resolution: string = '1D', adaOnly: boolean = true): Promise<WalletAnalyticsResult<WalletSnapshot[]>> {
+    const { status, data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/history`, { params: { resolution, adaOnly } });
+    return toWalletAnalyticsResult<WalletSnapshot[]>(status, data);
   },
 
-  async getWalletHoldings(stakeAddress: string): Promise<any> {
+  async getWalletHoldings(stakeAddress: string): Promise<Record<string, unknown>> {
     const { data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/holdings`);
     return data;
   },
