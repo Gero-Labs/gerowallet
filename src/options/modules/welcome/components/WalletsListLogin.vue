@@ -9,7 +9,7 @@
       </v-card-subtitle>
     </template>
     <WalletLibrary :available-wallets="availableWallets" :locked-wallet-id="isLocked ? loggedWallet?.id : null"
-      @select="submitLogin" @focus-wallet="onWalletHover" />
+      @select="submitLogin" @focus-wallet="onWalletHover" @add-account="openAddAccount" />
 
     <!-- Unlock Wallet Dialog -->
     <UnlockWalletDialog
@@ -69,6 +69,11 @@ onMounted(() => {
 });
 
 const vmProxy = getCurrentInstance()!.proxy
+
+// Already on the welcome page: the query opens onboarding on this wallet's device (Welcome.vue).
+const openAddAccount = (walletId: number): void => {
+  vmProxy?.$router?.replace({ path: '/welcome', query: { addWallet: '1', addAccount: String(walletId) } }).catch(() => {});
+};
 
 const submitLogin = async (walletId: number): Promise<void> => {
   // Check if wallet is locked

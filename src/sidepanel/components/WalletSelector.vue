@@ -10,7 +10,7 @@
 
     <!-- Keep list scrolling/sorting separate from the sheet's dismissal gesture. -->
     <WalletLibrary :available-wallets="availableWallets" :loading-wallet-id="loadingWalletId"
-      @select="selectWallet" @pointerdown.stop />
+      @select="selectWallet" @add-account="openAddAccount" @pointerdown.stop />
 
     <!-- Add wallet -->
     <div class="add-wallet-section">
@@ -43,6 +43,11 @@ function openSetup() {
   // out first, which used to kill the current session (and every other open
   // tab's) just to add a new wallet.
   chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/welcome?addWallet=1') });
+}
+
+/** Pairing runs in the full page: open it on this wallet's device to add more of its accounts. */
+function openAddAccount(id: number) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(`index.html#/welcome?addWallet=1&addAccount=${id}`) });
 }
 
 const props = withDefaults(defineProps<{

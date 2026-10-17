@@ -168,7 +168,7 @@
               class="editable-name"
               @click="startEditingName"
               :title="t('settings.editWalletName')"
-            >{{ account.name }}<v-icon size="x-small" class="ml-1 edit-icon">mdi-pencil</v-icon></span>
+            >{{ accountTitle }}<v-icon size="x-small" class="ml-1 edit-icon">mdi-pencil</v-icon></span>
           </v-list-item-title>
           <v-list-item-title class="mb-0" style="font-size: 14px; display: flex; align-items: center;" v-if="account && editingName">
             <input
@@ -190,6 +190,28 @@
           <v-list-item-subtitle style="font-size: 11px" v-if="account">
             {{ accountNetworkLabel }}
           </v-list-item-subtitle>
+          <v-menu v-if="account && accountSwitchable" location="top">
+            <template #activator="{ props: activatorProps }">
+              <button type="button" class="account-switch" v-bind="activatorProps" :disabled="switchingAccount"
+                :aria-label="t('accounts.switchAccount')">
+                {{ t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}<v-icon size="x-small">mdi-chevron-down</v-icon>
+              </button>
+            </template>
+            <v-list density="compact">
+              <v-list-subheader>{{ t('accounts.switchAccount') }}</v-list-subheader>
+              <v-list-item v-for="member in accountGroupMembers" :key="member.id" :active="member.id === account.id"
+                @click="switchAccount(member.id)">
+                <v-list-item-title>{{ member.name }}</v-list-item-title>
+                <v-list-item-subtitle>{{ t('accounts.label', { index: member.accountIndex ?? 0 }) }}</v-list-item-subtitle>
+              </v-list-item>
+              <template v-if="canAddMoreAccounts">
+                <v-divider />
+                <v-list-item prepend-icon="mdi-plus" @click="addAccount()">
+                  <v-list-item-title>{{ t('accounts.addAccount') }}</v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-list>
+          </v-menu>
         </div>
 
         <template #append>
@@ -249,6 +271,7 @@ import { debugLog } from '@/utils/debug';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import { GOVERNANCE_ITEMS } from '@/modules/navigation/components/governanceNav';
 import { prefetchPage } from '@/modules/navigation/lazyPage';
+import { accountGroup, canAddAccounts, conflictingWalletNames, walletDisplayName } from '@/shared/utils/walletAccount';
 
 interface NavigationItem {
   title?: string;
@@ -562,11 +585,34 @@ const isNameValid = computed(() => {
   const v = editNameValue.value.trim()
   if (!v || v.length < 3 || v.length > 40) return false
   if (v === account.value?.name) return false
-  const otherNames = Object.values(wallets.value)
-    .filter((w) => w.name !== account.value?.name)
-    .map((w) => w.name)
-  return !otherNames.includes(v)
+  // An added account is named within its wallet; any other wallet among the top-level ones.
+  return !!loggedRecord.value && !conflictingWalletNames(loggedRecord.value, wallets.value).includes(v)
 })
+
+// Accounts of the logged wallet's device (multi-account). The record from the wallet
+// list, not loggedWallet, so a rename shows here at once.
+const loggedRecord = computed(() => (account.value ? wallets.value[account.value.id] ?? account.value : null))
+const accountTitle = computed(() => (loggedRecord.value ? walletDisplayName(loggedRecord.value, wallets.value) : ''))
+const accountGroupMembers = computed(() => (loggedRecord.value ? accountGroup(loggedRecord.value, wallets.value) : []))
+const canAddMoreAccounts = computed(() => !!loggedRecord.value && featureFlagsStore.isMultiAccountEnabled() && canAddAccounts(loggedRecord.value))
+const accountSwitchable = computed(() => accountGroupMembers.value.length > 1 || canAddMoreAccounts.value)
+const switchingAccount = ref(false)
+
+async function switchAccount(id: number) {
+  const wallet = wallets.value[id]
+  if (!wallet || switchingAccount.value || id === account.value?.id) return
+  switchingAccount.value = true
+  try {
+    await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.LOGIN, data: { wallet } })
+  } finally {
+    switchingAccount.value = false
+  }
+}
+
+function addAccount() {
+  const head = accountGroupMembers.value[0]
+  if (head) router.push({ path: '/welcome', query: { addWallet: '1', addAccount: String(head.id) } }).catch(() => {})
+}
 
 function startEditingName() {
   editNameValue.value = account.value?.name || ''
@@ -899,6 +945,25 @@ onUnmounted(() => {
     .edit-icon {
       opacity: 0.6;
     }
+  }
+}
+
+.account-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  margin-top: var(--g-s-1);
+  color: var(--g-text-2);
+  font-size: 11px;
+  border-radius: var(--g-r-chip);
+
+  &:hover:not(:disabled) {
+    color: var(--g-text-1);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--g-accent);
+    outline-offset: 2px;
   }
 }
 

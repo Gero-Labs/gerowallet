@@ -5,8 +5,8 @@
 // derived at. Records created before multi-account support have no index and are
 // account 0. The background reads the index from the record, never from a
 // request, so a page cannot pick the key a transaction is signed with.
+import { bech32, bech32m } from 'bech32';
 import type { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { getPublicKey } from '@/chrome/serialization';
 import {
   Blockchain,
   CoinTypes,
@@ -75,10 +75,21 @@ export function resolveAccountIndex(wallet: AccountRecord): number {
  */
 export function deriveSigningAccountKey(rootKey: Bip32PrivateKey, accountIndex: number, accountXpub: string | undefined): Bip32PrivateKey {
   const accountKey = rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]);
-  if (!accountXpub || accountKey.toPublic().hex() !== getPublicKey(accountXpub).hex()) {
+  if (!accountXpub || accountKey.toPublic().hex() !== xpubHex(accountXpub)) {
     throw new InvalidAccountIndexError('The signing key does not belong to this account');
   }
   return accountKey;
+}
+
+/** The key and chain code a bech32 (or bech32m) account xpub holds, as hex; what `getPublicKey()` decodes. */
+function xpubHex(xpub: string): string {
+  let words: number[];
+  try {
+    words = bech32.decode(xpub, 1023).words;
+  } catch {
+    words = bech32m.decode(xpub, 1023).words;
+  }
+  return Buffer.from(bech32.fromWords(words)).toString('hex');
 }
 
 /** CIP-1852 account path, e.g. `m/1852'/1815'/1'`. */
@@ -117,4 +128,111 @@ export function accountIndexFromKeys(keys: Keys): number {
       : 'This wallet\'s keys belong to more than one account');
   }
   return [...accounts][0];
+}
+
+// ---------------------------------------------------------------------------
+// Account groups. Accounts other than #0 of a device are records of their own,
+// added under the account-#0 record (`parentWalletId`); the wallet list shows
+// them together.
+// ---------------------------------------------------------------------------
+
+type GroupRecord = Pick<Wallet, 'id' | 'name' | 'chain' | 'network' | 'type' | 'accountIndex' | 'parentWalletId'>;
+type WalletList<T> = T[] | Record<string | number, T> | null | undefined;
+const listOf = <T>(wallets: WalletList<T>): T[] => (Array.isArray(wallets) ? wallets : Object.values(wallets ?? {}));
+
+/**
+ * The account-#0 record `wallet` was added under, or null when it stands alone: no
+ * parent recorded, the parent is gone, or it is not the same kind of wallet on the
+ * same chain and network. A stale id never groups unrelated wallets.
+ */
+export function parentWallet<T extends GroupRecord>(wallet: T, wallets: WalletList<T>): T | null {
+  if (wallet.parentWalletId == null || wallet.parentWalletId === wallet.id) return null;
+  const parent = listOf(wallets).find((candidate) => candidate.id === wallet.parentWalletId);
+  if (!parent || parent.parentWalletId != null) return null;
+  return parent.chain === wallet.chain && parent.network === wallet.network && parent.type === wallet.type ? parent : null;
+}
+
+/** The accounts added under `parent`, by account index. */
+export function childAccounts<T extends GroupRecord>(parent: T, wallets: WalletList<T>): T[] {
+  return listOf(wallets)
+    .filter((wallet) => wallet.id !== parent.id && parentWallet(wallet, wallets)?.id === parent.id)
+    .sort((a, b) => (a.accountIndex ?? 0) - (b.accountIndex ?? 0) || a.id - b.id);
+}
+
+/** Wallets whose device can export more accounts (multi-account phase 1: Cardano hardware wallets). */
+export function canAddAccounts(wallet: Pick<Wallet, 'chain' | 'type'>): boolean {
+  return wallet.chain === Blockchain.CARDANO
+    && ([WalletType.Ledger, WalletType.Trezor, WalletType.Keystone] as string[]).includes(wallet.type ?? '');
+}
+
+/** Every account of the group `wallet` belongs to: account #0 first, then the rest by index. */
+export function accountGroup<T extends GroupRecord>(wallet: T, wallets: WalletList<T>): T[] {
+  const root = parentWallet(wallet, wallets) ?? wallet;
+  return [root, ...childAccounts(root, wallets)];
+}
+
+/** "Cold storage · Account #1" for an account added under another record, else the record's name. */
+export function walletDisplayName<T extends GroupRecord>(wallet: T, wallets: WalletList<T>): string {
+  const parent = parentWallet(wallet, wallets);
+  return parent ? `${parent.name} · ${wallet.name}` : wallet.name;
+}
+
+/**
+ * Names a rename of `wallet` must not take. An added account is named within its
+ * group, so two devices can both have an "Account #1"; any other wallet is named
+ * among the wallets the list shows at the top level.
+ */
+export function conflictingWalletNames<T extends GroupRecord>(wallet: T, wallets: WalletList<T>): string[] {
+  const parent = parentWallet(wallet, wallets);
+  const peers = parent ? childAccounts(parent, wallets) : listOf(wallets).filter((other) => !parentWallet(other, wallets));
+  return peers.filter((other) => other.id !== wallet.id).map((other) => other.name);
+}
+
+// ---------------------------------------------------------------------------
+// Accounts exported from a hardware wallet at pairing.
+// ---------------------------------------------------------------------------
+
+/** One device account, as pairing stores it on the wallet record. */
+export interface HardwareAccount {
+  accountIndex: number;
+  /** bech32 `xpub` over the 32-byte public key and 32-byte chain code (`wallet.publicKey`). */
+  publicKey: string;
+  keys: { chainCode: string; path: string; publicKey: string }[];
+}
+
+/** At most this many accounts are asked of a device at once. */
+export const MAX_ACCOUNTS_PER_EXPORT = 20;
+
+/**
+ * Account indices to ask a device for, validated: a non-empty list of distinct
+ * hardened account indices, no more than MAX_ACCOUNTS_PER_EXPORT. They can come
+ * from a page, so the background checks them before talking to the device.
+ */
+export function assertAccountIndices(indices: unknown): number[] {
+  if (!Array.isArray(indices) || indices.length === 0 || indices.length > MAX_ACCOUNTS_PER_EXPORT
+    || !indices.every((index) => Number.isInteger(index) && index >= 0 && index <= MAX_ACCOUNT_INDEX)
+    || new Set(indices).size !== indices.length) {
+    throw new InvalidAccountIndexError('Invalid account indices');
+  }
+  return indices as number[];
+}
+
+/**
+ * The device account behind an exported key. `path` must be the CIP-1852 account
+ * path the key was derived at (Keystone leaves off the `m/`); the account index is
+ * taken from it, so a key for any other path is refused rather than stored.
+ */
+export function hardwareAccount(publicKeyHex: string, chainCodeHex: string, path: string): HardwareAccount {
+  const accountIndex = accountIndexFromPath(path);
+  const accountPath = accountIndex === undefined ? '' : cardanoAccountPath(accountIndex);
+  if (!accountPath || (path.startsWith('m/') ? path : `m/${path}`) !== accountPath
+    || !/^[0-9a-f]{64}$/i.test(publicKeyHex) || !/^[0-9a-f]{64}$/i.test(chainCodeHex)) {
+    throw new InvalidAccountIndexError('The device returned a key for an unexpected path');
+  }
+  const words = bech32.toWords(Buffer.from(publicKeyHex + chainCodeHex, 'hex'));
+  return {
+    accountIndex: accountIndex!,
+    publicKey: bech32.encode('xpub', words, 1023),
+    keys: [{ chainCode: chainCodeHex, path: accountPath, publicKey: publicKeyHex }],
+  };
 }

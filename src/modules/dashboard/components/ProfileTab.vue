@@ -24,6 +24,15 @@
           ></EditableTextField>
         </v-col>
       </v-row>
+      <v-row v-if="accountPath" no-gutters class="py-2">
+        <v-col cols="7" class="text-left">
+          <h3 style="color: white">{{ $t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}</h3>
+          <span class="helper my-0">{{ $t('navigation.hdPath') }}</span>
+        </v-col>
+        <v-col cols="5" class="text-left" style="align-content: center">
+          <span class="g-mono">{{ accountPath }}</span>
+        </v-col>
+      </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3 style="color: white">
@@ -196,6 +205,7 @@ import { useExplorer } from '@/shared/composables/useExplorer';
 import { DEFAULT_CARDANO_EXPLORER } from '@/shared/utils/explorer';
 import { EXPLORER_LOGOS } from '@/shared/utils/explorerLogos';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import { accountGroup, cardanoAccountPath, conflictingWalletNames } from '@/shared/utils/walletAccount';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 // Define emits
@@ -283,11 +293,13 @@ const loc = computed({
 const profilePicDialog = ref<InstanceType<typeof ProfilePictureDialog>>();
 
 // Computed properties
-const otherWalletNames = computed(() => {
-  return Object.values(wallets.value)
-    .filter(wallet => wallet.name !== loggedWallet.value?.name)
-    .map(wallet => wallet.name);
-});
+// The stored record, so its account fields are current; loggedWallet is the login-time copy.
+const loggedRecord = computed(() => (loggedWallet.value ? wallets.value[loggedWallet.value.id] ?? loggedWallet.value : null));
+// An added account is named within its wallet; any other wallet among the top-level ones.
+const otherWalletNames = computed(() => (loggedRecord.value ? conflictingWalletNames(loggedRecord.value, wallets.value) : []));
+// Shown once a wallet has more than one account, so it is clear which one this is.
+const accountPath = computed(() => (loggedRecord.value && accountGroup(loggedRecord.value, wallets.value).length > 1
+  ? cardanoAccountPath(loggedRecord.value.accountIndex ?? 0) : ''));
 
 const avatar = computed(() => {
   if (loggedWallet.value.icon.includes('http')) {

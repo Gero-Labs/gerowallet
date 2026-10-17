@@ -69,14 +69,25 @@
           v-else-if="currentStep.key === 'connect'"
           :network="network"
           :wallet-type="walletType"
+          :account-indices="multiAccount ? accountIndices : undefined"
           @connected="onConnected"
           @back="step--"
+        />
+        <StepAccounts class="onboarding-step"
+          v-else-if="currentStep.key === 'accounts'"
+          :network="network"
+          :accounts="pairedAccounts"
+          @next="onAccountsChosen"
+          @scan-more="onScanMore"
+          @back="onAccountsBack"
         />
         <StepReview class="onboarding-step"
           v-else-if="currentStep.key === 'review'"
           :network="network"
           :wallet-type="walletType"
           :connection="connection"
+          :accounts="multiAccount ? chosenAccounts : undefined"
+          :group-public-key="pairedAccounts.find((account) => account.accountIndex === 0)?.publicKey"
           :name="walletName"
           @update:name="walletName = $event"
           @back="step--"
@@ -134,7 +145,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
-import { Blockchain, type WalletTypeValue } from '@/models/types';
+import { Blockchain, type Wallet, type WalletTypeValue } from '@/models/types';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import snackbar from '@/plugins/snackbar';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { ACCOUNTS_PER_SCAN, mergeScannedAccounts, nextScanIndices } from '@/shared/utils/accountDiscovery';
+import type { HardwareAccount } from '@/shared/utils/walletAccount';
 import StepStart from './steps/StepStart.vue';
 import StepSecurity from './steps/StepSecurity.vue';
 import StepCreateConfirm from './steps/StepCreateConfirm.vue';
@@ -142,6 +158,7 @@ import StepSeedPhrase from './steps/StepSeedPhrase.vue';
 import StepRestoreConfirm from './steps/StepRestoreConfirm.vue';
 import StepDevice from './steps/StepDevice.vue';
 import StepConnect from './steps/StepConnect.vue';
+import StepAccounts from './steps/StepAccounts.vue';
 import StepReview from './steps/StepReview.vue';
 import StepGoogleSignIn from './steps/StepGoogleSignIn.vue';
 import StepGoogleSecure from './steps/StepGoogleSecure.vue';
@@ -155,6 +172,7 @@ interface ConnectionPayload {
   keys: Array<{ publicKey: string; chainCode: string; path: string }>;
   btSupported: boolean;
   xfp?: string;
+  accounts?: HardwareAccount[];
 }
 
 interface StepDef {
@@ -167,7 +185,12 @@ interface StepDef {
 // `network` is the single source of truth, owned by Welcome.vue and passed in.
 // The network step emits changes up via `network-change`; Welcome updates the
 // prop and also drives the background from it.
-defineProps<{ network: NetworkInfo; devMode?: boolean }>();
+const props = defineProps<{
+  network: NetworkInfo;
+  devMode?: boolean;
+  /** Open the pair flow for this wallet's device, to add more of its accounts. */
+  addAccountTo?: Wallet | null;
+}>();
 const emit = defineEmits<{
   (e: 'network-change', n: NetworkInfo): void;
   (e: 'update:dev-mode', val: boolean): void;
@@ -184,6 +207,19 @@ const walletName = ref<string>(generateWalletName());
 const mnemonic = ref<string[]>([]);
 const walletType = ref<WalletTypeValue | undefined>(undefined);
 const connection = ref<ConnectionPayload | null>(null);
+
+// Multi-account pairing (Cardano hardware wallets, behind isMultiAccountEnabled).
+const { t } = useTranslation();
+const multiAccount = computed(() => featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.CARDANO);
+const FIRST_SCAN = Array.from({ length: ACCOUNTS_PER_SCAN }, (_, i) => i);
+const accountIndices = ref<number[]>(FIRST_SCAN);
+const pairedAccounts = ref<HardwareAccount[]>([]);
+const chosenAccounts = ref<HardwareAccount[]>([]);
+const resetAccounts = (): void => {
+  accountIndices.value = FIRST_SCAN;
+  pairedAccounts.value = [];
+  chosenAccounts.value = [];
+};
 
 // Google wallet (MPC "Sign in with Google") flow state — never logged.
 const googleIdToken = ref<string>('');
@@ -220,6 +256,9 @@ const steps = computed<StepDef[]>(() => {
       ...base,
       { key: 'device', titleKey: 'welcome.onboardingStepDevice', subtitleKey: 'welcome.onboardingSubDevice', descKey: 'welcome.onboardingDescDevice' },
       { key: 'connect', titleKey: 'welcome.onboardingStepConnect', subtitleKey: 'welcome.onboardingSubConnect', descKey: 'welcome.onboardingDescConnect' },
+      ...(multiAccount.value
+        ? [{ key: 'accounts', titleKey: 'accounts.stepTitle', subtitleKey: 'accounts.stepSubtitle', descKey: 'accounts.stepDescription' }]
+        : []),
       { key: 'review', titleKey: 'welcome.onboardingStepReview', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescCreateConfirm' },
     ];
   }
@@ -250,6 +289,7 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRes
   mnemonic.value = [];
   connection.value = null;
   walletType.value = undefined;
+  resetAccounts();
   // Reset Google flow state on (re)entry so a previous attempt never leaks
   // into a new one (idToken/passwords/recoveryShare are session-scoped only).
   googleIdToken.value = '';
@@ -323,8 +363,29 @@ const onDeviceSelect = (t: WalletTypeValue): void => {
   walletType.value = t;
 };
 const onConnected = (payload: ConnectionPayload): void => {
+  if (payload.accounts) {
+    // A later scan asks for account 0 again: it must be the device the first scan read.
+    const merged = mergeScannedAccounts(pairedAccounts.value, payload.accounts);
+    if (!merged) {
+      snackbar.setError(t('accounts.differentDevice'));
+      return;
+    }
+    pairedAccounts.value = merged;
+  }
   connection.value = payload;
   step.value++;
+};
+const onAccountsChosen = (accounts: HardwareAccount[]): void => {
+  chosenAccounts.value = accounts;
+  step.value++;
+};
+const onScanMore = (): void => {
+  accountIndices.value = nextScanIndices(pairedAccounts.value.map((account) => account.accountIndex));
+  step.value--;
+};
+const onAccountsBack = (): void => {
+  resetAccounts();
+  step.value--;
 };
 
 // Prefetch the PassKey capability probe the moment onboarding opens: on
@@ -333,6 +394,13 @@ const onConnected = (payload: ConnectionPayload): void => {
 // the user reaches the security step it resolves instantly instead of the
 // step flashing a false "PassKey not supported" notice.
 onMounted(() => {
+  // "Add account": straight to connecting this wallet's device; the accounts it
+  // already has are listed as added.
+  if (props.addAccountTo?.type) {
+    onMethodSelect('pair');
+    walletType.value = props.addAccountTo.type;
+    step.value = steps.value.findIndex((s) => s.key === 'connect') + 1;
+  }
   import('@/shared/utils/webauthn-prf')
     .then(({ isPrfSupported }) => isPrfSupported())
     .catch(() => { /* probe result is consumed (and errors surfaced) in StepSecurity */ });

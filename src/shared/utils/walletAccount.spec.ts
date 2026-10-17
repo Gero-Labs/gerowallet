@@ -5,11 +5,20 @@ import { Blockchain, CoinTypes, HARDENED, WalletType, WalletTypePurpose, type Ke
 import { resolvePrivateKey } from './resolver';
 import {
   InvalidAccountIndexError,
+  MAX_ACCOUNTS_PER_EXPORT,
+  accountGroup,
   accountIndexFromKeys,
   accountIndexFromPath,
+  assertAccountIndices,
+  canAddAccounts,
   cardanoAccountPath,
+  childAccounts,
+  conflictingWalletNames,
   deriveSigningAccountKey,
+  hardwareAccount,
+  parentWallet,
   resolveAccountIndex,
+  walletDisplayName,
 } from './walletAccount';
 
 const MNEMONIC = `${'abandon '.repeat(23)}art`;
@@ -121,5 +130,82 @@ describe('deriveSigningAccountKey', () => {
 
   it('refuses a record with no xpub', () => {
     expect(() => deriveSigningAccountKey(rootKey, 0, undefined)).toThrow(InvalidAccountIndexError);
+  });
+});
+
+describe('account groups', () => {
+  const record = (id: number, name: string, fields: Record<string, unknown> = {}) => ({
+    id, name, chain: Blockchain.CARDANO, network: 'Mainnet', type: WalletType.Keystone, ...fields,
+  });
+  const head = record(1, 'Cold storage');
+  const second = record(7, 'Account #2', { accountIndex: 2, parentWalletId: 1 });
+  const first = record(5, 'Account #1', { accountIndex: 1, parentWalletId: 1 });
+  const other = record(3, 'Daily', { type: WalletType.Ledger });
+  const otherAccount = record(9, 'Account #1', { type: WalletType.Ledger, accountIndex: 1, parentWalletId: 3 });
+  const wallets = { 1: head, 3: other, 5: first, 7: second, 9: otherAccount };
+
+  it('finds the wallet an account was added under, and none for a wallet that stands alone', () => {
+    expect(parentWallet(first, wallets)).toBe(head);
+    expect(parentWallet(head, wallets)).toBeNull();
+  });
+
+  it('never groups under a missing parent, or one on another chain, network or device', () => {
+    expect(parentWallet(record(11, 'x', { parentWalletId: 99 }), wallets)).toBeNull();
+    expect(parentWallet(record(11, 'x', { parentWalletId: 1, network: 'Preprod' }), wallets)).toBeNull();
+    expect(parentWallet(record(11, 'x', { parentWalletId: 1, type: WalletType.Ledger }), wallets)).toBeNull();
+    expect(parentWallet(record(11, 'x', { parentWalletId: 5 }), wallets)).toBeNull(); // 5 is itself an added account
+    expect(parentWallet(record(11, 'x', { parentWalletId: 11 }), wallets)).toBeNull();
+  });
+
+  it('lists a wallet’s accounts by index, with account #0 first in its group', () => {
+    expect(childAccounts(head, wallets)).toEqual([first, second]);
+    expect(accountGroup(second, wallets)).toEqual([head, first, second]);
+    expect(accountGroup(other, wallets)).toEqual([other, otherAccount]);
+  });
+
+  it('names an added account after the wallet it belongs to', () => {
+    expect(walletDisplayName(first, wallets)).toBe('Cold storage · Account #1');
+    expect(walletDisplayName(head, wallets)).toBe('Cold storage');
+  });
+
+  it('checks a rename within the account’s own wallet, or among top-level wallets', () => {
+    expect(conflictingWalletNames(first, wallets)).toEqual(['Account #2']); // not the Ledger's "Account #1"
+    expect(conflictingWalletNames(head, wallets).sort()).toEqual(['Daily']);
+  });
+
+  it('offers more accounts only for Cardano hardware wallets', () => {
+    expect(canAddAccounts(head)).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Trezor }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal }))).toBe(false);
+    expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN }))).toBe(false);
+  });
+});
+
+describe('device account export', () => {
+  const KEY = 'aa'.repeat(32);
+  const CHAIN_CODE = 'bb'.repeat(32);
+
+  it('accepts a list of distinct account indices', () => {
+    expect(assertAccountIndices([0, 1, 7])).toEqual([0, 1, 7]);
+  });
+
+  it.each([[[]], [[0, 0]], [[-1]], [[1.5]], [['1']], ['0'], [Array.from({ length: MAX_ACCOUNTS_PER_EXPORT + 1 }, (_, i) => i)]])(
+    'refuses %j', (indices) => {
+      expect(() => assertAccountIndices(indices)).toThrow(InvalidAccountIndexError);
+    });
+
+  it('builds the record’s xpub and key from an exported account key', () => {
+    const account = hardwareAccount(KEY, CHAIN_CODE, "1852'/1815'/3'");
+    expect(account.accountIndex).toBe(3);
+    expect(account.keys).toEqual([{ chainCode: CHAIN_CODE, path: "m/1852'/1815'/3'", publicKey: KEY }]);
+    expect(Buffer.from(bech32.fromWords(bech32.decode(account.publicKey, 1023).words)).toString('hex')).toBe(KEY + CHAIN_CODE);
+  });
+
+  it.each(["m/1852'/1815'/3'/0/0", "m/44'/1815'/3'", "m/1852'/1815'/3"])('refuses a key exported at %s', (path) => {
+    expect(() => hardwareAccount(KEY, CHAIN_CODE, path)).toThrow(InvalidAccountIndexError);
+  });
+
+  it('refuses a malformed key', () => {
+    expect(() => hardwareAccount('aa', CHAIN_CODE, "m/1852'/1815'/0'")).toThrow(InvalidAccountIndexError);
   });
 });

@@ -34,7 +34,7 @@
            badge only appears off mainnet, so the common case stays quiet. -->
       <div v-if="loggedWallet" class="wallet-identity-strip mb-2">
         <v-icon size="13" color="rgba(255,255,255,0.45)" class="mr-1">mdi-wallet-outline</v-icon>
-        <span class="grey--text text-caption">{{ loggedWallet.name }}</span>
+        <span class="grey--text text-caption">{{ walletDisplayName(loggedWallet, geroStore.wallets) }}</span>
         <span v-if="loggedWallet.network !== Network.MAINNET" class="network-badge ml-2">{{ loggedWallet.network }}</span>
       </div>
 
@@ -1082,7 +1082,8 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
-import { deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
+import { deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
+import { geroStore } from '@/stores/geroStore';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';

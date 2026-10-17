@@ -7,13 +7,20 @@ import {
   UREncoder,
 } from '@keystonehq/keystone-sdk';
 import { CryptoKeypath, DerivationAlgorithm, PathComponent } from '@keystonehq/bc-ur-registry-cardano';
-import { CryptoHDKey } from '@keystonehq/bc-ur-registry';
+import { CryptoHDKey, CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import { Options } from 'qr-code-styling/lib/types';
 import logo128Url from '@/assets/img/bkp/logo128.png';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import {
+  InvalidAccountIndexError,
+  assertAccountIndices,
+  cardanoAccountPath,
+  hardwareAccount,
+  type HardwareAccount,
+} from '@/shared/utils/walletAccount';
 
 const sdk: KeystoneSDK = new KeystoneSDK();
 
@@ -62,6 +69,36 @@ const createCryptoKeypath = (pathStr: string, xfp: string): CryptoKeypath => {
 export const getKeystonePublicKeyUR = (accPurpose = purpose.hdwallet, accIndex = 0): Options => {
   const ur: UR = sdk.generateKeyDerivationCall({ schemas: [ { path: `m/${accPurpose}'/1815'/${accIndex}'`, curve: Curve.ed25519, algo: DerivationAlgorithm.bip32ed25519 } ], origin: 'gerowallet' })
   return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190)
+}
+
+/**
+ * One key-derivation request for several Cardano accounts: one schema per account,
+ * so a single scan on the Keystone exports all of them.
+ */
+export const getKeystoneAccountsUR = (accountIndices: number[]): Options => {
+  const ur: UR = sdk.generateKeyDerivationCall({
+    schemas: assertAccountIndices(accountIndices).map((index) => ({
+      path: cardanoAccountPath(index), curve: Curve.ed25519, algo: DerivationAlgorithm.bip32ed25519,
+    })),
+    origin: 'gerowallet',
+  });
+  return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190);
+}
+
+/**
+ * The accounts in a Keystone `crypto-multi-accounts` answer, by the path each key
+ * carries. Only the accounts that were asked for are kept, so a device answering
+ * with other paths can never add an account the user did not see listed.
+ */
+export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: HardwareAccount[] } => {
+  const multiAccounts = CryptoMultiAccounts.fromCBOR(cbor);
+  const wanted = new Set(assertAccountIndices(accountIndices));
+  const accounts = multiAccounts.getKeys()
+    .map((key) => hardwareAccount(key.getKey().toString('hex'), key.getChainCode().toString('hex'), key.getOrigin().getPath()))
+    .filter((account) => wanted.has(account.accountIndex))
+    .sort((a, b) => a.accountIndex - b.accountIndex);
+  if (accounts.length === 0) throw new InvalidAccountIndexError('The Keystone did not return the requested accounts');
+  return { xfp: multiAccounts.getMasterFingerprint().toString('hex'), accounts };
 }
 
 export const parseSignature = (ur: UR): CardanoSignature => {

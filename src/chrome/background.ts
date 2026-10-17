@@ -68,6 +68,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
+import { assertAccountIndices } from '@/shared/utils/walletAccount';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
@@ -4017,7 +4018,11 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       const network = networks.resolveNetwork(request.data.chain, request.data.network);
 
       let coldWalletProps;
-      if (network.blockchain === Blockchain.CARDANO) {
+      if (network.blockchain === Blockchain.CARDANO && request.data.accountIndices !== undefined) {
+        // Multi-account pairing: { productName, btSupported, accounts }. The indices
+        // come from a page, so they are validated before the device is asked.
+        coldWalletProps = await trezor.getAccountXpubs(assertAccountIndices(request.data.accountIndices));
+      } else if (network.blockchain === Blockchain.CARDANO) {
         const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`;
         coldWalletProps = await trezor.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {

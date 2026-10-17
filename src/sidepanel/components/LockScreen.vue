@@ -155,6 +155,8 @@
 </template>
 
 <script setup lang="ts">
+import { geroStore } from '@/stores/geroStore';
+import { walletDisplayName } from '@/shared/utils/walletAccount';
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
@@ -225,7 +227,7 @@ const pinError = ref('');
 const unlockMethod = ref<string | null>(null);
 const configLoaded = ref(false);
 
-const walletName = computed(() => lockWallet.value?.name || 'Wallet');
+const walletName = computed(() => (lockWallet.value ? walletDisplayName(lockWallet.value, geroStore.wallets) : '') || 'Wallet');
 
 onMounted(async () => {
   await loadSecurityConfig();

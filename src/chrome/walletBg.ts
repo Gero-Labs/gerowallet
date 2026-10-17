@@ -132,6 +132,8 @@ export class WalletBg {
   publicKey: string;
   /** HD account `publicKey` belongs to, from the record; the only account this wallet signs with. */
   accountIndex: number;
+  /** The account-#0 record this account was added under, for an account other than #0. */
+  parentWalletId?: number;
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
@@ -175,6 +177,7 @@ export class WalletBg {
     this.encryptedPrivateKey = wallet.encryptedPrivateKey;
     this.publicKey = wallet.publicKey;
     this.accountIndex = resolveAccountIndex(wallet);
+    this.parentWalletId = wallet.parentWalletId;
     this.passwordLastUpdate = wallet.passwordLastUpdate;
     this.chain = wallet.chain;
     this.network = wallet.network;

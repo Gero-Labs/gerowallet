@@ -27,7 +27,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
-import { accountIndexFromKeys } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, hardwareAccount, type HardwareAccount } from '@/shared/utils/walletAccount';
 
 /**
  * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
@@ -64,29 +64,8 @@ export default {
     }[],
     btSupported: boolean;
   }> {
-    const pathArray = hdPathToArray(path);
     try {
-      let transport: Transport;
-      if (!isBluetooth) {
-        transport = await this.connectViaUSB();
-      } else {
-        transport = await this.connectViaBT();
-      }
-      const ledger: Ada = new Ada(transport);
-      if (!ledger) {
-        return undefined;
-      }
-      hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
-      const deviceModel: DeviceModel = ledger.transport.deviceModel;
-      const btSupported: boolean = !!deviceModel.bluetoothSpec
-      console.log('[LEDGER] Device Model:', deviceModel);
-      const productName: string = deviceModel.productName;
-      hardwareLoading.setText('Retrieving Cardano App Version ...');
-      const version: GetVersionResponse = await this.retrieveCardanoAppVersion(ledger);
-      hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Keys on Your Ledger Device.');
-      const ledgerKeys: GetExtendedPublicKeysResponse = await ledger.getExtendedPublicKeys({
-        paths: [pathArray],
-      });
+      const { productName, version, btSupported, ledgerKeys } = await this.exportLedgerPublicKeys(isBluetooth, [path]);
       const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex);
       const words = bech32.toWords(bip32PublicKey.bytes());
       const hwPublicKey = bech32.encode('xpub', words, 1023);
@@ -102,6 +81,44 @@ export default {
       this.usbDevice = undefined;
     }
     return this.usbDevice;
+  },
+  /**
+   * Pair several Cardano accounts at once: the device exports every account key in
+   * one request, so the user confirms once however many accounts are asked for.
+   * Throws instead of returning undefined, so the caller can show what went wrong.
+   */
+  async initLedgerAccounts(isBluetooth: boolean, accountIndices: number[]): Promise<{
+    productName: string;
+    btSupported: boolean;
+    accounts: HardwareAccount[];
+  }> {
+    const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
+    const { productName, btSupported, ledgerKeys } = await this.exportLedgerPublicKeys(isBluetooth, paths);
+    if (ledgerKeys.length !== paths.length) throw new Error(i18n.t('welcome.hardwareConnectionFailed') as string);
+    const accounts = ledgerKeys.map((key, i) => hardwareAccount(key.publicKeyHex, key.chainCodeHex, paths[i]));
+    return { productName, btSupported, accounts };
+  },
+  /** Connects, reads the device model and Cardano app version, then exports the keys at `paths`. */
+  async exportLedgerPublicKeys(isBluetooth: boolean, paths: string[]): Promise<{
+    productName: string;
+    version: GetVersionResponse;
+    btSupported: boolean;
+    ledgerKeys: GetExtendedPublicKeysResponse;
+  }> {
+    const transport: Transport = isBluetooth ? await this.connectViaBT() : await this.connectViaUSB();
+    const ledger: Ada = new Ada(transport);
+    hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
+    const deviceModel: DeviceModel = ledger.transport.deviceModel;
+    const btSupported: boolean = !!deviceModel.bluetoothSpec
+    console.log('[LEDGER] Device Model:', deviceModel);
+    const productName: string = deviceModel.productName;
+    hardwareLoading.setText('Retrieving Cardano App Version ...');
+    const version: GetVersionResponse = await this.retrieveCardanoAppVersion(ledger);
+    hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Keys on Your Ledger Device.');
+    const ledgerKeys: GetExtendedPublicKeysResponse = await ledger.getExtendedPublicKeys({
+      paths: paths.map(hdPathToArray),
+    });
+    return { productName, version, btSupported, ledgerKeys };
   },
   async retrieveCardanoAppVersion(ledger: Ada): Promise<GetVersionResponse> {
     try {

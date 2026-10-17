@@ -7,6 +7,7 @@ import { walletLibraryRepository, WalletLibraryError } from '@/db/wallet-library
 import { categoryFor, favoriteWallet, isWalletSort, moveWalletOrder, matchesWallet, normalizePreferences, sortLibraryWallets, sortWallets } from '@/services/walletLibrary/model';
 import type { LibraryWallet, WalletLibrarySnapshot, WalletSearchAddresses, WalletSort } from '@/services/walletLibrary/model';
 import { walletSearchAddresses } from '@/services/walletLibrary/addresses';
+import { parentWallet } from '@/shared/utils/walletAccount';
 
 // A display choice, like a remembered tab, so it lives in this browser's storage
 // (shared by the options page and the side panel) rather than in the wallet DB.
@@ -81,14 +82,29 @@ export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLi
   }, { immediate: true });
   onBeforeUnmount(() => { disposed = true; generation++; subscription?.unsubscribe(); });
 
-  const wallets = computed<LibraryWallet[]>(() => {
+  const allWallets = computed<LibraryWallet[]>(() => {
     const metadata = new Map(state.value.wallets.map(wallet => [wallet.id, wallet]));
     return sortWallets(available.value.map(wallet => ({ ...wallet, ...metadata.get(wallet.id),
       ...(addresses.value[wallet.id] || { addresses: [wallet.baseAddress || wallet.watchAddress || ''].filter(Boolean), stakeAddress: wallet.stakeAddress || '' }) })));
   });
+  // An account added under another wallet is listed inside that wallet's row, so
+  // it is not sorted, dragged, favourited or filed into a category on its own.
+  const accountsByParent = computed(() => {
+    const byParent = new Map<number, LibraryWallet[]>();
+    for (const wallet of allWallets.value) {
+      const parent = parentWallet(wallet, allWallets.value);
+      if (parent) byParent.set(parent.id, [...(byParent.get(parent.id) ?? []), wallet]);
+    }
+    for (const accounts of byParent.values()) accounts.sort((a, b) => (a.accountIndex ?? 0) - (b.accountIndex ?? 0) || a.id - b.id);
+    return byParent;
+  });
+  const accountIds = computed(() => new Set([...accountsByParent.value.values()].flat().map(wallet => wallet.id)));
+  const wallets = computed(() => allWallets.value.filter(wallet => !accountIds.value.has(wallet.id)));
+  const accountsFor = (wallet: LibraryWallet): LibraryWallet[] => accountsByParent.value.get(wallet.id) ?? [];
   const favoriteCount = computed(() => wallets.value.filter(wallet => wallet.isFavorite).length);
   const filtered = computed(() => sortLibraryWallets(
-    wallets.value.filter(wallet => (!favoritesOnly.value || wallet.isFavorite) && matchesWallet(wallet, query.value || '')),
+    wallets.value.filter(wallet => (!favoritesOnly.value || wallet.isFavorite)
+      && [wallet, ...accountsFor(wallet)].some(account => matchesWallet(account, query.value || ''))),
     sort.value));
   const filtering = computed(() => !!(query.value || '').trim() || favoritesOnly.value);
   // Dragging edits the saved order, so it is only offered while that order is what
@@ -150,5 +166,5 @@ export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLi
     finally { saving.value = false; }
   };
   return { preferences, query, favoritesOnly, sort, ready, saving, pendingCount, error, indexing, wallets, filtered, filtering,
-    reorderable, groups, favoriteCount, run, toggleFavorite, moveWallet };
+    reorderable, groups, favoriteCount, run, toggleFavorite, moveWallet, accountsFor };
 }

@@ -87,7 +87,8 @@
 
             <!-- Onboarding flow -->
             <div v-else key="onboarding" class="right-panel">
-              <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
+              <WalletOnboarding :key="addAccountTo?.id ?? 'new'" :network="selectedNetwork" :dev-mode="devMode" :add-account-to="addAccountTo"
+                @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
             </div>
           </transition>
 
@@ -100,6 +101,10 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import type { Wallet } from '@/models/types';
+import { geroStore } from '@/stores/geroStore';
+import { canAddAccounts, parentWallet } from '@/shared/utils/walletAccount';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
@@ -142,6 +147,20 @@ watch(devMode, (val) => {
 // --g-* slots here from selectedNetwork so the Get Started CTA gradient and any
 // accent-tinted chrome match the chosen chain (teal Prime, orange Vector, …).
 watch(selectedNetwork, (n) => applyChainAccent(n?.blockchain), { immediate: true });
+
+// "Add account" (?addAccount=<wallet id>): open onboarding on that wallet's device
+// and network. The wallet list can still be hydrating, so this also waits for it.
+const route = useRoute();
+const addAccountTo = ref<Wallet | null>(null);
+watch(() => [route?.query['addAccount'], geroStore.wallets] as const, ([id, wallets]) => {
+  const wallet = id ? wallets[Number(id)] : undefined;
+  if (!wallet || !canAddAccounts(wallet)) return;
+  const head = parentWallet(wallet, wallets) ?? wallet;
+  if (addAccountTo.value?.id === head.id) return;
+  addAccountTo.value = head;
+  selectedNetwork.value = networks.resolveNetwork(head.chain, head.network) ?? selectedNetwork.value;
+  started.value = true;
+}, { immediate: true });
 
 const onOnboardingNetwork = (n: NetworkInfo): void => {
   selectedNetwork.value = n;

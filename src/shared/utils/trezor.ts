@@ -18,7 +18,7 @@ import { NetworkInfo } from '@/utils/networks';
 import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
-import { accountIndexFromKeys } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, hardwareAccount, type HardwareAccount } from '@/shared/utils/walletAccount';
 
 /**
  * Trezor transaction transformer context
@@ -808,6 +808,35 @@ export default {
       console.error('[TREZOR] Failed to get public key:', error);
       throw error;
     }
+  },
+
+  /**
+   * Pair several Cardano accounts at once: one bundled request, so the user
+   * approves the export once however many accounts are asked for.
+   */
+  async getAccountXpubs(accountIndices: number[]): Promise<{
+    productName: string;
+    btSupported: boolean;
+    accounts: HardwareAccount[];
+  }> {
+    await this.init();
+    const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
+    const features: Trezor.Features = await this.getDeviceInfo();
+    const getKeys = () => TrezorConnect.cardanoGetPublicKey({
+      bundle: paths.map((path) => ({ path, showOnTrezor: false })),
+    } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>);
+      const res = await getKeys();
+    if (!res.success) {
+      throw new Error('error' in res.payload ? res.payload.error : 'Failed to get Trezor public keys');
+    }
+    if (res.payload.length !== paths.length || !res.payload.every((key) => key?.node)) {
+      throw new Error('Trezor returned an incomplete public key. Please try again.');
+    }
+    return {
+      productName: features['label'] || 'Trezor',
+      btSupported: features['model'].toLowerCase() === 'safe 7',
+      accounts: res.payload.map((key, i) => hardwareAccount(key.node.public_key, key.node.chain_code, paths[i])),
+    };
   },
 
   /**

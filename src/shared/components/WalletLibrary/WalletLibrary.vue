@@ -80,7 +80,7 @@
             @start="dragging = true" @end="dragging = false" @change="reordered($event, group)">
             <template #item="{ element: wallet, index }">
               <li class="library-wallet glass-liquid"
-                :data-wallet-id="wallet.id" :class="{ 'library-wallet--locked': wallet.id === lockedWalletId }">
+                :data-wallet-id="wallet.id" :class="{ 'library-wallet--locked': wallet.id === lockedWalletId, 'library-wallet--group': accountsFor(wallet).length }">
                 <button type="button" class="wallet-drag" :disabled="!reorderable || !ready"
                   :aria-label="t('walletLibrary.reorderWallet', { name: wallet.name })" :title="t('walletLibrary.keyboardHint')"
                   @keydown.alt.up.prevent="moveStep(wallet, group, index, -1)"
@@ -97,7 +97,7 @@
                   <span class="wallet-copy">
                     <span class="wallet-name">{{ wallet.name }} <v-icon v-if="wallet.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
                     <span v-if="loadingWalletId === wallet.id" class="wallet-network" role="status">{{ t('miniGero.unlocking') }}</span>
-                    <span v-else class="wallet-network">{{ wallet.chain }} &middot; {{ wallet.network }}<span v-if="walletKind(wallet)"> &middot; {{ walletKind(wallet) }}</span></span>
+                    <span v-else class="wallet-network">{{ wallet.chain }} &middot; {{ wallet.network }}<span v-if="walletKind(wallet)"> &middot; {{ walletKind(wallet) }}</span><span v-if="accountsFor(wallet).length"> &middot; {{ tc('accounts.count', accountsFor(wallet).length + 1, { count: accountsFor(wallet).length + 1 }) }}</span></span>
                     <span v-if="displayAddress(wallet)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(wallet) }" :title="displayAddress(wallet)">{{ shortAddress(displayAddress(wallet)) }}</span>
                   </span>
                   <img v-if="walletTypeIcon(wallet)" class="wallet-hardware" :src="walletTypeIcon(wallet)"
@@ -116,8 +116,25 @@
                     <v-divider />
                     <v-list-item :disabled="!reorderable || index === 0" @click="moveStep(wallet, group, index, -1)"><v-list-item-title>{{ t('walletLibrary.moveUp') }}</v-list-item-title></v-list-item>
                     <v-list-item :disabled="!reorderable || index === group.wallets.length - 1" @click="moveStep(wallet, group, index, 1)"><v-list-item-title>{{ t('walletLibrary.moveDown') }}</v-list-item-title></v-list-item>
+                    <template v-if="multiAccountEnabled && canAddAccounts(wallet)">
+                      <v-divider />
+                      <v-list-item @click="$emit('add-account', wallet.id)"><v-list-item-title>{{ t('accounts.addAccount') }}</v-list-item-title></v-list-item>
+                    </template>
                   </v-list>
                 </v-menu>
+                <ul v-if="accountsFor(wallet).length" class="library-accounts" :aria-label="t('accounts.accountsOf', { name: wallet.name })">
+                  <li v-for="account in accountsFor(wallet)" :key="account.id" class="library-account">
+                    <button type="button" class="account-open glass-tier" :class="{ 'account-open--locked': account.id === lockedWalletId }"
+                      :disabled="loadingWalletId != null" :aria-busy="loadingWalletId === account.id" :title="displayAddress(account)"
+                      :aria-label="t('walletLibrary.openWallet', { name: walletDisplayName(account, [wallet]) })"
+                      @click="$emit('select', account.id)" @focus="$emit('focus-wallet', account)">
+                      <v-progress-circular v-if="loadingWalletId === account.id" size="16" width="2" indeterminate color="var(--g-accent)" />
+                      <v-icon v-else size="small">mdi-subdirectory-arrow-right</v-icon>
+                      <span class="wallet-name">{{ account.name }} <v-icon v-if="account.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
+                      <span v-if="displayAddress(account)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(account) }">{{ shortAddress(displayAddress(account)) }}</span>
+                    </button>
+                  </li>
+                </ul>
               </li>
             </template>
             <template #footer>
@@ -150,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from 'vue';
+import { computed, ref, toRef } from 'vue';
 import Draggable from 'vuedraggable';
 import { WalletType } from '@/models/types';
 import type { Wallet } from '@/models/types';
@@ -162,12 +179,15 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWalletLibrary } from '@/shared/composables/useWalletLibrary';
 import { walletLibraryRepository as repository } from '@/db/wallet-library';
 import { WALLET_SORTS } from '@/services/walletLibrary/model';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { canAddAccounts, walletDisplayName } from '@/shared/utils/walletAccount';
 import type { LibraryWallet, WalletCategory, WalletSort } from '@/services/walletLibrary/model';
 
 const props = defineProps<{ availableWallets: Wallet[]; lockedWalletId?: number | null; loadingWalletId?: number | null }>();
-defineEmits<{ (event: 'select', id: number): void; (event: 'focus-wallet', wallet: Wallet): void }>();
-const { t } = useTranslation();
-const { preferences, query, favoritesOnly, sort, ready, saving, error, indexing, wallets, filtered, filtering, reorderable, groups, favoriteCount, run, pendingCount, toggleFavorite, moveWallet } = useWalletLibrary(toRef(props, 'availableWallets'));
+defineEmits<{ (event: 'select', id: number): void; (event: 'focus-wallet', wallet: Wallet): void; (event: 'add-account', id: number): void }>();
+const { t, tc } = useTranslation();
+const { preferences, query, favoritesOnly, sort, ready, saving, error, indexing, wallets, filtered, filtering, reorderable, groups, favoriteCount, run, pendingCount, toggleFavorite, moveWallet, accountsFor } = useWalletLibrary(toRef(props, 'availableWallets'));
+const multiAccountEnabled = computed(() => featureFlagsStore.isMultiAccountEnabled());
 // Existing labels with the same wording are reused; only "Custom order" is the library's own.
 const SORT_LABELS: Record<WalletSort, string> = {
   custom: 'walletLibrary.sortCustom',
@@ -269,6 +289,15 @@ function reordered(event: { added?: { element: LibraryWallet; newIndex: number }
 .library-wallet:hover, .library-wallet:focus-within, .library-wallet--locked { border-color: var(--g-accent); }
 .library-wallet--ghost { opacity: 0.3; border-color: var(--g-accent); }
 .library-wallet--fallback { opacity: 0.95; pointer-events: none; }
+/* A wallet with added accounts lists them on the line below its own row. */
+.library-wallet--group { flex-wrap: wrap; }
+.library-accounts { list-style: none; flex-basis: 100%; display: flex; flex-direction: column; gap: var(--g-s-1); margin: var(--g-s-1) 0 0; padding: 0 0 0 var(--g-s-6); }
+.account-open { display: flex; align-items: center; gap: var(--g-s-2); width: 100%; min-width: 0; padding: var(--g-s-2); text-align: left; color: inherit; border-radius: var(--g-r-control); transition: border-color var(--g-dur-fast) ease; }
+.account-open:hover, .account-open:focus-visible, .account-open--locked { border-color: var(--g-accent); }
+.account-open:disabled { cursor: wait; }
+.account-open .v-icon { color: var(--g-text-3); flex: none; }
+.account-open .wallet-name { font-size: 13px; flex: none; }
+.account-open .wallet-address { margin-left: auto; min-width: 0; }
 .library-wallets--target { min-height: 48px; border-radius: var(--g-r-control); outline: 1px dashed var(--g-accent); }
 .wallet-library--sorting { user-select: none; }
 .wallet-library--sorting .wallet-open { pointer-events: none; }

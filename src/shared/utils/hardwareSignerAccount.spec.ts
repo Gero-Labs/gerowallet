@@ -16,13 +16,14 @@ import { Blockchain, Keys, Network } from '@/models/types';
 import networks from '@/utils/networks';
 import { WALLET_ACCOUNT_XPUB, WALLET_ADDRESS } from '@/shared/utils/__fixtures__/handAssembledTxs';
 import { InvalidAccountIndexError } from '@/shared/utils/walletAccount';
+import { Ada } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
 // Both Trezor modules read chrome.runtime.id as they load (TREZOR_MANIFEST).
 vi.hoisted(() => {
   (globalThis as unknown as { chrome: unknown }).chrome = { runtime: { id: 'test-extension-id' } };
 });
 const { connectWebextension, connectWeb } = vi.hoisted(() => {
-  const connect = () => ({ init: vi.fn(async () => undefined), cardanoSignTransaction: vi.fn() });
+  const connect = () => ({ init: vi.fn(async () => undefined), cardanoSignTransaction: vi.fn(), cardanoGetPublicKey: vi.fn() });
   return { connectWebextension: connect(), connectWeb: connect() };
 });
 vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension }));
@@ -204,5 +205,75 @@ describe('Ledger on account #1', () => {
     await ledgerUtils.poolOwnerWitness(ownTx(), keysOnAccount(1), UTXOS, true, MAINNET).catch(() => undefined);
 
     expect(createWithDevice.mock.lastCall![0]).toMatchObject({ accountIndex: 1 });
+  });
+});
+
+/** What a device answers for account `index`: a key and chain code, distinct per account. */
+const deviceKey = (index: number) => ({ publicKeyHex: (index + 10).toString(16).padStart(2, '0').repeat(32), chainCodeHex: 'cc'.repeat(32) });
+
+describe.each([
+  ['trezor (service worker)', connectWebextension, () => trezor, 'getDeviceInfo'],
+  ['trezorWeb (document)', connectWeb, () => trezorWeb, 'getFeatures'],
+] as const)('%s exports several accounts', (_, connect, signer, featuresMethod) => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('asks for every account in one bundled request and keys each by its path', async () => {
+    vi.spyOn(signer() as unknown as Record<string, () => Promise<unknown>>, featuresMethod).mockResolvedValue({ label: 'My Trezor', model: 'T3T1' });
+    connect.cardanoGetPublicKey.mockResolvedValueOnce({
+      success: true,
+      payload: [0, 1, 4].map((index) => ({ node: { public_key: deviceKey(index).publicKeyHex, chain_code: deviceKey(index).chainCodeHex } })),
+    });
+
+    const { productName, accounts } = await (signer() as typeof trezorWeb).getAccountXpubs([0, 1, 4]);
+
+    expect(connect.cardanoGetPublicKey.mock.lastCall![0]).toEqual({ bundle: [
+      { path: "m/1852'/1815'/0'", showOnTrezor: false },
+      { path: "m/1852'/1815'/1'", showOnTrezor: false },
+      { path: "m/1852'/1815'/4'", showOnTrezor: false },
+    ] });
+    expect(productName).toBe('My Trezor');
+    expect(accounts.map((account) => [account.accountIndex, account.keys[0].publicKey]))
+      .toEqual([[0, deviceKey(0).publicKeyHex], [1, deviceKey(1).publicKeyHex], [4, deviceKey(4).publicKeyHex]]);
+  });
+
+  it('refuses an answer missing an account', async () => {
+    vi.spyOn(signer() as unknown as Record<string, () => Promise<unknown>>, featuresMethod).mockResolvedValue({ label: 'T', model: 'T3T1' });
+    connect.cardanoGetPublicKey.mockResolvedValue({ success: true, payload: [{ node: { public_key: deviceKey(0).publicKeyHex, chain_code: deviceKey(0).chainCodeHex } }] });
+
+    await expect((signer() as typeof trezorWeb).getAccountXpubs([0, 1])).rejects.toThrow();
+  });
+
+  it('refuses invalid indices before asking the device', async () => {
+    const asked = connect.cardanoGetPublicKey.mock.calls.length;
+    await expect((signer() as typeof trezorWeb).getAccountXpubs([1, 1])).rejects.toThrow(InvalidAccountIndexError);
+    expect(connect.cardanoGetPublicKey.mock.calls.length).toBe(asked);
+  });
+});
+
+describe('Ledger exports several accounts', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('asks for every account path in one request and keys each by its path', async () => {
+    const transport = { decorateAppAPIMethods: vi.fn(), deviceModel: { productName: 'Nano X', bluetoothSpec: [{}] } };
+    vi.spyOn(ledgerUtils, 'connectViaUSB').mockResolvedValue(transport as unknown as Transport);
+    vi.spyOn(ledgerUtils, 'retrieveCardanoAppVersion').mockResolvedValue({} as never);
+    const getKeys = vi.spyOn(Ada.prototype, 'getExtendedPublicKeys').mockResolvedValue([0, 2].map(deviceKey) as never);
+
+    const { productName, btSupported, accounts } = await ledgerUtils.initLedgerAccounts(false, [0, 2]);
+
+    const HARDENED = 0x80000000;
+    expect(getKeys.mock.lastCall![0]).toEqual({ paths: [[HARDENED + 1852, HARDENED + 1815, HARDENED], [HARDENED + 1852, HARDENED + 1815, HARDENED + 2]] });
+    expect({ productName, btSupported }).toEqual({ productName: 'Nano X', btSupported: true });
+    expect(accounts.map((account) => [account.accountIndex, account.keys[0].path])).toEqual([[0, "m/1852'/1815'/0'"], [2, "m/1852'/1815'/2'"]]);
+  });
+
+  it('refuses invalid indices before connecting', async () => {
+    const connectViaUSB = vi.spyOn(ledgerUtils, 'connectViaUSB');
+    await expect(ledgerUtils.initLedgerAccounts(false, [])).rejects.toThrow(InvalidAccountIndexError);
+    expect(connectViaUSB).not.toHaveBeenCalled();
   });
 });
