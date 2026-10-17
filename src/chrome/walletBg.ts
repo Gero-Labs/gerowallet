@@ -18,14 +18,12 @@ import {
   HARDENED,
   BIP44_SCAN_SIZE,
   ChainDerivations,
-  coin_type,
   CoinTypes,
   ERROR,
   Key,
   Keys,
   Provider,
   Wallet,
-  purpose,
   Tip,
   WalletType,
   WalletTypePurpose,
@@ -87,6 +85,7 @@ import {
 import { debugLog } from '@/utils/debug';
 import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
+import { cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
 // Static, not dynamic: walletBg and this module land in the same background
 // IIFE, so a dynamic import buys no code splitting — it only pushes the
 // module's declaration later in the emitted bundle, which is exactly the
@@ -131,6 +130,8 @@ export class WalletBg {
   network: string;
   addressType?: string;
   publicKey: string;
+  /** HD account `publicKey` belongs to, from the record; the only account this wallet signs with. */
+  accountIndex: number;
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
@@ -173,6 +174,7 @@ export class WalletBg {
     this.order = wallet.order;
     this.encryptedPrivateKey = wallet.encryptedPrivateKey;
     this.publicKey = wallet.publicKey;
+    this.accountIndex = resolveAccountIndex(wallet);
     this.passwordLastUpdate = wallet.passwordLastUpdate;
     this.chain = wallet.chain;
     this.network = wallet.network;
@@ -1136,6 +1138,8 @@ export class WalletBg {
       }
       return { stake, payment, change: [], ccCold: [], ccHot: [], drep129: [], drep105: [], script: [] };
     }
+    // Hardware signers send these paths to the device, so they carry the record's account.
+    const accountPath = cardanoAccountPath(this.accountIndex);
     const resolvedAddresses: Key[] = [];
     let addressIndex: number = 0; // Start from the first address index
     let consecutiveUnused: number = 0; // Track consecutive unused addresses
@@ -1143,7 +1147,7 @@ export class WalletBg {
       stake: [
         {
           address: this.stakeAddress,
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CHIMERIC_ACCOUNT}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.CHIMERIC_ACCOUNT}/${addressIndex}`,
           cred: Hash28ByteBase16(getStakeKey(this.publicKey, 0).hash().hex()),
         },
       ],
@@ -1151,27 +1155,27 @@ export class WalletBg {
       change: [],
       ccCold: [
         {
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD}/${addressIndex}`,
           cred: Hash28ByteBase16(getCcColdKey(this.publicKey, 0).hash().hex()),
         },
       ],
       ccHot: [
         {
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT}/${addressIndex}`,
           cred: Hash28ByteBase16(getCcHotKey(this.publicKey, 0).hash().hex()),
         },
       ],
       drep129: [
         {
           address: getCip129DrepId(this.publicKey),
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.DREP}/${addressIndex}`,
           cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
         },
       ],
       drep105: [
         {
           address: getCip105DrepId(this.publicKey),
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.DREP}/${addressIndex}`,
           cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
         },
       ],
@@ -1183,7 +1187,7 @@ export class WalletBg {
       let found: boolean = false;
       const derivedPaymentAddress = {
         address: derivedAddress,
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
+        path: `${accountPath}/${ChainDerivations.EXTERNAL}/${addressIndex}`,
         cred: keyHashFromAddress(derivedAddress),
         used: false,
       };
@@ -1196,7 +1200,7 @@ export class WalletBg {
       keys.payment.push(derivedPaymentAddress);
       const derivedChangeAddress = {
         address: internalDerivedAddress,
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
+        path: `${accountPath}/${ChainDerivations.INTERNAL}/${addressIndex}`,
         cred: keyHashFromAddress(internalDerivedAddress),
         used: false,
       };
@@ -1516,13 +1520,12 @@ export class WalletBg {
   async requestAccountKey(
     type: 'stake' | 'payment' | 'change' | 'drep',
     password: string,
-    accountIndex: number,
     index: number,
   ): Promise<Ed25519PrivateKey> {
     // Decrypt root private key (supports both password and PRF encryption)
     const rootKey = await this.decryptRootPrivateKey(password);
 
-    return this.deriveAccountKey(rootKey, type, accountIndex, index);
+    return this.deriveAccountKey(rootKey, type, index);
   }
 
   /**
@@ -1536,11 +1539,10 @@ export class WalletBg {
   private requestAccountKeyFromBytes(
     type: 'stake' | 'payment' | 'change' | 'drep',
     privateKeyBytes: Uint8Array,
-    accountIndex: number,
     index: number,
   ): Ed25519PrivateKey {
     const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(privateKeyBytes);
-    return this.deriveAccountKey(rootKey, type, accountIndex, index);
+    return this.deriveAccountKey(rootKey, type, index);
   }
 
   /**
@@ -1551,15 +1553,9 @@ export class WalletBg {
   private deriveAccountKey(
     rootKey: Bip32PrivateKey,
     type: 'stake' | 'payment' | 'change' | 'drep',
-    accountIndex: number,
     index: number,
   ): Ed25519PrivateKey {
-    // Derive account key
-    const accountKey: Bip32PrivateKey = rootKey.derive([
-      WalletTypePurpose.CIP1852,
-      CoinTypes.CARDANO,
-      HARDENED + accountIndex,
-    ]);
+    const accountKey: Bip32PrivateKey = deriveSigningAccountKey(rootKey, this.accountIndex, this.publicKey);
 
     // Derive specific key type
     if (type === 'stake') {
@@ -2142,7 +2138,6 @@ export class WalletBg {
    * Cardano JS SDK transaction signing method
    * @param txInput - Either a CBOR hex string or Cardano.Tx object (Cardano JS SDK)
    * @param password - Wallet password for software wallets
-   * @param accountIndex - Account index for derivation
    * @param utxos - UTXOs for reference
    * @param addresses - Address mappings (key-value pairs of addresses)
    * @returns Promise with witness set hex string
@@ -2150,7 +2145,6 @@ export class WalletBg {
   async signTx(
     txInput: string | Cardano.Tx,
     password: string,
-    accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted private key for PRF wallets
@@ -2189,12 +2183,7 @@ export class WalletBg {
     password = null; // Clear password from memory
 
     assertAuthorized?.();
-    // Derive an account private key
-    const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
-      WalletTypePurpose.CIP1852,
-      CoinTypes.CARDANO,
-      HARDENED + accountIndex,
-    ]);
+    const accountPrivateKey: Bip32PrivateKey = deriveSigningAccountKey(rootPrivateKey, this.accountIndex, this.publicKey);
 
     // Create a signature map for the witness
     const signatures = new Map<string, string>();
@@ -2204,7 +2193,7 @@ export class WalletBg {
       transaction,
       utxos,
       addresses,
-      accountIndex,
+      this.accountIndex,
       this.stakeAddress,
     );
 
@@ -3187,7 +3176,6 @@ export class WalletBg {
     address: Cardano.PaymentAddress | Cardano.RewardAccount | string,
     payload: string,
     password: string,
-    accountIndex: number,
     keys: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted root key for PRF wallets
     assertAuthorized?: () => void,
@@ -3196,7 +3184,7 @@ export class WalletBg {
     // This ensures 100% compatibility with the Cardano SDK standard
 
     const signWith = addrToSignWith(address);
-    const knownAddresses = this.convertKeysToGroupedAddresses(keys, accountIndex);
+    const knownAddresses = this.convertKeysToGroupedAddresses(keys);
 
     // Create a minimal KeyAgent-like object that implements the required interface
     const keyAgent = {
@@ -3234,8 +3222,8 @@ export class WalletBg {
         // other wallets decrypt the root key with the spending password. The
         // derivation is identical in both branches.
         const privateKey = privateKeyBytes
-          ? this.requestAccountKeyFromBytes(keyType, privateKeyBytes, accountIndex, derivationPath.index)
-          : await this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
+          ? this.requestAccountKeyFromBytes(keyType, privateKeyBytes, derivationPath.index)
+          : await this.requestAccountKey(keyType, password, derivationPath.index);
 
         // Sign the blob
         assertAuthorized?.();
@@ -3259,7 +3247,8 @@ export class WalletBg {
    * Convert Gero's Keys structure to SDK's GroupedAddress[] format
    * @private
    */
-  private convertKeysToGroupedAddresses(keys: Keys, accountIndex: number): GroupedAddress[] {
+  private convertKeysToGroupedAddresses(keys: Keys): GroupedAddress[] {
+    const accountIndex = this.accountIndex;
     const networkId = this.networkId();
     const stakeAddress = this.stakeAddress;
     const groupedAddresses: GroupedAddress[] = [];

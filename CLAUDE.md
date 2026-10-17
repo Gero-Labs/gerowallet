@@ -134,6 +134,12 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Display**: `walletStore.programmableTokens` → `useHoldingsValuation()` (locked *tokens* priced at 0, locked ADA at the native rate, `isProgrammable`, distinct `rowKey` so a dual-held unit doesn't collide), rendered with a lock badge and the `programmableTokens.badge` chip.
 - **CIP-68**: label-100 reference tokens are filtered out of the display; `cip68Label()` in `resolver.ts` strips the label prefix so names don't render as truncated hex.
 
+## Multi-account (accounts #0..N, issue 1307)
+- **One account = one wallet record.** `wallet.publicKey` is always the account-level xpub; `wallet.accountIndex` (non-indexed, absent on every pre-existing record = account 0) is the index it was derived at. Read it only through `resolveAccountIndex()` (`src/shared/utils/walletAccount.ts`), which throws for an invalid index and for an index other than 0 on Bitcoin, Midnight, watch and legacy Google wallets (their signing still derives account 0).
+- **The background decides the account, never a request.** `WalletBg.accountIndex` comes from the record; `signTx`/`signData` take no account argument, and `request.data.accountIndex` sent by pages is ignored. `deriveSigningAccountKey()` refuses an account key whose public half is not the record's xpub, so a mismatched record fails before signing. The two in-page PassKey signData paths (`DappSignData.vue`, `DAppOverlay.vue`) use the same helper.
+- **Hardware signers take the account from the key set they send paths from** (`accountIndexFromKeys()`): `WalletBg.resolvePathsForMissingAddresses` writes the record's account into every path, and Ledger/Trezor/Keystone send those. Never hardcode `0'` (or `accountIndex: 0`) in a CIP-1852 signing path.
+- **Re-pairing a device no longer duplicates it:** `createNewHardwareWallet` rejects an existing `(chain, network, xpub)` with `DuplicateWalletError`.
+
 ## Submit API (per-wallet custom Cardano submit endpoint)
 - Settings → Advanced lets a Cardano wallet send its signed transactions to a user-chosen endpoint (POST `application/cbor`, 30 s timeout, `redirect: 'error'`); rows `submitApi` (public) and `submitApiAuth` (header value) live in the per-wallet `config` table, no schema bump.
 - `src/chrome/submitRouter.ts` is the single choke point (`submitCardanoTx`): every Cardano submit goes through it, each caller passing its own 2.7.2 call as `defaultSubmit`. The router re-validates the stored row on every submit and checks the returned hash against the local tx id.

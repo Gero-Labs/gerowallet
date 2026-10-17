@@ -1082,6 +1082,7 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
+import { deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
@@ -2700,7 +2701,7 @@ async function signDataPrf() {
     const role = parseInt(pathParts[4].replace(/'/g, ""), 10);
     const index = parseInt(pathParts[5].replace(/'/g, ""), 10);
 
-    const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]);
+    const accountKey = deriveSigningAccountKey(rootKey, resolveAccountIndex(loggedWallet.value), loggedWallet.value?.publicKey);
     const signingKey = accountKey.derive([role, index]).toRawKey();
 
     // Get address bytes for COSE_Key. Address.toBytes() returns a HexBlob

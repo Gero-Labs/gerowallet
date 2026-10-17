@@ -27,6 +27,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
+import { accountIndexFromKeys } from '@/shared/utils/walletAccount';
 
 /**
  * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
@@ -210,7 +211,7 @@ export default {
 
     const ledgerTxTransformerContext: LedgerTxTransformerContext = {
       chainId: ledgerChainId(network),
-      accountIndex: 0,
+      accountIndex: accountIndexFromKeys(keys),
       outputsFormat: tx.body.outputs.map(_out => TxOutputFormat.MAP_BABBAGE),
       collateralReturnFormat: TxOutputFormat.MAP_BABBAGE,
       txInKeyPathMap,
@@ -283,7 +284,7 @@ export default {
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice(
       {
         chainId: ledgerChainId(network),
-        accountIndex: 0,
+        accountIndex: accountIndexFromKeys(keys),
         communicationType: CommunicationType.Web,
         deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
       },
@@ -363,6 +364,7 @@ export default {
    */
   createKnownAddressesFromKeys(keys: Keys, network: NetworkInfo): GroupedAddress[] {
     const knownAddresses: GroupedAddress[] = [];
+    const accountIndex = accountIndexFromKeys(keys);
 
     // Process payment addresses (External)
     keys.payment.forEach((key: Key, _arrayIndex: number) => {
@@ -376,7 +378,7 @@ export default {
             type: AddressType.External, // Payment addresses are external
             index: derivationIndex,
             networkId,
-            accountIndex: 0, // Assuming account 0 could be parameterized
+            accountIndex,
             address: key.address as Cardano.PaymentAddress,
             rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
@@ -398,7 +400,7 @@ export default {
             type: AddressType.Internal, // Change addresses are internal
             index: derivationIndex,
             networkId,
-            accountIndex: 0, // Assuming account 0 could be parameterized
+            accountIndex,
             address: key.address as Cardano.PaymentAddress,
             rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
@@ -423,7 +425,7 @@ export default {
               type: AddressType.External, // Stake addresses use External type
               index: derivationIndex,
               networkId,
-              accountIndex: 0,
+              accountIndex,
               address: key.address as Cardano.PaymentAddress, // The stake address itself
               rewardAccount: key.address as Cardano.RewardAccount, // Same as address for stake keys
               stakeKeyDerivationPath: {

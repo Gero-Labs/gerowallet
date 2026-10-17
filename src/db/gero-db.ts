@@ -613,6 +613,13 @@ export async function createNewHardwareWallet(wallet) {
     }
   }
 
+  // Pairing the same device again would otherwise store a second copy of the
+  // account it already has. A watch wallet has no public key, so never matches.
+  const duplicate = await findExistingWallet(wallet);
+  if (duplicate) {
+    throw new DuplicateWalletError(duplicate);
+  }
+
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
   if (order == null) {

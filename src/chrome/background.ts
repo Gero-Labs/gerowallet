@@ -2679,7 +2679,6 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.address,
         request.data.payload,
         request.data.password,
-        request.data.accountIndex || 0,
         WalletStore.state.keys,
         privateKeyBytes, // Pass pre-decrypted root key for PRF wallets
         () => assertCip45SigningRequest(request.data),
@@ -2754,7 +2753,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       let witnessResult = await walletBg.signTx(
         transaction,
         request.data.password,
-        request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
         privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
@@ -3180,7 +3178,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       return;
     }
 
-    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
+    const { txCbor, password, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
 
     // Step 1: Sign with wallet keys (payment + stake) using existing signTx
     let transaction;
@@ -3203,7 +3201,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
         WalletStore.state.loggedWallet,
         privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
       );
-      walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+      walletWitnesses = await walletBg.signTx(transaction, password, utxos, addresses, prfSecret);
     }
 
     // Step 2: Decrypt cold key from wallet DB and sign with it

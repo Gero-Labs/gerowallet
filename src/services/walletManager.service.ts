@@ -186,6 +186,7 @@ export class WalletManager {
           chain: walletBg.chain,
           network: walletBg.network,
           publicKey: walletBg.publicKey,
+          accountIndex: walletBg.accountIndex,
           provider: walletBg.provider,
           encryptedPrivateKey: walletBg.encryptedPrivateKey,
           passwordLastUpdate: walletBg.passwordLastUpdate,
@@ -302,6 +303,7 @@ export class WalletManager {
           chain: walletBg.chain,
           network: walletBg.network,
           publicKey: walletBg.publicKey,
+          accountIndex: walletBg.accountIndex,
           provider: walletBg.provider,
           encryptedPrivateKey: walletBg.encryptedPrivateKey,
           passwordLastUpdate: walletBg.passwordLastUpdate,
@@ -1809,7 +1811,6 @@ export class WalletManager {
         stakeAddress,
         payloadHex,
         auth.password ?? '',
-        0,
         WalletStore.state.keys,
         auth.privateKeyBytes,
       );

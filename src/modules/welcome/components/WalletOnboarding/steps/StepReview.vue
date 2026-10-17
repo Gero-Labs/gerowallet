@@ -90,6 +90,7 @@
 import { ref, computed, getCurrentInstance, nextTick } from 'vue';
 import { Theme } from '@/models/types';
 import GeroStore from '@/stores/geroStore';
+import { DuplicateWalletError } from '@/db/gero-db';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks from '@/utils/networks';
@@ -183,6 +184,10 @@ const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
     }
   } catch (e) {
     if (!current()) return;
+    if (e instanceof DuplicateWalletError) {
+      snackbar.setError(t('welcome.walletExistsMessage', { name: e.existingWallet.name }));
+      return;
+    }
     console.error('Error creating wallet:', e);
     snackbar.setError(t('welcome.hardwareConnectionFailed'));
   } finally {

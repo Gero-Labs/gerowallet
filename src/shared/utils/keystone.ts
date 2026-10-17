@@ -242,7 +242,7 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
         const stakeKey = keys.stake[0];
         if (stakeKey) {
           // We need to compare the key hash from the transaction with our stake key hash
-          // The stake key path is typically m/1852'/1815'/0'/2/0
+          // The stake key path is m/1852'/1815'/<account>'/2/0, the account the wallet record holds
           extraSigners.push({
             keyHash: keyHash,
             xfp,
