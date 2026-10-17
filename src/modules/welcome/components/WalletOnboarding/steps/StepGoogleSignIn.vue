@@ -11,10 +11,8 @@
       <template v-if="!email">
         <div class="google-signin-title">{{ $t('welcome.googleSignInButton') }}</div>
         <div class="google-signin-desc">{{ $t('welcome.onboardingDescGoogleSignIn') }}</div>
-        <v-btn
-          class="onb-btn google-signin-btn"
-          variant="outlined"
-
+        <GButton
+          tier="secondary"
           :loading="signingIn"
           @click="signIn()"
         >
@@ -22,7 +20,7 @@
             <v-img :src="google"  />
           </v-avatar>
           {{ $t('welcome.googleSignInButton') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="errorMessage"
           color="error"
@@ -38,9 +36,9 @@
 
       <template v-else>
         <div class="google-signin-title">{{ $t('welcome.googleSignedInAs', { email }) }}</div>
-        <v-btn variant="text" size="small" color="primary" class="mt-1" @click="changeAccount()">
+        <GButton tier="tertiary" compact class="mt-1" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="existingWallet"
           color="info"
@@ -68,37 +66,34 @@
     </div>
 
     <!-- Navigation (footer — outside the scroll region above) -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
+      <GButton
         v-if="existingWallet"
-        class="onb-btn onb-continue"
-        variant="flat"
-        color="primary"
+        tier="primary"
         @click="openUnlockExisting()"
+        class="step-next"
       >
         {{ $t('welcome.logInToThisWallet') }}
-      </v-btn>
-      <v-btn
+      </GButton>
+      <GButton
         v-else-if="enrolledOnBackend"
-        class="onb-btn onb-continue"
-        variant="flat"
-        color="primary"
+        tier="primary"
         @click="restoreExisting()"
+        class="step-next"
       >
         {{ $t('welcome.restoreThisWallet') }}
-      </v-btn>
-      <v-btn
+      </GButton>
+      <GButton
         v-else
-        class="onb-btn onb-continue"
-        variant="flat"
-        color="primary"
+        tier="primary"
         :disabled="!email"
         @click="onContinue()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
 
     <UnlockWalletDialog
@@ -124,6 +119,7 @@ import type { Wallet } from '@/models/types';
 import type { NetworkInfo } from '@/utils/networks';
 import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 import type { GoogleWalletBgResponse } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const props = defineProps<{ network?: NetworkInfo }>();
 const vmProxy = getCurrentInstance()!.proxy;
@@ -346,16 +342,6 @@ const onContinue = (): void => {
   max-width: 360px;
   margin-bottom: 20px;
   line-height: 1.5;
-}
-
-.google-signin-btn {
-  text-transform: none;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.onb-btn {
-  border-radius: 8px !important;
-  box-shadow: none !important;
 }
 
 /* Solid, high-contrast info alert — the default outlined/info blue is unreadable

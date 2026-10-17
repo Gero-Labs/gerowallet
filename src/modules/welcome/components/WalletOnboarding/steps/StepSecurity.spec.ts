@@ -19,7 +19,7 @@ describe('wallet name validation', () => {
       const wrapper = mount(StepSecurity, { props: { network }, global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } } });
       try {
         const input = wrapper.find('input[type=text]');
-        const next = wrapper.find('button.onb-continue');
+        const next = wrapper.find('button.step-next');
         await input.setValue('Valid wallet');
         await vi.waitFor(() => expect(next.attributes('disabled')).toBeUndefined());
         await input.setValue(name);
@@ -34,7 +34,7 @@ describe('wallet name validation', () => {
     const wrapper = mount(StepSecurity, { props: { network }, global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } } });
     try {
       await wrapper.find('input[type=text]').setValue('  My savings wallet  ');
-      const next = wrapper.find('button.onb-continue');
+      const next = wrapper.find('button.step-next');
       await vi.waitFor(() => expect(next.attributes('disabled')).toBeUndefined());
       await next.trigger('click');
       expect(wrapper.emitted('select')?.[0]).toEqual(['password', 'My savings wallet']);

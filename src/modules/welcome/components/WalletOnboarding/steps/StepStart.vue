@@ -81,23 +81,21 @@
           :placeholder="$t('welcome.watchDevPlaceholder')"
           class="watch-dev__field"
         />
-        <v-btn
-          class="onb-btn"
-          variant="flat"
-          color="primary"
+        <GButton
+          tier="secondary"
           :loading="watchLoading"
           :disabled="!watchAddress.trim()"
           @click="onWatchSubmit()"
-        >{{ $t('welcome.watchDevButton') }}</v-btn>
+        >{{ $t('welcome.watchDevButton') }}</GButton>
       </div>
     </div>
 
     </div>
 
     <!-- Navigation (footer — outside the scroll region above) -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
+    <div class="onboarding-actions d-flex">
       <v-spacer />
-      <v-btn class="onb-btn onb-continue" variant="flat" color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <GButton tier="primary" :disabled="!selectedMethod" @click="onContinue()" class="step-next">{{ $t('common.continue') }}</GButton>
     </div>
   </div>
 </template>
@@ -112,6 +110,7 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 type Method = 'create' | 'restore' | 'pair' | 'google' | 'googleRestore';
 
@@ -276,11 +275,6 @@ const onWatchSubmit = async (): Promise<void> => {
 
 .link-btn:hover {
   color: var(--v-primary-base);
-}
-
-.onb-btn {
-  border-radius: var(--g-r-control) !important;
-  box-shadow: none !important;
 }
 
 .method-list {

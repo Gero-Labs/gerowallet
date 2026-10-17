@@ -72,18 +72,18 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="approval.invalidate(); $emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="approval.invalidate(); $emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :loading="creatingWalletLoader"
         :disabled="!valid3 || creatingWalletLoader"
         @click="walletCreationStep3()"
+        class="step-next"
       >
         {{ $t('common.create') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -103,6 +103,7 @@ import type { NetworkInfo } from '@/utils/networks';
 import { useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface ConnectionPayload {
   publicKey: string;

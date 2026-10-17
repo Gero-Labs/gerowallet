@@ -39,17 +39,17 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!valid"
         @click="handleContinue()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -59,6 +59,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import * as bip39 from 'bip39';
 import MnemonicAutocomplete from '@/modules/welcome/components/MnemonicAutocomplete.vue';
 import { NetworkInfo } from '@/utils/networks';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineProps<{ network: NetworkInfo }>();
 

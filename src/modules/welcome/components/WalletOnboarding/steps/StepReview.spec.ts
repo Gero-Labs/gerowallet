@@ -43,7 +43,7 @@ function render(accounts: AccountXpub[]) {
 async function create(wrapper: ReturnType<typeof render>) {
   await wrapper.find('input[type=checkbox]').setValue(true);
   await flushPromises();
-  await wrapper.find('button.onb-continue').trigger('click');
+  await wrapper.find('button.step-next').trigger('click');
   await flushPromises();
   return mocks.create.mock.calls.map(([record]) => record as { name?: string; publicKey?: string; accountIndex?: number; parentWalletId?: number });
 }

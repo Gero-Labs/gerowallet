@@ -21,10 +21,10 @@
         >
           <span class="text-body-2">{{ errorMessage }}</span>
         </v-alert>
-        <v-btn class="onb-btn" variant="flat" color="primary" :loading="storing" @click="storeRecovery()">
+        <GButton tier="secondary" :loading="storing" @click="storeRecovery()">
           <v-icon start size="small">mdi-refresh</v-icon>
           {{ $t('common.retry') }}
-        </v-btn>
+        </GButton>
       </template>
     </div>
   </div>
@@ -36,6 +36,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { NetworkInfo } from '@/utils/networks';
 import type { GoogleWalletBgResponse } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const props = defineProps<{
   network: NetworkInfo;
@@ -96,9 +97,3 @@ const storeRecovery = async (): Promise<void> => {
 storeRecovery();
 </script>
 
-<style scoped>
-.onb-btn {
-  border-radius: 8px !important;
-  box-shadow: none !important;
-}
-</style>

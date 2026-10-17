@@ -6,7 +6,7 @@
       <p class="join-accounts__hint t-body-sm">{{ t('accounts.joinExplanation', { name: wallet.name }) }}</p>
     </div>
 
-    <div class="onboarding-actions step-actions d-flex">
+    <div class="onboarding-actions d-flex">
       <GButton tier="tertiary" :disabled="busy" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
       <GButton tier="primary" class="step-next" :loading="busy" :disabled="!accounts.length" @click="add()">
@@ -70,5 +70,4 @@ async function add(): Promise<void> {
 .join-accounts__text { margin: 0 0 var(--g-s-2); text-align: left; }
 .join-accounts__list { color: var(--g-text-1); }
 .join-accounts__hint { margin: var(--g-s-3) 0 0; text-align: left; }
-.step-actions { gap: var(--g-s-3); }
 </style>

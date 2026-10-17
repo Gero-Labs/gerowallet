@@ -36,7 +36,7 @@
       </div>
     </div>
 
-    <div class="onboarding-actions step-actions d-flex">
+    <div class="onboarding-actions d-flex">
       <GButton tier="tertiary" :disabled="busy" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
       <GButton v-if="!preview" tier="primary" class="step-next" :loading="busy" :disabled="!canUnlock" @click="unlock()">
@@ -235,5 +235,4 @@ onMounted(() => {
 .account-preview__address { line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
 .account-preview__meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--g-s-1); flex: none; }
 .account-preview__balance { color: var(--g-text-1); }
-.step-actions { gap: var(--g-s-3); }
 </style>

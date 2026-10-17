@@ -76,10 +76,10 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px; text-align: initial;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex" style="text-align: initial;">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn class="onb-continue" color="primary" @click="walletCreationStep2()">{{ $t('common.continue') }}</v-btn>
+      <GButton tier="primary" @click="walletCreationStep2()" class="step-next">{{ $t('common.continue') }}</GButton>
     </div>
 
     <!-- The device prompt is mounted globally in options/App.vue and driven by
@@ -110,6 +110,7 @@ import { debugLog } from '@/utils/debug';
 import type { NetworkInfo } from '@/utils/networks';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface ConnectionPayload {
   publicKey: string;

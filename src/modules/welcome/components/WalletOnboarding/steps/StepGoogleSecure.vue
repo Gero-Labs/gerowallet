@@ -57,17 +57,17 @@
       <template v-else>
         <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
         <div class="field-hint mb-2">{{ $t('welcome.secureWithPasskeyHint') }}</div>
-        <v-btn
-          class="passkey-auth-button mb-2"
+        <GButton
+          tier="secondary"
           block
-          variant="flat"
-          :color="passkey ? 'success' : 'primary'"
           :loading="enrolling"
           @click="secureWithPasskey()"
+          class="mb-2"
+          :style="passkey ? { '--g-btn-fg': 'var(--g-success)' } : undefined"
         >
           <v-icon start size="small">{{ passkey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
           {{ passkey ? $t('welcome.passkeySecured') : $t('welcome.secureWithPasskey') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="passkeyError"
           color="error"
@@ -153,34 +153,33 @@
       >
         <div class="text-body-2 font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
         <div class="text-body-2 mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
-        <v-btn
-          color="warning"
-          variant="outlined"
-          size="small"
+        <GButton
+          tier="destructive"
+          compact
           :loading="resetting"
           :disabled="creating || resetting"
           @click="resetGoogleAccount()"
         >
           {{ $t('welcome.resetGoogleAccountButton') }}
-        </v-btn>
+        </GButton>
         <div v-if="resetError" class="text-body-2 error--text mt-2">{{ resetError }}</div>
       </v-alert>
     </v-form>
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!canContinue || resetting"
         :loading="creating"
         @click="createWallet()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -196,6 +195,7 @@ import networks, { NetworkInfo } from '@/utils/networks';
 import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import { scoreRecoveryPassword, isAcceptableRecoveryPassword } from '@/shared/utils/mpc/recoveryPasswordStrength';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface Props {
   network: NetworkInfo;
@@ -404,11 +404,4 @@ const resetGoogleAccount = async (): Promise<void> => {
 .recovery-strength__label--2 { color: var(--g-warning); }
 .recovery-strength__label--3 { color: var(--g-info); }
 .recovery-strength__label--4 { color: var(--g-success); }
-
-.passkey-auth-button {
-  text-transform: none;
-  font-weight: 500;
-  border-radius: 8px !important;
-  box-shadow: none !important;
-}
 </style>

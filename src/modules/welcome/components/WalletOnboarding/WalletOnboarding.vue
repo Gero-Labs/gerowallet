@@ -499,13 +499,6 @@ onUnmounted(() => {
   background: rgb(from var(--g-raised) r g b / 0.78) !important;
 }
 
-/* Continue CTA (every step): black label on gradient/teal, incl. disabled.
-   Hoisted here from the 11 step components so the rule exists once. */
-.onboarding-content :deep(.onb-continue.v-btn),
-.onboarding-content :deep(.onb-continue.v-btn.v-btn--disabled) {
-  color: var(--g-canvas) !important;
-}
-
 .onboarding-content {
   width: 100%;
   min-width: 0;
@@ -583,7 +576,8 @@ onUnmounted(() => {
 
 .content-body :deep(.onboarding-actions) {
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: var(--g-s-4);
+  gap: var(--g-s-3);
 }
 
 /* A step may opt into an internal scroll (content scrolls, action row stays a

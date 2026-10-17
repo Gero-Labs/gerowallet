@@ -153,18 +153,18 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')" :disabled="creatingWalletLoader">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')" :disabled="creatingWalletLoader">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!canCreate"
         :loading="creatingWalletLoader"
         @click="walletCreationStep()"
+        class="step-next"
       >
         {{ $t('welcome.restoreWallet') }}
-      </v-btn>
+      </GButton>
     </div>
 
     <!-- Existing Wallet Confirmation Dialog (exceptional re-login path — kept as modal) -->
@@ -189,12 +189,12 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="handleCancelLogin()">
+          <GButton tier="tertiary" @click="handleCancelLogin()">
             {{ $t('common.cancel') }}
-          </v-btn>
-          <v-btn class="onb-continue" color="primary" @click="handleConfirmLogin()" :loading="creatingWalletLoader">
+          </GButton>
+          <GButton tier="primary" @click="handleConfirmLogin()" :loading="creatingWalletLoader">
             {{ $t('wallet.login') }}
-          </v-btn>
+          </GButton>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -212,6 +212,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
 import type { Wallet } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface Props {
   network: NetworkInfo;

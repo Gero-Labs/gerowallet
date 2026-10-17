@@ -33,7 +33,7 @@
       </GButton>
     </div>
 
-    <div class="onboarding-actions step-actions d-flex">
+    <div class="onboarding-actions d-flex">
       <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
       <GButton tier="primary" class="step-next" :disabled="probing || !selectedAccounts.length" @click="$emit('next', selectedAccounts)">
@@ -184,5 +184,4 @@ const shortAddress = (address: string) => (address.length > 30 ? `${address.slic
 .account-row__meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--g-s-1); flex: none; }
 .account-row__balance { color: var(--g-text-1); }
 .accounts-hint { margin: 0 0 var(--g-s-2); text-align: left; }
-.step-actions { gap: var(--g-s-3); }
 </style>
