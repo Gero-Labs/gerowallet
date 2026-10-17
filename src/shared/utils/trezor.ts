@@ -822,10 +822,11 @@ export default {
     await this.init();
     const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
     const features: Trezor.Features = await this.getDeviceInfo();
-    const getKeys = () => TrezorConnect.cardanoGetPublicKey({
+    // No retry: the incomplete first answer is a connect-web popup quirk
+    // (see trezorWeb.ts), and the Bridge path has never needed one.
+    const res = await TrezorConnect.cardanoGetPublicKey({
       bundle: paths.map((path) => ({ path, showOnTrezor: false })),
     } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>);
-      const res = await getKeys();
     if (!res.success) {
       throw new Error('error' in res.payload ? res.payload.error : 'Failed to get Trezor public keys');
     }

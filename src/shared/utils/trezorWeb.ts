@@ -852,10 +852,11 @@ export default {
     const getKeys = () => TrezorConnect.cardanoGetPublicKey({
       bundle: paths.map((path) => ({ path, showOnTrezor: false })),
     } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>);
-      let res = await getKeys();
-      if (res.success && !res.payload?.every((key) => key?.node)) {
-        res = await getKeys();
-      }
+    // Same connect-web quirk as the single-key path above: retry once.
+    let res = await getKeys();
+    if (res.success && !res.payload?.every((key) => key?.node)) {
+      res = await getKeys();
+    }
     if (!res.success) {
       throw new Error('error' in res.payload ? res.payload.error : 'Failed to get Trezor public keys');
     }
