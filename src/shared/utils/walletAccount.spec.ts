@@ -256,6 +256,13 @@ describe('secrets of a group', () => {
     expect(logged.secretsWalletId).toBe(5);
   });
 
+  it('gives no secrets to an account Gero does not store, whatever account #0 it names', () => {
+    const unstored: Wallet & { secretsWalletId: number } = withGroupSecrets({ ...added, id: 99 }, wallets);
+    expect(unstored.prfEncryptedPrivateKey).toBeUndefined();
+    expect(unstored.parentWalletId).toBeUndefined();
+    expect(unstored.secretsWalletId).toBe(99);
+  });
+
   it('reads the group from the stored records, not from the request', () => {
     // A request claiming another wallet as its account #0 gets nothing from it.
     const claimed: Wallet & { secretsWalletId: number } = withGroupSecrets({ ...savings, parentWalletId: 1 }, wallets);

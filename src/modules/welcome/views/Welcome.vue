@@ -105,6 +105,7 @@ import { useRoute } from 'vue-router';
 import type { Wallet } from '@/models/types';
 import { geroStore } from '@/stores/geroStore';
 import { canAddAccounts, parentWallet } from '@/shared/utils/walletAccount';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
@@ -152,9 +153,10 @@ watch(selectedNetwork, (n) => applyChainAccent(n?.blockchain), { immediate: true
 // and network. The wallet list can still be hydrating, so this also waits for it.
 const route = useRoute();
 const addAccountTo = ref<Wallet | null>(null);
-watch(() => [route?.query['addAccount'], geroStore.wallets] as const, ([id, wallets]) => {
+// Behind isMultiAccountEnabled, like every other way in; the flags load late too.
+watch(() => [route?.query['addAccount'], geroStore.wallets, featureFlagsStore.isMultiAccountEnabled()] as const, ([id, wallets, enabled]) => {
   const wallet = id ? wallets[Number(id)] : undefined;
-  if (!wallet || !canAddAccounts(wallet)) return;
+  if (!wallet || !enabled || !canAddAccounts(wallet)) return;
   const head = parentWallet(wallet, wallets) ?? wallet;
   if (addAccountTo.value?.id === head.id) return;
   addAccountTo.value = head;

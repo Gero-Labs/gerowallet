@@ -250,11 +250,12 @@ export function secretsWalletId(wallet: Pick<Wallet, 'id'> & { secretsWalletId?:
  * (deriveSigningAccountKey).
  */
 export function withGroupSecrets<T extends Wallet>(wallet: T, wallets: WalletList<Wallet>): T & { secretsWalletId: number } {
-  const stored = listOf(wallets).find((candidate) => candidate.id === wallet.id) ?? wallet;
-  if (stored.parentWalletId == null && wallet.parentWalletId == null) return { ...wallet, secretsWalletId: wallet.id };
-  const parent = parentWallet(stored, wallets);
+  const stored = listOf(wallets).find((candidate) => candidate.id === wallet.id);
+  if (stored?.parentWalletId == null && wallet.parentWalletId == null) return { ...wallet, secretsWalletId: wallet.id };
+  // An account Gero does not store has no group to check, so it gets no secrets.
+  const parent = stored ? parentWallet(stored, wallets) : null;
   const secrets: Partial<Wallet> = Object.fromEntries(GROUP_SECRET_FIELDS.map((field) => [field, parent?.[field]]));
-  return { ...wallet, ...secrets, parentWalletId: stored.parentWalletId, secretsWalletId: parent?.id ?? wallet.id };
+  return { ...wallet, ...secrets, parentWalletId: stored?.parentWalletId, secretsWalletId: parent?.id ?? wallet.id };
 }
 
 // ---------------------------------------------------------------------------
