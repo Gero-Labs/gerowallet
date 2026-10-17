@@ -19,7 +19,8 @@ import { WalletBg } from './walletBg';
 import WalletStore from '@/stores/walletStore';
 import { getAddress, getPaymentKeyExternal, getStakeKey } from './serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
-import { InvalidAccountIndexError } from '@/shared/utils/walletAccount';
+import { InvalidAccountIndexError, withGroupSecrets } from '@/shared/utils/walletAccount';
+import { encryptWithPassword } from '@/shared/utils/crypto';
 import { Blockchain, CoinTypes, HARDENED, Network, WalletType, WalletTypePurpose, type Keys } from '@/models/types';
 
 // clearForWalletSwitch() clears the wallet-scoped alarms; there is no extension API here.
@@ -139,5 +140,34 @@ describe('WalletBg on account #1', () => {
   it('refuses a record claiming an account its chain cannot sign for', () => {
     expect(() => bootWallet({ chain: Blockchain.BITCOIN, network: 'Mainnet', publicKey: 'xpub-unused', accountIndex: 1 }))
       .toThrow(InvalidAccountIndexError);
+  });
+});
+
+describe('WalletBg on an account added under a recovery-phrase wallet', () => {
+  beforeEach(() => {
+    WalletStore.clearForWalletSwitch();
+  });
+
+  it('signs with that account’s key, decrypted from its account #0’s root key', async () => {
+    const encryptedPrivateKey = encryptWithPassword('public-test-password', rootKeyBytes.toString('hex'));
+    const head = { id: 940_001, name: 'Daily', chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Normal, publicKey: accountXpub(0), encryptionMethod: 'password' as const, encryptedPrivateKey };
+    const added = { id: 940_002, name: 'Account #1', chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Normal, publicKey: accountXpub(1), accountIndex: 1, parentWalletId: head.id, encryptionMethod: 'password' as const };
+    const bg = new WalletBg(withGroupSecrets(added, [head, added]));
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const { txCbor, utxos } = spendFrom(keys.payment[0].address!);
+
+    const { witnesses } = await bg.signTx(txCbor, 'public-test-password', utxos, keys);
+
+    expect(bg.secretsWalletId).toBe(head.id);
+    expect(signingKeys(witnesses)).toEqual([getPaymentKeyExternal(accountXpub(1), 0).hex()]);
+  });
+
+  it('has nothing to sign with when its account #0 is gone', async () => {
+    const added = { id: 940_003, name: 'Account #1', chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Normal, publicKey: accountXpub(1), accountIndex: 1, parentWalletId: 940_999, encryptionMethod: 'password' as const };
+    const bg = new WalletBg(withGroupSecrets(added, [added]));
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const { txCbor, utxos } = spendFrom(keys.payment[0].address!);
+
+    await expect(bg.signTx(txCbor, 'public-test-password', utxos, keys)).rejects.toThrow();
   });
 });

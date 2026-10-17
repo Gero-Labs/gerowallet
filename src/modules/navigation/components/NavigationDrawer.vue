@@ -271,7 +271,7 @@ import { debugLog } from '@/utils/debug';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import { GOVERNANCE_ITEMS } from '@/modules/navigation/components/governanceNav';
 import { prefetchPage } from '@/modules/navigation/lazyPage';
-import { accountGroup, canAddAccounts, conflictingWalletNames, walletDisplayName } from '@/shared/utils/walletAccount';
+import { accountGroup, canAddAccounts, conflictingWalletNames, secretsWalletId, walletDisplayName } from '@/shared/utils/walletAccount';
 
 interface NavigationItem {
   title?: string;
@@ -704,8 +704,9 @@ async function checkUnlockMethod() {
       return
     }
 
+    // An added account's lock settings are its account #0's.
     const { getDb } = await import('@/db/wallet-db')
-    const db = await getDb(loggedWallet.value.id)
+    const db = await getDb(secretsWalletId(loggedWallet.value))
     const configTable = db.table('config')
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first()

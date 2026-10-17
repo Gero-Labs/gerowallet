@@ -27,7 +27,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
-import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, hardwareAccount, type HardwareAccount } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 
 /**
  * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
@@ -90,12 +90,12 @@ export default {
   async initLedgerAccounts(isBluetooth: boolean, accountIndices: number[]): Promise<{
     productName: string;
     btSupported: boolean;
-    accounts: HardwareAccount[];
+    accounts: AccountXpub[];
   }> {
     const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
     const { productName, btSupported, ledgerKeys } = await this.exportLedgerPublicKeys(isBluetooth, paths);
     if (ledgerKeys.length !== paths.length) throw new Error(i18n.t('welcome.hardwareConnectionFailed') as string);
-    const accounts = ledgerKeys.map((key, i) => hardwareAccount(key.publicKeyHex, key.chainCodeHex, paths[i]));
+    const accounts = ledgerKeys.map((key, i) => accountXpub(key.publicKeyHex, key.chainCodeHex, paths[i]));
     return { productName, btSupported, accounts };
   },
   /** Connects, reads the device model and Cardano app version, then exports the keys at `paths`. */

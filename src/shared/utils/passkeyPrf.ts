@@ -17,10 +17,13 @@
  */
 
 import { evaluatePrfForWallet } from '@/shared/utils/webauthn-prf';
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 
 /** What this needs off a wallet record. Structural, so any caller's shape fits. */
 export interface PrfWalletRef {
   id: number;
+  /** Set on a logged-in added account: its PassKey is account #0's, salted with that id. */
+  secretsWalletId?: number;
   webAuthnCredentialId: string;
   webAuthnTransports?: AuthenticatorTransport[] | null;
 }
@@ -30,13 +33,14 @@ export interface PrfWalletRef {
  * which one it is, and learning it where we do not.
  */
 export async function evaluateWalletPrf(wallet: PrfWalletRef): Promise<ArrayBuffer> {
+  const walletId = secretsWalletId(wallet);
   return evaluatePrfForWallet(
     wallet.webAuthnCredentialId,
-    wallet.id.toString(),
+    walletId.toString(),
     wallet.webAuthnTransports,
     learned => {
       void import('@/db/gero-db')
-        .then(({ setWalletWebAuthnTransports }) => setWalletWebAuthnTransports(wallet.id, learned))
+        .then(({ setWalletWebAuthnTransports }) => setWalletWebAuthnTransports(walletId, learned))
         .catch(error => console.error('Could not record PassKey transports:', error));
     },
   );

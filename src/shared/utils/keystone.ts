@@ -18,8 +18,8 @@ import {
   InvalidAccountIndexError,
   assertAccountIndices,
   cardanoAccountPath,
-  hardwareAccount,
-  type HardwareAccount,
+  accountXpub,
+  type AccountXpub,
 } from '@/shared/utils/walletAccount';
 
 const sdk: KeystoneSDK = new KeystoneSDK();
@@ -90,11 +90,11 @@ export const getKeystoneAccountsUR = (accountIndices: number[]): Options => {
  * carries. Only the accounts that were asked for are kept, so a device answering
  * with other paths can never add an account the user did not see listed.
  */
-export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: HardwareAccount[] } => {
+export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: AccountXpub[] } => {
   const multiAccounts = CryptoMultiAccounts.fromCBOR(cbor);
   const wanted = new Set(assertAccountIndices(accountIndices));
   const accounts = multiAccounts.getKeys()
-    .map((key) => hardwareAccount(key.getKey().toString('hex'), key.getChainCode().toString('hex'), key.getOrigin().getPath()))
+    .map((key) => accountXpub(key.getKey().toString('hex'), key.getChainCode().toString('hex'), key.getOrigin().getPath()))
     .filter((account) => wanted.has(account.accountIndex))
     .sort((a, b) => a.accountIndex - b.accountIndex);
   if (accounts.length === 0) throw new InvalidAccountIndexError('The Keystone did not return the requested accounts');

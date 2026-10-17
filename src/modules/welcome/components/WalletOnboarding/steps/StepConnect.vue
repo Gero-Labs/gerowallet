@@ -94,7 +94,7 @@ import { Blockchain, coin_type, purpose, WalletType } from '@/models/types';
 import ledger from '@/shared/utils/ledger';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import { getKeystoneAccountsUR, getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount, parseKeystoneAccounts } from '@/shared/utils/keystone';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 import { CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
@@ -117,7 +117,7 @@ interface ConnectionPayload {
   btSupported: boolean;
   xfp?: string;
   /** Multi-account pairing: every account the device exported, by index. */
-  accounts?: HardwareAccount[];
+  accounts?: AccountXpub[];
 }
 
 const { t } = useTranslation();
@@ -132,7 +132,7 @@ const props = defineProps<{
 const multiAccount = computed(() => props.network?.blockchain === Blockchain.CARDANO && !!props.accountIndices?.length);
 
 /** The payload for a multi-account export; the record fields come from each account. */
-const accountsPayload = (accounts: HardwareAccount[], btSupported: boolean, xfp?: string): ConnectionPayload => ({
+const accountsPayload = (accounts: AccountXpub[], btSupported: boolean, xfp?: string): ConnectionPayload => ({
   publicKey: accounts[0].publicKey,
   keys: accounts[0].keys,
   btSupported,

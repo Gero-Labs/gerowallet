@@ -34,6 +34,7 @@ import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
+import { secretsWallet } from '@/shared/utils/walletAccount';
 
 const selectedWallet = ref<string | null>(null);
 const showUnlockDialog = ref<boolean>(false);
@@ -143,14 +144,16 @@ const submitLogin = async (walletId: number): Promise<void> => {
     // **PRE-LOGIN UNLOCK CHECK** - If logged out, check if wallet has unlock method
     if (!loggedWallet.value && wallet) {
       debugLog('🔍 Checking for unlock method before login');
+      // An added account is locked with its account #0's settings.
+      const settingsWallet = secretsWallet(wallet, wallets.value);
       const { getDb } = await import('@/db/wallet-db');
-      const db = await getDb(wallet.id);
+      const db = await getDb(settingsWallet.id);
       const configTable = db.table('config');
       const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
 
       // MPC wallets have no `unlockMethod` config row (reconstruct-at-unlock
       // always needs Google + spending password) — gate on encryptionMethod too.
-      if (unlockMethodConfig?.value || wallet.encryptionMethod === 'mpc') {
+      if (unlockMethodConfig?.value || settingsWallet.encryptionMethod === 'mpc') {
         debugLog('🔐 Wallet has unlock method configured - showing pre-login unlock dialog');
         // Store wallet info for pre-login unlock
         preLoginWalletId.value = wallet.id;

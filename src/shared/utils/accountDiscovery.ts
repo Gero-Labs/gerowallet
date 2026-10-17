@@ -4,11 +4,11 @@
 import { Api } from '@/api/api';
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 
 export type AccountActivity = 'used' | 'unused' | 'unknown';
 
-export interface DiscoveredAccount extends HardwareAccount {
+export interface DiscoveredAccount extends AccountXpub {
   /** First receive address, to show beside the account. */
   address: string;
   stakeAddress: string;
@@ -48,7 +48,7 @@ async function activityOf(api: AccountApi, stakeAddress: string): Promise<Pick<D
 export async function discoverAccounts(
   chain: string,
   network: string,
-  accounts: HardwareAccount[],
+  accounts: AccountXpub[],
   api: AccountApi = new Api({ chain, network }, networks.resolveDefaultProvider(chain, network)),
 ): Promise<DiscoveredAccount[]> {
   return Promise.all(accounts.map(async (account) => {
@@ -74,7 +74,7 @@ export function nextScanIndices(scanned: number[]): number[] {
  * Accounts from one more scan, merged into those scanned so far by index. Returns
  * null when the scan's account 0 is not the one already held: another device.
  */
-export function mergeScannedAccounts(previous: HardwareAccount[], scanned: HardwareAccount[]): HardwareAccount[] | null {
+export function mergeScannedAccounts(previous: AccountXpub[], scanned: AccountXpub[]): AccountXpub[] | null {
   const first = previous.find((account) => account.accountIndex === 0);
   const again = scanned.find((account) => account.accountIndex === 0);
   if (first && again?.publicKey !== first.publicKey) return null;

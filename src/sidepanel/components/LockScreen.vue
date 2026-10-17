@@ -156,7 +156,7 @@
 
 <script setup lang="ts">
 import { geroStore } from '@/stores/geroStore';
-import { walletDisplayName } from '@/shared/utils/walletAccount';
+import { secretsWallet, walletDisplayName } from '@/shared/utils/walletAccount';
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
@@ -192,6 +192,9 @@ const emit = defineEmits<{
 }>();
 
 const lockWallet = computed(() => props.targetWallet ?? walletStore.loggedWallet);
+// An added account is locked and unlocked with its account #0's settings and
+// Google/PassKey identity, which only that record stores.
+const securityWallet = computed(() => (lockWallet.value ? secretsWallet(lockWallet.value, geroStore.wallets) : null));
 const isPreSwitch = computed(() => !!props.targetWallet);
 
 const { themeColors } = useChainContext();
@@ -206,11 +209,11 @@ let disposed = false;
 onBeforeUnmount(() => { disposed = true; });
 
 // MPC "Sign in with Google" unlock state — never logged (idToken).
-const isMpcWallet = computed(() => lockWallet.value?.encryptionMethod === 'mpc');
+const isMpcWallet = computed(() => securityWallet.value?.encryptionMethod === 'mpc');
 // Passkey material lives on the wallet record (Task 5); present only when the
 // wallet was secured with a passkey at creation, undefined for password wallets.
 const mpcUsesPasskey = computed(() => (
-  !!lockWallet.value?.webAuthnCredentialId && !!lockWallet.value?.mpcPrfSaltId
+  !!securityWallet.value?.webAuthnCredentialId && !!securityWallet.value?.mpcPrfSaltId
 ));
 const googleIdToken = ref('');
 const googleEmail = ref('');
@@ -242,7 +245,7 @@ async function loadSecurityConfig() {
     }
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(walletId);
+    const db = await getDb(securityWallet.value?.id ?? walletId);
     const configTable = db.table('config');
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();

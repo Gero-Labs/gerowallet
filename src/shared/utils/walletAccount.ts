@@ -159,10 +159,24 @@ export function childAccounts<T extends GroupRecord>(parent: T, wallets: WalletL
     .sort((a, b) => (a.accountIndex ?? 0) - (b.accountIndex ?? 0) || a.id - b.id);
 }
 
-/** Wallets whose device can export more accounts (multi-account phase 1: Cardano hardware wallets). */
-export function canAddAccounts(wallet: Pick<Wallet, 'chain' | 'type'>): boolean {
-  return wallet.chain === Blockchain.CARDANO
-    && ([WalletType.Ledger, WalletType.Trezor, WalletType.Keystone] as string[]).includes(wallet.type ?? '');
+/** Cardano wallets that can add another account: hardware devices, seeds (password or PassKey) and Google wallets. */
+export function canAddAccounts(wallet: Pick<Wallet, 'chain' | 'type' | 'encryptionMethod'>): boolean {
+  if (wallet.chain !== Blockchain.CARDANO) return false;
+  if (isHardwareWallet(wallet)) return true;
+  return wallet.type === WalletType.Normal || (wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc');
+}
+
+/** Ledger, Trezor and Keystone: the accounts come from the device, not from a stored secret. */
+export function isHardwareWallet(wallet: Pick<Wallet, 'type'>): boolean {
+  return ([WalletType.Ledger, WalletType.Trezor, WalletType.Keystone] as string[]).includes(wallet.type ?? '');
+}
+
+/** The lowest account index the group of `wallet` does not hold yet. */
+export function nextAccountIndex<T extends GroupRecord>(wallet: T, wallets: WalletList<T>): number {
+  const taken = new Set(accountGroup(wallet, wallets).map((account) => account.accountIndex ?? 0));
+  let index = 0;
+  while (taken.has(index)) index++;
+  return index;
 }
 
 /** Every account of the group `wallet` belongs to: account #0 first, then the rest by index. */
@@ -189,11 +203,67 @@ export function conflictingWalletNames<T extends GroupRecord>(wallet: T, wallets
 }
 
 // ---------------------------------------------------------------------------
-// Accounts exported from a hardware wallet at pairing.
+// Secrets and security settings of a group. A wallet's root key, recovery
+// phrase, unlock identity (PassKey, Google) and security settings are stored
+// once, on its account-#0 record. An account added under it stores none of them,
+// and reads them from there: one password, one PassKey, one lock for the group.
 // ---------------------------------------------------------------------------
 
-/** One device account, as pairing stores it on the wallet record. */
-export interface HardwareAccount {
+/** Record fields only account #0 of a group stores. */
+export const GROUP_SECRET_FIELDS: readonly (keyof Wallet)[] = [
+  'encryptionMethod',
+  'encryptedPrivateKey',
+  'encryptedMnemonic',
+  'prfEncryptedPrivateKey',
+  'prfEncryptedMnemonic',
+  'prfSpendingPassword',
+  'webAuthnCredentialId',
+  'webAuthnTransports',
+  'mpcPrfSaltId',
+  'userId',
+  'mpcDeviceShare',
+  'mpcDeviceShareNext',
+];
+
+/** The record holding `wallet`'s secrets and security settings: its account #0, or itself. */
+export function secretsWallet<T extends GroupRecord>(wallet: T, wallets: WalletList<T>): T {
+  return parentWallet(wallet, wallets) ?? wallet;
+}
+
+/**
+ * The id `wallet`'s secrets are bound to and its security settings are stored
+ * under. A PassKey wallet's encryption is bound to this id, so decrypting with an
+ * added account's own id fails. `secretsWalletId` is set on the logged-in wallet
+ * by the background (withGroupSecrets); a stored record has none and is its own.
+ */
+export function secretsWalletId(wallet: Pick<Wallet, 'id'> & { secretsWalletId?: number }): number {
+  return wallet.secretsWalletId ?? wallet.id;
+}
+
+/**
+ * `wallet` as the background logs it in, with the secrets of the record that
+ * stores them: an added account takes its account #0's, and `secretsWalletId`
+ * names that record. Group membership is read from the stored records, not from
+ * `wallet`, which comes from a request. An added account whose account #0 is gone
+ * or does not match gets no secrets, so it cannot unlock or sign. Signing still
+ * refuses a root key whose account key is not `wallet.publicKey`
+ * (deriveSigningAccountKey).
+ */
+export function withGroupSecrets<T extends Wallet>(wallet: T, wallets: WalletList<Wallet>): T & { secretsWalletId: number } {
+  const stored = listOf(wallets).find((candidate) => candidate.id === wallet.id) ?? wallet;
+  if (stored.parentWalletId == null && wallet.parentWalletId == null) return { ...wallet, secretsWalletId: wallet.id };
+  const parent = parentWallet(stored, wallets);
+  const secrets: Partial<Wallet> = Object.fromEntries(GROUP_SECRET_FIELDS.map((field) => [field, parent?.[field]]));
+  return { ...wallet, ...secrets, parentWalletId: stored.parentWalletId, secretsWalletId: parent?.id ?? wallet.id };
+}
+
+// ---------------------------------------------------------------------------
+// Accounts exported from a hardware wallet at pairing, or derived from a
+// software wallet's root key (softwareAccounts.ts).
+// ---------------------------------------------------------------------------
+
+/** One account of a device or seed, as its wallet record stores it. */
+export interface AccountXpub {
   accountIndex: number;
   /** bech32 `xpub` over the 32-byte public key and 32-byte chain code (`wallet.publicKey`). */
   publicKey: string;
@@ -218,11 +288,11 @@ export function assertAccountIndices(indices: unknown): number[] {
 }
 
 /**
- * The device account behind an exported key. `path` must be the CIP-1852 account
+ * The account behind an exported or derived key. `path` must be the CIP-1852 account
  * path the key was derived at (Keystone leaves off the `m/`); the account index is
  * taken from it, so a key for any other path is refused rather than stored.
  */
-export function hardwareAccount(publicKeyHex: string, chainCodeHex: string, path: string): HardwareAccount {
+export function accountXpub(publicKeyHex: string, chainCodeHex: string, path: string): AccountXpub {
   const accountIndex = accountIndexFromPath(path);
   const accountPath = accountIndex === undefined ? '' : cardanoAccountPath(accountIndex);
   if (!accountPath || (path.startsWith('m/') ? path : `m/${path}`) !== accountPath

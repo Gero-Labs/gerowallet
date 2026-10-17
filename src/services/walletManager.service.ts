@@ -61,6 +61,7 @@ import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import { UnlockTargetChangedError } from '@/chrome/unlockStartup';
+import { secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
 // dynamic `import()` here cannot produce a separate chunk — Rollup inlines the
@@ -154,17 +155,18 @@ export class WalletManager {
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
    */
-  async restore(wallet): Promise<WalletBg | null> {
+  async restore(requested): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting restore process');
     LoadingState.setText('Restoring wallet instance...');
     LoadingState.setLoading(true);
 
     try {
+      const wallet = await this.resolveGroupSecrets(requested);
       // Clean up an existing wallet if different. On a SWITCH, only clear the
       // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
       // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout(false);
+        await this.logout(false, secretsWalletId(wallet));
       }
 
       // Create a new wallet instance if needed
@@ -188,6 +190,7 @@ export class WalletManager {
           publicKey: walletBg.publicKey,
           accountIndex: walletBg.accountIndex,
           parentWalletId: walletBg.parentWalletId,
+          secretsWalletId: walletBg.secretsWalletId,
           provider: walletBg.provider,
           encryptedPrivateKey: walletBg.encryptedPrivateKey,
           passwordLastUpdate: walletBg.passwordLastUpdate,
@@ -210,7 +213,7 @@ export class WalletManager {
         // session (see login()), so restore/switch never exposes an MPC wallet
         // without a fresh unlock (Google + passkey/spending password).
         if (wallet.encryptionMethod === 'mpc') {
-          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+          WalletStore.setLocked(!mpcSessionCache.get(secretsWalletId(wallet)));
         }
 
         LoadingState.setText('Restoring wallet...');
@@ -245,6 +248,17 @@ export class WalletManager {
   }
 
   /**
+   * The record to log in with. An account added under another record stores no
+   * secrets and takes its account #0's (withGroupSecrets); any other wallet is
+   * logged in as given.
+   */
+  private async resolveGroupSecrets(wallet) {
+    if (wallet?.parentWalletId == null) return wallet;
+    const { getAllWallets } = await import('@/db/gero-db');
+    return withGroupSecrets(wallet, await getAllWallets());
+  }
+
+  /**
    * Login with a wallet
    * @param wallet - Wallet data to log in with
    * @returns WalletBg instance or null if failed
@@ -261,10 +275,10 @@ export class WalletManager {
     }
   }
 
-  private async loginWallet(wallet): Promise<WalletBg | null> {
+  private async loginWallet(requested): Promise<WalletBg | null> {
     // Do not raise transient flags for a wallet that is already initialized.
     // An in-flight initialization is joined by login() before reaching here.
-    if (this.walletBg && this.currentWalletId === wallet.id) return this.walletBg;
+    if (this.walletBg && this.currentWalletId === requested.id) return this.walletBg;
 
     debugLog('WalletManager: Starting login process');
     // Set syncing flag BEFORE setLoggedWallet — prevents router from navigating to dashboard
@@ -274,11 +288,12 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
+      const wallet = await this.resolveGroupSecrets(requested);
       // Clean up an existing wallet if different. On a SWITCH, only clear the
       // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
       // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout(false);
+        await this.logout(false, secretsWalletId(wallet));
       }
 
       // Create a new wallet instance if needed
@@ -306,6 +321,7 @@ export class WalletManager {
           publicKey: walletBg.publicKey,
           accountIndex: walletBg.accountIndex,
           parentWalletId: walletBg.parentWalletId,
+          secretsWalletId: walletBg.secretsWalletId,
           provider: walletBg.provider,
           encryptedPrivateKey: walletBg.encryptedPrivateKey,
           passwordLastUpdate: walletBg.passwordLastUpdate,
@@ -331,7 +347,7 @@ export class WalletManager {
         // wallet with no re-authentication. If the key IS present (the options
         // pre-login unlock reconstructed it before sending LOGIN), stay unlocked.
         if (wallet.encryptionMethod === 'mpc') {
-          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+          WalletStore.setLocked(!mpcSessionCache.get(secretsWalletId(wallet)));
         }
 
         LoadingState.setText('Initializing wallet...');
@@ -804,6 +820,24 @@ export class WalletManager {
   }
 
   /**
+   * Every wallet's MPC session (an explicit logout), or the outgoing wallet's (a
+   * switch). Sessions are keyed by the record holding the secrets, which the
+   * accounts of one wallet share, so a switch between them keeps it.
+   */
+  private async clearMpcCaches(clearAll: boolean, keepMpcSessionOf?: number): Promise<void> {
+    if (clearAll) {
+      mpcSessionCache.clearAll();
+      await mpcLoginShareCache.clearAll();
+      return;
+    }
+    if (this.currentWalletId === null) return;
+    const outgoing = this.walletBg ? secretsWalletId(this.walletBg) : this.currentWalletId;
+    if (outgoing === keepMpcSessionOf) return;
+    mpcSessionCache.clear(outgoing);
+    await mpcLoginShareCache.clear(outgoing);
+  }
+
+  /**
    * Logout current wallet and cleanup all resources
    */
   // `clearAllMpcCaches` is true for an explicit logout (wipe every wallet's MPC
@@ -812,18 +846,12 @@ export class WalletManager {
   // into mpcSessionCache BEFORE this runs, so a blanket clearAll would wipe the
   // target's just-authenticated session and re-lock it. On a switch we only clear
   // the OUTGOING wallet's caches.
-  async logout(clearAllMpcCaches = true): Promise<void> {
+  async logout(clearAllMpcCaches = true, keepMpcSessionOf?: number): Promise<void> {
     await clearMidnightPrivateSession(clearAllMpcCaches ? undefined : this.currentWalletId ?? undefined);
     try {
       // Clear cached MPC root-key bytes and login shares for the logged-out wallet
       // (or all wallets on an explicit logout) — never survive a logout.
-      if (clearAllMpcCaches) {
-        mpcSessionCache.clearAll();
-        await mpcLoginShareCache.clearAll();
-      } else if (this.currentWalletId !== null) {
-        mpcSessionCache.clear(this.currentWalletId);
-        await mpcLoginShareCache.clear(this.currentWalletId);
-      }
+      await this.clearMpcCaches(clearAllMpcCaches, keepMpcSessionOf);
 
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
@@ -954,13 +982,7 @@ export class WalletManager {
     } catch (error) {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
-      if (clearAllMpcCaches) {
-        mpcSessionCache.clearAll();
-        await mpcLoginShareCache.clearAll();
-      } else if (this.currentWalletId !== null) {
-        mpcSessionCache.clear(this.currentWalletId);
-        await mpcLoginShareCache.clear(this.currentWalletId);
-      }
+      await this.clearMpcCaches(clearAllMpcCaches, keepMpcSessionOf);
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
@@ -1023,8 +1045,12 @@ export class WalletManager {
     const { verifyPin, verifyPattern, verifyTotpCode, decryptSecurityData } = await import('@/shared/utils/security');
     const { getDb } = await import('@/db/wallet-db');
 
-    // Get security config from wallet database
-    const db = await getDb(walletId);
+    // Get security config from wallet database. An added account is unlocked
+    // with its account #0's settings and secrets, which only that record holds.
+    const { getAllWallets } = await import('@/db/gero-db');
+    const walletsMap: Record<number, Wallet> = await getAllWallets();
+    const settingsWalletId = walletsMap[walletId] ? secretsWallet(walletsMap[walletId], walletsMap).id : walletId;
+    const db = await getDb(settingsWalletId);
     const configTable = db.table('config');
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
@@ -1057,13 +1083,9 @@ export class WalletManager {
     // If encryptionMethod lookup fails (DB error → undefined), browserVerified is false and the code
     // falls through to the normal password branch, which safely fails when trying to decrypt with
     // the literal string 'lockpassword-verified' as a spending password.
-    // Cache walletsMap for reuse in the pre-login password path below (avoids duplicate DB read).
-    let cachedWalletsMap: Record<number, Wallet> | null = null;
     let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
     if (!encryptionMethod) {
-      const { getAllWallets } = await import('@/db/gero-db');
-      cachedWalletsMap = await getAllWallets();
-      encryptionMethod = cachedWalletsMap[walletId]?.encryptionMethod;
+      encryptionMethod = walletsMap[settingsWalletId]?.encryptionMethod;
     }
     const browserVerified =
       (unlockCredential === 'passkey-authenticated') ||
@@ -1099,12 +1121,8 @@ export class WalletManager {
 
         unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string);
       } else {
-        // NORMAL WALLET - Pre-login: load wallet from database (reuse cached map if available)
-        if (!cachedWalletsMap) {
-          const { getAllWallets } = await import('@/db/gero-db');
-          cachedWalletsMap = await getAllWallets();
-        }
-        const wallet = cachedWalletsMap[walletId];
+        // NORMAL WALLET - Pre-login: the stored record holding the secrets
+        const wallet = walletsMap[settingsWalletId];
 
         if (!wallet || wallet.type !== WalletType.Normal) {
           throw new Error('Password unlock is only supported for Normal wallets');
@@ -1333,7 +1351,7 @@ export class WalletManager {
       if (!walletStore.loggedWallet) return;
 
       const { getDb } = await import('@/db/wallet-db');
-      const db = await getDb(walletStore.loggedWallet.id);
+      const db = await getDb(secretsWalletId(walletStore.loggedWallet));
       const configTable = db.table('config');
 
       const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();

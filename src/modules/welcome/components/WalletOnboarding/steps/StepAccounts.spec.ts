@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import networks from '@/utils/networks';
 import { Blockchain, Network } from '@/models/types';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 
 const mocks = vi.hoisted(() => ({ discover: vi.fn(), findExisting: vi.fn() }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key, tc: (key: string) => key } }));
@@ -14,11 +14,11 @@ vi.mock('@/shared/utils/accountDiscovery', () => ({ ACCOUNTS_PER_SCAN: 5, discov
 import StepAccounts from './StepAccounts.vue';
 
 const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
-const account = (accountIndex: number): HardwareAccount => ({ accountIndex, publicKey: `xpub-${accountIndex}`, keys: [] });
+const account = (accountIndex: number): AccountXpub => ({ accountIndex, publicKey: `xpub-${accountIndex}`, keys: [] });
 
 /** Probes answer `activity` per index; the wallet list holds the indices in `stored`. */
 function device(activity: Record<number, string>, stored: Record<number, string> = {}) {
-  mocks.discover.mockImplementation(async (_chain: string, _network: string, accounts: HardwareAccount[]) =>
+  mocks.discover.mockImplementation(async (_chain: string, _network: string, accounts: AccountXpub[]) =>
     accounts.map((a) => ({ ...a, address: `addr1-${a.accountIndex}`, stakeAddress: `stake1-${a.accountIndex}`, activity: activity[a.accountIndex] ?? 'unused', balance: '0' })));
   mocks.findExisting.mockImplementation(async ({ publicKey }: { publicKey: string }) => {
     const index = Number(publicKey.split('-')[1]);
@@ -26,7 +26,7 @@ function device(activity: Record<number, string>, stored: Record<number, string>
   });
 }
 
-function render(accounts: HardwareAccount[]) {
+function render(accounts: AccountXpub[]) {
   return mount(StepAccounts, {
     props: { network, accounts },
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
@@ -37,7 +37,7 @@ const rows = (wrapper: ReturnType<typeof render>) => wrapper.findAll('button.acc
 const checked = (wrapper: ReturnType<typeof render>) => rows(wrapper).map((row) => row.attributes('aria-checked'));
 const continueWith = async (wrapper: ReturnType<typeof render>) => {
   await wrapper.find('button.onb-continue').trigger('click');
-  return (wrapper.emitted('next')?.[0]?.[0] as HardwareAccount[] | undefined)?.map((a) => a.accountIndex);
+  return (wrapper.emitted('next')?.[0]?.[0] as AccountXpub[] | undefined)?.map((a) => a.accountIndex);
 };
 
 afterEach(() => vi.clearAllMocks());
@@ -91,7 +91,7 @@ describe('choosing accounts', () => {
     await wrapper.setProps({ accounts: [0, 1, 5, 6].map(account) });
     await flushPromises();
 
-    expect(mocks.discover.mock.calls.map((call) => (call[2] as HardwareAccount[]).map((a) => a.accountIndex))).toEqual([[0, 1], [5, 6]]);
+    expect(mocks.discover.mock.calls.map((call) => (call[2] as AccountXpub[]).map((a) => a.accountIndex))).toEqual([[0, 1], [5, 6]]);
     expect(rows(wrapper)).toHaveLength(4);
   });
 

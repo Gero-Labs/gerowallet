@@ -93,7 +93,7 @@ import { ref, computed, getCurrentInstance, nextTick, watch } from 'vue';
 import { Theme } from '@/models/types';
 import GeroStore from '@/stores/geroStore';
 import { DuplicateWalletError, findExistingWallet } from '@/db/gero-db';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 import type { Wallet } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -117,7 +117,7 @@ const props = defineProps<{
   connection: ConnectionPayload | null;
   name: string;
   /** Multi-account pairing: the accounts to add, by index. */
-  accounts?: HardwareAccount[];
+  accounts?: AccountXpub[];
   /** Multi-account pairing: account #0's xpub, which finds the stored wallet new accounts join. */
   groupPublicKey?: string;
 }>();
@@ -173,7 +173,7 @@ const recordFields = () => ({
  * without it the accounts join the stored account #0. An account that turns out
  * to be stored already is skipped. Returns the first record created.
  */
-async function createAccountRecords(accounts: HardwareAccount[]): Promise<Wallet | undefined> {
+async function createAccountRecords(accounts: AccountXpub[]): Promise<Wallet | undefined> {
   let parentWalletId: number | undefined;
   let first: Wallet | undefined;
   for (const account of accounts) {

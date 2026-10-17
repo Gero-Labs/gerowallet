@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bech32 } from 'bech32';
 import type { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { Blockchain, CoinTypes, HARDENED, WalletType, WalletTypePurpose, type Keys } from '@/models/types';
+import { Blockchain, CoinTypes, HARDENED, WalletType, WalletTypePurpose, type Keys, type Wallet } from '@/models/types';
 import { resolvePrivateKey } from './resolver';
 import {
   InvalidAccountIndexError,
@@ -15,16 +15,21 @@ import {
   childAccounts,
   conflictingWalletNames,
   deriveSigningAccountKey,
-  hardwareAccount,
+  accountXpub,
+  isHardwareWallet,
+  nextAccountIndex,
   parentWallet,
   resolveAccountIndex,
+  secretsWallet,
+  secretsWalletId,
   walletDisplayName,
+  withGroupSecrets,
 } from './walletAccount';
 
 const MNEMONIC = `${'abandon '.repeat(23)}art`;
 
 /** The bech32 account xpub a record stores in `publicKey` for account `index`. */
-function accountXpub(rootKey: Bip32PrivateKey, index: number): string {
+function bech32AccountXpub(rootKey: Bip32PrivateKey, index: number): string {
   const publicKeyHex = rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index]).toPublic().hex();
   return bech32.encode('xpub', bech32.toWords(Buffer.from(publicKeyHex, 'hex')), 1023);
 }
@@ -117,15 +122,15 @@ describe('deriveSigningAccountKey', () => {
   const rootKey = resolvePrivateKey(MNEMONIC);
 
   it('derives the account key whose public half is the record’s xpub', () => {
-    const accountKey = deriveSigningAccountKey(rootKey, 1, accountXpub(rootKey, 1));
+    const accountKey = deriveSigningAccountKey(rootKey, 1, bech32AccountXpub(rootKey, 1));
     expect(accountKey.toPublic().hex()).toBe(
       rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + 1]).toPublic().hex(),
     );
   });
 
   it('refuses an index that does not match the xpub', () => {
-    expect(() => deriveSigningAccountKey(rootKey, 0, accountXpub(rootKey, 1))).toThrow(InvalidAccountIndexError);
-    expect(() => deriveSigningAccountKey(rootKey, 1, accountXpub(rootKey, 0))).toThrow(InvalidAccountIndexError);
+    expect(() => deriveSigningAccountKey(rootKey, 0, bech32AccountXpub(rootKey, 1))).toThrow(InvalidAccountIndexError);
+    expect(() => deriveSigningAccountKey(rootKey, 1, bech32AccountXpub(rootKey, 0))).toThrow(InvalidAccountIndexError);
   });
 
   it('refuses a record with no xpub', () => {
@@ -173,11 +178,16 @@ describe('account groups', () => {
     expect(conflictingWalletNames(head, wallets).sort()).toEqual(['Daily']);
   });
 
-  it('offers more accounts only for Cardano hardware wallets', () => {
+  it('offers more accounts for Cardano hardware, recovery-phrase, PassKey and Google wallets', () => {
     expect(canAddAccounts(head)).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Trezor }))).toBe(true);
-    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal }))).toBe(false);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, encryptionMethod: 'prf' }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Google, encryptionMethod: 'mpc' }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Google }))).toBe(false); // legacy contract wallet
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Watch }))).toBe(false);
     expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN }))).toBe(false);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT }))).toBe(false);
   });
 });
 
@@ -195,17 +205,74 @@ describe('device account export', () => {
     });
 
   it('builds the record’s xpub and key from an exported account key', () => {
-    const account = hardwareAccount(KEY, CHAIN_CODE, "1852'/1815'/3'");
+    const account = accountXpub(KEY, CHAIN_CODE, "1852'/1815'/3'");
     expect(account.accountIndex).toBe(3);
     expect(account.keys).toEqual([{ chainCode: CHAIN_CODE, path: "m/1852'/1815'/3'", publicKey: KEY }]);
     expect(Buffer.from(bech32.fromWords(bech32.decode(account.publicKey, 1023).words)).toString('hex')).toBe(KEY + CHAIN_CODE);
   });
 
   it.each(["m/1852'/1815'/3'/0/0", "m/44'/1815'/3'", "m/1852'/1815'/3"])('refuses a key exported at %s', (path) => {
-    expect(() => hardwareAccount(KEY, CHAIN_CODE, path)).toThrow(InvalidAccountIndexError);
+    expect(() => accountXpub(KEY, CHAIN_CODE, path)).toThrow(InvalidAccountIndexError);
   });
 
   it('refuses a malformed key', () => {
-    expect(() => hardwareAccount('aa', CHAIN_CODE, "m/1852'/1815'/0'")).toThrow(InvalidAccountIndexError);
+    expect(() => accountXpub('aa', CHAIN_CODE, "m/1852'/1815'/0'")).toThrow(InvalidAccountIndexError);
+  });
+});
+
+describe('secrets of a group', () => {
+  const secrets = {
+    encryptionMethod: 'prf' as const, prfEncryptedPrivateKey: 'prf-root', prfEncryptedMnemonic: 'prf-phrase',
+    webAuthnCredentialId: 'credential', webAuthnTransports: ['internal' as AuthenticatorTransport],
+  };
+  const base = { chain: Blockchain.CARDANO, network: 'Mainnet', type: WalletType.Normal };
+  const head = { id: 1, name: 'Daily', ...base, publicKey: 'xpub-0', ...secrets };
+  const added = { id: 2, name: 'Account #1', ...base, publicKey: 'xpub-1', accountIndex: 1, parentWalletId: 1, encryptionMethod: 'prf' as const };
+  const third = { id: 4, name: 'Account #3', ...base, publicKey: 'xpub-3', accountIndex: 3, parentWalletId: 1, encryptionMethod: 'prf' as const };
+  const savings = { id: 3, name: 'Savings', ...base, publicKey: 'xpub-s', encryptionMethod: 'password' as const, encryptedPrivateKey: 'savings-root' };
+  const wallets = { 1: head, 2: added, 3: savings, 4: third };
+
+  it('keeps them on account #0, which an added account reads them from', () => {
+    expect(secretsWallet(added, wallets)).toBe(head);
+    expect(secretsWallet(head, wallets)).toBe(head);
+    expect(secretsWalletId({ id: 2, secretsWalletId: 1 })).toBe(1);
+    expect(secretsWalletId({ id: 2 })).toBe(2);
+  });
+
+  it('logs an added account in with its account #0’s secrets, under that record’s id', () => {
+    const logged = withGroupSecrets(added, wallets);
+    expect(logged).toMatchObject({ id: 2, publicKey: 'xpub-1', accountIndex: 1, parentWalletId: 1, ...secrets, secretsWalletId: 1 });
+  });
+
+  it('logs any other wallet in as it is', () => {
+    expect(withGroupSecrets(savings, wallets)).toEqual({ ...savings, secretsWalletId: 3 });
+  });
+
+  it('gives no secrets to an account whose account #0 is gone, nor any it was handed', () => {
+    const orphan = { ...added, id: 5, parentWalletId: 99, prfEncryptedPrivateKey: 'smuggled' };
+    const logged: Wallet & { secretsWalletId: number } = withGroupSecrets(orphan, { ...wallets, 5: { ...orphan, prfEncryptedPrivateKey: undefined } });
+    expect(logged.prfEncryptedPrivateKey).toBeUndefined();
+    expect(logged.webAuthnCredentialId).toBeUndefined();
+    expect(logged.secretsWalletId).toBe(5);
+  });
+
+  it('reads the group from the stored records, not from the request', () => {
+    // A request claiming another wallet as its account #0 gets nothing from it.
+    const claimed: Wallet & { secretsWalletId: number } = withGroupSecrets({ ...savings, parentWalletId: 1 }, wallets);
+    expect(claimed.parentWalletId).toBeUndefined();
+    expect(claimed.encryptedPrivateKey).toBeUndefined();
+    expect(claimed.prfEncryptedPrivateKey).toBeUndefined();
+    expect(claimed.secretsWalletId).toBe(3);
+  });
+
+  it('offers the lowest account index the group does not have yet', () => {
+    expect(nextAccountIndex(head, wallets)).toBe(2);
+    expect(nextAccountIndex(third, wallets)).toBe(2);
+    expect(nextAccountIndex(savings, wallets)).toBe(1);
+  });
+
+  it('tells hardware wallets apart', () => {
+    expect(isHardwareWallet({ type: WalletType.Keystone })).toBe(true);
+    expect(isHardwareWallet({ type: WalletType.Normal })).toBe(false);
   });
 });

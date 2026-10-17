@@ -26,6 +26,9 @@ export enum MessageTypes {
   GET_PAIRING_QR = 'GET_PAIRING_QR',
   GET_PAIRING_STATUS = 'GET_PAIRING_STATUS',
   VERIFY_SPENDING_PASSWORD = 'VERIFY_SPENDING_PASSWORD',
+  // "Add account" for a recovery-phrase or Google wallet: the xpub of another of
+  // its accounts. Only the public key comes back; see chrome/addAccountKeys.ts.
+  DERIVE_ACCOUNT_XPUB = 'DERIVE_ACCOUNT_XPUB',
   // Live support chat: one-time-per-wallet identity handshake. BG asks Nexus for a
   // nonce, CIP-8 signs the challenge subject with the wallet's STAKE key (same
   // machinery as PRODUCE_DEVICE_REGISTER_PROOF), and returns the pseudonymous

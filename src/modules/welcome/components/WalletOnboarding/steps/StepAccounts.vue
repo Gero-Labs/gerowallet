@@ -2,7 +2,7 @@
   <div class="step-accounts">
     <div class="step-scroll">
       <p class="accounts-summary" role="status">
-        {{ probing ? t('accounts.checking') : tc('accounts.found', usedCount, { count: usedCount }) }}
+        {{ probing ? t('accounts.checking') : tc(source === 'seed' ? 'accounts.foundSeed' : 'accounts.found', usedCount, { count: usedCount }) }}
       </p>
       <ul class="accounts-list">
         <li v-for="row in rows" :key="row.accountIndex">
@@ -51,17 +51,19 @@ import { findExistingWallet } from '@/db/gero-db';
 import { ACCOUNTS_PER_SCAN, discoverAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 import type { NetworkInfo } from '@/utils/networks';
 
 const props = defineProps<{
   network: NetworkInfo;
-  /** Every account scanned from the device so far. */
-  accounts: HardwareAccount[];
+  /** Every account scanned from the device, or derived from the recovery phrase, so far. */
+  accounts: AccountXpub[];
+  /** Where the accounts come from, for the wording. */
+  source?: 'device' | 'seed';
 }>();
 
 defineEmits<{
-  (e: 'next', accounts: HardwareAccount[]): void;
+  (e: 'next', accounts: AccountXpub[]): void;
   (e: 'back'): void;
   (e: 'scan-more'): void;
 }>();

@@ -134,6 +134,12 @@ export class WalletBg {
   accountIndex: number;
   /** The account-#0 record this account was added under, for an account other than #0. */
   parentWalletId?: number;
+  /**
+   * The record whose secrets this wallet holds and whose id they are bound to:
+   * account #0 for an added account (withGroupSecrets), else this wallet. Every
+   * secret is decrypted, re-encrypted and migrated under this id, never `id`.
+   */
+  secretsWalletId: number;
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
@@ -164,7 +170,7 @@ export class WalletBg {
   constructor(
     // Wallet DB record; the intersection covers UI/store fields not part of
     // the persisted Wallet model but carried on the runtime object.
-    wallet: Wallet & { theme?: string; order?: number; passwordLastUpdate?: Date; createdAt?: string; btSupported?: boolean; xfp?: string },
+    wallet: Wallet & { theme?: string; order?: number; passwordLastUpdate?: Date; createdAt?: string; btSupported?: boolean; xfp?: string; secretsWalletId?: number },
     googleBaseAddress?: string
   ) {
     this.id = wallet.id;
@@ -178,6 +184,7 @@ export class WalletBg {
     this.publicKey = wallet.publicKey;
     this.accountIndex = resolveAccountIndex(wallet);
     this.parentWalletId = wallet.parentWalletId;
+    this.secretsWalletId = wallet.secretsWalletId ?? wallet.id;
     this.passwordLastUpdate = wallet.passwordLastUpdate;
     this.chain = wallet.chain;
     this.network = wallet.network;
@@ -1437,7 +1444,7 @@ export class WalletBg {
         const privateKeyBytes = await decryptPrivateKeyWithPrf(
           this.prfEncryptedPrivateKey,
           this.webAuthnCredentialId,
-          this.id.toString()
+          this.secretsWalletId.toString()
         );
 
         return Bip32PrivateKey.fromBytes(privateKeyBytes);
@@ -1488,7 +1495,7 @@ export class WalletBg {
         }
         return;
       }
-      const result = await migrateWalletSecrets(this.id, password);
+      const result = await migrateWalletSecrets(this.secretsWalletId, password);
       if (result.encryptedPrivateKey) this.encryptedPrivateKey = result.encryptedPrivateKey;
       if (result.encryptedMnemonic) this.encryptedMnemonic = result.encryptedMnemonic;
       if (result.outcome === 'migrated' || result.outcome === 'already-current' || result.outcome === 'not-applicable') {
@@ -1512,7 +1519,7 @@ export class WalletBg {
     try {
       const upgraded = encryptWithPassword(password, rootKeyBuffer.toString('hex'));
       const { migrateEncryptedPrivateKey } = await import('@/db/gero-db');
-      await migrateEncryptedPrivateKey(this.id, upgraded);
+      await migrateEncryptedPrivateKey(this.secretsWalletId, upgraded);
       this.encryptedPrivateKey = upgraded;
       debugLog(`🔐 Migrated wallet ${this.id} private key to hardened KDF format`);
     } catch (e) {
@@ -1846,7 +1853,7 @@ export class WalletBg {
           this.prfEncryptedMnemonic,
           prfSecret,
           this.webAuthnCredentialId,
-          this.id.toString()
+          this.secretsWalletId.toString()
         );
 
         // Sign and finalize PSBT
@@ -1956,7 +1963,7 @@ export class WalletBg {
       if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.id.toString()
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.secretsWalletId.toString()
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2009,7 +2016,7 @@ export class WalletBg {
       if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.id.toString()
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.secretsWalletId.toString()
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2341,7 +2348,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2401,7 +2408,7 @@ export class WalletBg {
       if (this.encryptionMethod === 'prf') {
         if (!this.prfEncryptedMnemonic || !prfSecret || !this.webAuthnCredentialId) throw new Error('PassKey authorization is required');
         const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
-        mnemonic = await decryptMnemonicWithPrfOutput(this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, String(this.id));
+        mnemonic = await decryptMnemonicWithPrfOutput(this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, String(this.secretsWalletId));
       } else {
         if (!password || !this.encryptedMnemonic) throw new Error('Spending password is required');
         const { decrypt } = await import('@/shared/utils/crypto');
@@ -2441,7 +2448,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2566,7 +2573,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2681,7 +2688,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2880,7 +2887,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -3109,7 +3116,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password required to sign DUST registration tx');

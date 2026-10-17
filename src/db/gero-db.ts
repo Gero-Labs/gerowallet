@@ -13,6 +13,7 @@ import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { debugLog } from '@/utils/debug';
 import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
 import { findDuplicateWallet, WalletIdentitySource } from '@/db/walletIdentity';
+import { assertAccountIndices, canAddAccounts, isHardwareWallet } from '@/shared/utils/walletAccount';
 
 let cachedDb: Dexie | null = null;
 
@@ -634,6 +635,52 @@ export async function createNewHardwareWallet(wallet) {
   });
   await createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
   return walletId;
+}
+
+/**
+ * Store an account added under a recovery-phrase, PassKey or Google wallet
+ * (`parentId`, its account #0). The record holds the account's own xpub and
+ * index but none of the wallet's secrets: they stay on account #0 and are read
+ * from there (withGroupSecrets), so one password, PassKey or Google sign-in keeps
+ * covering the whole wallet. A hardware wallet's accounts are paired instead.
+ */
+export async function createAccountWallet(
+  parentId: number,
+  account: { name: string; publicKey: string; accountIndex: number },
+): Promise<Wallet> {
+  const wallets: Record<number, Wallet> = await getAllWallets();
+  const parent = wallets[parentId];
+  if (!parent || parent.parentWalletId != null || isHardwareWallet(parent) || !canAddAccounts(parent)) {
+    throw new Error('Accounts cannot be added to this wallet');
+  }
+  const [accountIndex] = assertAccountIndices([account.accountIndex]);
+  if (accountIndex === 0) throw new Error('Account #0 is the wallet itself');
+
+  const record: Omit<Wallet, 'id'> & { theme?: string; passwordLastUpdate: Date } = {
+    name: account.name,
+    icon: parent.icon,
+    theme: (parent as Wallet & { theme?: string }).theme,
+    type: parent.type,
+    chain: parent.chain,
+    network: parent.network,
+    addressType: parent.addressType,
+    // Not a secret: lets each screen tell a PassKey or Google account apart
+    // without looking up its account #0.
+    encryptionMethod: parent.encryptionMethod,
+    publicKey: account.publicKey,
+    accountIndex,
+    parentWalletId: parent.id,
+    passwordLastUpdate: new Date(),
+  };
+  const duplicate = findDuplicateWallet(record, Object.values(wallets));
+  if (duplicate) throw new DuplicateWalletError(duplicate);
+
+  const db: Dexie = await getDb();
+  const order = ((await getLatestWalletByOrder()) ?? 0) + 1;
+  const walletId = await db['wallets'].add({ ...record, order });
+  // No recovery phrase is stored on the account, so no backup reminder of its own.
+  await createNewWalletDb(walletId, false);
+  return { ...record, id: walletId } as Wallet;
 }
 
 /**

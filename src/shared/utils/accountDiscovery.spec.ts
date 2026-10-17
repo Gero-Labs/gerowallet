@@ -3,13 +3,13 @@ import { bech32 } from 'bech32';
 import { Blockchain, CoinTypes, HARDENED, Network, WalletTypePurpose } from '@/models/types';
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import { resolvePrivateKey } from './resolver';
-import { hardwareAccount, type HardwareAccount } from './walletAccount';
+import { accountXpub, type AccountXpub } from './walletAccount';
 import { discoverAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
 
 const rootKey = resolvePrivateKey(`${'abandon '.repeat(23)}art`);
-const account = (index: number): HardwareAccount => {
+const account = (index: number): AccountXpub => {
   const hex = rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index]).toPublic().hex();
-  return hardwareAccount(hex.slice(0, 64), hex.slice(64), `m/1852'/1815'/${index}'`);
+  return accountXpub(hex.slice(0, 64), hex.slice(64), `m/1852'/1815'/${index}'`);
 };
 const stake = (index: number) => getRewardAddress(account(index).publicKey, Blockchain.CARDANO, Network.PREPROD).toBech32();
 

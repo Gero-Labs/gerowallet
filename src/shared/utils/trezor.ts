@@ -18,7 +18,7 @@ import { NetworkInfo } from '@/utils/networks';
 import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
-import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, hardwareAccount, type HardwareAccount } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 
 /**
  * Trezor transaction transformer context
@@ -817,7 +817,7 @@ export default {
   async getAccountXpubs(accountIndices: number[]): Promise<{
     productName: string;
     btSupported: boolean;
-    accounts: HardwareAccount[];
+    accounts: AccountXpub[];
   }> {
     await this.init();
     const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
@@ -836,7 +836,7 @@ export default {
     return {
       productName: features['label'] || 'Trezor',
       btSupported: features['model'].toLowerCase() === 'safe 7',
-      accounts: res.payload.map((key, i) => hardwareAccount(key.node.public_key, key.node.chain_code, paths[i])),
+      accounts: res.payload.map((key, i) => accountXpub(key.node.public_key, key.node.chain_code, paths[i])),
     };
   },
 

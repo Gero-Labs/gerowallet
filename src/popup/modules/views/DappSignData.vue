@@ -196,7 +196,7 @@ import ledger from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, parseDataSignature } from '@/shared/utils/keystone';
-import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccount';
 import networks from '@/utils/networks';
 import { DeviceStatusError, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Cardano } from '@cardano-sdk/core';
@@ -362,7 +362,7 @@ const signDataLocallyWithPrf = async () => {
       pkBytes = await awaitFreshApproval(async () => (decryptPrivateKeyWithPrf(
         loggedWallet.value.prfEncryptedPrivateKey,
         loggedWallet.value.webAuthnCredentialId,
-        loggedWallet.value.id.toString()
+        secretsWalletId(loggedWallet.value).toString()
       )), approvalCurrent);
     }
 

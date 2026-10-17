@@ -211,12 +211,15 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
 import type { Wallet } from '@/models/types';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 
 interface Props {
   network: NetworkInfo;
   securityMethod: 'prf' | 'password';
   name: string;
   mnemonic: string[];
+  /** Multi-account: the accounts chosen, account #0 among them; the others are added under it. */
+  accounts?: AccountXpub[];
 }
 
 const props = defineProps<Props>();
@@ -422,6 +425,7 @@ const walletCreationStep = async (): Promise<void> => {
       );
     }
 
+    await addChosenAccounts(wallet);
     await performLogin(wallet);
   } catch (error: unknown) {
     // Backstop: gero-db rejects duplicates too, in case a race let one slip past
@@ -435,6 +439,26 @@ const walletCreationStep = async (): Promise<void> => {
     console.error('Wallet restoration failed:', msg);
     vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
     creatingWalletLoader.value = false;
+  }
+};
+
+/**
+ * The other accounts chosen join the wallet just restored (account #0). They hold
+ * none of its secrets, so this asks for nothing more. Best-effort: the wallet is
+ * restored either way, and an account missed here can be added later.
+ */
+const addChosenAccounts = async (wallet: Wallet | undefined): Promise<void> => {
+  const others = (props.accounts ?? []).filter((account) => account.accountIndex > 0);
+  if (!wallet?.id || !others.length) return;
+  try {
+    await GeroStore.addAccounts(wallet.id, others.map((account) => ({
+      name: vmProxy.$t('accounts.label', { index: account.accountIndex }) as string,
+      publicKey: account.publicKey,
+      accountIndex: account.accountIndex,
+    })));
+  } catch (error) {
+    console.error('Adding the other accounts failed:', error instanceof Error ? error.message : 'unknown');
+    vmProxy['$snackbar']?.setError(vmProxy.$t('accounts.addLater') as string);
   }
 };
 

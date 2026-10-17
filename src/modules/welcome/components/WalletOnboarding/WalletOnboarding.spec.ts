@@ -3,13 +3,15 @@ import { createTestVuetify } from '@test/helpers/vuetify';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import networks from '@/utils/networks';
-import { Blockchain, Network, WalletType } from '@/models/types';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import { Blockchain, Network, WalletType, type Wallet } from '@/models/types';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 
-const { flags, stub } = vi.hoisted(() => ({
+const { flags, stub, derive, findExisting } = vi.hoisted(() => ({
   flags: { multiAccount: true, setError: vi.fn() },
   // Each step is a stub that shows its props, so the flow can be driven from here.
-  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey'], template: `<div class="${name}" />` }),
+  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet'], template: `<div class="${name}" />` }),
+  derive: vi.fn(),
+  findExisting: vi.fn(),
 }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@/plugins/snackbar', () => ({ default: { setError: flags.setError } }));
@@ -25,6 +27,10 @@ vi.mock('./steps/StepDevice.vue', () => ({ default: stub('StepDevice') }));
 vi.mock('./steps/StepConnect.vue', () => ({ default: stub('StepConnect') }));
 vi.mock('./steps/StepAccounts.vue', () => ({ default: stub('StepAccounts') }));
 vi.mock('./steps/StepReview.vue', () => ({ default: stub('StepReview') }));
+vi.mock('./steps/StepJoinAccounts.vue', () => ({ default: stub('StepJoinAccounts') }));
+vi.mock('./steps/StepAddAccount.vue', () => ({ default: stub('StepAddAccount') }));
+vi.mock('@/shared/utils/softwareAccounts', () => ({ deriveAccountXpubsFromMnemonic: derive }));
+vi.mock('@/db/gero-db', () => ({ findExistingWallet: findExisting }));
 vi.mock('./steps/StepGoogleSignIn.vue', () => ({ default: stub('StepGoogleSignIn') }));
 vi.mock('./steps/StepGoogleSecure.vue', () => ({ default: stub('StepGoogleSecure') }));
 vi.mock('./steps/StepGoogleBackup.vue', () => ({ default: stub('StepGoogleBackup') }));
@@ -35,15 +41,15 @@ import WalletOnboarding from './WalletOnboarding.vue';
 
 const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
 const keystone = { id: 7, name: 'Cold storage', chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Keystone };
-const account = (accountIndex: number, publicKey = `xpub-${accountIndex}`): HardwareAccount => ({ accountIndex, publicKey, keys: [] });
+const account = (accountIndex: number, publicKey = `xpub-${accountIndex}`): AccountXpub => ({ accountIndex, publicKey, keys: [] });
 
-function render() {
+function render(addAccountTo: object | null = keystone) {
   return mount(WalletOnboarding, {
-    props: { network, addAccountTo: keystone },
+    props: { network, addAccountTo: addAccountTo as Wallet | null },
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
   });
 }
-const connected = async (wrapper: ReturnType<typeof render>, accounts: HardwareAccount[]) => {
+const connected = async (wrapper: ReturnType<typeof render>, accounts: AccountXpub[]) => {
   wrapper.findComponent({ name: 'StepConnect' }).vm.$emit('connected', { publicKey: accounts[0].publicKey, keys: [], btSupported: false, accounts });
   await flushPromises();
 };
@@ -65,14 +71,14 @@ describe('adding accounts of a paired device', () => {
     await flushPromises();
     await connected(wrapper, [0, 1, 2, 3, 4].map((i) => account(i)));
     const step = wrapper.findComponent({ name: 'StepAccounts' });
-    expect((step.props('accounts') as HardwareAccount[]).map((a) => a.accountIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect((step.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([0, 1, 2, 3, 4]);
 
     step.vm.$emit('scan-more');
     await flushPromises();
     expect(wrapper.findComponent({ name: 'StepConnect' }).props('accountIndices')).toEqual([0, 5, 6, 7, 8, 9]);
 
     await connected(wrapper, [0, 5].map((i) => account(i)));
-    expect((wrapper.findComponent({ name: 'StepAccounts' }).props('accounts') as HardwareAccount[]).map((a) => a.accountIndex))
+    expect((wrapper.findComponent({ name: 'StepAccounts' }).props('accounts') as AccountXpub[]).map((a) => a.accountIndex))
       .toEqual([0, 1, 2, 3, 4, 5]);
   });
 
@@ -97,7 +103,7 @@ describe('adding accounts of a paired device', () => {
     await flushPromises();
 
     const review = wrapper.findComponent({ name: 'StepReview' });
-    expect((review.props('accounts') as HardwareAccount[]).map((a) => a.accountIndex)).toEqual([1]);
+    expect((review.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([1]);
     expect(review.props('groupPublicKey')).toBe('xpub-0');
   });
 
@@ -111,5 +117,91 @@ describe('adding accounts of a paired device', () => {
     await flushPromises();
     expect(wrapper.findComponent({ name: 'StepAccounts' }).exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'StepReview' }).props('accounts')).toBeUndefined();
+  });
+});
+
+describe('restoring a recovery phrase with several accounts', () => {
+  const words = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
+  const daily = { id: 12, name: 'Daily', chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal };
+
+  async function toAccounts() {
+    derive.mockImplementation(async (_mnemonic: string, indices: number[]) => indices.map((i) => account(i)));
+    const wrapper = render(null);
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'restore');
+    await flushPromises();
+    const seed = wrapper.findComponent({ name: 'StepSeedPhrase' });
+    seed.vm.$emit('change', words);
+    seed.vm.$emit('next');
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('lists the first five accounts the phrase derives', async () => {
+    const wrapper = await toAccounts();
+    const step = wrapper.findComponent({ name: 'StepAccounts' });
+
+    expect(derive).toHaveBeenCalledWith(words.join(' '), [0, 1, 2, 3, 4]);
+    expect((step.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(step.props('source')).toBe('seed');
+  });
+
+  it('derives five more in place, with no device to ask', async () => {
+    const wrapper = await toAccounts();
+    wrapper.findComponent({ name: 'StepAccounts' }).vm.$emit('scan-more');
+    await flushPromises();
+
+    expect(derive).toHaveBeenLastCalledWith(words.join(' '), [5, 6, 7, 8, 9]);
+    expect((wrapper.findComponent({ name: 'StepAccounts' }).props('accounts') as AccountXpub[])).toHaveLength(10);
+  });
+
+  it('secures a new wallet, then adds the accounts chosen under it', async () => {
+    findExisting.mockResolvedValue(null);
+    const wrapper = await toAccounts();
+    wrapper.findComponent({ name: 'StepAccounts' }).vm.$emit('next', [account(0), account(2)]);
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'StepSecurity' }).exists()).toBe(true);
+
+    wrapper.findComponent({ name: 'StepSecurity' }).vm.$emit('next');
+    await flushPromises();
+    const confirm = wrapper.findComponent({ name: 'StepRestoreConfirm' });
+    expect((confirm.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([0, 2]);
+  });
+
+  it('joins a phrase Gero already has, with nothing to secure again', async () => {
+    findExisting.mockResolvedValue(daily);
+    const wrapper = await toAccounts();
+    wrapper.findComponent({ name: 'StepAccounts' }).vm.$emit('next', [account(1)]);
+    await flushPromises();
+
+    expect(findExisting).toHaveBeenCalledWith({ chain: Blockchain.CARDANO, network: Network.MAINNET, publicKey: 'xpub-0' });
+    expect(wrapper.findComponent({ name: 'StepSecurity' }).exists()).toBe(false);
+    const join = wrapper.findComponent({ name: 'StepJoinAccounts' });
+    expect(join.props('wallet')).toEqual(daily);
+    expect((join.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([1]);
+  });
+
+  it('restores one account, as before, while multi-account is off', async () => {
+    flags.multiAccount = false;
+    const wrapper = render(null);
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'restore');
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepSeedPhrase' }).vm.$emit('next');
+    await flushPromises();
+
+    expect(derive).not.toHaveBeenCalled();
+    expect(wrapper.findComponent({ name: 'StepSecurity' }).exists()).toBe(true);
+  });
+});
+
+describe('adding an account to a recovery-phrase wallet', () => {
+  it('opens the add-account step for that wallet', async () => {
+    const daily = { id: 12, name: 'Daily', chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal, encryptionMethod: 'password' };
+    const wrapper = render(daily);
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'StepAddAccount' }).props('wallet')).toEqual(daily);
+    expect(wrapper.findComponent({ name: 'StepConnect' }).exists()).toBe(false);
   });
 });

@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
-import type { HardwareAccount } from '@/shared/utils/walletAccount';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 
 const mocks = vi.hoisted(() => {
   class DuplicateWalletError extends Error {
@@ -21,13 +21,13 @@ vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn(), fireSuccess
 import StepReview from './StepReview.vue';
 
 const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
-const account = (accountIndex: number): HardwareAccount => ({
+const account = (accountIndex: number): AccountXpub => ({
   accountIndex, publicKey: `xpub-${accountIndex}`, keys: [{ publicKey: `pk-${accountIndex}`, chainCode: 'cc', path: `m/1852'/1815'/${accountIndex}'` }],
 });
 const connection = { publicKey: 'xpub-0', keys: [], btSupported: false, xfp: '0a1b2c3d', accounts: [account(0), account(1)] };
 
 let nextId = 50;
-function render(accounts: HardwareAccount[]) {
+function render(accounts: AccountXpub[]) {
   nextId = 50;
   mocks.create.mockImplementation(async (record: Record<string, unknown>) => ({ ...record, id: nextId++ }));
   mocks.send.mockResolvedValue({});

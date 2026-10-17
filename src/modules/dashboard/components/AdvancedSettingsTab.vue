@@ -123,7 +123,7 @@
           <v-row no-gutters class="py-2">
             <v-col cols="9" class="text-left pr-1">
               <h3 class="white--text">{{ $t(isAddedAccount ? 'accounts.removeAccount' : 'settings.deleteWallet') }}</h3>
-              <span class="helper my-0">{{ $t(isAddedAccount ? 'accounts.removeAccountHelper' : 'settings.deleteWalletHelper') }}</span>
+              <span class="helper my-0">{{ $t(isAddedAccount ? removeAccountCopy.helper : 'settings.deleteWalletHelper') }}</span>
             </v-col>
             <v-col cols="3" style="align-content: center;">
               <v-btn
@@ -147,7 +147,7 @@
         <v-card>
           <v-card-title>{{ $t('settings.deleteWalletConfirmTitle') }}</v-card-title>
           <v-card-text>
-            <template v-if="isAddedAccount">{{ $t('accounts.removeAccountExplanation') }}</template>
+            <template v-if="isAddedAccount">{{ $t(removeAccountCopy.explanation) }}</template>
             <template v-else>{{ $t('settings.deleteWalletConfirmMessage') }}</template>
             <p v-if="addedAccounts.length" class="mt-2 mb-0">
               {{ $t('accounts.deleteGroupExplanation', { names: addedAccounts.map((account) => account.name).join(', ') }) }}
@@ -180,7 +180,7 @@ import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import GeroStore, { geroStore } from '@/stores/geroStore';
-import { childAccounts, parentWallet, walletDisplayName } from '@/shared/utils/walletAccount';
+import { childAccounts, isHardwareWallet, parentWallet, walletDisplayName } from '@/shared/utils/walletAccount';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
@@ -328,6 +328,10 @@ async function handleCardLogout(): Promise<void> {
 // heads a group removes its added accounts with it, since they are listed under it.
 const loggedRecord = computed(() => (loggedWallet.value ? geroStore.wallets[loggedWallet.value.id] ?? loggedWallet.value : null));
 const isAddedAccount = computed(() => !!loggedRecord.value && !!parentWallet(loggedRecord.value, geroStore.wallets));
+// Where the removed account's funds stay: on the device, or with the recovery phrase.
+const removeAccountCopy = computed(() => (loggedRecord.value && isHardwareWallet(loggedRecord.value)
+  ? { helper: 'accounts.removeAccountHelper', explanation: 'accounts.removeAccountExplanation' }
+  : { helper: 'accounts.removeAccountHelperSeed', explanation: 'accounts.removeAccountExplanationSeed' }));
 const addedAccounts = computed(() => (loggedRecord.value && !isAddedAccount.value ? childAccounts(loggedRecord.value, geroStore.wallets) : []));
 
 const deleteWalletConfirm = async () => {
