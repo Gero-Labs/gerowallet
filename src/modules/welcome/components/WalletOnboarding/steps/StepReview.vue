@@ -195,7 +195,7 @@ const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
 <style scoped lang="scss">
 /* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
 .wallet-name-field {
-  ::v-deep input {
+  :deep(input) {
     font-size: 14px;
     font-weight: 500;
     color: white;

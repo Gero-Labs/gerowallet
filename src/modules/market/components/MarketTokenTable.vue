@@ -762,15 +762,15 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 </script>
 
 <style scoped>
-.market-token-table >>> .v-table__wrapper {
+.market-token-table :deep(.v-table__wrapper) {
   overflow-x: auto;
 }
 
-.market-token-table >>> tbody tr {
+.market-token-table :deep(tbody tr) {
   cursor: pointer;
 }
 
-.market-token-table >>> tbody tr:hover {
+.market-token-table :deep(tbody tr:hover) {
   background: var(--g-hairline-1) !important;
 }
 
@@ -780,7 +780,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
    cell to the strip's exact height and zero the padding. Forced because the
    dense selector (.v-data-table--dense>...>td) is deep; specificity alone is
    fragile here. The strip then fills 100% of the cell, so the gold is flush. */
-.market-token-table >>> td.dust-line-cell {
+.market-token-table :deep(td.dust-line-cell) {
   padding: 0 !important;
   height: 24px !important;
   border-bottom: none !important;
@@ -788,7 +788,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 /* Merge the NIGHT row with the DUST strip below it: drop the Vuetify row
    divider on the NIGHT row (tagged via rowClass) so the two read as one row.
    The override flag is required to beat Vuetify's tr:not(:last-child) td rule. */
-.market-token-table >>> tr.night-dust-attached > td {
+.market-token-table :deep(tr.night-dust-attached > td) {
   border-bottom: none !important;
 }
 /* Vuetify boxes the expanded row with an inset top+bottom shadow
@@ -796,28 +796,28 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
    specificity 0,3,2) — that shadow is what made the DUST strip read as its own
    boxed row. Match Vuetify's depth (.v-table__wrapper tbody, 0,4,2) to
    remove it without an override flag. */
-.market-token-table >>> .v-table__wrapper tbody tr.v-data-table__expanded__content {
+.market-token-table :deep(.v-table__wrapper tbody tr.v-data-table__expanded__content) {
   box-shadow: none;
   cursor: default;
 }
-.market-token-table >>> .v-table__wrapper tbody tr.v-data-table__expanded__content:hover {
+.market-token-table :deep(.v-table__wrapper tbody tr.v-data-table__expanded__content:hover) {
   background: transparent;
 }
 
-.market-token-table >>> th {
+.market-token-table :deep(th) {
   font-size: 11px !important;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
-.market-token-table >>> td {
+.market-token-table :deep(td) {
   padding-top: 2px !important;
   padding-bottom: 2px !important;
   height: 40px !important;
 }
 
-.market-token-table >>> tbody tr td {
+.market-token-table :deep(tbody tr td) {
   border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
@@ -879,24 +879,24 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 
 /* Hide columns responsively via class */
 @media (max-width: 1264px) {
-  .market-token-table >>> .hidden-md-and-down {
+  .market-token-table :deep(.hidden-md-and-down) {
     display: none !important;
   }
 }
 
 @media (max-width: 960px) {
-  .market-token-table >>> .hidden-sm-and-down {
+  .market-token-table :deep(.hidden-sm-and-down) {
     display: none !important;
   }
 }
 
 /* Native token (ADA) — subtle highlight */
-.market-token-table >>> .native-token-row {
+.market-token-table :deep(.native-token-row) {
   background: rgba(0, 199, 243, 0.04) !important;
   border-left: 2px solid rgba(0, 199, 243, 0.3);
 }
 
-.market-token-table >>> .native-token-row:hover {
+.market-token-table :deep(.native-token-row:hover) {
   background: rgba(0, 199, 243, 0.07) !important;
 }
 

@@ -733,15 +733,15 @@ onUnmounted(() => {
   margin-bottom: 4px !important;
 }
 
-.menuItem ::v-deep .v-list-item__avatar {
+.menuItem :deep(.v-list-item__avatar) {
   overflow: visible !important;
 }
 
-.menuItem ::v-deep .v-avatar {
+.menuItem :deep(.v-avatar) {
   overflow: visible !important;
 }
 
-.menuItem ::v-deep .v-badge {
+.menuItem :deep(.v-badge) {
   overflow: visible !important;
 }
 
@@ -783,7 +783,7 @@ onUnmounted(() => {
 }
 
 /* The colored logo must never be recolored by the active-page icon filter. */
-.nexus-item ::v-deep .v-image {
+.nexus-item :deep(.v-image) {
   filter: none !important;
 }
 

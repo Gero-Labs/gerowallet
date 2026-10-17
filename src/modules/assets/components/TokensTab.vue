@@ -548,12 +548,12 @@ watch(
   overflow: visible;
 }
 
-.tokens-table.adaptive-height >>> .v-table__wrapper {
+.tokens-table.adaptive-height :deep(.v-table__wrapper) {
   overflow: visible;
   min-height: unset;
 }
 
-.tokens-table >>> tbody {
+.tokens-table :deep(tbody) {
   transition: height 0.2s ease;
 }
 </style>

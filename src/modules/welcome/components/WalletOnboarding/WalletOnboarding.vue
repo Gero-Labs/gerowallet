@@ -366,8 +366,8 @@ onUnmounted(() => {
 
 /* Continue CTA (every step): black label on gradient/teal, incl. disabled.
    Hoisted here from the 11 step components so the rule exists once. */
-.onboarding-content ::v-deep .onb-continue.v-btn,
-.onboarding-content ::v-deep .onb-continue.v-btn.v-btn--disabled {
+.onboarding-content :deep(.onb-continue.v-btn),
+.onboarding-content :deep(.onb-continue.v-btn.v-btn--disabled) {
   color: var(--g-canvas) !important;
 }
 
@@ -406,7 +406,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.dev-switch ::v-deep .v-input--selection-controls__input {
+.dev-switch :deep(.v-input--selection-controls__input) {
   transform: scale(0.8);
 }
 
@@ -439,14 +439,14 @@ onUnmounted(() => {
 
 /* Each step fills the body so its action row pins to the card bottom; tall
    steps grow and the body scrolls. */
-.content-body ::v-deep .onboarding-step {
+.content-body :deep(.onboarding-step) {
   flex: 1 0 auto;
   min-height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.content-body ::v-deep .onboarding-actions {
+.content-body :deep(.onboarding-actions) {
   margin-top: auto;
   padding-top: 16px;
 }
@@ -456,19 +456,19 @@ onUnmounted(() => {
    outer .content-body never scrolls — the scrollbar lives on .step-scroll and
    covers content only. A step just needs to wrap its content in .step-scroll and
    keep .onboarding-actions as a sibling after it. */
-.content-body ::v-deep .onboarding-step:has(.step-scroll) {
+.content-body :deep(.onboarding-step:has(.step-scroll)) {
   height: 100%;
   min-height: 0;
   flex: 1 1 auto;
 }
 
-.content-body ::v-deep .step-scroll {
+.content-body :deep(.step-scroll) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
 
-.content-body ::v-deep .onboarding-step:has(.step-scroll) .onboarding-actions {
+.content-body :deep(.onboarding-step:has(.step-scroll) .onboarding-actions) {
   flex-shrink: 0;
   margin-top: 0;
   padding-top: 16px;
@@ -479,7 +479,7 @@ onUnmounted(() => {
    Inside .onboarding-step (a flex column), that flex-grow:1 makes a block
    button stretch vertically to fill a short step's free space. Pin it to its
    natural height; min-width:100% from --block still gives full width. */
-.content-body ::v-deep .onboarding-step .v-btn--block {
+.content-body :deep(.onboarding-step .v-btn--block) {
   flex: 0 0 auto;
 }
 

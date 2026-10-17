@@ -206,37 +206,37 @@ function lastSaleVsFloorColor(item: NftCollectionDisplay): string {
 </script>
 
 <style scoped>
-.nft-collection-table >>> .v-table__wrapper {
+.nft-collection-table :deep(.v-table__wrapper) {
   overflow-x: auto;
 }
 
-.nft-collection-table >>> tbody tr {
+.nft-collection-table :deep(tbody tr) {
   cursor: pointer;
 }
 
-.nft-collection-table >>> tbody tr:hover {
+.nft-collection-table :deep(tbody tr:hover) {
   background: var(--g-hairline-1) !important;
 }
 
-.nft-collection-table >>> th {
+.nft-collection-table :deep(th) {
   font-size: 11px !important;
   white-space: nowrap;
 }
 
-.nft-collection-table >>> td {
+.nft-collection-table :deep(td) {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
 }
 
 /* Hide columns responsively via class */
 @media (max-width: 1264px) {
-  .nft-collection-table >>> .hidden-md-and-down {
+  .nft-collection-table :deep(.hidden-md-and-down) {
     display: none !important;
   }
 }
 
 @media (max-width: 960px) {
-  .nft-collection-table >>> .hidden-sm-and-down {
+  .nft-collection-table :deep(.hidden-sm-and-down) {
     display: none !important;
   }
 }

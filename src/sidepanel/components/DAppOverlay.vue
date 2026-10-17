@@ -3868,14 +3868,14 @@ function approveWcSession() {
 }
 /* Longer labels (Spanish "Desbloquear y compartir") wrap inside the button
    instead of running into the one next to it. Doubled class to beat Vuetify's
-   (0,3,0) size rule; ::v-deep because .v-btn__content is Vuetify's own markup
+   (0,3,0) size rule; :deep() because .v-btn__content is Vuetify's own markup
    (same recipe as MyGovernance's change row). */
 .action-buttons .v-btn.v-btn {
   height: auto;
   min-height: 36px;
   white-space: normal;
 }
-.action-buttons ::v-deep .v-btn__content {
+.action-buttons :deep(.v-btn__content) {
   min-width: 0;
   white-space: normal;
   line-height: 1.25;

@@ -1018,13 +1018,13 @@ watch(showVerificationOverlay, async (newValue) => {
 }
 
 /* Make PIN password dots bigger and textboxes square */
-.verification-card ::v-deep .v-otp-input {
+.verification-card :deep(.v-otp-input) {
   display: inline-flex !important;
   justify-content: center;
   width: auto !important;
 }
 
-.verification-card ::v-deep .v-otp-input__content {
+.verification-card :deep(.v-otp-input__content) {
   gap: 12px;
   padding: 0;
   width: auto;
@@ -1032,7 +1032,7 @@ watch(showVerificationOverlay, async (newValue) => {
   height: 56px !important;
 }
 
-.verification-card ::v-deep .v-otp-input .v-field {
+.verification-card :deep(.v-otp-input .v-field) {
   width: 56px !important;
   min-width: 56px;
   max-width: 56px !important;
@@ -1040,7 +1040,7 @@ watch(showVerificationOverlay, async (newValue) => {
   border-radius: 8px !important;
 }
 
-.verification-card ::v-deep .v-otp-input__field {
+.verification-card :deep(.v-otp-input__field) {
   font-size: 32px !important;
   font-weight: bold !important;
 }

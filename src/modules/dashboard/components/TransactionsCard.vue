@@ -1577,34 +1577,34 @@ a.tx-list__title:hover {
   border: 1px solid var(--g-hairline-1) !important;
 }
 
-.filter-date-picker ::v-deep .v-date-picker-header {
+.filter-date-picker :deep(.v-date-picker-header) {
   padding: 8px 16px !important;
   background: transparent !important;
 }
 
-.filter-date-picker ::v-deep .v-date-picker-header .v-btn {
+.filter-date-picker :deep(.v-date-picker-header .v-btn) {
   color: var(--g-text-2) !important;
 }
 
-.filter-date-picker ::v-deep .v-date-picker-table {
+.filter-date-picker :deep(.v-date-picker-table) {
   padding: 0 8px 8px !important;
 }
 
-.filter-date-picker ::v-deep .v-date-picker-table .v-btn {
+.filter-date-picker :deep(.v-date-picker-table .v-btn) {
   border-radius: var(--g-r-control) !important;
   color: var(--g-text-2) !important;
 }
 
-.filter-date-picker ::v-deep .v-date-picker-table .v-btn:hover {
+.filter-date-picker :deep(.v-date-picker-table .v-btn:hover) {
   background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
 }
 
-.filter-date-picker ::v-deep .v-btn--active {
+.filter-date-picker :deep(.v-btn--active) {
   background-color: var(--g-accent) !important;
   color: var(--g-on-grad) !important;
 }
 
-.filter-date-picker ::v-deep .v-date-picker-table--date .v-btn--disabled {
+.filter-date-picker :deep(.v-date-picker-table--date .v-btn--disabled) {
   opacity: 0.25 !important;
 }
 
