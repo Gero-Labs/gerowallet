@@ -32,7 +32,7 @@ describe('joining a recovery phrase Gero already has', () => {
   it('adds the accounts under the stored wallet and opens the first', async () => {
     mocks.addAccounts.mockResolvedValue([{ id: 30, name: 'accounts.label:1' }, { id: 31, name: 'accounts.label:3' }]);
     const wrapper = render([account(1), account(3)]);
-    await wrapper.find('button.onb-continue').trigger('click');
+    await wrapper.find('button.step-next').trigger('click');
     await flushPromises();
 
     expect(mocks.addAccounts).toHaveBeenCalledWith(12, [
@@ -46,7 +46,7 @@ describe('joining a recovery phrase Gero already has', () => {
   it('opens the stored wallet when every account was added meanwhile', async () => {
     mocks.addAccounts.mockResolvedValue([]);
     const wrapper = render([account(1)]);
-    await wrapper.find('button.onb-continue').trigger('click');
+    await wrapper.find('button.step-next').trigger('click');
     await flushPromises();
 
     expect(mocks.send).toHaveBeenCalledWith({ method: 'LOGIN', data: { wallet: daily } });

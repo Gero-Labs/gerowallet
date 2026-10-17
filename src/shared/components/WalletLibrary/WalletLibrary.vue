@@ -130,7 +130,7 @@
                       @click="$emit('select', account.id)" @focus="$emit('focus-wallet', account)">
                       <v-progress-circular v-if="loadingWalletId === account.id" size="16" width="2" indeterminate color="var(--g-accent)" />
                       <v-icon v-else size="small">mdi-subdirectory-arrow-right</v-icon>
-                      <span class="wallet-name">{{ account.name }} <v-icon v-if="account.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
+                      <span class="account-name t-body-sm">{{ account.name }} <v-icon v-if="account.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
                       <span v-if="displayAddress(account)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(account) }">{{ shortAddress(displayAddress(account)) }}</span>
                     </button>
                   </li>
@@ -255,7 +255,7 @@ function reordered(event: { added?: { element: LibraryWallet; newIndex: number }
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .wallet-library { display: flex; flex-direction: column; min-height: 0; flex: 1; width: 100%; color: var(--g-text-1); }
 .library-toolbar { flex: none; padding: var(--g-s-2) var(--g-s-1) var(--g-s-3); }
 .library-toolbar-bottom, .library-filters, .filter-button { display: flex; align-items: center; gap: var(--g-s-2); }
@@ -292,11 +292,15 @@ function reordered(event: { added?: { element: LibraryWallet; newIndex: number }
 /* A wallet with added accounts lists them on the line below its own row. */
 .library-wallet--group { flex-wrap: wrap; }
 .library-accounts { list-style: none; flex-basis: 100%; display: flex; flex-direction: column; gap: var(--g-s-1); margin: var(--g-s-1) 0 0; padding: 0 0 0 var(--g-s-6); }
-.account-open { display: flex; align-items: center; gap: var(--g-s-2); width: 100%; min-width: 0; padding: var(--g-s-2); text-align: left; color: inherit; border-radius: var(--g-r-control); transition: border-color var(--g-dur-fast) ease; }
-.account-open:hover, .account-open:focus-visible, .account-open--locked { border-color: var(--g-accent); }
+/* An added account is a card nested in its wallet's row: the glass-tier
+   material lifts its hairline on hover and deepens its tint for the locked
+   (current) account, rather than the parent row's accent border. */
+.account-open { display: flex; align-items: center; gap: var(--g-s-2); width: 100%; min-width: 0; padding: var(--g-s-2); text-align: left; color: inherit; transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease; }
+.account-open:hover:not(:disabled), .account-open:focus-visible { @include g-glass-tier-hover; }
+.account-open--locked, .account-open--locked:hover:not(:disabled) { @include g-glass-tier-active; }
 .account-open:disabled { cursor: wait; }
 .account-open .v-icon { color: var(--g-text-3); flex: none; }
-.account-open .wallet-name { font-size: 13px; flex: none; }
+.account-name { flex: none; color: var(--g-text-1); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-open .wallet-address { margin-left: auto; min-width: 0; }
 .library-wallets--target { min-height: 48px; border-radius: var(--g-r-control); outline: 1px dashed var(--g-accent); }
 .wallet-library--sorting { user-select: none; }

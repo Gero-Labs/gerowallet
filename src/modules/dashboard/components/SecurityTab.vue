@@ -144,7 +144,7 @@
         </v-avatar>
         <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
-            <h3 style="color: white; font-size: 16px;">{{ $t('accounts.groupSecurity') }}</h3>
+            <h3 class="t-body-lg">{{ $t('accounts.groupSecurity') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('accounts.managedBy', { name: managedBy.name }) }}

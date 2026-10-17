@@ -36,7 +36,7 @@ function render(accounts: AccountXpub[], onNetwork = network) {
 const rows = (wrapper: ReturnType<typeof render>) => wrapper.findAll('button.account-row');
 const checked = (wrapper: ReturnType<typeof render>) => rows(wrapper).map((row) => row.attributes('aria-checked'));
 const continueWith = async (wrapper: ReturnType<typeof render>) => {
-  await wrapper.find('button.onb-continue').trigger('click');
+  await wrapper.find('button.step-next').trigger('click');
   return (wrapper.emitted('next')?.[0]?.[0] as AccountXpub[] | undefined)?.map((a) => a.accountIndex);
 };
 
@@ -79,7 +79,7 @@ describe('choosing accounts', () => {
     await flushPromises();
 
     expect(checked(wrapper)).toEqual(['true', 'false']);
-    expect(wrapper.find('button.onb-continue').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('button.step-next').attributes('disabled')).toBeDefined();
     await rows(wrapper)[1].trigger('click');
     expect(await continueWith(wrapper)).toEqual([1]);
   });

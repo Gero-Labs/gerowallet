@@ -22,7 +22,7 @@
                   :placeholder="$t('welcome.walletNamePlaceholder')"
                 />
               </div>
-              <div v-else class="flex-grow-1 text-body-2">{{ $t('accounts.addingTo', { name: groupWallet?.name ?? '' }) }}</div>
+              <div v-else class="flex-grow-1 t-body">{{ $t('accounts.addingTo', { name: groupWallet?.name ?? '' }) }}</div>
             </div>
             <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
             <v-row no-gutters>
@@ -48,7 +48,7 @@
                 </div>
               </v-col>
             </v-row>
-            <div v-if="accounts" class="text-body-2 mt-2">{{ $t('accounts.reviewList', { list: accountList }) }}</div>
+            <div v-if="accounts" class="t-body mt-2">{{ $t('accounts.reviewList', { list: accountList }) }}</div>
           </v-card-text>
         </v-card>
 

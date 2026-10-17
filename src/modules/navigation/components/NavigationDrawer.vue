@@ -192,12 +192,12 @@
           </v-list-item-subtitle>
           <v-menu v-if="account && accountSwitchable" location="top">
             <template #activator="{ props: activatorProps }">
-              <button type="button" class="account-switch" v-bind="activatorProps" :disabled="switchingAccount"
+              <button type="button" class="account-switch t-caption" v-bind="activatorProps" :disabled="switchingAccount"
                 :aria-label="t('accounts.switchAccount')">
                 {{ t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}<v-icon size="x-small">mdi-chevron-down</v-icon>
               </button>
             </template>
-            <v-list density="compact">
+            <v-list density="compact" class="glass-popover">
               <v-list-subheader>{{ t('accounts.switchAccount') }}</v-list-subheader>
               <v-list-item v-for="member in accountGroupMembers" :key="member.id" :active="member.id === account.id"
                 @click="switchAccount(member.id)">
@@ -954,17 +954,13 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--g-s-1);
   margin-top: var(--g-s-1);
+  // Size from t-caption; an interactive caption reads at text-2, text-1 on hover.
   color: var(--g-text-2);
-  font-size: 11px;
   border-radius: var(--g-r-chip);
+  transition: color var(--g-dur-fast) ease;
 
   &:hover:not(:disabled) {
     color: var(--g-text-1);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--g-accent);
-    outline-offset: 2px;
   }
 }
 

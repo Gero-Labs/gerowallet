@@ -26,7 +26,7 @@
       </v-row>
       <v-row v-if="accountPath" no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">{{ $t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}</h3>
+          <h3 class="t-body-lg">{{ $t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}</h3>
           <span class="helper my-0">{{ $t('navigation.hdPath') }}</span>
         </v-col>
         <v-col cols="5" class="text-left" style="align-content: center">

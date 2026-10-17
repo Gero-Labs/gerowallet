@@ -1,7 +1,7 @@
 <template>
   <div class="step-add-account">
     <div class="step-scroll">
-      <p class="add-account__intro">{{ t('accounts.addingAccountTo', { index: accountIndex, name: wallet.name }) }}</p>
+      <p class="add-account__intro t-body-lg">{{ t('accounts.addingAccountTo', { index: accountIndex, name: wallet.name }) }}</p>
 
       <template v-if="!preview">
         <v-text-field
@@ -12,37 +12,37 @@
           :hint="t('accounts.passwordToAdd', { name: wallet.name })"
           persistent-hint
           :error-messages="error ? [error] : []"
-          variant="outlined"
-          density="comfortable"
+          variant="filled"
+          density="compact"
           autocomplete="current-password"
           :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
           @click:append-inner="showPassword = !showPassword"
           @keyup.enter="unlock()"
         />
-        <p v-else class="add-account__hint" :class="{ 'add-account__hint--error': !!error }" role="status">
+        <p v-else class="add-account__hint t-body-sm" :class="{ 'add-account__hint--error': !!error }" role="status">
           {{ error || (kind === 'passkey' ? t('accounts.passKeyToAdd') : t('accounts.checking')) }}
         </p>
       </template>
 
       <div v-else class="account-preview glass-tier">
         <span class="account-preview__text">
-          <span class="account-preview__name">{{ t('accounts.label', { index: accountIndex }) }}</span>
-          <span v-if="preview.address" class="account-preview__address" :title="preview.address">{{ shortAddress(preview.address) }}</span>
+          <span class="account-preview__name t-body">{{ t('accounts.label', { index: accountIndex }) }}</span>
+          <span v-if="preview.address" class="account-preview__address g-mono" :title="preview.address">{{ shortAddress(preview.address) }}</span>
         </span>
         <span class="account-preview__meta">
-          <span v-if="balance" class="g-num">{{ balance }}</span>
-          <span class="account-preview__status">{{ statusLabel }}</span>
+          <span v-if="balance" class="account-preview__balance t-body-sm g-num">{{ balance }}</span>
+          <span class="t-caption">{{ statusLabel }}</span>
         </span>
       </div>
     </div>
 
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" :disabled="busy" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions step-actions d-flex">
+      <GButton tier="tertiary" :disabled="busy" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn v-if="!preview" class="onb-continue" color="primary" :loading="busy" :disabled="!canUnlock" @click="unlock()">
+      <GButton v-if="!preview" tier="primary" class="step-next" :loading="busy" :disabled="!canUnlock" @click="unlock()">
         {{ kind === 'passkey' ? t('security.authenticateWithPassKey') : $t('common.continue') }}
-      </v-btn>
-      <v-btn v-else class="onb-continue" color="primary" :loading="busy" @click="add()">{{ t('accounts.addAccount') }}</v-btn>
+      </GButton>
+      <GButton v-else tier="primary" class="step-next" :loading="busy" @click="add()">{{ t('accounts.addAccount') }}</GButton>
     </div>
   </div>
 </template>
@@ -51,6 +51,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import { Blockchain, type Wallet } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
@@ -221,14 +222,18 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-.add-account__intro { color: var(--g-text-1); font-size: 14px; margin: 0 0 var(--g-s-3); text-align: left; }
-.add-account__hint { color: var(--g-text-2); font-size: 13px; margin: 0; text-align: left; }
-.add-account__hint--error { color: var(--g-text-1); }
-.account-preview { display: flex; align-items: center; gap: var(--g-s-3); padding: var(--g-s-3); border-radius: var(--g-r-control); }
+<style scoped lang="scss">
+// Type comes from the ramp classes in the markup; these rules only lay out.
+.add-account__intro { margin: 0 0 var(--g-s-3); text-align: left; }
+.add-account__hint { margin: 0; text-align: left; }
+.add-account__hint--error { color: var(--g-error); }
+// The same nested card as an account row on the accounts step, not interactive.
+.account-preview { display: flex; align-items: center; gap: var(--g-s-3); min-height: var(--g-row-h-panel); padding: var(--g-s-3); }
 .account-preview__text { display: flex; flex-direction: column; gap: var(--g-s-1); flex: 1; min-width: 0; text-align: left; }
-.account-preview__name { font-size: 14px; font-weight: 600; }
-.account-preview__address { color: var(--g-text-2); font: 11px var(--g-font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-preview__meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--g-s-1); flex: none; font-size: 13px; }
-.account-preview__status { color: var(--g-text-2); font-size: 12px; }
+.account-preview__name { color: var(--g-text-1); font-weight: 500; }
+// One truncated line, so the mono recipe's break-all wrapping is switched off.
+.account-preview__address { line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
+.account-preview__meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--g-s-1); flex: none; }
+.account-preview__balance { color: var(--g-text-1); }
+.step-actions { gap: var(--g-s-3); }
 </style>

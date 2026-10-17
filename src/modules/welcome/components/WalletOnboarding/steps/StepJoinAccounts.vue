@@ -1,17 +1,17 @@
 <template>
   <div class="step-join-accounts">
     <div class="step-scroll">
-      <p class="join-accounts__text">{{ t('accounts.addingTo', { name: wallet.name }) }}</p>
-      <p class="join-accounts__text">{{ t('accounts.reviewList', { list }) }}</p>
-      <p class="join-accounts__hint">{{ t('accounts.joinExplanation', { name: wallet.name }) }}</p>
+      <p class="join-accounts__text t-body-lg">{{ t('accounts.addingTo', { name: wallet.name }) }}</p>
+      <p class="join-accounts__text join-accounts__list t-body">{{ t('accounts.reviewList', { list }) }}</p>
+      <p class="join-accounts__hint t-body-sm">{{ t('accounts.joinExplanation', { name: wallet.name }) }}</p>
     </div>
 
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" :disabled="busy" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions step-actions d-flex">
+      <GButton tier="tertiary" :disabled="busy" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn class="onb-continue" color="primary" :loading="busy" :disabled="!accounts.length" @click="add()">
+      <GButton tier="primary" class="step-next" :loading="busy" :disabled="!accounts.length" @click="add()">
         {{ tc('accounts.addSelected', accounts.length, { count: accounts.length }) }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -23,6 +23,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import type { Wallet } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
@@ -65,6 +66,9 @@ async function add(): Promise<void> {
 </script>
 
 <style scoped>
-.join-accounts__text { color: var(--g-text-1); font-size: 14px; margin: 0 0 var(--g-s-2); text-align: left; }
-.join-accounts__hint { color: var(--g-text-2); font-size: 13px; margin: var(--g-s-3) 0 0; text-align: left; }
+/* Type comes from the ramp classes in the markup; these rules only lay out. */
+.join-accounts__text { margin: 0 0 var(--g-s-2); text-align: left; }
+.join-accounts__list { color: var(--g-text-1); }
+.join-accounts__hint { margin: var(--g-s-3) 0 0; text-align: left; }
+.step-actions { gap: var(--g-s-3); }
 </style>

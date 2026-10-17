@@ -46,7 +46,7 @@ function render(wallet: Wallet) {
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
   });
 }
-const continueButton = (wrapper: ReturnType<typeof render>) => wrapper.find('button.onb-continue');
+const continueButton = (wrapper: ReturnType<typeof render>) => wrapper.find('button.step-next');
 
 afterEach(() => vi.clearAllMocks());
 

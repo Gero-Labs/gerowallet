@@ -1,7 +1,7 @@
 <template>
   <div class="step-accounts">
     <div class="step-scroll">
-      <p class="accounts-summary" role="status">
+      <p class="accounts-summary t-body-sm" role="status">
         {{ probing ? t('accounts.checking') : tc(source === 'seed' ? 'accounts.foundSeed' : 'accounts.found', usedCount, { count: usedCount }) }}
       </p>
       <ul class="accounts-list">
@@ -17,28 +17,28 @@
           >
             <v-icon size="20" class="account-row__check">{{ checkIcon(row) }}</v-icon>
             <span class="account-row__text">
-              <span class="account-row__name">{{ t('accounts.label', { index: row.accountIndex }) }}</span>
-              <span v-if="row.address" class="account-row__address" :title="row.address">{{ shortAddress(row.address) }}</span>
+              <span class="account-row__name t-body">{{ t('accounts.label', { index: row.accountIndex }) }}</span>
+              <span v-if="row.address" class="account-row__address g-mono" :title="row.address">{{ shortAddress(row.address) }}</span>
             </span>
             <span class="account-row__meta">
-              <span v-if="row.balance" class="account-row__balance g-num">{{ row.balance }}</span>
-              <span class="account-row__status">{{ statusLabel(row) }}</span>
+              <span v-if="row.balance" class="account-row__balance t-body-sm g-num">{{ row.balance }}</span>
+              <span class="t-caption">{{ statusLabel(row) }}</span>
             </span>
           </button>
         </li>
       </ul>
-      <p v-if="firstAccountRequired" class="accounts-hint">{{ t('accounts.firstAccountIncluded') }}</p>
+      <p v-if="firstAccountRequired" class="accounts-hint t-caption">{{ t('accounts.firstAccountIncluded') }}</p>
       <GButton tier="tertiary" compact :disabled="probing" @click="$emit('scan-more')">
         {{ t('accounts.scanMore', { count: ACCOUNTS_PER_SCAN }) }}
       </GButton>
     </div>
 
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions step-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn class="onb-continue" color="primary" :disabled="probing || !selectedAccounts.length" @click="$emit('next', selectedAccounts)">
+      <GButton tier="primary" class="step-next" :disabled="probing || !selectedAccounts.length" @click="$emit('next', selectedAccounts)">
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -152,20 +152,37 @@ const statusLabel = (row: Row): string => {
 const shortAddress = (address: string) => (address.length > 30 ? `${address.slice(0, 15)}…${address.slice(-8)}` : address);
 </script>
 
-<style scoped>
-.accounts-summary { color: var(--g-text-2); font-size: 13px; margin: 0 0 var(--g-s-3); text-align: left; }
+<style scoped lang="scss">
+// Type comes from the ramp classes in the markup; these rules only lay out.
+.accounts-summary { margin: 0 0 var(--g-s-3); text-align: left; }
 .accounts-list { list-style: none; padding: 0; margin: 0 0 var(--g-s-2); display: flex; flex-direction: column; gap: var(--g-s-2); }
-.account-row { display: flex; align-items: center; gap: var(--g-s-3); width: 100%; padding: var(--g-s-3); text-align: left; color: var(--g-text-1); border-radius: var(--g-r-control); transition: border-color var(--g-dur-fast) ease; }
-.account-row:not(:disabled):hover, .account-row--selected { border-color: var(--g-accent); }
-.account-row:disabled { cursor: default; }
+
+// A choice card nested in the onboarding panel: the glass-tier material, its
+// hover lift and its selected tint, never an accent repaint.
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+  width: 100%;
+  min-height: var(--g-row-h-panel);
+  padding: var(--g-s-3);
+  text-align: left;
+  color: var(--g-text-1);
+  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
+
+  &:not(:disabled):hover { @include g-glass-tier-hover; }
+  &--selected,
+  &--selected:not(:disabled):hover { @include g-glass-tier-active; }
+  &:disabled { cursor: default; }
+}
 .account-row__check { color: var(--g-text-3); flex: none; }
 .account-row--selected .account-row__check { color: var(--g-accent); }
 .account-row__text { display: flex; flex-direction: column; gap: var(--g-s-1); flex: 1; min-width: 0; }
-.account-row__name { font-size: 14px; font-weight: 600; }
-.account-row__address { color: var(--g-text-2); font: 11px var(--g-font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-row__name { color: var(--g-text-1); font-weight: 500; }
+// One truncated line, so the mono recipe's break-all wrapping is switched off.
+.account-row__address { line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
 .account-row__meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--g-s-1); flex: none; }
-.account-row__balance { font-size: 13px; }
-.account-row__status { color: var(--g-text-2); font-size: 12px; }
-.accounts-hint { color: var(--g-text-2); font-size: 12px; margin: 0 0 var(--g-s-2); text-align: left; }
-.account-row:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; }
+.account-row__balance { color: var(--g-text-1); }
+.accounts-hint { margin: 0 0 var(--g-s-2); text-align: left; }
+.step-actions { gap: var(--g-s-3); }
 </style>
