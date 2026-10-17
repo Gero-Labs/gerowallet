@@ -891,7 +891,6 @@ export default {
   'common.back': 'Back',
   'common.balance': 'Balance',
   'common.blacklistedAddressTooltip': 'This address has been blacklisted',
-  'common.browserNotSupportIframes': 'Your browser does not support iframes.',
   'common.buy': 'Buy',
   'common.camera': 'Camera',
   'common.cancel': 'Cancel',

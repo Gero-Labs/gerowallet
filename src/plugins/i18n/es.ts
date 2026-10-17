@@ -888,7 +888,6 @@ export default {
   'common.back': 'Atrás',
   'common.balance': 'Saldo',
   'common.blacklistedAddressTooltip': 'Esta dirección está en la lista negra',
-  'common.browserNotSupportIframes': 'Tu navegador no admite iframes.',
   'common.buy': 'Comprar',
   'common.camera': 'Cámara',
   'common.cancel': 'Cancelar',

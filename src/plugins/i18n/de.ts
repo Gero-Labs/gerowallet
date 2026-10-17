@@ -1010,7 +1010,6 @@ export default {
   'common.backup': 'Sicherung',
   'common.balance': 'Kontostand',
   'common.blacklistedAddressTooltip': 'Diese Adresse wurde auf die schwarze Liste gesetzt',
-  'common.browserNotSupportIframes': 'Ihr Browser unterstützt keine iframes.',
   'common.buy': 'Kaufen',
   'common.camera': 'Kamera',
   'common.cancel': 'Abbrechen',
