@@ -285,7 +285,7 @@ defineEmits<{
   white-space: normal;
 }
 
-.realfi-getting-started__eligibility-cta ::v-deep .v-btn__content {
+.realfi-getting-started__eligibility-cta :deep(.v-btn__content) {
   white-space: normal;
 }
 
@@ -303,14 +303,14 @@ defineEmits<{
   min-width: 0;
 }
 
-.realfi-getting-started ::v-deep .realfi-getting-started__eligibility-cta.g-btn.v-btn {
+.realfi-getting-started :deep(.realfi-getting-started__eligibility-cta.g-btn.v-btn) {
   height: auto;
   min-height: var(--g-btn-h-compact);
   padding-top: var(--g-s-2);
   padding-bottom: var(--g-s-2);
 }
 
-.realfi-getting-started ::v-deep .realfi-getting-started__eligibility-cta.g-btn.v-btn .v-btn__content {
+.realfi-getting-started :deep(.realfi-getting-started__eligibility-cta.g-btn.v-btn .v-btn__content) {
   flex: 1 1 auto;
   min-width: 0;
   white-space: normal;

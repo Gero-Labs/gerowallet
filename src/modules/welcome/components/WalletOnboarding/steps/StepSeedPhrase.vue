@@ -177,21 +177,21 @@ const handleContinue = (): void => {
   padding: 2px !important;
 }
 
-.mnemonic-grid ::v-deep {
-  .v-input {
+.mnemonic-grid {
+  :deep(.v-input) {
     font-size: 12px;
     --v-input-control-height: 30px;
   }
-  .v-field {
+  :deep(.v-field) {
     --v-field-padding-start: 6px;
     --v-field-padding-end: 6px;
     --v-field-input-padding-top: 0px;
     --v-field-input-padding-bottom: 0px;
   }
-  .v-field__input {
+  :deep(.v-field__input) {
     min-height: 30px !important;
   }
-  .v-input__prepend {
+  :deep(.v-input__prepend) {
     margin-top: 4px !important;
     margin-right: 2px !important;
 
@@ -200,14 +200,14 @@ const handleContinue = (): void => {
       min-width: 18px !important;
     }
   }
-  .v-field--variant-outlined .v-field__outline {
+  :deep(.v-field--variant-outlined .v-field__outline) {
     --v-field-border-width: 1px;
   }
-  input {
+  :deep(input) {
     padding: 2px 0 !important;
     font-size: 11px;
   }
-  .v-field__append-inner {
+  :deep(.v-field__append-inner) {
     margin-top: 2px !important;
     padding-left: 0 !important;
 

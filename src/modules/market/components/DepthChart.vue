@@ -196,5 +196,5 @@ onBeforeUnmount(() => {
 }
 .depth-area { border-radius: 6px; overflow: hidden; }
 .depth-toggle { background: rgba(255,255,255,0.04) !important; }
-.depth-toggle >>> .v-btn { font-size: 10px !important; text-transform: none !important; letter-spacing: 0; }
+.depth-toggle :deep(.v-btn) { font-size: 10px !important; text-transform: none !important; letter-spacing: 0; }
 </style>

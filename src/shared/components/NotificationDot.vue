@@ -36,7 +36,7 @@ withDefaults(defineProps<Props>(), {
 
 <style scoped lang="scss">
 .notification-badge--pulse {
-  ::v-deep .v-badge__badge {
+  :deep(.v-badge__badge) {
     animation: pulse 2s ease-in-out infinite;
   }
 }

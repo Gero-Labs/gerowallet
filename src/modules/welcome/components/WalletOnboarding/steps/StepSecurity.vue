@@ -251,7 +251,7 @@ const handleContinue = (): void => {
 }
 
 // Remove checkbox hover highlight
-::v-deep .v-input--checkbox {
+:deep(.v-input--checkbox) {
   .v-input--selection-controls__ripple {
     display: none;
   }

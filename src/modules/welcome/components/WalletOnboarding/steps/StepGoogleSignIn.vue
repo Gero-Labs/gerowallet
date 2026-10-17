@@ -360,15 +360,15 @@ const onContinue = (): void => {
 
 /* Solid, high-contrast info alert — the default outlined/info blue is unreadable
    against the blue glass onboarding card. */
-::v-deep .mpc-info-alert.v-alert--outlined {
+:deep(.mpc-info-alert.v-alert--outlined) {
   background: rgba(8, 12, 20, 0.82) !important;
   border-color: rgba(125, 180, 255, 0.6) !important;
 }
-::v-deep .mpc-info-alert .v-alert__content,
-::v-deep .mpc-info-alert .text-body-2 {
+:deep(.mpc-info-alert .v-alert__content),
+:deep(.mpc-info-alert .text-body-2) {
   color: #eaf2ff !important;
 }
-::v-deep .mpc-info-alert .v-icon {
+:deep(.mpc-info-alert .v-icon) {
   color: #7db4ff !important;
 }
 </style>

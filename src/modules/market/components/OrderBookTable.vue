@@ -238,7 +238,7 @@ onBeforeUnmount(() => stopAutoRefresh());
 }
 
 .ob-toggle { background: var(--g-hairline-1) !important; }
-.ob-toggle >>> .v-btn { font-size: 11px !important; text-transform: none !important; letter-spacing: 0; }
+.ob-toggle :deep(.v-btn) { font-size: 11px !important; text-transform: none !important; letter-spacing: 0; }
 
 .ob-pool-info {
   display: flex;
