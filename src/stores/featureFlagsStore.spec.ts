@@ -76,3 +76,26 @@ test('reset() turns isSubmitApiEnabled back off', () => {
   featureFlagsStore.reset();
   expect(featureFlagsStore.isSubmitApiEnabled()).toBe(false);
 });
+
+test('exposes isMultiAccountEnabled, defaulting to false', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isMultiAccountEnabled()).toBe(false);
+});
+
+test('reflects a remote isMultiAccountEnabled flag once loaded, and follows a live flip', () => {
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isMultiAccountEnabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isMultiAccountEnabled()).toBe(true);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isMultiAccountEnabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isMultiAccountEnabled()).toBe(false);
+});
+
+test('reset() turns isMultiAccountEnabled back off', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isMultiAccountEnabled()).toBe(false);
+});

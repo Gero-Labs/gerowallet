@@ -718,7 +718,7 @@ const fundingHistoryHeaders = [
   border-right: 1px solid var(--g-hairline-2);
 }
 
-.positions-area >>> .v-tabs {
+.positions-area :deep(.v-tabs) {
   flex: 0 0 auto;
 }
 
@@ -750,7 +750,7 @@ const fundingHistoryHeaders = [
 /* Tables */
 .perps-table { background: transparent !important; }
 
-.perps-table >>> th {
+.perps-table :deep(th) {
   font-size: 11px !important;
   color: var(--g-text-3) !important;
   white-space: nowrap;
@@ -758,7 +758,7 @@ const fundingHistoryHeaders = [
   height: 28px !important;
 }
 
-.perps-table >>> td {
+.perps-table :deep(td) {
   font-size: 11px !important;
   white-space: nowrap;
   padding: 2px 8px !important;
@@ -889,10 +889,10 @@ const fundingHistoryHeaders = [
 /* ── Responsive — narrow widths ── */
 @media (max-width: 720px) {
   /* Hide nice-to-have columns on narrow widths: keep symbol, side, size, uPnL, liq */
-  .perps-table >>> th:nth-child(4),
-  .perps-table >>> td:nth-child(4),
-  .perps-table >>> th:nth-child(6),
-  .perps-table >>> td:nth-child(6) {
+  .perps-table :deep(th:nth-child(4)),
+  .perps-table :deep(td:nth-child(4)),
+  .perps-table :deep(th:nth-child(6)),
+  .perps-table :deep(td:nth-child(6)) {
     display: none;
   }
 }

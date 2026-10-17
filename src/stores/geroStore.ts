@@ -3,6 +3,8 @@ import {
   deleteWallet,
   createNewWallet,
   createNewHardwareWallet,
+  createAccountWallet,
+  DuplicateWalletError,
   getAllWallets,
   setWalletName as dbSetWalletName,
   setWalletIcon as dbSetWalletIcon,
@@ -11,6 +13,7 @@ import {
 import { ERROR, Wallet, WalletType } from '@/models/types';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { prepareSpendingPasswordRotation } from '@/shared/utils/passwordRotation';
+import { childAccounts } from '@/shared/utils/walletAccount';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -287,6 +290,29 @@ export default {
   },
 
   /**
+   * Add accounts of a recovery-phrase, PassKey or Google wallet under its account
+   * #0 (`parentId`); see createAccountWallet. An account Gero already has (another
+   * tab added it meanwhile) is skipped. Returns the records created, by index.
+   */
+  async addAccounts(parentId: number, accounts: Array<{ name: string; publicKey: string; accountIndex: number }>): Promise<Wallet[]> {
+    const created: Wallet[] = [];
+    try {
+      for (const account of [...accounts].sort((a, b) => a.accountIndex - b.accountIndex)) {
+        try {
+          created.push(await createAccountWallet(parentId, account));
+        } catch (error) {
+          if (!(error instanceof DuplicateWalletError)) throw error;
+        }
+      }
+    } finally {
+      const updatedWallets = await getAllWallets();
+      geroStore.wallets = updatedWallets;
+      broadcastFromBackground({ wallets: updatedWallets });
+    }
+    return created.map((wallet) => geroStore.wallets[wallet.id] ?? wallet);
+  },
+
+  /**
    * Refresh wallets from database
    * Used after operations that modify wallets outside the store (e.g., Google wallet activation)
    */
@@ -341,7 +367,12 @@ export default {
         if (!wallet.encryptedPrivateKey) throw new Error('Encrypted private key not found');
         // Decrypts with the current password (throws on a wrong one) and seals
         // every password secret under the new one; see passwordRotation.ts.
-        const rotation = await prepareSpendingPasswordRotation({ ...wallet, encryptedPrivateKey: wallet.encryptedPrivateKey }, currentPassword, newPassword);
+        const rotation = await prepareSpendingPasswordRotation(
+          { ...wallet, encryptedPrivateKey: wallet.encryptedPrivateKey },
+          currentPassword,
+          newPassword,
+          childAccounts(wallet, geroStore.wallets).map((account) => account.id),
+        );
 
         // Update database
         await dbUpdatePrivateKeyAndMnemonic(walletId, rotation.encryptedPrivateKey, rotation.encryptedMnemonic);

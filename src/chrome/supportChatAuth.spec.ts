@@ -171,7 +171,6 @@ describe('support chat handshake (background)', () => {
         STAKE,
         expectedPayloadHex('nonce_abcdefghijklm'),
         'pw',
-        0,
         { payment: [] },
         undefined,
       );
@@ -189,7 +188,6 @@ describe('support chat handshake (background)', () => {
         STAKE,
         expect.any(String),
         '',
-        0,
         null,
         privateKeyBytes,
       );

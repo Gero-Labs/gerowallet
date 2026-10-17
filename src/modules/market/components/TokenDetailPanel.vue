@@ -956,11 +956,11 @@ watch(selectedCurrency, () => {
   color: var(--g-text-1);
 }
 
-.stats-table ::v-deep td {
+.stats-table :deep(td) {
   border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
-.stats-table ::v-deep tr:last-child td {
+.stats-table :deep(tr:last-child td) {
   border-bottom: none !important;
 }
 
@@ -997,7 +997,7 @@ watch(selectedCurrency, () => {
 }
 
 /* ═══ Tabs ═══ */
-.detail-sub-tabs ::v-deep .v-tab {
+.detail-sub-tabs :deep(.v-tab) {
   text-transform: none !important;
   font-size: 12px;
   min-width: unset;

@@ -17,6 +17,8 @@
 import { ref, computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useAuthenticationFreshness } from '@/shared/composables/authorizationScope';
+// An added account's PassKey decrypts its account #0's key, under that record's id.
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 
 interface Props {
   color?: string;
@@ -97,7 +99,7 @@ async function authenticate() {
       privateKeyBytes = await decryptPrivateKeyWithPrf(
         loggedWallet.prfEncryptedPrivateKey,
         loggedWallet.webAuthnCredentialId,
-        loggedWallet.id.toString(),
+        secretsWalletId(loggedWallet).toString(),
         prfBuffer,
       );
     }

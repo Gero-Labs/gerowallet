@@ -26,10 +26,10 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn class="onb-btn onb-continue" variant="flat" color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <GButton tier="primary" :disabled="!localWalletType" @click="onContinue()" class="step-next">{{ $t('common.continue') }}</GButton>
     </div>
   </div>
 </template>
@@ -40,6 +40,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import type { NetworkInfo } from '@/utils/networks';
 import type { WalletTypeValue } from '@/models/types';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const { t } = useTranslation();
 
@@ -95,11 +96,6 @@ const onContinue = (): void => {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: white;
-}
-
-.onb-btn {
-  border-radius: 8px !important;
-  box-shadow: none !important;
 }
 
 .hw-list {

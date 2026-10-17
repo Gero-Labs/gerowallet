@@ -71,6 +71,8 @@ import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
 import { getDb } from '@/db/wallet-db';
+// An added account's PassKey autofill settings and encrypted password are its account #0's.
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 
 // Props
 interface Props {
@@ -160,7 +162,7 @@ async function checkPassKeyAvailable(): Promise<boolean> {
     if (!window.PublicKeyCredential) return false;
 
     // Check if passkey autofill is enabled in DB
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
 
     const passKeyAutofillConfig = await configTable.where({ key: 'passKeyForPasswordAutofill' }).first();
@@ -187,7 +189,7 @@ async function checkAutoTriggerEnabled(): Promise<boolean> {
     if (!wallet) return false;
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
 
     const autoTriggerConfig = await configTable.where({ key: 'passKeyAutoTrigger' }).first();
@@ -246,7 +248,7 @@ async function handlePassKeyAutofill() {
 
     // Get database config
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
 
     // Get WebAuthn credential ID
@@ -325,7 +327,7 @@ async function handlePassKeyAutofill() {
       const decryptedPassword = await decryptSpendingPasswordWithPrf(
         encryptedPasswordConfig.value,
         credentialConfig.value,
-        wallet.id
+        secretsWalletId(wallet).toString()
       );
       if (!current()) return;
 

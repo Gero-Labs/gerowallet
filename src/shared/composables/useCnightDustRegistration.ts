@@ -40,6 +40,7 @@ import { clearDustPending, getDustPending, markDustPending, reconcileDustPending
 import { extractNexusErrorMessage, isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
 import { CNIGHT_ASSETS } from '@/shared/utils/cnightAssets';
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
 export interface DustDestination {
@@ -469,7 +470,7 @@ export function useCnightDustRegistration() {
         wallet.prfEncryptedMnemonic,
         credentials.prfOutput,
         wallet.webAuthnCredentialId,
-        wallet.id.toString(),
+        secretsWalletId(wallet).toString(),
       );
     }
 
@@ -596,7 +597,7 @@ export function useCnightDustRegistration() {
         const pkBytes = await decryptPrivateKeyWithPrf(
           wallet.prfEncryptedPrivateKey,
           wallet.webAuthnCredentialId,
-          wallet.id.toString(),
+          secretsWalletId(wallet).toString(),
           credentials.prfOutput,
         );
         signingData.privateKeyBytes = Array.from(pkBytes);

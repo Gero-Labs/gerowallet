@@ -77,17 +77,17 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!canContinue"
         @click="handleContinue()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -98,6 +98,7 @@ import rules from '@/utils/rules';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import { NetworkInfo } from '@/utils/networks';
 import type { PrfSupportMode } from '@/shared/utils/webauthn-prf';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const vmProxy = getCurrentInstance()!.proxy;
 
@@ -251,7 +252,7 @@ const handleContinue = (): void => {
 }
 
 // Remove checkbox hover highlight
-::v-deep .v-input--checkbox {
+:deep(.v-input--checkbox) {
   .v-input--selection-controls__ripple {
     display: none;
   }

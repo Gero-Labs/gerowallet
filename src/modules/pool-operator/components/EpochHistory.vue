@@ -482,34 +482,34 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 }
 
 /* Data table — matches MarketTokenTable style */
-.epoch-table >>> .v-table__wrapper {
+.epoch-table :deep(.v-table__wrapper) {
   overflow-x: auto;
 }
 
-.epoch-table >>> tbody tr {
+.epoch-table :deep(tbody tr) {
   cursor: pointer;
 }
 
-.epoch-table >>> tbody tr:hover {
+.epoch-table :deep(tbody tr:hover) {
   background: var(--g-hairline-1) !important;
 }
 
-.epoch-table >>> th {
+.epoch-table :deep(th) {
   font-size: 11px !important;
   white-space: nowrap;
 }
 
-.epoch-table >>> td {
+.epoch-table :deep(td) {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
 }
 
-.epoch-table >>> td.text-end {
+.epoch-table :deep(td.text-end) {
   font-family: var(--g-font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-.epoch-table >>> .no-hover:hover {
+.epoch-table :deep(.no-hover:hover) {
   background: transparent !important;
 }
 

@@ -76,10 +76,10 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px; text-align: initial;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex" style="text-align: initial;">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn class="onb-continue" color="primary" @click="walletCreationStep2()">{{ $t('common.continue') }}</v-btn>
+      <GButton tier="primary" @click="walletCreationStep2()" class="step-next">{{ $t('common.continue') }}</GButton>
     </div>
 
     <!-- The device prompt is mounted globally in options/App.vue and driven by
@@ -93,7 +93,8 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { Blockchain, coin_type, purpose, WalletType } from '@/models/types';
 import ledger from '@/shared/utils/ledger';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import { getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount } from '@/shared/utils/keystone';
+import { getKeystoneAccountsUR, getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount, parseKeystoneAccounts } from '@/shared/utils/keystone';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
 import { CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
@@ -109,12 +110,15 @@ import { debugLog } from '@/utils/debug';
 import type { NetworkInfo } from '@/utils/networks';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface ConnectionPayload {
   publicKey: string;
   keys: Array<{ publicKey: string; chainCode: string; path: string }>;
   btSupported: boolean;
   xfp?: string;
+  /** Multi-account pairing: every account the device exported, by index. */
+  accounts?: AccountXpub[];
 }
 
 const { t } = useTranslation();
@@ -122,7 +126,20 @@ const { t } = useTranslation();
 const props = defineProps<{
   network: NetworkInfo;
   walletType: string | undefined;
+  /** Accounts to ask the device for. Set only for multi-account pairing (Cardano). */
+  accountIndices?: number[];
 }>();
+
+const multiAccount = computed(() => props.network?.blockchain === Blockchain.CARDANO && !!props.accountIndices?.length);
+
+/** The payload for a multi-account export; the record fields come from each account. */
+const accountsPayload = (accounts: AccountXpub[], btSupported: boolean, xfp?: string): ConnectionPayload => ({
+  publicKey: accounts[0].publicKey,
+  keys: accounts[0].keys,
+  btSupported,
+  ...(xfp ? { xfp } : {}),
+  accounts,
+});
 
 const emit = defineEmits<{
   (e: 'connected', payload: ConnectionPayload): void;
@@ -143,7 +160,9 @@ const initKeystoneQR = (): void => {
     if (qrCodeRef.value) qrCodeRef.value.innerHTML = '';
   }
   let qrOptions;
-  if (props.network?.blockchain === Blockchain.CARDANO) {
+  if (multiAccount.value) {
+    qrOptions = getKeystoneAccountsUR(props.accountIndices!);
+  } else if (props.network?.blockchain === Blockchain.CARDANO) {
     qrOptions = getKeystonePublicKeyUR(purpose.hdwallet, 0);
   } else if (props.network?.blockchain === Blockchain.BITCOIN) {
     qrOptions = generateBitcoinSyncQR('segwit', 0);
@@ -183,6 +202,14 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
       snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
       keystoneScan.value = false;
       emit('connected', payload);
+      return;
+    }
+
+    if (multiAccount.value) {
+      const { xfp, accounts } = parseKeystoneAccounts(Buffer.from(ur.cbor, 'hex'), props.accountIndices!);
+      snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
+      keystoneScan.value = false;
+      emit('connected', accountsPayload(accounts, false, xfp));
       return;
     }
 
@@ -240,7 +267,11 @@ const walletCreationStep2 = async (): Promise<void> => {
       let coldWalletProps;
       const index = 0;
 
-      if (props.network?.blockchain === Blockchain.CARDANO) {
+      if (multiAccount.value) {
+        const { btSupported, accounts } = await ledger.initLedgerAccounts(isBluetooth.value, props.accountIndices!);
+        emit('connected', accountsPayload(accounts, btSupported));
+        return;
+      } else if (props.network?.blockchain === Blockchain.CARDANO) {
         const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`;
         coldWalletProps = await ledger.initLedger(isBluetooth.value, path);
       } else if (props.network?.blockchain === Blockchain.BITCOIN) {
@@ -275,7 +306,10 @@ const walletCreationStep2 = async (): Promise<void> => {
     hardwareLoading.begin('Trezor', t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
     try {
       hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
-      const data = { method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network };
+      const data = {
+        method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network,
+        ...(multiAccount.value ? { accountIndices: props.accountIndices } : {}),
+      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response: any = featureFlagsStore.state.flags.isTrezorWebUsbEnabled
         ? await dispatchTrezor(data)
@@ -283,7 +317,10 @@ const walletCreationStep2 = async (): Promise<void> => {
 
       debugLog('[TREZOR] init success', response?.data?.success);
 
-      if (response.data.success && response.data.coldWalletProps) {
+      if (response.data.success && response.data.coldWalletProps?.accounts) {
+        const { btSupported, accounts } = response.data.coldWalletProps;
+        emit('connected', accountsPayload(accounts, btSupported));
+      } else if (response.data.success && response.data.coldWalletProps) {
         const coldWalletProps = response.data.coldWalletProps;
         const payload: ConnectionPayload = {
           publicKey: coldWalletProps.hwPublicKey,

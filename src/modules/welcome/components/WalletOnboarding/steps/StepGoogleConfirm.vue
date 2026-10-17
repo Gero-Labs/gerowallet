@@ -53,16 +53,16 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
+    <div class="onboarding-actions d-flex">
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :loading="finishing"
         @click="finish()"
+        class="step-next"
       >
         {{ $t('common.done') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -74,6 +74,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface Props {
   network: NetworkInfo;

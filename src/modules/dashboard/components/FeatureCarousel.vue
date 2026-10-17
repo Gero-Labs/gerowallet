@@ -376,13 +376,13 @@ onUnmounted(() => {
 }
 
 /* Smaller pagination dots */
-.carousel-wrapper ::v-deep .v-carousel__controls .v-btn {
+.carousel-wrapper :deep(.v-carousel__controls .v-btn) {
   width: 8px !important;
   height: 8px !important;
   margin: 0 2px !important;
 }
 
-.carousel-wrapper ::v-deep .v-carousel__controls .v-btn .v-icon {
+.carousel-wrapper :deep(.v-carousel__controls .v-btn .v-icon) {
   font-size: 8px !important;
 }
 

@@ -19,6 +19,7 @@ import { NetworkInfo } from '@/utils/networks';
 import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
+import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 
 /**
  * Trezor transaction transformer context
@@ -279,11 +280,11 @@ const toTxOut = (output: { index: number; txOut: Serialization.TransactionOutput
   if (knownAddress && !isScriptAddress) {
     // Change output (our address, not a script) - use address parameters
     const stakeKeyPathArray = knownAddress.stakeKeyDerivationPath
-      ? util.accountKeyDerivationPathToBip32Path(0, knownAddress.stakeKeyDerivationPath, KeyPurpose.STANDARD)
+      ? util.accountKeyDerivationPathToBip32Path(context.accountIndex, knownAddress.stakeKeyDerivationPath, KeyPurpose.STANDARD)
       : undefined;
 
     const paymentKeyPathArray = util.accountKeyDerivationPathToBip32Path(
-      0,
+      context.accountIndex,
       { role: knownAddress.type === AddressType.External ? KeyRole.External : KeyRole.Internal, index: knownAddress.index },
       KeyPurpose.STANDARD
     );
@@ -331,12 +332,12 @@ const mapDRep = (dRep: Cardano.DelegateRepresentative | undefined): Trezor.Carda
   return undefined;
 };
 
-const mapCerts = (certificates: Cardano.Certificate[]): Trezor.CardanoCertificate[] | undefined => {
+const mapCerts = (certificates: Cardano.Certificate[], accountIndex: number): Trezor.CardanoCertificate[] | undefined => {
   if (!certificates || certificates.length === 0) return undefined;
 
   return certificates.map((cert: Cardano.Certificate, index) => {
     debugLog(`[TREZOR] Processing certificate ${index}: ${cert.__typename}`);
-    const stakeKeyPathArray = util.accountKeyDerivationPathToBip32Path(0, { role: KeyRole.Stake, index: 0 }, KeyPurpose.STANDARD);
+    const stakeKeyPathArray = util.accountKeyDerivationPathToBip32Path(accountIndex, { role: KeyRole.Stake, index: 0 }, KeyPurpose.STANDARD);
     const stakeKeyPath = bip32PathToString(stakeKeyPathArray);
 
     // Vote delegation (Conway-era)
@@ -486,7 +487,7 @@ const resolveStakeKeyPath = (
   if (typeof stakeKeyPath === 'object' && !Array.isArray(stakeKeyPath) && 'role' in stakeKeyPath && 'index' in stakeKeyPath) {
     // Convert to BIP32 path string
     const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
-      0,
+      knownAddress.accountIndex,
       stakeKeyPath as AccountKeyDerivationPath,
       KeyPurpose.STANDARD
     );
@@ -679,7 +680,7 @@ const txToTrezor = async (
     ttl: body.validityInterval?.invalidHereafter?.toString(),
     protocolMagic: context.chainId.networkMagic,
     networkId: context.chainId.networkId,
-    certificates: mapCerts(body.certificates),
+    certificates: mapCerts(body.certificates, context.accountIndex),
     withdrawals: mapWithdrawals(body.withdrawals, context),
     validityIntervalStart: body.validityInterval?.invalidBefore?.toString(),
     auxiliaryData: body.auxiliaryDataHash ? mapAuxiliaryData(body.auxiliaryDataHash) : undefined,
@@ -837,6 +838,39 @@ export default {
   },
 
   /**
+   * Pair several Cardano accounts at once: one bundled request, so the user
+   * approves the export once however many accounts are asked for.
+   */
+  async getAccountXpubs(accountIndices: number[]): Promise<{
+    productName: string;
+    btSupported: boolean;
+    accounts: AccountXpub[];
+  }> {
+    await this.init();
+    const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
+    const features: Trezor.Features = await this.getFeatures();
+    const getKeys = () => TrezorConnect.cardanoGetPublicKey({
+      bundle: paths.map((path) => ({ path, showOnTrezor: false })),
+    } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>);
+    // Same connect-web quirk as the single-key path above: retry once.
+    let res = await getKeys();
+    if (res.success && !res.payload?.every((key) => key?.node)) {
+      res = await getKeys();
+    }
+    if (!res.success) {
+      throw new Error('error' in res.payload ? res.payload.error : 'Failed to get Trezor public keys');
+    }
+    if (res.payload.length !== paths.length || !res.payload.every((key) => key?.node)) {
+      throw new Error('Trezor returned an incomplete public key. Please try again.');
+    }
+    return {
+      productName: features['label'] || 'Trezor',
+      btSupported: features['model'].toLowerCase() === 'safe 7',
+      accounts: res.payload.map((key, i) => accountXpub(key.node.public_key, key.node.chain_code, paths[i])),
+    };
+  },
+
+  /**
    * Gets the mode in which we want to sign the transaction.
    * This function will always return the first matching type depending on the provided data
    * Data is further checked on the Trezor side
@@ -887,6 +921,7 @@ export default {
       ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
       : Serialization.Transaction.fromCore(tx);
     const txBod: Cardano.TxBody = tx.body;
+    const accountIndex = accountIndexFromKeys(keys);
     const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
 
     // Validate that we have known addresses
@@ -918,7 +953,7 @@ export default {
         : Trezor.PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY;
 
       const trezorTxData: Omit<Trezor.CardanoSignTransaction, 'signingMode'> = await txToTrezor(txBody, {
-        accountIndex: 0,
+        accountIndex,
         chainId: {
           networkId: network.networkId,
           networkMagic: network.networkParams.networkMagic
@@ -936,7 +971,7 @@ export default {
       const additionalWitnessRequests = signingMode === Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION
         ? multiSigWitnessPaths.map(path => bip32PathToString(path))
         : mapAdditionalWitnessRequests(body, {
-            accountIndex: 0,
+            accountIndex,
             chainId: {
               networkId: network.networkId,
               networkMagic: network.networkParams.networkMagic
@@ -1111,6 +1146,7 @@ export default {
    */
   createKnownAddressesFromKeys(keys: Keys, network: NetworkInfo): GroupedAddress[] {
     const knownAddresses: GroupedAddress[] = [];
+    const accountIndex = accountIndexFromKeys(keys);
 
     // Process payment addresses (External)
     keys.payment.forEach((key: Key, _arrayIndex: number) => {
@@ -1124,7 +1160,7 @@ export default {
             type: AddressType.External, // Payment addresses are external
             index: derivationIndex,
             networkId,
-            accountIndex: 0, // Assuming account 0 could be parameterized
+            accountIndex,
             address: key.address as Cardano.PaymentAddress,
             rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
@@ -1146,7 +1182,7 @@ export default {
             type: AddressType.Internal, // Change addresses are internal
             index: derivationIndex,
             networkId,
-            accountIndex: 0, // Assuming account 0 could be parameterized
+            accountIndex,
             address: key.address as Cardano.PaymentAddress,
             rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
@@ -1171,7 +1207,7 @@ export default {
               type: AddressType.External, // Stake addresses use External type
               index: derivationIndex,
               networkId,
-              accountIndex: 0,
+              accountIndex,
               address: key.address as Cardano.PaymentAddress, // The stake address itself
               rewardAccount: key.address as Cardano.RewardAccount, // Same as address for stake keys
               stakeKeyDerivationPath: {

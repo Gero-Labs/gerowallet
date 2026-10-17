@@ -196,6 +196,7 @@ import ledger from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, parseDataSignature } from '@/shared/utils/keystone';
+import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccount';
 import networks from '@/utils/networks';
 import { DeviceStatusError, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Cardano } from '@cardano-sdk/core';
@@ -361,7 +362,7 @@ const signDataLocallyWithPrf = async () => {
       pkBytes = await awaitFreshApproval(async () => (decryptPrivateKeyWithPrf(
         loggedWallet.value.prfEncryptedPrivateKey,
         loggedWallet.value.webAuthnCredentialId,
-        loggedWallet.value.id.toString()
+        secretsWalletId(loggedWallet.value).toString()
       )), approvalCurrent);
     }
 
@@ -391,7 +392,7 @@ const signDataLocallyWithPrf = async () => {
     const role = parseInt(pathParts[4].replace(/'/g, ""), 10);
     const index = parseInt(pathParts[5].replace(/'/g, ""), 10);
 
-    const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]); // m/1852'/1815'/0'
+    const accountKey = deriveSigningAccountKey(rootKey, resolveAccountIndex(loggedWallet.value), loggedWallet.value.publicKey);
     const derived = accountKey.derive([role, index]);
     const signingKey = derived.toRawKey();
 
@@ -509,7 +510,7 @@ const sign = () => approval.run(async () => {
         address,
         payload,
         network,
-        0,
+        accountIndexFromKeys(keys.value),
         !isBT.value,
         knownAddresses
       )), approvalCurrent);

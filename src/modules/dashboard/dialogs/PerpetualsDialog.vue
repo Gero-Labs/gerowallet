@@ -776,7 +776,7 @@ function onLogoError(e: Event) {
   font-weight: 600;
 }
 
-.chart-area ::v-deep .trading-view-chart-container {
+.chart-area :deep(.trading-view-chart-container) {
   flex: 1;
   min-height: 300px;
   background: transparent;

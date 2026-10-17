@@ -269,7 +269,7 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import networks from '@/utils/networks';
-import { Blockchain, type Key } from '@/models/types';
+import { Blockchain, Network, type Key } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { debugLog } from '@/utils/debug';
 
@@ -486,7 +486,8 @@ const target = computed<ReceiveTarget>(() => {
       label: bitcoinAddressTypeLabel.value,
       value: bitcoinAddress.value,
       hint: bitcoinAddressTypeDescription.value,
-      path: `m/${bitcoinDerivationPurpose.value}'/0'/0'/0/${bitcoinAddressIndex.value}`,
+      // This account's own path: coin type 1 off Mainnet, and its account index.
+      path: `m/${bitcoinDerivationPurpose.value}'/${loggedWallet.value?.network === Network.MAINNET ? 0 : 1}'/${loggedWallet.value?.accountIndex ?? 0}'/0/${bitcoinAddressIndex.value}`,
     };
   }
   return isMidnightWallet.value ? midnightTarget() : cardanoTarget();

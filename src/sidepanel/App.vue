@@ -92,6 +92,7 @@ import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
+import { secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 import { useChainContext } from './composables/useChainContext';
 
 const { t } = useTranslation();
@@ -159,6 +160,15 @@ async function doLogin(wallet: Wallet): Promise<boolean> {
   }
 }
 
+/**
+ * An account of the unlocked wallet: the accounts of one Google wallet share its
+ * session, so switching between them needs no new sign-in.
+ */
+function inUnlockedGroup(wallet: Wallet): boolean {
+  const logged = walletStore.loggedWallet;
+  return !!logged && !walletStore.isLocked && secretsWallet(wallet, geroStore.wallets).id === secretsWalletId(logged);
+}
+
 async function onWalletSelect(wallet: Wallet) {
   // Already the active, unlocked wallet → nothing to do.
   if (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked) {
@@ -169,7 +179,7 @@ async function onWalletSelect(wallet: Wallet) {
   // pre-switch unlock overlay (Google + passkey/password) which reconstructs the
   // target's key WITHOUT logging out the current wallet. onSwitchUnlocked then does
   // the real LOGIN; cancel keeps the current wallet. Non-MPC wallets log in directly.
-  if (wallet.encryptionMethod === 'mpc') {
+  if (wallet.encryptionMethod === 'mpc' && !inUnlockedGroup(wallet)) {
     showWalletSwitcher.value = false;
     pendingSwitchWallet.value = wallet;
     return;
@@ -184,7 +194,7 @@ async function onWalletSelect(wallet: Wallet) {
 // banner, before either could ever be seen from the switcher path.
 async function onWalletSwitch(wallet: Wallet) {
   if (
-    wallet.encryptionMethod === 'mpc' ||
+    (wallet.encryptionMethod === 'mpc' && !inUnlockedGroup(wallet)) ||
     (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked)
   ) {
     await onWalletSelect(wallet);
