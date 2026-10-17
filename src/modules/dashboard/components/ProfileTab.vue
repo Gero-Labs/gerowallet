@@ -206,6 +206,8 @@ import { DEFAULT_CARDANO_EXPLORER } from '@/shared/utils/explorer';
 import { EXPLORER_LOGOS } from '@/shared/utils/explorerLogos';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { accountGroup, cardanoAccountPath, conflictingWalletNames } from '@/shared/utils/walletAccount';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinKeyManager';
+import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 // Define emits
@@ -298,8 +300,13 @@ const loggedRecord = computed(() => (loggedWallet.value ? wallets.value[loggedWa
 // An added account is named within its wallet; any other wallet among the top-level ones.
 const otherWalletNames = computed(() => (loggedRecord.value ? conflictingWalletNames(loggedRecord.value, wallets.value) : []));
 // Shown once a wallet has more than one account, so it is clear which one this is.
-const accountPath = computed(() => (loggedRecord.value && accountGroup(loggedRecord.value, wallets.value).length > 1
-  ? cardanoAccountPath(loggedRecord.value.accountIndex ?? 0) : ''));
+const accountPath = computed(() => {
+  const record = loggedRecord.value;
+  if (!record || accountGroup(record, wallets.value).length < 2) return '';
+  return record.chain === Blockchain.BITCOIN
+    ? bitcoinAccountPath(record.network, record.addressType ?? 'segwit', record.accountIndex ?? 0)
+    : cardanoAccountPath(record.accountIndex ?? 0);
+});
 
 const avatar = computed(() => {
   if (loggedWallet.value.icon.includes('http')) {

@@ -70,12 +70,18 @@ describe('resolveAccountIndex', () => {
     expect(resolveAccountIndex({ ...cardano, chain: Blockchain.APEX_VECTOR, accountIndex: 1 })).toBe(1);
   });
 
+  it('allows another account on a Bitcoin recovery-phrase or PassKey wallet', () => {
+    expect(resolveAccountIndex({ chain: Blockchain.BITCOIN, type: WalletType.Normal, accountIndex: 3 })).toBe(3);
+    expect(resolveAccountIndex({ chain: Blockchain.BITCOIN, type: WalletType.Normal, encryptionMethod: 'prf', accountIndex: 1 })).toBe(1);
+  });
+
   it.each([-1, 1.5, 0x80000000, Number.NaN, '1'])('refuses %s', (accountIndex) => {
     expect(() => resolveAccountIndex({ ...cardano, accountIndex: accountIndex as number })).toThrow(InvalidAccountIndexError);
   });
 
   it.each([
-    ['a Bitcoin wallet', { chain: Blockchain.BITCOIN, type: WalletType.Normal }],
+    ['a Bitcoin hardware wallet', { chain: Blockchain.BITCOIN, type: WalletType.Ledger }],
+    ['a Bitcoin watch wallet', { chain: Blockchain.BITCOIN, type: WalletType.Watch }],
     ['a Midnight wallet', { chain: Blockchain.MIDNIGHT, type: WalletType.Normal }],
     ['a watch wallet', { chain: Blockchain.CARDANO, type: WalletType.Watch }],
     ['a legacy Google wallet', { chain: Blockchain.CARDANO, type: WalletType.Google }],
@@ -178,7 +184,7 @@ describe('account groups', () => {
     expect(conflictingWalletNames(head, wallets).sort()).toEqual(['Daily']);
   });
 
-  it('offers more accounts for Cardano hardware, recovery-phrase, PassKey and Google wallets', () => {
+  it('offers more accounts for Cardano hardware, recovery-phrase, PassKey and Google wallets, and Bitcoin recovery phrases', () => {
     expect(canAddAccounts(head)).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Trezor }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal }))).toBe(true);
@@ -186,7 +192,9 @@ describe('account groups', () => {
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Google, encryptionMethod: 'mpc' }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Google }))).toBe(false); // legacy contract wallet
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Watch }))).toBe(false);
-    expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN }))).toBe(false);
+    expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN }))).toBe(false); // a Bitcoin Keystone
+    expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN, type: WalletType.Normal }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN, type: WalletType.Normal, encryptionMethod: 'prf' }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT }))).toBe(false);
   });
 });

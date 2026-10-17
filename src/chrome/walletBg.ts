@@ -85,7 +85,7 @@ import {
 import { debugLog } from '@/utils/debug';
 import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
-import { cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
+import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
 // Static, not dynamic: walletBg and this module land in the same background
 // IIFE, so a dynamic import buys no code splitting — it only pushes the
 // module's declaration later in the emitted bundle, which is exactly the
@@ -1812,6 +1812,20 @@ export class WalletBg {
   }
 
   /**
+   * An added Bitcoin account signs at its own index, so its recovery phrase (its
+   * account #0's) must derive the record's xpub there: any other key would sign
+   * for addresses the wallet does not show. Account #0 records predate the check
+   * and sign as before.
+   */
+  private async assertBitcoinAccount(mnemonic: string): Promise<void> {
+    if (this.accountIndex === 0) return;
+    const { deriveBitcoinAccountXpub } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    if (deriveBitcoinAccountXpub(mnemonic, this.network, this.addressType, this.accountIndex) !== this.publicKey) {
+      throw new InvalidAccountIndexError('The signing key does not belong to this account');
+    }
+  }
+
+  /**
    * Sign Bitcoin PSBT transaction (software wallets)
    * Supports both password and PRF wallet encryption
    *
@@ -1856,13 +1870,14 @@ export class WalletBg {
           this.secretsWalletId.toString()
         );
 
-        // Sign and finalize PSBT
+        // Sign and finalize PSBT, with this account's keys
+        await this.assertBitcoinAccount(mnemonic);
         const signedTx = await signAndFinalizePsbt(
           psbtHex,
           mnemonic,
           this.network,
           this.addressType,
-          0
+          this.accountIndex
         );
 
         debugLog('✅ Bitcoin transaction signed with PRF');
@@ -1884,13 +1899,14 @@ export class WalletBg {
         // Decrypt mnemonic with password
         const decryptedMnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
 
-        // Sign and finalize PSBT
+        // Sign and finalize PSBT, with this account's keys
+        await this.assertBitcoinAccount(decryptedMnemonic);
         const signedTx = await signAndFinalizePsbt(
           psbtHex,
           decryptedMnemonic,
           this.network,
           this.addressType,
-          0
+          this.accountIndex
         );
 
         debugLog('✅ Bitcoin transaction signed with password');
@@ -1981,7 +1997,8 @@ export class WalletBg {
       psbt = bitcoin.Psbt.fromBase64(psbtHex, { network: bitcoinNetwork });
     }
 
-    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, 0);
+    await this.assertBitcoinAccount(mnemonic);
+    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, this.accountIndex);
 
     if (options?.autoFinalized !== false) {
       signedPsbt.finalizeAllInputs();
@@ -2006,8 +2023,7 @@ export class WalletBg {
     prfSecret?: Uint8Array
   ): Promise<string> {
     const { decrypt } = await import('@/shared/utils/crypto');
-    const { deriveBitcoinRootKey, getDerivationPurpose, BitcoinCoinType, BitcoinTestnetCoinType } =
-      await import('@/chains/bitcoin/bitcoinKeyManager');
+    const { deriveBitcoinRootKey, bitcoinAccountPath } = await import('@/chains/bitcoin/bitcoinKeyManager');
 
     // Decrypt mnemonic
     let mnemonic: string;
@@ -2024,11 +2040,10 @@ export class WalletBg {
       mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
-    // Derive signing key (first receiving address: m/purpose'/coinType'/0'/0/0)
+    // Derive signing key (this account's first receiving address: m/purpose'/coinType'/account'/0/0)
+    await this.assertBitcoinAccount(mnemonic);
     const rootKey = deriveBitcoinRootKey(mnemonic);
-    const purpose = getDerivationPurpose(this.addressType || 'segwit');
-    const coinType = this.network.toLowerCase() === 'mainnet' ? BitcoinCoinType : BitcoinTestnetCoinType;
-    const signingKey = rootKey.derive(`m/${purpose}'/${coinType}'/0'/0/0`);
+    const signingKey = rootKey.derive(`${bitcoinAccountPath(this.network, this.addressType || 'segwit', this.accountIndex)}/0/0`);
     if (!signingKey.privateKey || !signingKey.publicKey) throw new Error('Failed to derive signing key');
 
     const privKey = Buffer.from(signingKey.privateKey);

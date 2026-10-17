@@ -5,12 +5,15 @@ import * as bip39 from 'bip39';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { Blockchain, Network, WalletType, type Wallet } from '@/models/types';
 import { deriveAccountXpubs } from '@/shared/utils/softwareAccounts';
+import { deriveBitcoinAccountXpub } from '@/chains/bitcoin/bitcoinKeyManager';
 import { AddAccountError, deriveAccountXpubFlow } from './addAccountKeys';
 
 // Fixed test vectors — never used to hold funds.
+const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+const OTHER_PHRASE = 'letter advice cage absurd amount doctor acoustic avoid letter advice cage above';
 const rootOf = (mnemonic: string) => Bip32PrivateKey.fromBip39Entropy(Buffer.from(bip39.mnemonicToEntropy(mnemonic), 'hex'), '');
-const ROOT = rootOf('legal winner thank year wave sausage worth useful legal winner thank yellow');
-const OTHER_ROOT = rootOf('letter advice cage absurd amount doctor acoustic avoid letter advice cage above');
+const ROOT = rootOf(PHRASE);
+const OTHER_ROOT = rootOf(OTHER_PHRASE);
 
 const xpub = async (root: Bip32PrivateKey, index: number) => (await deriveAccountXpubs(root, [index]))[0].publicKey;
 
@@ -22,10 +25,13 @@ async function wallets(): Promise<Record<number, Wallet>> {
     3: { id: 3, name: 'Google', type: WalletType.Google, encryptionMethod: 'mpc', ...base },
     4: { id: 4, name: 'PassKey', type: WalletType.Normal, encryptionMethod: 'prf', prfEncryptedPrivateKey: 'prf-sealed', ...base },
     5: { id: 5, name: 'Ledger', type: WalletType.Ledger, ...base },
+    6: { id: 6, name: 'Bitcoin', type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.TESTNET, addressType: 'segwit', encryptionMethod: 'password', encryptedPrivateKey: 'btc-master-key', encryptedMnemonic: 'btc-sealed-phrase', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.TESTNET, 'segwit', 0) },
+    7: { id: 7, name: 'Bitcoin PassKey', type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.TESTNET, encryptionMethod: 'prf', prfEncryptedMnemonic: 'prf-phrase', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.TESTNET, 'segwit', 0) },
+    8: { id: 8, name: 'Bitcoin Ledger', type: WalletType.Ledger, chain: Blockchain.BITCOIN, network: Network.TESTNET, publicKey: 'xpub-ledger' },
   };
 }
 
-function deps(overrides: { session?: Uint8Array; root?: Bip32PrivateKey } = {}) {
+function deps(overrides: { session?: Uint8Array; root?: Bip32PrivateKey; phrase?: string } = {}) {
   const decrypted: Uint8Array[] = [];
   return {
     decrypted,
@@ -36,6 +42,10 @@ function deps(overrides: { session?: Uint8Array; root?: Bip32PrivateKey } = {}) 
       const bytes = Buffer.from((overrides.root ?? ROOT).bytes());
       decrypted.push(bytes);
       return bytes;
+    }),
+    decryptMnemonic: vi.fn((blob: string, password: string) => {
+      if (blob !== 'btc-sealed-phrase' || password !== 'right') throw new Error('wrong password');
+      return overrides.phrase ?? PHRASE;
     }),
   };
 }
@@ -75,5 +85,24 @@ describe('deriveAccountXpubFlow', () => {
     expect(await failure(deriveAccountXpubFlow({ walletId: 1, accountIndex: 0, password: 'right' }, deps()))).toBe('not-supported');
     expect(await failure(deriveAccountXpubFlow({ walletId: 9, accountIndex: 1 }, deps()))).toBe('not-found');
     await expect(deriveAccountXpubFlow({ walletId: 1, accountIndex: 2 ** 31, password: 'right' }, deps())).rejects.toThrow();
+  });
+});
+
+describe('deriveAccountXpubFlow on Bitcoin', () => {
+  it('derives the account from the recovery phrase, never the stored master key', async () => {
+    const d = deps();
+    await expect(deriveAccountXpubFlow({ walletId: 6, accountIndex: 2, password: 'right' }, d))
+      .resolves.toBe(deriveBitcoinAccountXpub(PHRASE, Network.TESTNET, 'segwit', 2));
+    expect(d.decryptRootKey).not.toHaveBeenCalled();
+  });
+
+  it('refuses a wrong password, and a phrase that is not this wallet’s', async () => {
+    expect(await failure(deriveAccountXpubFlow({ walletId: 6, accountIndex: 1, password: 'wrong' }, deps()))).toBe('wrong-password');
+    expect(await failure(deriveAccountXpubFlow({ walletId: 6, accountIndex: 1, password: 'right' }, deps({ phrase: OTHER_PHRASE })))).toBe('not-supported');
+  });
+
+  it('leaves Bitcoin PassKey and hardware wallets alone', async () => {
+    expect(await failure(deriveAccountXpubFlow({ walletId: 7, accountIndex: 1, password: 'right' }, deps()))).toBe('not-supported');
+    expect(await failure(deriveAccountXpubFlow({ walletId: 8, accountIndex: 1, password: 'right' }, deps()))).toBe('not-supported');
   });
 });

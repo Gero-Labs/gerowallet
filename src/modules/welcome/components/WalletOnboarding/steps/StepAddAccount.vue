@@ -51,12 +51,12 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import type { Wallet } from '@/models/types';
+import { Blockchain, type Wallet } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
 import GeroStore, { geroStore } from '@/stores/geroStore';
 import snackbar from '@/plugins/snackbar';
-import { discoverAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { discoverAccounts, discoverBitcoinAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
 import { nextAccountIndex, type AccountXpub } from '@/shared/utils/walletAccount';
@@ -79,6 +79,7 @@ const kind = computed<'password' | 'passkey' | 'google'>(() => {
   return 'password';
 });
 const accountIndex = computed(() => nextAccountIndex(props.wallet, geroStore.wallets));
+const isBitcoin = computed(() => props.wallet.chain === Blockchain.BITCOIN);
 
 const password = ref('');
 const showPassword = ref(false);
@@ -111,6 +112,7 @@ async function deriveXpub(): Promise<string> {
  * page (the documented PRF exception): derive here and wipe it straight away.
  */
 async function derivePassKeyXpub(): Promise<string> {
+  if (isBitcoin.value) return deriveBitcoinPassKeyXpub();
   const { webAuthnCredentialId, prfEncryptedPrivateKey } = props.wallet;
   if (!webAuthnCredentialId || !prfEncryptedPrivateKey) throw new Error('not-supported');
   const [{ evaluateWalletPrf }, { decryptPrivateKeyWithPrf }, { Bip32PrivateKey }, { deriveAccountXpubs }] = await Promise.all([
@@ -132,13 +134,47 @@ async function derivePassKeyXpub(): Promise<string> {
   }
 }
 
+/**
+ * A Bitcoin wallet's stored root key has no chain code, so its accounts come from
+ * its recovery phrase, decrypted here with the PassKey and checked against the
+ * wallet's own account-#0 xpub (base58: compared exactly).
+ */
+async function deriveBitcoinPassKeyXpub(): Promise<string> {
+  const { webAuthnCredentialId, prfEncryptedMnemonic } = props.wallet;
+  if (!webAuthnCredentialId || !prfEncryptedMnemonic) throw new Error('not-supported');
+  const [{ evaluateWalletPrf }, { decryptMnemonicWithPrfOutput }, { deriveAccountXpubsFromMnemonic }] = await Promise.all([
+    import('@/shared/utils/passkeyPrf'),
+    import('@/shared/utils/webauthn-prf'),
+    import('@/shared/utils/softwareAccounts'),
+  ]);
+  const prf = await evaluateWalletPrf({ id: props.wallet.id, webAuthnCredentialId, webAuthnTransports: props.wallet.webAuthnTransports });
+  try {
+    const mnemonic = await decryptMnemonicWithPrfOutput(prfEncryptedMnemonic, prf, webAuthnCredentialId, String(props.wallet.id));
+    const chain = { chain: props.wallet.chain, network: props.wallet.network, addressType: props.wallet.addressType };
+    const [own, next] = await deriveAccountXpubsFromMnemonic(mnemonic, [0, accountIndex.value], chain);
+    if (own.publicKey !== props.wallet.publicKey) throw new Error('not-supported');
+    return next.publicKey;
+  } finally {
+    new Uint8Array(prf).fill(0);
+  }
+}
+
+/** The account's address and whether it has been used, on the wallet's own chain and network, for the preview. */
+async function probe(found: AccountXpub): Promise<DiscoveredAccount> {
+  const { chain, network } = props.wallet;
+  const [result] = isBitcoin.value
+    ? await discoverBitcoinAccounts(network, props.wallet.addressType ?? 'segwit', [found])
+    : await discoverAccounts(chain, network, [found]);
+  return result;
+}
+
 async function unlock(): Promise<void> {
   if (!canUnlock.value) return;
   busy.value = true;
   error.value = '';
   try {
     account.value = { accountIndex: accountIndex.value, publicKey: await deriveXpub(), keys: [] };
-    [preview.value] = await discoverAccounts(props.network.blockchain, props.network.network, [account.value]);
+    preview.value = await probe(account.value);
   } catch (e) {
     const code = e instanceof Error ? e.message : '';
     error.value = t(ERRORS[code] ?? 'errors.unknownError', { name: props.wallet.name });

@@ -4,7 +4,12 @@ import { Blockchain, CoinTypes, HARDENED, Network, WalletTypePurpose } from '@/m
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import { resolvePrivateKey } from './resolver';
 import { accountXpub, type AccountXpub } from './walletAccount';
-import { discoverAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
+import { BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
+
+// bitcoinjs-lib rejects the test runner's Buffer: name each address after its xpub and index instead.
+vi.mock('@/chains/bitcoin/bitcoinKeyManager', () => ({
+  deriveBitcoinAddress: (xpub: string, _network: string, type: string, chain: number, index: number) => `${xpub}/${type}/${chain}/${index}`,
+}));
 
 const rootKey = resolvePrivateKey(`${'abandon '.repeat(23)}art`);
 const account = (index: number): AccountXpub => {
@@ -76,5 +81,35 @@ describe('scanning', () => {
 
   it('takes the first scan as it is', () => {
     expect(mergeScannedAccounts([], [account(1), account(0)])?.map((a) => a.accountIndex)).toEqual([0, 1]);
+  });
+});
+
+describe('discoverBitcoinAccounts', () => {
+  const btc = (accountIndex: number): AccountXpub => ({ accountIndex, publicKey: `xpub-${accountIndex}`, keys: [] });
+  /** Answers `getTransactions` per address: a history, nothing, or a failure. */
+  const esplora = (histories: Record<string, unknown[] | Error>) => ({
+    getTransactions: vi.fn(async (address: string) => {
+      const answer = histories[address];
+      if (answer instanceof Error) throw answer;
+      return answer ?? [];
+    }),
+  });
+
+  it('calls an account used when one of its first receive addresses has history, and shows the first', async () => {
+    const api = esplora({ 'xpub-1/segwit/0/2': [{ txid: 'aa' }] });
+    const [first, second] = await discoverBitcoinAccounts(Network.TESTNET, 'segwit', [btc(0), btc(1)], api);
+
+    expect(first).toMatchObject({ accountIndex: 0, address: 'xpub-0/segwit/0/0', stakeAddress: '', activity: 'unused' });
+    expect(second).toMatchObject({ accountIndex: 1, address: 'xpub-1/segwit/0/0', activity: 'used' });
+    // The used account stops at the address that answered; the unused one checks them all.
+    expect(api.getTransactions.mock.calls.filter(([address]) => address.startsWith('xpub-1'))).toHaveLength(3);
+    expect(api.getTransactions.mock.calls.filter(([address]) => address.startsWith('xpub-0'))).toHaveLength(BITCOIN_PROBE_ADDRESSES);
+  });
+
+  it('marks an account whose probe failed as unknown, without failing the others', async () => {
+    const api = esplora({ 'xpub-0/taproot/0/0': new Error('rate limited'), 'xpub-1/taproot/0/0': [{ txid: 'bb' }] });
+    const found = await discoverBitcoinAccounts(Network.MAINNET, 'taproot', [btc(0), btc(1)], api);
+
+    expect(found.map((account) => account.activity)).toEqual(['unknown', 'used']);
   });
 });

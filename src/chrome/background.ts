@@ -2607,11 +2607,12 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
 app.addToOptions(MessageTypes.DERIVE_ACCOUNT_XPUB, async (request, sendResponse) => {
   try {
     const { getAllWallets } = await import('@/db/gero-db');
-    const { decryptPrivateKey } = await import('@/shared/utils/crypto');
+    const { decrypt, decryptPrivateKey, SecretPurpose } = await import('@/shared/utils/crypto');
     const publicKey = await deriveAccountXpubFlow(request.data || {}, {
       getWallets: getAllWallets,
       sessionRootKey: (walletId) => mpcSessionCache.get(walletId),
       decryptRootKey: decryptPrivateKey,
+      decryptMnemonic: (encryptedMnemonic, password) => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic),
     });
     sendResponse({ id: request.id, data: { success: true, publicKey }, target: TARGET, sender: SENDER.extension });
   } catch (error) {

@@ -43,9 +43,9 @@ const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
 const keystone = { id: 7, name: 'Cold storage', chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Keystone };
 const account = (accountIndex: number, publicKey = `xpub-${accountIndex}`): AccountXpub => ({ accountIndex, publicKey, keys: [] });
 
-function render(addAccountTo: object | null = keystone) {
+function render(addAccountTo: object | null = keystone, onNetwork = network) {
   return mount(WalletOnboarding, {
-    props: { network, addAccountTo: addAccountTo as Wallet | null },
+    props: { network: onNetwork, addAccountTo: addAccountTo as Wallet | null },
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
   });
 }
@@ -141,7 +141,7 @@ describe('restoring a recovery phrase with several accounts', () => {
     const wrapper = await toAccounts();
     const step = wrapper.findComponent({ name: 'StepAccounts' });
 
-    expect(derive).toHaveBeenCalledWith(words.join(' '), [0, 1, 2, 3, 4]);
+    expect(derive).toHaveBeenCalledWith(words.join(' '), [0, 1, 2, 3, 4], { chain: Blockchain.CARDANO, network: Network.MAINNET });
     expect((step.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([0, 1, 2, 3, 4]);
     expect(step.props('source')).toBe('seed');
   });
@@ -151,7 +151,7 @@ describe('restoring a recovery phrase with several accounts', () => {
     wrapper.findComponent({ name: 'StepAccounts' }).vm.$emit('scan-more');
     await flushPromises();
 
-    expect(derive).toHaveBeenLastCalledWith(words.join(' '), [5, 6, 7, 8, 9]);
+    expect(derive).toHaveBeenLastCalledWith(words.join(' '), [5, 6, 7, 8, 9], { chain: Blockchain.CARDANO, network: Network.MAINNET });
     expect((wrapper.findComponent({ name: 'StepAccounts' }).props('accounts') as AccountXpub[])).toHaveLength(10);
   });
 
@@ -179,6 +179,22 @@ describe('restoring a recovery phrase with several accounts', () => {
     const join = wrapper.findComponent({ name: 'StepJoinAccounts' });
     expect(join.props('wallet')).toEqual(daily);
     expect((join.props('accounts') as AccountXpub[]).map((a) => a.accountIndex)).toEqual([1]);
+  });
+
+  it('lists a Bitcoin phrase’s accounts too', async () => {
+    derive.mockImplementation(async (_mnemonic: string, indices: number[]) => indices.map((i) => account(i)));
+    const bitcoin = networks.resolveNetwork(Blockchain.BITCOIN, Network.TESTNET);
+    const wrapper = render(null, bitcoin);
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'restore');
+    await flushPromises();
+    const seed = wrapper.findComponent({ name: 'StepSeedPhrase' });
+    seed.vm.$emit('change', words);
+    seed.vm.$emit('next');
+    await flushPromises();
+
+    expect(derive).toHaveBeenCalledWith(words.join(' '), [0, 1, 2, 3, 4], { chain: Blockchain.BITCOIN, network: Network.TESTNET });
+    expect(wrapper.findComponent({ name: 'StepAccounts' }).exists()).toBe(true);
   });
 
   it('restores one account, as before, while multi-account is off', async () => {

@@ -48,7 +48,8 @@ import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { findExistingWallet } from '@/db/gero-db';
-import { ACCOUNTS_PER_SCAN, discoverAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { Blockchain } from '@/models/types';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
@@ -60,6 +61,8 @@ const props = defineProps<{
   accounts: AccountXpub[];
   /** Where the accounts come from, for the wording. */
   source?: 'device' | 'seed';
+  /** Bitcoin: the address type the accounts' addresses are derived for (default segwit). */
+  addressType?: string;
 }>();
 
 defineEmits<{
@@ -84,7 +87,7 @@ watch(() => props.accounts, async (accounts) => {
   try {
     const { blockchain: chain, network } = props.network;
     const [found, stored] = await Promise.all([
-      discoverAccounts(chain, network, fresh),
+      chain === Blockchain.BITCOIN ? discoverBitcoinAccounts(network, props.addressType ?? 'segwit', fresh) : discoverAccounts(chain, network, fresh),
       Promise.all(fresh.map((account) => findExistingWallet({ chain, network, publicKey: account.publicKey }))),
     ]);
     found.forEach((account, i) => {

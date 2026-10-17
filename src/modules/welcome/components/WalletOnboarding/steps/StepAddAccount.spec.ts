@@ -10,9 +10,12 @@ const mocks = vi.hoisted(() => ({
   addAccounts: vi.fn(),
   push: vi.fn(async () => undefined),
   discover: vi.fn(),
+  discoverBitcoin: vi.fn(),
   prf: vi.fn(),
   decryptPrf: vi.fn(),
+  decryptPhrase: vi.fn(),
   derive: vi.fn(),
+  deriveFromPhrase: vi.fn(),
   wallets: {} as Record<number, unknown>,
 }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
@@ -20,10 +23,10 @@ vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn() } }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
 vi.mock('@/stores/geroStore', () => ({ default: { addAccounts: mocks.addAccounts }, geroStore: { get wallets() { return mocks.wallets; } } }));
-vi.mock('@/shared/utils/accountDiscovery', () => ({ discoverAccounts: mocks.discover }));
+vi.mock('@/shared/utils/accountDiscovery', () => ({ discoverAccounts: mocks.discover, discoverBitcoinAccounts: mocks.discoverBitcoin }));
 vi.mock('@/shared/utils/passkeyPrf', () => ({ evaluateWalletPrf: mocks.prf }));
-vi.mock('@/shared/utils/webauthn-prf', () => ({ decryptPrivateKeyWithPrf: mocks.decryptPrf }));
-vi.mock('@/shared/utils/softwareAccounts', () => ({ deriveAccountXpubs: mocks.derive }));
+vi.mock('@/shared/utils/webauthn-prf', () => ({ decryptPrivateKeyWithPrf: mocks.decryptPrf, decryptMnemonicWithPrfOutput: mocks.decryptPhrase }));
+vi.mock('@/shared/utils/softwareAccounts', () => ({ deriveAccountXpubs: mocks.derive, deriveAccountXpubsFromMnemonic: mocks.deriveFromPhrase }));
 vi.mock('@cardano-sdk/crypto', () => ({ Bip32PrivateKey: { fromBytes: (bytes: Uint8Array) => ({ bytes }) } }));
 
 import StepAddAccount from './StepAddAccount.vue';
@@ -133,5 +136,56 @@ describe('adding an account to a PassKey wallet', () => {
 
     expect(wrapper.text()).toContain('errors.unknownError');
     expect(mocks.discover).not.toHaveBeenCalled();
+  });
+});
+
+describe('adding an account to a Bitcoin wallet', () => {
+  const btcBase = { chain: Blockchain.BITCOIN, network: Network.TESTNET, addressType: 'segwit', publicKey: 'xpubBTC0' };
+  const btc: Wallet = { id: 5, name: 'Savings', type: WalletType.Normal, encryptionMethod: 'password', encryptedMnemonic: 'sealed', ...btcBase };
+
+  it('previews the account with the Bitcoin probe', async () => {
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKey: 'xpubBTC1' } });
+    mocks.discoverBitcoin.mockResolvedValueOnce([{ accountIndex: 1, publicKey: 'xpubBTC1', keys: [], address: 'tb1qaccount1', stakeAddress: '', activity: 'unused' }]);
+    const wrapper = render(btc);
+    await wrapper.find('input[type=password]').setValue('right');
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(mocks.send).toHaveBeenCalledWith({ method: 'DERIVE_ACCOUNT_XPUB', data: { walletId: 5, accountIndex: 1, password: 'right' } });
+    expect(mocks.discoverBitcoin).toHaveBeenCalledWith(Network.TESTNET, 'segwit', [{ accountIndex: 1, publicKey: 'xpubBTC1', keys: [] }]);
+    expect(mocks.discover).not.toHaveBeenCalled();
+  });
+
+  it('derives a PassKey wallet’s account from its recovery phrase, checked exactly against the stored xpub', async () => {
+    const passkeyBtc: Wallet = { ...btc, id: 6, encryptionMethod: 'prf', prfEncryptedMnemonic: 'prf-phrase', webAuthnCredentialId: 'cred', encryptedMnemonic: undefined };
+    const prf = new ArrayBuffer(4);
+    new Uint8Array(prf).fill(9);
+    mocks.prf.mockResolvedValueOnce(prf);
+    mocks.decryptPhrase.mockResolvedValueOnce('the phrase');
+    mocks.deriveFromPhrase.mockResolvedValueOnce([{ accountIndex: 0, publicKey: 'xpubBTC0', keys: [] }, { accountIndex: 1, publicKey: 'xpubBTC1', keys: [] }]);
+    mocks.discoverBitcoin.mockResolvedValueOnce([{ accountIndex: 1, publicKey: 'xpubBTC1', keys: [], address: 'tb1qaccount1', stakeAddress: '', activity: 'used' }]);
+    const wrapper = render(passkeyBtc);
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(mocks.decryptPhrase).toHaveBeenCalledWith('prf-phrase', prf, 'cred', '6');
+    expect(mocks.deriveFromPhrase).toHaveBeenCalledWith('the phrase', [0, 1], { chain: Blockchain.BITCOIN, network: Network.TESTNET, addressType: 'segwit' });
+    expect(mocks.decryptPrf).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(new Uint8Array(prf).every((byte) => byte === 0)).toBe(true);
+    expect(wrapper.text()).toContain('accounts.used');
+  });
+
+  it('refuses a phrase whose account #0 differs from the stored xpub only in case', async () => {
+    const passkeyBtc: Wallet = { ...btc, id: 6, encryptionMethod: 'prf', prfEncryptedMnemonic: 'prf-phrase', webAuthnCredentialId: 'cred' };
+    mocks.prf.mockResolvedValueOnce(new ArrayBuffer(4));
+    mocks.decryptPhrase.mockResolvedValueOnce('another phrase');
+    mocks.deriveFromPhrase.mockResolvedValueOnce([{ accountIndex: 0, publicKey: 'XPUBBTC0', keys: [] }, { accountIndex: 1, publicKey: 'xpubBTC1', keys: [] }]);
+    const wrapper = render(passkeyBtc);
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('errors.unknownError');
+    expect(mocks.discoverBitcoin).not.toHaveBeenCalled();
   });
 });

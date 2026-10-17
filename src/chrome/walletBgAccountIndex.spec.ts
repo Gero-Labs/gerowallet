@@ -138,7 +138,9 @@ describe('WalletBg on account #1', () => {
   });
 
   it('refuses a record claiming an account its chain cannot sign for', () => {
-    expect(() => bootWallet({ chain: Blockchain.BITCOIN, network: 'Mainnet', publicKey: 'xpub-unused', accountIndex: 1 }))
+    expect(() => bootWallet({ chain: Blockchain.MIDNIGHT, network: 'Mainnet', publicKey: 'xpub-unused', accountIndex: 1 }))
+      .toThrow(InvalidAccountIndexError);
+    expect(() => bootWallet({ chain: Blockchain.BITCOIN, network: 'Mainnet', type: WalletType.Ledger, publicKey: 'xpub-unused', accountIndex: 1 }))
       .toThrow(InvalidAccountIndexError);
   });
 });

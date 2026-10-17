@@ -4,6 +4,7 @@
 import { Api } from '@/api/api';
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
+import { Blockchain } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 
 export type AccountActivity = 'used' | 'unused' | 'unknown';
@@ -11,6 +12,7 @@ export type AccountActivity = 'used' | 'unused' | 'unknown';
 export interface DiscoveredAccount extends AccountXpub {
   /** First receive address, to show beside the account. */
   address: string;
+  /** Cardano only; '' on Bitcoin. */
   stakeAddress: string;
   /** 'unknown' when the probe failed: the account is still offered, just not pre-selected. */
   activity: AccountActivity;
@@ -81,4 +83,41 @@ export function mergeScannedAccounts(previous: AccountXpub[], scanned: AccountXp
   const merged = new Map(previous.map((account) => [account.accountIndex, account]));
   scanned.forEach((account) => merged.set(account.accountIndex, account));
   return [...merged.values()].sort((a, b) => a.accountIndex - b.accountIndex);
+}
+
+/** Receive addresses checked per Bitcoin account: wallets hand them out in order, so a used account has used one of its first. */
+export const BITCOIN_PROBE_ADDRESSES = 5;
+
+type BitcoinAddressApi = { getTransactions(address: string): Promise<unknown[]> };
+
+/**
+ * Which Bitcoin accounts have been used. There is no account-level query, so each
+ * account's first receive addresses are checked for history, in order, until one
+ * has some. A failed probe gives 'unknown'.
+ */
+export async function discoverBitcoinAccounts(
+  network: string,
+  addressType: string,
+  accounts: AccountXpub[],
+  api?: BitcoinAddressApi,
+): Promise<DiscoveredAccount[]> {
+  const [{ deriveBitcoinAddress }, client] = await Promise.all([
+    import('@/chains/bitcoin/bitcoinKeyManager'),
+    api ?? import('@/api/bitcoin-api').then(({ BitcoinApi }) => new BitcoinApi({ chain: Blockchain.BITCOIN, network }, networks.resolveDefaultProvider(Blockchain.BITCOIN, network))),
+  ]);
+  return Promise.all(accounts.map(async (account) => {
+    const addresses = Array.from({ length: BITCOIN_PROBE_ADDRESSES }, (_, i) => deriveBitcoinAddress(account.publicKey, network, addressType, 0, i));
+    let activity: AccountActivity = 'unused';
+    try {
+      for (const address of addresses) {
+        if ((await client.getTransactions(address)).length) {
+          activity = 'used';
+          break;
+        }
+      }
+    } catch {
+      activity = 'unknown';
+    }
+    return { ...account, address: addresses[0], stakeAddress: '', activity };
+  }));
 }

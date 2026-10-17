@@ -6,10 +6,10 @@ import networks from '@/utils/networks';
 import { Blockchain, Network } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 
-const mocks = vi.hoisted(() => ({ discover: vi.fn(), findExisting: vi.fn() }));
+const mocks = vi.hoisted(() => ({ discover: vi.fn(), discoverBitcoin: vi.fn(), findExisting: vi.fn() }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key, tc: (key: string) => key } }));
 vi.mock('@/db/gero-db', () => ({ findExistingWallet: mocks.findExisting }));
-vi.mock('@/shared/utils/accountDiscovery', () => ({ ACCOUNTS_PER_SCAN: 5, discoverAccounts: mocks.discover }));
+vi.mock('@/shared/utils/accountDiscovery', () => ({ ACCOUNTS_PER_SCAN: 5, discoverAccounts: mocks.discover, discoverBitcoinAccounts: mocks.discoverBitcoin }));
 
 import StepAccounts from './StepAccounts.vue';
 
@@ -26,9 +26,9 @@ function device(activity: Record<number, string>, stored: Record<number, string>
   });
 }
 
-function render(accounts: AccountXpub[]) {
+function render(accounts: AccountXpub[], onNetwork = network) {
   return mount(StepAccounts, {
-    props: { network, accounts },
+    props: { network: onNetwork, accounts },
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
   });
 }
@@ -101,5 +101,19 @@ describe('choosing accounts', () => {
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text().includes('accounts.scanMore'))!.trigger('click');
     expect(wrapper.emitted('scan-more')).toHaveLength(1);
+  });
+});
+
+describe('choosing Bitcoin accounts', () => {
+  it('probes them on their receive addresses, and pre-selects the used ones', async () => {
+    mocks.findExisting.mockResolvedValue(null);
+    mocks.discoverBitcoin.mockImplementation(async (_network: string, _type: string, accounts: AccountXpub[]) =>
+      accounts.map((a) => ({ ...a, address: `tb1q-${a.accountIndex}`, stakeAddress: '', activity: a.accountIndex === 1 ? 'used' : 'unused' })));
+    const wrapper = render([0, 1, 2].map(account), networks.resolveNetwork(Blockchain.BITCOIN, Network.TESTNET));
+    await flushPromises();
+
+    expect(mocks.discoverBitcoin).toHaveBeenCalledWith(Network.TESTNET, 'segwit', [0, 1, 2].map(account));
+    expect(mocks.discover).not.toHaveBeenCalled();
+    expect(checked(wrapper)).toEqual(['true', 'true', 'false']);
   });
 });

@@ -3,10 +3,12 @@
 // from the Google session the wallet was unlocked with, here in the background;
 // only the account's public key goes back to the page. A PassKey wallet derives
 // in the page instead, where WebAuthn can run (the documented PRF exception).
+// A Bitcoin wallet's stored root key has no chain code: it derives from its
+// recovery phrase instead.
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import type { Wallet } from '@/models/types';
+import { Blockchain, type Wallet } from '@/models/types';
 import { assertAccountIndices, canAddAccounts, isHardwareWallet, secretsWallet } from '@/shared/utils/walletAccount';
-import { deriveAccountXpubs } from '@/shared/utils/softwareAccounts';
+import { deriveAccountXpubs, deriveAccountXpubsFromMnemonic } from '@/shared/utils/softwareAccounts';
 
 export type AddAccountErrorCode = 'not-found' | 'not-supported' | 'wrong-password' | 'locked';
 
@@ -23,6 +25,8 @@ export interface DeriveAccountXpubDeps {
   sessionRootKey(walletId: number): Uint8Array | undefined;
   /** The single reader for a stored root key (decryptPrivateKey); throws on a wrong password. */
   decryptRootKey(encryptedPrivateKey: string, password: string): Uint8Array;
+  /** The reader for a stored recovery phrase (decrypt, SecretPurpose.Mnemonic); throws on a wrong password. */
+  decryptMnemonic(encryptedMnemonic: string, password: string): string;
 }
 
 /**
@@ -41,6 +45,7 @@ export async function deriveAccountXpubFlow(
   if (!canAddAccounts(wallet) || isHardwareWallet(wallet)) throw new AddAccountError('not-supported');
   const [accountIndex] = assertAccountIndices([input.accountIndex]);
   if (accountIndex === 0) throw new AddAccountError('not-supported');
+  if (wallet.chain === Blockchain.BITCOIN) return bitcoinAccountXpub(wallet, accountIndex, input.password, deps);
 
   let rootKeyBytes: Uint8Array;
   if (wallet.encryptionMethod === 'mpc') {
@@ -68,4 +73,23 @@ export async function deriveAccountXpubFlow(
   } finally {
     rootKeyBytes.fill(0);
   }
+}
+
+/**
+ * A Bitcoin account's xpub, from the wallet's recovery phrase. The phrase must
+ * derive the wallet's own account-#0 xpub (base58: compared exactly).
+ */
+async function bitcoinAccountXpub(wallet: Wallet, accountIndex: number, password: unknown, deps: DeriveAccountXpubDeps): Promise<string> {
+  if (wallet.encryptionMethod === 'prf' || !wallet.encryptedMnemonic) throw new AddAccountError('not-supported');
+  if (typeof password !== 'string' || !password) throw new AddAccountError('wrong-password');
+  let mnemonic: string;
+  try {
+    mnemonic = deps.decryptMnemonic(wallet.encryptedMnemonic, password);
+  } catch {
+    throw new AddAccountError('wrong-password');
+  }
+  const chain = { chain: wallet.chain, network: wallet.network, addressType: wallet.addressType };
+  const [own, account] = await deriveAccountXpubsFromMnemonic(mnemonic, [0, accountIndex], chain);
+  if (own.publicKey !== wallet.publicKey) throw new AddAccountError('not-supported');
+  return account.publicKey;
 }

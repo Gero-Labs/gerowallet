@@ -56,7 +56,7 @@
           :security-method="securityMethod"
           :name="walletName"
           :mnemonic="mnemonic"
-          :accounts="multiAccount ? chosenAccounts : undefined"
+          :accounts="multiAccountRestore ? chosenAccounts : undefined"
           @back="step--"
         />
         <StepDevice class="onboarding-step"
@@ -231,6 +231,10 @@ const connection = ref<ConnectionPayload | null>(null);
 // exported or a restored recovery phrase derives, and the ones chosen.
 const { t } = useTranslation();
 const multiAccount = computed(() => featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.CARDANO);
+// A restore also lists Bitcoin accounts; pairing a Bitcoin device still adds account #0 only.
+const multiAccountRestore = computed(() => multiAccount.value
+  || (featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.BITCOIN));
+const restoreChain = computed(() => ({ chain: props.network.blockchain, network: props.network.network }));
 const FIRST_SCAN = Array.from({ length: ACCOUNTS_PER_SCAN }, (_, i) => i);
 const accountIndices = ref<number[]>(FIRST_SCAN);
 const scannedAccounts = ref<AccountXpub[]>([]);
@@ -270,7 +274,7 @@ const steps = computed<StepDef[]>(() => {
     return [
       ...base,
       { key: 'seed', titleKey: 'welcome.onboardingStepSeed', subtitleKey: 'welcome.onboardingSubSeed', descKey: 'welcome.onboardingDescSeed' },
-      ...(multiAccount.value
+      ...(multiAccountRestore.value
         ? [{ key: 'accounts', titleKey: 'accounts.stepTitle', subtitleKey: 'accounts.stepSubtitle', descKey: 'accounts.stepDescriptionSeed' }]
         : []),
       // The accounts join a stored account #0, whose password or PassKey covers them.
@@ -415,9 +419,9 @@ const onConnected = (payload: ConnectionPayload): void => {
 const restoredMnemonic = (): string => mnemonic.value.join(' ');
 /** Restore: list the recovery phrase's first accounts before choosing how to secure it. */
 const onSeedNext = async (): Promise<void> => {
-  if (multiAccount.value) {
+  if (multiAccountRestore.value) {
     const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
-    scannedAccounts.value = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), FIRST_SCAN);
+    scannedAccounts.value = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), FIRST_SCAN, restoreChain.value);
   }
   step.value++;
 };
@@ -437,7 +441,7 @@ const onScanMore = async (): Promise<void> => {
   if (selectedMethod.value === 'restore') {
     // Derived from the recovery phrase in memory: no device to ask again.
     const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
-    const more = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), next.filter((index) => index !== 0));
+    const more = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), next.filter((index) => index !== 0), restoreChain.value);
     scannedAccounts.value = [...scannedAccounts.value, ...more];
     return;
   }

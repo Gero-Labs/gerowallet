@@ -65,3 +65,24 @@ describe('createAccountWallet', () => {
     await expect(createAccountWallet(headId, { name: 'x', publicKey: xpubs[2], accountIndex: -1 })).rejects.toThrow();
   });
 });
+
+describe('createAccountWallet on Bitcoin', () => {
+  it('stores a Bitcoin account under its recovery-phrase wallet, with its address type and none of its secrets', async () => {
+    const btcId = await createNewWallet('Savings', 'icon', Theme.GERO, MNEMONIC, PASSWORD, Blockchain.BITCOIN, Network.TESTNET) as number;
+    const head = await stored(btcId);
+    const [own, next] = await deriveAccountXpubsFromMnemonic(MNEMONIC, [0, 1], { chain: Blockchain.BITCOIN, network: Network.TESTNET });
+    expect(head.publicKey).toBe(own.publicKey);
+
+    const account = await createAccountWallet(btcId, { name: 'Account #1', publicKey: next.publicKey, accountIndex: 1 });
+    const record = await stored(account.id);
+
+    expect(record).toMatchObject({ chain: Blockchain.BITCOIN, network: Network.TESTNET, type: WalletType.Normal, addressType: 'segwit', publicKey: next.publicKey, accountIndex: 1, parentWalletId: btcId });
+    expect(record.encryptedMnemonic).toBeUndefined();
+    expect(record.encryptedPrivateKey).toBeUndefined();
+  });
+
+  it('refuses a Bitcoin hardware wallet as parent', async () => {
+    const ledgerId = await createNewHardwareWallet({ name: 'BTC Ledger', type: WalletType.Ledger, chain: Blockchain.BITCOIN, network: Network.TESTNET, publicKey: 'xpub-btc-ledger-placeholder' });
+    await expect(createAccountWallet(ledgerId as number, { name: 'x', publicKey: 'xpub-other', accountIndex: 1 })).rejects.toThrow();
+  });
+});
