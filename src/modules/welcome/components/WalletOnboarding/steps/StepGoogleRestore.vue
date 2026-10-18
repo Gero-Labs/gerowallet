@@ -21,7 +21,7 @@
       </div>
     </template>
 
-    <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+    <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
     <v-form ref="restoreForm" v-model="formValid" style="width: 100%;">
       <!-- Wallet name -->
@@ -51,7 +51,7 @@
         class="mb-2"
       ></v-text-field>
 
-      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+      <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
       <!-- New spending password (fallback when this device/browser has no WebAuthn PRF) -->
       <template v-if="!passkeyCapable">

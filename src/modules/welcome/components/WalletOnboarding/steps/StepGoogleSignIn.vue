@@ -1,7 +1,7 @@
 <template>
   <div class="step-google-signin">
     <div class="step-scroll">
-    <div class="google-signin-panel">
+    <div class="google-signin-panel glass-tier">
       <div class="google-signin-icon">
         <v-avatar size="56" color="rgba(255,255,255,0.05)">
           <v-img :src="google"  width="28" />
@@ -320,9 +320,8 @@ const onContinue = (): void => {
   justify-content: center;
   text-align: center;
   padding: 24px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  /* The surface is the glass-tier class in the markup: a pane nested in the
+     onboarding panel. */
 }
 
 .google-signin-icon {

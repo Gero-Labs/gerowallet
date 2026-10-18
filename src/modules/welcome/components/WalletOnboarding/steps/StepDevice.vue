@@ -7,7 +7,7 @@
         v-for="item in walletTypes"
         :key="item.name"
         type="button"
-        class="hw-card"
+        class="hw-card glass-tier"
         :class="{
           'hw-card--active': localWalletType === item.name,
           'hw-card--disabled': !item.enabled,
@@ -104,22 +104,15 @@ const onContinue = (): void => {
   min-height: 86px;
   text-align: left;
   padding: 16px 18px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 
-  &:hover:not(.hw-card--disabled) {
-    border-color: rgba(255, 255, 255, 0.24);
-    background: rgba(255, 255, 255, 0.05);
-  }
+  // A choice card nested in the onboarding panel: the glass-tier material, its
+  // hover lift and its selected tint, never an accent repaint or a glow.
+  &:hover:not(.hw-card--disabled) { @include g-glass-tier-hover; }
 
-  &--active {
-    border-color: var(--v-primary-base);
-    background: #{"rgb(from var(--v-primary-base) r g b / 0.1)"};
-    box-shadow: 0 0 16px #{"rgb(from var(--v-primary-base) r g b / 0.08)"};
-  }
+  &--active,
+  &--active:hover:not(.hw-card--disabled) { @include g-glass-tier-active; }
 
   &--disabled {
     opacity: 0.4;

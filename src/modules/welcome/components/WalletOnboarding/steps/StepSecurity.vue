@@ -20,13 +20,13 @@
            instead of falsely claiming "not supported": on Windows the first
            capability call can take seconds while Windows Hello spins up. -->
       <template v-if="prfSupported !== false">
-        <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
+        <v-divider class="my-4" style="border-color: var(--g-hairline-1);" />
         <div class="t-label mb-2">{{ $t('welcome.securityMethod') }}</div>
         <div class="security-row">
 
           <!-- PassKey tile -->
           <div
-            class="security-tile"
+            class="security-tile glass-tier"
             :class="{
               'security-tile--active': selectedSecurityMethod === 'prf',
               'security-tile--pending': prfSupported === null,
@@ -53,7 +53,7 @@
 
           <!-- Password tile -->
           <div
-            class="security-tile"
+            class="security-tile glass-tier"
             :class="{ 'security-tile--active': selectedSecurityMethod === 'password' }"
             @click="pickMethod('password')"
           >
@@ -175,22 +175,15 @@ const handleContinue = (): void => {
   flex: 1;
   min-width: 0;
   padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 
-  &:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.05);
-  }
+  // A choice tile nested in the onboarding panel: the glass-tier material, its
+  // hover lift and its selected tint, never an accent repaint or a glow.
+  &:hover { @include g-glass-tier-hover; }
 
-  &--active {
-    border-color: #{"rgb(from var(--v-primary-base) r g b / 0.55)"};
-    background: #{"rgb(from var(--v-primary-base) r g b / 0.06)"};
-    box-shadow: 0 0 14px #{"rgb(from var(--v-primary-base) r g b / 0.07)"};
-  }
+  &--active,
+  &--active:hover { @include g-glass-tier-active; }
 
   // PRF probe still pending: visibly "checking", not selectable yet
   &--pending {

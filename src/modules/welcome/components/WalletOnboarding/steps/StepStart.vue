@@ -11,7 +11,7 @@
     <div class="method-list">
       <button
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'create' }"
         @click="selectedMethod = 'create'"
       >
@@ -24,7 +24,7 @@
 
       <button
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'restore' }"
         @click="selectedMethod = 'restore'"
       >
@@ -37,7 +37,7 @@
 
       <button
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'pair', 'method-card--disabled': !pairSupported }"
         :disabled="!pairSupported"
         @click="selectedMethod = 'pair'"
@@ -54,7 +54,7 @@
       <button
         v-if="googleWalletVisible"
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'google', 'method-card--disabled': !googleWalletSupported }"
         :disabled="!googleWalletSupported"
         @click="selectedMethod = 'google'"
@@ -224,7 +224,7 @@ const onWatchSubmit = async (): Promise<void> => {
 };
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* Fill the onboarding body and split into a scrollable content region plus a
    pinned action footer. The scrollbar lives on .step-scroll (content only), so
    the CONTINUE row sits below/outside it instead of scrolling with the list. */
@@ -245,7 +245,7 @@ const onWatchSubmit = async (): Promise<void> => {
   flex-shrink: 0;
   margin-top: 0;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .method-list {
@@ -261,20 +261,19 @@ const onWatchSubmit = async (): Promise<void> => {
   width: 100%;
   text-align: left;
   padding: 6px 16px;
-  border-radius: var(--g-r-card);
-  border: 1px solid var(--g-hairline-2);
-  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 }
 
+/* A choice card nested in the onboarding panel: the glass-tier material, its
+   hover lift and its selected tint, never an accent repaint. */
 .method-card:hover:not(.method-card--disabled) {
-  background: rgba(255, 255, 255, 0.05);
+  @include g-glass-tier-hover;
 }
 
-.method-card--active {
-  border-color: var(--v-primary-base);
-  background: rgb(from var(--v-primary-base) r g b / 0.1);
+.method-card--active,
+.method-card--active:hover:not(.method-card--disabled) {
+  @include g-glass-tier-active;
 }
 
 .method-card--disabled {

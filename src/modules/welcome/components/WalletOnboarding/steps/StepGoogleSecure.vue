@@ -15,7 +15,7 @@
         class="mb-2"
       ></v-text-field>
 
-      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+      <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
       <!-- Spending password (fallback when the device/browser has no WebAuthn PRF) -->
       <template v-if="!passkeyCapable">
@@ -81,7 +81,7 @@
         </v-alert>
       </template>
 
-      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+      <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
       <!-- Recovery password -->
       <div class="t-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>

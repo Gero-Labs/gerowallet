@@ -1,7 +1,7 @@
 <template>
   <div class="step-google-confirm">
     <div class="step-scroll">
-    <v-card class="mb-3" variant="outlined" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+    <v-card class="glass-tier mb-3" flat>
       <v-card-text class="pa-3">
         <div class="d-flex align-center mb-2">
           <v-avatar size="32" class="mr-2">
@@ -12,7 +12,7 @@
             <div class="summary-value t-body font-weight-medium">{{ name }}</div>
           </div>
         </div>
-        <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+        <v-divider class="my-2" style="border-color: var(--g-hairline-2);"></v-divider>
         <v-row no-gutters>
           <v-col cols="6" class="pr-3">
             <div class="d-flex align-center">
@@ -23,7 +23,7 @@
               </div>
             </div>
           </v-col>
-          <v-divider vertical style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+          <v-divider vertical style="border-color: var(--g-hairline-2);"></v-divider>
           <v-col cols="6" class="pl-3">
             <div class="d-flex align-center">
               <v-avatar size="20" class="mr-2">
