@@ -227,7 +227,7 @@ const handleContinue = (): void => {
   color: var(--g-warning);
   line-height: 1.4;
   padding: var(--g-s-2) var(--g-s-3);
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   border: 1px solid rgba(255, 196, 0, 0.18);
   background: rgba(255, 196, 0, 0.04);
 }

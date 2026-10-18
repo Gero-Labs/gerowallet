@@ -354,14 +354,10 @@ const walletCreationStep2 = async (): Promise<void> => {
   line-height: 1.5;
 }
 
-#qr-code > svg {
-  border-radius: 10px;
-}
-
 .qr-scanner {
   text-align: center;
   border: 1px solid white;
-  border-radius: 4px;
+  border-radius: var(--g-r-control);
   width: 100%;
 }
 </style>

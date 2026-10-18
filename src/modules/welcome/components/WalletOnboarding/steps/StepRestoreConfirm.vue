@@ -169,7 +169,7 @@
 
     <!-- Existing Wallet Confirmation Dialog (exceptional re-login path — kept as modal) -->
     <v-dialog v-model="showConfirmDialog" max-width="500" persistent>
-      <v-card class="rounded-xl">
+      <v-card class="exists-dialog">
         <v-card-title class="t-heading">
           {{ $t('welcome.walletAlreadyExists') }}
         </v-card-title>
@@ -509,6 +509,9 @@ const handleCancelLogin = (): void => {
 </script>
 
 <style scoped lang="scss">
+// The already-exists dialog: a sheet, so it takes the sheet radius.
+.exists-dialog { border-radius: var(--g-r-sheet); }
+
 // Summary card: type comes from the ramp classes in the markup; these rules
 // only set line height and lift each value to the primary tone.
 .summary-label { line-height: 1.2; }

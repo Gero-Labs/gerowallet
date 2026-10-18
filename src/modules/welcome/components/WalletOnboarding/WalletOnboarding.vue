@@ -507,7 +507,7 @@ onUnmounted(() => {
   height: 620px;
   max-height: calc(100vh - 80px);
   padding: var(--g-s-5);
-  border-radius: 16px !important;
+  border-radius: var(--g-r-sheet) !important;
   display: flex;
   flex-direction: column;
   overflow: visible;
