@@ -7,12 +7,10 @@ name: Dev Bundle Gate
 # only surfaced after merge to main. This bundles the main-UI vite config
 # (vite parses every single-file component) so those breaks fail pre-merge.
 #
-# Why only build:web (not the full `npm run build`): `npm run build` runs 4 vite
-# builds in parallel via run-p, each with --max-old-space-size=6144 (~24GB peak),
-# which OOM-kills the shared self-hosted `gero-plain` runner. build:web is a
-# single vite process (~6GB) and bundles the options/popup/sidepanel app — where
-# essentially all Vue SFCs live. background/content/inject are TS entrypoints
-# with ~no SFCs, so this keeps the SFC-syntax coverage while fitting the runner.
+# This job builds the options/approval and sidepanel UIs, where the Vue SFCs
+# live. The full production command now builds four bundles sequentially.
+# Building all four again here would duplicate the required Ledger job below;
+# background/content/inject are covered there with production configuration.
 #
 # The other three entry points are NOT uncovered, and adding them here would be
 # duplicate work: midnight-ledger-verify.yml's `Ledger tests and extension
@@ -24,13 +22,11 @@ name: Dev Bundle Gate
 # `check-bundle-tdz: OK — N known offender(s)` line. Look there before concluding
 # that a production background break could reach `development` unnoticed.
 #
-# Why build-only (no tsc/eslint step): `npm run typecheck` (plain tsc) is
-# systemically red against this repo — tsc doesn't resolve unplugin-auto-imports
-# (`computed`, `ref`, ...) or the `browser` global, so it reports hundreds of
-# pre-existing false errors and would make the gate permanently fail. The vite
-# build DOES resolve auto-imports, so it reflects real buildability. (vue-tsc is
-# also unavailable: Vue 2.7 + TS 5.8 has no compatible version — 1.x caps at
-# ~TS 5.4, 2.x+ dropped Vue 2.) Cleaning up the tsc/lint debt is a separate task.
+# Vue-aware checking is available: `npm run typecheck` uses vue-tsc. Generate
+# auto-import/component declarations before comparing diagnostics. Historical
+# type and repo-wide lint debt is tracked in MAINTENANCE.md and issue 1313;
+# neither is a passing global gate. Touched code must pass ESLint, and new
+# type diagnostics must be fixed. Vite buildability is a separate check.
 #
 # Secret-free by design: it synthesizes a placeholder .env.production from the
 # VITE_* names the source references (VITE_* values are inlined runtime strings,

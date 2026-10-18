@@ -25,7 +25,7 @@ It cannot be toggled at runtime - it is inlined at build.
 
 **Reloading the extension tears down the side panel.** A reload at `chrome://extensions` kills the panel's page and its `store-sync` port, and its Inspect target disappears. Close and reopen the panel, and reopen its DevTools, before re-testing - otherwise you are reading a dead context and will conclude your fix did nothing.
 
-**Do not filter the console on `⏱️ PERF:`, `🔐 Auth:`, `📡 API:`, `💾 DB:` or `🔄 Sync:`.** Those prefixes are documented in ARCHITECTURE.md and CLAUDE.md and appear **zero times** in `src/`. The real searchable tags are `[PRF]`, `[Keystone]`, `[DApp]`, `[TREZOR]`, `[LEDGER]`, `[ROUTER]`, `🌙` (Midnight), `🔵 [webpage.ts]`, `❌`, `✅`.
+Search the relevant module for its actual `debugLog()` tags rather than assuming a shared prefix. Existing tags include `[PRF]`, `[Keystone]`, `[DApp]`, `[TREZOR]`, `[LEDGER]`, `[ROUTER]`, `🌙` (Midnight), `🔵 [webpage.ts]`, `❌`, `✅`.
 
 Background stack traces always point at `background/index.js:<line>`, never at a `.ts` file: the background bundle sets `sourcemap: false` unconditionally because 3000+ modules OOM the generator. Dev builds are unminified, so search the emitted file for the function name.
 

@@ -10,7 +10,7 @@ The local `@cardano-sdk` builder in `src/shared/utils/builder.ts` is the **minor
 
 So changing coin selection or the fee margin in `builder.ts` and then testing a Send does nothing. **Check the caller first.**
 
-Fee computation on the local path is `BrowserTxConstruction.minFee()` in `src/chrome/cardanoJsSdkCbor.ts`: it inserts N unique dummy vkey/signature pairs (N from `analyzeTransactionForSignatures()`), lets the SDK size the real CBOR, then adds a flat `80 * minFeeCoefficient` safety margin. CLAUDE.md's "witnessCount x 110 bytes" formula does not exist in the code.
+Fee computation on the local path is `BrowserTxConstruction.minFee()` in `src/chrome/cardanoJsSdkCbor.ts`: it inserts N unique dummy vkey/signature pairs (N from `analyzeTransactionForSignatures()`), lets the SDK size the real CBOR, then adds a flat `80 * minFeeCoefficient` safety margin. Transactions with existing witnesses use the SDK directly.
 
 Two local-builder invariants:
 
@@ -28,9 +28,9 @@ Two local-builder invariants:
 | Ledger, Keystone | **Document (UI) context** - never through the background |
 | Watch | No branch. Silently no-ops |
 
-Software signing decrypts the root key in the background, derives `CIP1852/1815'/account'` then per-signer sub-paths, signs the tx id, and returns **only the witness-set CBOR**. The key never leaves.
+Password-wallet software signing decrypts the root key in the background, derives `CIP1852/1815'/account'` then per-signer sub-paths, signs the tx id, and returns **only the witness-set CBOR**. The key never leaves.
 
-**Two documented exceptions to "private keys never leave the background", which ARCHITECTURE.md states as an absolute:**
+**Additional signing boundaries for PRF and hardware wallets:**
 
 - **PRF / passkey wallets**: WebAuthn PRF needs a document, which a service worker does not have, so the root key is decrypted in the UI context and sent to the background as a plain `number[]` in the SIGN_TX payload.
 - **Ledger and Keystone** sign entirely in document context.
@@ -62,7 +62,7 @@ Do not invent a scheme. Two exist:
 
 The old crypto-ts/CryptoJS outer AES wrap (MD5, one iteration) was **removed** because it negated PBKDF2 under the same password. Legacy nested blobs are still readable and are migrated to the single strong layer on first password unlock, best-effort so a failed rewrite can never break signing. Do not reintroduce an outer wrap.
 
-A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is Argon2id -> XChaCha20-Poly1305 with the header as AEAD associated data and a purpose byte that binds each blob to its field (`SecretPurpose`). It is written only while the `isKeyEnvelopeV2Enabled` kill switch is on (ships dark); readers shipped one release earlier, so a rollback can never meet a blob it cannot open.
+A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is Argon2id -> XChaCha20-Poly1305 with the header as AEAD associated data and a purpose byte that binds each blob to its field (`SecretPurpose`). It is written only while the `isKeyEnvelopeV2Enabled` kill switch is on. Do not infer reader compatibility from a release number: verify the actual recovery artifact against every stored format. Turning the writer flag off does not remove already-written `gpw2` data. Follow the [forward-recovery procedure](../../../../spikes/vue3-migration/RELEASE-READINESS.md); do not roll back to an older package with unverified readers.
 
 **Always write stored password secrets through `sealTextSecret` / `sealKeySecret`** (`src/shared/utils/secretWriters.ts`), never `encrypt` / `encryptWithPassword` directly: they pick `gpw2` or the current format from the flag. With the flag on, `src/chrome/secretMigration.ts` upgrades a wallet's existing secrets after a successful password decrypt (key-equivalence check, in-memory read-back, compare-and-swap per IndexedDB, storage read-back). A new secret stored under the spending password must be added to `CONFIG_SECRET_FIELDS` (`walletSecretFields.ts`) or it keeps the old password after a password change.
 

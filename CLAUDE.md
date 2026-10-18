@@ -11,11 +11,11 @@ Cardano blockchain wallet Chrome extension (Manifest V3). Multi-chain light wall
 - **Frontend**: Vue.js 3.5 + TypeScript + Vuetify 4.2
 - **Build**: Vite 7.3 (4 configs: main, background, content, inject)
 - **State**: Custom Vue reactive stores (not Vuex)
-- **DB**: Dexie 4.0.7 (IndexedDB) with versioned schemas
-- **Cardano**: `@cardano-sdk/core` v0.46.9 (preferred for new features)
+- **DB**: Dexie (version in package-lock.json) (IndexedDB) with versioned schemas
+- **Cardano**: `@cardano-sdk/core` (version in package-lock.json) (preferred for new features)
 - **Hardware Wallets**: Ledger, Trezor, Keystone
 - **Real-time**: Gero Sync — push-based WebSocket sync (`VITE_SYNC_WS_URL`)
-- **Crypto**: WebAssembly (bip39, blake2b), `@noble/ciphers` (ChaCha20), `@noble/hashes` (PBKDF2)
+- **Crypto**: Local chain SDK WASM, versioned password-secret encryption, and a separate PRF path
 
 ## Project Structure
 ```
@@ -25,20 +25,20 @@ src/
   stores/          # Vue reactive stores: walletStore, geroStore, networkStore, poolOperatorStore, etc.
   services/        # Business logic: sync, websocket (Gero Sync), walletManager, storeMessaging
   db/              # Database: gero-db.ts (app-level), wallet-db.ts (per-wallet)
-  api/             # Data clients, routed through gero-backend/Nexus: blockchain-api, nexus-tx-api, market-api, spo-api
+  api/             # Data clients: Gero/Nexus plus direct Esplora, Koios and Midnight providers
   shared/          # Reusable: utils/, composables/, components/
   options/         # Extension options page entry
-  popup/           # Extension popup entry
+  popup/           # Active approval views rendered by the options router
   sidepanel/       # Extension side panel entry
 ```
 
 ## Critical Patterns
 
 ### Chrome Messaging
-- **Options/Browser context**: `Messaging.sendToBackgroundFromOptions()`
-- **Popup context**: `Messaging.sendToBackground()`
+- **All wallet UI surfaces**: `Messaging.sendToBackgroundFromOptions()` for `MessageTypes.*`
+- **dApp-facing registry**: `Messaging.sendToBackground()`; selection is by registry, not window type
 - **Response format**: `{ data: { success, error?, result? }, target, sender }`
-- **Background handler**: `app.addToOptions(MessageTypes.X, async (req, sendResponse) => { ... return true; })`
+- **Background handler**: register with `app.addToOptions()`. The messaging listener keeps the channel open; call `sendResponse` exactly once on every path, including errors. The registered handler return value is ignored.
 
 ### State Management
 - Stores use `broadcastFromBackground()` to sync across contexts
@@ -58,7 +58,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 ```
 
 ### Transaction Fee Calculation (Conway Era)
-- `cardanoJsSdkCbor.ts`: `minFee()` adds witness overhead (witnessCount × 110 bytes × minFeeCoefficient)
+- `cardanoJsSdkCbor.ts`: `BrowserTxConstruction.minFee()` sizes unsigned transactions with unique dummy witnesses via the SDK, then adds `80 * minFeeCoefficient`. Already witnessed transactions use the SDK calculation directly
 - `builder.ts`: Always create change output for certificate/withdrawal-only transactions
 - `resolver.ts`: Recognizes Conway certificate types (Unregistration, Registration, StakeRegistrationDelegation)
 
@@ -68,8 +68,13 @@ npm run dev              # Dev (all contexts)
 npm run build            # Production build
 npm run typecheck        # TypeScript check
 npm run lint             # ESLint
-npm run pack             # Package .zip/.crx
+npm test -- --maxWorkers=2 # Full unit suite
+npm run design:check      # Design and contrast gates
 ```
+
+See [MAINTENANCE.md](MAINTENANCE.md) for diagnostic baselines and the
+[release runbook](spikes/vue3-migration/RELEASE-READINESS.md) for qualified
+packaging. Legacy `pack:*` utilities do not perform release qualification.
 
 ## Key Rules
 
@@ -89,7 +94,9 @@ npm run pack             # Package .zip/.crx
 - **CRITICAL**: `@click="handler"` passes Event as first arg, overriding defaults. Use `@click="handler()"` when function has default params.
 
 ### Security
-- All private keys encrypted (ChaCha20-Poly1305 AEAD with PBKDF2)
+- Write stored password secrets through `sealTextSecret` / `sealKeySecret` in
+  `secretWriters.ts`. They select field-specific current formats or purpose-bound
+  `gpw2` when enabled. Preserve legacy readers; PRF encryption is separate.
 - Background script isolation for sensitive operations
 - Never log sensitive data
 - Use `debugLog()` for dev logging
@@ -163,19 +170,19 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - Nav hiding: check flag in NavigationDrawer.vue menu items
 
 ## Background Polling
-- **Sync (Gero Sync tip push)**: Full speed when unlocked; throttled to every 2 min when locked (`walletManager.service.ts`)
+- **Sync (Gero Sync tip push)**: Event-driven in `walletManager.service.ts`. The two-minute value is a mutex acquisition timeout, not a locked-state polling throttle.
 - **Risk scores**: Every 12 hours (via Nexus)
 - **Fiat rates (USD→EUR)**: Fetched on demand by `useCurrencyConverter.ts` via `/api/price/fiatRates`. No background polling.
 - **Price data**: Provided by the market data API (`market-api.ts`, via backend), NOT by background alarms. No third-party price/mcap polling in the background.
 
 ## Performance
-- Login optimized to <200ms (non-blocking sync, deferred BringCache, trusted login response)
+- Keep login independent of sync connection establishment. Record measured timings and the tested scenario before making latency claims.
 - Use `Promise.all()` for parallel async, `setTimeout` for non-critical deferrals
-- Use `performance.now()` timing logs with `⏱️ PERF:` prefix
+- Use existing module-specific `debugLog()` calls with synthetic data; no universal timing-prefix convention is established.
 
 ## Common Issues
-- **WASM loading**: Files must be in `public/`, check vite WASM plugins
-- **Chrome messaging timeout**: Use `return true` for async handlers
+- **WASM loading**: Dependencies supply WASM; Vite plugins emit local assets and adapt worker loading. Check emitted paths and CSP.
+- **Chrome messaging timeout**: The listener keeps registered channels open; ensure every handler calls `sendResponse` exactly once on all paths.
 - **"No Table" error**: Apply schema on every DB open
 - **Store race conditions**: Always use in-memory state, not `chrome.storage.local.get()`
 - **Login freezing**: Make messaging init non-blocking
@@ -222,7 +229,13 @@ node scripts/design/contrast.mjs         # 56 WCAG checks against the real token
 Motion is feedback, not decoration. Keep spinners, ~1.4s skeleton shimmers, typing/dot indicators, and status/sync/connection pulses. Delete decorative loops (glow/breathe/float/aurora/color-shift). Durations resolve to `--g-dur-*`; prefer explicit `transition` property lists over `transition: all` (and never comma-list properties with a single trailing duration — that only animates the last one).
 
 ## External Integrations
-Data layer: **Nexus** (via gero-backend) — blockchain data, prices, DeFi/swap routing, and risk scores are all brokered server-side; the client carries no third-party data keys. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay (Guardarian removed 2026-09). Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
+Data layer: **Nexus** (via gero-backend) for primary Cardano data and routing.
+Bitcoin also uses Esplora, and SPO uses Koios directly. Midnight data uses
+Nexus/Gero Sync; proof generation can use direct Foundation/Arkhia services,
+with public indexer endpoints available for development fallback. Public client
+configuration varies by integration. Real-time: **Gero Sync** (WebSocket push).
+Fiat on-ramp: MoonPay (Guardarian removed 2026-09). Other: ADA Handle, Bring
+Cashback. Hardware: Ledger, Trezor, Keystone.
 
 ## Relevant Skills
 Use these slash commands when working on this project:
@@ -237,4 +250,4 @@ Use these slash commands when working on this project:
 - `/simplify` — Review changed code for quality and efficiency
 
 ---
-**Last Updated**: 2026-10-04
+**Last Updated**: 2026-10-18
