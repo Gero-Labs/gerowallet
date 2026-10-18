@@ -11,15 +11,15 @@ npm ci               # use the committed lockfile; installs the yorkie hook
 touch .env.development
 ```
 
-There is no `.env.example` (it was removed because it carried `MANIFEST_KEY`). Three variables are all you need to boot against a local backend:
+There is no committed `.env.example`. Create local configuration explicitly. Three variables are all you need to boot against a local backend:
 
 ```bash
 printf 'VITE_BACKEND_URL=http://localhost:8081\nVITE_NEXUS_URL=http://localhost:8081/api/nexus\nVITE_SYNC_WS_URL=ws://localhost:8081/sync\n' > .env.development
 ```
 
-`VITE_NEXUS_URL` points at `<backend>/api/nexus`, not at Nexus directly - the backend injects the API key. The client needs no third-party keys. To see everything the code can read: `grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u` (29 names today).
+`VITE_NEXUS_URL` points at `<backend>/api/nexus`, not at Nexus directly - the backend injects the API key. Integration-specific settings may also be needed; `VITE_*` values are public client configuration. To see everything the code can read: `grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u`.
 
-Those three point at a **backend you still have to run**, or the extension boots with no data - correct layout, empty wallet, every call failing. README.md step 3 has the Docker image and the `.env.backend` it needs; `curl http://localhost:8081/health` is the check. Decide up front which rung of the verification ladder you actually need:
+Those three point at a **backend you still have to run**, or the extension boots with no data - correct layout, empty wallet, every call failing. Use the current backend deployment/setup instructions; `curl http://localhost:8081/health` is the check. Decide up front which rung of the verification ladder you actually need:
 
 | You need | You need a backend? |
 |---|---|
@@ -80,29 +80,25 @@ All four set `emptyOutDir: false` so they do not wipe each other. Changing `src/
 
 **Do not start a second `npm run dev` while one is running.** `npm run clear` runs first and rimrafs the output the running server produced, then the new one dies on the strict port. For the same reason, starting `npm run dev` while Chrome has `extension/` loaded leaves a broken extension until all four builds finish - wait for them to settle, then reload.
 
-**`npm run clear` is not a clean slate.** It removes eight named paths only. `extension/public`, `extension/vendor`, `extension/options` and `extension/_metadata` survive, so a deleted asset can keep shipping. For a genuinely clean tree: `rm -rf extension`.
+**`npm run clear` is not a clean slate.** It removes eight named paths only. `extension/public`, `extension/vendor`, `extension/options` and `extension/_metadata` survive, so a deleted asset can keep shipping. For reproducible packaging, build in a fresh disposable checkout instead of reusing an output directory with unknown contents.
 
 **The manifest is generated, never hand-edited.** `scripts/manifest.ts` is the source; `scripts/prepare.ts` shells out to it. The dev watcher watches a path that does not exist (`src/manifest.ts`), so after editing `scripts/manifest.ts` you must re-run `npx esno ./scripts/manifest.ts` or restart `npm run dev` - otherwise the change silently does nothing.
 
 **Dev and production manifests differ.** `buildCSP(isDev)` puts `http://localhost:*` in `script-src`/`font-src` only in dev. Pointing a production-built `extension/` at a dev server gives you silent CSP blocks and a blank page.
 
-**Working in a git worktree?** `envDir` is the checkout root and `.env*` is gitignored, so a fresh worktree has no env files at all: the extension builds and loads, then every network call fails with no build error. Copy or symlink the `.env*` files in.
-
-`node_modules` may or may not be there - a harness-created worktree often already has a real one. **Check before linking**, because `ln -s` into an existing directory does not error, it silently creates `node_modules/node_modules`:
-
-```bash
-ls node_modules >/dev/null 2>&1 || ln -s ../../../node_modules node_modules
-```
-
-If you did link it, unstage the symlink before committing, and never `git add -A` while it exists. Also note the git stash stack is **shared** across worktrees - prefer a WIP commit to `git stash`.
+**Working in a git worktree?** `envDir` is the checkout root and `.env*` is
+ignored. Create the public configuration required for that checkout explicitly;
+do not assume another checkout's settings apply. Use its own normal `npm ci`
+for reproducible dependency checks. Shared `node_modules` does not establish a
+clean lockfile installation. The stash stack is shared across worktrees.
 
 **A background build that fails with `check-bundle-tdz: FAIL`** naming a module you never touched: the background is a single IIFE with no code splitting, so module evaluation order is a correctness constraint. The guard (`scripts/check-bundle-tdz.mjs`, baseline in `scripts/bundle-tdz-baseline.json`) catches the class of bug that once threw `Cannot access 'midnightSync_service' before initialization` and broke login. Fix by making the offending dynamic import static.
 
-Before you believe such a failure, check your install. The guard's keys are computed from bundled **dependency** code, so a `node_modules` that has drifted from `package-lock.json` - the symlink above pointing at a stale main checkout is the usual way - changes the module set, the emitted order and Rollup's `$N` suffixes, and reports offenders as fixed and introduced that no commit caused. `npm ci` and rebuild first; compare against what the `Ledger tests and extension bundles` check built.
+Before you believe such a failure, check your install. The guard's keys are computed from bundled **dependency** code, so a `node_modules` that has drifted from `package-lock.json` - a dependency directory shared with another checkout is one possible cause - changes the module set, the emitted order and Rollup's `$N` suffixes, and reports offenders as fixed and introduced that no commit caused. `npm ci` and rebuild first; compare against what the `Ledger tests and extension bundles` check built.
 
-**`components.d.ts` regenerates on every build** and is tracked. The file is `src/components.d.ts` (Vite's root is `src/`); a stale repo-root copy from before the Vue 3 migration was deleted, so if one reappears, delete it rather than commit it. Never hand-edit it. Check `git status` before committing so a stale regeneration does not ride along.
+**`components.d.ts` regenerates on every build** and is tracked. The file is `src/components.d.ts` (Vite's root is `src/`); a stale repo-root copy from before the Vue 3 migration was deleted, so if one reappears, delete it rather than commit it. Never hand-edit it. Build before comparing Vue-aware diagnostics so auto-import declarations also exist. Check `git status` before committing so a stale regeneration does not ride along.
 
-**WASM is not in the repo.** There are zero `.wasm` files under `src/` and no `public/` directory. Every WASM binary ships inside an npm package and is emitted by `vite-plugin-wasm` next to the bundle that consumes it. If WASM breaks in the background, look at the `service-worker-fixes` plugin in `vite.config.background.mts:458-500`, which rewrites `document.currentScript` and `document.baseURI` so the emitted `new URL(...)` resolves inside a service worker.
+**WASM is not in the repo.** WASM dependencies are emitted by the build, not maintained as source binaries. Every WASM binary ships inside an npm package and is emitted by `vite-plugin-wasm` next to the bundle that consumes it. If WASM breaks in the background, look at the `service-worker-fixes` plugin in `vite.config.background.mts`, which rewrites `document.currentScript` and `document.baseURI` so the emitted `new URL(...)` resolves inside a service worker.
 
 ## Packaging
 

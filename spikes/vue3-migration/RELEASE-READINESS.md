@@ -1,34 +1,38 @@
 # Vue 3 release and recovery readiness
 
-This document records release preparation for
-[V14](https://github.com/Gero-Labs/gerowallet/issues/1296). It does not approve a
-production release. The migration branch is pushed, and the package version
-remains `2.7.3` for the authorized hosted dry run. A future release version must
-be committed and reviewed before publication. Production tagging, store
-submission, and rollout require separate authorization.
+This is the release procedure for
+[V14 #1296](https://github.com/Gero-Labs/gerowallet/issues/1296). The migration
+and follow-up fixes are merged; development is `2.7.3`. Release version and
+source must be committed and reviewed before publication. Production tagging,
+store submission, and rollout require release-owner authorization.
 
-## Current candidate and qualification
+## Current qualification boundary — October 18, 2026
 
-The [review response](REVIEW-RESPONSE.md) records fixes from the AI review and
-populated-wallet browser qualification. Commits `4f57b4fb` and `020c7805` change
-production code after the original integration record. Use the
-[review-fix evidence record](evidence/review-fixes.json) for current tests,
-artifact hashes, runtime coverage, source identity, and hosted workflow status.
-Do not transfer a passing result from an older package to the current source.
+The current local baseline is development
+`1a4d50ac5e1d51fc9a3601a63808c79f839ff6b2`. See the
+[maintenance handoff](../../MAINTENANCE.md) and
+[dated evidence](evidence/maintenance-2026-10-18.json): normal clean install,
+5,239 tests passed without skips, complete production build, static guards,
+and offline Chromium entrypoint smoke. The build uses a synthetic public
+manifest key and does not establish store identity or production readiness.
 
-The production public manifest key matches the canonical store ID, and GitHub's
-identity settings use those existing values. The
-[hosted dry run](https://github.com/Gero-Labs/gerowallet/actions/runs/38424347669)
-passes on `e872dd09`, including 5,076 tests, a complete production build, and
-the expected-ID artifact gate. The retained ZIP and downloaded directory both
-match every recorded checksum. The publish job is skipped. Local production and
-beta checks also pass against their configured channel identities; release-owner
-channel approval remains separate.
+Keep these release gates open:
 
-Keep physical signing, existing-profile upgrade and recovery, full provider and
-platform coverage, and publication authority as explicit release gates. The
-latest record distinguishes completed checks from pending or unavailable
-coverage; it does not close those gates by implication.
+- [#1284](https://github.com/Gero-Labs/gerowallet/issues/1284): missing coverage
+  and live prerequisites, with exact wallet/harness SHAs.
+- [#1295](https://github.com/Gero-Labs/gerowallet/issues/1295): supported-device,
+  platform, live-provider, accessibility, and performance acceptance.
+- [#1296](https://github.com/Gero-Labs/gerowallet/issues/1296): expected channel
+  identity on the retained candidate, supported production-profile upgrade
+  (including 2.7.2), forward recovery, and release-owner access.
+- [#1298](https://github.com/Gero-Labs/gerowallet/issues/1298): authorized beta,
+  store submission, and production observation.
+
+The [review-fix record](evidence/review-fixes.json) retains earlier packaging
+and identity checks, including the reported hosted dry run on `e872dd09`.
+Those historical results do not qualify this newer source. Historical hosted
+run links have not been revalidated by this documentation update. Every new
+candidate needs its own checksums, expected ID, and scenario evidence.
 
 ## Historical integration qualification
 
@@ -59,7 +63,7 @@ that checkpoint; use the current record above for subsequent qualification.
 | Real background synchronization and restart | Pass in offline scope | `store-browser-final/report.json` passes 12 checks with zero page errors on the final production artifact. Production UI creates both synthetic wallets; real broadcasts, password unlock, switching, persistence, and process restart work without harness state writes. Wallet A reaches the dashboard after the existing 300-second offline safety timeout. Wallet B's first-restore dashboard and live synchronization are not certified. A saved lock is verified before restart; existing startup policy intentionally clears it when no session unlock method is configured. |
 | Dependency advisories | Reviewed numbers; release decision open | `final-audit.json` records 73 findings: 19 low, 31 moderate, 23 high, zero critical. Remaining advisories need recorded owners, exposure assessment, and release disposition. This is not a clean dependency audit. |
 | Stable store identity and exact candidate | Open | Local artifact reports explicitly set `identityVerified: false`. Match the intended production/beta public manifest key to the release owner's expected extension ID, then qualify the committed candidate and its retained archives. |
-| In-place upgrade and forward recovery | Open | Exercise an existing 2.7.3 profile and a higher-version recovery package without uninstalling. Cover supported secret formats, flag-on migration, flag-off readers, database state, browser restart, and worker termination. Follow the recovery procedure below. |
+| In-place upgrade and forward recovery | Open | Exercise supported production profiles (including 2.7.2) and a higher-version recovery package without uninstalling. Cover supported secret formats, flag-on migration, flag-off readers, database state, browser restart, and worker termination. Follow the recovery procedure below. |
 | Physical authentication and signing | Open | Test PassKey and supported Ledger, Trezor, and Keystone paths on the supported platforms and test networks. Include Cardano, Bitcoin, and Midnight where supported, cancellation/replacement while authorization is pending, and fresh approval after replacement. Mocked signing tests do not establish physical device acceptance. |
 | Full UI and provider acceptance | Open | Complete desktop/narrow, locale, cached navigation, real native sidepanel, and provider integration checks across the supported chain matrix. Record any unavailable provider or platform explicitly. |
 | Final review, beta observation, and publication | Open | Complete the final AI review and address findings on the candidate. Obtain the release owner's decision, run the approved beta observation period, confirm store access and lead times, then authorize V16 publication separately. No store action has occurred. |
@@ -178,7 +182,7 @@ rebuilds the artifact, or submits anything to the Chrome Web Store.
 
 The authorized `dry_run=true`, `expected_version=2.7.3` hosted invocation passes.
 Its run URL, tested commit, outcome, and measured runner resources are in the
-[current evidence record](evidence/review-fixes.json). Store permissions, protected release
+[historical review-fix record](evidence/review-fixes.json). Store permissions, protected release
 environments, and store acceptance remain separate release-owner checks.
 The authorized dry run does not authorize `dry_run=false` or production tagging.
 

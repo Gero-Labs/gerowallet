@@ -1,7 +1,7 @@
 # Vue 3 migration pilot
 
 This is the frozen V01 experiment and Vue 2 baseline record. The production
-migration now lives on `migration/vue3-vuetify4`; see
+migration merged through PR #1302 and follow-up PR #1305; see
 [implementation and verification](IMPLEMENTATION.md) for its scope and results.
 Statements below about unchanged production dependencies describe the V01
 checkpoint, not the current integration branch.
@@ -11,7 +11,7 @@ of [the migration epic](https://github.com/Gero-Labs/gerowallet/issues/1282).
 It proves selected framework contracts before the production wallet changes.
 It does not contain a wallet, real signing, production accounts, or chain SDKs.
 
-The local integration branch is **migration/vue3-vuetify4**. The first review
+The historical integration branch was **migration/vue3-vuetify4**. The first review
 branch, **migration/v01-foundation-pilot**, starts from development commit
 50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a (GeroWallet 2.7.3).
 That includes the explorer-selection change merged after the original audit
@@ -36,17 +36,16 @@ from the pilot's independently locked packages. Review these deliverables:
 - The source, build runner, and browser checks in this directory.
 - Baseline and pilot evidence described below.
 
-V01 remains open until its technical evidence, ownership, and forecast are
-reviewed. A passing small pilot cannot establish complete wallet parity.
+V01 was closed in the October 18 implementation audit. Remaining release
+coverage is tracked in the [current handoff](IMPLEMENTATION.md). A passing small pilot cannot establish complete wallet parity.
 V02 supplies the full application baselines and upgrade fixtures; V03–V12
 convert and integrate production code; V13 qualifies the release candidate.
 
 ## Run the pilot
 
-Use Node 24.19.0 for this recorded experiment. The machine's original Node
-20.11.0 and the repository's current CI Node 22.11.0 are below the selected
-Vite 7 toolchain's minimum patch versions. V03 must update the migration
-toolchain runtime and CI together.
+Use Node 24.19.0 for this recorded experiment. At the pilot checkpoint, local Node 20.11.0 and CI Node 22.11.0 were
+below the selected toolchain's minimum patch versions. Production and CI now
+use Node 24.19.0; keep the frozen experiment distinct from current setup.
 
 The browser runner resolves the pinned Playwright package from each target.
 Install its Chromium browser on a fresh machine after installing the target:

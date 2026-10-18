@@ -1,30 +1,31 @@
 # Vue 3 migration implementation and verification
 
-The branch `migration/vue3-vuetify4` migrates GeroWallet 2.7.3 from Vue 2
-and Vuetify 2 to native Vue 3.5.44 and Vuetify 4.2.4. Its base is development
-commit `50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a`. The package version remains
-2.7.3 for review and dry-run qualification. No release version bump is included.
+The Vue 3/Vuetify 4 migration merged in
+[PR #1302](https://github.com/Gero-Labs/gerowallet/pull/1302), followed by
+[PR #1305](https://github.com/Gero-Labs/gerowallet/pull/1305). Development at
+`1a4d50ac5e1d51fc9a3601a63808c79f839ff6b2` includes those changes and PR #1306.
+The package remains `2.7.3`; implementation acceptance is separate from
+production release authorization under [epic #1282](https://github.com/Gero-Labs/gerowallet/issues/1282).
 
-This work implements [epic #1282](https://github.com/Gero-Labs/gerowallet/issues/1282).
-The user initially requested a local PR and an AI review, then authorized branch
-publication and a hosted dry run. The branch is now pushed. Production tagging,
-store submission, and rollout remain outside that authorization. Acceptance
-below distinguishes implemented work from device and release evidence.
+## Current handoff — October 18, 2026
 
-## Current review-fix candidate
+[MAINTENANCE.md](../../MAINTENANCE.md) provides current commands, ownership,
+dependency cadence, and follow-up debt. The
+[dated evidence](evidence/maintenance-2026-10-18.json) records a fresh normal
+install, 5,239 passing tests across 466 files without skips, four production
+bundles, and a packaged Chromium entrypoint smoke. Type checking still reports
+54 diagnostics and ESLint 112 errors; neither is represented as passing.
 
-The [review response](REVIEW-RESPONSE.md) describes the source fixes in
-`4f57b4fb` and the native Vuetify navigation fix in `020c7805`. Use the
-[review-fix evidence record](evidence/review-fixes.json) for the latest tested
-source, test results, package hashes, populated-wallet browser coverage, and
-hosted workflow status. Refreshed qualification must identify the candidate it
-actually exercised; results below for older packages are historical.
+The artifact uses a synthetic public manifest key. Offline browser smoke does
+not qualify store identity, physical devices, providers, profile upgrades, or
+rollout. Those remain in the open tickets below. Historical JSON records are
+preserved; their candidate hashes and run results do not transfer to newer code.
 
-The production public manifest key matches the canonical store ID. The
-[hosted dry run](https://github.com/Gero-Labs/gerowallet/actions/runs/38424347669)
-passes on packaging commit `e872dd09`, including 5,076 tests, the complete build,
-and artifact identity/integrity checks. Its publish job is skipped. This result
-does not authorize production publication.
+The [review response](REVIEW-RESPONSE.md) and
+[review-fix evidence](evidence/review-fixes.json) describe the earlier October
+13–14 review sequence. Use them for historical provenance, not as the latest
+candidate record. Remote run links in old records were not requalified by this
+documentation update.
 
 ## Historical integration evidence
 
@@ -36,30 +37,30 @@ code, so this record does not certify the current candidate.
 
 ## Ticket coverage
 
-The table records implementation scope and remaining release acceptance. Check
-the current evidence record for the qualification status of the reviewed source.
+The October 18 ticket audit closed verified implementation scope. Outstanding
+device, profile, provider, and release criteria remain with their owning
+tickets; closing implementation tickets does not mark those criteria complete.
 
-| Ticket | Local implementation and evidence | Remaining acceptance |
-| --- | --- | --- |
-| [V01 #1283](https://github.com/Gero-Labs/gerowallet/issues/1283) | Frozen dependency/inventory baseline; independent Vuetify 3 and 4 pilots, each with 14 passing browser checks. | Review target and final forecast. |
-| [V02 #1284](https://github.com/Gero-Labs/gerowallet/issues/1284) | Vue Test Utils 2 harness, reconciled legacy explorer expectations, deterministic timeout test, migrated browser fixtures, new real-control regression tests. | Complete supported-platform and encrypted-profile matrix. |
-| [V03 #1285](https://github.com/Gero-Labs/gerowallet/issues/1285) | Node 24.19, Vite 7.3.7, Vue plugin, normal peer resolution, clean lockfile install, all four extension build configurations; hosted dry run passes on `e872dd09`. | Required pull-request checks after review and integration. |
-| [V04 #1286](https://github.com/Gero-Labs/gerowallet/issues/1286) | Both createApp roots, Router 4, late hydration guards, query handling, RouterView/KeepAlive conversion, real away/back lifecycle tests. | Supported-browser smoke at the reviewed candidate. |
-| [V05 #1287](https://github.com/Gero-Labs/gerowallet/issues/1287) | Reactive stores; proxy-safe Chrome and Dexie boundaries; real store/port integration without published-state overrides; persistence and rollback tests. | In-place browser-profile upgrade and recovery rehearsal. |
-| [V06 #1288](https://github.com/Gero-Labs/gerowallet/issues/1288) | I18n 11.4.14 runtime-only build; exhaustive production-compiler pass over 16,839 messages; literal-at-sign escaping; locale/plural tests. | Visual locale sweep at narrow and desktop widths. |
-| [V07 #1289](https://github.com/Gero-Labs/gerowallet/issues/1289) | Shared model/emits, activators, inputs, overlays, toast replacement, numeric steppers, responsive/theme compatibility. | Final visual review. |
-| [V08 #1290](https://github.com/Gero-Labs/gerowallet/issues/1290) | Awaited form validation, approval freshness through async boundaries, single-flight signing, stale key wiping, correlated QR responses and Bitcoin unsigned-transaction matching. | Physical PassKey and hardware signing on supported test networks. |
-| [V09 #1291](https://github.com/Gero-Labs/gerowallet/issues/1291) | Dashboard, assets, contacts, send/history, market tables, sidepanel and draggable library migrated; browser drag/persistence regressions. | Full three-chain visual and transaction matrix. |
-| [V10 #1292](https://github.com/Gero-Labs/gerowallet/issues/1292) | Swap custom-element boundary preserved; perps/earn/vault controls and native tables migrated. | Live provider integration and test-network transaction acceptance. |
-| [V11 #1293](https://github.com/Gero-Labs/gerowallet/issues/1293) | Staking, governance, pool registration, card and Help controls migrated; real pool/relay and Help navigation regressions. | Provider/device checks and final visual review. |
-| [V12 #1294](https://github.com/Gero-Labs/gerowallet/issues/1294) | Vuetify 4 final runtime; Vue 2 host plugins/compiler/decorators removed; no compat runtime; AI review source findings addressed. | Close review acceptance against the refreshed candidate evidence. |
-| [V13 #1295](https://github.com/Gero-Labs/gerowallet/issues/1295) | Automated suite, source/type baseline comparison, production browser checks and artifact qualification. | External matrix and exact-reviewed-candidate acceptance. |
-| [V14 #1296](https://github.com/Gero-Labs/gerowallet/issues/1296) | Artifact/version/CSP/WASM/hash checker and negative tests; compatible secret-reader suites; tested-artifact release workflow and forward-recovery runbook; production identity configuration verified. | Exact-package channel identity, real profile upgrade/recovery, and release-owner access. |
-| [V15 #1297](https://github.com/Gero-Labs/gerowallet/issues/1297) | Contributor/runtime/API guidance, implementation ledger and release/recovery instructions. | Final reviewer handoff and platform evidence. |
-| [V16 #1298](https://github.com/Gero-Labs/gerowallet/issues/1298) | Branch publication and hosted dry-run qualification authorized; manual workflow defaults to dry run and cannot rebuild or mutate the tested source before tagging. | Separately authorized beta distribution, observation, store submission, and rollout. |
-
-No issue is automatically closed by this local implementation. In particular,
-an integration-branch change is not equivalent to a store rollout.
+| Ticket | Status and remaining scope |
+| --- | --- |
+| [V01: dependency/pilot decision #1283](https://github.com/Gero-Labs/gerowallet/issues/1283) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V03: build toolchain #1285](https://github.com/Gero-Labs/gerowallet/issues/1285) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V04: bootstrap/router #1286](https://github.com/Gero-Labs/gerowallet/issues/1286) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V05: reactive stores #1287](https://github.com/Gero-Labs/gerowallet/issues/1287) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V06: i18n #1288](https://github.com/Gero-Labs/gerowallet/issues/1288) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V07: shared controls #1289](https://github.com/Gero-Labs/gerowallet/issues/1289) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V08: authentication/approvals #1290](https://github.com/Gero-Labs/gerowallet/issues/1290) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V09: wallet screens #1291](https://github.com/Gero-Labs/gerowallet/issues/1291) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V11: ancillary features #1293](https://github.com/Gero-Labs/gerowallet/issues/1293) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V12: integration cleanup #1294](https://github.com/Gero-Labs/gerowallet/issues/1294) | Closed: verified implementation; release acceptance retained in open gates below. |
+| [V02 #1284](https://github.com/Gero-Labs/gerowallet/issues/1284) | Open: full coverage and prerequisites. |
+| [V10 #1292](https://github.com/Gero-Labs/gerowallet/issues/1292) | Open: vault transfers intentionally disabled pending provider capability. |
+| [V13 #1295](https://github.com/Gero-Labs/gerowallet/issues/1295) | Open: final exact-candidate qualification. |
+| [V14 #1296](https://github.com/Gero-Labs/gerowallet/issues/1296) | Open: channel identity, supported-profile upgrade and recovery. |
+| [V15 #1297](https://github.com/Gero-Labs/gerowallet/issues/1297) | Documentation handoff prepared; closes after review/merge. |
+| [V16 #1298](https://github.com/Gero-Labs/gerowallet/issues/1298) | Open: beta, submission, and production rollout. |
+| [Maintenance #1313](https://github.com/Gero-Labs/gerowallet/issues/1313) | Open: type/lint diagnostic remediation. |
+| [Maintenance #1314](https://github.com/Gero-Labs/gerowallet/issues/1314) | Open: advisory triage and coordinated dependency updates. |
 
 ## Implementation decisions
 
@@ -95,9 +96,13 @@ proxies without converting dates, typed arrays, maps, sets or big integers to
 JSON-shaped substitutes. The frozen legacy, gpw1, gpw2 and PassKey compatibility
 tests remain mandatory. See [release and recovery readiness](RELEASE-READINESS.md).
 
-## Reproduce local qualification
+## Historical integration qualification
 
-Use Node 24.19.0 and npm 11.1.0. The integration uses Vitest/UI 4.1.11 because the
+For current reproduction, use [MAINTENANCE.md](../../MAINTENANCE.md), including
+build-generated declarations before type checking. The commands and counts
+below describe the original integration checkpoint.
+
+That checkpoint used Node 24.19.0 and npm 11.1.0. The integration uses Vitest/UI 4.1.11 because the
 initial 3.2.7 graph retained disclosed test-tool vulnerabilities. The final
 lockfile also resolves the compatible shell-quote fix. npm 10 and 11 hit an
 Arborist error while resolving that development-tool update; npm 12.2.0 generated
@@ -127,8 +132,8 @@ skips. Full ESLint retained 116 errors versus 268 in the baseline; the Vue-aware
 check retained 56 TypeScript errors versus 242 baseline diagnostics. Both
 comparisons found zero introduced diagnostics, and production SFCs had none.
 Changed-file lint, the unchanged design budgets, and all 56 contrast checks
-passed. Use the [review-fix record](evidence/review-fixes.json) for the refreshed
-results after the review and populated-wallet runtime fixes.
+passed. The [review-fix record](evidence/review-fixes.json) preserves the subsequent
+review checkpoint; the October 18 ledger above is the current local baseline.
 
 `typecheck` now uses `vue-tsc`; `typecheck:vue` is an explicit alias. The older
 TypeScript-only command remains available as `typecheck:ts` for baseline

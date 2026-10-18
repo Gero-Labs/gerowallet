@@ -5,11 +5,11 @@ description: Use when building a feature, fixing a bug, reviewing code, or getti
 
 # Developing on Gero Wallet
 
-A Manifest V3 Chrome extension: Vue 3.5 + Vuetify 4.2 + TypeScript, four independent Vite bundles, three blockchains, keys held in the background service worker.
+A Manifest V3 Chrome extension: Vue 3.5 + Vuetify 4.2 + TypeScript, four independent Vite bundles, multiple chains, with wallet-specific worker, PRF and hardware signing boundaries.
 
 ## Start here: three facts that reverse your instincts
 
-**1. The two commands the PR checklist tells you to run are not gates and never pass.**
+**1. Global diagnostics have a tracked baseline; touched code must be clean.**
 `npm run typecheck`, `npm run typecheck:vue`, and repo-wide lint still expose historical diagnostics. The Vue 3 toolchain now supports SFC type checking with vue-tsc; compare diagnostics with the baseline and fix new errors rather than relying on an absolute count. Lint every touched file and run the relevant regression tests. Do not suppress diagnostics or repair unrelated files to make a count look smaller.
 
 **2. What actually blocks you is the pre-commit hook and four required checks.**
@@ -30,7 +30,7 @@ isolation to distinguish load sensitivity from a regression; keep both results.
 ## Before writing code
 
 - **Search for it first.** Most "add X" tasks are already half-built. Transactions already has a CSV export; `dashboard.hideBalances` already exists; four near-identical `export` i18n keys already exist. Grep the module, the i18n values, and `git log --oneline -- <path>` before designing anything.
-- **Trust code over docs.** README.md and ARCHITECTURE.md are broadly good; CLAUDE.md is authoritative on intent but carries stale specifics (dependency versions, `src/popup` as a live entry, WASM in `public/`, the `minFee` formula). `package.json` is the only truth for versions. See `references/doc-drift.md`.
+- **Verify guidance against source.** Read `package.json` and its lockfile for versions. [MAINTENANCE.md](../../../MAINTENANCE.md) records dated debt and reproduction; `references/doc-drift.md` maps claims to authoritative sources. Fix new drift in the same PR.
 - **Ask which chain.** Cardano, Bitcoin and Midnight are three separate code paths on the same screens. A fix verified on one is not a fix. See `references/chains.md`.
 
 ## The verification ladder
@@ -39,17 +39,17 @@ Run cheap to expensive, and stop lying to yourself about what each one proves.
 
 | Command | Time | What it actually proves |
 |---|---|---|
-| `npx eslint <files you changed>` | ~2s | The pre-commit lint gate will pass. Repo-wide lint is meaningless. |
+| `npx eslint <files you changed>` | ~2s | Touched files satisfy the lint rule; global debt is tracked separately. |
 | `npm run design:check` | ~2s | The design ratchet and 56 WCAG checks pass. Also a required-check step. |
 | `npx vitest run <paths>` | seconds | Only what you point it at. Re-run a failing file alone before calling it a regression. |
 | `npm run build:web -- --mode production` | ~90s | Every SFC parses and the bundle resolves. This is the real buildability gate, and what CI runs. |
-| `npm run dev` + load `extension/` in Chrome | minutes | The only thing that proves runtime behaviour. Nothing else does. |
+| `npm run dev` + load `extension/` in Chrome | minutes | Interactive runtime checks; real packaged-browser harnesses also provide scoped runtime evidence. |
 
 `npm run build` now builds the four production bundles sequentially. Keep that ordering: running four 6 GB Vite processes together can exhaust memory. For a UI-only change, use `npm run build:web -- --mode production`; release qualification needs all four bundles plus the packaged artifact checks.
 
 ## Non-negotiables
 
-- **The design ratchet has zero headroom.** 12 of 15 metrics sit at exactly their budget today (`hexOccurrences 779/779`, `hexDistinct 287/287`, `fontSizeDistinct 75/75`, `clickableDivs 106/106`, `formatFnForks 15/15`, ...). One new hex literal, radius, font-size, `transition: all`, clickable `<div>`, `outline: none` or forked formatter blocks your commit and the required CI check. (`!important`, `backdrop-filter` and infinite animations still have a little headroom - run the audit rather than assuming either way.) Scope matters: **style metrics scan `src/**/*.{vue,scss,css}` only**, so a `#1122`-style PR reference in a comment counts as a hex colour there (write `PR 1122`) but cannot trip it in a `.ts` file. `formatFnForks` scans a different set, `src/**/*.{ts,vue}`, so a TypeScript-only diff can still break the ratchet by forking a formatter. See `references/design-system.md`.
+- **The design ratchet may not regress.** Read current budgets and run the audit; do not copy old metric counts or assume headroom. Scope matters: **style metrics scan `src/**/*.{vue,scss,css}` only**, so a `#1122`-style PR reference in a comment counts as a hex colour there (write `PR 1122`) but cannot trip it in a `.ts` file. `formatFnForks` scans a different set, `src/**/*.{ts,vue}`, so a TypeScript-only diff can still break the ratchet by forking a formatter. See `references/design-system.md`.
 - **Never `git commit --no-verify`.** The single hook entry chains all three gates, so skipping lint silently skips the ratchet and the contrast check too. You will find out in CI instead.
 - **Every new i18n key goes in `us.ts`, `de.ts` and `es.ts` in the same commit.** `src/plugins/i18n.parity.spec.ts` fails on drift, and the required `Production bundle (SFC parse)` check runs it. At runtime a missing translation silently renders English, and a key missing from `us.ts` renders the raw key text to the user. Warnings are deliberately silenced. See `references/i18n.md`.
 - **After touching `src/chrome/`, reload the extension at `chrome://extensions`.** `npm run dev` does rebuild the background bundle on save, but an MV3 service worker keeps running the old one until you reload.
@@ -71,7 +71,7 @@ Run cheap to expensive, and stop lying to yourself about what each one proves.
 | Tests: what exists, what runs, what is flaky | `references/testing.md` |
 | A bug you cannot reproduce or locate | `references/debugging.md` |
 | Commit, PR, required checks, review, merge | `references/shipping.md` |
-| Where CLAUDE.md and ARCHITECTURE.md are out of date | `references/doc-drift.md` |
+| Documentation source map and drift prevention | `references/doc-drift.md` |
 
 ## Red flags
 

@@ -2,7 +2,7 @@
 
 ## Branch
 
-Branch from `development`, target `development`. `main` is the release branch, is unprotected, and is months behind. There are no `release/*` branches - releases are tagged at release time, and a hotfix branches from the tag.
+Branch from `development`, target `development`. Release and recovery branches must start from a verified source selected through the release runbook. Check current branch protection and release state rather than assuming an old branch or tag is qualified.
 
 ```bash
 git checkout development && git pull && git checkout -b fix/<slug>
@@ -64,13 +64,13 @@ Required checks on `development` (these are job `name:` strings, not workflow na
 | `Production bundle (SFC parse)` | `dev-bundle-gate.yml` | Explicit regression suites, including secret readers/migration, stores, navigation and i18n; `npm run design:check`; then `build:web` against a synthesized placeholder `.env.production`. Read the workflow for the current path list. |
 | `npm ci (lock in sync)` | `lockfile-check.yml` | `npm ci --ignore-scripts` |
 | `ESLint flat config loads` | `eslint-check.yml` | `eslint --print-config` on two files. It lints **no source** - it only proves the flat config resolves |
-| `Ledger tests and extension bundles` | `midnight-ledger-verify.yml` | The Midnight + crossDevice vitest slice, then `scripts/build-isolated-extension.mjs` which builds all five production entry points. Deliberately **not** path-filtered, so it runs on every PR |
+| `Ledger tests and extension bundles` | `midnight-ledger-verify.yml` | The Midnight + crossDevice vitest slice, then `scripts/build-isolated-extension.mjs` which builds all four production bundles plus manifest preparation. Deliberately **not** path-filtered, so it runs on every PR |
 
 ### Getting it approved, concretely
 
 Four checks green is not enough. Also enforced:
 
-- **1 approving review, and you cannot approve your own PR.** GitHub refuses it on authorship (`Can not approve your own pull request`). A solo-authored PR therefore needs a second reviewer, or `gh pr merge --squash --admin` if you have that right. (`require_last_push_approval` is **false** here, so pushing a commit to *someone else's* PR does not disqualify you from approving it.)
+- **1 approving review, and you cannot approve your own PR.** GitHub refuses it on authorship (`Can not approve your own pull request`). A solo-authored PR therefore needs an independent reviewer. (`require_last_push_approval` is **false** here, so pushing a commit to *someone else's* PR does not disqualify you from approving it.)
 - **`dismiss_stale_reviews: true`** - every push drops the approval you already had. On a long-lived branch that means merge-from-`development`, then re-approve, every round.
 - **`strict: true`** - the branch must be up to date with `development` before it can merge.
 - **`required_conversation_resolution`** - a fully green, approved PR still reports `BLOCKED` while any review thread is unresolved. REST does not expose threads; list them over GraphQL.
@@ -120,7 +120,7 @@ provider, beta, or production-verification gates.
 - `bitcoinjs-lib` is frozen at exactly `6.1.7` by `@babylonlabs-io/btc-staking-ts`'s single-version peer. Bumping it breaks `npm ci` and re-locking does not fix it.
 - `@midnightntwrk/ledger-v9` must move together with all four sibling `wallet-sdk-*` packages, or npm quietly nests a second `wasm-bindgen` copy.
 
-To resync a drifted lockfile: `npm install --package-lock-only`, then validate with a **real** `npm ci` - `--package-lock-only` skips peer resolution, so it will not reproduce the ERESOLVE the gate hits.
+To resync a drifted lockfile: `npm install --package-lock-only`, then validate with a **real** `npm ci` - a lockfile-only operation does not prove a clean installation. Do not force or bypass peer resolution.
 
 ## Security issues
 
