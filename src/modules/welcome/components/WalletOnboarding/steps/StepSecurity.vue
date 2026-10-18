@@ -4,12 +4,12 @@
     <v-form ref="nameForm" v-model="nameValid" style="width: 100%;">
 
       <!-- Wallet name field -->
-      <div class="t-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <label :for="nameId" class="t-label d-block mb-2">{{ $t('welcome.walletName') }}</label>
       <v-text-field
+        :id="nameId"
         v-model="name"
         density="compact"
         variant="filled"
-        :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
         :rules="nameRules"
         class="mb-3"
@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, getCurrentInstance, useId } from 'vue';
 import rules from '@/utils/rules';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import { NetworkInfo } from '@/utils/networks';
@@ -114,6 +114,7 @@ const nameRules = [(value: string) => rules.required()(value.trim()), rules.maxC
 
 // Wallet name
 const name = ref(generateWalletName());
+const nameId = useId();
 
 // Security method. null = probe still pending (never claim "not supported"
 // while checking — the first Windows Hello capability call can take seconds).

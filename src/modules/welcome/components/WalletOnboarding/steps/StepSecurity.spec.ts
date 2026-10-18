@@ -42,3 +42,15 @@ describe('wallet name validation', () => {
     } finally { wrapper.unmount(); }
   });
 });
+
+describe('wallet name label', () => {
+  it('names the field once, from the section label', () => {
+    const wrapper = mount(StepSecurity, { props: { network }, global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } } });
+    try {
+      const input = wrapper.find('input[type=text]');
+      const labels = wrapper.findAll('label, .t-label').filter((el) => el.text() === 'welcome.walletName');
+      expect(labels).toHaveLength(1);
+      expect(labels[0].attributes('for')).toBe(input.attributes('id'));
+    } finally { wrapper.unmount(); }
+  });
+});

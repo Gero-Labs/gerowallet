@@ -4,12 +4,12 @@
     <v-form ref="secureForm" v-model="formValid" style="width: 100%;">
 
       <!-- Wallet name field -->
-      <div class="t-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <label :for="nameId" class="t-label d-block mb-2">{{ $t('welcome.walletName') }}</label>
       <v-text-field
+        :id="nameId"
         v-model="name"
         density="compact"
         variant="filled"
-        :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
         :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
         class="mb-2"
@@ -25,7 +25,7 @@
           v-model="spendingPassword"
           density="compact"
           variant="filled"
-          :label="$t('welcome.spendingPassword')"
+          :label="$t('welcome.password')"
           :type="showSpending ? 'text' : 'password'"
           :append-inner-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
           @click:append-inner="showSpending = !showSpending"
@@ -90,7 +90,7 @@
         v-model="recoveryPassword"
         density="compact"
         variant="filled"
-        :label="$t('welcome.recoveryPassword')"
+        :label="$t('welcome.password')"
         :type="showRecovery ? 'text' : 'password'"
         :append-inner-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
         @click:append-inner="showRecovery = !showRecovery"
@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, getCurrentInstance, useId } from 'vue';
 import rules from '@/utils/rules';
 import { Theme } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
@@ -224,6 +224,7 @@ const vmProxy = getCurrentInstance()!.proxy;
 const formValid = ref(false);
 
 const name = ref(props.googleName?.trim() || generateWalletName());
+const nameId = useId();
 const spendingPassword = ref('');
 const confirmSpendingPassword = ref('');
 const recoveryPassword = ref('');
