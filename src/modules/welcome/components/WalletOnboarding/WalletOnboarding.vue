@@ -506,7 +506,7 @@ onUnmounted(() => {
      overflow and scroll inside. */
   height: 620px;
   max-height: calc(100vh - 80px);
-  padding: 24px 28px;
+  padding: var(--g-s-5);
   border-radius: 16px !important;
   display: flex;
   flex-direction: column;
@@ -514,14 +514,14 @@ onUnmounted(() => {
 }
 
 .content-header {
-  margin-bottom: 20px;
+  margin-bottom: var(--g-s-5);
 }
 
 .content-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--g-s-3);
 }
 
 .dev-switch {
@@ -544,7 +544,7 @@ onUnmounted(() => {
 
 .content-desc {
   line-height: 1.5;
-  margin-top: 6px;
+  margin-top: var(--g-s-2);
 }
 
 .content-body {
@@ -600,7 +600,7 @@ onUnmounted(() => {
 .content-body :deep(.onboarding-step:has(.step-scroll) .onboarding-actions) {
   flex-shrink: 0;
   margin-top: 0;
-  padding-top: 16px;
+  padding-top: var(--g-s-4);
   border-top: 1px solid var(--g-hairline-1);
 }
 

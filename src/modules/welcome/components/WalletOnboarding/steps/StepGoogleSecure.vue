@@ -384,7 +384,7 @@ const resetGoogleAccount = async (): Promise<void> => {
 .recovery-strength {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 .recovery-strength__label {
   font-weight: 500;

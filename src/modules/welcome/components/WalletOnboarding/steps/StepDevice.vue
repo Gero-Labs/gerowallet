@@ -93,17 +93,17 @@ const onContinue = (): void => {
 .hw-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--g-s-2);
 }
 
 .hw-card {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--g-s-4);
   width: 100%;
   min-height: 86px;
   text-align: left;
-  padding: 16px 18px;
+  padding: var(--g-s-4);
   cursor: pointer;
   transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 

@@ -319,23 +319,23 @@ const onContinue = (): void => {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px 16px;
+  padding: var(--g-s-5) var(--g-s-4);
   /* The surface is the glass-tier class in the markup: a pane nested in the
      onboarding panel. */
 }
 
 .google-signin-icon {
-  margin-bottom: 16px;
+  margin-bottom: var(--g-s-4);
 }
 
 /* Type comes from the ramp classes in the markup; these rules only space. */
 .google-signin-title {
-  margin-bottom: 4px;
+  margin-bottom: var(--g-s-1);
 }
 
 .google-signin-desc {
   max-width: 360px;
-  margin-bottom: 20px;
+  margin-bottom: var(--g-s-5);
   line-height: 1.5;
 }
 

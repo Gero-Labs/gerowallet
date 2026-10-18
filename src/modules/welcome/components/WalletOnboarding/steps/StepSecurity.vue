@@ -168,13 +168,13 @@ const handleContinue = (): void => {
 // ─── Security method row ──────────────────────────────────────────────────────
 .security-row {
   display: flex;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 .security-tile {
   flex: 1;
   min-width: 0;
-  padding: 10px 12px;
+  padding: var(--g-s-3);
   cursor: pointer;
   transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 
@@ -194,7 +194,7 @@ const handleContinue = (): void => {
   &__head {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--g-s-1);
   }
 
   // Type comes from the ramp classes in the markup; these rules only set the
@@ -226,7 +226,7 @@ const handleContinue = (): void => {
   align-items: flex-start;
   color: var(--g-warning);
   line-height: 1.4;
-  padding: 8px 10px;
+  padding: var(--g-s-2) var(--g-s-3);
   border-radius: 8px;
   border: 1px solid rgba(255, 196, 0, 0.18);
   background: rgba(255, 196, 0, 0.04);

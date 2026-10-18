@@ -244,23 +244,23 @@ const onWatchSubmit = async (): Promise<void> => {
 .step-start .onboarding-actions {
   flex-shrink: 0;
   margin-top: 0;
-  padding-top: 16px;
+  padding-top: var(--g-s-4);
   border-top: 1px solid var(--g-hairline-1);
 }
 
 .method-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 .method-card {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--g-s-3);
   width: 100%;
   text-align: left;
-  padding: 6px 16px;
+  padding: var(--g-s-2) var(--g-s-4);
   cursor: pointer;
   transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 }
@@ -319,15 +319,15 @@ const onWatchSubmit = async (): Promise<void> => {
 }
 
 .watch-dev {
-  margin-top: 16px;
-  padding-top: 12px;
+  margin-top: var(--g-s-4);
+  padding-top: var(--g-s-3);
   border-top: 1px solid var(--g-hairline-1);
 }
 
 .watch-dev__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 .watch-dev__field {
