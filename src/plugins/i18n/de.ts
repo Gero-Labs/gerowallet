@@ -5831,4 +5831,8 @@ export default {
   'accounts.groupSecurity': 'Wiederherstellungsphrase, Passwort und Sperre',
   'accounts.managedBy': 'Werden von „{name}“ verwaltet. Öffnen Sie diese Wallet, um sie zu ändern.',
   'accounts.accountPublicKey': 'Öffentlicher Kontoschlüssel (#{index})',
+  'accounts.fewerAccounts': 'Weniger Konten',
+  'accounts.moreAccounts': 'Mehr Konten',
+  'accounts.createCountHint': 'Jedes Konto hat eigene Adressen und ein eigenes Guthaben. Sie können später weitere hinzufügen.',
+  'accounts.addLaterCreate': 'Ihre Wallet wurde erstellt, ihre anderen Konten konnten aber nicht hinzugefügt werden. Fügen Sie sie über die Wallet-Liste hinzu.',
 }

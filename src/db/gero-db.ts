@@ -388,9 +388,15 @@ export async function createNewWallet(
      * derive these itself — see the Midnight branch above for why.
      */
     midnightAddresses?: MidnightAddresses;
+    /**
+     * The caller generated `mnemonic` for this new wallet (to derive its other
+     * accounts from the same phrase), so it is not a restore: the phrase still
+     * needs backing up.
+     */
+    generatedMnemonic?: boolean;
   }
 ) {
-  let isRestore = true;
+  let isRestore = !options?.generatedMnemonic;
   if (!mnemonic) {
     isRestore = false;
     mnemonic = bip39.generateMnemonic(256);

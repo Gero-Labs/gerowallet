@@ -271,6 +271,7 @@ export default {
       prfOutput?: ArrayBuffer;
       walletId?: number;
       midnightAddresses?: { unshielded: string; shielded: string; dust: string };
+      generatedMnemonic?: boolean;
     }
   ) {
     const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, addressType, options);

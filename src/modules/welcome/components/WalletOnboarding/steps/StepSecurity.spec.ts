@@ -9,7 +9,7 @@ import { Blockchain, Network } from '@/models/types';
 const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
 
 vi.mock('@/chrome/serialization', () => ({ isPaymentAddress: () => false }));
-vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
+vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key, tc: (key: string, count: number) => `${key}:${count}` } }));
 vi.mock('@/shared/utils/webauthn-prf', () => ({ getPrfSupportMode: async () => 'none' }));
 
 
@@ -37,7 +37,7 @@ describe('wallet name validation', () => {
       const next = wrapper.find('button.step-next');
       await vi.waitFor(() => expect(next.attributes('disabled')).toBeUndefined());
       await next.trigger('click');
-      expect(wrapper.emitted('select')?.[0]).toEqual(['password', 'My savings wallet']);
+      expect(wrapper.emitted('select')?.[0]).toEqual(['password', 'My savings wallet', 1]);
       expect(wrapper.emitted('next')).toHaveLength(1);
     } finally { wrapper.unmount(); }
   });
@@ -51,6 +51,43 @@ describe('wallet name label', () => {
       const labels = wrapper.findAll('label, .t-label').filter((el) => el.text() === 'welcome.walletName');
       expect(labels).toHaveLength(1);
       expect(labels[0].attributes('for')).toBe(input.attributes('id'));
+    } finally { wrapper.unmount(); }
+  });
+});
+
+describe('account count', () => {
+  const mountStep = (offerAccounts?: boolean) => mount(StepSecurity, { props: { network, offerAccounts }, global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } } });
+
+  it('is not offered unless the onboarding asks for it', () => {
+    const wrapper = mountStep();
+    try {
+      expect(wrapper.find('.account-count').exists()).toBe(false);
+    } finally { wrapper.unmount(); }
+  });
+
+  it('starts at one account, stays between 1 and 20 and goes out with the choice', async () => {
+    const wrapper = mountStep(true);
+    try {
+      const [fewer, more] = wrapper.findAll('.account-count__step');
+      const value = () => wrapper.find('.account-count__value').text();
+      expect(value()).toBe('accounts.count:1');
+      expect(fewer.attributes('disabled')).toBeDefined();
+
+      await more.trigger('click');
+      await more.trigger('click');
+      expect(value()).toBe('accounts.count:3');
+      await fewer.trigger('click');
+      expect(value()).toBe('accounts.count:2');
+
+      for (let i = 0; i < 25; i++) await more.trigger('click');
+      expect(value()).toBe('accounts.count:20');
+      expect(more.attributes('disabled')).toBeDefined();
+
+      await fewer.trigger('click');
+      const next = wrapper.find('button.step-next');
+      await vi.waitFor(() => expect(next.attributes('disabled')).toBeUndefined());
+      await next.trigger('click');
+      expect(wrapper.emitted('select')?.[0]?.[2]).toBe(19);
     } finally { wrapper.unmount(); }
   });
 });

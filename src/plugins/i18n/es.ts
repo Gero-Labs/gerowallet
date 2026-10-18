@@ -5707,4 +5707,8 @@ export default {
   'accounts.groupSecurity': 'Frase de recuperación, contraseña y bloqueo',
   'accounts.managedBy': 'Los administra "{name}". Ábrela para cambiarlos.',
   'accounts.accountPublicKey': 'Clave pública de la cuenta (#{index})',
+  'accounts.fewerAccounts': 'Menos cuentas',
+  'accounts.moreAccounts': 'Más cuentas',
+  'accounts.createCountHint': 'Cada cuenta tiene sus propias direcciones y su propio saldo. Puedes agregar más después.',
+  'accounts.addLaterCreate': 'Tu billetera se creó, pero no se pudieron agregar sus otras cuentas. Agrégalas desde la lista de billeteras.',
 }

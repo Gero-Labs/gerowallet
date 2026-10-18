@@ -73,6 +73,37 @@
         <span>{{ $t('welcome.prfNotSupported') }}</span>
       </div>
 
+      <!-- Multi-account: how many accounts of the new recovery phrase to add.
+           Account #0 is always one of them; more can be added later. -->
+      <template v-if="offerAccounts">
+        <v-divider class="my-4" style="border-color: var(--g-hairline-1);" />
+        <div :id="accountsLabelId" class="t-label mb-2">{{ $t('accounts.stepTitle') }}</div>
+        <div class="account-count" role="group" :aria-labelledby="accountsLabelId">
+          <GButton
+            compact
+            class="account-count__step"
+            :disabled="accountCount <= 1"
+            :aria-label="$t('accounts.fewerAccounts')"
+            @click="accountCount--"
+          >
+            <v-icon size="small">mdi-minus</v-icon>
+          </GButton>
+          <span class="account-count__value t-body-lg g-num" aria-live="polite">
+            {{ tc('accounts.count', accountCount, { count: accountCount }) }}
+          </span>
+          <GButton
+            compact
+            class="account-count__step"
+            :disabled="accountCount >= MAX_NEW_ACCOUNTS"
+            :aria-label="$t('accounts.moreAccounts')"
+            @click="accountCount++"
+          >
+            <v-icon size="small">mdi-plus</v-icon>
+          </GButton>
+        </div>
+        <div class="t-caption mt-2">{{ $t('accounts.createCountHint') }}</div>
+      </template>
+
     </v-form>
     </div>
 
@@ -98,14 +129,21 @@ import rules from '@/utils/rules';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import { NetworkInfo } from '@/utils/networks';
 import type { PrfSupportMode } from '@/shared/utils/webauthn-prf';
+import { MAX_ACCOUNTS_PER_EXPORT } from '@/shared/utils/walletAccount';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
 const vmProxy = getCurrentInstance()!.proxy;
+const { tc } = useTranslation();
 
-defineProps<{ network: NetworkInfo }>();
+defineProps<{
+  network: NetworkInfo;
+  /** Creating a wallet with multi-account on: also ask how many accounts to add. */
+  offerAccounts?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'select', method: 'prf' | 'password', name: string): void;
+  (e: 'select', method: 'prf' | 'password', name: string, accountCount: number): void;
   (e: 'next'): void;
   (e: 'back'): void;
 }>();
@@ -115,6 +153,11 @@ const nameRules = [(value: string) => rules.required()(value.trim()), rules.maxC
 // Wallet name
 const name = ref(generateWalletName());
 const nameId = useId();
+
+// Accounts #0 to #accountCount-1, derived in one call, so no more than it allows.
+const MAX_NEW_ACCOUNTS = MAX_ACCOUNTS_PER_EXPORT;
+const accountCount = ref(1);
+const accountsLabelId = useId();
 
 // Security method. null = probe still pending (never claim "not supported"
 // while checking — the first Windows Hello capability call can take seconds).
@@ -160,7 +203,7 @@ onMounted(async () => {
 
 const handleContinue = (): void => {
   if (!canContinue.value || !name.value.trim()) return;
-  emit('select', selectedSecurityMethod.value, name.value.trim());
+  emit('select', selectedSecurityMethod.value, name.value.trim(), accountCount.value);
   emit('next');
 };
 </script>
@@ -231,6 +274,24 @@ const handleContinue = (): void => {
   border-radius: var(--g-r-control);
   border: 1px solid rgba(255, 196, 0, 0.18);
   background: rgba(255, 196, 0, 0.04);
+}
+
+// ─── Account count ────────────────────────────────────────────────────────────
+.account-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-3);
+
+  // Square icon buttons: GButton pads for a text label.
+  :deep(.v-btn.g-btn.account-count__step) {
+    min-width: var(--g-btn-h-compact);
+    padding: 0;
+  }
+
+  &__value {
+    min-width: 112px;
+    text-align: center;
+  }
 }
 
 // Remove checkbox hover highlight

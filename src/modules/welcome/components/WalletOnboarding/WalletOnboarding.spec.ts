@@ -9,7 +9,7 @@ import type { AccountXpub } from '@/shared/utils/walletAccount';
 const { flags, stub, derive, findExisting } = vi.hoisted(() => ({
   flags: { multiAccount: true, setError: vi.fn() },
   // Each step is a stub that shows its props, so the flow can be driven from here.
-  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet'], template: `<div class="${name}" />` }),
+  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet', 'offerAccounts', 'accountCount'], template: `<div class="${name}" />` }),
   derive: vi.fn(),
   findExisting: vi.fn(),
 }));
@@ -219,5 +219,58 @@ describe('adding an account to a recovery-phrase wallet', () => {
 
     expect(wrapper.findComponent({ name: 'StepAddAccount' }).props('wallet')).toEqual(daily);
     expect(wrapper.findComponent({ name: 'StepConnect' }).exists()).toBe(false);
+  });
+});
+
+describe('creating a wallet with several accounts', () => {
+  async function toSecurity(onNetwork = network) {
+    const wrapper = render(null, onNetwork);
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'create');
+    await flushPromises();
+    return wrapper;
+  }
+  const confirmWith = async (wrapper: Awaited<ReturnType<typeof toSecurity>>, count: number) => {
+    const security = wrapper.findComponent({ name: 'StepSecurity' });
+    security.vm.$emit('select', 'password', 'Daily', count);
+    security.vm.$emit('next');
+    await flushPromises();
+    return wrapper.findComponent({ name: 'StepCreateConfirm' });
+  };
+
+  it('asks how many accounts, and creates that many', async () => {
+    const wrapper = await toSecurity();
+    expect(wrapper.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(true);
+    expect((await confirmWith(wrapper, 3)).props('accountCount')).toBe(3);
+  });
+
+  it('asks on Bitcoin too, but not on a chain without accounts', async () => {
+    expect((await toSecurity(networks.resolveNetwork(Blockchain.BITCOIN, Network.TESTNET))).findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(true);
+    const midnight = await toSecurity(networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD));
+    expect(midnight.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(false);
+    expect((await confirmWith(midnight, 3)).props('accountCount')).toBe(1);
+  });
+
+  it('creates one account, as before, while multi-account is off', async () => {
+    flags.multiAccount = false;
+    const wrapper = await toSecurity();
+    expect(wrapper.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(false);
+    expect((await confirmWith(wrapper, 3)).props('accountCount')).toBe(1);
+  });
+
+  it('does not ask during a restore, whose accounts were chosen from the phrase', async () => {
+    findExisting.mockResolvedValue(null);
+    derive.mockImplementation(async (_mnemonic: string, indices: number[]) => indices.map((i) => account(i)));
+    const wrapper = render(null);
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'restore');
+    await flushPromises();
+    const seed = wrapper.findComponent({ name: 'StepSeedPhrase' });
+    seed.vm.$emit('change', 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' '));
+    seed.vm.$emit('next');
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepAccounts' }).vm.$emit('next', [account(0)]);
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(false);
   });
 });

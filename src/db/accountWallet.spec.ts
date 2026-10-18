@@ -86,3 +86,19 @@ describe('createAccountWallet on Bitcoin', () => {
     await expect(createAccountWallet(ledgerId as number, { name: 'x', publicKey: 'xpub-other', accountIndex: 1 })).rejects.toThrow();
   });
 });
+
+describe('a new wallet whose phrase the caller generated', () => {
+  const backupRow = async (id: number) => (await (await getDb(id)).table('config').toArray())
+    .find((row: { key: string }) => row.key === 'backup')?.value;
+
+  it('still asks for a backup, where a typed phrase counts as restored', async () => {
+    // Another fixed test vector — never used to hold funds.
+    const generated = 'letter advice cage absurd amount doctor acoustic avoid letter advice cage above';
+    const id = await createNewWallet('Fresh', 'icon', Theme.GERO, generated, PASSWORD, Blockchain.CARDANO, Network.PREPROD, undefined, { generatedMnemonic: true }) as number;
+
+    expect(await backupRow(id)).toBe(false);
+    expect(await backupRow(headId)).toBe(true);
+    // Its account #0 is the key the onboarding read from the same phrase.
+    expect((await stored(id)).publicKey).toBe((await deriveAccountXpubsFromMnemonic(generated, [0]))[0].publicKey);
+  });
+});

@@ -33,6 +33,7 @@
         <StepSecurity class="onboarding-step"
           v-else-if="currentStep.key === 'security'"
           :network="network"
+          :offer-accounts="multiAccountCreate"
           @select="onSecuritySelect"
           @next="step++"
           @back="step--"
@@ -42,6 +43,7 @@
           :network="network"
           :security-method="securityMethod"
           :name="walletName"
+          :account-count="multiAccountCreate ? accountCount : 1"
           @back="step--"
         />
         <StepSeedPhrase class="onboarding-step"
@@ -235,6 +237,9 @@ const multiAccount = computed(() => featureFlagsStore.isMultiAccountEnabled() &&
 // A restore also lists Bitcoin accounts; pairing a Bitcoin device still adds account #0 only.
 const multiAccountRestore = computed(() => multiAccount.value
   || (featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.BITCOIN));
+// Creating a recovery-phrase or PassKey wallet asks how many accounts to start with.
+const multiAccountCreate = computed(() => selectedMethod.value === 'create' && multiAccountRestore.value);
+const accountCount = ref(1);
 const restoreChain = computed(() => ({ chain: props.network.blockchain, network: props.network.network }));
 const FIRST_SCAN = Array.from({ length: ACCOUNTS_PER_SCAN }, (_, i) => i);
 const accountIndices = ref<number[]>(FIRST_SCAN);
@@ -394,9 +399,10 @@ const onNetworkChange = (n: NetworkInfo): void => {
     selectedMethod.value = null;
   }
 };
-const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
+const onSecuritySelect = (m: 'prf' | 'password', name: string, count = 1): void => {
   securityMethod.value = m;
   walletName.value = name;
+  accountCount.value = count;
 };
 const onMnemonicChange = (m: string[]): void => {
   mnemonic.value = m;

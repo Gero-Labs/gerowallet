@@ -14,6 +14,7 @@
             <div>
               <div class="summary-label t-caption">{{ $t('welcome.walletName') }}</div>
               <div class="summary-value t-body font-weight-medium">{{ name }}</div>
+              <div v-if="accountCount > 1" class="summary-label t-caption">{{ tc('accounts.count', accountCount, { count: accountCount }) }}</div>
             </div>
           </div>
           <v-divider class="my-2" style="border-color: var(--g-hairline-2);"></v-divider>
@@ -177,15 +178,21 @@ import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
+import type { Wallet } from '@/models/types';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface Props {
   network: NetworkInfo;
   securityMethod: 'prf' | 'password';
   name: string;
+  /** Multi-account: how many accounts to start with, #0 among them. */
+  accountCount?: number;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { accountCount: 1 });
+const { tc } = useTranslation();
 
 const emit = defineEmits<{
   (e: 'back'): void;
@@ -266,6 +273,23 @@ const walletCreationStep = async (): Promise<void> => {
       midnightAddresses = await deriveMidnightAddresses(preGeneratedMnemonic, props.network.network);
     }
 
+    // More than one account: generate the phrase here, as a restore types it, and
+    // read the accounts' public keys from it before anything is written or the
+    // PassKey is registered. gero-db is told the phrase is new, so it still asks
+    // for a backup.
+    let accounts: AccountXpub[] = [];
+    if (props.accountCount > 1 && !preGeneratedMnemonic) {
+      const bip39 = await import('bip39');
+      const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
+      preGeneratedMnemonic = bip39.generateMnemonic(256);
+      accounts = await deriveAccountXpubsFromMnemonic(
+        preGeneratedMnemonic,
+        Array.from({ length: props.accountCount }, (_, index) => index),
+        { chain: props.network.blockchain, network: props.network.network },
+      );
+    }
+    const newPhrase = accounts.length ? { generatedMnemonic: true } : {};
+
     if (props.securityMethod === 'prf') {
       // ========================================================================
       // PRF WALLET CREATION (PURE PRF MODE - NO PASSWORD)
@@ -302,6 +326,7 @@ const walletCreationStep = async (): Promise<void> => {
             credentialTransports: transports,
             walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
             ...(midnightAddresses ? { midnightAddresses } : {}),
+            ...newPhrase,
           };
 
           wallet = await GeroStore.createNewWallet(
@@ -347,10 +372,11 @@ const walletCreationStep = async (): Promise<void> => {
         props.network.blockchain,
         props.network.network,
         undefined,  // addressType - use default based on chain
-        midnightAddresses ? { midnightAddresses } : undefined
+        { ...(midnightAddresses ? { midnightAddresses } : {}), ...newPhrase }
       );
     }
 
+    await addCreatedAccounts(wallet, accounts);
     emit('created');
 
     const response = await Messaging.sendToBackgroundFromOptions({
@@ -379,6 +405,29 @@ const walletCreationStep = async (): Promise<void> => {
     vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
   } finally {
     creatingWalletLoader.value = false;
+  }
+};
+
+/**
+ * The other accounts join the wallet just created (account #0), as a restore adds
+ * the ones chosen. They hold none of its secrets, so this asks for nothing more.
+ * Only when account #0 is the key the wallet stored, so a phrase mix-up adds
+ * nothing. Best-effort: the wallet exists either way, and an account missed here
+ * can be added later.
+ */
+const addCreatedAccounts = async (wallet: Wallet | undefined, accounts: AccountXpub[]): Promise<void> => {
+  const others = accounts.filter((account) => account.accountIndex > 0);
+  if (!wallet?.id || !others.length) return;
+  try {
+    if (accounts[0]?.publicKey !== wallet.publicKey) throw new Error('account #0 mismatch');
+    await GeroStore.addAccounts(wallet.id, others.map((account) => ({
+      name: vmProxy.$t('accounts.label', { index: account.accountIndex }) as string,
+      publicKey: account.publicKey,
+      accountIndex: account.accountIndex,
+    })));
+  } catch (error) {
+    console.error('Adding the other accounts failed:', error instanceof Error ? error.message : 'unknown');
+    vmProxy['$snackbar']?.setError(vmProxy.$t('accounts.addLaterCreate') as string);
   }
 };
 </script>

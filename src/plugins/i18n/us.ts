@@ -5938,4 +5938,8 @@ export default {
   'accounts.groupSecurity': 'Recovery phrase, password and lock',
   'accounts.managedBy': 'Managed by "{name}". Open it to change them.',
   'accounts.accountPublicKey': 'Account public key (#{index})',
+  'accounts.fewerAccounts': 'Fewer accounts',
+  'accounts.moreAccounts': 'More accounts',
+  'accounts.createCountHint': 'Each account has its own addresses and balance. You can add more later.',
+  'accounts.addLaterCreate': 'Your wallet was created, but its other accounts could not be added. Add them from the wallet list.',
 }
