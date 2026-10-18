@@ -1,7 +1,7 @@
 <template>
   <div class="step-device">
     <div class="step-scroll">
-    <div class="step-section-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
     <div class="hw-list">
       <button
         v-for="item in walletTypes"
@@ -17,8 +17,8 @@
       >
         <img :src="item.icon" class="hw-card__logo" :alt="item.name" />
         <span class="hw-card__text">
-          <span class="hw-card__name">{{ item.name }}</span>
-          <span class="hw-card__desc">{{ item.description }}</span>
+          <span class="hw-card__name t-body-lg">{{ item.name }}</span>
+          <span class="hw-card__desc t-body-sm">{{ item.description }}</span>
         </span>
         <v-icon class="hw-card__check" size="20">{{ localWalletType === item.name ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
       </button>
@@ -90,14 +90,6 @@ const onContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
 .hw-list {
   display: flex;
   flex-direction: column;
@@ -150,16 +142,12 @@ const onContinue = (): void => {
     min-width: 0;
   }
 
+  // Type comes from the ramp classes in the markup; these rules only space.
   &__name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #fff;
     line-height: 1.25;
   }
 
   &__desc {
-    font-size: 12.5px;
-    color: #94979c;
     margin-top: 2px;
     line-height: 1.35;
     display: -webkit-box;
@@ -170,11 +158,11 @@ const onContinue = (): void => {
   }
 
   &__check {
-    color: rgba(255, 255, 255, 0.25) !important;
+    color: var(--g-text-3);
   }
 
   &--active &__check {
-    color: var(--v-primary-base) !important;
+    color: var(--g-accent);
   }
 }
 </style>

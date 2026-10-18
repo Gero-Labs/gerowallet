@@ -21,7 +21,7 @@
     />
     <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
-        <ul class="text-left" style="line-height: 1.5">
+        <ul class="connect-steps t-body">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
           <li v-if="isBitcoin">{{ $t('welcome.installBitcoinApp', { walletType }) }}</li>
           <li v-else>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
@@ -31,13 +31,13 @@
         </ul>
       </div>
       <div v-if="walletType === WalletType.Trezor">
-        <ul class="text-left" style="line-height: 1.5">
+        <ul class="connect-steps t-body">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
           <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
         </ul>
       </div>
       <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
-        <ul class="text-left" style="line-height: 1.5">
+        <ul class="connect-steps t-body">
           <li>{{ $t('welcome.unlockKeystone') }}</li>
           <li>{{ $t('welcome.selectScanQR') }} <v-icon size="small">mdi-line-scan</v-icon></li>
           <li>{{ $t('welcome.scanQRWithKeystone') }}</li>
@@ -45,7 +45,7 @@
         </ul>
       </div>
       <div v-else-if="walletType === WalletType.Keystone && keystoneScan">
-        <ul class="text-left" style="line-height: 1.5">
+        <ul class="connect-steps t-body">
           <li>{{ $t('welcome.adjustDistance') }}</li>
           <li>{{ $t('welcome.lowDensitySetting') }}</li>
         </ul>
@@ -348,6 +348,12 @@ const walletCreationStep2 = async (): Promise<void> => {
 </script>
 
 <style scoped lang="scss">
+// Type comes from the ramp class in the markup; the alert sets the tone.
+.connect-steps {
+  text-align: left;
+  line-height: 1.5;
+}
+
 #qr-code > svg {
   border-radius: 10px;
 }

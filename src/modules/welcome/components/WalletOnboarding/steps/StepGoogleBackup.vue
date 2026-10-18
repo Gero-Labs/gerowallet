@@ -7,7 +7,7 @@
     <div class="step-scroll d-flex flex-column align-center justify-center text-center" style="min-height: 180px;">
       <template v-if="!errorMessage">
         <v-progress-circular indeterminate color="primary" size="34" width="3" class="mb-3" />
-        <div class="text-body-2 grey--text text--lighten-1">{{ $t('welcome.savingRecovery') }}</div>
+        <div class="t-body">{{ $t('welcome.savingRecovery') }}</div>
       </template>
       <template v-else>
         <v-alert
@@ -19,7 +19,7 @@
           class="mb-3"
           style="width: 100%;"
         >
-          <span class="text-body-2">{{ errorMessage }}</span>
+          <span class="t-body">{{ errorMessage }}</span>
         </v-alert>
         <GButton tier="secondary" :loading="storing" @click="storeRecovery()">
           <v-icon start size="small">mdi-refresh</v-icon>

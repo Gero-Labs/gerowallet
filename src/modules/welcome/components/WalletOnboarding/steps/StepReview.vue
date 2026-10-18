@@ -12,7 +12,7 @@
                 <v-img :src="walletIconSrc" cover></v-img>
               </v-avatar>
               <div v-if="createsFirstAccount" class="flex-grow-1">
-                <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
+                <div class="summary-label t-caption">{{ $t('welcome.walletName') }}</div>
                 <v-text-field
                   v-model="walletName"
                   variant="plain"
@@ -30,8 +30,8 @@
                 <div class="d-flex align-center">
                   <v-icon color="primary" size="20" class="mr-2">mdi-shield-lock-outline</v-icon>
                   <div>
-                    <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.type') }}</div>
-                    <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ walletType }}</div>
+                    <div class="summary-label t-caption">{{ $t('welcome.type') }}</div>
+                    <div class="summary-value t-body font-weight-medium">{{ walletType }}</div>
                   </div>
                 </div>
               </v-col>
@@ -42,8 +42,8 @@
                     <v-img :src="network ? network.icon : ''" ></v-img>
                   </v-avatar>
                   <div>
-                    <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
-                    <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ network ? network.title : '' }}</div>
+                    <div class="summary-label t-caption">{{ $t('common.network') }}</div>
+                    <div class="summary-value t-body font-weight-medium">{{ network ? network.title : '' }}</div>
                   </div>
                 </div>
               </v-col>
@@ -60,7 +60,7 @@
           :disabled="creatingWalletLoader"
         >
           <template v-slot:label>
-            <span class="text-body-2">
+            <span class="t-body">
               {{ $t('welcome.agreeToTerms') }}
               <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('navigation.termsOfService') }}</a>.
             </span>
@@ -267,12 +267,16 @@ const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
 </script>
 
 <style scoped lang="scss">
-/* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
+// Summary card: type comes from the ramp classes in the markup; these rules
+// only set line height and lift each value to the primary tone.
+.summary-label { line-height: 1.2; }
+.summary-value { color: var(--g-text-1); line-height: 1.3; }
+
 .wallet-name-field {
   :deep(input) {
     font-size: 14px;
     font-weight: 500;
-    color: white;
+    color: var(--g-text-1);
     padding: 0;
   }
 }

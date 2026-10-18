@@ -7,7 +7,7 @@
     <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
     <!-- ── Method (stacked selectable cards) ───────────────── -->
-    <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
     <div class="method-list">
       <button
         type="button"
@@ -17,8 +17,8 @@
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(walletSvg)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.createWallet') }}</span>
-          <span class="method-card__desc">{{ $t('welcome.createWalletDescription') }}</span>
+          <span class="method-card__title t-body-lg">{{ $t('welcome.createWallet') }}</span>
+          <span class="method-card__desc t-body-sm">{{ $t('welcome.createWalletDescription') }}</span>
         </span>
       </button>
 
@@ -30,8 +30,8 @@
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(keyGeroSvg)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.restoreWallet') }}</span>
-          <span class="method-card__desc">{{ $t('welcome.restoreWalletDescription') }}</span>
+          <span class="method-card__title t-body-lg">{{ $t('welcome.restoreWallet') }}</span>
+          <span class="method-card__desc t-body-sm">{{ $t('welcome.restoreWalletDescription') }}</span>
         </span>
       </button>
 
@@ -44,8 +44,8 @@
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(pairSvg)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.pairHardwareWallet') }}</span>
-          <span class="method-card__desc">
+          <span class="method-card__title t-body-lg">{{ $t('welcome.pairHardwareWallet') }}</span>
+          <span class="method-card__desc t-body-sm">
             {{ pairSupported ? $t('welcome.pairHardwareWalletDescription') : $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
           </span>
         </span>
@@ -61,8 +61,8 @@
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(googleGlyph)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.googleWalletMethod') }}</span>
-          <span class="method-card__desc">
+          <span class="method-card__title t-body-lg">{{ $t('welcome.googleWalletMethod') }}</span>
+          <span class="method-card__desc t-body-sm">
             {{ googleWalletSupported ? $t('welcome.googleWalletMethodDescription') : $t('welcome.googleWalletNotSupportedOnNetwork') }}
           </span>
         </span>
@@ -71,7 +71,7 @@
 
     <!-- Dev builds only: watch a user-supplied address (read-only, no keys) -->
     <div v-if="watchVisible" class="watch-dev">
-      <div class="step-section-label mb-2">{{ $t('welcome.watchDevTitle') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.watchDevTitle') }}</div>
       <div class="watch-dev__row">
         <v-text-field
           v-model="watchAddress"
@@ -248,35 +248,6 @@ const onWatchSubmit = async (): Promise<void> => {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.step-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--g-text-2);
-}
-
-.google-restore-link {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
-}
-
-.link-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 12px;
-  color: var(--g-text-3);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.link-btn:hover {
-  color: var(--v-primary-base);
-}
-
 .method-list {
   display: flex;
   flex-direction: column;
@@ -338,16 +309,12 @@ const onWatchSubmit = async (): Promise<void> => {
   min-width: 0;
 }
 
+/* Type comes from the ramp classes in the markup; these rules only space. */
 .method-card__title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--g-text-1);
   line-height: 1.25;
 }
 
 .method-card__desc {
-  font-size: 13px;
-  color: var(--g-text-3);
   margin-top: 2px;
   line-height: 1.35;
 }

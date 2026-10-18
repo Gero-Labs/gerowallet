@@ -4,7 +4,7 @@
     <v-form ref="secureForm" v-model="formValid" style="width: 100%;">
 
       <!-- Wallet name field -->
-      <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.walletName') }}</div>
       <v-text-field
         v-model="name"
         density="compact"
@@ -19,8 +19,8 @@
 
       <!-- Spending password (fallback when the device/browser has no WebAuthn PRF) -->
       <template v-if="!passkeyCapable">
-        <div class="step-section-label mb-2">{{ $t('welcome.spendingPassword') }}</div>
-        <div class="field-hint mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.spendingPassword') }}</div>
+        <div class="field-hint t-caption mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
         <v-text-field
           v-model="spendingPassword"
           density="compact"
@@ -55,8 +55,8 @@
 
       <!-- Passkey (preferred path — hardware-backed, no password to remember) -->
       <template v-else>
-        <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
-        <div class="field-hint mb-2">{{ $t('welcome.secureWithPasskeyHint') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+        <div class="field-hint t-caption mb-2">{{ $t('welcome.secureWithPasskeyHint') }}</div>
         <GButton
           tier="secondary"
           block
@@ -77,15 +77,15 @@
           border="start"
           class="mb-2"
         >
-          <span class="text-body-2">{{ passkeyError }}</span>
+          <span class="t-body">{{ passkeyError }}</span>
         </v-alert>
       </template>
 
       <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
 
       <!-- Recovery password -->
-      <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
-      <div class="field-hint mb-2">{{ $t('welcome.recoveryPasswordHint') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
+      <div class="field-hint t-caption mb-2">{{ $t('welcome.recoveryPasswordHint') }}</div>
       <v-text-field
         v-model="recoveryPassword"
         density="compact"
@@ -110,7 +110,7 @@
           height="4"
           rounded
         />
-        <span class="recovery-strength__label" :class="`recovery-strength__label--${recoveryScore.score}`">
+        <span class="recovery-strength__label t-caption" :class="`recovery-strength__label--${recoveryScore.score}`">
           {{ $t(recoveryScore.labelKey) }}
         </span>
       </div>
@@ -136,7 +136,7 @@
         border="start"
         class="mt-3 mb-0"
       >
-        <span class="text-body-2">{{ errorMessage }}</span>
+        <span class="t-body">{{ errorMessage }}</span>
       </v-alert>
 
       <!-- Confirmation-gated reset: only shown when CREATE_MPC_GOOGLE_WALLET failed
@@ -151,8 +151,8 @@
         border="start"
         class="mt-3 mb-0"
       >
-        <div class="text-body-2 font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
-        <div class="text-body-2 mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
+        <div class="t-body font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
+        <div class="t-body mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
         <GButton
           tier="destructive"
           compact
@@ -162,7 +162,7 @@
         >
           {{ $t('welcome.resetGoogleAccountButton') }}
         </GButton>
-        <div v-if="resetError" class="text-body-2 error--text mt-2">{{ resetError }}</div>
+        <div v-if="resetError" class="reset-error t-body mt-2">{{ resetError }}</div>
       </v-alert>
     </v-form>
     </div>
@@ -375,17 +375,9 @@ const resetGoogleAccount = async (): Promise<void> => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
+// Type comes from the ramp classes in the markup; these rules only space and
+// set the status tones.
 .field-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
   line-height: 1.4;
 }
 
@@ -395,8 +387,7 @@ const resetGoogleAccount = async (): Promise<void> => {
   gap: 8px;
 }
 .recovery-strength__label {
-  font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 .recovery-strength__label--0,
@@ -404,4 +395,8 @@ const resetGoogleAccount = async (): Promise<void> => {
 .recovery-strength__label--2 { color: var(--g-warning); }
 .recovery-strength__label--3 { color: var(--g-info); }
 .recovery-strength__label--4 { color: var(--g-success); }
+
+// The reset failed: an error inside the warning alert, so it outranks the
+// alert's own tone that ramp text inherits there.
+.v-alert .reset-error { color: var(--g-error); }
 </style>

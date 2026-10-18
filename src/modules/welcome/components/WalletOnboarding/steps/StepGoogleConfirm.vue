@@ -8,8 +8,8 @@
             <v-img :src="walletIconSrc" cover></v-img>
           </v-avatar>
           <div>
-            <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
-            <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ name }}</div>
+            <div class="summary-label t-caption">{{ $t('welcome.walletName') }}</div>
+            <div class="summary-value t-body font-weight-medium">{{ name }}</div>
           </div>
         </div>
         <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
@@ -18,8 +18,8 @@
             <div class="d-flex align-center">
               <v-icon color="primary" size="20" class="mr-2">mdi-google</v-icon>
               <div>
-                <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.googleWalletSummaryTitle') }}</div>
-                <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ email }}</div>
+                <div class="summary-label t-caption">{{ $t('welcome.googleWalletSummaryTitle') }}</div>
+                <div class="summary-value t-body font-weight-medium">{{ email }}</div>
               </div>
             </div>
           </v-col>
@@ -30,8 +30,8 @@
                 <v-img :src="network ? network.icon : ''" ></v-img>
               </v-avatar>
               <div>
-                <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
-                <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ network ? network.title : '' }}</div>
+                <div class="summary-label t-caption">{{ $t('common.network') }}</div>
+                <div class="summary-value t-body font-weight-medium">{{ network ? network.title : '' }}</div>
               </div>
             </div>
           </v-col>
@@ -48,7 +48,7 @@
       border="start"
       class="mb-0"
     >
-      <span class="text-body-2">{{ errorMessage }}</span>
+      <span class="t-body">{{ errorMessage }}</span>
     </v-alert>
     </div>
 
@@ -150,5 +150,8 @@ const finish = async (): Promise<void> => {
 </script>
 
 <style scoped>
-/* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
+/* Summary card: type comes from the ramp classes in the markup; these rules
+   only set line height and lift each value to the primary tone. */
+.summary-label { line-height: 1.2; }
+.summary-value { color: var(--g-text-1); line-height: 1.3; }
 </style>

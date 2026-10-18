@@ -4,7 +4,7 @@
     <v-card class="liquid-glass transparent-override onboarding-content" flat>
       <div class="content-header">
         <div class="content-header-row">
-          <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
+          <div class="content-title t-heading">{{ $t(currentStep.titleKey) }}</div>
           <v-switch
             v-if="currentStep.key === 'start'"
             class="dev-switch ma-0 pa-0"
@@ -15,11 +15,11 @@
             @update:model-value="onDevToggle"
           >
             <template v-slot:label>
-              <span class="dev-switch__label">{{ $t('welcome.developerNetworks') }}</span>
+              <span class="dev-switch__label t-caption">{{ $t('welcome.developerNetworks') }}</span>
             </template>
           </v-switch>
         </div>
-        <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
+        <div class="content-desc t-body">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
         <StepStart class="onboarding-step"
@@ -529,8 +529,6 @@ onUnmounted(() => {
 }
 
 .dev-switch__label {
-  font-size: 11px;
-  color: var(--g-text-3);
   white-space: nowrap;
 }
 
@@ -538,18 +536,14 @@ onUnmounted(() => {
   transform: scale(0.8);
 }
 
+/* Type comes from the ramp classes in the markup; these rules only space. */
 .content-title {
-  font-size: 22px;
-  font-weight: 700;
   line-height: 1.2;
-  color: #fff;
   margin-top: 2px;
 }
 
 .content-desc {
-  font-size: 14px;
   line-height: 1.5;
-  color: #94979c;
   margin-top: 6px;
 }
 
@@ -572,6 +566,12 @@ onUnmounted(() => {
   min-height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* A checkbox label carries a ramp class, which sets its tone, so Vuetify's
+   medium-emphasis fade would only dim it a second time. */
+.content-body :deep(.v-checkbox .v-label) {
+  opacity: 1;
 }
 
 .content-body :deep(.onboarding-actions) {

@@ -2,7 +2,7 @@
   <div class="step-seed-phrase">
     <div class="step-scroll">
 
-    <div class="step-section-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
 
     <!-- Seed length toggle (12 / 15 / 24) -->
     <v-row no-gutters class="pb-2">
@@ -165,14 +165,6 @@ const handleContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
 // Mnemonic grid — compact inputs
 .pa-half {
   padding: 2px !important;

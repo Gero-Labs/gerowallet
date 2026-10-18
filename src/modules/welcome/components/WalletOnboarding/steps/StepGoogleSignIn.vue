@@ -9,8 +9,8 @@
       </div>
 
       <template v-if="!email">
-        <div class="google-signin-title">{{ $t('welcome.googleSignInButton') }}</div>
-        <div class="google-signin-desc">{{ $t('welcome.onboardingDescGoogleSignIn') }}</div>
+        <div class="google-signin-title t-body-lg">{{ $t('welcome.googleSignInButton') }}</div>
+        <div class="google-signin-desc t-body-sm">{{ $t('welcome.onboardingDescGoogleSignIn') }}</div>
         <GButton
           tier="secondary"
           :loading="signingIn"
@@ -30,12 +30,12 @@
           border="start"
           class="mt-3 mb-0"
         >
-          <span class="text-body-2">{{ $t(errorMessage) }}</span>
+          <span class="t-body">{{ $t(errorMessage) }}</span>
         </v-alert>
       </template>
 
       <template v-else>
-        <div class="google-signin-title">{{ $t('welcome.googleSignedInAs', { email }) }}</div>
+        <div class="google-signin-title t-body-lg">{{ $t('welcome.googleSignedInAs', { email }) }}</div>
         <GButton tier="tertiary" compact class="mt-1" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
         </GButton>
@@ -48,7 +48,7 @@
           border="start"
           class="mpc-info-alert mt-3 mb-0"
         >
-          <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletAlreadyExists', { name: existingWallet.name }) }}</span>
+          <span class="t-body" style="white-space: pre-line;">{{ $t('welcome.googleWalletAlreadyExists', { name: existingWallet.name }) }}</span>
         </v-alert>
         <v-alert
           v-else-if="enrolledOnBackend"
@@ -59,7 +59,7 @@
           border="start"
           class="mpc-info-alert mt-3 mb-0"
         >
-          <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
+          <span class="t-body" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
         </v-alert>
       </template>
     </div>
@@ -329,16 +329,12 @@ const onContinue = (): void => {
   margin-bottom: 16px;
 }
 
+/* Type comes from the ramp classes in the markup; these rules only space. */
 .google-signin-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
   margin-bottom: 4px;
 }
 
 .google-signin-desc {
-  font-size: 13px;
-  color: #94979c;
   max-width: 360px;
   margin-bottom: 20px;
   line-height: 1.5;
@@ -351,7 +347,7 @@ const onContinue = (): void => {
   border-color: rgba(125, 180, 255, 0.6) !important;
 }
 :deep(.mpc-info-alert .v-alert__content),
-:deep(.mpc-info-alert .text-body-2) {
+:deep(.mpc-info-alert .t-body) {
   color: #eaf2ff !important;
 }
 :deep(.mpc-info-alert .v-icon) {

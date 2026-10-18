@@ -4,7 +4,7 @@
     <v-form ref="nameForm" v-model="nameValid" style="width: 100%;">
 
       <!-- Wallet name field -->
-      <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.walletName') }}</div>
       <v-text-field
         v-model="name"
         density="compact"
@@ -21,7 +21,7 @@
            capability call can take seconds while Windows Hello spins up. -->
       <template v-if="prfSupported !== false">
         <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
-        <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.securityMethod') }}</div>
         <div class="security-row">
 
           <!-- PassKey tile -->
@@ -35,12 +35,12 @@
           >
             <div class="security-tile__head">
               <v-icon size="15" color="primary">mdi-shield-key</v-icon>
-              <span class="security-tile__name">{{ $t('welcome.passKeyMethod') }}</span>
+              <span class="security-tile__name t-body-sm">{{ $t('welcome.passKeyMethod') }}</span>
               <v-tooltip location="bottom"  max-width="260" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
                   <v-icon v-bind="activatorProps" size="x-small" class="ml-auto" color="grey lighten-1"  @click.stop>mdi-information-outline</v-icon>
                 </template>
-                <span class="text-body-2">{{ $t('welcome.passKeyLearnMoreFull') }}</span>
+                <span class="t-body-sm">{{ $t('welcome.passKeyLearnMoreFull') }}</span>
               </v-tooltip>
             </div>
             <div class="d-flex align-center mt-1">
@@ -48,7 +48,7 @@
               <v-chip v-else-if="prfMode === 'security-key'" color="warning" variant="outlined" size="x-small" class="mr-1">{{ $t('welcome.securityKeyRequired') }}</v-chip>
               <v-chip v-else color="primary" size="x-small" class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
             </div>
-            <span class="security-tile__sub mt-1">{{ passKeySubText }}</span>
+            <span class="security-tile__sub t-caption mt-1">{{ passKeySubText }}</span>
           </div>
 
           <!-- Password tile -->
@@ -59,16 +59,16 @@
           >
             <div class="security-tile__head">
               <v-icon size="15" color="grey lighten-1">mdi-key-variant</v-icon>
-              <span class="security-tile__name">{{ $t('welcome.passwordMethod') }}</span>
+              <span class="security-tile__name t-body-sm">{{ $t('welcome.passwordMethod') }}</span>
             </div>
-            <span class="security-tile__sub mt-2">{{ $t('welcome.passwordMethodDesc') }}</span>
+            <span class="security-tile__sub t-caption mt-2">{{ $t('welcome.passwordMethodDesc') }}</span>
           </div>
 
         </div>
       </template>
 
       <!-- PRF not supported — compact inline notice -->
-      <div v-else class="prf-notice mt-3">
+      <div v-else class="prf-notice t-caption mt-3">
         <v-icon size="x-small" color="warning" class="mr-1 flex-shrink-0">mdi-alert-outline</v-icon>
         <span>{{ $t('welcome.prfNotSupported') }}</span>
       </div>
@@ -165,15 +165,6 @@ const handleContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
-// ─── Section labels ───────────────────────────────────────────────────────────
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white
-}
-
 // ─── Security method row ──────────────────────────────────────────────────────
 .security-row {
   display: flex;
@@ -213,10 +204,10 @@ const handleContinue = (): void => {
     gap: 5px;
   }
 
+  // Type comes from the ramp classes in the markup; these rules only set the
+  // name's weight and each line's selected tone.
   &__name {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.75);
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -224,13 +215,11 @@ const handleContinue = (): void => {
 
   &__sub {
     display: block;
-    font-size: 10px;
-    color: var(--g-text-3);
     line-height: 1.35;
   }
 
   &--active &__name {
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--g-text-1);
   }
 
   &--active &__sub {
@@ -242,8 +231,7 @@ const handleContinue = (): void => {
 .prf-notice {
   display: flex;
   align-items: flex-start;
-  font-size: 11px;
-  color: rgba(255, 196, 0, 0.65);
+  color: var(--g-warning);
   line-height: 1.4;
   padding: 8px 10px;
   border-radius: 8px;

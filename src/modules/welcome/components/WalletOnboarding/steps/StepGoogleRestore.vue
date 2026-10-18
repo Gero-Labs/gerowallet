@@ -2,7 +2,7 @@
   <div class="step-google-restore">
     <div class="step-scroll">
     <!-- Google sign-in -->
-    <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
     <template v-if="!email">
       <GButton tier="secondary" :loading="signingIn" @click="signIn()">
         <v-avatar size="18" class="mr-2">
@@ -14,7 +14,7 @@
     <template v-else>
       <div class="signed-in-row">
         <v-icon color="success" size="18" class="mr-1">mdi-check-circle</v-icon>
-        <span class="text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email }) }}</span>
+        <span class="signed-in-row__text t-body">{{ $t('welcome.googleSignedInAs', { email }) }}</span>
         <GButton tier="tertiary" compact class="ml-2" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
         </GButton>
@@ -25,7 +25,7 @@
 
     <v-form ref="restoreForm" v-model="formValid" style="width: 100%;">
       <!-- Wallet name -->
-      <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.walletName') }}</div>
       <v-text-field
         v-model="name"
         density="compact"
@@ -37,8 +37,8 @@
       ></v-text-field>
 
       <!-- Recovery password (no file — fileless restore) -->
-      <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
-      <div class="field-hint mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
+      <div class="field-hint t-caption mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
       <v-text-field
         v-model="recoveryPassword"
         density="compact"
@@ -55,7 +55,7 @@
 
       <!-- New spending password (fallback when this device/browser has no WebAuthn PRF) -->
       <template v-if="!passkeyCapable">
-        <div class="step-section-label mb-2">{{ $t('welcome.newSpendingPassword') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.newSpendingPassword') }}</div>
         <v-text-field
           v-model="spendingPassword"
           density="compact"
@@ -89,7 +89,7 @@
 
       <!-- Re-enroll a passkey on this (new) device — preferred path, hardware-backed -->
       <template v-else>
-        <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.securityMethod') }}</div>
         <GButton
           tier="secondary"
           block
@@ -110,7 +110,7 @@
           border="start"
           class="mb-2"
         >
-          <span class="text-body-2">{{ passkeyError }}</span>
+          <span class="t-body">{{ passkeyError }}</span>
         </v-alert>
       </template>
 
@@ -123,7 +123,7 @@
         border="start"
         class="mt-3 mb-0"
       >
-        <span class="text-body-2">{{ errorMessage }}</span>
+        <span class="t-body">{{ errorMessage }}</span>
       </v-alert>
     </v-form>
     </div>
@@ -355,22 +355,18 @@ const restore = async (): Promise<void> => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
+// Type comes from the ramp classes in the markup; these rules only space and
+// lift the signed-in account to the primary tone.
 .field-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
   line-height: 1.4;
 }
 
 .signed-in-row {
   display: flex;
   align-items: center;
+}
+
+.signed-in-row__text {
+  color: var(--g-text-1);
 }
 </style>
