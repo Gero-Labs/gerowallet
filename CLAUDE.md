@@ -15,7 +15,7 @@ Cardano blockchain wallet Chrome extension (Manifest V3). Multi-chain light wall
 - **Cardano**: `@cardano-sdk/core` (version in package-lock.json) (preferred for new features)
 - **Hardware Wallets**: Ledger, Trezor, Keystone
 - **Real-time**: Gero Sync — push-based WebSocket sync (`VITE_SYNC_WS_URL`)
-- **Crypto**: WebAssembly (bip39, blake2b), `@noble/ciphers` (ChaCha20), `@noble/hashes` (PBKDF2)
+- **Crypto**: Local chain SDK WASM, versioned password-secret encryption, and a separate PRF path
 
 ## Project Structure
 ```
@@ -94,7 +94,9 @@ packaging. Legacy `pack:*` utilities do not perform release qualification.
 - **CRITICAL**: `@click="handler"` passes Event as first arg, overriding defaults. Use `@click="handler()"` when function has default params.
 
 ### Security
-- All private keys encrypted (ChaCha20-Poly1305 AEAD with PBKDF2)
+- Write stored password secrets through `sealTextSecret` / `sealKeySecret` in
+  `secretWriters.ts`. They select field-specific current formats or purpose-bound
+  `gpw2` when enabled. Preserve legacy readers; PRF encryption is separate.
 - Background script isolation for sensitive operations
 - Never log sensitive data
 - Use `debugLog()` for dev logging

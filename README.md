@@ -44,7 +44,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - Hardware wallet support (Ledger, Trezor, Keystone)
 - PassKey (WebAuthn PRF) wallets with hardware-backed key encryption
 - Multiple wallets; broader account-index support is tracked in [#1307](https://github.com/Gero-Labs/gerowallet/issues/1307)
-- Enterprise-grade encryption (AES-256 + ChaCha20-Poly1305)
+- Versioned authenticated encryption for stored software-wallet secrets
 
 **⛓️ Multi-Chain Support**
 - **Cardano** — staking, CIP-1694 governance, native assets, NFTs, dApp connector
@@ -93,7 +93,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - **Cardano SDK**: `@cardano-sdk/core` (see the lockfile) (modern, preferred for new features)
 - **Data Layer**: Nexus (Gero backend) for blockchain data, prices, and DeFi routing
 - **Real-time**: Gero Sync — WebSocket push for instant blockchain updates
-- **Cryptography**: WebAssembly for performance-critical operations (bip39, blake2b)
+- **Cryptography**: Local WASM from chain SDK dependencies, plus versioned secret encryption
 - **Hardware Wallets**: Native support for Ledger, Trezor, and Keystone
 
 For complete technical details, see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -445,7 +445,9 @@ Gero Wallet takes security seriously. This is a non-custodial wallet handling re
 ### Security Features
 
 **Key protection**
-- **Private key encryption**: AES-256 + ChaCha20-Poly1305 AEAD, with PBKDF2 key derivation
+- **Stored secrets**: Password-secret writers select the supported raw-key,
+  `gpw1`, or purpose-bound `gpw2` format according to the field and feature flag.
+  Legacy readers remain for compatibility; PRF wallets use a separate path.
 - **Signing boundaries**: password-wallet signing runs in the worker; PRF wallets decrypt in trusted UI, and hardware wallets use document-side device communication.
 - **Hardware wallet support**: Ledger, Trezor, and Keystone
 - **PassKey (WebAuthn PRF) wallets**: key encryption bound to platform authenticator hardware, with no spending password
