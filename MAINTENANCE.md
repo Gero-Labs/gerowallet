@@ -13,6 +13,12 @@ diagnostics, dependency advisory URLs, and evidence limits. Checks used a fresh
 normal install with scripts enabled, Node 24.19.0, npm 11.1.0, and Windows x64.
 No forced or legacy peer resolution was used.
 
+`lockfileSha256` hashes the raw Git blob at `sourceCommit:package-lock.json`
+(LF line endings). `lockfileCheckout` separately preserves the installed
+Windows checkout's CRLF hash; normalizing its line endings yields the same
+Git blob. Diagnostic messages replace the absolute checkout prefix with
+`<repo>/`. Apply that normalization before comparing messages across machines.
+
 | Check | Result | Interpretation |
 | --- | --- | --- |
 | `npm ci` | Pass | Lockfile installs normally with scripts |

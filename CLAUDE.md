@@ -229,7 +229,13 @@ node scripts/design/contrast.mjs         # 56 WCAG checks against the real token
 Motion is feedback, not decoration. Keep spinners, ~1.4s skeleton shimmers, typing/dot indicators, and status/sync/connection pulses. Delete decorative loops (glow/breathe/float/aurora/color-shift). Durations resolve to `--g-dur-*`; prefer explicit `transition` property lists over `transition: all` (and never comma-list properties with a single trailing duration — that only animates the last one).
 
 ## External Integrations
-Data layer: **Nexus** (via gero-backend) for primary Cardano data and routing. Bitcoin also uses Esplora, Midnight uses Foundation/Arkhia, and SPO uses Koios directly. Public client configuration varies by integration. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay (Guardarian removed 2026-09). Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
+Data layer: **Nexus** (via gero-backend) for primary Cardano data and routing.
+Bitcoin also uses Esplora, and SPO uses Koios directly. Midnight data uses
+Nexus/Gero Sync; proof generation can use direct Foundation/Arkhia services,
+with public indexer endpoints available for development fallback. Public client
+configuration varies by integration. Real-time: **Gero Sync** (WebSocket push).
+Fiat on-ramp: MoonPay (Guardarian removed 2026-09). Other: ADA Handle, Bring
+Cashback. Hardware: Ledger, Trezor, Keystone.
 
 ## Relevant Skills
 Use these slash commands when working on this project:

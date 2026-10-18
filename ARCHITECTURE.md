@@ -101,7 +101,9 @@ Nexus proxy. This is not a universal network boundary:
 
 - [bitcoin-api.ts](src/api/bitcoin-api.ts) uses Esplora directly.
 - [spo-api.ts](src/api/spo-api.ts) calls per-network Koios endpoints.
-- [Midnight](src/chains/midnight) also uses Foundation/Arkhia services.
+- [Midnight](src/chains/midnight) data uses Nexus/Gero Sync. Proof generation
+  can use direct Foundation/Arkhia services; public indexer endpoints also
+  support development fallback. See `midnightConfig.ts` for per-network routes.
 - Feature flags, market data, on-ramp, and provider integrations have their
   own configuration and availability requirements.
 

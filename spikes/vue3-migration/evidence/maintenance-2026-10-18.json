@@ -7,7 +7,7 @@
     "npm": "11.1.0",
     "platform": "Windows x64"
   },
-  "lockfileSha256": "a85758ded34f014715b942963f8f8507458bf9244797b707b1cfc21285774fc4",
+  "lockfileSha256": "1075fddbdf0d3ca79d86b4f59eb993934fe4a078b3c8017370c26feaced132b5",
   "installation": {
     "command": "npx --yes npm@11.1.0 ci",
     "exitCode": 0,
@@ -62,14 +62,14 @@
       "src/shared/composables/useCnightDustRegistration.ts(602,21): error TS4111: Property 'privateKeyBytes' comes from an index signature, so it must be accessed with ['privateKeyBytes'].",
       "src/shared/composables/useCnightDustRegistration.ts(607,21): error TS4111: Property 'privateKeyBytes' comes from an index signature, so it must be accessed with ['privateKeyBytes'].",
       "src/shared/composables/useCnightDustRegistration.ts(610,19): error TS4111: Property 'password' comes from an index signature, so it must be accessed with ['password'].",
-      "src/shared/composables/usePoolSigning.ts(45,44): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
-      "src/shared/composables/usePoolSigning.ts(45,102): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
-      "src/shared/composables/usePoolSigning.ts(46,43): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
-      "src/shared/composables/usePoolSigning.ts(46,100): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
+      "src/shared/composables/usePoolSigning.ts(45,44): error TS2694: Namespace '\"<repo>/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
+      "src/shared/composables/usePoolSigning.ts(45,102): error TS2694: Namespace '\"<repo>/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
+      "src/shared/composables/usePoolSigning.ts(46,43): error TS2694: Namespace '\"<repo>/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
+      "src/shared/composables/usePoolSigning.ts(46,100): error TS2694: Namespace '\"<repo>/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
       "src/shared/composables/usePoolSigning.ts(146,5): error TS2345: Argument of type 'number' is not assignable to parameter of type 'bigint'.",
       "src/shared/composables/usePoolSigning.ts(177,78): error TS2345: Argument of type 'number' is not assignable to parameter of type 'bigint'.",
-      "src/shared/composables/usePoolSigning.ts(289,53): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
-      "src/shared/composables/usePoolSigning.ts(289,122): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
+      "src/shared/composables/usePoolSigning.ts(289,53): error TS2694: Namespace '\"<repo>/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
+      "src/shared/composables/usePoolSigning.ts(289,122): error TS2694: Namespace '\"<repo>/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
       "src/shared/utils/resolver.ts(291,5): error TS2353: Object literal may only specify known properties, and 'decimals' does not exist in type 'NftMetadata'.",
       "src/shared/utils/resolver.ts(549,5): error TS7030: Not all code paths return a value.",
       "src/shared/utils/resolver.ts(570,5): error TS7030: Not all code paths return a value.",
@@ -83,7 +83,8 @@
       "src/shared/utils/trezorWeb.ts(1397,38): error TS2339: Property 'error' does not exist on type '{ error: string; code?: ErrorCode; } | SignedTransaction'.",
       "src/sidepanel/composables/useAgentDock.ts(60,68): error TS2322: Type 'WalletContextSnapshot' is not assignable to type 'Record<string, unknown>'."
     ],
-    "npmEquivalent": "npm run typecheck"
+    "npmEquivalent": "npm run typecheck",
+    "diagnosticNormalization": "Absolute checkout prefixes use <repo>/ with forward slashes. Normalize the same way before comparing diagnostic path/code/message identities."
   },
   "lint": {
     "command": "node node_modules/eslint/bin/eslint.js . --format json --output-file <report>",
@@ -2431,5 +2432,11 @@
     "dependencies": 1314,
     "accountableOwner": "adamcazes",
     "implementation": "Codex during authorized sessions"
+  },
+  "lockfileHashDefinition": "SHA-256 of raw Git blob bytes at sourceCommit:package-lock.json (LF); independent of checkout line-ending conversion.",
+  "lockfileCheckout": {
+    "sha256": "a85758ded34f014715b942963f8f8507458bf9244797b707b1cfc21285774fc4",
+    "lineEndings": "CRLF",
+    "normalizedToLfMatchesGitBlob": true
   }
 }

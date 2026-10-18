@@ -20,8 +20,9 @@ A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for C
 **Gero Wallet** is a feature-rich, non-custodial multi-chain wallet browser extension. It supports Cardano, Bitcoin, Midnight, and Apex Fusion (Prime and Vector), and ships two interfaces: a full dashboard and Mini-Gero, a compact side-panel wallet.
 
 Cardano data and DeFi routing primarily use **Nexus**, through the Gero
-backend. Bitcoin also uses Esplora directly, Midnight uses Foundation/Arkhia
-services, and the SPO client calls Koios. See [architecture](ARCHITECTURE.md)
+backend. Bitcoin also uses Esplora directly, and the SPO client calls Koios.
+Midnight data uses Nexus/Gero Sync, while proof generation can use direct
+Foundation/Arkhia services. See [architecture](ARCHITECTURE.md)
 for these boundaries. Feature availability depends on chain and feature flags.
 
 The development package is `2.7.3`; that version is not evidence of a published
