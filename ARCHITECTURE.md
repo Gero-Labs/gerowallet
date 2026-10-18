@@ -1,1006 +1,175 @@
-# Gero Wallet Architecture
-
-## Table of Contents
-- [Overview](#overview)
-- [High-Level Architecture](#high-level-architecture)
-- [Chrome Extension Architecture](#chrome-extension-architecture)
-- [Component Architecture](#component-architecture)
-- [Data Flow](#data-flow)
-- [State Management](#state-management)
-- [Database Architecture](#database-architecture)
-- [Security Architecture](#security-architecture)
-- [Real-Time Communication](#real-time-communication)
-- [Transaction Processing](#transaction-processing)
-- [External Integrations](#external-integrations)
-- [Build System](#build-system)
-
----
-
-## Overview
-
-Gero Wallet is a comprehensive Cardano blockchain wallet implemented as a Chrome browser extension (Manifest V3). It bridges Web2 and Web3 technologies, providing users with secure wallet management, portfolio tracking, staking, governance participation, and DeFi integrations.
-
-### Key Architectural Principles
-
-1. **Security First**: Private keys never leave the background context, all sensitive operations are isolated
-2. **Multi-Context Design**: Separate execution contexts (background, content, inject, web) with secure messaging
-3. **Real-Time Sync**: WebSocket-based blockchain updates with Gero Sync (WebSocket push) for instant portfolio updates
-4. **Performance Optimized**: Non-blocking initialization, deferred loading, and efficient state management
-5. **Extensible**: Modular architecture with clear separation of concerns
-
----
-
-## High-Level Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Browser Extension                            │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │   Popup      │  │   Options    │  │  Side Panel  │          │
-│  │   (Web UI)   │  │   (Web UI)   │  │   (Web UI)   │          │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
-│         │                  │                  │                  │
-│         └──────────────────┼──────────────────┘                  │
-│                            │                                     │
-│                ┌───────────▼───────────┐                         │
-│                │  Chrome Messaging     │                         │
-│                │  (Runtime.sendMessage)│                         │
-│                └───────────┬───────────┘                         │
-│                            │                                     │
-│         ┌──────────────────▼──────────────────┐                 │
-│         │   Background Service Worker         │                 │
-│         │  - Wallet Operations                │                 │
-│         │  - Crypto Operations                │                 │
-│         │  - Transaction Signing              │                 │
-│         │  - State Broadcasting               │                 │
-│         └──────────┬──────────────────┬──────┘                  │
-│                    │                  │                          │
-│         ┌──────────▼─────┐  ┌────────▼─────────┐               │
-│         │  IndexedDB     │  │  Chrome Storage  │               │
-│         │  (Dexie)       │  │  (Sync State)    │               │
-│         └────────────────┘  └──────────────────┘               │
-└─────────────────────────────────────────────────────────────────┘
-                             │
-                ┌────────────▼────────────┐
-                │  External Services      │
-                │  - Nexus (Gero backend) │
-                │  - Gero Sync (WS push)  │
-                │  - Price Feeds          │
-                │  - DeFi Aggregators     │
-                └─────────────────────────┘
-```
-
----
-
-## Chrome Extension Architecture
-
-### Manifest V3 Structure
-
-Gero Wallet is built using Chrome's **Manifest V3** specification, which enforces stricter security and performance requirements:
-
-#### 1. **Background Service Worker** (`src/chrome/background.ts`)
-- **Purpose**: Core wallet operations, transaction signing, crypto operations
-- **Lifecycle**: Event-driven, can be suspended after 30 seconds of inactivity
-- **Key Responsibilities**:
-  - Wallet key management (encrypted storage)
-  - Transaction construction and signing
-  - Message routing between contexts
-  - State broadcasting to UI contexts
-  - API communication with the blockchain data layer
-
-#### 2. **Content Scripts** (`src/chrome/content/`)
-- **Purpose**: Inject wallet API into web pages
-- **Execution Context**: Runs in isolated context within web pages
-- **Responsibilities**:
-  - Bridge communication between page and extension
-  - Inject `window.cardano` API for DApp connections
-  - Message relay and validation
-
-#### 3. **Inject Scripts** (`src/chrome/inject/`)
-- **Purpose**: Provide `window.cardano` API to web pages
-- **Execution Context**: Runs in page's main context
-- **Responsibilities**:
-  - Expose Cardano DApp connector API (CIP-30)
-  - Handle DApp connection requests
-  - Transaction approval UI
-
-#### 4. **Web UI Contexts** (Options, Popup, Sidepanel)
-- **Options Page** (`src/options/`): Full wallet interface (main UI)
-- **Popup** (`src/popup/`): Quick access wallet actions
-- **Sidepanel** (`src/sidepanel/`): Chrome's side panel UI
-
-### Cross-Context Communication
-
-```
-┌─────────────┐                    ┌──────────────────┐
-│   Web Page  │                    │   Options Page   │
-│             │                    │   (Vue.js SPA)   │
-│  window.    │                    │                  │
-│  cardano    │                    │                  │
-└──────┬──────┘                    └────────┬─────────┘
-       │                                    │
-       │ postMessage                        │ chrome.runtime
-       ▼                                    ▼
-┌──────────────┐                    ┌──────────────────┐
-│   Content    │                    │   Background     │
-│   Script     │◄───────────────────┤   Service Worker │
-│              │  chrome.runtime    │                  │
-└──────────────┘                    └──────────────────┘
-```
-
-**Message Flow:**
-1. Web page calls `window.cardano.signTx()`
-2. Inject script posts message to content script
-3. Content script sends to background via `chrome.runtime.sendMessage()`
-4. Background processes, responds
-5. Response flows back through the chain
-
----
-
-## Component Architecture
-
-### Module System
-
-Gero Wallet uses a **feature-based module architecture**. Each feature is self-contained in `src/modules/[feature]/`:
-
-```
-src/modules/
-├── assets/              # Token and NFT management
-├── blog/                # In-app news and updates
-├── dashboard/           # Portfolio overview, quick actions
-├── governance/          # Cardano governance (CIP-1694)
-├── multisig/            # Multi-signature wallets
-├── navigation/          # App routing and layout
-├── staking/             # Cardano staking and delegation
-├── swap/                # DeFi token swapping
-├── transactions/        # Transaction history and details
-├── wallet/              # Wallet settings and management
-└── welcome/             # Onboarding and wallet creation
-```
-
-**Module Structure:**
-```
-modules/[feature]/
-├── components/          # Vue components specific to feature
-├── dialogs/             # Modal dialogs
-├── views/               # Main views/pages
-├── composables/         # Vue composables
-└── types.ts             # TypeScript types
-```
-
-### Service Layer
-
-Business logic is centralized in **services** (`src/services/`):
-
-| Service | Purpose |
-|---------|---------|
-| `walletManager.service.ts` | Wallet lifecycle (create, import, login, switch) |
-| `sync.service.ts` | Blockchain synchronization (UTXOs, transactions) |
-| `websocket.service.ts` | Real-time WebSocket communication (Gero Sync push) |
-| `krakenWebSocket.service.ts` | Real-time price feeds (via Nexus) |
-| `storeMessaging.service.ts` | Cross-context state synchronization |
-| `storageObserver.service.ts` | Chrome storage change observer |
-
-### API Layer
-
-External integrations are abstracted in `src/api/`:
-
-```typescript
-// Base API class with common patterns
-class Api {
-  protected async request(endpoint: string, options?: RequestOptions) {
-    // Common retry logic, error handling, auth
-  }
-}
-
-// Feature-specific APIs extend base
-class BlockchainApi extends Api {
-  async getUtxos(address: string): Promise<Utxo[]> { ... }
-  async submitTx(txHash: string): Promise<void> { ... }
-}
-```
-
-**Key API Integrations:**
-- **Blockchain**: Nexus (Gero backend) as the blockchain data layer
-- **Prices**: market/price data (via Nexus), Charli3 Oracle
-- **DeFi**: Nexus DEX routing (swap aggregation), token analytics (via Nexus)
-- **Security**: transaction risk assessment, Xerberus (ratings)
-- **Fiat**: Moonpay, Guardarian (on/off ramps)
-
----
-
-## Data Flow
-
-### Wallet Initialization Flow
-
-```
-User Login
-    │
-    ▼
-┌────────────────────────────────┐
-│ walletManager.service.ts       │
-│ - Decrypt private keys         │
-│ - Initialize wallet stores     │
-│ - Setup Gero Sync connection   │
-└────────┬───────────────────────┘
-         │
-         ▼
-┌────────────────────────────────┐
-│ sync.service.ts                │
-│ - Fetch UTXOs from blockchain  │
-│ - Fetch transaction history    │
-│ - Calculate balances           │
-└────────┬───────────────────────┘
-         │
-         ▼
-┌────────────────────────────────┐
-│ walletStore (Vue reactive)   │
-│ - Update state                 │
-│ - Broadcast to UI contexts     │
-└────────┬───────────────────────┘
-         │
-         ▼
-┌────────────────────────────────┐
-│ UI Updates (Options/Popup)     │
-│ - Render portfolio             │
-│ - Show balances                │
-└────────────────────────────────┘
-```
-
-### Transaction Flow
-
-```
-User Initiates Transaction
-         │
-         ▼
-┌────────────────────────────────┐
-│ UI Component (e.g., SendDialog)│
-│ - Validate inputs              │
-│ - Request password             │
-└────────┬───────────────────────┘
-         │
-         │ chrome.runtime.sendMessage
-         ▼
-┌────────────────────────────────┐
-│ background.ts                  │
-│ - Route message to handler     │
-└────────┬───────────────────────┘
-         │
-         ▼
-┌────────────────────────────────┐
-│ walletBg.ts                    │
-│ - Build transaction (SDK)      │
-│ - Calculate fees               │
-│ - Sign with private key        │
-└────────┬───────────────────────┘
-         │
-         ▼
-┌────────────────────────────────┐
-│ BlockchainApi                  │
-│ - Submit via Nexus             │
-└────────┬───────────────────────┘
-         │
-         ▼
-┌────────────────────────────────┐
-│ Gero Sync Real-time Update     │
-│ - Receive confirmation         │
-│ - Update wallet state          │
-└────────────────────────────────┘
-```
-
-### Hardware Wallet Flow
-
-Hardware wallets (Ledger, Trezor, Keystone) use a **hybrid approach**:
-
-1. **Background** prepares unsigned transaction
-2. **Frontend** handles device communication (WebUSB, WebBLE, QR)
-3. User confirms on device
-4. Frontend sends signed transaction back to background
-5. **Background** submits to blockchain
-
-**Why?** Service workers can't access WebUSB/WebBLE APIs directly.
-
----
-
-## State Management
-
-### Vue reactive Stores
-
-Gero Wallet uses **custom Vue reactive stores** instead of Vuex for lightweight, performant state management:
-
-```typescript
-// Example store pattern
-import { reactive } from 'vue';
-const walletStore = reactive({
-  // State
-  walletId: null,
-  address: null,
-  balance: '0',
-  utxos: [],
-  transactions: [],
-
-  // Mutations (methods that modify state)
-  setWallet(walletId: string, address: string) {
-    this.walletId = walletId;
-    this.address = address;
-  },
-
-  setBalance(balance: string) {
-    this.balance = balance;
-  }
-});
-```
-
-### Key Stores
-
-| Store | Purpose | Location |
-|-------|---------|----------|
-| `geroStore` | Global app state (wallets list, network, config) | `src/stores/geroStore.ts` |
-| `walletStore` | Active wallet data (UTXOs, keys, addresses) | `src/stores/walletStore.ts` |
-| `networkStore` | Network params (tip, epoch, genesis) | `src/stores/networkStore.ts` |
-| `priceStore` | Real-time price data | `src/stores/priceStore.ts` |
-| `stakingStore` | Staking pools and delegation | `src/stores/stakingStore.ts` |
-| `governanceStore` | Governance and DRep state | `src/stores/governanceStore.ts` |
-| `loadingStore` | Loading states and progress | `src/stores/loading.ts` |
-
-### Cross-Context State Synchronization
-
-**Challenge**: Chrome extension has multiple isolated JavaScript contexts (background, options, popup). State must stay synchronized.
-
-**Solution**: Dual messaging system
-
-#### Background Context (`src/chrome/storeMessagingBg.ts`)
-```typescript
-// Broadcast store updates to all connected UI contexts
-function broadcastUpdate(storeName: string, updates: any) {
-  // Serialize complex types (BigInt, Map, Set)
-  const serialized = JSON.parse(JSON.stringify(updates, serializer));
-
-  // Broadcast via port connections
-  ports.forEach(port => {
-    port.postMessage({ storeName, updates: serialized });
-  });
-}
-```
-
-Each store persists its own state after the broadcast. `walletStore`, `networkStore` and `midnightStore` use `StorePersister` (`src/utils/storePersistence.ts`). It writes only the fields that changed: small ones to `chrome.storage.local[storeName]`, and bulk ones (transactions, UTxOs, tokens, collections, assets) to the `gero-store-cache` IndexedDB. Large values must stay out of `chrome.storage`. Chrome copies every changed value (old and new) on its browser UI thread into every `storage.onChanged` listener, including the content script in every tab. Whole-store rewrites froze the entire browser.
-
-#### Browser Context (`src/services/storeMessaging.service.ts`)
-```typescript
-// Subscribe to store updates from background
-storeMessaging.subscribe('walletStore', (updates) => {
-  Object.assign(walletStore, updates);
-});
-```
-
-**Critical Pattern**: Always use **current in-memory state** as base for updates:
-```typescript
-// ✅ CORRECT
-const current = walletStore;
-const finalState = { ...current, ...updates };
-chrome.storage.local.set({ walletStore: finalState });
-
-// ❌ WRONG (race condition)
-const current = await chrome.storage.local.get('walletStore');
-const finalState = { ...current.walletStore, ...updates };
-chrome.storage.local.set({ walletStore: finalState });
-```
-
----
-
-## Database Architecture
-
-### Two-Tier Database System
-
-Gero Wallet uses **Dexie.js** (IndexedDB wrapper) with a two-tier architecture:
-
-#### 1. Application-Level Database (`src/db/gero-db.ts`)
-- **Database Name**: `GeroWalletDatabase` (singleton)
-- **Purpose**: Global application data
-- **Tables**:
-  - `wallets` - List of all wallets (id, name, type, encrypted keys)
-  - `config` - Global settings
-  - `provider` - Blockchain provider configuration
-
-```typescript
-// Access pattern
-import { getAllWallets, createNewWallet } from '@/db/gero-db';
-
-const wallets = await getAllWallets();
-const walletId = await createNewWallet(name, icon, theme, mnemonic, password);
-```
-
-#### 2. Wallet-Specific Databases (`src/db/wallet-db.ts`)
-- **Database Name**: `wallet-{walletId}` (one per wallet)
-- **Purpose**: Individual wallet data (isolated)
-- **Tables**:
-  - `config` - Wallet-specific settings
-  - `sync` - Sync state (last sync time, tip)
-  - `account` - Account details
-  - `addresses` - Address derivation cache
-  - `contacts` - Address book
-  - `rewards` - Staking rewards history
-  - `transactions` - Transaction history
-  - `connected_dapps` - DApp connection permissions
-  - `multisig` - Multi-sig wallet data
-
-```typescript
-// Access pattern
-import { getDb } from '@/db/wallet-db';
-
-const db = await getDb(walletId);
-const transactions = await db['transactions'].toArray();
-await db['transactions'].add(newTransaction);
-```
-
-### Database Versioning
-
-**Critical Pattern**: Always apply schema on every database open:
-
-```typescript
-db.version(1).stores({
-  wallets: '++id, name, type'
-});
-
-db.version(2).stores({
-  wallets: '++id, name, type, publicKey'
-}).upgrade(tx => {
-  // Migration logic
-});
-
-await db.open();
-```
-
-**Why?** Prevents "No [Table] Table" errors. Schema application is idempotent.
-
-### Data Persistence Strategy
-
-1. **Hot Path**: In-memory stores (Vue reactive) for UI reactivity
-2. **Persistence**: IndexedDB for permanent storage
-3. **Sync**: Chrome Storage for cross-context state hydration
-4. **Cache**: Portfolio cache for expensive calculations
-
----
-
-## Security Architecture
-
-### Threat Model
-
-1. **Malicious DApps**: Attempting to steal private keys or trick users
-2. **XSS Attacks**: Injecting scripts to access wallet data
-3. **Phishing**: Social engineering to extract mnemonics
-4. **Physical Access**: Unauthorized device access
-5. **Network Attacks**: Man-in-the-middle, DNS poisoning
-
-### Security Layers
-
-#### 1. **Private Key Protection**
-
-**Storage**: Every secret stored under the spending password is encrypted at rest. Writers:
-
-```typescript
-// Small UTF-8 secrets (mnemonic, MPC device share, 2FA data): gpw1 = Argon2id -> XChaCha20-Poly1305
-import { encrypt } from '@/shared/utils/crypto';
-const encryptedMnemonic = encrypt(mnemonic, password);
-
-// Root key, SPO cold key, Strike key: PBKDF2-HMAC-SHA512 (19,162 iter) -> ChaCha20-Poly1305
-// Format: salt (32B) + nonce (12B) + tag (16B) + ciphertext, compatible with CSL's EMIP3
-import { encryptPrivateKey, encryptWithPassword } from '@/shared/utils/crypto';
-const encryptedRootKey = encryptPrivateKey(rootKey, password);
-```
-
-**Reading**: always go through the single reader for the field. Never call `decryptWithPassword` or the legacy reader on a stored blob directly: fields hold several historical formats (including the purpose-bound `gpw2` envelope, legacy crypto-ts blobs and raw PBKDF2 hex), and only these readers handle all of them.
-
-```typescript
-import { SecretPurpose, decrypt, decryptPrivateKey, decryptKeyBlob } from '@/shared/utils/crypto';
-const rootKeyBytes = decryptPrivateKey(wallet.encryptedPrivateKey, password);        // Cardano, BTC, Midnight
-const mnemonic = decrypt(wallet.encryptedMnemonic, password, SecretPurpose.Mnemonic); // also MpcShare, SecurityData
-const coldKey = decryptKeyBlob(coldKeyBlob, password, SecretPurpose.ColdKey);        // also StrikeKey
-```
-
-#### 2. **Context Isolation**
-
-- **Private keys**: Only accessible in background service worker
-- **Transaction signing**: Never exposes keys to UI contexts
-- **Message validation**: All cross-context messages validated
-
-#### 3. **DApp Connection Security**
-
-```typescript
-// Connection approval required
-const approval = await showConnectionDialog(dappInfo);
-if (!approval) throw new Error('User rejected');
-
-// Transaction risk assessment
-const risk = await cardanoShieldApi.assessRisk(tx);
-if (risk.level === 'high') showWarning();
-```
-
-**Protections**:
-- Domain whitelisting/blacklisting
-- Transaction preview and approval
-- Transaction risk assessment
-- Limited API exposure (CIP-30 standard only)
-
-#### 4. **Hardware Wallet Integration**
-
-- **Ledger**: WebUSB/WebBLE with app attestation
-- **Trezor**: Connect API with bridge/webextension
-- **Keystone**: Air-gapped QR code signing
-
-**Benefit**: Private keys never touch the computer, even encrypted.
-
-#### 5. **Spending Password**
-
-- Required for all sensitive operations
-- Never stored (must be re-entered)
-- Separate from encryption key (optional enhanced security)
-
-### Security Best Practices
-
-1. **Never log sensitive data** (keys, mnemonics, passwords)
-2. **Validate all inputs** (addresses, amounts, transaction data)
-3. **Use established crypto patterns** (don't roll your own)
-4. **Handle errors gracefully** without exposing sensitive info
-5. **Regular security audits**
-
----
-
-## Real-Time Communication
-
-### Gero Sync WebSocket Service
-
-Gero Wallet uses **Gero Sync (WebSocket push)** for instant blockchain updates:
-
-**Architecture**:
-```
-Blockchain Events
-      │
-      ▼
-┌───────────────────────┐
-│  Gero Backend         │
-│  (monitors chain)     │
-└──────────┬────────────┘
-           │ publish
-           ▼
-┌───────────────────────┐
-│  Gero Sync            │
-│  (WebSocket push)     │
-└──────────┬────────────┘
-           │ subscribe
-           ▼
-┌───────────────────────┐
-│  Background Worker    │
-│ (websocket.service.ts)│
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│  Sync & Update Stores │
-└───────────────────────┘
-```
-
-**Channel Types**:
-1. **Private Channels**: User-specific updates (e.g., `stake1u...`)
-   - New transactions
-   - UTXO changes
-   - Reward payouts
-
-2. **Group Channels**: Network-wide events (e.g., `CARDANO.MAINNET`)
-   - New blocks
-   - Epoch transitions
-   - Protocol parameter updates
-
-**Authentication**:
-```typescript
-// Per-wallet authentication
-ablyService.setAuthParams(chain, network, stakeAddress);
-ablyService.connect();
-
-// Auth callback fetches token from backend
-authCallback: async (tokenParams, callback) => {
-  const token = await backendApi.getAblyToken(address);
-  callback(null, token);
-}
-```
-
-**Optimization**: Non-blocking connection during wallet login:
-```typescript
-// Don't block login waiting for Gero Sync
-(async () => {
-  await ablyService.connect();
-  await ablyService.subscribe(channels);
-})(); // Execute but don't await
-```
-
-**Concurrency Control**: Mutex locks prevent race conditions:
-```typescript
-import { Mutex } from 'async-mutex';
-const syncMutex = new Mutex();
-
-ablyService.on('message', async (message) => {
-  await syncMutex.runExclusive(async () => {
-    // Process sync updates atomically
-  });
-});
-```
-
----
-
-## Transaction Processing
-
-### Modern Cardano SDK Integration
-
-Gero Wallet uses **@cardano-sdk/core** (v0.46.9) for all transaction operations:
-
-```typescript
-import { Cardano, Serialization } from '@cardano-sdk/core';
-
-// Build transaction
-const tx: Cardano.Tx = {
-  body: {
-    inputs: [...],
-    outputs: [...],
-    fee: calculatedFee,
-    ...
-  },
-  witness: {
-    signatures: new Map(),
-    ...
-  }
-};
-
-// Serialize to CBOR
-const txCbor = Serialization.Transaction.fromCore(tx).toCbor();
-
-// Submit to blockchain
-await blockchainApi.submitTx(txCbor);
-```
-
-### Fee Calculation (Conway Era)
-
-**Critical**: Proper fee calculation for Conway-era transactions:
-
-```typescript
-// 1. Build initial transaction skeleton
-const skeleton = buildTxSkeleton(inputs, outputs, certificates);
-
-// 2. Resolve change outputs (MUST happen before fee calc)
-const change = changeAddressResolver(skeleton);
-
-// 3. Calculate base fee from CBOR size
-const baseFee = await sdk.minFee(skeletonWithChange);
-
-// 4. Add witness overhead
-const witnessCount = analyzeTransactionForSignatures(tx);
-const witnessOverhead = witnessCount * 110; // bytes per signature
-const totalFee = baseFee + (witnessOverhead * minFeeCoefficient);
-
-// 5. Update transaction with final fee
-tx.body.fee = totalFee;
-```
-
-**Conway-Era Certificate Types**:
-- `CertificateType.Unregistration` - Unstake (replaces legacy StakeDeregistration)
-- `CertificateType.Registration` - Register stake key
-- `CertificateType.StakeRegistrationDelegation` - Register + delegate
-- `CertificateType.StakeDelegation` - Delegate to pool
-
-### Transaction Builder (`src/shared/utils/builder.ts`)
-
-```typescript
-export async function buildTx(params: TxBuilderParams): Promise<Cardano.Tx> {
-  // 1. Coin selection
-  const { inputs, change } = selectCoins(params);
-
-  // 2. Build outputs
-  const outputs = buildOutputs(params.recipients);
-
-  // 3. Add certificates/withdrawals
-  const certificates = buildCertificates(params.certificates);
-
-  // 4. Calculate fees
-  const fee = await calculateFee({ inputs, outputs, certificates });
-
-  // 5. Finalize transaction
-  return {
-    body: { inputs, outputs, fee, certificates, ... },
-    witness: { signatures: new Map() }
-  };
-}
-```
-
----
-
-## External Integrations
-
-### Blockchain Data Layer
-
-**Primary**: Nexus (Gero backend)
-- **Pros**: Fast, reliable, first-party
-- Provides all on-chain data (UTXOs, transactions, tips) behind a single API
-
-**Backend API**: Custom backend for specialized operations:
-- Real-time sync token generation
-- Portfolio analytics
-- Custom queries not available in standard APIs
-
-### Price Feeds
-
-1. **Real-time price stream (via Nexus)**: Real-time ADA/USD price
-   ```typescript
-   krakenWebSocketService.connect();
-   krakenWebSocketService.on('price', (price) => {
-     priceStore.setPrice('ADA', price);
-   });
-   ```
-
-2. **Market/price data (via Nexus)**: Historical data, altcoin prices
-3. **Charli3**: On-chain oracle prices
-
-### DeFi Integrations
-
-- **Nexus DEX routing**: Swap aggregation across Cardano DEXs
-  - Finds best rates across Minswap, SundaeSwap, WingRiders, etc.
-  - Smart order routing
-
-- **Token analytics (via Nexus)**: Portfolio analytics and token metrics
-  - Token prices and charts
-  - Portfolio valuation
-
-- **Strike Finance**: Perpetuals trading (futures/options)
-
-### Fiat On/Off Ramps
-
-- **Moonpay**: Credit card purchases, ACH transfers
-- **Guardarian**: Alternative fiat gateway
-
----
-
-## Build System
-
-### Vite Multi-Config Architecture
-
-Gero Wallet uses **4 separate Vite configurations** for different contexts:
-
-```
-vite.config.mts               - Main web app (options, popup, sidepanel)
-vite.config.background.mts    - Background service worker
-vite.config.content.mts       - Content scripts
-vite.config.inject.mts        - Page injection scripts
-```
-
-**Why?** Each context has different requirements:
-- **Background**: Node polyfills, WASM support, no DOM
-- **Content**: Minimal bundle size, isolated from page
-- **Inject**: Must run in page context, expose window.cardano
-- **Web**: Full Vue.js SPA with router, Vuetify
-
-### Build Process
-
-```bash
-npm run build
-```
-
-**Steps**:
-1. Clear previous builds (`extension/` folder)
-2. Build background worker (Rollup bundle)
-3. Build content scripts (injected into pages)
-4. Build inject scripts (window.cardano API)
-5. Build web apps (options and sidepanel; popup approval views use the options router)
-6. Copy manifest.json and static assets
-7. Copy WASM files to `extension/`
-
-**Output**: `extension/` folder ready to load in Chrome
-
-### Plugin Architecture
-
-**Critical Plugins**:
-- `vite-plugin-wasm` - WebAssembly support (cryptography)
-- `vite-plugin-top-level-await` - Async WASM loading
-- `vite-plugin-node-polyfills` - Node.js compatibility (Buffer, process, etc.)
-- `@vitejs/plugin-vue` - Vue.js 3.5 single-file component support
-- `unplugin-auto-import` - Auto-import Vue, Vuetify
-- `unplugin-vue-components` - Auto-import components
-
-### Environment Variables
-
-```bash
-.env.development    # Development (localhost backend)
-.env.production     # Production (mainnet backend)
-.env.beta          # Beta testing environment
-```
-
-**Key Variables**:
-- `VITE_BACKEND_URL` - Gero backend API endpoint
-- `VITE_NEXUS_URL` - Nexus data layer (via backend proxy, `<backend>/api/nexus`)
-- `VITE_SYNC_WS_URL` - Gero Sync WebSocket (real-time updates)
-- `VITE_MOONPAY_API_KEY` - Fiat on-ramp
-
----
-
-## Performance Optimizations
-
-### Wallet Login Performance
-
-Recent optimizations reduced login time from **~11 seconds to <200ms**:
-
-1. **API Provider Optimization**: Optimized `getTip()` routing through the blockchain data layer (saved ~400ms)
-2. **Non-Critical Deferrals**:
-   - Swap token lists/blacklists (via Nexus) load in background (saved ~26ms)
-   - Bring cashback cache loads async (saved ~349ms)
-3. **Gero Sync Non-Blocking**: Connection happens in background (saved **~10,000ms**)
-4. **Chart Data Deferral**: Load price charts after 500ms (saved ~181ms)
-5. **Login Response Trust**: Removed 5-second polling loop (saved up to 5000ms)
-
-**Monitoring**:
-```typescript
-const start = performance.now();
-await operation();
-console.log(`⏱️ PERF: Operation took ${performance.now() - start}ms`);
-```
-
-### Bundle Size Optimization
-
-- **Code Splitting**: Dynamic imports for heavy components
-- **Tree Shaking**: Vite removes unused code
-- **Minification**: Terser for production builds
-- **Lazy Loading**: Routes and dialogs loaded on demand
-
----
-
-## Development Workflow
-
-### Local Development
-
-```bash
-# 1. Install dependencies
-npm ci
-
-# 2. Start dev server (hot reload)
-npm run dev
-
-# 3. Load in Chrome
-# - Navigate to chrome://extensions/
-# - Enable "Developer mode"
-# - Load unpacked -> select extension/ folder
-```
-
-### Testing
-
-```bash
-# Type checking
-npm run typecheck
-
-# Linting
-npm run lint
-
-# Fix linting issues
-npm run lint -- --fix
-```
-
-### Debugging
-
-**Background Script**:
-1. Go to `chrome://extensions/`
-2. Find Gero Wallet
-3. Click "service worker" link
-4. Opens DevTools for background context
-
-**Options/Popup**:
-1. Right-click on extension UI
-2. Select "Inspect"
-3. Opens DevTools for UI context
-
-**Console Prefixes**:
-- `⏱️ PERF:` - Performance metrics
-- `🔐 Auth:` - Authentication/security
-- `📡 API:` - Network requests
-- `💾 DB:` - Database operations
-- `🔄 Sync:` - Blockchain sync
-
----
-
-## Key Design Patterns
-
-### 1. **Message Passing Pattern**
-
-```typescript
-// Options/Browser Context
-const response = await Messaging.sendToBackgroundFromOptions({
-  method: MessageTypes.SIGN_TX,
-  data: { tx, password }
-});
-
-// Background Handler
-app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
-  const signedTx = await walletBg.signTx(request.data.tx, request.data.password);
-  sendResponse({ data: { success: true, tx: signedTx } });
-  return true; // Keep channel open for async
-});
-```
-
-### 2. **Store Broadcasting Pattern**
-
-```typescript
-// Update store and broadcast to all contexts
-function updateWalletState(updates: Partial<WalletStore>) {
-  Object.assign(walletStore, updates);
-
-  if (context === 'background') {
-    backgroundStoreMessaging.broadcastUpdate('walletStore', updates);
-    persister.markDirty(Object.keys(updates)); // only the touched fields; bulk ones to IndexedDB
-  }
-}
-```
-
-### 3. **Database Access Pattern**
-
-```typescript
-// Centralized database access
-const db = await getDb(walletId);
-
-// Use transactions for atomic operations
-await db.transaction('rw', db.transactions, db.addresses, async () => {
-  await db.transactions.add(newTx);
-  await db.addresses.update(address, { lastUsed: Date.now() });
-});
-```
-
-### 4. **Hardware Wallet Pattern**
-
-```typescript
-// 1. Background prepares unsigned transaction
-const unsignedTx = await buildTx(params);
-
-// 2. UI handles device communication
-const signedWitness = await ledgerService.signTx(unsignedTx);
-
-// 3. Background assembles and submits
-const finalTx = assembleTx(unsignedTx, signedWitness);
-await blockchainApi.submitTx(finalTx);
-```
-
----
-
-## Extending the Architecture
-
-### Adding a New Feature Module
-
-1. Create module directory: `src/modules/myFeature/`
-2. Add components, dialogs, views
-3. Create store if needed: `src/stores/myFeatureStore.ts`
-4. Add API integration: `src/api/myFeature-api.ts`
-5. Register routes in `src/modules/navigation/router.ts`
-6. Add navigation items in `src/modules/navigation/`
-
-### Adding a New Blockchain Provider
-
-1. Create API class: `src/api/myProvider-api.ts`
-2. Implement required methods: `getUtxos()`, `submitTx()`, `getTip()`, etc.
-3. Add to provider configuration in `src/stores/networkStore.ts`
-4. Update provider selection logic
-
-### Adding a New DeFi Integration
-
-1. Create API class: `src/api/myDeFi-api.ts`
-2. Create store: `src/stores/myDeFiStore.ts`
-3. Add UI components in `src/modules/swap/` or new module
-4. Integrate with transaction builder
-
----
-
-## Conclusion
-
-Gero Wallet's architecture prioritizes **security**, **performance**, and **extensibility**. The multi-context design isolates sensitive operations, the modular structure enables feature additions without coupling, and the real-time communication provides instant updates.
-
-For detailed implementation guides, see:
-- **Getting Started**: [Quick Start](README.md#quick-start)
-- **Development Guide**: `CLAUDE.md`
-- **Contributing**: `CONTRIBUTING.md`
-- **Security**: see the Security section of [README](README.md)
-
----
-
-**Last Updated**: 2025-12-23
+# Gero Wallet architecture
+
+This guide describes development at `1a4d50ac` on October 18, 2026, after the
+Vue 3 migration and its follow-up fixes. See [maintenance](MAINTENANCE.md) for
+measured debt and [release readiness](spikes/vue3-migration/RELEASE-READINESS.md)
+for qualification that remains open.
+
+## Runtime and build boundaries
+
+The host uses Vue 3, Vuetify 4, Router 4, I18n 11, and Vite 7. Read
+[package.json](package.json) and its lockfile for exact versions. Options API
+components remain supported; new components use Composition API. There is no
+host Vue 2 compatibility runtime.
+
+Four Vite configurations produce the extension; manifest preparation is a
+separate step. Production builds run sequentially to bound memory use.
+
+| Configuration | Source | Output |
+| --- | --- | --- |
+| [Web](vite.config.mts) | `src/options/index.html`, `src/sidepanel/index.html` | Dashboard/approval SPA and Mini-Gero |
+| [Background](vite.config.background.mts) | `src/chrome/background.ts` | Classic MV3 worker IIFE |
+| [Content](vite.config.content.mts) | `src/chrome/content.ts` | Isolated-world bridge |
+| [Inject](vite.config.inject.mts) | `src/chrome/inject.ts` | Page-world connector bundle |
+
+[scripts/manifest.ts](scripts/manifest.ts) defines permissions, CSP, entry
+paths, and channel identity. [scripts/prepare.ts](scripts/prepare.ts) writes
+the generated manifest and copies static and vendored assets.
+
+The obsolete `src/popup/main.ts`, `Popup.vue`, and `index.html` bootstrap was
+removed. Active [approval views](src/popup/modules/views) remain registered in
+the [options router](src/modules/navigation/router.ts). A Chrome popup window
+hosts that SPA; it is not a third web entry or `action.default_popup`.
+Mini-Gero has its own [sidepanel sources](src/sidepanel).
+
+WASM comes from installed dependencies and is emitted locally by the build
+plugins. Background loading must work without DOM globals. Do not add a CDN
+fallback; run the remote-code and artifact guards on the complete output.
+
+## Messaging and trust
+
+The page-world connector communicates through
+[content.ts](src/chrome/content.ts) to
+[messaging.ts](src/chrome/messaging.ts). Browser-supplied sender metadata is
+distinct from untrusted page-provided fields.
+
+| Caller and registry | Send method | Registration |
+| --- | --- | --- |
+| Dashboard, approval window, sidepanel | `sendToBackgroundFromOptions()` | `addToOptions(MessageTypes.X, handler)` |
+| dApp-facing connector methods | `sendToBackground()` | `add(METHOD.x, handler)` |
+
+The distinction is the registry, not the window shape. The messaging listener
+keeps a registered asynchronous handler's channel open. Returning `true` inside
+that handler does not send a response: call `sendResponse` exactly once on
+success, failure, and early exits. Check transport errors before reading
+`response.data`; handler errors and transport errors differ.
+
+Sensitive internal methods use [senderTrust.ts](src/chrome/senderTrust.ts) to
+check an extension-page sender. For dApp methods, preserve the relay's
+browser-derived origin and check wallet permission and current approval scope
+in the background. Never treat an origin inside the request payload as proof
+of authorization.
+
+Approvals must remain fresh after validation, authentication, and device
+round trips. Recheck wallet, network, request identity, cancellation, and expiry
+before signing or submitting. Single-flight guards prevent double submission.
+See the [signing guide](.claude/skills/gerowallet-dev/references/security.md).
+
+## State and worker lifetime
+
+[Stores](src/stores) use Vue reactivity rather than Vuex. Background stores
+broadcast through [storeMessagingBg.ts](src/chrome/storeMessagingBg.ts);
+documents subscribe through
+[storeMessaging.service.ts](src/services/storeMessaging.service.ts).
+Serialize reactive proxies at Chrome messaging and database boundaries.
+
+MV3 can stop the worker between requests. Durable state lives in storage;
+an in-memory wallet instance can be absent during startup or after locking.
+Handlers must tolerate that state. A warm-worker test does not prove restart
+behavior. See [production messaging tests](src/stores/productionMessaging.integration.spec.ts)
+and [real store browser smoke](scripts/migration-browser/store-sync-smoke.cjs).
+
+[StorePersister](src/utils/storePersistence.ts) splits persistence between a
+small `chrome.storage.local` record and bulk fields in the `gero-store-cache`
+IndexedDB. Do not rewrite multi-megabyte store snapshots for small changes;
+storage events copy values into listening contexts.
+
+The database layer has two scopes:
+
+- [gero-db.ts](src/db/gero-db.ts): application wallet list and shared settings.
+- [wallet-db.ts](src/db/wallet-db.ts): wallet-specific transactions, addresses,
+  configuration, and other chain data.
+
+Apply versioned schemas on every database open. Keep schema and secret-format
+changes separate from framework work and supply upgrade/recovery evidence
+when they change. The Vue migration did not require a schema bump.
+
+## Chain data and synchronization
+
+Cardano data and transaction construction primarily use the Gero backend and
+Nexus proxy. This is not a universal network boundary:
+
+- [bitcoin-api.ts](src/api/bitcoin-api.ts) uses Esplora directly.
+- [spo-api.ts](src/api/spo-api.ts) calls per-network Koios endpoints.
+- [Midnight](src/chains/midnight) also uses Foundation/Arkhia services.
+- Feature flags, market data, on-ramp, and provider integrations have their
+  own configuration and availability requirements.
+
+Read [src/env.ts](src/env.ts) and the relevant API module for configuration.
+Values exposed through `VITE_*` are client-visible; backend credentials do not
+belong there.
+
+[websocket.service.ts](src/services/websocket.service.ts) and
+[sync.service.ts](src/services/sync.service.ts) implement Gero Sync. Keep
+wallet/address subscriptions current across wallet switches and reconnects;
+handle sync, rollback, and resync messages. Connection establishment must not
+block login. The two-minute value in the wallet manager is a mutex acquisition
+timeout, not a locked-wallet polling interval. There is no current Ably service.
+
+## Transactions and key handling
+
+Many Cardano flows request unsigned transactions from Nexus. The local
+[builder](src/shared/utils/builder.ts) uses
+[cardanoJsSdkCbor.ts](src/chrome/cardanoJsSdkCbor.ts). For an unsigned transaction,
+`BrowserTxConstruction.minFee()` inserts unique dummy vkey witnesses for the
+estimated signature count (analysis or conservative fallback), lets the SDK size the serialized transaction, and adds an
+`80 * minFeeCoefficient` margin. Existing witnesses use the SDK fee calculation
+directly. There is no fixed 110-byte-per-witness formula. Preserve change
+outputs in certificate/withdrawal-only flows.
+
+Signing boundaries depend on the wallet:
+
+- Password-based software wallets decrypt and sign in the worker.
+- PassKey/PRF wallets perform WebAuthn and decrypt key material in a trusted
+  extension document before sending the needed bytes to the worker. Plaintext
+  key material therefore can enter the trusted UI context.
+- Ledger and Keystone use document-side device/QR communication. Private
+  signing keys remain on the hardware device; physical qualification is still
+  needed for the candidate.
+- Cross-device recovery and other signers have their own lifecycles. Review
+  the implementation and supported chain before changing key handling.
+
+Never log key material, mnemonic phrases, passwords, or private wallet data.
+Keep existing secret readers when changing writers. The
+[reader guard](scripts/check-secret-envelope-readers.mjs) and frozen fixtures
+cover legacy, `gpw1`, and purpose-bound `gpw2` compatibility; PRF encryption is
+a separate path. See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+## Vue component contracts
+
+Use `modelValue`/`update:modelValue`, native Vuetify activator props, and
+`await form.validate()` followed by its `{ valid }` result. Recheck approval
+scope after asynchronous work. Route caching must honor activation,
+deactivation, and late store hydration.
+
+Translations live in `src/plugins/i18n/{us,de,es}.ts`. Add keys in every locale;
+the parity suite verifies keys, placeholders, and plurals. I18n's production
+build is runtime-only with precompiled messages, compatible with extension CSP.
+
+Use [design tokens](src/shared/styles/tokens.css), their SCSS mirror, shared
+controls, and the design/contrast checks. Theme changes must preserve the
+custom-element boundary in
+[GeroSwapEmbed.vue](src/modules/swap/components/GeroSwapEmbed.vue): the vendored
+widget owns its internals, while the host owns approval and signing.
+
+## Verification and maintenance
+
+[CONTRIBUTING.md](CONTRIBUTING.md) gives the verification ladder;
+[MAINTENANCE.md](MAINTENANCE.md) records diagnostics, ownership, dependency
+policy, and reproduction commands. Required PR checks run selected suites.
+Packaging runs the full suite and validates its retained artifact. Neither
+alone proves hardware, live-provider, upgrade/recovery, or rollout acceptance.
+
+Use existing module-specific `debugLog()` calls with synthetic data. Record
+actual timings, environment, and scenario when making performance claims;
+this guide does not promise a universal login latency.

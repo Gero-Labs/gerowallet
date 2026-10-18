@@ -73,11 +73,11 @@ the relevant tests locally and retain full-suite results for the exact release
 candidate. AI review may run additional targeted suites; its report must state
 which ones actually ran.
 
-**The inverse is just as important**: anything under `src/chains/midnight` or `src/services/crossDevice` **is** gated on every PR, so a red `Ledger tests and extension bundles` check is a real failure, not noise. That check is also not path-filtered, so it runs its vitest slice and builds all five production entry points even for a one-file UI PR - budget for the wait.
+**The inverse is just as important**: anything under `src/chains/midnight` or `src/services/crossDevice` **is** gated on every PR, so a red `Ledger tests and extension bundles` check is a real failure, not noise. That check is also not path-filtered, so it runs its vitest slice and builds all four production bundles plus manifest preparation even for a one-file UI PR - budget for the wait.
 
 ## Make your test fail first
 
-Under happy-dom, `getContextType()` returns `'content'` (a `window` exists, protocol is `http:`). So `broadcastFromBackground()` no-ops and `storeMessaging.subscribe` is never wired. **A test written against a store's broadcast path passes on both the broken and the fixed code.** Confirm the test fails against the unfixed tree before you trust it.
+Under happy-dom, `getContextType()` returns `'content'` (a `window` exists, protocol is `http:`). So `broadcastFromBackground()` no-ops and `storeMessaging.subscribe` is never wired. A test that never selects the background/browser context can pass without exercising the broadcast path. `src/stores/productionMessaging.integration.spec.ts` explicitly creates those contexts and tests the real transport. Confirm the test fails against the unfixed tree before you trust it.
 
 ## Patterns to copy
 
@@ -128,6 +128,6 @@ use the runner's documented browser override. CI may provision its own browser
 and system dependencies. Physical devices, existing-profile upgrades, and
 production release acceptance still need their separate evidence.
 
-## Don't run this locally
+## Build in an isolated checkout
 
-`scripts/build-isolated-extension.mjs` refuses to run in a checkout that already has `.env`, `.env.local`, `.env.production`, `.env.production.local` or `extension/manifest.json`, because it synthesizes its own. It is for a clean disposable clone. Note `.env.development` is **not** on that guard list, so a normal dev checkout will happily start the whole five-target production build - that is a long wait, not a safe check. Use `build:web` instead.
+`scripts/build-isolated-extension.mjs` refuses to run in a checkout that already has `.env`, `.env.local`, `.env.production`, `.env.production.local` or `extension/manifest.json`, because it synthesizes its own. Use a fresh disposable checkout with its own normal `npm ci`; pass its absolute path to the script. `.env.development` is not on that guard list, so do not use the script to detect whether an active checkout is safe to overwrite. The script builds four bundles and prepares a synthetic manifest. See [MAINTENANCE.md](../../../../MAINTENANCE.md) for reproduction and evidence limits.

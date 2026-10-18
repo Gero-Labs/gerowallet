@@ -2,7 +2,7 @@
 
 One token layer, four surfaces, chain accent as the only per-chain colour, enforced by two pure-Node scripts that run in both the pre-commit hook and a required CI check.
 
-## The ratchet has no headroom
+## Check the current ratchet
 
 ```bash
 node scripts/design/audit.mjs      # 15 metrics vs scripts/design/budgets.json
@@ -10,18 +10,10 @@ node scripts/design/contrast.mjs   # 56 WCAG checks
 npm run design:check               # both, ~2s - what CI runs
 ```
 
-Current state (verified): all 15 pass, and **12 of them sit at exactly their budget**:
-
-```
-hexOccurrences 779/779   hexDistinct 287/287   fontSizeDistinct 75/75
-radiusDistinct 60/60     zIndexDistinct 22/22  uppercase 108/108
-lowAlphaText 19/19       transitionAll 8/8     clickableDivs 106/106
-outlineNone 26/26        corruptedMdiNames 0/0 formatFnForks 15/15
-```
-
-Only `backdropFilters` (83/89), `infiniteAnimations` (68/69) and `importantCount` (2025/2061) have slack.
-
-So: **one** new hex literal, border-radius, font-size, z-index, `text-transform: uppercase`, low-alpha white text, `transition: all`, clickable `<div>`, `outline: none` or forked formatter blocks your commit *and* the `Production bundle (SFC parse)` required check.
+Read `scripts/design/budgets.json` and run the audit for current counts.
+Historical counts are not headroom. A metric above its budget blocks the
+normal commit hook and the required production-bundle check. Keep touched
+files at or below their starting metrics; do not raise budgets to hide drift.
 
 Two different file sets, which is the source of most confusion:
 

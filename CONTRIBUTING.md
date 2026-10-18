@@ -27,7 +27,7 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
    npm ci
    ```
 4. Create your environment file (see the README's "Configure Environment"
-   for the three variables it needs):
+   for base backend settings and optional integration configuration):
    ```bash
    touch .env.development
    ```
@@ -70,18 +70,22 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 2. Make your changes following our coding standards
 3. Write or update tests as needed
 4. Verify your change. Note that `npm run typecheck` and `npm run lint`
-   report hundreds of pre-existing errors on a clean checkout and are not
-   merge gates - lint only the files you touched:
+   have tracked diagnostics and are not repository-wide merge gates. Compare
+   [the dated baseline](MAINTENANCE.md) and lint every touched code file:
    ```bash
    npx eslint <files you changed>          # what the pre-commit hook enforces
    npm run design:check                    # design ratchet + WCAG contrast
    npx vitest run <specs near your change>
-   npm run build:web -- --mode production  # the real buildability gate
+   npm run build:web -- --mode production  # web/SFC build gate
    ```
    `npm run typecheck` (also `typecheck:vue`) checks templates and TypeScript.
    `npm run typecheck:ts` retains the older TypeScript-only diagnostic command. Compare
    diagnostics with the baseline and fix errors introduced by your change.
-   For anything user-visible, run `npm run dev` and try it in the browser.
+   Required checks also build background/content/inject bundles; see
+   [MAINTENANCE.md](MAINTENANCE.md) for all four checks and clean-install
+   reproduction. Generate declarations with a build before comparing type
+   diagnostics. For user-visible work, run the relevant real-browser harness
+   or `npm run dev` and exercise the change in the browser.
 5. Commit with clear messages:
    ```bash
    git commit -m "feat: add new feature description"
@@ -124,7 +128,9 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 - **Never log sensitive data** (passwords, keys, mnemonics)
 - Validate all user inputs
-- Keep private key operations in background script
+- Preserve wallet-specific signing boundaries: software signing in the worker,
+  trusted-document PRF decryption and device communication where required.
+  See [ARCHITECTURE.md](ARCHITECTURE.md).
 - Follow existing cryptographic patterns
 
 ### Testing
@@ -152,7 +158,7 @@ The repo ships a contributor skill at
 [`.claude/skills/gerowallet-dev/`](.claude/skills/gerowallet-dev/SKILL.md). Claude Code
 picks it up automatically on a fresh clone; you can also invoke it with
 `/gerowallet-dev`. It covers the build loop, the extension's execution contexts,
-stores and IndexedDB, the design ratchet, i18n, the three chains, signing and
+stores and IndexedDB, the design ratchet, i18n, the supported chains, signing and
 security invariants, and which of this repo's checks actually gate a merge.
 It is plain Markdown, so it reads fine without any AI tooling.
 

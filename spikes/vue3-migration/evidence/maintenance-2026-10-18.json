@@ -1,0 +1,2435 @@
+{
+  "recordedAt": "2026-10-18",
+  "sourceCommit": "1a4d50ac5e1d51fc9a3601a63808c79f839ff6b2",
+  "scope": "Fresh normal installation and unchanged runtime in docs-maintenance worktree; not store qualification.",
+  "environment": {
+    "node": "24.19.0",
+    "npm": "11.1.0",
+    "platform": "Windows x64"
+  },
+  "lockfileSha256": "a85758ded34f014715b942963f8f8507458bf9244797b707b1cfc21285774fc4",
+  "installation": {
+    "command": "npx --yes npm@11.1.0 ci",
+    "exitCode": 0,
+    "scriptsEnabled": true,
+    "forcedPeerResolution": false
+  },
+  "tests": {
+    "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 --reporter=json --outputFile=<report>",
+    "passed": 5239,
+    "failed": 0,
+    "skipped": 0,
+    "files": 466,
+    "npmEquivalent": "npm test -- --maxWorkers=2"
+  },
+  "typecheck": {
+    "command": "node node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
+    "prerequisite": "Production web build generated auto-import/component declarations",
+    "exitCode": 2,
+    "diagnosticCount": 54,
+    "diagnostics": [
+      "src/api/blockchain-api.ts(24,27): error TS2304: Cannot find name 'AxiosError'.",
+      "src/api/blockchain-api.ts(41,27): error TS2304: Cannot find name 'AxiosError'.",
+      "src/api/blockchain-api.ts(101,27): error TS2304: Cannot find name 'AxiosError'.",
+      "src/api/blockchain-api.ts(192,27): error TS2304: Cannot find name 'AxiosError'.",
+      "src/api/blockchain-api.ts(217,27): error TS2304: Cannot find name 'AxiosError'.",
+      "src/api/blockchain-api.ts(246,27): error TS2304: Cannot find name 'AxiosError'.",
+      "src/api/strike-v2.error.ts(28,26): error TS4111: Property 'error' comes from an index signature, so it must be accessed with ['error'].",
+      "src/api/strike-v2.error.ts(28,37): error TS4111: Property 'message' comes from an index signature, so it must be accessed with ['message'].",
+      "src/api/strike-v2.error.ts(28,50): error TS4111: Property 'detail' comes from an index signature, so it must be accessed with ['detail'].",
+      "src/chrome/background.ts(607,11): error TS2339: Property 'forEach' does not exist on type 'unknown'.",
+      "src/chrome/background.ts(1220,27): error TS4111: Property 'featureFlags' comes from an index signature, so it must be accessed with ['featureFlags'].",
+      "src/chrome/background.ts(4626,28): error TS4111: Property 'featureFlags' comes from an index signature, so it must be accessed with ['featureFlags'].",
+      "src/chrome/background.ts(4969,40): error TS7030: Not all code paths return a value.",
+      "src/chrome/inject.ts(136,11): error TS4111: Property 'gerowallet' comes from an index signature, so it must be accessed with ['gerowallet'].",
+      "src/chrome/inject.ts(211,16): error TS6133: '_buildWsAccount' is declared but its value is never read.",
+      "src/chrome/walletBg.ts(3067,18): error TS4111: Property 'publicKeyHex' comes from an index signature, so it must be accessed with ['publicKeyHex'].",
+      "src/chrome/walletBg.ts(3067,43): error TS4111: Property 'addressHex' comes from an index signature, so it must be accessed with ['addressHex'].",
+      "src/chrome/walletBg.ts(3071,28): error TS4111: Property 'publicKeyHex' comes from an index signature, so it must be accessed with ['publicKeyHex'].",
+      "src/chrome/walletBg.ts(3072,26): error TS4111: Property 'addressHex' comes from an index signature, so it must be accessed with ['addressHex'].",
+      "src/chrome/walletBg.ts(3073,27): error TS4111: Property 'cardanoXpub' comes from an index signature, so it must be accessed with ['cardanoXpub'].",
+      "src/chrome/walletBg.ts(3074,34): error TS4111: Property 'cardanoBaseAddress' comes from an index signature, so it must be accessed with ['cardanoBaseAddress'].",
+      "src/chrome/walletBg.ts(3075,35): error TS4111: Property 'cardanoStakeAddress' comes from an index signature, so it must be accessed with ['cardanoStakeAddress'].",
+      "src/chrome/walletBg.ts(3076,40): error TS4111: Property 'cardanoPaymentKeyHashHex' comes from an index signature, so it must be accessed with ['cardanoPaymentKeyHashHex'].",
+      "src/db/loaders/walletLoader.ts(217,3): error TS4114: This member must have an 'override' modifier because it overrides a member in the base class 'BaseLoader'.",
+      "src/modules/help/helpRichText.ts(11,30): error TS4111: Property 'target' comes from an index signature, so it must be accessed with ['target'].",
+      "src/modules/help/helpRichText.ts(20,37): error TS4111: Property 'uri' comes from an index signature, so it must be accessed with ['uri'].",
+      "src/modules/navigation/helpAccess.ts(3,22): error TS4111: Property 'public' comes from an index signature, so it must be accessed with ['public'].",
+      "src/modules/navigation/helpAccess.ts(3,86): error TS4111: Property 'public' comes from an index signature, so it must be accessed with ['public'].",
+      "src/services/copilot/marketSnapshot.ts(61,25): error TS2339: Property 'priceChange24h' does not exist on type 'unknown'.",
+      "src/services/copilot/marketSnapshot.ts(62,24): error TS2339: Property 'priceChange7d' does not exist on type 'unknown'.",
+      "src/services/notify/notifyPush.ts(91,53): error TS2345: Argument of type '{ body: string; icon: string; tag: string; renotify: false; requireInteraction: boolean; timestamp: number; data: NotificationData; }' is not assignable to parameter of type 'NotificationOptions & { data: NotificationData; tag: string; silent: boolean; renotify: boolean; requireInteraction: boolean; timestamp: number; icon: string; }'.",
+      "src/shared/composables/useCnightDustRegistration.ts(602,21): error TS4111: Property 'privateKeyBytes' comes from an index signature, so it must be accessed with ['privateKeyBytes'].",
+      "src/shared/composables/useCnightDustRegistration.ts(607,21): error TS4111: Property 'privateKeyBytes' comes from an index signature, so it must be accessed with ['privateKeyBytes'].",
+      "src/shared/composables/useCnightDustRegistration.ts(610,19): error TS4111: Property 'password' comes from an index signature, so it must be accessed with ['password'].",
+      "src/shared/composables/usePoolSigning.ts(45,44): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
+      "src/shared/composables/usePoolSigning.ts(45,102): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
+      "src/shared/composables/usePoolSigning.ts(46,43): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
+      "src/shared/composables/usePoolSigning.ts(46,100): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
+      "src/shared/composables/usePoolSigning.ts(146,5): error TS2345: Argument of type 'number' is not assignable to parameter of type 'bigint'.",
+      "src/shared/composables/usePoolSigning.ts(177,78): error TS2345: Argument of type 'number' is not assignable to parameter of type 'bigint'.",
+      "src/shared/composables/usePoolSigning.ts(289,53): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519PublicKeyHex'.",
+      "src/shared/composables/usePoolSigning.ts(289,122): error TS2694: Namespace '\"D:/GeroRepos/gitRepos/gw-docs-maintenance/node_modules/@cardano-sdk/core/dist/cjs/Cardano/index\"' has no exported member 'Ed25519SignatureHex'.",
+      "src/shared/utils/resolver.ts(291,5): error TS2353: Object literal may only specify known properties, and 'decimals' does not exist in type 'NftMetadata'.",
+      "src/shared/utils/resolver.ts(549,5): error TS7030: Not all code paths return a value.",
+      "src/shared/utils/resolver.ts(570,5): error TS7030: Not all code paths return a value.",
+      "src/shared/utils/resolver.ts(687,51): error TS2769: No overload matches this call.",
+      "src/shared/utils/resolver.ts(692,50): error TS2769: No overload matches this call.",
+      "src/shared/utils/trezorWeb.ts(291,16): error TS4111: Property 'addressParameters' comes from an index signature, so it must be accessed with ['addressParameters'].",
+      "src/shared/utils/trezorWeb.ts(298,16): error TS4111: Property 'address' comes from an index signature, so it must be accessed with ['address'].",
+      "src/shared/utils/trezorWeb.ts(766,38): error TS2339: Property 'error' does not exist on type '{ _passphrase_cached?: boolean; busy?: boolean; homescreen_format?: \"Toif\" | \"Jpeg\" | \"ToiG\"; hide_passphrase_from_host?: boolean; unit_color?: number; unit_btconly?: boolean; homescreen_width?: number; ... 50 more ...; internal_model: DeviceModelInternal; } | { ...; }'.",
+      "src/shared/utils/trezorWeb.ts(1301,38): error TS2339: Property 'error' does not exist on type '{ error: string; code?: ErrorCode; } | ({ publicKey: string; path: number[]; serializedPath: string; } & { xpubSegwit?: string; descriptorChecksum?: string; descriptor?: string; xpub: string; fingerprint: number; depth: number; chainCode: string; childNum: number; })'.",
+      "src/shared/utils/trezorWeb.ts(1364,38): error TS2339: Property 'error' does not exist on type '{ error: string; code?: ErrorCode; } | Address'.",
+      "src/shared/utils/trezorWeb.ts(1397,38): error TS2339: Property 'error' does not exist on type '{ error: string; code?: ErrorCode; } | SignedTransaction'.",
+      "src/sidepanel/composables/useAgentDock.ts(60,68): error TS2322: Type 'WalletContextSnapshot' is not assignable to type 'Record<string, unknown>'."
+    ],
+    "npmEquivalent": "npm run typecheck"
+  },
+  "lint": {
+    "command": "node node_modules/eslint/bin/eslint.js . --format json --output-file <report>",
+    "exitCode": 1,
+    "errors": 112,
+    "warnings": 0,
+    "files": [
+      {
+        "path": "src/api/babylon-api.ts",
+        "diagnostics": [
+          {
+            "line": 115,
+            "column": 22,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 116,
+            "column": 22,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 118,
+            "column": 63,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 119,
+            "column": 39,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 162,
+            "column": 16,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 163,
+            "column": 53,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/bitcoin-api.ts",
+        "diagnostics": [
+          {
+            "line": 94,
+            "column": 23,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 114,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 143,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 249,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/blockchain-api.ts",
+        "diagnostics": [
+          {
+            "line": 24,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 41,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 51,
+            "column": 32,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 101,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 121,
+            "column": 32,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 161,
+            "column": 50,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 192,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 217,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 246,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/clarity-api.ts",
+        "diagnostics": [
+          {
+            "line": 142,
+            "column": 19,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 147,
+            "column": 58,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 158,
+            "column": 48,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/coinGecko.api.ts",
+        "diagnostics": [
+          {
+            "line": 13,
+            "column": 35,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/kraken-api.ts",
+        "diagnostics": [
+          {
+            "line": 47,
+            "column": 20,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/lightning-api.ts",
+        "diagnostics": [
+          {
+            "line": 217,
+            "column": 17,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/moonpay-api.ts",
+        "diagnostics": [
+          {
+            "line": 14,
+            "column": 43,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/api/tap-tools-api.ts",
+        "diagnostics": [
+          {
+            "line": 12,
+            "column": 49,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 15,
+            "column": 53,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 22,
+            "column": 14,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/chains/bitcoin/bitcoinPsbtBuilder.ts",
+        "diagnostics": [
+          {
+            "line": 67,
+            "column": 4,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 77,
+            "column": 16,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/chains/bitcoin/bitcoinTransactionSync.ts",
+        "diagnostics": [
+          {
+            "line": 317,
+            "column": 11,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 318,
+            "column": 13,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 341,
+            "column": 11,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 342,
+            "column": 13,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/chains/common/interfaces.ts",
+        "diagnostics": [
+          {
+            "line": 23,
+            "column": 9,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 58,
+            "column": 17,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 59,
+            "column": 18,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 63,
+            "column": 14,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 70,
+            "column": 8,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 81,
+            "column": 8,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 104,
+            "column": 84,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 110,
+            "column": 24,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/chrome/database.ts",
+        "diagnostics": [
+          {
+            "line": 26,
+            "column": 47,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 43,
+            "column": 65,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 60,
+            "column": 74,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 104,
+            "column": 52,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 121,
+            "column": 59,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 122,
+            "column": 20,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 137,
+            "column": 63,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 143,
+            "column": 20,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/composables/useWalletStatus.ts",
+        "diagnostics": [
+          {
+            "line": 56,
+            "column": 48,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 58,
+            "column": 62,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 101,
+            "column": 71,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/db/loaders/base.ts",
+        "diagnostics": [
+          {
+            "line": 11,
+            "column": 19,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 35,
+            "column": 28,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 57,
+            "column": 23,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 65,
+            "column": 24,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/db/loaders/index.ts",
+        "diagnostics": [
+          {
+            "line": 80,
+            "column": 36,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/models/wallet.ts",
+        "diagnostics": [
+          {
+            "line": 106,
+            "column": 14,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 250,
+            "column": 13,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 320,
+            "column": 13,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 363,
+            "column": 36,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/modules/dashboard/dialogs/BitcoinTransactionDetailsDialog.vue",
+        "diagnostics": [
+          {
+            "line": 248,
+            "column": 48,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/modules/dashboard/utils/emptyStateConfigs.ts",
+        "diagnostics": [
+          {
+            "line": 165,
+            "column": 40,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 165,
+            "column": 53,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 172,
+            "column": 41,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 172,
+            "column": 57,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/modules/market/composables/useNftMarketData.ts",
+        "diagnostics": [
+          {
+            "line": 78,
+            "column": 69,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/modules/market/composables/useStrikeVaults.ts",
+        "diagnostics": [
+          {
+            "line": 66,
+            "column": 15,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 88,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 89,
+            "column": 15,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 107,
+            "column": 15,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 125,
+            "column": 15,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 145,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 146,
+            "column": 15,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 163,
+            "column": 15,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/services/krakenWebSocket.service.ts",
+        "diagnostics": [
+          {
+            "line": 29,
+            "column": 18,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 40,
+            "column": 37,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 41,
+            "column": 40,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 142,
+            "column": 31,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 149,
+            "column": 34,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 158,
+            "column": 38,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 193,
+            "column": 34,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 217,
+            "column": 52,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/services/walletConnect/chromeStorageAdapter.ts",
+        "diagnostics": [
+          {
+            "line": 5,
+            "column": 77,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 25,
+            "column": 24,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 32,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 37,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/components/TradingViewChart.vue",
+        "diagnostics": [
+          {
+            "line": 45,
+            "column": 18,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 74,
+            "column": 24,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 287,
+            "column": 42,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 307,
+            "column": 41,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/components/VueHighcharts.vue",
+        "diagnostics": [
+          {
+            "line": 17,
+            "column": 13,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 26,
+            "column": 19,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 29,
+            "column": 22,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 33,
+            "column": 29,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 46,
+            "column": 31,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 70,
+            "column": 28,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 86,
+            "column": 13,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/composables/usePoolRegistration.ts",
+        "diagnostics": [
+          {
+            "line": 94,
+            "column": 40,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 124,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/composables/usePoolRetirement.ts",
+        "diagnostics": [
+          {
+            "line": 83,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/utils/transaction.ts",
+        "diagnostics": [
+          {
+            "line": 3,
+            "column": 45,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/types/hardware-trezor.d.ts",
+        "diagnostics": [
+          {
+            "line": 17,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 20,
+            "column": 21,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/utils/debug.ts",
+        "diagnostics": [
+          {
+            "line": 16,
+            "column": 34,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 24,
+            "column": 35,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      },
+      {
+        "path": "src/utils/storageSync.ts",
+        "diagnostics": [
+          {
+            "line": 13,
+            "column": 43,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 16,
+            "column": 29,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 54,
+            "column": 56,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          },
+          {
+            "line": 61,
+            "column": 77,
+            "ruleId": "@typescript-eslint/no-explicit-any",
+            "message": "Unexpected any. Specify a different type."
+          }
+        ]
+      }
+    ]
+  },
+  "audit": {
+    "command": "npx --yes npm@11.1.0 audit --json",
+    "exitCode": 1,
+    "counts": {
+      "info": 0,
+      "low": 19,
+      "moderate": 31,
+      "high": 23,
+      "critical": 0,
+      "total": 73
+    },
+    "interpretation": "Affected dependency nodes, not unique advisories or demonstrated exploits; registry result is time-dependent.",
+    "dependencies": [
+      {
+        "name": "@cardano-foundation/cardano-verify-datasignature",
+        "severity": "low",
+        "isDirect": true,
+        "range": "*",
+        "via": [
+          "@stricahq/bip32ed25519",
+          "@stricahq/cip08"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@cardano-sdk/hardware-trezor",
+        "severity": "low",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "@trezor/connect",
+          "@trezor/connect-web"
+        ],
+        "fixAvailable": {
+          "name": "@cardano-sdk/web-extension",
+          "version": "0.6.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@cardano-sdk/wallet",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": ">=0.3.0",
+        "via": [
+          "@cardano-sdk/hardware-trezor",
+          "pouchdb"
+        ],
+        "fixAvailable": {
+          "name": "@cardano-sdk/web-extension",
+          "version": "0.6.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@cardano-sdk/web-extension",
+        "severity": "moderate",
+        "isDirect": true,
+        "range": ">=0.6.1-nightly.0",
+        "via": [
+          "@cardano-sdk/hardware-trezor",
+          "@cardano-sdk/wallet"
+        ],
+        "fixAvailable": {
+          "name": "@cardano-sdk/web-extension",
+          "version": "0.6.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-aptos",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-arweave",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-avalanche",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-btc",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-cardano",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-cosmos",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-eth",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": ">=0.2.3",
+        "via": [
+          "hdkey",
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-evm",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-iota",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-near",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-sol",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-stellar",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-sui",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-ton",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/bc-ur-registry-zcash",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@keystonehq/keystone-sdk",
+        "severity": "moderate",
+        "isDirect": true,
+        "range": "*",
+        "via": [
+          "@keystonehq/bc-ur-registry-aptos",
+          "@keystonehq/bc-ur-registry-arweave",
+          "@keystonehq/bc-ur-registry-avalanche",
+          "@keystonehq/bc-ur-registry-btc",
+          "@keystonehq/bc-ur-registry-cardano",
+          "@keystonehq/bc-ur-registry-cosmos",
+          "@keystonehq/bc-ur-registry-eth",
+          "@keystonehq/bc-ur-registry-evm",
+          "@keystonehq/bc-ur-registry-iota",
+          "@keystonehq/bc-ur-registry-near",
+          "@keystonehq/bc-ur-registry-sol",
+          "@keystonehq/bc-ur-registry-stellar",
+          "@keystonehq/bc-ur-registry-sui",
+          "@keystonehq/bc-ur-registry-ton",
+          "@keystonehq/bc-ur-registry-zcash",
+          "uuid"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@solana/web3.js",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "<=0.0.0-pr-29130 || 0.0.4 - 1.99.0",
+        "via": [
+          "jayson"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@stellar/stellar-sdk",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=15.1.0",
+        "via": [
+          "toml"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@stricahq/bip32ed25519",
+        "severity": "low",
+        "isDirect": false,
+        "range": "<=1.1.2",
+        "via": [
+          "elliptic"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "@stricahq/cip08",
+        "severity": "low",
+        "isDirect": false,
+        "range": "<=1.0.4",
+        "via": [
+          "@stricahq/bip32ed25519"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "@trezor/blockchain-link",
+        "severity": "high",
+        "isDirect": false,
+        "range": "1.0.15 - 10.0.0-beta.3",
+        "via": [
+          "@solana/web3.js",
+          "@stellar/stellar-sdk",
+          "@trezor/blockchain-link-types",
+          "@trezor/blockchain-link-types",
+          "@trezor/blockchain-link-utils",
+          "@trezor/blockchain-link-utils",
+          "@trezor/utxo-lib",
+          "crypto-browserify",
+          "ripple-lib"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@trezor/blockchain-link-types",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "1.0.13 - 1.5.1",
+        "via": [
+          "@solana/web3.js",
+          "@trezor/utxo-lib"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@trezor/blockchain-link-utils",
+        "severity": "high",
+        "isDirect": false,
+        "range": "1.4.0-beta.1 - 10.0.0-beta.3 || 1.0.9 - 1.2.4",
+        "via": [
+          "@solana/web3.js",
+          "@stellar/stellar-sdk"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@trezor/connect",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=10.0.0-beta.3",
+        "via": [
+          "@trezor/blockchain-link",
+          "@trezor/blockchain-link",
+          "@trezor/blockchain-link-types",
+          "@trezor/blockchain-link-types",
+          "@trezor/blockchain-link-utils",
+          "@trezor/utxo-lib"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@trezor/connect-web",
+        "severity": "low",
+        "isDirect": true,
+        "range": "<=9.7.3",
+        "via": [
+          "@trezor/connect"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-web",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@trezor/connect-webextension",
+        "severity": "low",
+        "isDirect": true,
+        "range": "<=9.7.3",
+        "via": [
+          "@trezor/connect",
+          "@trezor/connect-web"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@trezor/utxo-lib",
+        "severity": "low",
+        "isDirect": false,
+        "range": "1.0.0-beta.1 - 2.5.0",
+        "via": [
+          "tiny-secp256k1"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@typescript-eslint/eslint-plugin",
+        "severity": "high",
+        "isDirect": true,
+        "range": "4.0.1-alpha.0 - 8.2.1-alpha.25",
+        "via": [
+          "@typescript-eslint/parser",
+          "@typescript-eslint/type-utils",
+          "@typescript-eslint/utils"
+        ],
+        "fixAvailable": {
+          "name": "@typescript-eslint/eslint-plugin",
+          "version": "8.71.2",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@typescript-eslint/parser",
+        "severity": "high",
+        "isDirect": true,
+        "range": "3.10.2-alpha.0 - 8.2.1-alpha.25",
+        "via": [
+          "@typescript-eslint/typescript-estree"
+        ],
+        "fixAvailable": {
+          "name": "@typescript-eslint/parser",
+          "version": "8.71.2",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@typescript-eslint/type-utils",
+        "severity": "high",
+        "isDirect": false,
+        "range": "5.9.2-alpha.0 - 8.2.1-alpha.25",
+        "via": [
+          "@typescript-eslint/typescript-estree",
+          "@typescript-eslint/utils"
+        ],
+        "fixAvailable": {
+          "name": "@typescript-eslint/eslint-plugin",
+          "version": "8.71.2",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "high",
+        "isDirect": false,
+        "range": "3.10.2-alpha.0 - 8.2.1-alpha.25",
+        "via": [
+          "globby"
+        ],
+        "fixAvailable": {
+          "name": "@typescript-eslint/parser",
+          "version": "8.71.2",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "@typescript-eslint/utils",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=8.2.1-alpha.25",
+        "via": [
+          "@typescript-eslint/typescript-estree"
+        ],
+        "fixAvailable": {
+          "name": "@typescript-eslint/eslint-plugin",
+          "version": "8.71.2",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "brace-expansion",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=1.1.20 || 2.0.0 - 2.1.6 || 4.0.0 - 5.0.11",
+        "via": [
+          {
+            "source": 1240100,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+            "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<1.1.21"
+          },
+          {
+            "source": 1240101,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+            "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.0.0 <2.1.7"
+          },
+          {
+            "source": 1240103,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+            "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=4.0.0 <5.0.12"
+          },
+          {
+            "source": 1240104,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion",
+            "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<1.1.20"
+          },
+          {
+            "source": 1240105,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion",
+            "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=2.0.0 <2.1.6"
+          },
+          {
+            "source": 1240107,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion",
+            "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=4.0.0 <5.0.11"
+          },
+          {
+            "source": 1240108,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion",
+            "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<1.1.19"
+          },
+          {
+            "source": 1240109,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion",
+            "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=2.0.0 <2.1.5"
+          },
+          {
+            "source": 1240111,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion",
+            "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=4.0.0 <5.0.10"
+          }
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "braces",
+        "severity": "high",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          {
+            "source": 1240992,
+            "name": "braces",
+            "dependency": "braces",
+            "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+            "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+            "severity": "high",
+            "cwe": [
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=3.0.3"
+          }
+        ],
+        "fixAvailable": {
+          "name": "unplugin-vue-components",
+          "version": "32.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "browserify-sign",
+        "severity": "low",
+        "isDirect": false,
+        "range": ">=2.4.0",
+        "via": [
+          "elliptic"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "chokidar",
+        "severity": "high",
+        "isDirect": false,
+        "range": "2.0.0 - 3.6.0",
+        "via": [
+          "braces"
+        ],
+        "fixAvailable": {
+          "name": "unplugin-vue-components",
+          "version": "32.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "create-ecdh",
+        "severity": "low",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "elliptic"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "cross-spawn",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<6.0.6",
+        "via": [
+          {
+            "source": 1104663,
+            "name": "cross-spawn",
+            "dependency": "cross-spawn",
+            "title": "Regular Expression Denial of Service (ReDoS) in cross-spawn",
+            "url": "https://github.com/advisories/GHSA-3xgq-45jj-v275",
+            "severity": "high",
+            "cwe": [
+              "CWE-1333"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<6.0.6"
+          }
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "crypto-browserify",
+        "severity": "low",
+        "isDirect": true,
+        "range": ">=3.4.0",
+        "via": [
+          "browserify-sign",
+          "create-ecdh"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "dompurify",
+        "severity": "low",
+        "isDirect": true,
+        "range": "<=3.4.15",
+        "via": [
+          {
+            "source": 1240621,
+            "name": "dompurify",
+            "dependency": "dompurify",
+            "title": "DOMPurify: IN_PLACE: node-removing afterSanitize hook leaves detached subtree event handlers armed, causing DOM XSS",
+            "url": "https://github.com/advisories/GHSA-p98j-92pf-mc4p",
+            "severity": "low",
+            "cwe": [
+              "CWE-79"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=3.4.13 <=3.4.15"
+          },
+          {
+            "source": 1241204,
+            "name": "dompurify",
+            "dependency": "dompurify",
+            "title": "DOMPurify: IN_PLACE returns a force-removed rawtext root whose text carries attacker markup \u2014 pure HTML reparse executes",
+            "url": "https://github.com/advisories/GHSA-6688-9rhm-gjv2",
+            "severity": "low",
+            "cwe": [
+              "CWE-79"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=3.4.15"
+          }
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "elliptic",
+        "severity": "low",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          {
+            "source": 1112030,
+            "name": "elliptic",
+            "dependency": "elliptic",
+            "title": "Elliptic Uses a Cryptographic Primitive with a Risky Implementation",
+            "url": "https://github.com/advisories/GHSA-848j-6mx2-7j84",
+            "severity": "low",
+            "cwe": [
+              "CWE-1240"
+            ],
+            "cvss": {
+              "score": 5.6,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L"
+            },
+            "range": "<=6.6.1"
+          }
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "eslint-plugin-vue",
+        "severity": "moderate",
+        "isDirect": true,
+        "range": "8.7.0 - 10.5.1",
+        "via": [
+          "postcss-selector-parser"
+        ],
+        "fixAvailable": {
+          "name": "eslint-plugin-vue",
+          "version": "10.11.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "execa",
+        "severity": "high",
+        "isDirect": false,
+        "range": "0.5.0 - 0.9.0",
+        "via": [
+          "cross-spawn"
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "fast-glob",
+        "severity": "high",
+        "isDirect": false,
+        "range": "*",
+        "via": [
+          "micromatch"
+        ],
+        "fixAvailable": {
+          "name": "unplugin-vue-components",
+          "version": "32.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "fflate",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "0.8.0 - 0.8.2",
+        "via": [
+          {
+            "source": 1164782,
+            "name": "fflate",
+            "dependency": "fflate",
+            "title": "fflate unzipSync can enter an infinite loop when parsing malformed ZIP64 archives",
+            "url": "https://github.com/advisories/GHSA-px8p-9vwx-vf98",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=0.8.0 <0.8.3"
+          }
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "globby",
+        "severity": "high",
+        "isDirect": false,
+        "range": ">=8.0.0",
+        "via": [
+          "fast-glob"
+        ],
+        "fixAvailable": {
+          "name": "rollup-plugin-copy",
+          "version": "2.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "hdkey",
+        "severity": "low",
+        "isDirect": false,
+        "range": ">=0.7.0",
+        "via": [
+          "secp256k1"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "ip-address",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "<=10.7.0",
+        "via": [
+          {
+            "source": 1239948,
+            "name": "ip-address",
+            "dependency": "ip-address",
+            "title": "ip-address: Address6.isLinkLocal() recognizes fe80::/64 rather than fe80::/10, allowing SSRF and trust-boundary bypass to on-link hosts",
+            "url": "https://github.com/advisories/GHSA-rpw4-54j3-4h4q",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-697",
+              "CWE-918"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=10.5.0"
+          },
+          {
+            "source": 1239949,
+            "name": "ip-address",
+            "dependency": "ip-address",
+            "title": "ip-address: no classifier recognizes the NAT64 local-use range 64:ff9b:1::/48, allowing SSRF and trust-boundary bypass",
+            "url": "https://github.com/advisories/GHSA-2vr4-cq9g-pvrc",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-918"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=10.2.0 <=10.5.0"
+          },
+          {
+            "source": 1240097,
+            "name": "ip-address",
+            "dependency": "ip-address",
+            "title": "ip-address: isInSubnet() and isHostInSubnet() compare addresses of different families as if they shared an address space, allowing an allowlist check to admit an address outside its range",
+            "url": "https://github.com/advisories/GHSA-j6r3-76f7-8jcv",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-697",
+              "CWE-843"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=10.7.0"
+          },
+          {
+            "source": 1240098,
+            "name": "ip-address",
+            "dependency": "ip-address",
+            "title": "ip-address: Address6 builds a parse diagnostic proportional to the input with no length bound, allowing a single long string to stall or crash the process",
+            "url": "https://github.com/advisories/GHSA-h3mg-xc3c-68pw",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=10.7.0"
+          }
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "jayson",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "2.0.6 - 4.3.0",
+        "via": [
+          "stream-json",
+          "uuid"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "micromatch",
+        "severity": "high",
+        "isDirect": false,
+        "range": ">=0.2.0",
+        "via": [
+          "braces"
+        ],
+        "fixAvailable": {
+          "name": "unplugin-vue-components",
+          "version": "32.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "node-stdlib-browser",
+        "severity": "low",
+        "isDirect": true,
+        "range": "*",
+        "via": [
+          "crypto-browserify"
+        ],
+        "fixAvailable": {
+          "name": "vite-plugin-node-polyfills",
+          "version": "0.2.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "pbkdf2",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "<=3.1.6",
+        "via": [
+          {
+            "source": 1241333,
+            "name": "pbkdf2",
+            "dependency": "pbkdf2",
+            "title": "pbkdf2 rehashes long passwords on every iteration, enabling denial of service",
+            "url": "https://github.com/advisories/GHSA-477h-4r7f-fvrx",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400"
+            ],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<=3.1.6"
+          }
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "<7.1.6",
+        "via": [
+          {
+            "source": 1241232,
+            "name": "postcss-selector-parser",
+            "dependency": "postcss-selector-parser",
+            "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+            "url": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<7.1.6"
+          }
+        ],
+        "fixAvailable": {
+          "name": "eslint-plugin-vue",
+          "version": "10.11.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "pouchdb",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": ">=6.3.3",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": {
+          "name": "@cardano-sdk/web-extension",
+          "version": "0.6.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "ripple-keypairs",
+        "severity": "low",
+        "isDirect": false,
+        "range": "<=1.4.0",
+        "via": [
+          "elliptic"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "ripple-lib",
+        "severity": "low",
+        "isDirect": false,
+        "range": ">=0.13.0-rc1",
+        "via": [
+          "ripple-keypairs"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "rollup-plugin-copy",
+        "severity": "high",
+        "isDirect": true,
+        "range": ">=3.0.0",
+        "via": [
+          "globby"
+        ],
+        "fixAvailable": {
+          "name": "rollup-plugin-copy",
+          "version": "2.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "secp256k1",
+        "severity": "low",
+        "isDirect": false,
+        "range": ">=2.0.0",
+        "via": [
+          "elliptic"
+        ],
+        "fixAvailable": true
+      },
+      {
+        "name": "showdown",
+        "severity": "moderate",
+        "isDirect": true,
+        "range": "*",
+        "via": [
+          {
+            "source": 1117038,
+            "name": "showdown",
+            "dependency": "showdown",
+            "title": "Showdown vulnerable to Regular Expression Denial of Service (ReDoS) in link/anchor parsing",
+            "url": "https://github.com/advisories/GHSA-rmmh-p597-ppvv",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-674",
+              "CWE-777"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<=2.1.0"
+          },
+          {
+            "source": 1138814,
+            "name": "showdown",
+            "dependency": "showdown",
+            "title": "showdown metadata title handling allows cross-site scripting",
+            "url": "https://github.com/advisories/GHSA-cr32-g25g-vxjj",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-79"
+            ],
+            "cvss": {
+              "score": 6.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+            },
+            "range": "<=2.1.0"
+          },
+          {
+            "source": 1138815,
+            "name": "showdown",
+            "dependency": "showdown",
+            "title": "showdown allows stored cross-site scripting through table header ID injection",
+            "url": "https://github.com/advisories/GHSA-22g5-r2x5-97cx",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-79"
+            ],
+            "cvss": {
+              "score": 6.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+            },
+            "range": "<=2.1.0"
+          }
+        ],
+        "fixAvailable": false
+      },
+      {
+        "name": "stream-json",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "<=3.5.0",
+        "via": [
+          {
+            "source": 1164823,
+            "name": "stream-json",
+            "dependency": "stream-json",
+            "title": "stream-json: pick/ignore/filter/replace filters are O(depth\u00b2) on nested input \u2014 small crafted JSON blocks the event loop for seconds\u2192minutes (DoS)",
+            "url": "https://github.com/advisories/GHSA-528h-pc64-c93x",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 6.2,
+              "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=3.4.0"
+          },
+          {
+            "source": 1241262,
+            "name": "stream-json",
+            "dependency": "stream-json",
+            "title": "stream-json: JSONC parser and verifier re-scan the whole accumulated comment on every input chunk",
+            "url": "https://github.com/advisories/GHSA-hqr4-qq8f-hg3x",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 6.2,
+              "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=3.5.0"
+          },
+          {
+            "source": 1241263,
+            "name": "stream-json",
+            "dependency": "stream-json",
+            "title": "stream-json has a prototype pollution issue: Assembler writes this.current[this.key] on plain objects",
+            "url": "https://github.com/advisories/GHSA-mjw6-4jj6-33hc",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-1321"
+            ],
+            "cvss": {
+              "score": 5.1,
+              "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            "range": "<3.6.0"
+          }
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "tiny-secp256k1",
+        "severity": "low",
+        "isDirect": false,
+        "range": "0.0.0-rc-1560324438 || 0.2.0 - 1.1.7",
+        "via": [
+          "elliptic"
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "toml",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=4.1.2",
+        "via": [
+          {
+            "source": 1164824,
+            "name": "toml",
+            "dependency": "toml",
+            "title": "toml-node: Uncontrolled Recursion",
+            "url": "https://github.com/advisories/GHSA-82x6-q7mm-w9cf",
+            "severity": "high",
+            "cwe": [
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<4.2.0"
+          },
+          {
+            "source": 1164825,
+            "name": "toml",
+            "dependency": "toml",
+            "title": "toml-node: Prototype Pollution Leads to `Object.prototype` Corruption via `__proto__` Key-Path Desynchronization",
+            "url": "https://github.com/advisories/GHSA-v5mp-jgw5-2x6j",
+            "severity": "high",
+            "cwe": [
+              "CWE-1321"
+            ],
+            "cvss": {
+              "score": 8.2,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:L"
+            },
+            "range": "<4.1.2"
+          }
+        ],
+        "fixAvailable": {
+          "name": "@trezor/connect-webextension",
+          "version": "10.0.1",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "unimport",
+        "severity": "high",
+        "isDirect": false,
+        "range": "0.2.2 - 3.13.4 || 3.14.5 - 4.1.1",
+        "via": [
+          "fast-glob"
+        ],
+        "fixAvailable": {
+          "name": "unplugin-auto-import",
+          "version": "21.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "unplugin-auto-import",
+        "severity": "high",
+        "isDirect": true,
+        "range": "0.8.0 - 0.14.4 || 0.19.0 - 19.0.0",
+        "via": [
+          "unimport"
+        ],
+        "fixAvailable": {
+          "name": "unplugin-auto-import",
+          "version": "21.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "unplugin-vue-components",
+        "severity": "high",
+        "isDirect": true,
+        "range": "<=29.2.0",
+        "via": [
+          "chokidar",
+          "fast-glob"
+        ],
+        "fixAvailable": {
+          "name": "unplugin-vue-components",
+          "version": "32.1.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "uuid",
+        "severity": "moderate",
+        "isDirect": false,
+        "range": "<11.1.1",
+        "via": [
+          {
+            "source": 1119441,
+            "name": "uuid",
+            "dependency": "uuid",
+            "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+            "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-787",
+              "CWE-1285"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<11.1.1"
+          }
+        ],
+        "fixAvailable": {
+          "name": "@cardano-sdk/web-extension",
+          "version": "0.6.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "vite-plugin-node-polyfills",
+        "severity": "low",
+        "isDirect": true,
+        "range": ">=0.3.0",
+        "via": [
+          "node-stdlib-browser"
+        ],
+        "fixAvailable": {
+          "name": "vite-plugin-node-polyfills",
+          "version": "0.2.0",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "vite-plugin-top-level-await",
+        "severity": "moderate",
+        "isDirect": true,
+        "range": ">=1.2.3",
+        "via": [
+          "uuid"
+        ],
+        "fixAvailable": {
+          "name": "vite-plugin-top-level-await",
+          "version": "1.2.2",
+          "isSemVerMajor": true
+        }
+      },
+      {
+        "name": "yorkie",
+        "severity": "high",
+        "isDirect": true,
+        "range": "*",
+        "via": [
+          "execa"
+        ],
+        "fixAvailable": false
+      }
+    ]
+  },
+  "build": {
+    "command": "node scripts/build-isolated-extension.mjs <fresh-checkout>",
+    "exitCode": 0,
+    "identity": "Synthetic public manifest key; no store identity qualification",
+    "artifactSha256": "4712755cb6c1f585baf48f7761d98569dd911d19fdf9a7f051f8694c0bba48ea"
+  },
+  "guards": {
+    "secretReaders": "pass",
+    "remoteCode": "pass",
+    "tdz": {
+      "known": 27,
+      "new": 0,
+      "changedExportFingerprints": 5
+    },
+    "designMetrics": 15,
+    "contrastChecks": 56
+  },
+  "browser": {
+    "passed": true,
+    "browserVersion": "151.0.7922.34",
+    "blockedRequests": 9,
+    "pageErrors": [],
+    "coverage": "Actual extension pages in Chromium tabs, including sidepanel document and dashboard tab handoff; native browser side-panel chrome is not automated."
+  },
+  "evidenceSha256": {
+    "maintenance-tests.json": "ddee0291c2c158dca77fb65c23dc23b36615ba2ef0338d2847bbd879bcf47e1f",
+    "maintenance-typecheck.log": "0a7f3a818ceb294228c1fe17ea552eee5111445fa839847910a04a426cba84df",
+    "maintenance-lint.json": "c388963149f1f8cb0f50087a3971c7cf47e81c1bc76e38c8c2f0cfad4f8e00f4",
+    "maintenance-audit.json": "f461facfbfdecadaeb5c52e29b71809b27769f8bb83e85521c540074633539f4",
+    "maintenance-build.log": "9dc0cf91b6db767d3da2224219a988b35ae1c0a4d5112478cc7bc2552acf233c",
+    "maintenance-dev.json": "00b59cd19361c1ff5590b3546271c4a6f343425b76e9633c9006dd0b4d72d2ea",
+    "maintenance-artifact.json": "26d66a3e58675ba3d77f79cb148e1370716729e1a2c45ce6baaa52afc090a3c6"
+  },
+  "limits": [
+    "Synthetic offline artifact; live requests blocked in browser smoke",
+    "No physical devices, real profile upgrade/recovery, beta observation or store submission",
+    "Documentation-only changes do not qualify a later runtime commit"
+  ],
+  "development": {
+    "command": "npm run dev",
+    "port": 3408,
+    "liveBackend": false,
+    "passed": true,
+    "manifestPrepared": true,
+    "watchBuildsCompleted": 3,
+    "webHtmlStatus": 200,
+    "durationSeconds": 26,
+    "harnessNote": "Initial probe wrongly required an absolute script URL; corrected to accept the served relative main.ts URL. No application change was needed. Original log retained locally."
+  },
+  "artifactValidation": {
+    "command": "node scripts/check-release-artifact.mjs extension --expected-version 2.7.3 --report <outside-extension-report>",
+    "exitCode": 0,
+    "files": 1162,
+    "localWasmFiles": 8,
+    "identityVerified": false
+  },
+  "documentationChecks": {
+    "localLinksChecked": 122,
+    "brokenLocalLinks": 0,
+    "dependabotParsedConfigurationUnchanged": true,
+    "eslintConfigLoads": [
+      "src/options/App.vue",
+      "src/utils/debug.ts"
+    ]
+  },
+  "followUpIssues": {
+    "typeAndLint": 1313,
+    "dependencies": 1314,
+    "accountableOwner": "adamcazes",
+    "implementation": "Codex during authorized sessions"
+  }
+}

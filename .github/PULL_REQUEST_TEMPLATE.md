@@ -19,7 +19,8 @@ Closes #
 <!-- Steps you ran. Use the Preprod/Preview testnet for any on-chain flow — never mainnet funds. -->
 
 ## Checklist
-- [ ] Follows the existing code style; `npm run lint` and `npm run typecheck` pass.
+- [ ] Touched code files pass ESLint; relevant tests and design checks pass.
+- [ ] Compared Vue-aware type diagnostics with the baseline when applicable; no new diagnostics. Record existing debt via `MAINTENANCE.md`, not as a passing global check.
 - [ ] Self-reviewed the diff; no leftover debug logs.
 - [ ] **No secrets** (keys, mnemonics, passwords, tokens) added to code, tests, or fixtures.
 - [ ] User-facing strings use i18n (`$t()`), with entries in every locale (`us.ts` / `de.ts` / `es.ts`, enforced by `src/plugins/i18n.parity.spec.ts`).

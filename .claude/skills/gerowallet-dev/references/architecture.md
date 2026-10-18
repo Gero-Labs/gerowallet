@@ -6,11 +6,11 @@
 |---|---|---|
 | Page world | `src/chrome/inject.ts` (+ `injectMidnight.ts`, `webpage.ts`) | Defines `window.cardano` (CIP-30) and `window.midnight[uuid]` on every page. Delivered as a web-accessible resource that the content script appends as a `<script>` tag - it is not a manifest content script |
 | Content script | `src/chrome/content.ts` | The one manifest content script, isolated world, relays page <-> background |
-| Background | `src/chrome/background.ts` (6645 lines) + `src/chrome/walletBg.ts` | MV3 service worker. Owns the wallet instance, the DB and signing |
+| Background | `src/chrome/background.ts` + `src/chrome/walletBg.ts` | MV3 service worker. Owns the wallet instance, the DB and signing |
 | Options SPA | `src/options/` -> `extension/index.html` | The main UI. **Also renders every dApp approval "popup" window**, loaded at a hash route inside `chrome.windows.create({type:'popup'})` |
 | Side panel | `src/sidepanel/` -> `extension/sidepanel/index.html` | Mini-Gero. Its own router, its own pages, its own components |
 
-`src/popup/{index.html,main.ts,Popup.vue}` is **dead code** - not a Vite input, and the manifest declares no `action.default_popup`. The live popup surfaces are the Vue components under `src/popup/modules/views/`, routed by the *options* router.
+`src/popup/{index.html,main.ts,Popup.vue}` was **removed**. It is not a Vite input, and the manifest declares no `action.default_popup`. The live popup surfaces are the Vue components under `src/popup/modules/views/`, routed by the *options* router.
 
 Which context you are in: `getContextType()` in `src/utils/storageSync.ts:84-91`. No `window` -> `'background'`; `chrome-extension:` protocol -> `'browser'` (options, approval popup and side panel all collapse to this); otherwise `'content'`. Use it rather than ad-hoc `typeof window` checks: the background Vite config replaces `typeof window` and `typeof document` with the literal `"undefined"` at compile time, so a `typeof`-guarded branch is silently dead-code-eliminated in that bundle only.
 
@@ -23,14 +23,14 @@ Which context you are in: `getContextType()` in `src/utils/storageSync.ts:84-91`
 | `Messaging.sendToBackgroundFromOptions()` | `SENDER.options` | `optionsMethodList` | `app.addToOptions(MessageTypes.X, ...)` |
 | `Messaging.sendToBackground()` | `SENDER.webpage` | `methodList` | `app.add(METHOD.x, ...)` |
 
-**The split is by registry, not by window.** CLAUDE.md's "Popup context: `sendToBackground()`" reads as popup-vs-options and is misleading. Every wallet UI surface - options page, approval popup window, side panel - uses `sendToBackgroundFromOptions` for `MessageTypes.*` handlers. `sendToBackground` is for invoking a dApp-facing CIP-30 method, which only two components in the whole UI legitimately do.
+**The split is by registry, not by window.** Every wallet UI surface - options page, approval popup window, side panel - uses `sendToBackgroundFromOptions` for `MessageTypes.*` handlers. `sendToBackground` is for invoking a dApp-facing CIP-30 method, which only two components in the whole UI legitimately do.
 
 Method-name constants live in two places: dApp-facing CIP-30 / Bitcoin / Midnight methods in `src/chrome/config.ts`, internal UI <-> background methods in `src/models/MessageTypes.ts`.
 
 Index the surface:
 
 ```bash
-grep -n 'app.addToOptions(MessageTypes\.' src/chrome/background.ts    # 71 matches; 76 registrations in all (5 wrap the constant onto the next line)
+grep -n 'app.addToOptions(MessageTypes\.' src/chrome/background.ts    # includes single-line registrations; inspect multiline registrations too
 grep -nE 'app.add\((METHOD|BITCOIN_METHOD|MIDNIGHT_METHOD)\.' src/chrome/background.ts   # dApp-reachable handlers
 ```
 
@@ -48,7 +48,7 @@ if (res?.data?.error) { /* handler-level failure */ }
 
 The exported `BackgroundResponse<T>` type is narrower than what is actually sent (no `id`, no `error`) - do not treat it as the contract.
 
-**`return true` in a handler does nothing.** `BackgroundHandler` is typed to return void and the value is discarded; the wrapper inside `listen()` returns `true` itself for every message it dispatches to a registered handler (it returns `false` only when nothing matched, deliberately closing the channel). What matters is calling `sendResponse` exactly once on every path, including every error path. CLAUDE.md's template is cargo cult here.
+**`return true` in a handler does nothing.** `BackgroundHandler` is typed to return void and the value is discarded; the wrapper inside `listen()` returns `true` itself for every message it dispatches to a registered handler (it returns `false` only when nothing matched, deliberately closing the channel). What matters is calling `sendResponse` exactly once on every path, including every error path.
 
 ### Ports
 

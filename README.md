@@ -4,10 +4,10 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-24.19.0-brightgreen.svg)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-4.9-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue.js-3.5-green.svg)](https://vuejs.org/)
 
-A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for Cardano, Midnight, and Apex Fusion.
+A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for Cardano, Bitcoin, Midnight, and Apex Fusion.
 
 [Features](#key-features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Contributing](#contributing)
 
@@ -17,9 +17,16 @@ A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for C
 
 ## Overview
 
-**Gero Wallet** (v2.7.0) is a feature-rich, non-custodial multi-chain wallet browser extension. It supports Cardano, Midnight, and Apex Fusion (Prime and Vector), and ships two interfaces: a full dashboard and Mini-Gero, a compact side-panel wallet.
+**Gero Wallet** is a feature-rich, non-custodial multi-chain wallet browser extension. It supports Cardano, Bitcoin, Midnight, and Apex Fusion (Prime and Vector), and ships two interfaces: a full dashboard and Mini-Gero, a compact side-panel wallet.
 
-All blockchain data, price feeds, DeFi routing, and real-time updates are served through **Nexus**, Gero's own backend data layer. The extension holds no third-party data-provider keys — the client talks only to the Gero backend, which brokers everything server-side.
+Cardano data and DeFi routing primarily use **Nexus**, through the Gero
+backend. Bitcoin also uses Esplora directly, Midnight uses Foundation/Arkhia
+services, and the SPO client calls Koios. See [architecture](ARCHITECTURE.md)
+for these boundaries. Feature availability depends on chain and feature flags.
+
+The development package is `2.7.3`; that version is not evidence of a published
+release. The Vue 3 migration is merged. See [maintenance](MAINTENANCE.md) for
+current checks and remaining release work.
 
 ### Two interfaces
 
@@ -36,13 +43,14 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - Create and import wallets with BIP39 mnemonic phrases
 - Hardware wallet support (Ledger, Trezor, Keystone)
 - PassKey (WebAuthn PRF) wallets with hardware-backed key encryption
-- Multi-account and multi-wallet support
+- Multiple wallets; broader account-index support is tracked in [#1307](https://github.com/Gero-Labs/gerowallet/issues/1307)
 - Enterprise-grade encryption (AES-256 + ChaCha20-Poly1305)
 
 **⛓️ Multi-Chain Support**
 - **Cardano** — staking, CIP-1694 governance, native assets, NFTs, dApp connector
 - **Midnight** — shielded transfers, NIGHT/DUST management, proof server, and a shielded proving consent flow
 - **Apex Fusion** — Prime and Vector chains
+- **Bitcoin** — wallet and transaction flows behind the Bitcoin feature flag
 
 **⛓️ Cardano Native Features**
 - **Staking**: delegate to stake pools and earn rewards
@@ -55,7 +63,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - DEX aggregation for best swap rates (routed via Nexus)
 - Token swaps across multiple Cardano DEXs
 - Perpetuals trading via Strike Finance: order book, market and limit orders, TWAP orders, positions and order history
-- Vaults via Strike Finance: deposit into yield vaults and track positions
+- Vaults via Strike Finance: view vault data; transfers remain unavailable pending [#1292](https://github.com/Gero-Labs/gerowallet/issues/1292)
 - Portfolio tracking, analytics, and real-time price feeds
 - Fiat on-ramp via MoonPay
 
@@ -81,8 +89,8 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - **Frontend**: Vue.js 3.5 + TypeScript + Vuetify 4.2 (Material Design)
 - **Build System**: Vite 7.3 with 4 separate configurations
 - **State Management**: Custom Vue reactive stores (lightweight, performant)
-- **Database**: Dexie 4.0.7 (IndexedDB wrapper with versioned schemas)
-- **Cardano SDK**: @cardano-sdk/core v0.46.9 (modern, preferred for new features)
+- **Database**: Dexie (see the lockfile for the installed version) (IndexedDB wrapper with versioned schemas)
+- **Cardano SDK**: `@cardano-sdk/core` (see the lockfile) (modern, preferred for new features)
 - **Data Layer**: Nexus (Gero backend) for blockchain data, prices, and DeFi routing
 - **Real-time**: Gero Sync — WebSocket push for instant blockchain updates
 - **Cryptography**: WebAssembly for performance-critical operations (bip39, blake2b)
@@ -99,7 +107,7 @@ For complete technical details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 Before you begin, ensure you have the following installed:
 
 - **Node.js 24.19+ (24.x)** and **npm 11.1.0**, matching CI ([Download](https://nodejs.org/))
-- **Docker Desktop** or **Rancher Desktop** ([Docker](https://www.docker.com/products/docker-desktop) | [Rancher](https://rancherdesktop.io/))
+- A configured Gero backend for live data; optional for offline checks
 - **Chrome** or any Chromium-based browser (Edge, Brave, etc.)
 - **Git** for version control
 
@@ -109,20 +117,23 @@ Before you begin, ensure you have the following installed:
 # Clone the repository
 git clone https://github.com/Gero-Labs/gerowallet.git
 cd gerowallet
+git switch development
+
+# Match the CI package manager
+npm install --global npm@11.1.0
 
 # Install dependencies
 npm ci
 
-# Create environment file (the three variables below are all you need —
-# see "Configure Environment")
-touch .env.development
+# Create .env.development in your editor using the settings below.
 ```
 
 ### 2. Configure Environment
 
-The client needs no third-party API keys — all blockchain data, prices, and DeFi
-routing are served by the Gero backend (Nexus). For local development you only
-need to point the extension at a backend instance:
+For local development, create `.env.development` with these backend settings.
+They allow the base application to boot; live integrations and feature flags
+may need additional public configuration. Never put backend secrets in
+`VITE_*` variables, which are exposed to the client:
 
 ```bash
 # Gero backend base URL (localhost for development)
@@ -136,12 +147,12 @@ VITE_NEXUS_URL=http://localhost:8081/api/nexus
 VITE_SYNC_WS_URL=ws://localhost:8081/sync
 ```
 
-Those three are all you need. Other `VITE_*` variables (fiat on-ramp,
-feature-flag service, blog, etc.) are optional — none are required to boot the
-extension against a local backend. To list every variable the code reads:
+An unavailable backend leaves data-driven views empty or failing even when
+the UI loads. Configure the services needed for your scenario. To list the
+`VITE_*` names referenced by source and build scripts:
 
 ```bash
-grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u
+rg -o --no-filename 'VITE_[A-Z0-9_]+' src scripts
 ```
 
 CIP-113 programmable-token display is behind two build-time gates, both of which must
@@ -152,22 +163,15 @@ hashes, which are reviewed protocol constants (an empty list disables the featur
 network). Mainnet, preprod and preview are all allowlisted and configured, so CIP-113 is
 live on all three.
 
-### 3. Start Gero Backend
+### 3. Connect a backend
 
-```bash
-# Pull Docker image
-docker pull skyhawkofficial/gero:gerowallet-backend-v1.76
+Use the team's maintained backend deployment or its current setup instructions
+to run a local instance. Its server-side configuration is maintained separately
+from this extension. Check `http://localhost:8081/health` for the local example
+above. Do not assume an old Docker tag is compatible with current services.
 
-# Run container
-docker run -d \
-  --name gerowallet-backend \
-  --env-file .env.backend \
-  -p 8081:8081 \
-  skyhawkofficial/gero:gerowallet-backend-v1.76
-
-# Verify it's running
-curl http://localhost:8081/health
-```
+Offline tests and the synthetic isolated build in [MAINTENANCE.md](MAINTENANCE.md)
+do not need backend credentials. They do not establish live data behavior.
 
 ### 4. Start Development
 
@@ -180,7 +184,7 @@ This starts development servers for all contexts:
 - Background service worker
 - Content scripts (DApp connector)
 - Inject scripts (window.cardano API)
-- Web UI (options, popup, sidepanel)
+- Web UI (options/dashboard and sidepanel; approvals use options routes)
 
 ### 5. Load Extension in Chrome
 
@@ -209,24 +213,45 @@ npm run dev:inject       # Inject scripts only
 
 ### Build and Package
 
+Use the [release procedure](spikes/vue3-migration/RELEASE-READINESS.md) for
+candidate packaging: sequential builds, secret-reader/remote-code/TDZ checks,
+expected channel identity, and retained artifact hashes. For an offline source
+check, use the isolated-build instructions in [MAINTENANCE.md](MAINTENANCE.md).
+
+
 ```bash
 # Production build
 npm run build            # Optimized production build
 npm run build:beta       # Beta build with beta environment
 
 # Package extension
-npm run pack             # Create .zip and .crx packages
-npm run pack:zip         # Chrome Web Store .zip
-npm run pack:zip:beta    # Beta .zip
+# Legacy developer packaging utilities (not release qualification)
+npm run pack:zip         # Local development ZIP
+npm run pack:zip:beta    # Local beta ZIP
 
 # Utilities
 npm run clear            # Clean build artifacts
 npm run typecheck        # TypeScript type checking
 npm run lint             # ESLint checks
-npm run lint -- --fix    # Auto-fix linting issues
+# Do not run a repository-wide automatic lint fix.
 ```
 
 ### Testing
+
+Run automated checks before manual testing:
+
+```bash
+npm test -- --maxWorkers=2
+npm run design:check
+npx eslint <changed-code-files>
+npm run typecheck
+```
+
+Global lint and Vue-aware type checking have tracked historical diagnostics.
+Compare the [maintenance baseline](MAINTENANCE.md); fix new diagnostics and
+all lint in touched code files. [CONTRIBUTING.md](CONTRIBUTING.md) explains
+required CI checks and targeted tests. A passing unit suite is separate from
+physical-device, live-provider, and profile-upgrade acceptance.
 
 Use the **Preprod testnet** for safe testing:
 1. Load the extension and create a test wallet
@@ -290,7 +315,7 @@ Gero Wallet uses a multi-context architecture for security and performance:
 
 ```
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│   Popup     │  │   Options   │  │ Side Panel  │
+│  Approval   │  │   Options   │  │ Side Panel  │
 │   (Web UI)  │  │   (Web UI)  │  │  (Web UI)   │
 └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
        │                │                │
@@ -316,7 +341,7 @@ Gero Wallet uses a multi-context architecture for security and performance:
 ```
 
 **Why this architecture?**
-- **Security**: Private keys isolated in background context, never exposed to UI
+- **Security**: Software signing is centered in the worker; PassKey decryption and hardware communication also use trusted extension documents. See the signing boundaries in [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Performance**: Non-blocking operations, efficient state synchronization
 - **Reliability**: Database persistence with real-time state sync
 
@@ -331,7 +356,7 @@ Gero Wallet uses a multi-context architecture for security and performance:
    - Mutex-protected sync to prevent race conditions
 
 3. **Modern Cardano SDK**
-   - Uses `@cardano-sdk/core` v0.46.9 for all Cardano operations
+   - Uses `@cardano-sdk/core` alongside backend transaction construction
    - Conway-era support (latest Cardano protocol features)
 
 4. **Hardware Wallet Integration**
@@ -348,6 +373,7 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - **[Quick Start](#quick-start)** - Local setup and development environment
 - **[Architecture Overview](ARCHITECTURE.md)** - System design, patterns, data flow
+- **[Maintenance](MAINTENANCE.md)** - Current debt, ownership, checks, and dependency policy
 - **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute, code standards, PR process
 - **[Contributor Skill](.claude/skills/gerowallet-dev/SKILL.md)** - Working guide to the codebase: build loop, execution contexts, state, design ratchet, i18n, chains, signing, and which checks actually gate a merge
 
@@ -355,7 +381,7 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - **Tech Stack**: Vue.js 3.5, TypeScript, Vite, Dexie, Cardano SDK
 - **Key Patterns**: Vue reactive stores, Chrome messaging, two-tier database
-- **Data Layer**: Nexus (Gero backend) — the single source for blockchain data, prices, and DeFi routing; the client carries no third-party provider keys
+- **Data Layer**: Nexus/Gero backend plus chain-specific providers; see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Development Resources
 
@@ -420,7 +446,7 @@ Gero Wallet takes security seriously. This is a non-custodial wallet handling re
 
 **Key protection**
 - **Private key encryption**: AES-256 + ChaCha20-Poly1305 AEAD, with PBKDF2 key derivation
-- **Context isolation**: private keys never leave the background service worker
+- **Signing boundaries**: password-wallet signing runs in the worker; PRF wallets decrypt in trusted UI, and hardware wallets use document-side device communication.
 - **Hardware wallet support**: Ledger, Trezor, and Keystone
 - **PassKey (WebAuthn PRF) wallets**: key encryption bound to platform authenticator hardware, with no spending password
 
@@ -491,31 +517,9 @@ Gero Wallet is built on the shoulders of giants. Special thanks to:
 
 ## Roadmap
 
-### Current (v2.7.x)
-- ✅ Conway-era support
-- ✅ PassKey authentication
-- ✅ Governance (DRep voting)
-- ✅ Multi-chain support (Cardano, Midnight, Apex Fusion)
-- ✅ Mini-Gero side panel
-- ✅ Perpetuals trading
-
-### Upcoming
-- 🔜 Bitcoin support (BTC, Lightning, Ordinals, Babylon staking, Thorchain swaps)
-- 🔜 Stake pool operator dashboard
-- 🔜 Gero Card
-- 🔜 Google-backed (MPC) wallets
-- 🔜 Remote signing across trusted devices
-- 🔜 Copilot insights feed
-- 🔜 Enhanced NFT management
-- 🔜 Advanced portfolio analytics
-- 🔜 Mobile companion app
-
-### Future
-- 💡 Cross-chain swaps
-- 💡 Social recovery
-- 💡 Decentralized identity (DID)
-
-See our [Project Catalyst proposals](https://projectcatalyst.io/) for community-funded development.
+See [open issues](https://github.com/Gero-Labs/gerowallet/issues) for planned
+work and [migration status](spikes/vue3-migration/IMPLEMENTATION.md) for the
+remaining qualification and rollout scope.
 
 ---
 
@@ -525,6 +529,6 @@ See our [Project Catalyst proposals](https://projectcatalyst.io/) for community-
 
 [Website](https://gerowallet.io) • [Documentation](ARCHITECTURE.md) • [GitHub](https://github.com/Gero-Labs/gerowallet)
 
-**Last Updated**: 2026-08-09
+**Last Updated**: 2026-10-18
 
 </div>
