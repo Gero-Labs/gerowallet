@@ -168,7 +168,7 @@ const shortAddress = (address: string) => (address.length > 30 ? `${address.slic
   padding: var(--g-s-3);
   text-align: left;
   color: var(--g-text-1);
-  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
 
   &:not(:disabled):hover { @include g-glass-tier-hover; }
   &--selected,

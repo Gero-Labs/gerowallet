@@ -176,7 +176,7 @@ const handleContinue = (): void => {
   min-width: 0;
   padding: var(--g-s-3);
   cursor: pointer;
-  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
 
   // A choice tile nested in the onboarding panel: the glass-tier material, its
   // hover lift and its selected tint, never an accent repaint or a glow.

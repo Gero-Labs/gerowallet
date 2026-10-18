@@ -262,7 +262,7 @@ const onWatchSubmit = async (): Promise<void> => {
   text-align: left;
   padding: var(--g-s-2) var(--g-s-4);
   cursor: pointer;
-  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
 }
 
 /* A choice card nested in the onboarding panel: the glass-tier material, its

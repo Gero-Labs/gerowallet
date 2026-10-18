@@ -179,7 +179,7 @@ watch(
   border: 1px solid var(--g-hairline-1);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color var(--g-dur-fast) ease, background var(--g-dur-fast) ease, box-shadow var(--g-dur-fast) ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background var(--g-dur-fast) var(--g-ease), box-shadow var(--g-dur-fast) var(--g-ease);
 
   &:hover:not(.chain-tile--disabled) {
     border-color: var(--g-hairline-3);
@@ -279,7 +279,7 @@ watch(
   font-weight: 500;
   color: var(--g-text-2);
   cursor: pointer;
-  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease, opacity var(--g-dur-fast) ease;
+  transition: color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease), opacity var(--g-dur-fast) var(--g-ease);
 
   &:hover:not(.net-pill--disabled) {
     border-color: var(--g-hairline-3);
