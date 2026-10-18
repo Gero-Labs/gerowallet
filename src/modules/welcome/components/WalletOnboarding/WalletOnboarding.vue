@@ -11,6 +11,7 @@
             :model-value="devMode"
             density="compact"
             inset
+            size="x-small"
             hide-details
             @update:model-value="onDevToggle"
           >
@@ -530,10 +531,6 @@ onUnmounted(() => {
 
 .dev-switch__label {
   white-space: nowrap;
-}
-
-.dev-switch :deep(.v-input--selection-controls__input) {
-  transform: scale(0.8);
 }
 
 /* Type comes from the ramp classes in the markup; these rules only space. */
