@@ -61,6 +61,7 @@
           density="compact"
           variant="filled"
           :label="$t('welcome.password')"
+          :aria-label="$t('welcome.newSpendingPassword')"
           :type="showSpending ? 'text' : 'password'"
           :append-inner-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
           @click:append-inner="showSpending = !showSpending"
