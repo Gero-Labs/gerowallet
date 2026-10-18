@@ -208,7 +208,7 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   opacity: 0;
   /* Pure cross-fade between chains — no vertical slide (a translateY here both
      left a black gap at the top and made the image jump on hover). */
-  transition: opacity 0.3s ease;
+  transition: opacity var(--g-dur-slow) var(--g-ease);
 }
 
 .welcome-background-image.background-active {
@@ -229,9 +229,9 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 100;
+  z-index: var(--g-z-sheet);
   border-radius: var(--g-r-control);
-  padding: 4px 8px;
+  padding: var(--g-s-1) var(--g-s-2);
 }
 
 /* The Help button keeps a transparent border so the pressed state (raised fill, hairline) never shifts layout. */
@@ -259,7 +259,7 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   width: 73%;
   height: 100%;
   position: relative;
-  /* NO backdrop-filter or blur effects here */
+  /* No glass material here: the hero and the onboarding card carry their own. */
   background: transparent;
 }
 
@@ -283,25 +283,18 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   justify-content: center;
   min-height: 0;
   overflow-y: auto; /* the onboarding hero can exceed short viewports */
-  padding: 16px;
+  padding: var(--g-s-4);
 }
 
 /* Reveal transition: only the intro fades OUT. The onboarding card mounts fully
-   opaque — animating its opacity makes Chrome drop the liquid-glass
-   backdrop-filter for a few frames (card flashes transparent then snaps in). */
+   opaque — animating its opacity makes Chrome drop the glass blur for a few
+   frames (card flashes transparent then snaps in). */
 .onboarding-reveal-leave-active {
-  transition: opacity 0.25s ease;
+  transition: opacity var(--g-dur-base) var(--g-ease);
 }
 
 .onboarding-reveal-leave-to {
   opacity: 0;
-}
-
-/* Fallback for browsers without backdrop-filter support */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .welcome-glass-panel {
-    background-color: var(--g-raised);
-  }
 }
 
 /* Responsive */

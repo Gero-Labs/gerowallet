@@ -23,7 +23,7 @@
     </GButton>
     <v-divider vertical></v-divider>
     <GButton tier="tertiary" compact :ripple="false" class="footer-btn" @click="changeLogDialog = true">
-      Change Log ({{ `v${version}` }})
+      {{ $t('help.welcome.whatsNew') }} (v{{ version }})
     </GButton>
 
     <!-- Dialogs -->
@@ -47,27 +47,13 @@ const version = ref<string>(APP_VERSION);
   align-items: center;
   justify-content: center;
   background: transparent;
-  padding: 0 20px;
+  padding: 0 var(--g-s-5);
 }
 
-/* Legal links are quiet chrome, not accents. The foreground comes from
-   GButton's --g-btn-fg seam (custom properties resolve on this element, so no
-   specificity contest). The size needs a real rule, qualified up to 0,5,0 so it
-   beats GButton's own 0,4,0 base rule deterministically rather than by
-   stylesheet injection order. 11px is the ramp floor (was 10px). */
-.footer-btn {
-  text-transform: none;
+/* Legal links are quiet chrome, not accents: compact tertiary GButtons in the
+   tertiary text tone, through GButton's --g-btn-fg seam. Their size is the
+   button tier's own. */
+.footer-legal :deep(.footer-btn) {
   --g-btn-fg: var(--g-text-3);
-}
-.v-btn.footer-btn.g-btn.g-btn--tertiary {
-  font-size: 11px;
-}
-
-/* .footer-btn is forwarded onto GButton's inner v-btn, which doesn't carry this
-   component's scope id — so a plain scoped rule never matches. Pierce with
-   :deep() and target the button text so the smaller size actually applies. */
-.footer-legal :deep(.footer-btn),
-.footer-legal :deep(.footer-btn .v-btn__content) {
-  font-size: 11px;
 }
 </style>

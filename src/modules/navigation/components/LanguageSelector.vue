@@ -1,13 +1,13 @@
 <template>
   <v-menu v-model="menuOpen" eager transition="none">
     <template v-slot:activator="{ props: activatorProps }">
-      <v-btn size="large" variant="plain" v-bind="activatorProps"  :ripple="false" width="140" style="font-weight: 600">
-        <v-avatar size="20">
+      <GButton tier="tertiary" compact v-bind="activatorProps" :ripple="false">
+        <v-avatar size="20" class="mr-2">
           <flag :iso="currentLanguage.iso" style="font-size: 20px;"></flag>
         </v-avatar>
-        &nbsp;&nbsp;{{currentLanguage.short}}&nbsp;
-        <v-icon class="toggleUpDown" :class='{ "rotate": menuOpen }' size="small">mdi-chevron-down</v-icon>
-      </v-btn>
+        {{ currentLanguage.short }}
+        <v-icon class="toggleUpDown ml-1" :class='{ "rotate": menuOpen }' size="small">mdi-chevron-down</v-icon>
+      </GButton>
     </template>
     <v-card variant="outlined" class="glass-popover">
       <v-list density="compact" class="pa-0 transparent">
@@ -30,6 +30,7 @@ import GeroStore from '@/stores/geroStore';
 import languages from '@/plugins/languages';
 import i18n, { loadLanguage } from '@/plugins/i18n';
 import { READY_LANGUAGES } from '@/plugins/i18n.config';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const selectedLang = ref(-1);
 const menuOpen = ref(false);
@@ -90,8 +91,9 @@ onMounted(() => {
 });
 </script>
 <style>
+/* Global on purpose: TokenSelector's chevron reuses this class. */
 .toggleUpDown {
-  transition: transform .2s ease-in-out !important;
+  transition: transform var(--g-dur-fast) var(--g-ease) !important;
 }
 
 .toggleUpDown.rotate {
