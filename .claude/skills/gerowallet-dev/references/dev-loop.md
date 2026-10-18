@@ -100,7 +100,7 @@ If you did link it, unstage the symlink before committing, and never `git add -A
 
 Before you believe such a failure, check your install. The guard's keys are computed from bundled **dependency** code, so a `node_modules` that has drifted from `package-lock.json` - the symlink above pointing at a stale main checkout is the usual way - changes the module set, the emitted order and Rollup's `$N` suffixes, and reports offenders as fixed and introduced that no commit caused. `npm ci` and rebuild first; compare against what the `Ledger tests and extension bundles` check built.
 
-**`components.d.ts` regenerates on every build** and is tracked. The live file is `src/components.d.ts` (Vite's root is `src/`); the copy at the repo root is stale. Never hand-edit either. Check `git status` before committing so a stale regeneration does not ride along.
+**`components.d.ts` regenerates on every build** and is tracked. The file is `src/components.d.ts` (Vite's root is `src/`); a stale repo-root copy from before the Vue 3 migration was deleted, so if one reappears, delete it rather than commit it. Never hand-edit it. Check `git status` before committing so a stale regeneration does not ride along.
 
 **WASM is not in the repo.** There are zero `.wasm` files under `src/` and no `public/` directory. Every WASM binary ships inside an npm package and is emitted by `vite-plugin-wasm` next to the bundle that consumes it. If WASM breaks in the background, look at the `service-worker-fixes` plugin in `vite.config.background.mts:458-500`, which rewrites `document.currentScript` and `document.baseURI` so the emitted `new URL(...)` resolves inside a service worker.
 
