@@ -21,7 +21,8 @@
           </v-avatar>
           <span class="chain-tile__label t-body">{{ fam.name }}</span>
           <span v-if="!isFamilySelectable(fam)" class="chain-tile__ribbon">
-            <span>{{ $t('welcome.soon') }}</span>
+            <span class="chain-tile__fold"><span /></span>
+            <span class="chain-tile__face"><span>{{ $t('welcome.soon') }}</span></span>
           </span>
         </button>
       </template>
@@ -203,16 +204,23 @@ watch(
    dashboard's disabled-swap ribbon. Its text is the tile's own, so a disabled
    tile also says why to assistive tech. The strip is --g-ribbon, the red it
    had before the restyle (11px text reads at 5.8:1 on it).
-   The ribbon box is the tile's own pill shape, so the strip is cut along the
-   rounded end instead of poking out past it; the strip crosses that end far
-   enough in for the longest translation in capitals ("PRONTO") to fit, and
-   the disabled tile's wider end padding keeps the chain name clear of it. */
+   Two copies of one strip: the face is cut to the tile's pill, so the strip
+   follows the rounded end instead of poking out past it; the fold, in a darker
+   shade, is cut to the pill grown by 3px, so it only shows past the tile's
+   edge at each end, as the ribbon folding over it. The strip crosses the
+   rounded end far enough in for the longest translation in capitals
+   ("PRONTO") to fit, and the disabled tile's wider end padding keeps the chain
+   name clear of it. */
 .chain-tile__ribbon {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  overflow: hidden;
   pointer-events: none;
+}
+
+.chain-tile__face,
+.chain-tile__fold {
+  position: absolute;
+  inset: 0;
 
   span {
     position: absolute;
@@ -220,16 +228,29 @@ watch(
     right: -12px;
     display: block;
     width: 76px;
-    padding: 1px 0;
+    height: 15px;
+    transform: rotate(45deg);
+  }
+}
+
+.chain-tile__face {
+  clip-path: inset(0 round var(--g-r-pill));
+
+  span {
     background-color: var(--g-ribbon);
     color: var(--g-text-1);
     font-size: 11px;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 15px;
     text-align: center;
     text-transform: uppercase;
-    transform: rotate(45deg);
   }
+}
+
+.chain-tile__fold {
+  clip-path: inset(-3px round var(--g-r-pill));
+
+  span { background-color: color-mix(in srgb, var(--g-ribbon) 73%, var(--g-canvas)); }
 }
 
 /* ── Network pills (dev mode) ─────────────────────── */
