@@ -147,18 +147,14 @@
                 <flag :iso="item.iso" square style="font-size: 20px"></flag>
               </v-avatar>
               <div class="g-list-content">
-                <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
+                <v-list-item-title>{{ item.name }}</v-list-item-title>
               </div>
             </template></v-list-item></template>
             <template v-slot:selection="{ item }">
-              <v-list-item density="compact" style="min-height: 32px; height: 32px">
-                <v-avatar size="20">
-                  <flag :iso="item.iso" square style="font-size: 20px"></flag>
-                </v-avatar>
-                <div class="py-0 g-list-content">
-                  <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
-                </div>
-              </v-list-item>
+              <v-avatar size="20" class="mr-2">
+                <flag :iso="item.iso" square style="font-size: 20px"></flag>
+              </v-avatar>
+              <span>{{ item.name }}</span>
             </template>
           </v-select>
           <!--          <v-text-field disabled outlined dense value="English" hide-details></v-text-field>-->
