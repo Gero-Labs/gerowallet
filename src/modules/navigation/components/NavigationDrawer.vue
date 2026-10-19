@@ -155,7 +155,7 @@
     <!-- Append slot -->
     <template #append>
       <v-divider></v-divider>
-      <v-list-item lines="three" class="account-header px-0" prepend-gap="12">
+      <v-list-item lines="two" class="account-header px-0" prepend-gap="12">
         <template #prepend>
           <span class="account-avatar">
             <v-avatar size="40">
@@ -195,9 +195,9 @@
           </v-list-item-subtitle>
           <v-menu v-if="account && accountSwitchable" location="top">
             <template #activator="{ props: activatorProps }">
-              <button type="button" class="account-switch t-caption" v-bind="activatorProps" :disabled="switchingAccount"
+              <button type="button" class="account-switch" v-bind="activatorProps" :disabled="switchingAccount"
                 :aria-label="t('accounts.switchAccount')">
-                {{ t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}<v-icon size="x-small">mdi-chevron-down</v-icon>
+                {{ t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}<v-icon size="14">mdi-chevron-down</v-icon>
               </button>
             </template>
             <v-list density="compact" class="glass-popover">
@@ -970,15 +970,17 @@ onUnmounted(() => {
   border: 1px solid var(--g-hairline-3);
 }
 
+// The account line reads like the network line above it (11px, subtitle
+// tone), so it no longer outweighs it; text-1 on hover marks it as a control.
 .account-switch {
   display: inline-flex;
+  align-self: flex-start;
   align-items: center;
-  gap: var(--g-s-1);
-  margin-top: var(--g-s-1);
-  // Size from t-caption; an interactive caption reads at text-2, text-1 on hover.
+  font-size: 11px;
+  line-height: 1.2;
   color: var(--g-text-2);
   border-radius: var(--g-r-chip);
-  transition: color var(--g-dur-fast) ease;
+  transition: color var(--g-dur-fast) var(--g-ease);
 
   &:hover:not(:disabled) {
     color: var(--g-text-1);
