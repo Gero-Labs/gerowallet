@@ -201,8 +201,8 @@ watch(
 
 /* Corner ribbon "Soon" on a chain that can't be picked yet, like the
    dashboard's disabled-swap ribbon. Its text is the tile's own, so a disabled
-   tile also says why to assistive tech. The strip is the error tone mixed
-   towards the canvas so 11px white text stays readable on it (about 5:1).
+   tile also says why to assistive tech. The strip is --g-ribbon, the red it
+   had before the restyle (11px text reads at 5.8:1 on it).
    The ribbon box is the tile's own pill shape, so the strip is cut along the
    rounded end instead of poking out past it; the strip crosses that end far
    enough in for the longest translation in capitals ("PRONTO") to fit, and
@@ -221,7 +221,7 @@ watch(
     display: block;
     width: 76px;
     padding: 1px 0;
-    background-color: color-mix(in srgb, var(--g-error) 70%, var(--g-canvas));
+    background-color: var(--g-ribbon);
     color: var(--g-text-1);
     font-size: 11px;
     font-weight: 700;
