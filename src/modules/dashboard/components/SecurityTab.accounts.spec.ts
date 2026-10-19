@@ -5,7 +5,12 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { env, stub } = vi.hoisted(() => ({
-  env: { send: vi.fn() },
+  env: {
+    send: vi.fn(),
+    remoteSigning: false,
+    // Each wallet's config rows, by wallet id: account #0's lock settings live under its own id.
+    config: {} as Record<number, Record<string, unknown>>,
+  },
   // A child dialog that renders nothing; the tab's own rows are what is checked.
   stub: () => ({ default: { render: () => null } }),
 }));
@@ -27,10 +32,14 @@ vi.mock('@/stores/walletStore', () => ({
   walletStore: Vue.reactive({ config: {}, loggedWallet: null as unknown }),
   default: { hasBackup: () => true, setWebsiteProtection: vi.fn() },
 }));
-vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isCrossDeviceSigningEnabled: () => false } }));
-vi.mock('@/stores/remoteSigningStore', () => ({ remoteSigningStore: { state: { settings: { enabled: false } }, needsProof: () => false } }));
+vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isCrossDeviceSigningEnabled: () => env.remoteSigning } }));
+vi.mock('@/stores/remoteSigningStore', () => ({ remoteSigningStore: { state: { settings: { enabled: false } }, needsProof: () => false, ensureLoaded: async () => {} } }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: env.send } }));
-vi.mock('@/db/wallet-db', () => ({ getDb: async () => ({ table: () => ({ where: () => ({ first: async () => undefined }) }) }) }));
+vi.mock('@/db/wallet-db', () => ({
+  getDb: async (id: number) => ({
+    table: () => ({ where: ({ key }: { key: string }) => ({ first: async () => (key in (env.config[id] ?? {}) ? { key, value: env.config[id][key] } : undefined) }) }),
+  }),
+}));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/shared/composables/useFeatureNotifications', () => ({ isFeatureNew: () => false, markFeatureAsSeen: vi.fn() }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: vi.fn() }));
@@ -56,7 +65,12 @@ function render(loggedWallet: Record<string, unknown>) {
   });
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  env.remoteSigning = false;
+  env.config = {};
+  document.body.innerHTML = '';
+});
 
 describe('security settings of an added account', () => {
   it('are its account #0’s, which a tap opens', async () => {
@@ -83,5 +97,28 @@ describe('security settings of an added account', () => {
     expect(wrapper.text()).toContain('security.lockSettings');
     expect(wrapper.text()).toContain('settings.spendingSecuritySettings');
     expect(wrapper.text()).toContain('accounts.accountPublicKey');
+  });
+});
+
+describe('the Remote Signing gate of an added account', () => {
+  const openRemoteSigning = async (loggedWallet: Record<string, unknown>) => {
+    env.remoteSigning = true;
+    env.config = { 1: { unlockMethod: 'pin', pinLength: 6 } };
+    const wrapper = render(loggedWallet);
+    await flushPromises();
+    const row = wrapper.findAll('.v-list-item').find((item) => item.text().includes('crossDevice.settings.title'))!;
+    await row.trigger('click');
+    await flushPromises();
+    return wrapper;
+  };
+
+  it('asks for account #0’s PIN, as account #0 itself does', async () => {
+    for (const loggedWallet of [daily, { ...added, encryptedPrivateKey: 'sealed', secretsWalletId: 1 }]) {
+      const wrapper = await openRemoteSigning(loggedWallet);
+      expect(document.querySelector('.verification-card')).not.toBeNull();
+      expect(document.querySelector('.v-otp-input')).not.toBeNull();
+      wrapper.unmount();
+      document.body.innerHTML = '';
+    }
   });
 });

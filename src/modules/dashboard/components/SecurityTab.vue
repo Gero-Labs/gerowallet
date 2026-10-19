@@ -481,7 +481,7 @@ import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { geroStore } from '@/stores/geroStore';
-import { accountGroup, parentWallet } from '@/shared/utils/walletAccount';
+import { accountGroup, parentWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 
 const { t } = useTranslation();
 const backupWalletDialog = ref<boolean>(false);
@@ -714,13 +714,15 @@ const verifyAddressOnDevice = async () => {
   }
 };
 
-// Load security config from wallet database
+// Load security config from wallet database. An added account's lock settings
+// are its account #0's, so they are read from there, as the drawer and the lock
+// screen read them; the Remote Signing gate below verifies against the same.
 async function loadSecurityConfig() {
   try {
     if (!loggedWallet.value) return;
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(loggedWallet.value.id);
+    const db = await getDb(secretsWalletId(loggedWallet.value));
     const configTable = db.table('config');
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
@@ -792,7 +794,7 @@ async function startVerifiedOpen() {
     if (!wallet) return;
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
     const pinLengthConfig = await configTable.where({ key: 'pinLength' }).first();
     pinLength.value = pinLengthConfig?.value || 6;
@@ -841,7 +843,7 @@ async function verifyCurrentMethod() {
     if (!wallet) throw new Error('No wallet logged in');
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
 
     let isValid = false;
