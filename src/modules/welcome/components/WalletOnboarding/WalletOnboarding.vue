@@ -80,6 +80,8 @@
         <StepAccounts class="onboarding-step"
           v-else-if="currentStep.key === 'accounts'"
           :network="network"
+          v-model:selected="selectedAccountIndices"
+          v-model:offered="offeredAccountIndices"
           :accounts="scannedAccounts"
           :source="selectedMethod === 'restore' ? 'seed' : 'device'"
           @next="onAccountsChosen"
@@ -245,12 +247,17 @@ const FIRST_SCAN = Array.from({ length: ACCOUNTS_PER_SCAN }, (_, i) => i);
 const accountIndices = ref<number[]>(FIRST_SCAN);
 const scannedAccounts = ref<AccountXpub[]>([]);
 const chosenAccounts = ref<AccountXpub[]>([]);
+// StepAccounts' choice, kept here: a further device scan remounts that step.
+const selectedAccountIndices = ref<number[]>([]);
+const offeredAccountIndices = ref<number[]>([]);
 /** A restored recovery phrase whose account #0 Gero already has: the chosen accounts join it. */
 const joinWallet = ref<Wallet | null>(null);
 const resetAccounts = (): void => {
   accountIndices.value = FIRST_SCAN;
   scannedAccounts.value = [];
   chosenAccounts.value = [];
+  selectedAccountIndices.value = [];
+  offeredAccountIndices.value = [];
   joinWallet.value = null;
 };
 

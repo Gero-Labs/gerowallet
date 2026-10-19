@@ -9,7 +9,7 @@ import type { AccountXpub } from '@/shared/utils/walletAccount';
 const { flags, stub, derive, findExisting } = vi.hoisted(() => ({
   flags: { multiAccount: true, setError: vi.fn() },
   // Each step is a stub that shows its props, so the flow can be driven from here.
-  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet', 'offerAccounts', 'accountCount'], template: `<div class="${name}" />` }),
+  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet', 'offerAccounts', 'accountCount', 'selected', 'offered'], template: `<div class="${name}" />` }),
   derive: vi.fn(),
   findExisting: vi.fn(),
 }));
@@ -80,6 +80,27 @@ describe('adding accounts of a paired device', () => {
     await connected(wrapper, [0, 5].map((i) => account(i)));
     expect((wrapper.findComponent({ name: 'StepAccounts' }).props('accounts') as AccountXpub[]).map((a) => a.accountIndex))
       .toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('gives the accounts step back what the user chose after a further scan, and forgets it on going back', async () => {
+    const wrapper = render();
+    await flushPromises();
+    await connected(wrapper, [0, 1, 2, 3, 4].map((i) => account(i)));
+    const step = wrapper.findComponent({ name: 'StepAccounts' });
+    step.vm.$emit('update:selected', [0, 1]);
+    step.vm.$emit('update:offered', [0, 1, 2, 3, 4]);
+    step.vm.$emit('scan-more');
+    await flushPromises();
+
+    await connected(wrapper, [0, 5].map((i) => account(i)));
+    const again = wrapper.findComponent({ name: 'StepAccounts' });
+    expect(again.props('selected')).toEqual([0, 1]);
+    expect(again.props('offered')).toEqual([0, 1, 2, 3, 4]);
+
+    again.vm.$emit('back');
+    await flushPromises();
+    await connected(wrapper, [0, 1].map((i) => account(i)));
+    expect(wrapper.findComponent({ name: 'StepAccounts' }).props('selected')).toEqual([]);
   });
 
   it('stays on connecting when a further scan reads another device', async () => {

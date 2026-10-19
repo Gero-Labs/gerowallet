@@ -76,7 +76,11 @@ const { t, tc } = useTranslation();
 const discovered = ref<Record<number, DiscoveredAccount>>({});
 /** Name of the wallet already holding each account, or null when it is new. */
 const existing = ref<Record<number, string | null>>({});
-const selected = ref<number[]>([]);
+// The choice outlives this step: a further device scan goes back to connecting,
+// which unmounts it. `offered` holds the accounts whose default choice was made
+// already, so coming back does not reselect an account the user cleared.
+const selected = defineModel<number[]>('selected', { default: () => [] });
+const offered = defineModel<number[]>('offered', { default: () => [] });
 const pending = ref(0);
 const probing = computed(() => pending.value > 0);
 
@@ -93,10 +97,16 @@ watch(() => props.accounts, async (accounts) => {
     found.forEach((account, i) => {
       discovered.value = { ...discovered.value, [account.accountIndex]: account };
       existing.value = { ...existing.value, [account.accountIndex]: stored[i]?.name ?? null };
-      // Account #0 heads the group, so it is always added when it is new; the
-      // others are offered pre-selected when they have been used.
-      if (!stored[i] && (account.accountIndex === 0 || account.activity === 'used')) select(account.accountIndex);
     });
+    // Account #0 heads the group, so it is always added when it is new; the
+    // others are offered pre-selected when they have been used. Written once:
+    // the models only take a new value when the onboarding passes it back.
+    const preselected = found
+      .filter((account, i) => !stored[i] && !offered.value.includes(account.accountIndex)
+        && (account.accountIndex === 0 || account.activity === 'used'))
+      .map((account) => account.accountIndex);
+    if (preselected.length) selected.value = [...new Set([...selected.value, ...preselected])].sort((a, b) => a - b);
+    offered.value = [...new Set([...offered.value, ...found.map((account) => account.accountIndex)])];
   } finally {
     pending.value--;
   }
@@ -131,9 +141,6 @@ const usedCount = computed(() => rows.value.filter((row) => row.activity === 'us
 const firstAccountRequired = computed(() => existing.value[0] === null);
 const isSelected = (index: number) => selected.value.includes(index);
 const selectable = (row: Row) => row.existing === null && !(row.accountIndex === 0 && firstAccountRequired.value);
-const select = (index: number) => {
-  if (!isSelected(index)) selected.value = [...selected.value, index].sort((a, b) => a - b);
-};
 const toggle = (index: number) => {
   selected.value = isSelected(index) ? selected.value.filter((i) => i !== index) : [...selected.value, index].sort((a, b) => a - b);
 };

@@ -104,6 +104,38 @@ describe('choosing accounts', () => {
   });
 });
 
+describe('the choice across a further device scan', () => {
+  /** As the onboarding binds it: the choice lives in the parent, so a remount keeps it. */
+  function renderBound(accounts: AccountXpub[], model: { selected: number[]; offered: number[] }) {
+    const wrapper = mount(StepAccounts, {
+      props: {
+        network, accounts, ...model,
+        'onUpdate:selected': (value: number[]) => { model.selected = value; wrapper.setProps({ selected: value }); },
+        'onUpdate:offered': (value: number[]) => { model.offered = value; wrapper.setProps({ offered: value }); },
+      },
+      global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
+    });
+    return wrapper;
+  }
+
+  it('keeps what the user chose when the step is shown again, and pre-selects only the accounts new to it', async () => {
+    device({ 0: 'used', 2: 'used', 6: 'used' });
+    const model = { selected: [] as number[], offered: [] as number[] };
+    const first = renderBound([0, 1, 2, 3, 4].map(account), model);
+    await flushPromises();
+    await rows(first)[1].trigger('click');
+    await rows(first)[2].trigger('click');
+    expect(model.selected).toEqual([0, 1]);
+    first.unmount();
+
+    // "Scan 5 more": connecting again unmounts the step; it comes back with every account so far.
+    const again = renderBound([0, 1, 2, 3, 4, 5, 6].map(account), model);
+    await flushPromises();
+    expect(checked(again)).toEqual(['true', 'true', 'false', 'false', 'false', 'false', 'true']);
+    expect(await continueWith(again)).toEqual([0, 1, 6]);
+  });
+});
+
 describe('choosing Bitcoin accounts', () => {
   it('probes them on their receive addresses, and pre-selects the used ones', async () => {
     mocks.findExisting.mockResolvedValue(null);
