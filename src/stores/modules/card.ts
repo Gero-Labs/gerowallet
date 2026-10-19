@@ -11,6 +11,7 @@ import { handleCardApiError } from './cardApiErrors';
 import { endProviderSession } from './cardSession';
 import { cardUuidFromOrderStatus, depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
 import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
+import { parseMissingFields, type CardholderDetails, type CardholderField } from '@/modules/wallet/utils/cardholderDetails';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -669,6 +670,21 @@ export default {
     } catch (error) {
       throw error;
     }
+  },
+
+  /** The cardholder details Zione still needs before it can issue a card; empty when none. */
+  async getMissingCardholderDetails(): Promise<CardholderField[]> {
+    const response = await getCardApi().axiosInstance.get('/api/kaiserex/cards/cardholder-details/missing');
+    return parseMissingFields(response.data);
+  },
+
+  /**
+   * Saves missing cardholder details and returns the fields that are still missing. Zione never
+   * overwrites a stored value: it ignores any field it already holds.
+   */
+  async fillCardholderDetails(details: Partial<CardholderDetails>): Promise<CardholderField[]> {
+    const response = await getCardApi().axiosInstance.post('/api/kaiserex/cards/cardholder-details', details);
+    return parseMissingFields(response.data);
   },
 
   async getOrderDetails(orderUuid: string): Promise<CardOrderStatus> {

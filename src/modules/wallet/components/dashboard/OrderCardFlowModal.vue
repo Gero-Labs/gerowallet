@@ -21,14 +21,30 @@
         :label="t('card.orderYourGeroCard')"
       />
 
+      <!-- Asking Zione which cardholder details it still needs -->
+      <div v-if="checkingDetails" class="order-flow__checking" role="status">
+        <v-progress-circular indeterminate size="28" width="3" />
+        <span class="t-body-sm">{{ t('card.details.checking') }}</span>
+      </div>
+
+      <!-- 0. Missing cardholder details: Zione refuses any order until they are filled -->
+      <template v-else-if="step === 0">
+        <CardholderDetailsStep ref="detailsStep" :fields="missingFields" :still-missing="detailsStillMissing" />
+        <div class="order-flow__actions">
+          <GButton tier="secondary" :disabled="savingDetails" @click="close">{{ t('common.cancel') }}</GButton>
+          <GButton tier="primary" :loading="savingDetails" @click="saveDetails">{{ t('card.details.saveAndContinue') }}</GButton>
+        </div>
+      </template>
+
       <!-- 1. Card type -->
-      <template v-if="step === 1">
+      <template v-else-if="step === 1">
         <CardTypeSelectionStep
           :selected-type="selectedType || undefined"
           :has-virtual-card="hasVirtualCard"
           :has-physical-card="hasPhysicalCard"
-          @select="selectedType = $event"
+          @select="selectType"
         />
+        <CardDetailsRejectedNotice v-if="rejectedReason !== null" :reason="rejectedReason" />
         <div class="order-flow__actions">
           <GButton tier="secondary" @click="close">{{ t('common.cancel') }}</GButton>
           <GButton tier="primary" :disabled="!selectedType" :loading="orderingVirtual" @click="continueFromType">
@@ -42,7 +58,7 @@
         <ShippingAddressSelectionStep
           ref="addressStep"
           :address="address"
-          :saved-address="savedAddress || undefined"
+          :known="knownAddress || undefined"
           @update:address="address = $event"
         />
         <div class="order-flow__actions">
@@ -82,7 +98,8 @@
           />
           <p class="t-caption order-flow__later">{{ t('card.payLaterNote') }}</p>
         </template>
-        <div v-else class="order-flow__actions">
+        <CardDetailsRejectedNotice v-if="!placed && rejectedReason !== null" :reason="rejectedReason" />
+        <div v-if="!placed" class="order-flow__actions">
           <GButton tier="secondary" :disabled="placing" @click="step = 3">{{ t('common.back') }}</GButton>
           <GButton tier="primary" :loading="placing" @click="placeOrder">{{ t('card.placeOrder') }}</GButton>
         </div>
@@ -116,12 +133,16 @@ import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAsset
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
 import {
-  emptyAddress, lovelaceFromAda, savedDeliveryAddress, toOrderPayload,
-  type ShippingAddress, type ShippingMethod,
+  emptyAddress, isMissingDetailsRejection, isStoredDetailsRejection, lovelaceFromAda, savedDeliveryAddress,
+  toOrderPayload, toProviderAddress,
+  type KnownAddress, type ShippingAddress, type ShippingMethod,
 } from '@/modules/wallet/utils/cardOrder';
+import type { CardholderField, DetailsSaveResult } from '@/modules/wallet/utils/cardholderDetails';
 import CardSteps from '../ui/CardSteps.vue';
 import CardPhases from '../ui/CardPhases.vue';
 import CardSignSection from '../ui/CardSignSection.vue';
+import CardholderDetailsStep from './card-order-steps/CardholderDetailsStep.vue';
+import CardDetailsRejectedNotice from './card-order-steps/CardDetailsRejectedNotice.vue';
 import CardTypeSelectionStep from './card-order-steps/CardTypeSelectionStep.vue';
 import ShippingAddressSelectionStep from './card-order-steps/ShippingAddressSelectionStep.vue';
 import ShippingMethodStep from './card-order-steps/ShippingMethodStep.vue';
@@ -148,7 +169,19 @@ interface PlacedOrder {
   readAt: number;
 }
 
-const step = ref<1 | 2 | 3 | 4 | 5>(1);
+/** 0 is the missing-details step, which Zione requires before any order. */
+const step = ref<0 | 1 | 2 | 3 | 4 | 5>(1);
+const checkingDetails = ref(false);
+const missingFields = ref<CardholderField[]>([]);
+const detailsStillMissing = ref(false);
+const savingDetails = ref(false);
+/** Where a details save returns to: the card types, or the order that was refused. */
+const resumeStep = ref<1 | 4>(1);
+/** The home address saved in this flow, offered for delivery. */
+const residential = ref<ShippingAddress | null>(null);
+/** Zione's reason when it refused characters in details it already holds; null otherwise. */
+const rejectedReason = ref<string | null>(null);
+let detailsCheck = 0;
 const selectedType = ref<'virtual' | 'physical' | null>(null);
 const address = ref<ShippingAddress>(emptyAddress());
 const shippingMethod = ref<ShippingMethod>('regular');
@@ -159,10 +192,17 @@ const placing = ref(false);
 const signBusy = ref(false);
 const signPhase = ref(0);
 const addressStep = ref<{ validate: () => Promise<boolean> } | null>(null);
+const detailsStep = ref<{ save: () => Promise<DetailsSaveResult | null> } | null>(null);
 const signSection = ref<{ reset: () => void } | null>(null);
 
 const cards = computed(() => cardStore.state.cards || []);
-const savedAddress = computed(() => savedDeliveryAddress(cards.value));
+
+/** The address to offer for delivery: the home address saved in this flow, else the last delivery. */
+const knownAddress = computed<KnownAddress | null>(() => {
+  if (residential.value) return { source: 'residential', address: toProviderAddress(residential.value) };
+  const delivered = savedDeliveryAddress(cards.value);
+  return delivered ? { source: 'delivery', address: toProviderAddress(delivered) } : null;
+});
 
 const hasVirtualCard = computed(() =>
   cards.value.some(card =>
@@ -184,7 +224,7 @@ const hasPhysicalCard = computed(() =>
   }),
 );
 
-const locked = computed(() => placing.value || signBusy.value || orderingVirtual.value);
+const locked = computed(() => placing.value || signBusy.value || orderingVirtual.value || savingDetails.value);
 
 const stepLabels = computed(() => [
   t('card.cardType'), t('card.shippingAddress'), t('card.shippingMethod'), t('card.paymentDetails'), t('card.confirm'),
@@ -192,7 +232,9 @@ const stepLabels = computed(() => [
 const payPhases = computed(() => [t('card.placingOrder'), t('card.buildingTransaction'), t('card.signingAndSubmitting')]);
 
 const title = computed(() => {
+  if (checkingDetails.value) return t('card.orderYourGeroCard');
   switch (step.value) {
+    case 0: return t('card.details.title');
     case 2: return t('card.whereToShipCard');
     case 3: return t('card.selectShippingMethod');
     case 4: return t('card.shippingFeePayment');
@@ -202,7 +244,9 @@ const title = computed(() => {
 });
 
 const subtitle = computed(() => {
+  if (checkingDetails.value) return '';
   switch (step.value) {
+    case 0: return t('card.details.subtitle');
     case 3: return t('card.selectDeliverySpeed');
     case 4: return t('card.reviewPaymentDetails');
     case 5: return t('card.orderPlacedSuccessfully');
@@ -212,7 +256,9 @@ const subtitle = computed(() => {
 });
 
 const art = computed<IsoSceneName>(() => {
+  if (checkingDetails.value) return 'verify';
   switch (step.value) {
+    case 0: return 'verify';
     case 2: return 'shipping';
     case 3: return 'physical';
     case 4: return 'payment';
@@ -228,9 +274,81 @@ const estimatedAda = computed(() => {
 
 const walletNetworkId = () => networkIdOfAddress(walletStore.loggedWallet.baseAddress);
 
+/**
+ * Asks Zione which cardholder details it still needs and, when any are missing, starts on the
+ * details step. A failed check lets the flow go on: Zione still refuses an incomplete order
+ * with its own reason, which {@link explainOrderFailure} turns into the same step.
+ */
+async function checkDetails(): Promise<void> {
+  const run = ++detailsCheck;
+  checkingDetails.value = true;
+  try {
+    const missing = await cardStore.getMissingCardholderDetails();
+    if (run !== detailsCheck) return;
+    missingFields.value = missing;
+    if (missing.length) step.value = 0;
+  } catch {
+    // Unknown is not "missing": the order itself reports what Zione needs.
+  } finally {
+    if (run === detailsCheck) checkingDetails.value = false;
+  }
+}
+
+async function saveDetails(): Promise<void> {
+  savingDetails.value = true;
+  try {
+    const result = await detailsStep.value?.save();
+    if (!result) return;
+    if (result.residential) residential.value = result.residential;
+    if (result.remaining.length) {
+      missingFields.value = result.remaining;
+      detailsStillMissing.value = true;
+      return;
+    }
+    missingFields.value = [];
+    detailsStillMissing.value = false;
+    snackbar.fireSuccess(t('card.details.saved'));
+    step.value = resumeStep.value;
+  } finally {
+    savingDetails.value = false;
+  }
+}
+
+function selectType(type: 'virtual' | 'physical'): void {
+  selectedType.value = type;
+  rejectedReason.value = null;
+}
+
+/**
+ * Explains a refused order: details only Zione support can change get a notice with a way to
+ * reach them, missing details send the user to the details step, anything else is a snackbar.
+ */
+async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<void> {
+  if (isStoredDetailsRejection(reason)) {
+    rejectedReason.value = reason;
+    return;
+  }
+  if (isMissingDetailsRejection(reason)) {
+    const run = detailsCheck;
+    const missing = await cardStore.getMissingCardholderDetails().catch(() => [] as CardholderField[]);
+    // The modal was reset (closed, or closed and reopened) while this was in flight.
+    if (run !== detailsCheck || !props.open) return;
+    if (missing.length) {
+      missingFields.value = missing;
+      detailsStillMissing.value = false;
+      resumeStep.value = refusedAt;
+      step.value = 0;
+      snackbar.setError(t('card.details.neededToOrder'));
+      return;
+    }
+  }
+  snackbar.setError(`${t('card.failedToOrderCard')} ${reason || t('card.pleaseTryAgain')}`);
+}
+
 async function continueFromType(): Promise<void> {
+  rejectedReason.value = null;
   if (selectedType.value === 'physical') {
-    address.value = savedAddress.value ? { ...savedAddress.value } : emptyAddress();
+    address.value = knownAddress.value ? { ...knownAddress.value.address } : emptyAddress();
     step.value = 2;
     return;
   }
@@ -242,7 +360,7 @@ async function continueFromType(): Promise<void> {
     orderingVirtual.value = false;
     close();
   } catch (error: unknown) {
-    snackbar.setError(`${t('card.failedToOrderCard')} ${providerReason(error) || t('card.pleaseTryAgain')}`);
+    await explainOrderFailure(providerReason(error) || '', 1);
   } finally {
     orderingVirtual.value = false;
   }
@@ -267,6 +385,7 @@ async function continueFromShipping(): Promise<void> {
 
 async function placeOrder(): Promise<void> {
   placing.value = true;
+  rejectedReason.value = null;
   try {
     const response = await cardStore.orderPhysicalCard(toOrderPayload(address.value, shippingMethod.value));
     const depositAddress = response?.depositAddress;
@@ -289,8 +408,7 @@ async function placeOrder(): Promise<void> {
       readAt: Date.now(),
     };
   } catch (error: unknown) {
-    const reason = providerReason(error) || (error instanceof Error ? error.message : '');
-    snackbar.setError(`${t('card.failedToOrderCard')} ${reason || t('card.pleaseTryAgain')}`);
+    await explainOrderFailure(providerReason(error) || (error instanceof Error ? error.message : ''), 4);
   } finally {
     placing.value = false;
   }
@@ -350,7 +468,14 @@ function onSubmitted(): void {
 }
 
 function reset(): void {
+  detailsCheck++;
+  checkingDetails.value = false;
   step.value = 1;
+  missingFields.value = [];
+  detailsStillMissing.value = false;
+  resumeStep.value = 1;
+  residential.value = null;
+  rejectedReason.value = null;
   selectedType.value = null;
   address.value = emptyAddress();
   shippingMethod.value = 'regular';
@@ -368,8 +493,11 @@ function close(): void {
 watch(
   () => props.open,
   open => {
-    if (open) reset();
+    if (!open) return;
+    reset();
+    checkDetails();
   },
+  { immediate: true },
 );
 </script>
 
@@ -390,5 +518,14 @@ watch(
 .order-flow__later {
   margin: 0;
   text-align: center;
+}
+
+.order-flow__checking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--g-s-3);
+  padding: var(--g-s-6) 0;
+  color: var(--g-text-2);
 }
 </style>
