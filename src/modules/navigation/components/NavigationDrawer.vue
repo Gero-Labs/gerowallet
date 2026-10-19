@@ -155,11 +155,17 @@
     <!-- Append slot -->
     <template #append>
       <v-divider></v-divider>
-      <v-list-item lines="three" class="px-0" prepend-gap="12">
+      <v-list-item lines="three" class="account-header px-0" prepend-gap="12">
         <template #prepend>
-          <v-avatar size="40">
-            <v-img v-if="account" :src="avatar" />
-          </v-avatar>
+          <span class="account-avatar">
+            <v-avatar size="40">
+              <v-img v-if="account" :src="avatar" />
+            </v-avatar>
+            <v-avatar v-if="account && chainIcon" class="account-chain" size="16" role="img"
+              :aria-label="account.chain" :title="account.chain">
+              <v-img :src="chainIcon" />
+            </v-avatar>
+          </span>
         </template>
 
         <div class="py-0 g-list-content" style="align-self: initial">
@@ -184,9 +190,6 @@
               <v-icon style="font-size: 12px;">mdi-check</v-icon>
             </v-btn>
           </v-list-item-title>
-          <v-list-item-subtitle class="mb-0" style="font-size: 11px" v-if="account">
-            {{ account.chain }}
-          </v-list-item-subtitle>
           <v-list-item-subtitle style="font-size: 11px" v-if="account">
             {{ accountNetworkLabel }}
           </v-list-item-subtitle>
@@ -335,6 +338,10 @@ const accountNetworkLabel = computed(() => {
   const n = account.value?.network;
   return account.value?.chain === Blockchain.BITCOIN && n === 'Testnet' ? 'Testnet4' : n;
 })
+
+// The chain is a badge on the avatar, as in the wallet library; the line under
+// the name is the network.
+const chainIcon = computed(() => account.value ? networks.resolveNetwork(account.value.chain, account.value.network)?.icon || '' : '')
 
 const avatar = computed(() => {
   if (!account.value) return ''
@@ -947,6 +954,20 @@ onUnmounted(() => {
       opacity: 0.6;
     }
   }
+}
+
+.account-avatar {
+  position: relative;
+  display: inline-flex;
+}
+
+// The wallet library's chain badge: a control-sized solid on the avatar's corner.
+.account-chain {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-3);
 }
 
 .account-switch {
