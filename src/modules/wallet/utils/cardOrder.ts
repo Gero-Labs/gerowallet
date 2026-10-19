@@ -1,5 +1,6 @@
 import type { CardInfo } from '@/models/card';
 import type { OrderPhysicalCardPayload } from '@/stores/modules/card';
+import { toProviderText } from './cardholderDetails';
 
 export type ShippingMethod = 'regular' | 'express-eu' | 'express-worldwide';
 
@@ -10,6 +11,16 @@ export interface ShippingAddress {
   zipCode: string;
   countryCode: string;
   phone: string;
+}
+
+/**
+ * An address the wallet already knows and can offer for delivery: the home address the user
+ * just gave Zione, or the delivery address of their last physical card. Zione has no endpoint
+ * that returns the address it holds, so nothing else is known.
+ */
+export interface KnownAddress {
+  source: 'residential' | 'delivery';
+  address: ShippingAddress;
 }
 
 /** Field limits of the provider's physical-card order endpoint. */
@@ -40,6 +51,41 @@ export function savedDeliveryAddress(cards: CardInfo[]): ShippingAddress | null 
     countryCode: delivery.country_code || '',
     phone: delivery.phone || '',
   };
+}
+
+/** A known address rewritten into the characters Zione accepts (see `toProviderText`). */
+export function toProviderAddress(address: ShippingAddress): ShippingAddress {
+  return {
+    ...address,
+    streetAddress: toProviderText(address.streetAddress),
+    city: toProviderText(address.city),
+    stateProvince: toProviderText(address.stateProvince),
+    zipCode: toProviderText(address.zipCode),
+  };
+}
+
+/** The address on one line, for a choice card: "Vnouckova 2007, 25601 Benesov, Stredocesky kraj, Czechia". */
+export function addressLine(address: ShippingAddress, countryName?: string): string {
+  const place = [address.zipCode, address.city].filter(Boolean).join(' ');
+  return [address.streetAddress, place, address.stateProvince, countryName || address.countryCode].filter(Boolean).join(', ');
+}
+
+/**
+ * True when Zione refused characters in a card order. The wallet only sends delivery fields that
+ * pass Zione's character rules, so the refused text is in the cardholder details Zione already
+ * holds, which only Zione support can change.
+ */
+export function isStoredDetailsRejection(reason: string | undefined): boolean {
+  return !!reason && /forbidden symbols/i.test(reason);
+}
+
+/**
+ * True when Zione refused a card order for a missing field ("The address field is required.",
+ * "Missing field"). The wallet always sends the full delivery address, so the gap is in the
+ * cardholder details, which the user can fill in.
+ */
+export function isMissingDetailsRejection(reason: string | undefined): boolean {
+  return !!reason && /\b(is required|missing field)\b/i.test(reason);
 }
 
 export function toOrderPayload(address: ShippingAddress, method: ShippingMethod): OrderPhysicalCardPayload {
