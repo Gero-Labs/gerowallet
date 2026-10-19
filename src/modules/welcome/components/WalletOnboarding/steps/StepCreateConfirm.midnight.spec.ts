@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StepCreateConfirm from './StepCreateConfirm.vue';
 import networks from '@/utils/networks';
-import { Blockchain, Network, Theme } from '@/models/types';
+import { Blockchain, Network, Theme, type Wallet } from '@/models/types';
 import { createNewWallet, getAllWallets, getDb } from '@/db/gero-db';
 import { getDb as getWalletDb } from '@/db/wallet-db';
 
@@ -64,7 +64,7 @@ describe('Midnight recovery phrase backup on creation (#1333)', () => {
         await vi.waitFor(() => expect(login).toHaveBeenCalled(), { timeout: 10_000 });
         await flushPromises();
         expect(setError).not.toHaveBeenCalled();
-        const wallets = Object.values(await getAllWallets());
+        const wallets = Object.values(await getAllWallets()) as Wallet[];
         expect(wallets).toHaveLength(1);
         expect(wallets[0].encryptionMethod).toBe(securityMethod);
         expect(securityMethod === 'prf' ? wallets[0].prfEncryptedMnemonic : wallets[0].encryptedMnemonic).toBeTruthy();
