@@ -210,6 +210,27 @@ describe('OrderCardFlowModal refused orders', () => {
     expect(snackbar.setError).toHaveBeenCalledWith('card.details.neededToOrder');
   });
 
+  it('ignores a missing-details re-check that lands after the modal was reopened', async () => {
+    let finishStale: (fields: string[]) => void = () => undefined;
+    card.getMissingCardholderDetails
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(new Promise<string[]>(resolve => { finishStale = resolve; }))
+      .mockResolvedValueOnce([]);
+    card.orderCard.mockRejectedValue(refusal(400, 'The address field is required.'));
+    await open();
+    await orderVirtual();
+
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    await flushPromises();
+    finishStale(['nationality']);
+    await flushPromises();
+
+    expect(title()).toBe('card.orderYourGeroCard');
+    expect(wrapper.text()).not.toContain('card.details.nationality');
+    expect(snackbar.setError).not.toHaveBeenCalled();
+  });
+
   it('falls back to the provider reason for any other refusal', async () => {
     card.getMissingCardholderDetails.mockResolvedValue([]);
     card.orderCard.mockRejectedValue(refusal(400, 'User is unverified'));

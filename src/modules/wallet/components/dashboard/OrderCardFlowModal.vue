@@ -329,8 +329,11 @@ async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<vo
     return;
   }
   if (isMissingDetailsRejection(reason)) {
+    const run = detailsCheck;
     const missing = await cardStore.getMissingCardholderDetails().catch(() => [] as CardholderField[]);
-    if (missing.length && props.open) {
+    // The modal was reset (closed, or closed and reopened) while this was in flight.
+    if (run !== detailsCheck || !props.open) return;
+    if (missing.length) {
       missingFields.value = missing;
       detailsStillMissing.value = false;
       resumeStep.value = refusedAt;
