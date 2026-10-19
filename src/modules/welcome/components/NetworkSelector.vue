@@ -181,7 +181,7 @@ watch(
   &--active:hover:not(.chain-tile--disabled) { @include g-glass-tier-active; }
 
   &--disabled {
-    padding-right: var(--g-s-6);
+    padding-right: calc(var(--g-s-6) + var(--g-s-2));
     cursor: not-allowed;
   }
 
@@ -205,8 +205,8 @@ watch(
    towards the canvas so 11px white text stays readable on it (about 5:1).
    The ribbon box is the tile's own pill shape, so the strip is cut along the
    rounded end instead of poking out past it; the strip crosses that end far
-   enough in for the longest translation ("Pronto") to fit, and the disabled
-   tile's wider end padding keeps the chain name clear of it. */
+   enough in for the longest translation in capitals ("PRONTO") to fit, and
+   the disabled tile's wider end padding keeps the chain name clear of it. */
 .chain-tile__ribbon {
   position: absolute;
   inset: 0;
@@ -216,17 +216,18 @@ watch(
 
   span {
     position: absolute;
-    top: 8px;
-    right: -18px;
+    top: 12px;
+    right: -12px;
     display: block;
-    width: 72px;
-    padding: 2px 0;
+    width: 76px;
+    padding: 1px 0;
     background-color: color-mix(in srgb, var(--g-error) 70%, var(--g-canvas));
     color: var(--g-text-1);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.2;
     text-align: center;
+    text-transform: uppercase;
     transform: rotate(45deg);
   }
 }
