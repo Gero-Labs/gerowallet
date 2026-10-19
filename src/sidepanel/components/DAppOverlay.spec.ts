@@ -4,6 +4,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
+import { bech32 } from 'bech32';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
 
 const mocks = vi.hoisted(() => ({
@@ -55,6 +56,9 @@ const ADDRESS = Cardano.Address.fromBytes(HexBlob(`61${'01'.repeat(28)}`)).toBec
 const overlay = useDAppOverlay();
 const request = (id = 'request-1') => ({ requestId: id, method: 'signData', payload: { website: 'https://dapp.example', address: ADDRESS, payload: id === 'request-1' ? '6869' : '627965' } });
 const signature = { signature: 'signed-message', key: 'public-key' };
+// The account public key the stub root key derives, and the record's xpub over it.
+const ACCOUNT_PUBLIC_KEY = 'ab'.repeat(64);
+const accountXpub = (publicKeyHex: string) => bech32.encode('xpub', bech32.toWords(Buffer.from(publicKeyHex, 'hex')), 1023);
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -62,10 +66,13 @@ beforeEach(() => {
   mocks.send.mockReset().mockResolvedValue({ data: signature });
   mocks.buildSignature.mockReturnValue(signature);
   const signingKey = {};
-  const key = { derive: vi.fn(), toRawKey: () => signingKey };
+  const key = { derive: vi.fn(), toRawKey: () => signingKey, toPublic: () => ({ hex: () => ACCOUNT_PUBLIC_KEY }) };
   key.derive.mockReturnValue(key);
   mocks.fromBytes.mockReturnValue(key);
-  WalletStore.state.loggedWallet = { id: 1, type: WalletType.Normal, chain: Blockchain.CARDANO, network: Network.MAINNET, encryptionMethod: 'password' } as never;
+  WalletStore.state.loggedWallet = {
+    id: 1, type: WalletType.Normal, chain: Blockchain.CARDANO, network: Network.MAINNET, encryptionMethod: 'password',
+    publicKey: accountXpub(ACCOUNT_PUBLIC_KEY),
+  } as never;
   WalletStore.state.keys = { payment: [{ address: ADDRESS, path: "m/1852'/1815'/0'/0/0" }], change: [], stake: [] } as never;
   WalletStore.state.isLocked = false;
   overlay.currentRequest.value = request() as never;
@@ -179,6 +186,22 @@ describe('dApp sign-data authorization freshness', () => {
     await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(signature));
     expect(mocks.buildSignature).toHaveBeenCalledTimes(1);
     expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('refuses to sign with PassKey when the derived account key is not the wallet’s', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    WalletStore.state.loggedWallet = {
+      ...WalletStore.state.loggedWallet, encryptionMethod: 'prf', publicKey: accountXpub('cd'.repeat(64)),
+    } as never;
+    const wrapper = render();
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+    finishPassKey();
+    await flushPromises();
+    expect(mocks.fromBytes).toHaveBeenCalledTimes(1);
+    expect(mocks.buildSignature).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
   });
 
   it.each(['cancel', 'request', 'payload', 'wallet', 'network', 'lock', 'unmount'] as const)(

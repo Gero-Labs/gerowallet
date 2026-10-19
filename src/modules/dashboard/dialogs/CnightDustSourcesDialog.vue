@@ -177,7 +177,7 @@
 import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { walletStore } from '@/stores/walletStore';
-import { geroStore } from '@/stores/geroStore';
+import { sourceSecretsRecord } from '@/shared/composables/useCardanoStakeEnumeration';
 import { Blockchain, Network } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import {
@@ -317,15 +317,19 @@ async function confirmAction(source: DustSource) {
     let prfOutput: ArrayBuffer | undefined;
     if (source.encryptionMethod === 'prf') {
       // Evaluate PRF against the SOURCE wallet's own credential (the logged
-      // wallet's for the same-seed twin, the imported record's otherwise).
-      const record = source.sameSeed
-        ? walletStore.loggedWallet
-        : (geroStore.wallets ?? {})[source.walletId as number];
-      if (!record?.webAuthnCredentialId) {
+      // wallet's for the same-seed twin, the imported record's otherwise, and
+      // an added account's account #0's, which holds its PassKey).
+      const record = sourceSecretsRecord(source);
+      const webAuthnCredentialId = record?.webAuthnCredentialId;
+      if (!record || !webAuthnCredentialId) {
         throw new Error('PassKey wallet missing credential ID');
       }
       const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
-      prfOutput = await evaluateWalletPrf(record);
+      prfOutput = await evaluateWalletPrf({
+        id: record.id,
+        webAuthnCredentialId,
+        webAuthnTransports: record.webAuthnTransports,
+      });
     }
     const credentials = {
       password: source.encryptionMethod === 'prf' ? undefined : authPassword.value,

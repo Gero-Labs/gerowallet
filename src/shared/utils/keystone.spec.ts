@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { CardanoSignature, CardanoSignDataSignature } from '@keystonehq/bc-ur-registry-cardano';
-import { CryptoHDKey, CryptoKeypath, PathComponent } from '@keystonehq/bc-ur-registry';
+import { CryptoHDKey, CryptoKeypath, CryptoMultiAccounts, PathComponent } from '@keystonehq/bc-ur-registry';
 import { KeystoneSDK, UR, URDecoder } from '@keystonehq/keystone-sdk';
-import { generateBitcoinPSBTQR, parseBitcoinSignature, parseBitcoinAccount, parseDataSignature, parseSignature } from './keystone';
+import { generateBitcoinPSBTQR, getKeystoneAccountsUR, parseBitcoinSignature, parseBitcoinAccount, parseDataSignature, parseKeystoneAccounts, parseSignature } from './keystone';
+import { InvalidAccountIndexError } from './walletAccount';
 
 const mocks = vi.hoisted(() => ({ build: vi.fn(() => 'cose-signature'), key: vi.fn(() => 'cose-key') }));
 vi.mock('@/shared/utils/converter', () => ({
@@ -69,5 +70,43 @@ describe('Keystone real SDK wire contracts', () => {
     });
     const parsed = parseBitcoinAccount(hdkey.toUR());
     expect(parsed).toEqual({ xpub: hdkey.getBip32Key(), xfp: '12345678', path: "84'/0'", publicKey: publicKey.toString('hex'), chainCode: '04'.repeat(32) });
+  });
+});
+
+describe('Keystone multi-account pairing', () => {
+  const FINGERPRINT = NativeBuffer.from('0a1b2c3d', 'hex');
+  /** A Cardano account key as the Keystone answers it: the origin path carries the account. */
+  const accountKey = (index: number, fill: number) => new CryptoHDKey({
+    isMaster: false,
+    key: NativeBuffer.alloc(32, fill),
+    chainCode: NativeBuffer.alloc(32, fill + 1),
+    origin: new CryptoKeypath([
+      new PathComponent({ index: 1852, hardened: true }),
+      new PathComponent({ index: 1815, hardened: true }),
+      new PathComponent({ index, hardened: true }),
+    ], FINGERPRINT),
+  });
+  const answer = (...keys: CryptoHDKey[]) => new CryptoMultiAccounts(FINGERPRINT, keys).toCBOR();
+
+  it('asks for the accounts in one key-derivation request', () => {
+    const options = getKeystoneAccountsUR([0, 1, 2]);
+    expect(String(options.data)).toMatch(/^ur:qr-hardware-call\//i);
+    expect(() => getKeystoneAccountsUR([])).toThrow(InvalidAccountIndexError);
+  });
+
+  it('reads each account by the path its key carries, with the master fingerprint', () => {
+    const { xfp, accounts } = parseKeystoneAccounts(answer(accountKey(1, 3), accountKey(0, 1)), [0, 1]);
+    expect(xfp).toBe('0a1b2c3d');
+    expect(accounts.map((a) => a.accountIndex)).toEqual([0, 1]);
+    expect(accounts[1].keys[0]).toEqual({ publicKey: '03'.repeat(32), chainCode: '04'.repeat(32), path: "m/1852'/1815'/1'" });
+  });
+
+  it('keeps only the accounts that were asked for', () => {
+    const { accounts } = parseKeystoneAccounts(answer(accountKey(0, 1), accountKey(9, 5)), [0, 1]);
+    expect(accounts.map((a) => a.accountIndex)).toEqual([0]);
+  });
+
+  it('refuses an answer with none of them', () => {
+    expect(() => parseKeystoneAccounts(answer(accountKey(9, 5)), [0, 1])).toThrow(InvalidAccountIndexError);
   });
 });

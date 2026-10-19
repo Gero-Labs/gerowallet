@@ -52,6 +52,18 @@ export interface Wallet {
   mpcPrfSaltId?: string; // MPC passkey PRF salt id (stable, non-secret)
   prfSpendingPassword?: string; // Optional spending password hash (PBKDF2-HMAC-SHA512)
   publicKey?: string; // Account xpub (bech32)
+  /**
+   * HD account `publicKey` was derived at (m/1852'/1815'/accountIndex'). Absent on
+   * every record created before multi-account support, which are account 0. Read it
+   * through resolveAccountIndex() (src/shared/utils/walletAccount.ts), which refuses
+   * a value the wallet cannot sign for. Non-indexed: no schema bump.
+   */
+  accountIndex?: number;
+  /**
+   * Set on an account other than #0: the id of the account-#0 record of the same
+   * device or seed, which the wallet list groups it under. Non-indexed.
+   */
+  parentWalletId?: number;
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
   mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
   mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)

@@ -90,10 +90,10 @@ onMounted(() => loadPrices());
   border-radius: 8px;
   padding: 12px;
 }
-.dex-table >>> td, .dex-table >>> th {
+.dex-table :deep(td), .dex-table :deep(th) {
   border-bottom: 1px solid rgba(255,255,255,0.04) !important;
   padding: 6px 8px !important;
 }
-.dex-table >>> tr:last-child td { border-bottom: none !important; }
+.dex-table :deep(tr:last-child td) { border-bottom: none !important; }
 .best-price { background: rgba(38,250,176,0.04); }
 </style>

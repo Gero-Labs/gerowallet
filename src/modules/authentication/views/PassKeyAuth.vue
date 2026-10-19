@@ -45,6 +45,7 @@ import assets from '@/utils/assets';
 import { getDb } from '@/db/wallet-db';
 import { decryptSpendingPasswordWithPrf, decryptPrivateKeyWithPrf } from '@/shared/utils/webauthn-prf';
 import { evaluateWalletPrf } from '@/shared/utils/passkeyPrf';
+import { secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 
 const loading = ref(true);
 const error = ref('');
@@ -87,18 +88,21 @@ onMounted(async () => {
       // wallet. Resolve it by explicit `walletId`, exactly as mpcPrf does for
       // its pre-switch unlock; without the param this is the logged-in wallet
       // as before.
+      // An added account's PassKey and secrets are its account #0's.
       const rawTargetId = urlParams.get('walletId');
-      let target: { id: number; webAuthnCredentialId?: string; webAuthnTransports?: AuthenticatorTransport[] } | undefined = wallet;
+      let target: { id: number; secretsWalletId?: number; webAuthnCredentialId?: string; webAuthnTransports?: AuthenticatorTransport[] } | undefined = wallet;
       if (rawTargetId) {
         const { getAllWallets } = await import('@/db/gero-db');
-        target = (await getAllWallets())[Number(rawTargetId)];
-        if (!target) throw new Error('Wallet not found');
+        const wallets = await getAllWallets();
+        const record = wallets[Number(rawTargetId)];
+        if (!record) throw new Error('Wallet not found');
+        target = secretsWallet(record, wallets);
       }
       if (!target?.webAuthnCredentialId) {
         throw new Error('PRF wallet not properly configured');
       }
       const prfOutput = await evaluateWalletPrf({
-        id: target.id,
+        id: secretsWalletId(target),
         webAuthnCredentialId: target.webAuthnCredentialId,
         webAuthnTransports: target.webAuthnTransports,
       });
@@ -115,7 +119,7 @@ onMounted(async () => {
       const privateKeyBytes = await decryptPrivateKeyWithPrf(
         wallet.prfEncryptedPrivateKey,
         wallet.webAuthnCredentialId,
-        wallet.id.toString()
+        secretsWalletId(wallet).toString()
       );
 
       resultPayload = {
@@ -136,7 +140,9 @@ onMounted(async () => {
       const targetWalletId = urlParams.get('walletId');
       if (targetWalletId) {
         const { getAllWallets } = await import('@/db/gero-db');
-        const target = (await getAllWallets())[Number(targetWalletId)];
+        const wallets = await getAllWallets();
+        const record = wallets[Number(targetWalletId)];
+        const target = record ? secretsWallet(record, wallets) : undefined;
         credentialId = target?.webAuthnCredentialId;
         saltId = target?.mpcPrfSaltId;
       }
@@ -153,8 +159,8 @@ onMounted(async () => {
       };
     } else {
       // Default: Decrypt spending password using PRF
-      // Get database config
-      const db = await getDb(wallet.id);
+      // Get database config (account #0's for an added account)
+      const db = await getDb(secretsWalletId(wallet));
       const configTable = db.table('config');
 
       // Get WebAuthn credential ID
@@ -173,7 +179,7 @@ onMounted(async () => {
       const decryptedPassword = await decryptSpendingPasswordWithPrf(
         encryptedPasswordConfig.value,
         credentialConfig.value,
-        wallet.id
+        secretsWalletId(wallet).toString()
       );
 
       resultPayload = {

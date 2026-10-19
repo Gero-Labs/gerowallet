@@ -7,45 +7,45 @@
     <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
     <!-- ── Method (stacked selectable cards) ───────────────── -->
-    <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
     <div class="method-list">
       <button
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'create' }"
         @click="selectedMethod = 'create'"
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(walletSvg)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.createWallet') }}</span>
-          <span class="method-card__desc">{{ $t('welcome.createWalletDescription') }}</span>
+          <span class="method-card__title t-body-lg">{{ $t('welcome.createWallet') }}</span>
+          <span class="method-card__desc t-body-sm">{{ $t('welcome.createWalletDescription') }}</span>
         </span>
       </button>
 
       <button
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'restore' }"
         @click="selectedMethod = 'restore'"
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(keyGeroSvg)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.restoreWallet') }}</span>
-          <span class="method-card__desc">{{ $t('welcome.restoreWalletDescription') }}</span>
+          <span class="method-card__title t-body-lg">{{ $t('welcome.restoreWallet') }}</span>
+          <span class="method-card__desc t-body-sm">{{ $t('welcome.restoreWalletDescription') }}</span>
         </span>
       </button>
 
       <button
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'pair', 'method-card--disabled': !pairSupported }"
         :disabled="!pairSupported"
         @click="selectedMethod = 'pair'"
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(pairSvg)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.pairHardwareWallet') }}</span>
-          <span class="method-card__desc">
+          <span class="method-card__title t-body-lg">{{ $t('welcome.pairHardwareWallet') }}</span>
+          <span class="method-card__desc t-body-sm">
             {{ pairSupported ? $t('welcome.pairHardwareWalletDescription') : $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
           </span>
         </span>
@@ -54,15 +54,15 @@
       <button
         v-if="googleWalletVisible"
         type="button"
-        class="method-card"
+        class="method-card glass-tier"
         :class="{ 'method-card--active': selectedMethod === 'google', 'method-card--disabled': !googleWalletSupported }"
         :disabled="!googleWalletSupported"
         @click="selectedMethod = 'google'"
       >
         <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(googleGlyph)" /></span>
         <span class="method-card__text">
-          <span class="method-card__title">{{ $t('welcome.googleWalletMethod') }}</span>
-          <span class="method-card__desc">
+          <span class="method-card__title t-body-lg">{{ $t('welcome.googleWalletMethod') }}</span>
+          <span class="method-card__desc t-body-sm">
             {{ googleWalletSupported ? $t('welcome.googleWalletMethodDescription') : $t('welcome.googleWalletNotSupportedOnNetwork') }}
           </span>
         </span>
@@ -71,7 +71,7 @@
 
     <!-- Dev builds only: watch a user-supplied address (read-only, no keys) -->
     <div v-if="watchVisible" class="watch-dev">
-      <div class="step-section-label mb-2">{{ $t('welcome.watchDevTitle') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.watchDevTitle') }}</div>
       <div class="watch-dev__row">
         <v-text-field
           v-model="watchAddress"
@@ -81,23 +81,21 @@
           :placeholder="$t('welcome.watchDevPlaceholder')"
           class="watch-dev__field"
         />
-        <v-btn
-          class="onb-btn"
-          variant="flat"
-          color="primary"
+        <GButton
+          tier="secondary"
           :loading="watchLoading"
           :disabled="!watchAddress.trim()"
           @click="onWatchSubmit()"
-        >{{ $t('welcome.watchDevButton') }}</v-btn>
+        >{{ $t('welcome.watchDevButton') }}</GButton>
       </div>
     </div>
 
     </div>
 
     <!-- Navigation (footer — outside the scroll region above) -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
+    <div class="onboarding-actions d-flex">
       <v-spacer />
-      <v-btn class="onb-btn onb-continue" variant="flat" color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <GButton tier="primary" :disabled="!selectedMethod" @click="onContinue()" class="step-next">{{ $t('common.continue') }}</GButton>
     </div>
   </div>
 </template>
@@ -112,6 +110,7 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 type Method = 'create' | 'restore' | 'pair' | 'google' | 'googleRestore';
 
@@ -225,7 +224,7 @@ const onWatchSubmit = async (): Promise<void> => {
 };
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* Fill the onboarding body and split into a scrollable content region plus a
    pinned action footer. The scrollbar lives on .step-scroll (content only), so
    the CONTINUE row sits below/outside it instead of scrolling with the list. */
@@ -245,71 +244,36 @@ const onWatchSubmit = async (): Promise<void> => {
 .step-start .onboarding-actions {
   flex-shrink: 0;
   margin-top: 0;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.step-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--g-text-2);
-}
-
-.google-restore-link {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
-}
-
-.link-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 12px;
-  color: var(--g-text-3);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.link-btn:hover {
-  color: var(--v-primary-base);
-}
-
-.onb-btn {
-  border-radius: var(--g-r-control) !important;
-  box-shadow: none !important;
+  padding-top: var(--g-s-4);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .method-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 .method-card {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--g-s-3);
   width: 100%;
   text-align: left;
-  padding: 6px 16px;
-  border-radius: var(--g-r-card);
-  border: 1px solid var(--g-hairline-2);
-  background: rgba(255, 255, 255, 0.03);
+  padding: var(--g-s-2) var(--g-s-4);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
 }
 
+/* A choice card nested in the onboarding panel: the glass-tier material, its
+   hover lift and its selected tint, never an accent repaint. */
 .method-card:hover:not(.method-card--disabled) {
-  background: rgba(255, 255, 255, 0.05);
+  @include g-glass-tier-hover;
 }
 
-.method-card--active {
-  border-color: var(--v-primary-base);
-  background: rgb(from var(--v-primary-base) r g b / 0.1);
+.method-card--active,
+.method-card--active:hover:not(.method-card--disabled) {
+  @include g-glass-tier-active;
 }
 
 .method-card--disabled {
@@ -344,30 +308,26 @@ const onWatchSubmit = async (): Promise<void> => {
   min-width: 0;
 }
 
+/* Type comes from the ramp classes in the markup; these rules only space. */
 .method-card__title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--g-text-1);
   line-height: 1.25;
 }
 
 .method-card__desc {
-  font-size: 13px;
-  color: var(--g-text-3);
   margin-top: 2px;
   line-height: 1.35;
 }
 
 .watch-dev {
-  margin-top: 16px;
-  padding-top: 12px;
+  margin-top: var(--g-s-4);
+  padding-top: var(--g-s-3);
   border-top: 1px solid var(--g-hairline-1);
 }
 
 .watch-dev__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 .watch-dev__field {

@@ -68,6 +68,8 @@
 </template>
 
 <script setup lang="ts">
+import { geroStore } from '@/stores/geroStore';
+import { walletDisplayName } from '@/shared/utils/walletAccount';
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import WalletStore, { matchesDappWhitelistEntry } from '@/stores/walletStore';
@@ -128,7 +130,8 @@ function disconnectActiveSite() {
 
 const ADA_HANDLE_POLICY = 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a';
 
-const walletName = computed(() => walletStore.loggedWallet?.name || 'Wallet');
+// An added account shows as "Wallet · Account #1": its own name alone does not say whose it is.
+const walletName = computed(() => (walletStore.loggedWallet ? walletDisplayName(walletStore.loggedWallet, geroStore.wallets) : '') || 'Wallet');
 const walletIcon = computed(() => assets.resolveIcon(walletStore.loggedWallet?.icon));
 const isMpcGoogleWallet = computed(() => {
   const w = walletStore.loggedWallet;

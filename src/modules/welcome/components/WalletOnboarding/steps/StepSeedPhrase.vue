@@ -2,7 +2,7 @@
   <div class="step-seed-phrase">
     <div class="step-scroll">
 
-    <div class="step-section-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
 
     <!-- Seed length toggle (12 / 15 / 24) -->
     <v-row no-gutters class="pb-2">
@@ -39,17 +39,17 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!valid"
         @click="handleContinue()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
@@ -59,6 +59,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import * as bip39 from 'bip39';
 import MnemonicAutocomplete from '@/modules/welcome/components/MnemonicAutocomplete.vue';
 import { NetworkInfo } from '@/utils/networks';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineProps<{ network: NetworkInfo }>();
 
@@ -164,34 +165,26 @@ const handleContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
 // Mnemonic grid — compact inputs
 .pa-half {
   padding: 2px !important;
 }
 
-.mnemonic-grid ::v-deep {
-  .v-input {
+.mnemonic-grid {
+  :deep(.v-input) {
     font-size: 12px;
     --v-input-control-height: 30px;
   }
-  .v-field {
+  :deep(.v-field) {
     --v-field-padding-start: 6px;
     --v-field-padding-end: 6px;
     --v-field-input-padding-top: 0px;
     --v-field-input-padding-bottom: 0px;
   }
-  .v-field__input {
+  :deep(.v-field__input) {
     min-height: 30px !important;
   }
-  .v-input__prepend {
+  :deep(.v-input__prepend) {
     margin-top: 4px !important;
     margin-right: 2px !important;
 
@@ -200,14 +193,14 @@ const handleContinue = (): void => {
       min-width: 18px !important;
     }
   }
-  .v-field--variant-outlined .v-field__outline {
+  :deep(.v-field--variant-outlined .v-field__outline) {
     --v-field-border-width: 1px;
   }
-  input {
+  :deep(input) {
     padding: 2px 0 !important;
     font-size: 11px;
   }
-  .v-field__append-inner {
+  :deep(.v-field__append-inner) {
     margin-top: 2px !important;
     padding-left: 0 !important;
 

@@ -4,22 +4,23 @@
     <v-card class="liquid-glass transparent-override onboarding-content" flat>
       <div class="content-header">
         <div class="content-header-row">
-          <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
+          <div class="content-title t-heading">{{ $t(currentStep.titleKey) }}</div>
           <v-switch
             v-if="currentStep.key === 'start'"
             class="dev-switch ma-0 pa-0"
             :model-value="devMode"
             density="compact"
             inset
+            size="x-small"
             hide-details
             @update:model-value="onDevToggle"
           >
             <template v-slot:label>
-              <span class="dev-switch__label">{{ $t('welcome.developerNetworks') }}</span>
+              <span class="dev-switch__label t-caption">{{ $t('welcome.developerNetworks') }}</span>
             </template>
           </v-switch>
         </div>
-        <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
+        <div class="content-desc t-body">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
         <StepStart class="onboarding-step"
@@ -32,6 +33,7 @@
         <StepSecurity class="onboarding-step"
           v-else-if="currentStep.key === 'security'"
           :network="network"
+          :offer-accounts="multiAccountCreate"
           @select="onSecuritySelect"
           @next="step++"
           @back="step--"
@@ -41,13 +43,14 @@
           :network="network"
           :security-method="securityMethod"
           :name="walletName"
+          :account-count="multiAccountCreate ? accountCount : 1"
           @back="step--"
         />
         <StepSeedPhrase class="onboarding-step"
           v-else-if="currentStep.key === 'seed'"
           :network="network"
           @change="onMnemonicChange"
-          @next="step++"
+          @next="onSeedNext"
           @back="step--"
         />
         <StepRestoreConfirm class="onboarding-step"
@@ -56,6 +59,7 @@
           :security-method="securityMethod"
           :name="walletName"
           :mnemonic="mnemonic"
+          :accounts="multiAccountRestore ? chosenAccounts : undefined"
           @back="step--"
         />
         <StepDevice class="onboarding-step"
@@ -69,7 +73,31 @@
           v-else-if="currentStep.key === 'connect'"
           :network="network"
           :wallet-type="walletType"
+          :account-indices="multiAccount ? accountIndices : undefined"
           @connected="onConnected"
+          @back="step--"
+        />
+        <StepAccounts class="onboarding-step"
+          v-else-if="currentStep.key === 'accounts'"
+          :network="network"
+          v-model:selected="selectedAccountIndices"
+          v-model:offered="offeredAccountIndices"
+          :accounts="scannedAccounts"
+          :source="selectedMethod === 'restore' ? 'seed' : 'device'"
+          @next="onAccountsChosen"
+          @scan-more="onScanMore"
+          @back="onAccountsBack"
+        />
+        <StepJoinAccounts class="onboarding-step"
+          v-else-if="currentStep.key === 'joinAccounts' && joinWallet"
+          :wallet="joinWallet"
+          :accounts="chosenAccounts"
+          @back="step--"
+        />
+        <StepAddAccount class="onboarding-step"
+          v-else-if="currentStep.key === 'addAccount' && addAccountTo"
+          :network="network"
+          :wallet="addAccountTo"
           @back="step--"
         />
         <StepReview class="onboarding-step"
@@ -77,6 +105,8 @@
           :network="network"
           :wallet-type="walletType"
           :connection="connection"
+          :accounts="multiAccount ? chosenAccounts : undefined"
+          :group-public-key="scannedAccounts.find((account) => account.accountIndex === 0)?.publicKey"
           :name="walletName"
           @update:name="walletName = $event"
           @back="step--"
@@ -134,7 +164,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
-import { Blockchain, type WalletTypeValue } from '@/models/types';
+import { Blockchain, type Wallet, type WalletTypeValue } from '@/models/types';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import snackbar from '@/plugins/snackbar';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { ACCOUNTS_PER_SCAN, mergeScannedAccounts, nextScanIndices } from '@/shared/utils/accountDiscovery';
+import { isHardwareWallet, type AccountXpub } from '@/shared/utils/walletAccount';
 import StepStart from './steps/StepStart.vue';
 import StepSecurity from './steps/StepSecurity.vue';
 import StepCreateConfirm from './steps/StepCreateConfirm.vue';
@@ -142,7 +177,10 @@ import StepSeedPhrase from './steps/StepSeedPhrase.vue';
 import StepRestoreConfirm from './steps/StepRestoreConfirm.vue';
 import StepDevice from './steps/StepDevice.vue';
 import StepConnect from './steps/StepConnect.vue';
+import StepAccounts from './steps/StepAccounts.vue';
 import StepReview from './steps/StepReview.vue';
+import StepJoinAccounts from './steps/StepJoinAccounts.vue';
+import StepAddAccount from './steps/StepAddAccount.vue';
 import StepGoogleSignIn from './steps/StepGoogleSignIn.vue';
 import StepGoogleSecure from './steps/StepGoogleSecure.vue';
 import StepGoogleBackup from './steps/StepGoogleBackup.vue';
@@ -155,6 +193,7 @@ interface ConnectionPayload {
   keys: Array<{ publicKey: string; chainCode: string; path: string }>;
   btSupported: boolean;
   xfp?: string;
+  accounts?: AccountXpub[];
 }
 
 interface StepDef {
@@ -167,7 +206,15 @@ interface StepDef {
 // `network` is the single source of truth, owned by Welcome.vue and passed in.
 // The network step emits changes up via `network-change`; Welcome updates the
 // prop and also drives the background from it.
-defineProps<{ network: NetworkInfo; devMode?: boolean }>();
+const props = defineProps<{
+  network: NetworkInfo;
+  devMode?: boolean;
+  /**
+   * Add more accounts of this wallet: the pair flow for a hardware wallet's
+   * device, the add-account step for a recovery-phrase, PassKey or Google wallet.
+   */
+  addAccountTo?: Wallet | null;
+}>();
 const emit = defineEmits<{
   (e: 'network-change', n: NetworkInfo): void;
   (e: 'update:dev-mode', val: boolean): void;
@@ -178,12 +225,41 @@ const onDevToggle = (val: boolean | null): void => {
 };
 
 const step = ref<number>(1);
-const selectedMethod = ref<'create' | 'restore' | 'pair' | 'google' | 'googleRestore' | null>(null);
+const selectedMethod = ref<'create' | 'restore' | 'pair' | 'google' | 'googleRestore' | 'addAccount' | null>(null);
 const securityMethod = ref<'prf' | 'password'>('prf');
 const walletName = ref<string>(generateWalletName());
 const mnemonic = ref<string[]>([]);
 const walletType = ref<WalletTypeValue | undefined>(undefined);
 const connection = ref<ConnectionPayload | null>(null);
+
+// Multi-account (Cardano, behind isMultiAccountEnabled): the accounts a device
+// exported or a restored recovery phrase derives, and the ones chosen.
+const { t } = useTranslation();
+const multiAccount = computed(() => featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.CARDANO);
+// A restore also lists Bitcoin accounts; pairing a Bitcoin device still adds account #0 only.
+const multiAccountRestore = computed(() => multiAccount.value
+  || (featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.BITCOIN));
+// Creating a recovery-phrase or PassKey wallet asks how many accounts to start with.
+const multiAccountCreate = computed(() => selectedMethod.value === 'create' && multiAccountRestore.value);
+const accountCount = ref(1);
+const restoreChain = computed(() => ({ chain: props.network.blockchain, network: props.network.network }));
+const FIRST_SCAN = Array.from({ length: ACCOUNTS_PER_SCAN }, (_, i) => i);
+const accountIndices = ref<number[]>(FIRST_SCAN);
+const scannedAccounts = ref<AccountXpub[]>([]);
+const chosenAccounts = ref<AccountXpub[]>([]);
+// StepAccounts' choice, kept here: a further device scan remounts that step.
+const selectedAccountIndices = ref<number[]>([]);
+const offeredAccountIndices = ref<number[]>([]);
+/** A restored recovery phrase whose account #0 Gero already has: the chosen accounts join it. */
+const joinWallet = ref<Wallet | null>(null);
+const resetAccounts = (): void => {
+  accountIndices.value = FIRST_SCAN;
+  scannedAccounts.value = [];
+  chosenAccounts.value = [];
+  selectedAccountIndices.value = [];
+  offeredAccountIndices.value = [];
+  joinWallet.value = null;
+};
 
 // Google wallet (MPC "Sign in with Google") flow state — never logged.
 const googleIdToken = ref<string>('');
@@ -211,8 +287,22 @@ const steps = computed<StepDef[]>(() => {
     return [
       ...base,
       { key: 'seed', titleKey: 'welcome.onboardingStepSeed', subtitleKey: 'welcome.onboardingSubSeed', descKey: 'welcome.onboardingDescSeed' },
-      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity', descKey: 'welcome.onboardingDescSecurity' },
-      { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescRestoreConfirm' },
+      ...(multiAccountRestore.value
+        ? [{ key: 'accounts', titleKey: 'accounts.stepTitle', subtitleKey: 'accounts.stepSubtitle', descKey: 'accounts.stepDescriptionSeed' }]
+        : []),
+      // The accounts join a stored account #0, whose password or PassKey covers them.
+      ...(joinWallet.value
+        ? [{ key: 'joinAccounts', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'accounts.joinDescription' }]
+        : [
+          { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity', descKey: 'welcome.onboardingDescSecurity' },
+          { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescRestoreConfirm' },
+        ]),
+    ];
+  }
+  if (selectedMethod.value === 'addAccount') {
+    return [
+      ...base,
+      { key: 'addAccount', titleKey: 'accounts.addAccount', subtitleKey: 'accounts.stepSubtitle', descKey: 'accounts.addAccountDescription' },
     ];
   }
   if (selectedMethod.value === 'pair') {
@@ -220,6 +310,9 @@ const steps = computed<StepDef[]>(() => {
       ...base,
       { key: 'device', titleKey: 'welcome.onboardingStepDevice', subtitleKey: 'welcome.onboardingSubDevice', descKey: 'welcome.onboardingDescDevice' },
       { key: 'connect', titleKey: 'welcome.onboardingStepConnect', subtitleKey: 'welcome.onboardingSubConnect', descKey: 'welcome.onboardingDescConnect' },
+      ...(multiAccount.value
+        ? [{ key: 'accounts', titleKey: 'accounts.stepTitle', subtitleKey: 'accounts.stepSubtitle', descKey: 'accounts.stepDescription' }]
+        : []),
       { key: 'review', titleKey: 'welcome.onboardingStepReview', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescCreateConfirm' },
     ];
   }
@@ -245,11 +338,12 @@ const steps = computed<StepDef[]>(() => {
 // list (the list shrinks/grows when the method changes).
 const currentStep = computed<StepDef>(() => steps.value[Math.min(step.value, steps.value.length) - 1]);
 
-const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRestore'): void => {
+const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRestore' | 'addAccount'): void => {
   selectedMethod.value = m;
   mnemonic.value = [];
   connection.value = null;
   walletType.value = undefined;
+  resetAccounts();
   // Reset Google flow state on (re)entry so a previous attempt never leaks
   // into a new one (idToken/passwords/recoveryShare are session-scoped only).
   googleIdToken.value = '';
@@ -312,9 +406,10 @@ const onNetworkChange = (n: NetworkInfo): void => {
     selectedMethod.value = null;
   }
 };
-const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
+const onSecuritySelect = (m: 'prf' | 'password', name: string, count = 1): void => {
   securityMethod.value = m;
   walletName.value = name;
+  accountCount.value = count;
 };
 const onMnemonicChange = (m: string[]): void => {
   mnemonic.value = m;
@@ -323,8 +418,53 @@ const onDeviceSelect = (t: WalletTypeValue): void => {
   walletType.value = t;
 };
 const onConnected = (payload: ConnectionPayload): void => {
+  if (payload.accounts) {
+    // A later scan asks for account 0 again: it must be the device the first scan read.
+    const merged = mergeScannedAccounts(scannedAccounts.value, payload.accounts);
+    if (!merged) {
+      snackbar.setError(t('accounts.differentDevice'));
+      return;
+    }
+    scannedAccounts.value = merged;
+  }
   connection.value = payload;
   step.value++;
+};
+const restoredMnemonic = (): string => mnemonic.value.join(' ');
+/** Restore: list the recovery phrase's first accounts before choosing how to secure it. */
+const onSeedNext = async (): Promise<void> => {
+  if (multiAccountRestore.value) {
+    const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
+    scannedAccounts.value = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), FIRST_SCAN, restoreChain.value);
+  }
+  step.value++;
+};
+const onAccountsChosen = async (accounts: AccountXpub[]): Promise<void> => {
+  chosenAccounts.value = accounts;
+  if (selectedMethod.value === 'restore') {
+    const first = scannedAccounts.value.find((account) => account.accountIndex === 0);
+    const { findExistingWallet } = await import('@/db/gero-db');
+    joinWallet.value = first
+      ? await findExistingWallet({ chain: props.network.blockchain, network: props.network.network, publicKey: first.publicKey })
+      : null;
+  }
+  step.value++;
+};
+const onScanMore = async (): Promise<void> => {
+  const next = nextScanIndices(scannedAccounts.value.map((account) => account.accountIndex));
+  if (selectedMethod.value === 'restore') {
+    // Derived from the recovery phrase in memory: no device to ask again.
+    const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
+    const more = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), next.filter((index) => index !== 0), restoreChain.value);
+    scannedAccounts.value = [...scannedAccounts.value, ...more];
+    return;
+  }
+  accountIndices.value = next;
+  step.value--;
+};
+const onAccountsBack = (): void => {
+  resetAccounts();
+  step.value--;
 };
 
 // Prefetch the PassKey capability probe the moment onboarding opens: on
@@ -333,6 +473,15 @@ const onConnected = (payload: ConnectionPayload): void => {
 // the user reaches the security step it resolves instantly instead of the
 // step flashing a false "PassKey not supported" notice.
 onMounted(() => {
+  // "Add account": a hardware wallet goes straight to connecting its device, which
+  // lists the accounts it already has as added; any other wallet to its own step.
+  if (props.addAccountTo && isHardwareWallet(props.addAccountTo)) {
+    onMethodSelect('pair');
+    walletType.value = props.addAccountTo.type;
+    step.value = steps.value.findIndex((s) => s.key === 'connect') + 1;
+  } else if (props.addAccountTo) {
+    onMethodSelect('addAccount');
+  }
   import('@/shared/utils/webauthn-prf')
     .then(({ isPrfSupported }) => isPrfSupported())
     .catch(() => { /* probe result is consumed (and errors surfaced) in StepSecurity */ });
@@ -364,13 +513,6 @@ onUnmounted(() => {
   background: rgb(from var(--g-raised) r g b / 0.78) !important;
 }
 
-/* Continue CTA (every step): black label on gradient/teal, incl. disabled.
-   Hoisted here from the 11 step components so the rule exists once. */
-.onboarding-content ::v-deep .onb-continue.v-btn,
-.onboarding-content ::v-deep .onb-continue.v-btn.v-btn--disabled {
-  color: var(--g-canvas) !important;
-}
-
 .onboarding-content {
   width: 100%;
   min-width: 0;
@@ -378,22 +520,22 @@ onUnmounted(() => {
      overflow and scroll inside. */
   height: 620px;
   max-height: calc(100vh - 80px);
-  padding: 24px 28px;
-  border-radius: 16px !important;
+  padding: var(--g-s-5);
+  border-radius: var(--g-r-sheet) !important;
   display: flex;
   flex-direction: column;
   overflow: visible;
 }
 
 .content-header {
-  margin-bottom: 20px;
+  margin-bottom: var(--g-s-5);
 }
 
 .content-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--g-s-3);
 }
 
 .dev-switch {
@@ -401,28 +543,18 @@ onUnmounted(() => {
 }
 
 .dev-switch__label {
-  font-size: 11px;
-  color: var(--g-text-3);
   white-space: nowrap;
 }
 
-.dev-switch ::v-deep .v-input--selection-controls__input {
-  transform: scale(0.8);
-}
-
+/* Type comes from the ramp classes in the markup; these rules only space. */
 .content-title {
-  font-size: 22px;
-  font-weight: 700;
   line-height: 1.2;
-  color: #fff;
   margin-top: 2px;
 }
 
 .content-desc {
-  font-size: 14px;
   line-height: 1.5;
-  color: #94979c;
-  margin-top: 6px;
+  margin-top: var(--g-s-2);
 }
 
 .content-body {
@@ -439,16 +571,23 @@ onUnmounted(() => {
 
 /* Each step fills the body so its action row pins to the card bottom; tall
    steps grow and the body scrolls. */
-.content-body ::v-deep .onboarding-step {
+.content-body :deep(.onboarding-step) {
   flex: 1 0 auto;
   min-height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.content-body ::v-deep .onboarding-actions {
+/* A checkbox label carries a ramp class, which sets its tone, so Vuetify's
+   medium-emphasis fade would only dim it a second time. */
+.content-body :deep(.v-checkbox .v-label) {
+  opacity: 1;
+}
+
+.content-body :deep(.onboarding-actions) {
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: var(--g-s-4);
+  gap: var(--g-s-3);
 }
 
 /* A step may opt into an internal scroll (content scrolls, action row stays a
@@ -456,30 +595,30 @@ onUnmounted(() => {
    outer .content-body never scrolls — the scrollbar lives on .step-scroll and
    covers content only. A step just needs to wrap its content in .step-scroll and
    keep .onboarding-actions as a sibling after it. */
-.content-body ::v-deep .onboarding-step:has(.step-scroll) {
+.content-body :deep(.onboarding-step:has(.step-scroll)) {
   height: 100%;
   min-height: 0;
   flex: 1 1 auto;
 }
 
-.content-body ::v-deep .step-scroll {
+.content-body :deep(.step-scroll) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
 
-.content-body ::v-deep .onboarding-step:has(.step-scroll) .onboarding-actions {
+.content-body :deep(.onboarding-step:has(.step-scroll) .onboarding-actions) {
   flex-shrink: 0;
   margin-top: 0;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: var(--g-s-4);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 /* Vuetify's .v-btn--block sets `flex: 1 0 auto` (for full-width in a row).
    Inside .onboarding-step (a flex column), that flex-grow:1 makes a block
    button stretch vertically to fill a short step's free space. Pin it to its
    natural height; min-width:100% from --block still gives full width. */
-.content-body ::v-deep .onboarding-step .v-btn--block {
+.content-body :deep(.onboarding-step .v-btn--block) {
   flex: 0 0 auto;
 }
 

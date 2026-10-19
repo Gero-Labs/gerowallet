@@ -34,7 +34,7 @@
            badge only appears off mainnet, so the common case stays quiet. -->
       <div v-if="loggedWallet" class="wallet-identity-strip mb-2">
         <v-icon size="13" color="rgba(255,255,255,0.45)" class="mr-1">mdi-wallet-outline</v-icon>
-        <span class="grey--text text-caption">{{ loggedWallet.name }}</span>
+        <span class="grey--text text-caption">{{ walletDisplayName(loggedWallet, geroStore.wallets) }}</span>
         <span v-if="loggedWallet.network !== Network.MAINNET" class="network-badge ml-2">{{ loggedWallet.network }}</span>
       </div>
 
@@ -1082,6 +1082,8 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
+import { deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
+import { geroStore } from '@/stores/geroStore';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
@@ -2700,7 +2702,7 @@ async function signDataPrf() {
     const role = parseInt(pathParts[4].replace(/'/g, ""), 10);
     const index = parseInt(pathParts[5].replace(/'/g, ""), 10);
 
-    const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]);
+    const accountKey = deriveSigningAccountKey(rootKey, resolveAccountIndex(loggedWallet.value), loggedWallet.value?.publicKey);
     const signingKey = accountKey.derive([role, index]).toRawKey();
 
     // Get address bytes for COSE_Key. Address.toBytes() returns a HexBlob
@@ -3868,14 +3870,14 @@ function approveWcSession() {
 }
 /* Longer labels (Spanish "Desbloquear y compartir") wrap inside the button
    instead of running into the one next to it. Doubled class to beat Vuetify's
-   (0,3,0) size rule; ::v-deep because .v-btn__content is Vuetify's own markup
+   (0,3,0) size rule; :deep() because .v-btn__content is Vuetify's own markup
    (same recipe as MyGovernance's change row). */
 .action-buttons .v-btn.v-btn {
   height: auto;
   min-height: 36px;
   white-space: normal;
 }
-.action-buttons ::v-deep .v-btn__content {
+.action-buttons :deep(.v-btn__content) {
   min-width: 0;
   white-space: normal;
   line-height: 1.25;

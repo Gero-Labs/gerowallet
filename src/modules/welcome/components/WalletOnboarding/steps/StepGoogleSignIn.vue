@@ -1,7 +1,7 @@
 <template>
   <div class="step-google-signin">
     <div class="step-scroll">
-    <div class="google-signin-panel">
+    <div class="google-signin-panel glass-tier">
       <div class="google-signin-icon">
         <v-avatar size="56" color="rgba(255,255,255,0.05)">
           <v-img :src="google"  width="28" />
@@ -9,12 +9,10 @@
       </div>
 
       <template v-if="!email">
-        <div class="google-signin-title">{{ $t('welcome.googleSignInButton') }}</div>
-        <div class="google-signin-desc">{{ $t('welcome.onboardingDescGoogleSignIn') }}</div>
-        <v-btn
-          class="onb-btn google-signin-btn"
-          variant="outlined"
-
+        <div class="google-signin-title t-body-lg">{{ $t('welcome.googleSignInButton') }}</div>
+        <div class="google-signin-desc t-body-sm">{{ $t('welcome.onboardingDescGoogleSignIn') }}</div>
+        <GButton
+          tier="secondary"
           :loading="signingIn"
           @click="signIn()"
         >
@@ -22,7 +20,7 @@
             <v-img :src="google"  />
           </v-avatar>
           {{ $t('welcome.googleSignInButton') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="errorMessage"
           color="error"
@@ -32,15 +30,15 @@
           border="start"
           class="mt-3 mb-0"
         >
-          <span class="text-body-2">{{ $t(errorMessage) }}</span>
+          <span class="t-body">{{ $t(errorMessage) }}</span>
         </v-alert>
       </template>
 
       <template v-else>
-        <div class="google-signin-title">{{ $t('welcome.googleSignedInAs', { email }) }}</div>
-        <v-btn variant="text" size="small" color="primary" class="mt-1" @click="changeAccount()">
+        <div class="google-signin-title t-body-lg">{{ $t('welcome.googleSignedInAs', { email }) }}</div>
+        <GButton tier="tertiary" compact class="mt-1" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="existingWallet"
           color="info"
@@ -50,7 +48,7 @@
           border="start"
           class="mpc-info-alert mt-3 mb-0"
         >
-          <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletAlreadyExists', { name: existingWallet.name }) }}</span>
+          <span class="t-body" style="white-space: pre-line;">{{ $t('welcome.googleWalletAlreadyExists', { name: existingWallet.name }) }}</span>
         </v-alert>
         <v-alert
           v-else-if="enrolledOnBackend"
@@ -61,44 +59,41 @@
           border="start"
           class="mpc-info-alert mt-3 mb-0"
         >
-          <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
+          <span class="t-body" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
         </v-alert>
       </template>
     </div>
     </div>
 
     <!-- Navigation (footer — outside the scroll region above) -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
+      <GButton
         v-if="existingWallet"
-        class="onb-btn onb-continue"
-        variant="flat"
-        color="primary"
+        tier="primary"
         @click="openUnlockExisting()"
+        class="step-next"
       >
         {{ $t('welcome.logInToThisWallet') }}
-      </v-btn>
-      <v-btn
+      </GButton>
+      <GButton
         v-else-if="enrolledOnBackend"
-        class="onb-btn onb-continue"
-        variant="flat"
-        color="primary"
+        tier="primary"
         @click="restoreExisting()"
+        class="step-next"
       >
         {{ $t('welcome.restoreThisWallet') }}
-      </v-btn>
-      <v-btn
+      </GButton>
+      <GButton
         v-else
-        class="onb-btn onb-continue"
-        variant="flat"
-        color="primary"
+        tier="primary"
         :disabled="!email"
         @click="onContinue()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
 
     <UnlockWalletDialog
@@ -124,6 +119,7 @@ import type { Wallet } from '@/models/types';
 import type { NetworkInfo } from '@/utils/networks';
 import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 import type { GoogleWalletBgResponse } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const props = defineProps<{ network?: NetworkInfo }>();
 const vmProxy = getCurrentInstance()!.proxy;
@@ -323,52 +319,37 @@ const onContinue = (): void => {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  padding: var(--g-s-5) var(--g-s-4);
+  /* The surface is the glass-tier class in the markup: a pane nested in the
+     onboarding panel. */
 }
 
 .google-signin-icon {
-  margin-bottom: 16px;
+  margin-bottom: var(--g-s-4);
 }
 
+/* Type comes from the ramp classes in the markup; these rules only space. */
 .google-signin-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 4px;
+  margin-bottom: var(--g-s-1);
 }
 
 .google-signin-desc {
-  font-size: 13px;
-  color: #94979c;
   max-width: 360px;
-  margin-bottom: 20px;
+  margin-bottom: var(--g-s-5);
   line-height: 1.5;
-}
-
-.google-signin-btn {
-  text-transform: none;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.onb-btn {
-  border-radius: 8px !important;
-  box-shadow: none !important;
 }
 
 /* Solid, high-contrast info alert — the default outlined/info blue is unreadable
    against the blue glass onboarding card. */
-::v-deep .mpc-info-alert.v-alert--outlined {
+:deep(.mpc-info-alert.v-alert--outlined) {
   background: rgba(8, 12, 20, 0.82) !important;
   border-color: rgba(125, 180, 255, 0.6) !important;
 }
-::v-deep .mpc-info-alert .v-alert__content,
-::v-deep .mpc-info-alert .text-body-2 {
+:deep(.mpc-info-alert .v-alert__content),
+:deep(.mpc-info-alert .t-body) {
   color: #eaf2ff !important;
 }
-::v-deep .mpc-info-alert .v-icon {
+:deep(.mpc-info-alert .v-icon) {
   color: #7db4ff !important;
 }
 </style>

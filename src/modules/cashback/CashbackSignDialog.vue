@@ -94,6 +94,7 @@ import hardwareLoading from '@/plugins/hardwareLoading';
 import rules from '@/utils/rules';
 import networks from '@/utils/networks';
 import ledger from '@/shared/utils/ledger';
+import { accountIndexFromKeys } from '@/shared/utils/walletAccount';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { signPayloadHex } from './portalBridge';
@@ -238,7 +239,7 @@ async function signWithLedger(approved: ApprovedRequest): Promise<Signed> {
   hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
   try {
     const known = ledger.createKnownAddressesFromKeys(keys.value, network);
-    const signed = await ledger.signData(approved.address, approved.payloadHex, network, 0, !isBluetooth.value, known);
+    const signed = await ledger.signData(approved.address, approved.payloadHex, network, accountIndexFromKeys(keys.value), !isBluetooth.value, known);
     return { signature: signed.signatureHex, key: signed.signingPublicKeyHex };
   } finally {
     hardwareLoading.end();

@@ -295,6 +295,7 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import snackbar from '@/plugins/snackbar';
 import type { Wallet } from '@/models/types';
+import { secretsWallet } from '@/shared/utils/walletAccount';
 
 /** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
 interface BackgroundMessageResponse {
@@ -495,16 +496,21 @@ async function loadSecurityConfig() {
       return;
     }
 
+    // An added account is unlocked with its account #0's settings, PassKey and
+    // Google identity, which only that record stores.
+    const walletsMap = await getAllWallets();
+    const walletRecord = (walletsMap[walletId] as Wallet) || null;
+    const settingsRecord = walletRecord ? secretsWallet(walletRecord, walletsMap as Record<number, Wallet>) : null;
+
     // Resolve wallet record for pre-login PRF detection and credential retrieval
     let preLoginWalletRecord: Wallet | null = null;
     if (props.preLoginWalletId) {
-      const walletsMap = await getAllWallets();
-      preLoginWalletRecord = (walletsMap[walletId] as Wallet) || null;
+      preLoginWalletRecord = settingsRecord;
       preLoginEncryptionMethod.value = preLoginWalletRecord?.encryptionMethod || null;
     }
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(walletId);
+    const db = await getDb(settingsRecord?.id ?? walletId);
     const configTable = db.table('config');
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();

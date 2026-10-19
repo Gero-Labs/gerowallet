@@ -122,8 +122,8 @@
         <v-card-text>
           <v-row no-gutters class="py-2">
             <v-col cols="9" class="text-left pr-1">
-              <h3 class="white--text">{{ $t('settings.deleteWallet') }}</h3>
-              <span class="helper my-0">{{ $t('settings.deleteWalletHelper') }}</span>
+              <h3 class="white--text">{{ $t(isAddedAccount ? 'accounts.removeAccount' : 'settings.deleteWallet') }}</h3>
+              <span class="helper my-0">{{ $t(isAddedAccount ? removeAccountCopy.helper : 'settings.deleteWalletHelper') }}</span>
             </v-col>
             <v-col cols="3" style="align-content: center;">
               <v-btn
@@ -137,7 +137,7 @@
                 <v-icon end class="mr-1 ml-0">
                   mdi-delete
                 </v-icon>
-                {{ $t('settings.deleteWallet') }}
+                {{ $t(isAddedAccount ? 'accounts.removeAccount' : 'settings.deleteWallet') }}
               </v-btn>
             </v-col>
           </v-row>
@@ -147,7 +147,11 @@
         <v-card>
           <v-card-title>{{ $t('settings.deleteWalletConfirmTitle') }}</v-card-title>
           <v-card-text>
-            {{ $t('settings.deleteWalletConfirmMessage') }}
+            <template v-if="isAddedAccount">{{ $t(removeAccountCopy.explanation) }}</template>
+            <template v-else>{{ $t('settings.deleteWalletConfirmMessage') }}</template>
+            <p v-if="addedAccounts.length" class="mt-2 mb-0">
+              {{ $t('accounts.deleteGroupExplanation', { names: addedAccounts.map((account) => account.name).join(', ') }) }}
+            </p>
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
@@ -175,7 +179,8 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
-import GeroStore from '@/stores/geroStore';
+import GeroStore, { geroStore } from '@/stores/geroStore';
+import { childAccounts, isHardwareWallet, parentWallet, walletDisplayName } from '@/shared/utils/walletAccount';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
@@ -319,20 +324,32 @@ async function handleCardLogout(): Promise<void> {
   }
 }
 
+// Multi-account: an added account is removed on its own; deleting the wallet that
+// heads a group removes its added accounts with it, since they are listed under it.
+const loggedRecord = computed(() => (loggedWallet.value ? geroStore.wallets[loggedWallet.value.id] ?? loggedWallet.value : null));
+const isAddedAccount = computed(() => !!loggedRecord.value && !!parentWallet(loggedRecord.value, geroStore.wallets));
+// Where the removed account's funds stay: on the device, or with the recovery phrase.
+const removeAccountCopy = computed(() => (loggedRecord.value && isHardwareWallet(loggedRecord.value)
+  ? { helper: 'accounts.removeAccountHelper', explanation: 'accounts.removeAccountExplanation' }
+  : { helper: 'accounts.removeAccountHelperSeed', explanation: 'accounts.removeAccountExplanationSeed' }));
+const addedAccounts = computed(() => (loggedRecord.value && !isAddedAccount.value ? childAccounts(loggedRecord.value, geroStore.wallets) : []));
+
 const deleteWalletConfirm = async () => {
   deleteWalletLoading.value = true;
-  const walletId = loggedWallet.value.id;
-  const name = loggedWallet.value.name;
+  const name = isAddedAccount.value ? walletDisplayName(loggedRecord.value!, geroStore.wallets) : loggedWallet.value.name;
+  const walletIds = [loggedWallet.value.id, ...addedAccounts.value.map((account) => account.id)];
 
   await handleCardLogout();
-  // Push notifications: queue the server-side unlink durably BEFORE the wallet record
-  // and its keys are deleted (the worker retries it on later starts if it fails now).
-  await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.NOTIFY_WALLET_REMOVED, data: { walletId } });
-  // Midnight: drop this wallet's coin state, history and balances (PRIV-01).
-  // Also BEFORE removeWallet: the background reads the address from the record.
-  await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.FORGET_MIDNIGHT_WALLET_DATA, data: { walletId } });
-  // Remove wallet from geroStore (this will also delete from database)
-  GeroStore.removeWallet(walletId);
+  for (const walletId of walletIds) {
+    // Push notifications: queue the server-side unlink durably BEFORE the wallet record
+    // and its keys are deleted (the worker retries it on later starts if it fails now).
+    await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.NOTIFY_WALLET_REMOVED, data: { walletId } });
+    // Midnight: drop this wallet's coin state, history and balances (PRIV-01).
+    // Also BEFORE removeWallet: the background reads the address from the record.
+    await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.FORGET_MIDNIGHT_WALLET_DATA, data: { walletId } });
+    // Remove wallet from geroStore (this will also delete from database)
+    GeroStore.removeWallet(walletId);
+  }
 
   // Then logout
   await submitLogout();

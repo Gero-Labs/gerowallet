@@ -456,7 +456,7 @@ onMounted(() => {
   min-height: 300px;
 }
 
-.qr-code-container >>> canvas {
+.qr-code-container :deep(canvas) {
   max-width: 100%;
   height: auto;
 }
