@@ -181,7 +181,7 @@ watch(
   &--active:hover:not(.chain-tile--disabled) { @include g-glass-tier-active; }
 
   &--disabled {
-    padding-right: var(--g-s-5);
+    padding-right: var(--g-s-6);
     cursor: not-allowed;
   }
 
@@ -203,23 +203,23 @@ watch(
    dashboard's disabled-swap ribbon. Its text is the tile's own, so a disabled
    tile also says why to assistive tech. The strip is the error tone mixed
    towards the canvas so 11px white text stays readable on it (about 5:1).
-   Sized so the longest translation ("Pronto") fits inside the corner; the
-   disabled tile's wider end padding keeps the chain name clear of it. */
+   The ribbon box is the tile's own pill shape, so the strip is cut along the
+   rounded end instead of poking out past it; the strip crosses that end far
+   enough in for the longest translation ("Pronto") to fit, and the disabled
+   tile's wider end padding keeps the chain name clear of it. */
 .chain-tile__ribbon {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 32px;
-  height: 32px;
+  inset: 0;
+  border-radius: inherit;
   overflow: hidden;
   pointer-events: none;
 
   span {
     position: absolute;
-    top: 6px;
-    right: -15px;
+    top: 8px;
+    right: -18px;
     display: block;
-    width: 58px;
+    width: 72px;
     padding: 2px 0;
     background-color: color-mix(in srgb, var(--g-error) 70%, var(--g-canvas));
     color: var(--g-text-1);
