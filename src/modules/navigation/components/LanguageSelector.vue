@@ -3,7 +3,7 @@
     <template v-slot:activator="{ props: activatorProps }">
       <GButton tier="tertiary" compact v-bind="activatorProps" :ripple="false">
         <v-avatar size="20" class="mr-2">
-          <flag :iso="currentLanguage.iso" style="font-size: 20px;"></flag>
+          <flag :iso="currentLanguage.iso" square style="font-size: 20px;"></flag>
         </v-avatar>
         {{ currentLanguage.short }}
         <v-icon class="toggleUpDown ml-1" :class='{ "rotate": menuOpen }' size="small">mdi-chevron-down</v-icon>
@@ -14,7 +14,7 @@
 
           <v-list-item v-for="(item, index) in availableLanguages" :key="index" :active="selectedLang === index" @click="selectedLang = index">
             <template #prepend><v-avatar size="20">
-              <flag :iso="item.iso" style="font-size: 20px;"></flag>
+              <flag :iso="item.iso" square style="font-size: 20px;"></flag>
             </v-avatar>
             </template><v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
           </v-list-item>

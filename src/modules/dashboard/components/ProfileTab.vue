@@ -144,7 +144,7 @@
           >
             <template v-slot:item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
               <v-avatar size="20">
-                <flag :iso="item.iso" style="font-size: 20px"></flag>
+                <flag :iso="item.iso" square style="font-size: 20px"></flag>
               </v-avatar>
               <div class="g-list-content">
                 <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
@@ -153,7 +153,7 @@
             <template v-slot:selection="{ item }">
               <v-list-item density="compact" style="min-height: 32px; height: 32px">
                 <v-avatar size="20">
-                  <flag :iso="item.iso" style="font-size: 20px"></flag>
+                  <flag :iso="item.iso" square style="font-size: 20px"></flag>
                 </v-avatar>
                 <div class="py-0 g-list-content">
                   <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
