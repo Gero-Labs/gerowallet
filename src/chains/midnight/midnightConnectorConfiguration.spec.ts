@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Network } from '@/models/types';
-import { getMidnightEndpoints } from './midnightConfig';
+import { DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9, getMidnightEndpoints } from './midnightConfig';
 import { connectorConfiguration } from './midnightConnectorConfiguration';
 import type { ProofServerPreference } from './midnightProvingTarget';
 
@@ -42,6 +42,18 @@ describe('connectorConfiguration', () => {
     const endpoints = endpointsFor(Network.PREPROD);
     expect(connectorConfiguration(endpoints, preference('local'), 'preprod').proverServerUri).toBe('http://localhost:6399');
     expect(connectorConfiguration(endpoints, preference('remote'), 'preprod').proverServerUri).toBe(endpoints.defaultProofServerUrl);
+  });
+
+  it('reports the ledger-9 proof server on stagenet', () => {
+    const endpoints = endpointsFor(Network.STAGENET);
+    expect(connectorConfiguration(endpoints, preference('local'), 'stagenet').proverServerUri).toBe('http://localhost:6398');
+    expect(connectorConfiguration(endpoints, preference('remote'), 'stagenet').proverServerUri).toBe(DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9);
+    expect(connectorConfiguration(endpoints, preference('zkpaas'), 'stagenet').proverServerUri).toBe(DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9);
+  });
+
+  it('omits proverServerUri in local mode when the network has no local server set', () => {
+    const { localUrlLedger9: _unset, ...withoutLedger9 } = preference('local');
+    expect(connectorConfiguration(endpointsFor(Network.STAGENET), withoutLedger9, 'stagenet').proverServerUri).toBeUndefined();
   });
 
   it('never advertises the zkPaaS endpoint or its credentials', () => {
