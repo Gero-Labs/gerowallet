@@ -166,7 +166,6 @@ export interface SupportChatSigner {
     address: string,
     payloadHex: string,
     password: string,
-    accountIndex: number,
     keys: unknown,
     privateKeyBytes?: Uint8Array,
   ): Promise<{ signature: string; key: unknown }>;
@@ -208,7 +207,6 @@ export async function authenticateSupportChat(
         stakeAddress,
         payloadHex,
         auth.password ?? '',
-        0,
         keys,
         auth.privateKeyBytes,
       );

@@ -13,7 +13,7 @@
         </v-avatar>
         <div class="py-0 g-list-content" style="align-self: self-start;">
           <v-list-item-title class="text-left">
-            <h3 style="color: white; font-size: 16px;">{{ $t('settings.extendedPublicKey') }}</h3>
+            <h3 style="color: white; font-size: 16px;">{{ inAccountGroup ? $t('accounts.accountPublicKey', { index: loggedWallet?.accountIndex ?? 0 }) : $t('settings.extendedPublicKey') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('settings.ed25519ExtendedKey') }}
@@ -26,7 +26,7 @@
           <div ref="qrCodeRef" class="security-public-key-qr" style="width: 120px; height: 120px;"></div>
         </v-avatar>
       </v-list-item>
-      <v-list-item class="px-2 py-1" v-if="canBackup" @click="backupWalletDialog = true">
+      <v-list-item class="px-2 py-1" v-if="canBackup && !managedBy" @click="backupWalletDialog = true">
         <v-avatar class="my-0">
           <v-badge
             v-if="!backup"
@@ -81,7 +81,7 @@
       </v-list-item>
 
       <!-- MPC "Sign in with Google": change recovery password -->
-      <v-list-item v-if="isMpcWallet" class="px-2 py-1" @click="changeRecoveryPasswordDialog = true">
+      <v-list-item v-if="isMpcWallet && !managedBy" class="px-2 py-1" @click="changeRecoveryPasswordDialog = true">
         <v-avatar class="my-0">
           <v-icon>mdi-form-textbox-password</v-icon>
         </v-avatar>
@@ -99,7 +99,7 @@
       </v-list-item>
 
       <!-- MPC "Sign in with Google": reveal secret recovery phrase -->
-      <v-list-item v-if="isMpcWallet" class="px-2 py-1" @click="revealRecoveryPhraseDialog = true">
+      <v-list-item v-if="isMpcWallet && !managedBy" class="px-2 py-1" @click="revealRecoveryPhraseDialog = true">
         <v-avatar class="my-0">
           <v-icon>mdi-key-alert-outline</v-icon>
         </v-avatar>
@@ -116,7 +116,7 @@
         </div>
       </v-list-item>
 
-      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet" @click="changePasswordDialog = true">
+      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet && !managedBy" @click="changePasswordDialog = true">
         <v-avatar class="my-0">
           <v-icon>
             mdi-shield-key-outline
@@ -137,8 +137,26 @@
         </div>
       </v-list-item>
 
+      <!-- An added account: its recovery phrase, password and lock are its account #0's -->
+      <v-list-item v-if="managedBy" class="px-2 py-1" :disabled="openingManagingWallet" @click="openManagingWallet">
+        <v-avatar class="my-0">
+          <v-icon>mdi-shield-lock-outline</v-icon>
+        </v-avatar>
+        <div class="py-0 g-list-content">
+          <v-list-item-title class="text-left">
+            <h3 class="t-body-lg">{{ $t('accounts.groupSecurity') }}</h3>
+          </v-list-item-title>
+          <v-list-item-subtitle class="text-left">
+            {{ $t('accounts.managedBy', { name: managedBy.name }) }}
+          </v-list-item-subtitle>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">mdi-chevron-right</v-icon>
+        </div>
+      </v-list-item>
+
       <!-- Lock Settings (Unlock Method + Auto-Lock) -->
-      <v-list-item class="px-2 py-1" @click="handleLockSettingsClick">
+      <v-list-item v-else class="px-2 py-1" @click="handleLockSettingsClick">
         <v-avatar class="my-0">
           <!-- New Feature Notification Dot -->
           <NotificationDot
@@ -462,6 +480,8 @@ import rules from '@/utils/rules';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { geroStore } from '@/stores/geroStore';
+import { accountGroup, parentWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 
 const { t } = useTranslation();
 const backupWalletDialog = ref<boolean>(false);
@@ -529,6 +549,22 @@ const getVerifyTitle = (method: string | null) => {
 };
 
 const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
+
+// An account added under another record keeps none of the group's secrets or
+// security settings: they are its account #0's, edited there.
+const managedBy = computed(() => (loggedWallet.value ? parentWallet(loggedWallet.value, geroStore.wallets) : null));
+const inAccountGroup = computed(() => !!loggedWallet.value && accountGroup(loggedWallet.value, geroStore.wallets).length > 1);
+const openingManagingWallet = ref(false);
+async function openManagingWallet() {
+  const wallet = managedBy.value;
+  if (!wallet || openingManagingWallet.value) return;
+  openingManagingWallet.value = true;
+  try {
+    await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.LOGIN, data: { wallet } });
+  } finally {
+    openingManagingWallet.value = false;
+  }
+}
 
 // MPC "Sign in with Google" wallet: unlock is Google sign-in + the secret
 // chosen at creation, not a local unlock method / config-table passkey. The
@@ -678,13 +714,15 @@ const verifyAddressOnDevice = async () => {
   }
 };
 
-// Load security config from wallet database
+// Load security config from wallet database. An added account's lock settings
+// are its account #0's, so they are read from there, as the drawer and the lock
+// screen read them; the Remote Signing gate below verifies against the same.
 async function loadSecurityConfig() {
   try {
     if (!loggedWallet.value) return;
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(loggedWallet.value.id);
+    const db = await getDb(secretsWalletId(loggedWallet.value));
     const configTable = db.table('config');
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
@@ -756,7 +794,7 @@ async function startVerifiedOpen() {
     if (!wallet) return;
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
     const pinLengthConfig = await configTable.where({ key: 'pinLength' }).first();
     pinLength.value = pinLengthConfig?.value || 6;
@@ -805,7 +843,7 @@ async function verifyCurrentMethod() {
     if (!wallet) throw new Error('No wallet logged in');
 
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
+    const db = await getDb(secretsWalletId(wallet));
     const configTable = db.table('config');
 
     let isValid = false;
@@ -1018,13 +1056,13 @@ watch(showVerificationOverlay, async (newValue) => {
 }
 
 /* Make PIN password dots bigger and textboxes square */
-.verification-card ::v-deep .v-otp-input {
+.verification-card :deep(.v-otp-input) {
   display: inline-flex !important;
   justify-content: center;
   width: auto !important;
 }
 
-.verification-card ::v-deep .v-otp-input__content {
+.verification-card :deep(.v-otp-input__content) {
   gap: 12px;
   padding: 0;
   width: auto;
@@ -1032,7 +1070,7 @@ watch(showVerificationOverlay, async (newValue) => {
   height: 56px !important;
 }
 
-.verification-card ::v-deep .v-otp-input .v-field {
+.verification-card :deep(.v-otp-input .v-field) {
   width: 56px !important;
   min-width: 56px;
   max-width: 56px !important;
@@ -1040,7 +1078,7 @@ watch(showVerificationOverlay, async (newValue) => {
   border-radius: 8px !important;
 }
 
-.verification-card ::v-deep .v-otp-input__field {
+.verification-card :deep(.v-otp-input__field) {
   font-size: 32px !important;
   font-weight: bold !important;
 }

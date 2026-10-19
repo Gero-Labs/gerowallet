@@ -68,8 +68,10 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
+import { assertAccountIndices, secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { deriveAccountXpubFlow } from '@/chrome/addAccountKeys';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
@@ -184,7 +186,8 @@ loadWallets().then(async () => {
     if (walletStore.isLocked) {
       try {
         const { getDb } = await import('@/db/wallet-db');
-        const db = await getDb(walletStore.loggedWallet.id);
+        // An added account's lock is its account #0's.
+        const db = await getDb(secretsWalletId(walletStore.loggedWallet));
         const configTable = db.table('config');
         const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
         // Clear a stray lock when no unlock method is configured (incl. MPC set to
@@ -649,10 +652,11 @@ async function checkAutoLock(): Promise<void> {
       return;
     }
 
-    // Get auto-lock configuration
+    // Get auto-lock configuration. An added account's lock settings are its
+    // account #0's; its activity is tracked on the account itself.
     const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(wallet.id);
-    const configTable = db.table('config');
+    const configTable = (await getDb(secretsWalletId(wallet))).table('config');
+    const activityTable = (await getDb(wallet.id)).table('config');
 
     const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
     const autoLockMinutes = autoLockConfig?.value || 0;
@@ -665,7 +669,7 @@ async function checkAutoLock(): Promise<void> {
 
     // Last activity: absent means the wallet just logged in and the tracker hasn't
     // run yet — skip this tick.
-    const lastActivityConfig = await configTable.where({ key: 'lastActivityTimestamp' }).first();
+    const lastActivityConfig = await activityTable.where({ key: 'lastActivityTimestamp' }).first();
     if (!lastActivityConfig || !lastActivityConfig.value) {
       return;
     }
@@ -2194,14 +2198,26 @@ app.addToOptions(MessageTypes.STORE_MPC_RECOVERY, async (request, sendResponse) 
   return true; // Required for async Chrome message handlers
 });
 
+/**
+ * The record an MPC request's wallet keeps its shares and session under: an
+ * account added under another record holds none and uses its account #0's.
+ */
+async function mpcSecretsWalletId(walletId: number): Promise<number> {
+  const { getAllWallets } = await import('@/db/gero-db');
+  const wallets = await getAllWallets();
+  const wallet = wallets[walletId];
+  return wallet ? secretsWallet(wallet, wallets).id : walletId;
+}
+
 app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) => {
   try {
     // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
-    const { walletId, idToken } = request.data || {};
-    if (!walletId) throw new Error('walletId is required');
+    const { walletId: requestedWalletId, idToken } = request.data || {};
+    if (!requestedWalletId) throw new Error('walletId is required');
     // Like UNLOCK: let startup hydrate the store first, or its persisted lock
     // would overwrite the unlock below.
     await booted();
+    const walletId = await mpcSecretsWalletId(requestedWalletId);
     // Two ways in: a fresh Google idToken (first unlock of the session) OR a
     // login share already cached from an earlier unlock this session (re-unlock
     // after a lock, no repeat Google sign-in). One of them must be present.
@@ -2262,8 +2278,9 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     // and the side panel keeps rendering LockScreen (both gate on isLocked).
     // The flag belongs to the logged-in wallet, re-checked after the async
     // reconstruction: a pre-switch or onboarding unlock authenticates another
-    // wallet, whose LOGIN then unlocks it from mpcSessionCache.
-    if (walletStore.loggedWallet?.id === walletId) WalletStore.setLocked(false);
+    // wallet, whose LOGIN then unlocks it from mpcSessionCache. The accounts of
+    // one wallet share its session, so any of them logged in is unlocked.
+    if (walletStore.loggedWallet && secretsWalletId(walletStore.loggedWallet) === walletId) WalletStore.setLocked(false);
 
     sendResponse({
       id: request.id,
@@ -2292,7 +2309,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
  */
 app.addToOptions(MessageTypes.HAS_MPC_SESSION, async (request, sendResponse) => {
   const { walletId } = request.data || {};
-  const hasSession = !!walletId && (await mpcLoginShareCache.has(walletId));
+  const hasSession = !!walletId && (await mpcLoginShareCache.has(await mpcSecretsWalletId(walletId)));
   sendResponse({
     id: request.id,
     data: { success: true, hasSession },
@@ -2586,6 +2603,26 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
   return true; // Required for async Chrome message handlers
 });
 
+// "Add account": the xpub of another account of a recovery-phrase or Google
+// wallet. Never log request.data (spending password). Only the public key leaves.
+app.addToOptions(MessageTypes.DERIVE_ACCOUNT_XPUB, async (request, sendResponse) => {
+  try {
+    const { getAllWallets } = await import('@/db/gero-db');
+    const { decrypt, decryptPrivateKey, SecretPurpose } = await import('@/shared/utils/crypto');
+    const publicKey = await deriveAccountXpubFlow(request.data || {}, {
+      getWallets: getAllWallets,
+      sessionRootKey: (walletId) => mpcSessionCache.get(walletId),
+      decryptRootKey: decryptPrivateKey,
+      decryptMnemonic: (encryptedMnemonic, password) => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic),
+    });
+    sendResponse({ id: request.id, data: { success: true, publicKey }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    const code = (error as { code?: string })?.code ?? 'not-supported';
+    sendResponse({ id: request.id, data: { success: false, error: code }, target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.REFRESH_LOGGED_WALLET_SECRET, async (request, sendResponse) => {
   try {
     // After a spending-password change the DB ciphertext is rotated, but the
@@ -2599,12 +2636,14 @@ app.addToOptions(MessageTypes.REFRESH_LOGGED_WALLET_SECRET, async (request, send
     const wallets = await getAllWallets();
     const fresh = walletId != null ? wallets?.[walletId] : undefined;
     if (fresh) {
+      // An added account holds its account #0's secrets, so a rotation of
+      // account #0 refreshes it too.
       const walletBg = walletManager.getWallet();
-      if (walletBg && walletBg.id === walletId) {
+      if (walletBg && secretsWalletId(walletBg) === walletId) {
         walletBg.encryptedPrivateKey = fresh.encryptedPrivateKey;
         walletBg.encryptedMnemonic = fresh.encryptedMnemonic;
       }
-      if (walletStore.loggedWallet?.id === walletId) {
+      if (walletStore.loggedWallet && secretsWalletId(walletStore.loggedWallet) === walletId) {
         WalletStore.setLoggedWallet({
           ...walletStore.loggedWallet,
           encryptedPrivateKey: fresh.encryptedPrivateKey,
@@ -2680,7 +2719,6 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.address,
         request.data.payload,
         request.data.password,
-        request.data.accountIndex || 0,
         WalletStore.state.keys,
         privateKeyBytes, // Pass pre-decrypted root key for PRF wallets
         () => assertCip45SigningRequest(request.data),
@@ -2755,7 +2793,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       let witnessResult = await walletBg.signTx(
         transaction,
         request.data.password,
-        request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
         privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
@@ -3181,7 +3218,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       return;
     }
 
-    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
+    const { txCbor, password, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
 
     // Step 1: Sign with wallet keys (payment + stake) using existing signTx
     let transaction;
@@ -3204,7 +3241,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
         WalletStore.state.loggedWallet,
         privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
       );
-      walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+      walletWitnesses = await walletBg.signTx(transaction, password, utxos, addresses, prfSecret);
     }
 
     // Step 2: Decrypt cold key from wallet DB and sign with it
@@ -4020,7 +4057,11 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       const network = networks.resolveNetwork(request.data.chain, request.data.network);
 
       let coldWalletProps;
-      if (network.blockchain === Blockchain.CARDANO) {
+      if (network.blockchain === Blockchain.CARDANO && request.data.accountIndices !== undefined) {
+        // Multi-account pairing: { productName, btSupported, accounts }. The indices
+        // come from a page, so they are validated before the device is asked.
+        coldWalletProps = await trezor.getAccountXpubs(assertAccountIndices(request.data.accountIndices));
+      } else if (network.blockchain === Blockchain.CARDANO) {
         const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`;
         coldWalletProps = await trezor.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {

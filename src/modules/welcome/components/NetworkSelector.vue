@@ -7,25 +7,23 @@
         <!-- Force the Apex chains onto a second row → 3 (Cardano/Midnight/Bitcoin) + 2 (Apex Prime/Vector) -->
         <div
           v-if="idx > 0 && fam.name.includes('Apex') && !families[idx - 1].name.includes('Apex')"
-
           class="chain-row__break"
         ></div>
         <button
-
           type="button"
-          class="chain-tile"
+          class="chain-tile glass-tier"
           :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': !isFamilySelectable(fam) }"
-          :style="fam.name === activeFamily && chainColor(fam.name) ? { borderColor: chainColor(fam.name), boxShadow: `0 0 16px -4px ${chainColor(fam.name)}` } : null"
           :disabled="!isFamilySelectable(fam)"
           @click="selectFamily(fam)"
         >
           <v-avatar size="26" class="chain-tile__icon">
             <v-img :src="fam.icon" ></v-img>
           </v-avatar>
-          <span class="chain-tile__label">{{ fam.name }}</span>
-          <div v-if="!isFamilySelectable(fam)" class="ribbon top-right" aria-hidden="true">
-            <span>{{ $t('welcome.soon') }}</span>
-          </div>
+          <span class="chain-tile__label t-body">{{ fam.name }}</span>
+          <span v-if="!isFamilySelectable(fam)" class="chain-tile__ribbon">
+            <span class="chain-tile__fold"><span /></span>
+            <span class="chain-tile__face"><span>{{ $t('welcome.soon') }}</span></span>
+          </span>
         </button>
       </template>
     </div>
@@ -38,7 +36,7 @@
           v-for="net in activeNets"
           :key="net.blockchain + net.network"
           type="button"
-          class="net-pill"
+          class="net-pill glass-tier t-body-sm"
           :class="{ 'net-pill--active': isNetActive(net), 'net-pill--disabled': net.comingSoon }"
           :disabled="net.comingSoon"
           @click="selectNet(net)"
@@ -54,7 +52,6 @@
 import { computed, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
-import { chainAccents, chainKeyFor } from '@/config/themes';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain } from '@/models/types';
 
@@ -107,11 +104,6 @@ const isFamilySelectable = (fam: Family): boolean => {
   return props.devMode ? !fam.comingSoon : famHasLiveMainnet(fam);
 };
 
-// Per-network accent for the active tile ring, from the single accent source.
-// The old hardcoded map carried the retired Apex Prime/Vector one-offs and had
-// no Midnight entry.
-const chainColor = (name: string): string => chainAccents[chainKeyFor(name)].accent;
-
 const isNetActive = (net: NetworkInfo): boolean =>
   props.network?.blockchain === net.blockchain && props.network?.network === net.network;
 
@@ -154,11 +146,16 @@ watch(
 </script>
 
 <style scoped lang="scss">
+// The chain tiles and network pills are choices nested in the onboarding
+// panel: the glass-tier material with its hover lift and selected tint (the
+// selected edge is --g-accent, which the welcome screen points at the chosen
+// chain), shaped as pills. Type comes from the ramp classes in the markup.
+
 /* ── Chain tiles ──────────────────────────────────── */
 .chain-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 /* Zero-size full-width flex item: forces everything after it onto a new line
@@ -173,29 +170,20 @@ watch(
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px 8px 10px;
+  gap: var(--g-s-2);
+  padding: var(--g-s-2) var(--g-s-4) var(--g-s-2) var(--g-s-3);
   border-radius: var(--g-r-pill);
-  border: 1px solid var(--g-hairline-1);
-  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color var(--g-dur-fast) ease, background var(--g-dur-fast) ease, box-shadow var(--g-dur-fast) ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
 
-  &:hover:not(.chain-tile--disabled) {
-    border-color: var(--g-hairline-3);
-    background: rgba(255, 255, 255, 0.06);
-  }
+  &:hover:not(.chain-tile--disabled) { @include g-glass-tier-hover; }
 
-  &--active {
-    border-color: #{"rgb(from var(--v-primary-base) r g b / 0.6)"};
-    background: #{"rgb(from var(--v-primary-base) r g b / 0.08)"};
-    box-shadow: 0 0 16px #{"rgb(from var(--v-primary-base) r g b / 0.08)"};
-  }
+  &--active,
+  &--active:hover:not(.chain-tile--disabled) { @include g-glass-tier-active; }
 
   &--disabled {
+    padding-right: calc(var(--g-s-6) + var(--g-s-2));
     cursor: not-allowed;
-    border-color: var(--g-hairline-2);
-    background: rgba(255, 255, 255, 0.02);
   }
 
   &--disabled &__label {
@@ -207,88 +195,86 @@ watch(
   }
 
   &__label {
-    font-size: 14px;
-    font-weight: 600;
     color: var(--g-text-1);
+    font-weight: 500;
   }
 }
 
-/* Corner ribbon "Soon" badge (matches the disabled swap quick-action). */
-.ribbon {
+/* Corner ribbon "Soon" on a chain that can't be picked yet, like the
+   dashboard's disabled-swap ribbon. Its text is the tile's own, so a disabled
+   tile also says why to assistive tech. The strip is --g-ribbon, the red it
+   had before the restyle (11px text reads at 5.8:1 on it).
+   Two copies of one strip: the face is cut to the tile's pill, so the strip
+   follows the rounded end instead of poking out past it; the fold, in a darker
+   shade, is cut to the pill grown by 3px, so it only shows past the tile's
+   edge at each end, as the ribbon folding over it. The strip crosses the
+   rounded end far enough in for the longest translation in capitals
+   ("PRONTO") to fit, and the disabled tile's wider end padding keeps the chain
+   name clear of it. */
+.chain-tile__ribbon {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 1.75rem;
-  height: 1.75rem;
-  overflow: hidden;
-  z-index: 20;
+  inset: 0;
   pointer-events: none;
 }
 
-.ribbon span {
+.chain-tile__face,
+.chain-tile__fold {
   position: absolute;
-  display: block;
-  width: 46px;
-  padding: 2px 0;
-  background-color: #bd1550;
-  color: var(--g-text-1);
-  font-size: 11px;
-  font-weight: 700;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-  text-transform: uppercase;
-  text-align: center;
-  right: -12px;
-  top: 4px;
-  transform: rotate(45deg);
-  letter-spacing: 0.3px;
-  line-height: 1.2;
+  inset: 0;
+
+  span {
+    position: absolute;
+    top: 12px;
+    right: -12px;
+    display: block;
+    width: 76px;
+    height: 15px;
+    transform: rotate(45deg);
+  }
 }
 
-.ribbon span::before,
-.ribbon span::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  z-index: -1;
-  border-left: 2px solid transparent;
-  border-right: 2px solid transparent;
-  border-top: 2px solid #8b0e3c;
+.chain-tile__face {
+  clip-path: inset(0 round var(--g-r-pill));
+
+  span {
+    background-color: var(--g-ribbon);
+    color: var(--g-text-1);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
+    text-transform: uppercase;
+  }
 }
 
-.ribbon span::before {
-  left: 0;
-}
+.chain-tile__fold {
+  clip-path: inset(-3px round var(--g-r-pill));
 
-.ribbon span::after {
-  right: 0;
+  span { background-color: color-mix(in srgb, var(--g-ribbon) 73%, var(--g-canvas)); }
 }
 
 /* ── Network pills (dev mode) ─────────────────────── */
 .net-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 
 .net-pill {
-  padding: 7px 16px;
+  padding: var(--g-s-2) var(--g-s-4);
   border-radius: var(--g-r-pill);
-  border: 1px solid var(--g-hairline-2);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 13px;
   font-weight: 500;
-  color: var(--g-text-2);
   cursor: pointer;
-  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease, opacity var(--g-dur-fast) ease;
+  transition: color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease), opacity var(--g-dur-fast) var(--g-ease);
 
   &:hover:not(.net-pill--disabled) {
-    border-color: var(--g-hairline-3);
+    @include g-glass-tier-hover;
     color: var(--g-text-1);
   }
 
-  &--active {
-    border-color: var(--v-primary-base);
-    background: #{"rgb(from var(--v-primary-base) r g b / 0.12)"};
+  &--active,
+  &--active:hover:not(.net-pill--disabled) {
+    @include g-glass-tier-active;
     color: var(--g-text-1);
   }
 

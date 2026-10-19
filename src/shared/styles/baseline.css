@@ -99,6 +99,11 @@ html .v-tooltip > .v-overlay__content .t-caption,
 html .v-tooltip > .v-overlay__content .t-body-sm {
   color: var(--g-text-1);
 }
+/* Ramp text inside an alert keeps the alert's tone (its status colour, or a
+   screen's readability override): the ramp sets the size, the alert the colour. */
+html .v-alert :is(.t-body, .t-body-sm, .t-caption) {
+  color: inherit;
+}
 
 /* ---- Skeleton: the one sanctioned shimmer (1.4s). Reduced-motion is handled
    by the global block at the bottom of this file, so no per-use override. ---- */

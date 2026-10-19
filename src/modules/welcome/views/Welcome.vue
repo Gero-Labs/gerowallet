@@ -87,7 +87,8 @@
 
             <!-- Onboarding flow -->
             <div v-else key="onboarding" class="right-panel">
-              <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
+              <WalletOnboarding :key="addAccountTo?.id ?? 'new'" :network="selectedNetwork" :dev-mode="devMode" :add-account-to="addAccountTo"
+                @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
             </div>
           </transition>
 
@@ -100,6 +101,11 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import type { Wallet } from '@/models/types';
+import { geroStore } from '@/stores/geroStore';
+import { canAddAccounts, parentWallet } from '@/shared/utils/walletAccount';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
@@ -142,6 +148,21 @@ watch(devMode, (val) => {
 // --g-* slots here from selectedNetwork so the Get Started CTA gradient and any
 // accent-tinted chrome match the chosen chain (teal Prime, orange Vector, …).
 watch(selectedNetwork, (n) => applyChainAccent(n?.blockchain), { immediate: true });
+
+// "Add account" (?addAccount=<wallet id>): open onboarding on that wallet's device
+// and network. The wallet list can still be hydrating, so this also waits for it.
+const route = useRoute();
+const addAccountTo = ref<Wallet | null>(null);
+// Behind isMultiAccountEnabled, like every other way in; the flags load late too.
+watch(() => [route?.query['addAccount'], geroStore.wallets, featureFlagsStore.isMultiAccountEnabled()] as const, ([id, wallets, enabled]) => {
+  const wallet = id ? wallets[Number(id)] : undefined;
+  if (!wallet || !enabled || !canAddAccounts(wallet)) return;
+  const head = parentWallet(wallet, wallets) ?? wallet;
+  if (addAccountTo.value?.id === head.id) return;
+  addAccountTo.value = head;
+  selectedNetwork.value = networks.resolveNetwork(head.chain, head.network) ?? selectedNetwork.value;
+  started.value = true;
+}, { immediate: true });
 
 const onOnboardingNetwork = (n: NetworkInfo): void => {
   selectedNetwork.value = n;
@@ -187,7 +208,7 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   opacity: 0;
   /* Pure cross-fade between chains — no vertical slide (a translateY here both
      left a black gap at the top and made the image jump on hover). */
-  transition: opacity 0.3s ease;
+  transition: opacity var(--g-dur-slow) var(--g-ease);
 }
 
 .welcome-background-image.background-active {
@@ -208,9 +229,9 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 100;
+  z-index: var(--g-z-sheet);
   border-radius: var(--g-r-control);
-  padding: 4px 8px;
+  padding: var(--g-s-1) var(--g-s-2);
 }
 
 /* The Help button keeps a transparent border so the pressed state (raised fill, hairline) never shifts layout. */
@@ -238,7 +259,7 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   width: 73%;
   height: 100%;
   position: relative;
-  /* NO backdrop-filter or blur effects here */
+  /* No glass material here: the hero and the onboarding card carry their own. */
   background: transparent;
 }
 
@@ -262,25 +283,18 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   justify-content: center;
   min-height: 0;
   overflow-y: auto; /* the onboarding hero can exceed short viewports */
-  padding: 16px;
+  padding: var(--g-s-4);
 }
 
 /* Reveal transition: only the intro fades OUT. The onboarding card mounts fully
-   opaque — animating its opacity makes Chrome drop the liquid-glass
-   backdrop-filter for a few frames (card flashes transparent then snaps in). */
+   opaque — animating its opacity makes Chrome drop the glass blur for a few
+   frames (card flashes transparent then snaps in). */
 .onboarding-reveal-leave-active {
-  transition: opacity 0.25s ease;
+  transition: opacity var(--g-dur-base) var(--g-ease);
 }
 
 .onboarding-reveal-leave-to {
   opacity: 0;
-}
-
-/* Fallback for browsers without backdrop-filter support */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .welcome-glass-panel {
-    background-color: var(--g-raised);
-  }
 }
 
 /* Responsive */

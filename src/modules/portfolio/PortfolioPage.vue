@@ -1285,7 +1285,7 @@ function closeDustRegistration() {
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
 
-.holdings-table-card ::v-deep .v-data-table {
+.holdings-table-card :deep(.v-data-table) {
   background: transparent;
 }
 
@@ -1302,20 +1302,20 @@ function closeDustRegistration() {
   border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
-.holdings-table-card ::v-deep tbody tr {
+.holdings-table-card :deep(tbody tr) {
   transition: background var(--g-dur-fast) ease;
 }
 
-.holdings-table-card ::v-deep tbody tr:hover {
+.holdings-table-card :deep(tbody tr:hover) {
   background: var(--g-hairline-1) !important;
 }
 
-.holdings-table-card ::v-deep tbody tr td {
+.holdings-table-card :deep(tbody tr td) {
   border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 /* Monospace numbers in holdings */
-.holdings-table-card ::v-deep td.text-right {
+.holdings-table-card :deep(td.text-right) {
   font-family: var(--g-font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;

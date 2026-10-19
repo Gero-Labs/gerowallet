@@ -5,37 +5,37 @@
     <!-- ===== PRF CONFIRMATION PATH ===== -->
     <template v-if="securityMethod === 'prf'">
       <!-- Wallet summary card -->
-      <v-card class="mb-3" variant="outlined" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+      <v-card class="glass-tier mb-3" flat>
         <v-card-text class="pa-3">
           <div class="d-flex align-center mb-2">
             <v-avatar size="32" class="mr-2">
               <v-img :src="walletIconSrc" cover></v-img>
             </v-avatar>
             <div>
-              <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
-              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ name }}</div>
+              <div class="summary-label t-caption">{{ $t('welcome.walletName') }}</div>
+              <div class="summary-value t-body font-weight-medium">{{ name }}</div>
             </div>
           </div>
-          <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+          <v-divider class="my-2" style="border-color: var(--g-hairline-2);"></v-divider>
           <v-row no-gutters>
             <v-col cols="6" class="pr-3">
               <div class="d-flex align-center">
                 <v-icon color="primary" size="20" class="mr-2">mdi-shield-key</v-icon>
                 <div>
-                  <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.securityMethod') }}</div>
-                  <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ $t('welcome.passKeyMethod') }}</div>
+                  <div class="summary-label t-caption">{{ $t('welcome.securityMethod') }}</div>
+                  <div class="summary-value t-body font-weight-medium">{{ $t('welcome.passKeyMethod') }}</div>
                 </div>
               </div>
             </v-col>
-            <v-divider vertical style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+            <v-divider vertical style="border-color: var(--g-hairline-2);"></v-divider>
             <v-col cols="6" class="pl-3">
               <div class="d-flex align-center">
                 <v-avatar size="20" class="mr-2">
                   <v-img :src="network ? network.icon : ''" ></v-img>
                 </v-avatar>
                 <div>
-                  <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
-                  <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ network ? network.title : '' }}</div>
+                  <div class="summary-label t-caption">{{ $t('common.network') }}</div>
+                  <div class="summary-value t-body font-weight-medium">{{ network ? network.title : '' }}</div>
                 </div>
               </div>
             </v-col>
@@ -52,7 +52,7 @@
           class="mb-1 mt-0"
         >
           <template v-slot:label>
-            <span class="text-body-2">{{ $t('welcome.understandPasswordRecovery') }}</span>
+            <span class="t-body">{{ $t('welcome.understandPasswordRecovery') }}</span>
           </template>
         </v-checkbox>
 
@@ -63,7 +63,7 @@
           class="mb-1 mt-0"
         >
           <template v-slot:label>
-            <span class="text-body-2">
+            <span class="t-body">
               {{ $t('welcome.iHaveReadTerms') }}
               <a class="terms-link" @click.stop="openTerms()">{{ $t('navigation.termsOfService') }}</a>.
             </span>
@@ -120,7 +120,7 @@
           border="start"
           class="mb-3"
         >
-          <span class="text-body-2">{{ $t('welcome.passwordNoRecoveryWarning') }}</span>
+          <span class="t-body">{{ $t('welcome.passwordNoRecoveryWarning') }}</span>
         </v-alert>
 
         <!-- Password acknowledgments -->
@@ -131,7 +131,7 @@
           class="mb-1 mt-0"
         >
           <template v-slot:label>
-            <span class="text-body-2">{{ $t('welcome.understandPasswordRecovery') }}</span>
+            <span class="t-body">{{ $t('welcome.understandPasswordRecovery') }}</span>
           </template>
         </v-checkbox>
 
@@ -142,7 +142,7 @@
           class="mb-1 mt-0"
         >
           <template v-slot:label>
-            <span class="text-body-2">
+            <span class="t-body">
               {{ $t('welcome.iHaveReadTerms') }}
               <a class="terms-link" @click.stop="openTerms()">{{ $t('navigation.termsOfService') }}</a>.
             </span>
@@ -153,48 +153,48 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')" :disabled="creatingWalletLoader">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')" :disabled="creatingWalletLoader">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!canCreate"
         :loading="creatingWalletLoader"
         @click="walletCreationStep()"
+        class="step-next"
       >
         {{ $t('welcome.restoreWallet') }}
-      </v-btn>
+      </GButton>
     </div>
 
     <!-- Existing Wallet Confirmation Dialog (exceptional re-login path — kept as modal) -->
     <v-dialog v-model="showConfirmDialog" max-width="500" persistent>
-      <v-card class="rounded-xl">
-        <v-card-title class="text-h6">
+      <v-card class="exists-dialog">
+        <v-card-title class="t-heading">
           {{ $t('welcome.walletAlreadyExists') }}
         </v-card-title>
         <v-card-text v-if="existingWalletInfo">
-          <p class="mb-2">
+          <p class="t-body mb-2">
             {{ $t('welcome.walletExistsMessage', { name: existingWalletInfo.name }) }}
           </p>
-          <p class="mb-2">
+          <p class="t-body mb-2">
             {{ $t('welcome.walletExistsOnNetwork', {
               chain: existingWalletInfo.chain,
               network: existingWalletInfo.network
             }) }}
           </p>
-          <p class="text--secondary">
+          <p class="t-body-sm">
             {{ $t('welcome.wouldYouLikeToLogin') }}
           </p>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="handleCancelLogin()">
+          <GButton tier="tertiary" @click="handleCancelLogin()">
             {{ $t('common.cancel') }}
-          </v-btn>
-          <v-btn class="onb-continue" color="primary" @click="handleConfirmLogin()" :loading="creatingWalletLoader">
+          </GButton>
+          <GButton tier="primary" @click="handleConfirmLogin()" :loading="creatingWalletLoader">
             {{ $t('wallet.login') }}
-          </v-btn>
+          </GButton>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -211,12 +211,16 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
 import type { Wallet } from '@/models/types';
+import type { AccountXpub } from '@/shared/utils/walletAccount';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface Props {
   network: NetworkInfo;
   securityMethod: 'prf' | 'password';
   name: string;
   mnemonic: string[];
+  /** Multi-account: the accounts chosen, account #0 among them; the others are added under it. */
+  accounts?: AccountXpub[];
 }
 
 const props = defineProps<Props>();
@@ -422,6 +426,7 @@ const walletCreationStep = async (): Promise<void> => {
       );
     }
 
+    await addChosenAccounts(wallet);
     await performLogin(wallet);
   } catch (error: unknown) {
     // Backstop: gero-db rejects duplicates too, in case a race let one slip past
@@ -435,6 +440,26 @@ const walletCreationStep = async (): Promise<void> => {
     console.error('Wallet restoration failed:', msg);
     vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
     creatingWalletLoader.value = false;
+  }
+};
+
+/**
+ * The other accounts chosen join the wallet just restored (account #0). They hold
+ * none of its secrets, so this asks for nothing more. Best-effort: the wallet is
+ * restored either way, and an account missed here can be added later.
+ */
+const addChosenAccounts = async (wallet: Wallet | undefined): Promise<void> => {
+  const others = (props.accounts ?? []).filter((account) => account.accountIndex > 0);
+  if (!wallet?.id || !others.length) return;
+  try {
+    await GeroStore.addAccounts(wallet.id, others.map((account) => ({
+      name: vmProxy.$t('accounts.label', { index: account.accountIndex }) as string,
+      publicKey: account.publicKey,
+      accountIndex: account.accountIndex,
+    })));
+  } catch (error) {
+    console.error('Adding the other accounts failed:', error instanceof Error ? error.message : 'unknown');
+    vmProxy['$snackbar']?.setError(vmProxy.$t('accounts.addLater') as string);
   }
 };
 
@@ -484,10 +509,17 @@ const handleCancelLogin = (): void => {
 </script>
 
 <style scoped lang="scss">
-/* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
+// The already-exists dialog: a sheet, so it takes the sheet radius.
+.exists-dialog { border-radius: var(--g-r-sheet); }
+
+// Summary card: type comes from the ramp classes in the markup; these rules
+// only set line height and lift each value to the primary tone.
+.summary-label { line-height: 1.2; }
+.summary-value { color: var(--g-text-1); line-height: 1.3; }
+
 // Terms link
 .terms-link {
-  color: var(--v-primary-base);
+  color: var(--g-accent);
   text-decoration: none;
   &:hover {
     text-decoration: underline;
@@ -495,7 +527,7 @@ const handleCancelLogin = (): void => {
 }
 
 // Remove checkbox hover highlight
-::v-deep .v-input--checkbox {
+:deep(.v-input--checkbox) {
   .v-input--selection-controls__ripple {
     display: none;
   }

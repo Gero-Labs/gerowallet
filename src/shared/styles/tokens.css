@@ -42,6 +42,11 @@
      is --g-accent. RealFi mint, per their brand: */
   --g-partner-realfi: #3EDCA8;
 
+  /* The "Soon" corner ribbon on a chain that can't be picked yet (the welcome
+     network picker). A badge colour, not a status: nothing has failed, so it is
+     not --g-error. --g-text-1 on it reads at 5.8:1. */
+  --g-ribbon: #BD1550;
+
   /* Semantic */
   --g-error: #F97066;
   --g-success: #47CD89;

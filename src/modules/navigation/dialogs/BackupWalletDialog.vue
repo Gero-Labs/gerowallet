@@ -258,6 +258,7 @@ import snackbar from '@/plugins/snackbar';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 
 const { t } = useTranslation();
 
@@ -472,7 +473,7 @@ const decryptMnemonicWithPassKey = (): Promise<void> => approval.run(async () =>
     const decryptedMnemonic = await decryptMnemonicWithPrf(
       wallet.prfEncryptedMnemonic,
       wallet.webAuthnCredentialId,
-      wallet.id.toString()
+      secretsWalletId(wallet).toString()
     );
     if (!current()) return;
 

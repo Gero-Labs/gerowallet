@@ -4,28 +4,29 @@
     <v-form ref="secureForm" v-model="formValid" style="width: 100%;">
 
       <!-- Wallet name field -->
-      <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <label :for="nameId" class="t-label d-block mb-2">{{ $t('welcome.walletName') }}</label>
       <v-text-field
+        :id="nameId"
         v-model="name"
         density="compact"
         variant="filled"
-        :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
         :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
         class="mb-2"
       ></v-text-field>
 
-      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+      <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
       <!-- Spending password (fallback when the device/browser has no WebAuthn PRF) -->
       <template v-if="!passkeyCapable">
-        <div class="step-section-label mb-2">{{ $t('welcome.spendingPassword') }}</div>
-        <div class="field-hint mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.spendingPassword') }}</div>
+        <div class="field-hint t-caption mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
         <v-text-field
           v-model="spendingPassword"
           density="compact"
           variant="filled"
-          :label="$t('welcome.spendingPassword')"
+          :label="$t('welcome.password')"
+          :aria-label="$t('welcome.spendingPassword')"
           :type="showSpending ? 'text' : 'password'"
           :append-inner-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
           @click:append-inner="showSpending = !showSpending"
@@ -55,19 +56,19 @@
 
       <!-- Passkey (preferred path — hardware-backed, no password to remember) -->
       <template v-else>
-        <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
-        <div class="field-hint mb-2">{{ $t('welcome.secureWithPasskeyHint') }}</div>
-        <v-btn
-          class="passkey-auth-button mb-2"
+        <div class="t-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+        <div class="field-hint t-caption mb-2">{{ $t('welcome.secureWithPasskeyHint') }}</div>
+        <GButton
+          tier="secondary"
           block
-          variant="flat"
-          :color="passkey ? 'success' : 'primary'"
           :loading="enrolling"
           @click="secureWithPasskey()"
+          class="mb-2"
+          :style="passkey ? { '--g-btn-fg': 'var(--g-success)' } : undefined"
         >
           <v-icon start size="small">{{ passkey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
           {{ passkey ? $t('welcome.passkeySecured') : $t('welcome.secureWithPasskey') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="passkeyError"
           color="error"
@@ -77,20 +78,21 @@
           border="start"
           class="mb-2"
         >
-          <span class="text-body-2">{{ passkeyError }}</span>
+          <span class="t-body">{{ passkeyError }}</span>
         </v-alert>
       </template>
 
-      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+      <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
       <!-- Recovery password -->
-      <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
-      <div class="field-hint mb-2">{{ $t('welcome.recoveryPasswordHint') }}</div>
+      <div class="t-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
+      <div class="field-hint t-caption mb-2">{{ $t('welcome.recoveryPasswordHint') }}</div>
       <v-text-field
         v-model="recoveryPassword"
         density="compact"
         variant="filled"
-        :label="$t('welcome.recoveryPassword')"
+        :label="$t('welcome.password')"
+        :aria-label="$t('welcome.recoveryPassword')"
         :type="showRecovery ? 'text' : 'password'"
         :append-inner-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
         @click:append-inner="showRecovery = !showRecovery"
@@ -110,7 +112,7 @@
           height="4"
           rounded
         />
-        <span class="recovery-strength__label" :class="`recovery-strength__label--${recoveryScore.score}`">
+        <span class="recovery-strength__label t-caption" :class="`recovery-strength__label--${recoveryScore.score}`">
           {{ $t(recoveryScore.labelKey) }}
         </span>
       </div>
@@ -136,7 +138,7 @@
         border="start"
         class="mt-3 mb-0"
       >
-        <span class="text-body-2">{{ errorMessage }}</span>
+        <span class="t-body">{{ errorMessage }}</span>
       </v-alert>
 
       <!-- Confirmation-gated reset: only shown when CREATE_MPC_GOOGLE_WALLET failed
@@ -151,42 +153,41 @@
         border="start"
         class="mt-3 mb-0"
       >
-        <div class="text-body-2 font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
-        <div class="text-body-2 mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
-        <v-btn
-          color="warning"
-          variant="outlined"
-          size="small"
+        <div class="t-body font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
+        <div class="t-body mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
+        <GButton
+          tier="destructive"
+          compact
           :loading="resetting"
           :disabled="creating || resetting"
           @click="resetGoogleAccount()"
         >
           {{ $t('welcome.resetGoogleAccountButton') }}
-        </v-btn>
-        <div v-if="resetError" class="text-body-2 error--text mt-2">{{ resetError }}</div>
+        </GButton>
+        <div v-if="resetError" class="reset-error t-body mt-2">{{ resetError }}</div>
       </v-alert>
     </v-form>
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        class="onb-continue"
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!canContinue || resetting"
         :loading="creating"
         @click="createWallet()"
+        class="step-next"
       >
         {{ $t('common.continue') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, getCurrentInstance, useId } from 'vue';
 import rules from '@/utils/rules';
 import { Theme } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
@@ -196,6 +197,7 @@ import networks, { NetworkInfo } from '@/utils/networks';
 import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import { scoreRecoveryPassword, isAcceptableRecoveryPassword } from '@/shared/utils/mpc/recoveryPasswordStrength';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 interface Props {
   network: NetworkInfo;
@@ -224,6 +226,7 @@ const vmProxy = getCurrentInstance()!.proxy;
 const formValid = ref(false);
 
 const name = ref(props.googleName?.trim() || generateWalletName());
+const nameId = useId();
 const spendingPassword = ref('');
 const confirmSpendingPassword = ref('');
 const recoveryPassword = ref('');
@@ -375,28 +378,19 @@ const resetGoogleAccount = async (): Promise<void> => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
+// Type comes from the ramp classes in the markup; these rules only space and
+// set the status tones.
 .field-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
   line-height: 1.4;
 }
 
 .recovery-strength {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-s-2);
 }
 .recovery-strength__label {
-  font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 .recovery-strength__label--0,
@@ -405,10 +399,7 @@ const resetGoogleAccount = async (): Promise<void> => {
 .recovery-strength__label--3 { color: var(--g-info); }
 .recovery-strength__label--4 { color: var(--g-success); }
 
-.passkey-auth-button {
-  text-transform: none;
-  font-weight: 500;
-  border-radius: 8px !important;
-  box-shadow: none !important;
-}
+// The reset failed: an error inside the warning alert, so it outranks the
+// alert's own tone that ramp text inherits there.
+.v-alert .reset-error { color: var(--g-error); }
 </style>

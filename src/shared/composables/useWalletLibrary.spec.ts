@@ -95,3 +95,40 @@ describe('responsive wallet organization', () => {
     expect(library.groups.value[1].wallets.map(wallet => wallet.id)).toEqual([3, 1, 2]);
   });
 });
+
+describe('accounts added under a wallet', () => {
+  let grouped: ReturnType<typeof useWalletLibrary>;
+  let groupWrapper: ReturnType<typeof mount>;
+  const records = [
+    { id: 1, name: 'Cold storage', type: 'Keystone' },
+    { id: 2, name: 'Daily', type: 'Normal' },
+    { id: 6, name: 'Account #2', type: 'Keystone', accountIndex: 2, parentWalletId: 1 },
+    { id: 5, name: 'Account #1', type: 'Keystone', accountIndex: 1, parentWalletId: 1 },
+    { id: 9, name: 'Orphan', type: 'Keystone', accountIndex: 1, parentWalletId: 42 },
+  ].map(wallet => ({ ...wallet, chain: 'Cardano', network: 'Mainnet' }));
+
+  beforeEach(async () => {
+    snapshot = { preferences: normalizePreferences(null), wallets: records.map((wallet, order) => ({ id: wallet.id, order })) };
+    groupWrapper = mount(Vue.defineComponent({ setup() {
+      grouped = useWalletLibrary(ref(records as never), repo);
+      return {};
+    }, render() { return Vue.h('div'); } }));
+    await flush();
+  });
+  afterEach(() => groupWrapper.unmount());
+
+  it('lists them inside their wallet by index, not as wallets of their own', () => {
+    expect(grouped.wallets.value.map(wallet => wallet.id)).toEqual([1, 2, 9]);
+    expect(grouped.accountsFor(grouped.wallets.value[0]).map(wallet => wallet.id)).toEqual([5, 6]);
+    expect(grouped.groups.value.flatMap(group => group.wallets).map(wallet => wallet.id)).not.toContain(5);
+  });
+
+  it('keeps an account whose wallet is gone in the list, on its own', () => {
+    expect(grouped.accountsFor(grouped.wallets.value.find(wallet => wallet.id === 9)!)).toEqual([]);
+  });
+
+  it('finds a wallet by one of its accounts', () => {
+    grouped.query.value = 'Account #2';
+    expect(grouped.filtered.value.map(wallet => wallet.id)).toEqual([1]);
+  });
+});

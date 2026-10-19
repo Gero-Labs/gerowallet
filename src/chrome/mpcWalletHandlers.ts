@@ -19,6 +19,8 @@ import { isAcceptableRecoveryPassword } from '@/shared/utils/mpc/recoveryPasswor
 /** Minimal wallet shape the sign-path helpers need. */
 export interface SignableWallet {
   id?: number;
+  /** Account #0 for an added account: the session key is cached under it (withGroupSecrets). */
+  secretsWalletId?: number;
   encryptionMethod?: string;
 }
 
@@ -44,7 +46,8 @@ export function resolveSignPrivateKeyBytes(
 ): Uint8Array | undefined {
   if (explicitBytes) return explicitBytes;
   if (wallet?.encryptionMethod === 'mpc') {
-    const cached = wallet.id != null ? sessionCache.get(wallet.id) : undefined;
+    const sessionId = wallet.secretsWalletId ?? wallet.id;
+    const cached = sessionId != null ? sessionCache.get(sessionId) : undefined;
     if (!cached) {
       throw new Error('This wallet needs to be unlocked with Google before signing.');
     }

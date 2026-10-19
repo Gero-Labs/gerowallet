@@ -1,13 +1,13 @@
 <template>
   <div class="step-device">
     <div class="step-scroll">
-    <div class="step-section-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
     <div class="hw-list">
       <button
         v-for="item in walletTypes"
         :key="item.name"
         type="button"
-        class="hw-card"
+        class="hw-card glass-tier"
         :class="{
           'hw-card--active': localWalletType === item.name,
           'hw-card--disabled': !item.enabled,
@@ -17,8 +17,8 @@
       >
         <img :src="item.icon" class="hw-card__logo" :alt="item.name" />
         <span class="hw-card__text">
-          <span class="hw-card__name">{{ item.name }}</span>
-          <span class="hw-card__desc">{{ item.description }}</span>
+          <span class="hw-card__name t-body-lg">{{ item.name }}</span>
+          <span class="hw-card__desc t-body-sm">{{ item.description }}</span>
         </span>
         <v-icon class="hw-card__check" size="20">{{ localWalletType === item.name ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
       </button>
@@ -26,10 +26,10 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn class="onb-btn onb-continue" variant="flat" color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <GButton tier="primary" :disabled="!localWalletType" @click="onContinue()" class="step-next">{{ $t('common.continue') }}</GButton>
     </div>
   </div>
 </template>
@@ -40,6 +40,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import type { NetworkInfo } from '@/utils/networks';
 import type { WalletTypeValue } from '@/models/types';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const { t } = useTranslation();
 
@@ -89,49 +90,29 @@ const onContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
-.onb-btn {
-  border-radius: 8px !important;
-  box-shadow: none !important;
-}
-
 .hw-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--g-s-2);
 }
 
 .hw-card {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--g-s-4);
   width: 100%;
   min-height: 86px;
   text-align: left;
-  padding: 16px 18px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  padding: var(--g-s-4);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
 
-  &:hover:not(.hw-card--disabled) {
-    border-color: rgba(255, 255, 255, 0.24);
-    background: rgba(255, 255, 255, 0.05);
-  }
+  // A choice card nested in the onboarding panel: the glass-tier material, its
+  // hover lift and its selected tint, never an accent repaint or a glow.
+  &:hover:not(.hw-card--disabled) { @include g-glass-tier-hover; }
 
-  &--active {
-    border-color: var(--v-primary-base);
-    background: #{"rgb(from var(--v-primary-base) r g b / 0.1)"};
-    box-shadow: 0 0 16px #{"rgb(from var(--v-primary-base) r g b / 0.08)"};
-  }
+  &--active,
+  &--active:hover:not(.hw-card--disabled) { @include g-glass-tier-active; }
 
   &--disabled {
     opacity: 0.4;
@@ -154,16 +135,12 @@ const onContinue = (): void => {
     min-width: 0;
   }
 
+  // Type comes from the ramp classes in the markup; these rules only space.
   &__name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #fff;
     line-height: 1.25;
   }
 
   &__desc {
-    font-size: 12.5px;
-    color: #94979c;
     margin-top: 2px;
     line-height: 1.35;
     display: -webkit-box;
@@ -174,11 +151,11 @@ const onContinue = (): void => {
   }
 
   &__check {
-    color: rgba(255, 255, 255, 0.25) !important;
+    color: var(--g-text-3);
   }
 
   &--active &__check {
-    color: var(--v-primary-base) !important;
+    color: var(--g-accent);
   }
 }
 </style>

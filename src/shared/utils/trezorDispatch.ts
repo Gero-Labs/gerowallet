@@ -8,6 +8,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import i18n from '@/plugins/i18n';
 import WalletStore from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
+import { assertAccountIndices } from '@/shared/utils/walletAccount';
 
 /**
  * Document-context dispatcher for Trezor operations (WebUSB + Bridge transport).
@@ -39,7 +40,10 @@ export async function dispatchTrezor(data: any): Promise<any> {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let coldWalletProps: any;
-      if (network.blockchain === Blockchain.CARDANO) {
+      if (network.blockchain === Blockchain.CARDANO && data.accountIndices !== undefined) {
+        // Multi-account pairing; mirrors the background handler.
+        coldWalletProps = await trezorWeb.getAccountXpubs(assertAccountIndices(data.accountIndices));
+      } else if (network.blockchain === Blockchain.CARDANO) {
         const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`;
         coldWalletProps = await trezorWeb.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {

@@ -40,6 +40,7 @@ import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Wallet } from '@/models/types';
 import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
+import { resolveAccountIndex, secretsWallet } from '@/shared/utils/walletAccount';
 
 export interface CardanoStakeIdentity {
   /** Stable row key — the stake (reward) address. */
@@ -53,9 +54,24 @@ export interface CardanoStakeIdentity {
   baseAddress: string;
   stakeAddress: string;
   paymentKeyHashHex: string;
+  /** The CIP-1852 account its keys sit at: 0 for the twin, the record's own for an imported account. */
+  accountIndex: number;
   /** False for watch-only / hardware records. */
   canSign: boolean;
   encryptionMethod: 'password' | 'prf';
+}
+
+/**
+ * The record holding a source's secrets: the logged wallet for the same-seed
+ * twin, otherwise the imported record's account #0. An added account (issue
+ * 1307) holds none of its own; a missing or mismatched account #0 leaves the
+ * record itself, which has none, so it stays read-only.
+ */
+export function sourceSecretsRecord(source: Pick<CardanoStakeIdentity, 'sameSeed' | 'walletId'>): Wallet | undefined {
+  if (source.sameSeed) return walletStore.loggedWallet ?? undefined;
+  const wallets = (geroStore.wallets ?? {}) as Record<number, Wallet>;
+  const record = wallets[source.walletId as number];
+  return record ? secretsWallet(record, wallets) : undefined;
 }
 
 export function walletCanSign(w: Partial<Wallet>): boolean {
@@ -75,6 +91,7 @@ function twinStakeIdentity(): CardanoStakeIdentity | null {
     baseAddress: addrs.cardanoBaseAddress,
     stakeAddress: addrs.cardanoStakeAddress,
     paymentKeyHashHex: addrs.cardanoPaymentKeyHashHex ?? '',
+    accountIndex: 0,
     canSign: walletCanSign(wallet),
     encryptionMethod: wallet.encryptionMethod === 'prf' ? 'prf' : 'password',
   };
@@ -90,6 +107,7 @@ async function stakeIdentityFromRecord(
     const baseAddress = getAddress(w.publicKey, Blockchain.CARDANO, w.network, 0).toBech32();
     const stakeAddress = getRewardAddress(w.publicKey, Blockchain.CARDANO, w.network).toBech32();
     const paymentKeyHashHex = getPaymentKeyExternal(w.publicKey, 0).hash().hex();
+    const secrets = sourceSecretsRecord({ sameSeed: false, walletId: w.id });
     return {
       key: stakeAddress,
       label: w.name,
@@ -98,8 +116,9 @@ async function stakeIdentityFromRecord(
       baseAddress,
       stakeAddress,
       paymentKeyHashHex,
-      canSign: walletCanSign(w),
-      encryptionMethod: w.encryptionMethod === 'prf' ? 'prf' : 'password',
+      accountIndex: resolveAccountIndex(w),
+      canSign: !!secrets && walletCanSign(secrets),
+      encryptionMethod: secrets?.encryptionMethod === 'prf' ? 'prf' : 'password',
     };
   } catch (e) {
     // Any derivation failure drops the whole record — a partially-derived

@@ -1,5 +1,5 @@
 <template>
-  <div class="welcome-glass-panel">
+  <div class="welcome-glass-panel glass-chrome">
     <div class="welcome-content">
       <div class="welcome-header">
         <div class="logo-container">
@@ -19,7 +19,7 @@
       <WalletsListLogin v-if="hasWallets" :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
-    <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
+    <div class="footer-left t-caption">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
   </div>
 </template>
 <script setup lang="ts">
@@ -55,33 +55,14 @@ const logo = computed(() => {
 });
 </script>
 <style scoped>
-.welcome-left-column {
-  width: 38%;
-  height: 100%;
-  position: relative;
-}
-
+/* The sign-in panel is the welcome screen's frame: the glass-chrome material
+   (the nav drawer's), which draws its own blur and right-hand hairline. */
 .welcome-glass-panel {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border-right: 1px solid var(--g-hairline-3);
-  box-shadow: inset 0 1px 0 var(--g-hairline-2), 4px 0 24px rgba(0, 0, 0, 0.4);
-}
-
-.welcome-glass-panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, var(--g-hairline-2), transparent);
-  z-index: 1;
 }
 
 .welcome-content {
@@ -96,9 +77,8 @@ const logo = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 18px;
+  padding: var(--g-s-4);
   position: relative;
-  z-index: 2;
   max-width: 428px;
 }
 
@@ -106,7 +86,7 @@ const logo = computed(() => {
 .logo { width: 72px; height: 81px; }
 
 .logo-container {
-  margin: 8px 0 12px;
+  margin: var(--g-s-2) 0 var(--g-s-3);
 }
 
 .wallet-list-block {
@@ -120,89 +100,8 @@ const logo = computed(() => {
   flex-direction: column;
 }
 
-.logo-container .logo {
-  transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
-}
-
-.text-container {
-  width: 100%;
-  max-width: 400px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 0 10px;
-}
-
-.subtitle {
-  font-size: 16px;
-  font-weight: 300;
-  margin-bottom: 4px;
-}
-
-.title {
-  font-size: 32px !important;
-  white-space: normal;
-  margin-bottom: 20px;
-  line-height: 1.2 !important;
-  word-break: break-word;
-  hyphens: auto;
-}
-
-.title-regular {
-  font-weight: 400 !important;
-  font-size: 32px !important;
-  line-height: 1.2 !important;
-}
-
-.title-gradient {
-  font-weight: 700 !important;
-  font-size: 32px !important;
-  line-height: 1.2 !important;
-}
-
-.description {
-  color: var(--g-text-3);
-  font-size: 16px;
-  white-space: nowrap;
-  margin-bottom: 20px;
-}
-
-.create-btn {
-  margin-top: 12px;
-  letter-spacing: normal;
-  border-radius: var(--g-r-control);
-  text-transform: none;
-}
-
+/* Type comes from the ramp class in the markup. */
 .footer-left {
-  padding: 12px 20px;
-  font-size: 11px;
-  color: var(--g-text-2);
-  position: relative;
-  z-index: 2;
-}
-
-/* Responsive font sizing for longer text */
-@media (max-width: 1200px) {
-  .title {
-    font-size: 32px !important;
-  }
-
-  .title-regular,
-  .title-gradient {
-    font-size: 32px !important;
-  }
-}
-
-@media (max-width: 900px) {
-  .title {
-    font-size: 32px !important;
-  }
-
-  .title-regular,
-  .title-gradient {
-    font-size: 32px !important;
-  }
+  padding: var(--g-s-3) var(--g-s-5);
 }
 </style>

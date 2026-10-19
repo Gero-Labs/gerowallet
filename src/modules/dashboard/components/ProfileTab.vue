@@ -24,6 +24,15 @@
           ></EditableTextField>
         </v-col>
       </v-row>
+      <v-row v-if="accountPath" no-gutters class="py-2">
+        <v-col cols="7" class="text-left">
+          <h3 class="t-body-lg">{{ $t('accounts.label', { index: loggedRecord?.accountIndex ?? 0 }) }}</h3>
+          <span class="helper my-0">{{ $t('navigation.hdPath') }}</span>
+        </v-col>
+        <v-col cols="5" class="text-left" style="align-content: center">
+          <span class="g-mono">{{ accountPath }}</span>
+        </v-col>
+      </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3 style="color: white">
@@ -135,21 +144,17 @@
           >
             <template v-slot:item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
               <v-avatar size="20">
-                <flag :iso="item.iso" style="font-size: 20px"></flag>
+                <flag :iso="item.iso" square style="font-size: 20px"></flag>
               </v-avatar>
               <div class="g-list-content">
-                <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
+                <v-list-item-title>{{ item.name }}</v-list-item-title>
               </div>
             </template></v-list-item></template>
             <template v-slot:selection="{ item }">
-              <v-list-item density="compact" style="min-height: 32px; height: 32px">
-                <v-avatar size="20">
-                  <flag :iso="item.iso" style="font-size: 20px"></flag>
-                </v-avatar>
-                <div class="py-0 g-list-content">
-                  <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
-                </div>
-              </v-list-item>
+              <v-avatar size="20" class="mr-2">
+                <flag :iso="item.iso" square style="font-size: 20px"></flag>
+              </v-avatar>
+              <span>{{ item.name }}</span>
             </template>
           </v-select>
           <!--          <v-text-field disabled outlined dense value="English" hide-details></v-text-field>-->
@@ -196,6 +201,9 @@ import { useExplorer } from '@/shared/composables/useExplorer';
 import { DEFAULT_CARDANO_EXPLORER } from '@/shared/utils/explorer';
 import { EXPLORER_LOGOS } from '@/shared/utils/explorerLogos';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import { accountGroup, cardanoAccountPath, conflictingWalletNames } from '@/shared/utils/walletAccount';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinKeyManager';
+import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 // Define emits
@@ -283,10 +291,17 @@ const loc = computed({
 const profilePicDialog = ref<InstanceType<typeof ProfilePictureDialog>>();
 
 // Computed properties
-const otherWalletNames = computed(() => {
-  return Object.values(wallets.value)
-    .filter(wallet => wallet.name !== loggedWallet.value?.name)
-    .map(wallet => wallet.name);
+// The stored record, so its account fields are current; loggedWallet is the login-time copy.
+const loggedRecord = computed(() => (loggedWallet.value ? wallets.value[loggedWallet.value.id] ?? loggedWallet.value : null));
+// An added account is named within its wallet; any other wallet among the top-level ones.
+const otherWalletNames = computed(() => (loggedRecord.value ? conflictingWalletNames(loggedRecord.value, wallets.value) : []));
+// Shown once a wallet has more than one account, so it is clear which one this is.
+const accountPath = computed(() => {
+  const record = loggedRecord.value;
+  if (!record || accountGroup(record, wallets.value).length < 2) return '';
+  return record.chain === Blockchain.BITCOIN
+    ? bitcoinAccountPath(record.network, record.addressType ?? 'segwit', record.accountIndex ?? 0)
+    : cardanoAccountPath(record.accountIndex ?? 0);
 });
 
 const avatar = computed(() => {

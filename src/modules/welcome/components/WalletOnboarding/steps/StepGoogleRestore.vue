@@ -2,48 +2,48 @@
   <div class="step-google-restore">
     <div class="step-scroll">
     <!-- Google sign-in -->
-    <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
     <template v-if="!email">
-      <v-btn class="onb-btn google-signin-btn" variant="outlined" :loading="signingIn" @click="signIn()">
+      <GButton tier="secondary" :loading="signingIn" @click="signIn()">
         <v-avatar size="18" class="mr-2">
           <v-img :src="google"  />
         </v-avatar>
         {{ $t('welcome.googleSignInButton') }}
-      </v-btn>
+      </GButton>
     </template>
     <template v-else>
       <div class="signed-in-row">
         <v-icon color="success" size="18" class="mr-1">mdi-check-circle</v-icon>
-        <span class="text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email }) }}</span>
-        <v-btn variant="text" size="x-small" color="primary" class="ml-2" @click="changeAccount()">
+        <span class="signed-in-row__text t-body">{{ $t('welcome.googleSignedInAs', { email }) }}</span>
+        <GButton tier="tertiary" compact class="ml-2" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
-        </v-btn>
+        </GButton>
       </div>
     </template>
 
-    <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+    <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
     <v-form ref="restoreForm" v-model="formValid" style="width: 100%;">
       <!-- Wallet name -->
-      <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <label :for="nameId" class="t-label d-block mb-2">{{ $t('welcome.walletName') }}</label>
       <v-text-field
+        :id="nameId"
         v-model="name"
         density="compact"
         variant="filled"
-        :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
         :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
         class="mb-2"
       ></v-text-field>
 
       <!-- Recovery password (no file — fileless restore) -->
-      <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
-      <div class="field-hint mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
+      <label :for="recoveryPasswordId" class="t-label d-block mb-2">{{ $t('welcome.recoveryPassword') }}</label>
+      <div class="field-hint t-caption mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
       <v-text-field
+        :id="recoveryPasswordId"
         v-model="recoveryPassword"
         density="compact"
         variant="filled"
-        :label="$t('welcome.recoveryPassword')"
         :type="showRecovery ? 'text' : 'password'"
         :append-inner-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
         @click:append-inner="showRecovery = !showRecovery"
@@ -51,16 +51,17 @@
         class="mb-2"
       ></v-text-field>
 
-      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+      <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
       <!-- New spending password (fallback when this device/browser has no WebAuthn PRF) -->
       <template v-if="!passkeyCapable">
-        <div class="step-section-label mb-2">{{ $t('welcome.newSpendingPassword') }}</div>
+        <div class="t-label mb-2">{{ $t('welcome.newSpendingPassword') }}</div>
         <v-text-field
           v-model="spendingPassword"
           density="compact"
           variant="filled"
-          :label="$t('welcome.newSpendingPassword')"
+          :label="$t('welcome.password')"
+          :aria-label="$t('welcome.newSpendingPassword')"
           :type="showSpending ? 'text' : 'password'"
           :append-inner-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
           @click:append-inner="showSpending = !showSpending"
@@ -89,18 +90,18 @@
 
       <!-- Re-enroll a passkey on this (new) device — preferred path, hardware-backed -->
       <template v-else>
-        <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
-        <v-btn
-          class="passkey-auth-button mb-2"
+        <div class="t-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+        <GButton
+          tier="secondary"
           block
-          variant="flat"
-          :color="enrolledPasskey ? 'success' : 'primary'"
           :loading="enrollingPasskey"
           @click="setUpPasskey()"
+          class="mb-2"
+          :style="enrolledPasskey ? { '--g-btn-fg': 'var(--g-success)' } : undefined"
         >
           <v-icon start size="small">{{ enrolledPasskey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
           {{ enrolledPasskey ? $t('welcome.passkeySecured') : $t('welcome.setUpPasskeyThisDevice') }}
-        </v-btn>
+        </GButton>
         <v-alert
           v-if="passkeyError"
           color="error"
@@ -110,7 +111,7 @@
           border="start"
           class="mb-2"
         >
-          <span class="text-body-2">{{ passkeyError }}</span>
+          <span class="t-body">{{ passkeyError }}</span>
         </v-alert>
       </template>
 
@@ -123,29 +124,30 @@
         border="start"
         class="mt-3 mb-0"
       >
-        <span class="text-body-2">{{ errorMessage }}</span>
+        <span class="t-body">{{ errorMessage }}</span>
       </v-alert>
     </v-form>
     </div>
 
     <!-- Navigation buttons (footer — outside the scroll region above) -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+    <div class="onboarding-actions d-flex">
+      <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <v-btn
-        color="primary"
+      <GButton
+        tier="primary"
         :disabled="!canRestore"
         :loading="restoring"
         @click="restore()"
+        class="step-next"
       >
         {{ $t('welcome.restoreGoogleWallet') }}
-      </v-btn>
+      </GButton>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, getCurrentInstance, useId } from 'vue';
 import rules from '@/utils/rules';
 import { Theme } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
@@ -155,6 +157,7 @@ import networks, { NetworkInfo } from '@/utils/networks';
 import { google } from '@/utils/assets';
 import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 const props = defineProps<{
   network: NetworkInfo;
@@ -179,7 +182,9 @@ const email = ref(props.prefillEmail ?? '');
 const picture = ref(props.prefillPicture ?? '');
 
 const name = ref(props.prefillName?.trim() || generateWalletName());
+const nameId = useId();
 const recoveryPassword = ref('');
+const recoveryPasswordId = useId();
 const spendingPassword = ref('');
 const confirmSpendingPassword = ref('');
 const showRecovery = ref(false);
@@ -353,23 +358,10 @@ const restore = async (): Promise<void> => {
 </script>
 
 <style scoped lang="scss">
-.step-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: white;
-}
-
+// Type comes from the ramp classes in the markup; these rules only space and
+// lift the signed-in account to the primary tone.
 .field-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
   line-height: 1.4;
-}
-
-.google-signin-btn {
-  text-transform: none;
-  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 .signed-in-row {
@@ -377,15 +369,7 @@ const restore = async (): Promise<void> => {
   align-items: center;
 }
 
-.onb-btn {
-  border-radius: 8px !important;
-  box-shadow: none !important;
-}
-
-.passkey-auth-button {
-  text-transform: none;
-  font-weight: 500;
-  border-radius: 8px !important;
-  box-shadow: none !important;
+.signed-in-row__text {
+  color: var(--g-text-1);
 }
 </style>

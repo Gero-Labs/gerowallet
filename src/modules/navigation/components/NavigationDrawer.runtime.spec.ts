@@ -75,6 +75,13 @@ describe('NavigationDrawer with native Vuetify injections', () => {
     expect(router.currentRoute.value.path).toBe('/nexus');
   });
 
+  it('names the network under the wallet and shows the chain as a badge on its avatar', async () => {
+    const { wrapper } = await mountNativeDrawer();
+    const header = wrapper.get('.account-header');
+    expect(header.findAll('.v-list-item-subtitle').map((line) => line.text())).toEqual(['Mainnet']);
+    expect(header.get('.account-avatar .account-chain').attributes('aria-label')).toBe('Cardano');
+  });
+
   it('closes on the mobile breakpoint and returns to a persistent desktop drawer', async () => {
     const { wrapper, open } = await mountNativeDrawer();
     const drawer = wrapper.findComponent(VNavigationDrawer);

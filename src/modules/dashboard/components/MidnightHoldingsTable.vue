@@ -288,7 +288,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
   background: transparent;
 }
 
-.tokens-table ::v-deep th {
+.tokens-table :deep(th) {
   background: rgba(10, 14, 20, 0.8) !important;
   color: rgba(255, 255, 255, 0.5) !important;
   text-transform: uppercase;
@@ -298,15 +298,15 @@ const rows = computed<MidnightHoldingRow[]>(() => [
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
-.tokens-table ::v-deep tbody tr {
+.tokens-table :deep(tbody tr) {
   transition: background 0.15s ease;
 }
 
-.tokens-table ::v-deep tbody tr:hover {
+.tokens-table :deep(tbody tr:hover) {
   background: rgba(0, 199, 243, 0.04) !important;
 }
 
-.tokens-table ::v-deep tbody tr td {
+.tokens-table :deep(tbody tr td) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
   padding-top: 8px !important;
   padding-bottom: 8px !important;

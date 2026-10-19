@@ -14,7 +14,8 @@
  *  - **Imported Cardano wallets**: other wallet records (`geroStore.wallets`)
  *    on the same Cardano network. Addresses derive from each record's public
  *    xpub (no keys needed to display); signing requires THAT record's
- *    password/PassKey.
+ *    password/PassKey (an added account's: its account #0's, at its own
+ *    account index).
  *  - **Watch-only / hardware records**: listed read-only (no local mnemonic).
  *
  * Signing bypasses the logged-wallet SIGN_TX pipeline (which signs with the
@@ -30,7 +31,6 @@
  */
 
 import { computed, ref } from 'vue';
-import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, CoinTypes, HARDENED, Wallet, WalletTypePurpose } from '@/models/types';
@@ -44,6 +44,7 @@ import { clearDustPending, markDustPending, reconcileDustPending } from '@/share
 import {
   CardanoStakeIdentity,
   enumerateCardanoStakeIdentities,
+  sourceSecretsRecord,
 } from '@/shared/composables/useCardanoStakeEnumeration';
 import { debugLog } from '@/utils/debug';
 
@@ -361,13 +362,14 @@ export function useDustSources() {
     }
   }
 
-  /** Decrypt the SOURCE wallet's mnemonic (the logged wallet's for the twin). */
+  /**
+   * Decrypt the SOURCE wallet's mnemonic (the logged wallet's for the twin; an
+   * added account's account #0's, whose PassKey salt is that record's id).
+   */
   async function decryptSourceMnemonic(
     source: DustSource, credentials: SourceCredentials,
   ): Promise<string> {
-    const record: (Wallet & { id: number }) | undefined = source.sameSeed
-      ? walletStore.loggedWallet
-      : (geroStore.wallets ?? {})[source.walletId as number] as Wallet;
+    const record: (Wallet & { id: number }) | undefined = sourceSecretsRecord(source);
     if (!record) throw new Error('Source wallet record not found');
 
     if (credentials.prfOutput) {
@@ -401,10 +403,11 @@ export function useDustSources() {
    * Paths: the mapping tx needs payment [0,0] (inputs) + stake [2,0] (the
    * validator's extra_signatories check on the datum's c_wallet); a plain
    * self-send needs only payment [0,0] (an extra witness would inflate the
-   * tx past the fee Nexus estimated for it).
+   * tx past the fee Nexus estimated for it). `accountIndex` is the source's
+   * account: an added account signs with its own keys, not account #0's.
    */
   async function signWithMnemonic(
-    txCbor: string, mnemonic: string, paths: number[][] = [[0, 0], [2, 0]],
+    txCbor: string, mnemonic: string, accountIndex: number, paths: number[][] = [[0, 0], [2, 0]],
   ): Promise<string> {
     const [{ deserializeCardanoJsSdkTx }, { Serialization }, { HexBlob }, { resolvePrivateKey }] =
       await Promise.all([
@@ -416,7 +419,7 @@ export function useDustSources() {
     const transaction = deserializeCardanoJsSdkTx(txCbor);
     const rootKey = resolvePrivateKey(mnemonic);
     const accountKey = rootKey.derive([
-      WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED,
+      WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex,
     ]);
 
     const signatures = new Map<string, string>();
@@ -429,7 +432,7 @@ export function useDustSources() {
     return Serialization.TransactionWitnessSet.fromCore(witness).toCbor();
   }
 
-  /** Guard: the decrypted seed must actually derive this source's address. */
+  /** Guard: the decrypted seed must actually derive this source's address, at its account. */
   async function assertSeedMatchesSource(mnemonic: string, source: DustSource): Promise<void> {
     const { getAddress } = await import('@/chrome/serialization');
     const { resolvePrivateKey } = await import('@/shared/utils/resolver');
@@ -438,7 +441,7 @@ export function useDustSources() {
     const rootKey = resolvePrivateKey(mnemonic);
     const bip32Ed25519 = await SodiumBip32Ed25519.create();
     const xpubHex = bip32Ed25519.getBip32PublicKey(
-      rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED]).hex(),
+      rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + source.accountIndex]).hex(),
     );
     const xpub = bech32.encode('xpub', bech32.toWords(Buffer.from(xpubHex, 'hex')), 120);
     const derivedBase = getAddress(xpub, Blockchain.CARDANO, network.value, 0).toBech32();
@@ -559,7 +562,7 @@ export function useDustSources() {
     // Too big → isolate the cNIGHT (plain self-send, payment-only witness).
     onStage?.('isolating');
     const isoCbor = await buildIsolationTx(source);
-    const isoWit = await signWithMnemonic(isoCbor, mnemonic, [[0, 0]]);
+    const isoWit = await signWithMnemonic(isoCbor, mnemonic, source.accountIndex, [[0, 0]]);
     await mergeAndSubmit(isoCbor, isoWit);
 
     // Wait for the isolation to confirm (clean cNIGHT UTxO present), then
@@ -612,7 +615,7 @@ export function useDustSources() {
 
       onStage?.('registering');
       const txCbor = await buildFittingTx(source, mnemonic, buildRegister, onStage);
-      const witnessHex = await signWithMnemonic(txCbor, mnemonic);
+      const witnessHex = await signWithMnemonic(txCbor, mnemonic, source.accountIndex);
       const txId = await mergeAndSubmit(txCbor, witnessHex);
 
       markDustPending(source.stakeAddress, ownDustAddress.value, txId);
@@ -678,7 +681,7 @@ export function useDustSources() {
 
       onStage?.('registering');
       const finalCbor = await buildFittingTx(source, mnemonic, buildUpdate, onStage);
-      const witnessHex = await signWithMnemonic(finalCbor, mnemonic);
+      const witnessHex = await signWithMnemonic(finalCbor, mnemonic, source.accountIndex);
       const txId = await mergeAndSubmit(finalCbor, witnessHex);
 
       markDustPending(source.stakeAddress, ownDustAddress.value, txId);

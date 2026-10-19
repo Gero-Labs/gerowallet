@@ -7,6 +7,7 @@ vi.mock('@/shared/utils/trezorWeb', () => ({
     init: vi.fn(),
     getFeatures: vi.fn(),
     getXpub: vi.fn(),
+    getAccountXpubs: vi.fn(),
     cardanoSignTransaction: vi.fn(),
     cardanoSignMessage: vi.fn(),
     getAddress: vi.fn(),
@@ -78,6 +79,27 @@ describe('dispatchTrezor', () => {
         target: 'gerowallet',
         sender: 'extension',
       });
+    });
+
+    test('Cardano with account indices: exports those accounts in one request', async () => {
+      mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Cardano' } as never);
+      const coldWalletProps = { productName: 'Trezor', btSupported: false, accounts: [] };
+      mockedTrezorWeb.getAccountXpubs.mockResolvedValue(coldWalletProps);
+
+      const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Cardano', network: 'Mainnet', accountIndices: [0, 1, 2] });
+
+      expect(mockedTrezorWeb.getAccountXpubs).toHaveBeenCalledWith([0, 1, 2]);
+      expect(mockedTrezorWeb.getXpub).not.toHaveBeenCalled();
+      expect(resp.data).toEqual({ success: true, coldWalletProps });
+    });
+
+    test.each([[[]], [[0, 0]], [[-1]], [['1']]])('refuses account indices %j before asking the device', async (accountIndices) => {
+      mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Cardano' } as never);
+
+      const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Cardano', network: 'Mainnet', accountIndices });
+
+      expect(mockedTrezorWeb.getAccountXpubs).not.toHaveBeenCalled();
+      expect(resp.data.success).toBe(false);
     });
 
     test('Bitcoin: calls trezorWeb.initBitcoinTrezor and reformats the response', async () => {

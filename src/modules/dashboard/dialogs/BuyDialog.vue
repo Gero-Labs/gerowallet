@@ -76,9 +76,7 @@
                     :src="url"
                     width="100%"
                     @load="onIframeLoad"
-                  >
-                    <p>{{ $t('common.browserNotSupportIframes') }}</p>
-                  </iframe>
+                  />
                 </v-card-text>
               </v-card>
             </v-stepper-window-item>

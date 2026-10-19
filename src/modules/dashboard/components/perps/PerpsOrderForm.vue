@@ -1011,7 +1011,7 @@ async function placeOrderAction() {
   color: var(--g-raised);
 }
 
-.of-input ::v-deep input {
+.of-input :deep(input) {
   font-family: var(--g-font-mono) !important;
   font-size: 12px !important;
   color: var(--g-text-1) !important;
@@ -1158,12 +1158,12 @@ async function placeOrderAction() {
   margin: 0 !important;
   padding: 0 !important;
 }
-.of-checkbox ::v-deep .v-label {
+.of-checkbox :deep(.v-label) {
   font-size: 11px !important;
   color: var(--g-text-1) !important;
   font-weight: 700 !important;
 }
-.of-checkbox ::v-deep .v-input--selection-controls__input {
+.of-checkbox :deep(.v-input--selection-controls__input) {
   margin-right: 4px !important;
 }
 
@@ -1207,7 +1207,7 @@ async function placeOrderAction() {
   line-height: 1.4 !important;
 }
 
-.of-slippage-alert ::v-deep .v-icon {
+.of-slippage-alert :deep(.v-icon) {
   font-size: 14px !important;
   margin-right: 4px !important;
 }
@@ -1232,17 +1232,17 @@ async function placeOrderAction() {
 
 /* ── Custom slider ───────────────────────────────────────────────────── */
 
-.custom-slider ::v-deep .v-slider__tick {
+.custom-slider :deep(.v-slider__tick) {
   background-color: var(--g-hairline-3)!important;
   border-radius: 50%;
 }
-.custom-slider ::v-deep .v-slider__thumb {
+.custom-slider :deep(.v-slider__thumb) {
   background-color: var(--g-canvas) !important;
   border: 1px solid var(--g-success) !important;
   width: 14px!important;
   height: 14px!important;
 }
-.custom-slider ::v-deep .v-slider--horizontal .v-slider__track-container {
+.custom-slider :deep(.v-slider--horizontal .v-slider__track-container) {
   height: 6px !important;
 }
 </style>

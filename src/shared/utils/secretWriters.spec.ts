@@ -113,6 +113,19 @@ describe('prepareSpendingPasswordRotation', () => {
     expect((await prfDb.table('config').get('spo_encryptedColdKey')).value).toBe('prf-blob');
   });
 
+  it('moves the added accounts’ own cold keys to the new password too', async () => {
+    const own = await seedConfig(7007, { spo_encryptedColdKey: F.coldKey.rawHex, spo_coldKeyEncryption: 'password' });
+    const added = await seedConfig(7008, { spo_encryptedColdKey: F.coldKey.rawHex, spo_coldKeyEncryption: 'password' });
+    const untouched = await seedConfig(7009, { spo_encryptedColdKey: F.coldKey.rawHex, spo_coldKeyEncryption: 'password' });
+
+    await (await prepareSpendingPasswordRotation({ id: 7007, encryptedPrivateKey: F.rootKey.rawHex }, F.pw, NEW, [7008])).commitSecondary();
+
+    for (const db of [own, added]) {
+      expect(decryptKeyBlob((await db.table('config').get('spo_encryptedColdKey')).value, NEW, SecretPurpose.ColdKey).toString('hex')).toBe(F.coldKey.hex);
+    }
+    expect((await untouched.table('config').get('spo_encryptedColdKey')).value).toBe(F.coldKey.rawHex);
+  });
+
   it('with the flag on, every rotated secret is gpw2', async () => {
     setEnvelopeV2EnabledForTest(true);
     const db = await seedConfig(7006, { encryptedTotpSecret: F.securityData.gpw1 });

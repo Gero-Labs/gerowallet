@@ -100,10 +100,16 @@ async function prepareStrike(wallet: RotationWallet, currentPassword: string, ne
   };
 }
 
+/**
+ * @param accountIds - The accounts added under `wallet`. They store none of its
+ *   secrets, but their own secondary ones (an SPO cold key, a Strike key) are
+ *   sealed under the same spending password and follow it too.
+ */
 export async function prepareSpendingPasswordRotation(
   wallet: RotationWallet,
   currentPassword: string,
   newPassword: string,
+  accountIds: readonly number[] = [],
 ): Promise<PreparedRotation> {
   // Throws on a wrong current password, before anything is sealed or written.
   const rootKey = decryptPrivateKey(wallet.encryptedPrivateKey, currentPassword);
@@ -114,31 +120,38 @@ export async function prepareSpendingPasswordRotation(
   const encryptedPrivateKey = await sealKeySecret(rootKey, newPassword, SecretPurpose.RootKey);
   const encryptedMnemonic = mnemonic === null ? null : await sealTextSecret(mnemonic, newPassword, SecretPurpose.Mnemonic);
 
-  let configUpdates: ConfigUpdate[] = [];
-  let strike: { key: string; record: StrikeRecord } | null = null;
-  try {
-    configUpdates = await prepareConfig(wallet.id, currentPassword, newPassword);
-    strike = await prepareStrike(wallet, currentPassword, newPassword);
-  } catch (e) {
-    debugLog('🔐 Could not prepare secondary secrets for password change:', e);
+  const configUpdates: Array<{ walletId: number; updates: ConfigUpdate[] }> = [];
+  const strikes: Array<{ key: string; record: StrikeRecord }> = [];
+  for (const walletId of [wallet.id, ...accountIds]) {
+    try {
+      const updates = await prepareConfig(walletId, currentPassword, newPassword);
+      if (updates.length > 0) configUpdates.push({ walletId, updates });
+      const strike = await prepareStrike({ ...wallet, id: walletId }, currentPassword, newPassword);
+      if (strike) strikes.push(strike);
+    } catch (e) {
+      debugLog('🔐 Could not prepare secondary secrets for password change:', e);
+    }
   }
 
   return {
     encryptedPrivateKey,
     encryptedMnemonic,
     async commitSecondary() {
-      try {
-        if (configUpdates.length > 0) {
-          const { getDb } = await import('@/db/wallet-db');
-          const db = await getDb(wallet.id);
-          if (db) {
-            const table = db.table('config');
-            await db.transaction('rw', table, async () => {
-              for (const u of configUpdates) await table.update(u.key, { value: u.next });
-            });
-          }
+      const { getDb } = await import('@/db/wallet-db');
+      for (const { walletId, updates } of configUpdates) {
+        try {
+          const db = await getDb(walletId);
+          if (!db) continue;
+          const table = db.table('config');
+          await db.transaction('rw', table, async () => {
+            for (const u of updates) await table.update(u.key, { value: u.next });
+          });
+        } catch (e) {
+          debugLog('🔐 Could not re-encrypt secondary secrets after password change:', e);
         }
-        if (strike) await chrome.storage.local.set({ [strike.key]: strike.record });
+      }
+      try {
+        if (strikes.length > 0) await chrome.storage.local.set(Object.fromEntries(strikes.map(({ key, record }) => [key, record])));
       } catch (e) {
         debugLog('🔐 Could not re-encrypt secondary secrets after password change:', e);
       }

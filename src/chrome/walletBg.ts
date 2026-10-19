@@ -18,14 +18,12 @@ import {
   HARDENED,
   BIP44_SCAN_SIZE,
   ChainDerivations,
-  coin_type,
   CoinTypes,
   ERROR,
   Key,
   Keys,
   Provider,
   Wallet,
-  purpose,
   Tip,
   WalletType,
   WalletTypePurpose,
@@ -87,6 +85,7 @@ import {
 import { debugLog } from '@/utils/debug';
 import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
+import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
 // Static, not dynamic: walletBg and this module land in the same background
 // IIFE, so a dynamic import buys no code splitting — it only pushes the
 // module's declaration later in the emitted bundle, which is exactly the
@@ -131,6 +130,16 @@ export class WalletBg {
   network: string;
   addressType?: string;
   publicKey: string;
+  /** HD account `publicKey` belongs to, from the record; the only account this wallet signs with. */
+  accountIndex: number;
+  /** The account-#0 record this account was added under, for an account other than #0. */
+  parentWalletId?: number;
+  /**
+   * The record whose secrets this wallet holds and whose id they are bound to:
+   * account #0 for an added account (withGroupSecrets), else this wallet. Every
+   * secret is decrypted, re-encrypted and migrated under this id, never `id`.
+   */
+  secretsWalletId: number;
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
@@ -161,7 +170,7 @@ export class WalletBg {
   constructor(
     // Wallet DB record; the intersection covers UI/store fields not part of
     // the persisted Wallet model but carried on the runtime object.
-    wallet: Wallet & { theme?: string; order?: number; passwordLastUpdate?: Date; createdAt?: string; btSupported?: boolean; xfp?: string },
+    wallet: Wallet & { theme?: string; order?: number; passwordLastUpdate?: Date; createdAt?: string; btSupported?: boolean; xfp?: string; secretsWalletId?: number },
     googleBaseAddress?: string
   ) {
     this.id = wallet.id;
@@ -173,6 +182,9 @@ export class WalletBg {
     this.order = wallet.order;
     this.encryptedPrivateKey = wallet.encryptedPrivateKey;
     this.publicKey = wallet.publicKey;
+    this.accountIndex = resolveAccountIndex(wallet);
+    this.parentWalletId = wallet.parentWalletId;
+    this.secretsWalletId = wallet.secretsWalletId ?? wallet.id;
     this.passwordLastUpdate = wallet.passwordLastUpdate;
     this.chain = wallet.chain;
     this.network = wallet.network;
@@ -1136,6 +1148,8 @@ export class WalletBg {
       }
       return { stake, payment, change: [], ccCold: [], ccHot: [], drep129: [], drep105: [], script: [] };
     }
+    // Hardware signers send these paths to the device, so they carry the record's account.
+    const accountPath = cardanoAccountPath(this.accountIndex);
     const resolvedAddresses: Key[] = [];
     let addressIndex: number = 0; // Start from the first address index
     let consecutiveUnused: number = 0; // Track consecutive unused addresses
@@ -1143,7 +1157,7 @@ export class WalletBg {
       stake: [
         {
           address: this.stakeAddress,
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CHIMERIC_ACCOUNT}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.CHIMERIC_ACCOUNT}/${addressIndex}`,
           cred: Hash28ByteBase16(getStakeKey(this.publicKey, 0).hash().hex()),
         },
       ],
@@ -1151,27 +1165,27 @@ export class WalletBg {
       change: [],
       ccCold: [
         {
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD}/${addressIndex}`,
           cred: Hash28ByteBase16(getCcColdKey(this.publicKey, 0).hash().hex()),
         },
       ],
       ccHot: [
         {
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT}/${addressIndex}`,
           cred: Hash28ByteBase16(getCcHotKey(this.publicKey, 0).hash().hex()),
         },
       ],
       drep129: [
         {
           address: getCip129DrepId(this.publicKey),
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.DREP}/${addressIndex}`,
           cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
         },
       ],
       drep105: [
         {
           address: getCip105DrepId(this.publicKey),
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
+          path: `${accountPath}/${ChainDerivations.DREP}/${addressIndex}`,
           cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
         },
       ],
@@ -1183,7 +1197,7 @@ export class WalletBg {
       let found: boolean = false;
       const derivedPaymentAddress = {
         address: derivedAddress,
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
+        path: `${accountPath}/${ChainDerivations.EXTERNAL}/${addressIndex}`,
         cred: keyHashFromAddress(derivedAddress),
         used: false,
       };
@@ -1196,7 +1210,7 @@ export class WalletBg {
       keys.payment.push(derivedPaymentAddress);
       const derivedChangeAddress = {
         address: internalDerivedAddress,
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
+        path: `${accountPath}/${ChainDerivations.INTERNAL}/${addressIndex}`,
         cred: keyHashFromAddress(internalDerivedAddress),
         used: false,
       };
@@ -1430,7 +1444,7 @@ export class WalletBg {
         const privateKeyBytes = await decryptPrivateKeyWithPrf(
           this.prfEncryptedPrivateKey,
           this.webAuthnCredentialId,
-          this.id.toString()
+          this.secretsWalletId.toString()
         );
 
         return Bip32PrivateKey.fromBytes(privateKeyBytes);
@@ -1481,7 +1495,7 @@ export class WalletBg {
         }
         return;
       }
-      const result = await migrateWalletSecrets(this.id, password);
+      const result = await migrateWalletSecrets(this.secretsWalletId, password);
       if (result.encryptedPrivateKey) this.encryptedPrivateKey = result.encryptedPrivateKey;
       if (result.encryptedMnemonic) this.encryptedMnemonic = result.encryptedMnemonic;
       if (result.outcome === 'migrated' || result.outcome === 'already-current' || result.outcome === 'not-applicable') {
@@ -1505,7 +1519,7 @@ export class WalletBg {
     try {
       const upgraded = encryptWithPassword(password, rootKeyBuffer.toString('hex'));
       const { migrateEncryptedPrivateKey } = await import('@/db/gero-db');
-      await migrateEncryptedPrivateKey(this.id, upgraded);
+      await migrateEncryptedPrivateKey(this.secretsWalletId, upgraded);
       this.encryptedPrivateKey = upgraded;
       debugLog(`🔐 Migrated wallet ${this.id} private key to hardened KDF format`);
     } catch (e) {
@@ -1516,13 +1530,12 @@ export class WalletBg {
   async requestAccountKey(
     type: 'stake' | 'payment' | 'change' | 'drep',
     password: string,
-    accountIndex: number,
     index: number,
   ): Promise<Ed25519PrivateKey> {
     // Decrypt root private key (supports both password and PRF encryption)
     const rootKey = await this.decryptRootPrivateKey(password);
 
-    return this.deriveAccountKey(rootKey, type, accountIndex, index);
+    return this.deriveAccountKey(rootKey, type, index);
   }
 
   /**
@@ -1536,11 +1549,10 @@ export class WalletBg {
   private requestAccountKeyFromBytes(
     type: 'stake' | 'payment' | 'change' | 'drep',
     privateKeyBytes: Uint8Array,
-    accountIndex: number,
     index: number,
   ): Ed25519PrivateKey {
     const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(privateKeyBytes);
-    return this.deriveAccountKey(rootKey, type, accountIndex, index);
+    return this.deriveAccountKey(rootKey, type, index);
   }
 
   /**
@@ -1551,15 +1563,9 @@ export class WalletBg {
   private deriveAccountKey(
     rootKey: Bip32PrivateKey,
     type: 'stake' | 'payment' | 'change' | 'drep',
-    accountIndex: number,
     index: number,
   ): Ed25519PrivateKey {
-    // Derive account key
-    const accountKey: Bip32PrivateKey = rootKey.derive([
-      WalletTypePurpose.CIP1852,
-      CoinTypes.CARDANO,
-      HARDENED + accountIndex,
-    ]);
+    const accountKey: Bip32PrivateKey = deriveSigningAccountKey(rootKey, this.accountIndex, this.publicKey);
 
     // Derive specific key type
     if (type === 'stake') {
@@ -1806,6 +1812,20 @@ export class WalletBg {
   }
 
   /**
+   * An added Bitcoin account signs at its own index, so its recovery phrase (its
+   * account #0's) must derive the record's xpub there: any other key would sign
+   * for addresses the wallet does not show. Account #0 records predate the check
+   * and sign as before.
+   */
+  private async assertBitcoinAccount(mnemonic: string): Promise<void> {
+    if (this.accountIndex === 0) return;
+    const { deriveBitcoinAccountXpub } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    if (deriveBitcoinAccountXpub(mnemonic, this.network, this.addressType, this.accountIndex) !== this.publicKey) {
+      throw new InvalidAccountIndexError('The signing key does not belong to this account');
+    }
+  }
+
+  /**
    * Sign Bitcoin PSBT transaction (software wallets)
    * Supports both password and PRF wallet encryption
    *
@@ -1847,16 +1867,17 @@ export class WalletBg {
           this.prfEncryptedMnemonic,
           prfSecret,
           this.webAuthnCredentialId,
-          this.id.toString()
+          this.secretsWalletId.toString()
         );
 
-        // Sign and finalize PSBT
+        // Sign and finalize PSBT, with this account's keys
+        await this.assertBitcoinAccount(mnemonic);
         const signedTx = await signAndFinalizePsbt(
           psbtHex,
           mnemonic,
           this.network,
           this.addressType,
-          0
+          this.accountIndex
         );
 
         debugLog('✅ Bitcoin transaction signed with PRF');
@@ -1878,13 +1899,14 @@ export class WalletBg {
         // Decrypt mnemonic with password
         const decryptedMnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
 
-        // Sign and finalize PSBT
+        // Sign and finalize PSBT, with this account's keys
+        await this.assertBitcoinAccount(decryptedMnemonic);
         const signedTx = await signAndFinalizePsbt(
           psbtHex,
           decryptedMnemonic,
           this.network,
           this.addressType,
-          0
+          this.accountIndex
         );
 
         debugLog('✅ Bitcoin transaction signed with password');
@@ -1957,7 +1979,7 @@ export class WalletBg {
       if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.id.toString()
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.secretsWalletId.toString()
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -1975,7 +1997,8 @@ export class WalletBg {
       psbt = bitcoin.Psbt.fromBase64(psbtHex, { network: bitcoinNetwork });
     }
 
-    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, 0);
+    await this.assertBitcoinAccount(mnemonic);
+    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, this.accountIndex);
 
     if (options?.autoFinalized !== false) {
       signedPsbt.finalizeAllInputs();
@@ -2000,8 +2023,7 @@ export class WalletBg {
     prfSecret?: Uint8Array
   ): Promise<string> {
     const { decrypt } = await import('@/shared/utils/crypto');
-    const { deriveBitcoinRootKey, getDerivationPurpose, BitcoinCoinType, BitcoinTestnetCoinType } =
-      await import('@/chains/bitcoin/bitcoinKeyManager');
+    const { deriveBitcoinRootKey, bitcoinAccountPath } = await import('@/chains/bitcoin/bitcoinKeyManager');
 
     // Decrypt mnemonic
     let mnemonic: string;
@@ -2010,7 +2032,7 @@ export class WalletBg {
       if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.id.toString()
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.secretsWalletId.toString()
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2018,11 +2040,10 @@ export class WalletBg {
       mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
-    // Derive signing key (first receiving address: m/purpose'/coinType'/0'/0/0)
+    // Derive signing key (this account's first receiving address: m/purpose'/coinType'/account'/0/0)
+    await this.assertBitcoinAccount(mnemonic);
     const rootKey = deriveBitcoinRootKey(mnemonic);
-    const purpose = getDerivationPurpose(this.addressType || 'segwit');
-    const coinType = this.network.toLowerCase() === 'mainnet' ? BitcoinCoinType : BitcoinTestnetCoinType;
-    const signingKey = rootKey.derive(`m/${purpose}'/${coinType}'/0'/0/0`);
+    const signingKey = rootKey.derive(`${bitcoinAccountPath(this.network, this.addressType || 'segwit', this.accountIndex)}/0/0`);
     if (!signingKey.privateKey || !signingKey.publicKey) throw new Error('Failed to derive signing key');
 
     const privKey = Buffer.from(signingKey.privateKey);
@@ -2142,7 +2163,6 @@ export class WalletBg {
    * Cardano JS SDK transaction signing method
    * @param txInput - Either a CBOR hex string or Cardano.Tx object (Cardano JS SDK)
    * @param password - Wallet password for software wallets
-   * @param accountIndex - Account index for derivation
    * @param utxos - UTXOs for reference
    * @param addresses - Address mappings (key-value pairs of addresses)
    * @returns Promise with witness set hex string
@@ -2150,7 +2170,6 @@ export class WalletBg {
   async signTx(
     txInput: string | Cardano.Tx,
     password: string,
-    accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted private key for PRF wallets
@@ -2189,12 +2208,7 @@ export class WalletBg {
     password = null; // Clear password from memory
 
     assertAuthorized?.();
-    // Derive an account private key
-    const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
-      WalletTypePurpose.CIP1852,
-      CoinTypes.CARDANO,
-      HARDENED + accountIndex,
-    ]);
+    const accountPrivateKey: Bip32PrivateKey = deriveSigningAccountKey(rootPrivateKey, this.accountIndex, this.publicKey);
 
     // Create a signature map for the witness
     const signatures = new Map<string, string>();
@@ -2204,7 +2218,7 @@ export class WalletBg {
       transaction,
       utxos,
       addresses,
-      accountIndex,
+      this.accountIndex,
       this.stakeAddress,
     );
 
@@ -2349,7 +2363,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2409,7 +2423,7 @@ export class WalletBg {
       if (this.encryptionMethod === 'prf') {
         if (!this.prfEncryptedMnemonic || !prfSecret || !this.webAuthnCredentialId) throw new Error('PassKey authorization is required');
         const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
-        mnemonic = await decryptMnemonicWithPrfOutput(this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, String(this.id));
+        mnemonic = await decryptMnemonicWithPrfOutput(this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, String(this.secretsWalletId));
       } else {
         if (!password || !this.encryptedMnemonic) throw new Error('Spending password is required');
         const { decrypt } = await import('@/shared/utils/crypto');
@@ -2449,7 +2463,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2574,7 +2588,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2689,7 +2703,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -2888,7 +2902,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
@@ -3117,7 +3131,7 @@ export class WalletBg {
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
-        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
       );
     } else {
       if (!password) throw new Error('Password required to sign DUST registration tx');
@@ -3187,7 +3201,6 @@ export class WalletBg {
     address: Cardano.PaymentAddress | Cardano.RewardAccount | string,
     payload: string,
     password: string,
-    accountIndex: number,
     keys: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted root key for PRF wallets
     assertAuthorized?: () => void,
@@ -3196,7 +3209,7 @@ export class WalletBg {
     // This ensures 100% compatibility with the Cardano SDK standard
 
     const signWith = addrToSignWith(address);
-    const knownAddresses = this.convertKeysToGroupedAddresses(keys, accountIndex);
+    const knownAddresses = this.convertKeysToGroupedAddresses(keys);
 
     // Create a minimal KeyAgent-like object that implements the required interface
     const keyAgent = {
@@ -3234,8 +3247,8 @@ export class WalletBg {
         // other wallets decrypt the root key with the spending password. The
         // derivation is identical in both branches.
         const privateKey = privateKeyBytes
-          ? this.requestAccountKeyFromBytes(keyType, privateKeyBytes, accountIndex, derivationPath.index)
-          : await this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
+          ? this.requestAccountKeyFromBytes(keyType, privateKeyBytes, derivationPath.index)
+          : await this.requestAccountKey(keyType, password, derivationPath.index);
 
         // Sign the blob
         assertAuthorized?.();
@@ -3259,7 +3272,8 @@ export class WalletBg {
    * Convert Gero's Keys structure to SDK's GroupedAddress[] format
    * @private
    */
-  private convertKeysToGroupedAddresses(keys: Keys, accountIndex: number): GroupedAddress[] {
+  private convertKeysToGroupedAddresses(keys: Keys): GroupedAddress[] {
+    const accountIndex = this.accountIndex;
     const networkId = this.networkId();
     const stakeAddress = this.stakeAddress;
     const groupedAddresses: GroupedAddress[] = [];

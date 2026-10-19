@@ -5,9 +5,10 @@
 // module — a vi.mock() of it cannot intercept those same-file calls.
 import 'fake-indexeddb/auto';
 import { describe, it, expect } from 'vitest';
-import { Blockchain, Network, Theme } from '@/models/types';
+import { bech32 } from 'bech32';
+import { Blockchain, Network, Theme, WalletType } from '@/models/types';
 import type { Wallet } from '@/models/types';
-import { createNewWallet, findExistingWallet, getAllWallets, DuplicateWalletError } from '@/db/gero-db';
+import { createNewHardwareWallet, createNewWallet, findExistingWallet, getAllWallets, DuplicateWalletError } from '@/db/gero-db';
 
 // Fixed test vector — never used to hold funds.
 const MNEMONIC = 'test walk nut penalty hip pave soap entry language right filter choice';
@@ -56,5 +57,43 @@ describe('duplicate restore', () => {
   it('rejects a second Bitcoin restore of the same seed', async () => {
     await expect(restore('Bitcoin again', Blockchain.BITCOIN, Network.MAINNET))
       .rejects.toBeInstanceOf(DuplicateWalletError);
+  });
+});
+
+describe('duplicate hardware pairing', () => {
+  /** A device account's xpub as pairing stores it: bech32 over 64 key + chain-code bytes. */
+  const deviceXpub = (fill: string) => bech32.encode('xpub', bech32.toWords(Buffer.from(fill.repeat(64), 'hex')), 1023);
+
+  function pair(name: string, publicKey: string, network: string = Network.MAINNET, type: string = WalletType.Keystone) {
+    return createNewHardwareWallet({
+      name, icon: 'icon', type, theme: Theme.GERO, chain: Blockchain.CARDANO, network, publicKey,
+      keys: [{ publicKey: 'aa'.repeat(32), chainCode: 'bb'.repeat(32), path: "1852'/1815'/0'" }],
+      btSupported: false, xfp: '0a1b2c3d',
+    });
+  }
+
+  it('rejects pairing the same device account twice, and stores no second copy', async () => {
+    await pair('Keystone', deviceXpub('a1'));
+
+    const second = pair('Keystone again', deviceXpub('a1'));
+    await expect(second).rejects.toBeInstanceOf(DuplicateWalletError);
+    await expect(second).rejects.toMatchObject({ existingWallet: { name: 'Keystone' } });
+
+    const copies = Object.values(await storedWallets()).filter((w) => w.publicKey === deviceXpub('a1'));
+    expect(copies).toHaveLength(1);
+  });
+
+  it('still allows another account of the same device', async () => {
+    expect(typeof await pair('Keystone account 1', deviceXpub('b2'))).toBe('number');
+  });
+
+  it('still allows the same device account on another network', async () => {
+    expect(typeof await pair('Keystone preprod', deviceXpub('a1'), Network.PREPROD)).toBe('number');
+  });
+
+  it('never treats two watch wallets as the same: they carry no public key', async () => {
+    const watch = { name: 'Watch', icon: 'icon', type: WalletType.Watch, theme: Theme.GERO, chain: Blockchain.CARDANO, network: Network.MAINNET, publicKey: '' };
+    expect(typeof await createNewHardwareWallet({ ...watch, watchAddress: 'addr1-a' })).toBe('number');
+    expect(typeof await createNewHardwareWallet({ ...watch, watchAddress: 'addr1-b' })).toBe('number');
   });
 });

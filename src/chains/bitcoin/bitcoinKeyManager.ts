@@ -69,16 +69,28 @@ export function deriveBitcoinAccountXpub(
   addressType: string = 'segwit',
   accountIndex: number = 0
 ): string {
+  return deriveBitcoinAccountXpubs(mnemonic, network, addressType, [accountIndex])[0];
+}
+
+/**
+ * The account xpubs of `mnemonic` at each of `accountIndices`, from one root key
+ * (the seed's PBKDF2 runs once). Each is what that account's wallet record stores.
+ */
+export function deriveBitcoinAccountXpubs(
+  mnemonic: string,
+  network: string,
+  addressType: string,
+  accountIndices: number[]
+): string[] {
   const rootKey = deriveBitcoinRootKey(mnemonic);
+  return accountIndices.map((accountIndex) => rootKey.derive(bitcoinAccountPath(network, addressType, accountIndex)).publicExtendedKey);
+}
+
+/** A Bitcoin account's derivation path: m/purpose'/coinType'/account' (coin type 1 off Mainnet). */
+export function bitcoinAccountPath(network: string, addressType: string = 'segwit', accountIndex: number = 0): string {
   const purpose = getDerivationPurpose(addressType);
   const coinType = network === 'Mainnet' ? BitcoinCoinType : BitcoinTestnetCoinType;
-
-  // Derive account key: m/purpose'/coinType'/account'
-  const path = `m/${purpose}'/${coinType}'/${accountIndex}'`;
-  const accountKey = rootKey.derive(path);
-
-  // Return extended public key (xpub)
-  return accountKey.publicExtendedKey;
+  return `m/${purpose}'/${coinType}'/${accountIndex}'`;
 }
 
 /**
