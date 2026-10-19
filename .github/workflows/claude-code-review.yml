@@ -72,8 +72,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          latest=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            --jq '[.[] | select(.user.login | test("claude"; "i")) | .id] | max // 0')
+          # Paginate: the endpoint returns 30 comments a page, so on a longer PR
+          # an unpaginated read misses the newest. With --paginate, --jq runs
+          # once per page; jq -s folds the pages back together.
+          latest=$(gh api --paginate "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments?per_page=100" \
+            --jq '.[] | select(.user.login | test("claude"; "i")) | .id' | jq -s 'max // 0')
           echo "latest_id=${latest}" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code Review
@@ -156,8 +159,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          latest=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            --jq '[.[] | select(.user.login | test("claude"; "i"))] | last // {}')
+          # Paginated like the snapshot above; comments come oldest first, so
+          # the last one across all pages is the newest.
+          latest=$(gh api --paginate "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments?per_page=100" \
+            --jq '.[] | select(.user.login | test("claude"; "i"))' | jq -s 'last // {}')
           id=$(printf '%s' "$latest" | jq -r '.id // 0')
           body=$(printf '%s' "$latest" | jq -r '.body // ""')
 
