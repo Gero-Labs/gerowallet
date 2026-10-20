@@ -15,6 +15,7 @@ import * as ecc from 'tiny-secp256k1';
 import { HDKey } from '@scure/bip32';
 import * as bip39 from 'bip39';
 import { getBitcoinNetwork } from './bitcoinPsbtBuilder';
+import { deriveBitcoinAddressSetFromXpubs, type BitcoinAddressTypeName, type BitcoinDerivationInfo } from './bitcoinKeyManager';
 import type { ISignedTx } from '@/chains/common/interfaces';
 
 // Initialize ECC library for bitcoinjs-lib
@@ -85,6 +86,20 @@ function deriveSigningKey(
 }
 
 /**
+ * The address input `i` spends from, read from the previous output its PSBT data carries
+ */
+function spentAddress(psbt: bitcoin.Psbt, i: number, network: bitcoin.Network): string | undefined {
+  const input = psbt.data.inputs[i];
+  try {
+    const script = input.witnessUtxo?.script
+      ?? (input.nonWitnessUtxo && bitcoin.Transaction.fromBuffer(input.nonWitnessUtxo).outs[psbt.txInputs[i].index]?.script);
+    return script ? bitcoin.address.fromOutputScript(script, network) : undefined;
+  } catch {
+    return undefined; // no standard address script
+  }
+}
+
+/**
  * Sign PSBT with private key (software wallet)
  *
  * @param psbt PSBT to sign (hex or base64 string, or PSBT object)
@@ -119,14 +134,18 @@ export function signPsbtWithMnemonic(
 
   // Derive account key
   const accountKey = deriveAccountKey(mnemonic, network, addressType, accountIndex);
+  // The receive and change addresses the wallet watches, built when an input first needs them
+  let ownAddresses: Record<string, BitcoinDerivationInfo> | undefined;
 
   // Sign all inputs
   const inputCount = psbtObj.data.inputs.length;
 
   for (let i = 0; i < inputCount; i++) {
     try {
-      // Derive signing key using bip32Derivation metadata if available,
-      // otherwise fall back to external chain (0) with index 0
+      // Derive signing key using bip32Derivation metadata if available. An input
+      // without it (Gero Sync UTxOs carry no path, nor do most dApp PSBTs) takes the
+      // path of the wallet address it spends from; one that spends from none falls
+      // back to external chain (0) with index 0
       let chain = 0;
       let index = 0;
       const bip32Deriv = psbtObj.data.inputs[i].bip32Derivation;
@@ -136,6 +155,15 @@ export function signPsbtWithMnemonic(
         if (pathParts.length >= 3) {
           chain = parseInt(pathParts[pathParts.length - 2], 10);
           index = parseInt(pathParts[pathParts.length - 1], 10);
+        }
+      } else {
+        ownAddresses ??= deriveBitcoinAddressSetFromXpubs(
+          { [addressType.toLowerCase() as BitcoinAddressTypeName]: accountKey.publicExtendedKey },
+          network
+        ).derivationMap;
+        const address = spentAddress(psbtObj, i, bitcoinNetwork);
+        if (address && Object.hasOwn(ownAddresses, address)) {
+          ({ chain, index } = ownAddresses[address]);
         }
       }
       const signingKey = deriveSigningKey(accountKey, chain, index);
