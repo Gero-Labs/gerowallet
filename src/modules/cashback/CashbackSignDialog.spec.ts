@@ -125,7 +125,7 @@ describe('cashback claim approval', () => {
     expect(send).toHaveBeenNthCalledWith(1, { method: MessageTypes.VERIFY_SPENDING_PASSWORD, data: { password: 'hunter22' } });
     expect(send).toHaveBeenNthCalledWith(2, {
       method: MessageTypes.SIGN_DATA,
-      data: { address: ADDRESS, payload: MESSAGE_HEX, password: 'hunter22', accountIndex: 0, isUsb: false },
+      data: { address: ADDRESS, payload: MESSAGE_HEX, password: 'hunter22', isUsb: false },
     });
     expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
   });
@@ -239,7 +239,7 @@ describe('cashback claim approval', () => {
     await flush();
     expect(send).toHaveBeenCalledWith({
       method: MessageTypes.SIGN_DATA,
-      data: { address: ADDRESS, payload: MESSAGE_HEX, password: '', privateKeyBytes: [1, 2, 3], accountIndex: 0, isUsb: false },
+      data: { address: ADDRESS, payload: MESSAGE_HEX, password: '', privateKeyBytes: [1, 2, 3], isUsb: false },
     });
     expect(Array.from(bytes)).toEqual([0, 0, 0]);
     expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);

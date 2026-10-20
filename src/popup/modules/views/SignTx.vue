@@ -540,7 +540,6 @@ const sign = () => approval.run(async () => {
             txCbor: txCbor,
             partialSign: partialSign,
             password: spendingPassword.value,
-            accountIndex: 0,
             utxos: utxos.value,
             addresses: keys.value,
             mergeWitnesses: mergeWitnesses || false,

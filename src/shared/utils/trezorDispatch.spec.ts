@@ -178,9 +178,9 @@ describe('dispatchTrezor', () => {
     const signatureData = { signatureHex: 'sig', signingPublicKeyHex: 'key', addressFieldHex: 'addr' };
     mockedTrezorWeb.cardanoSignMessage.mockResolvedValue(signatureData);
 
-    const resp = await dispatchTrezor({ method: 'signData', address: 'addr1', payload: 'deadbeef', accountIndex: 0 });
+    const resp = await dispatchTrezor({ method: 'signData', address: 'addr1', payload: 'deadbeef' });
 
-    expect(mockedTrezorWeb.cardanoSignMessage).toHaveBeenCalledWith('addr1', 'deadbeef', 1, 0, expect.anything());
+    expect(mockedTrezorWeb.cardanoSignMessage).toHaveBeenCalledWith('addr1', 'deadbeef', 1, expect.anything());
     expect(resp).toEqual({
       data: { success: true, signatureData },
       target: 'gerowallet',

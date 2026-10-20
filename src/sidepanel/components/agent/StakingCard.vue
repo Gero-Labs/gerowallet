@@ -224,7 +224,6 @@ export default defineComponent({
         walletContext: {
           keys,
           stakeAddress: walletStore.loggedWallet?.stakeAddress || '',
-          accountIndex: 0,
         },
       });
       assertStakeWalletUnchanged(wallet, t);
@@ -358,7 +357,6 @@ export default defineComponent({
           data: {
             txCbor: cbor,
             partialSign: true,
-            accountIndex: 0,
             utxos: walletStore.utxos,
             addresses: walletStore.keys,
             mergeWitnesses: false,

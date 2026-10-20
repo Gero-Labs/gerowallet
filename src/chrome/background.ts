@@ -4088,7 +4088,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         sender: SENDER.extension,
       });
     } else if (request.data.method === 'signData') {
-      const { address, payload, accountIndex } = request.data;
+      const { address, payload } = request.data;
       const currentWallet = walletManager.getWallet();
       const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
 
@@ -4098,7 +4098,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         signatureHex: string;
         signingPublicKeyHex: string;
         addressFieldHex: string;
-      } = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
+      } = await trezor.signData(address, payload, network.networkId, WalletStore.state.keys);
 
       assertCip45SigningRequest(request.data);
       sendResponse({

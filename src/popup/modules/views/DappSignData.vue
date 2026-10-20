@@ -445,7 +445,6 @@ const signAndReturnTx = async () => {
         address,
         payload,
         password: spendingPassword.value,
-        accountIndex: 0,
         isUsb: !isBT.value
       }
     })), approvalCurrent) as { data: { key: string; signature: string } };
@@ -560,7 +559,6 @@ const sign = () => approval.run(async () => {
         cip45Authorization: request.value?.data?.cip45Authorization,
         address,
         payload,
-        accountIndex: 0
       };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
         ? await awaitFreshApproval(async () => (dispatchTrezor(data)), approvalCurrent)

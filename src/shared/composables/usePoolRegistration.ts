@@ -1,5 +1,6 @@
 import { ref, toRefs } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
+import type { Hash32ByteBase16 } from '@cardano-sdk/crypto';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -91,7 +92,7 @@ export function usePoolRegistration() {
       if (params.metadataUrl && params.metadataHash) {
         poolParameters.metadataJson = {
           url: params.metadataUrl,
-          hash: params.metadataHash as any,
+          hash: params.metadataHash as Hash32ByteBase16,
         };
       }
 
@@ -116,17 +117,17 @@ export function usePoolRegistration() {
         walletContext: {
           keys: keys.value,
           stakeAddress: loggedWallet.value?.stakeAddress || '',
-          accountIndex: 0,
         },
       });
 
       isConfirmDialogOpen.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error building pool registration transaction:', error);
-      if (error.message?.includes('UTxO Balance Insufficient')) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('UTxO Balance Insufficient')) {
         snackbar.setError(t('errors.insufficientBalance'));
       } else {
-        snackbar.setError(error.message || t('errors.unknownError'));
+        snackbar.setError(message || t('errors.unknownError'));
       }
     } finally {
       loading.value = false;

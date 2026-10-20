@@ -431,7 +431,6 @@ export function usePoolSigning(options: {
         walletContext: {
           keys: keys.value,
           stakeAddress: loggedWallet.value.stakeAddress || '',
-          accountIndex: 0,
         },
       });
 
@@ -503,7 +502,6 @@ export function usePoolSigning(options: {
         data: {
           txCbor: tx2Cbor,
           password: spendingPassword.value,
-          accountIndex: 0,
           coldKeyOnly: true,
         },
       })) as { data: { coldKeyWitness?: { vkey: string; signature: string }; error?: string } };
@@ -653,14 +651,12 @@ export function usePoolSigning(options: {
       const signingData: {
         txCbor: string;
         password: string;
-        accountIndex: number;
         utxos: unknown;
         addresses: unknown;
         privateKeyBytes?: number[];
       } = {
         txCbor: txCbor.value,
         password: spendingPassword.value,
-        accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value,
       };

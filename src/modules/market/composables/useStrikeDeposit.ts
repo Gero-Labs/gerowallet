@@ -289,7 +289,6 @@ export function useStrikeDeposit() {
           partialSign: false,
           password: isPrf ? '' : password,
           ...(isPrf && pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
-          accountIndex: 0,
           utxos,
           addresses: keys,
           mergeWitnesses: false,

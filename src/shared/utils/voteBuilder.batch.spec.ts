@@ -32,7 +32,7 @@ describe('buildVotingProcedures — batch fee sanity', () => {
     }));
     const tx = { body: { inputs: [], outputs: [], votingProcedures: buildVotingProcedures(CRED, votes) } };
 
-    const signers = analyzeTransactionForSignatures(tx as never, [], {} as never, 0, '');
+    const signers = analyzeTransactionForSignatures(tx as never, [], {} as never, '');
     const drepSigners = signers.filter(signer => signer.derivationPath[0] === ChainDerivations.DREP);
 
     expect(drepSigners).toHaveLength(1);

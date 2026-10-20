@@ -2218,7 +2218,6 @@ export class WalletBg {
       transaction,
       utxos,
       addresses,
-      this.accountIndex,
       this.stakeAddress,
     );
 

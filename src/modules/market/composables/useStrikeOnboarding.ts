@@ -529,7 +529,6 @@ async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promis
         // Password wallets: pass the spending password.
         password: isPrf ? '' : password,
         ...(isPrf && pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
-        accountIndex: 0,
       },
     })) as { data: { signature?: string; key?: string; error?: string } };
 

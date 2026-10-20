@@ -29,7 +29,6 @@ interface PasswordFieldRef {
 interface SignTxRequestData {
   txCbor: string;
   partialSign: boolean;
-  accountIndex?: number;
   utxos?: unknown;
   addresses?: unknown;
   mergeWitnesses?: boolean;
@@ -268,7 +267,6 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         txCbor: txCbor.value,
         partialSign: false,
         password: attempt.password,
-        accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value,
         mergeWitnesses: false,

@@ -230,7 +230,7 @@ async function signWithPassword(approved: ApprovedRequest, current: () => boolea
   }
   return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_DATA,
-    data: { address: approved.address, payload: approved.payloadHex, password, accountIndex: 0, isUsb: false },
+    data: { address: approved.address, payload: approved.payloadHex, password, isUsb: false },
   }));
 }
 
@@ -247,7 +247,7 @@ async function signWithLedger(approved: ApprovedRequest): Promise<Signed> {
 }
 
 async function signWithTrezor(approved: ApprovedRequest): Promise<Signed> {
-  const data = { method: 'signData', address: approved.address, payload: approved.payloadHex, accountIndex: 0 };
+  const data = { method: 'signData', address: approved.address, payload: approved.payloadHex };
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
     const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
@@ -315,7 +315,7 @@ async function signWithPassKey(privateKeyBytes: Uint8Array) {
     try {
       return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_DATA,
-        data: { address: approved.address, payload: approved.payloadHex, password: '', privateKeyBytes: Array.from(privateKeyBytes), accountIndex: 0, isUsb: false },
+        data: { address: approved.address, payload: approved.payloadHex, password: '', privateKeyBytes: Array.from(privateKeyBytes), isUsb: false },
       }));
     } finally {
       privateKeyBytes.fill(0);

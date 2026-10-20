@@ -25,11 +25,11 @@ function txWithVote(voterType: Cardano.VoterType) {
   } as never;
 }
 
-// analyzeTransactionForSignatures(transaction, utxos, addresses, accountIndex, stakeAddress)
+// analyzeTransactionForSignatures(transaction, utxos, addresses, stakeAddress)
 // returns the signer array directly. Empty utxos/addresses are fine here: the
 // voting branch does not consult them.
 function analyze(tx: never) {
-  return analyzeTransactionForSignatures(tx, [], {} as never, 0, '');
+  return analyzeTransactionForSignatures(tx, [], {} as never, '');
 }
 
 describe('analyzeTransactionForSignatures — voting procedures', () => {
@@ -91,15 +91,15 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
 
   it('adds the DRep witness for our own DRep voter, not for someone else’s', () => {
     const own = keys({ drep129: [{ cred: CRED, path: '' }] });
-    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, CRED), [], own, 0, '')
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, CRED), [], own, '')
       .some(s => s.derivationPath[0] === ChainDerivations.DREP)).toBe(true);
-    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, FOREIGN), [], own, 0, '')
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, FOREIGN), [], own, '')
       .some(s => s.derivationPath[0] === ChainDerivations.DREP)).toBe(false);
   });
 
   it('adds the CC-hot witness only for our own CC-hot voter', () => {
     const own = keys({ ccHot: [{ cred: CRED, path: '' }] });
-    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.ccHotKeyHash, FOREIGN), [], own, 0, '')).toHaveLength(0);
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.ccHotKeyHash, FOREIGN), [], own, '')).toHaveLength(0);
   });
 
   it('adds the stake witness only for a certificate on our own stake credential', () => {
@@ -109,7 +109,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
       stakeCredential: { type: Cardano.CredentialType.KeyHash, hash },
       dRep: { __typename: 'AlwaysAbstain' },
     }] } }) as never;
-    expect(analyzeTransactionForSignatures(cert(CRED), [], own, 0, '').some(s => s.type === 'stake')).toBe(true);
-    expect(analyzeTransactionForSignatures(cert(FOREIGN), [], own, 0, '').some(s => s.type === 'stake')).toBe(false);
+    expect(analyzeTransactionForSignatures(cert(CRED), [], own, '').some(s => s.type === 'stake')).toBe(true);
+    expect(analyzeTransactionForSignatures(cert(FOREIGN), [], own, '').some(s => s.type === 'stake')).toBe(false);
   });
 });

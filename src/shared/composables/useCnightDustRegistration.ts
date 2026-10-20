@@ -588,7 +588,6 @@ export function useCnightDustRegistration() {
     const signingData: Record<string, unknown> = {
       txCbor,
       partialSign: false,
-      accountIndex: 0,
       utxos: utxos.value,
       addresses: keys.value,
       mergeWitnesses: false,

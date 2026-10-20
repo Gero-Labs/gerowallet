@@ -1068,14 +1068,12 @@ export default {
    * @param address - Address to sign with
    * @param payload - Data to sign (hex)
    * @param networkId - Network Id
-   * @param accountIndex - Account index
-   * @param keys
+   * @param keys - The wallet's keys; the signing path is the matched key's
    */
   async cardanoSignMessage(
     address: string,
     payload: string,
     networkId: number,
-    accountIndex: number,
     keys: Keys,
   ): Promise<{
     signatureHex: string;

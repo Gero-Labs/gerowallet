@@ -69,7 +69,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
         sender: SENDER.extension,
       };
     } else if (data.method === 'signData') {
-      const { address, payload, accountIndex } = data;
+      const { address, payload } = data;
       // Document context has no `walletManager` (service-worker only). The
       // currently active wallet's chain/network are already mirrored onto
       // WalletStore (see CLAUDE.md "State Management"), so we resolve the
@@ -82,7 +82,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
         signatureHex: string;
         signingPublicKeyHex: string;
         addressFieldHex: string;
-      } = await trezorWeb.cardanoSignMessage(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
+      } = await trezorWeb.cardanoSignMessage(address, payload, network.networkId, WalletStore.state.keys);
 
       return {
         data: { success: true, signatureData },

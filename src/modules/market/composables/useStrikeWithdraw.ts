@@ -132,7 +132,6 @@ async function signCip8(message: string, password: string, pkBytes?: Uint8Array)
       // PRF wallets pass the pre-decrypted root key bytes instead of a password.
       password: pkBytes ? '' : password,
       ...(pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
-      accountIndex: 0,
       isUsb: false,
     },
   }) as { data?: { signature?: string; key?: string; error?: string }; error?: string };
@@ -180,7 +179,6 @@ async function signWithdrawTx(
       partialSign: false,
       password: pkBytes ? '' : password,
       ...(pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
-      accountIndex: 0,
       utxos,
       addresses: keys,
       mergeWitnesses: false,
