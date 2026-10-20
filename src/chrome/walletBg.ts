@@ -2082,6 +2082,7 @@ export class WalletBg {
     const bitcoin = await import('bitcoinjs-lib');
     const ecc = await import('tiny-secp256k1');
     const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { taprootKeyPathSigner } = await import('@/chains/bitcoin/bitcoinSigner');
     const { sha256 } = await import('@noble/hashes/sha2');
 
     const bitcoinNetwork = getBitcoinNetwork(this.network);
@@ -2091,9 +2092,13 @@ export class WalletBg {
     const tagHash = sha256(tag);
     const msgHash = Buffer.from(sha256(Buffer.concat([tagHash, tagHash, Buffer.from(message, 'utf8')])));
 
-    // P2WPKH scriptPubKey for signing key
-    const hash160 = bitcoin.crypto.hash160(pubKey);
-    const scriptPubKey = Buffer.concat([Buffer.from([0x00, 0x14]), hash160]);
+    // scriptPubKey of the address being proven: the BIP86 P2TR output of the signing
+    // key on a Taproot wallet, its P2WPKH output otherwise
+    const taproot = this.addressType === 'taproot';
+    const internalKey = Buffer.from(pubKey.subarray(1, 33));
+    const scriptPubKey = taproot
+      ? bitcoin.payments.p2tr({ internalPubkey: internalKey }).output!
+      : Buffer.concat([Buffer.from([0x00, 0x14]), bitcoin.crypto.hash160(pubKey)]);
 
     // Build virtual to_spend tx to compute its txid
     const toSpendTx = new bitcoin.Transaction();
@@ -2111,10 +2116,12 @@ export class WalletBg {
       index: 0,
       sequence: 0,
       witnessUtxo: { script: scriptPubKey, value: 0 },
+      ...(taproot && { tapInternalKey: internalKey }),
     });
     psbt.addOutput({ script: bitcoin.script.compile([bitcoin.opcodes['OP_RETURN']]), value: 0 });
 
-    psbt.signInput(0, {
+    // A Taproot output takes a Schnorr key-path signature (one 64-byte witness item)
+    psbt.signInput(0, taproot ? taprootKeyPathSigner({ privateKey: privKey, publicKey: pubKey }) : {
       publicKey: pubKey,
       sign: (hash: Buffer) => Buffer.from(ecc.sign(hash, privKey)),
     });
