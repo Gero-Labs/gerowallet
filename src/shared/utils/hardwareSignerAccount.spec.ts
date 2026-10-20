@@ -108,12 +108,50 @@ beforeAll(() => {
 });
 
 type SignTransaction = typeof trezor.signTransaction;
-const TREZOR_SIGNERS: [string, { cardanoSignTransaction: Mock }, SignTransaction][] = [
+const TREZOR_SIGNERS: [string, { cardanoSignTransaction: Mock; cardanoGetPublicKey: Mock }, SignTransaction][] = [
   ['trezor (service worker)', connectWebextension, (...args) => trezor.signTransaction(...args)],
   ['trezorWeb (document)', connectWeb, (...args) => trezorWeb.cardanoSignTransaction(...args)],
 ];
 
 describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) => {
+  let crypto: Crypto.Bip32Ed25519;
+  beforeAll(async () => { crypto = await Crypto.SodiumBip32Ed25519.create(); });
+  afterEach(() => { connect.cardanoGetPublicKey.mockReset(); connect.cardanoSignTransaction.mockReset(); });
+
+  const script = Cardano.PaymentAddress(Cardano.Address.fromBytes(HexBlob(`71${'cc'.repeat(28)}`)).toBech32());
+  const scriptUtxos: Cardano.Utxo[] = [[{ ...UTXOS[0][0], address: script }, { address: script, value: { coins: 10_000_000n } }]];
+
+  it.each([0, 1])('returns a valid 1854 multisig witness for account %i and filters unrelated keys', async (account) => {
+    const root = crypto.fromBip39Entropy(Buffer.alloc(32), '');
+    const accountKey = crypto.derivePrivateKey(root, [HARDENED + 1854, HARDENED + 1815, HARDENED + account]);
+    const witnessKey = crypto.derivePrivateKey(accountKey, [0, 0]);
+    const publicKey = crypto.getRawPublicKey(crypto.getBip32PublicKey(witnessKey));
+    const signature = crypto.sign(crypto.getRawPrivateKey(witnessKey), HexBlob(NO_COLLATERAL_TX_ID));
+    const unrelatedKey = crypto.getRawPublicKey(crypto.getBip32PublicKey(crypto.derivePrivateKey(root, [HARDENED + 1852, HARDENED + 1815, HARDENED + account, 0, 0])));
+    connect.cardanoGetPublicKey.mockResolvedValueOnce({ success: true, payload: { publicKey: crypto.getBip32PublicKey(accountKey) } });
+    connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: {
+      hash: NO_COLLATERAL_TX_ID,
+      witnesses: [{ pubKey: publicKey, signature }, { pubKey: unrelatedKey, signature }],
+    } });
+    const tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(NO_COLLATERAL_TX));
+    const signatures = await signTransaction(tx.toCore(), keysOnAccount(account), scriptUtxos, false, MAINNET, XPUB, NO_COLLATERAL_TX);
+    expect([...signatures]).toEqual([[publicKey, signature]]);
+    expect(crypto.verify(signature, HexBlob(NO_COLLATERAL_TX_ID), publicKey)).toBe(true);
+    expect(connect.cardanoGetPublicKey.mock.lastCall![0]).toMatchObject({ path: `m/1854'/1815'/${account}'`, showOnTrezor: false });
+  });
+
+  it.each([
+    { success: false, payload: { error: 'Export declined' } },
+    { success: true, payload: { publicKey: 'invalid' } },
+  ])('refuses a failed or malformed multisig key export: %j', async (response) => {
+    connect.cardanoGetPublicKey.mockResolvedValueOnce(response);
+    connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: {
+      hash: NO_COLLATERAL_TX_ID, witnesses: [{ pubKey: '11'.repeat(32), signature: '22'.repeat(64) }],
+    } });
+    const tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(NO_COLLATERAL_TX));
+    await expect(signTransaction(tx.toCore(), keysOnAccount(1), scriptUtxos, false, MAINNET, XPUB, NO_COLLATERAL_TX)).rejects.toThrow(/multisig account public key/);
+  });
+
   async function deviceRequest(keys: Keys): Promise<Trezor.CardanoSignTransaction & { additionalWitnessRequests?: string[] }> {
     connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: { hash: OWN_TX_ID, witnesses: [] } });
     await signTransaction(ownTx(), keys, UTXOS, false, MAINNET, XPUB, OWN_TX);
@@ -130,6 +168,7 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
     expect(request.certificates?.[0].path).toBe("m/1852'/1815'/1'/2/0");
     expect(request.additionalWitnessRequests).toEqual(["m/1852'/1815'/1'/2/0"]);
     expect(pathStrings(request).filter((path) => !path.startsWith("m/1852'/1815'/1'/"))).toEqual([]);
+    expect(connect.cardanoGetPublicKey).not.toHaveBeenCalled();
   });
 
   it('keeps an account 0 wallet’s paths under account 0', async () => {
