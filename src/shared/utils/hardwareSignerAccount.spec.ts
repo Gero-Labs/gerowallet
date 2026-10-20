@@ -5,6 +5,7 @@
 // stake key) for a wallet on account #1, and check that nothing in the device request says 0'.
 import { afterEach, beforeAll, describe, expect, it, vi, type Mock } from 'vitest';
 import { bech32 } from 'bech32';
+import { HexBlob } from '@cardano-sdk/util';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import * as Crypto from '@cardano-sdk/crypto';
 import { LedgerKeyAgent } from '@cardano-sdk/hardware-ledger';
@@ -14,7 +15,12 @@ import type Transport from '@ledgerhq/hw-transport';
 import type * as Trezor from '@trezor/connect';
 import { Blockchain, Keys, Network } from '@/models/types';
 import networks from '@/utils/networks';
-import { WALLET_ACCOUNT_XPUB, WALLET_ADDRESS } from '@/shared/utils/__fixtures__/handAssembledTxs';
+import {
+  NO_COLLATERAL_TX,
+  NO_COLLATERAL_TX_ID,
+  WALLET_ACCOUNT_XPUB,
+  WALLET_ADDRESS,
+} from '@/shared/utils/__fixtures__/handAssembledTxs';
 import { InvalidAccountIndexError } from '@/shared/utils/walletAccount';
 import { Ada } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
@@ -137,6 +143,20 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
     const mixed = { ...keysOnAccount(1), stake: keysOnAccount(0).stake };
     await expect(signTransaction(ownTx(), mixed, UTXOS, false, MAINNET, XPUB, OWN_TX))
       .rejects.toThrow(InvalidAccountIndexError);
+  });
+
+  it.each([1, 0])('asks for the multisig witness of account %i in a multisig transaction', async (account) => {
+    const tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(NO_COLLATERAL_TX));
+    // The input (aa…#0) sits at the script address its output pays: the wallet owns none of it.
+    const script = Cardano.PaymentAddress(Cardano.Address.fromBytes(HexBlob(`71${'cc'.repeat(28)}`)).toBech32());
+    const thirdParty: Cardano.Utxo[] = [[{ ...UTXOS[0][0], address: script }, { address: script, value: { coins: 10_000_000n } }]];
+    connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: { hash: NO_COLLATERAL_TX_ID, witnesses: [] } });
+
+    await signTransaction(tx.toCore(), keysOnAccount(account), thirdParty, false, MAINNET, XPUB, NO_COLLATERAL_TX);
+
+    expect(connect.cardanoSignTransaction.mock.lastCall![0]).toMatchObject({
+      additionalWitnessRequests: [`m/1854'/1815'/${account}'/0/0`],
+    });
   });
 });
 
