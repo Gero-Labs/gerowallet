@@ -54,7 +54,7 @@ export interface CardanoStakeIdentity {
   baseAddress: string;
   stakeAddress: string;
   paymentKeyHashHex: string;
-  /** The CIP-1852 account its keys sit at: 0 for the twin, the record's own for an imported account. */
+  /** The CIP-1852 account its keys sit at: the Midnight wallet's for the twin, the record's own for an imported account. */
   accountIndex: number;
   /** False for watch-only / hardware records. */
   canSign: boolean;
@@ -91,7 +91,8 @@ function twinStakeIdentity(): CardanoStakeIdentity | null {
     baseAddress: addrs.cardanoBaseAddress,
     stakeAddress: addrs.cardanoStakeAddress,
     paymentKeyHashHex: addrs.cardanoPaymentKeyHashHex ?? '',
-    accountIndex: 0,
+    // The twin's Cardano keys sit at the Midnight wallet's own account.
+    accountIndex: resolveAccountIndex(wallet),
     canSign: walletCanSign(wallet),
     encryptionMethod: wallet.encryptionMethod === 'prf' ? 'prf' : 'password',
   };

@@ -2376,7 +2376,7 @@ export class WalletBg {
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
       const { midnightStore } = await import('@/stores/midnightStore');
       // skipCardano: same BG-bundle pbkdf2 workaround as the other Midnight paths.
-      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
       try {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
@@ -2430,7 +2430,7 @@ export class WalletBg {
         mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
       }
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
       try {
         if (!isCurrent()) throw new Error('Wallet changed while authorizing private synchronization');
         prepareMidnightPrivateSession(this.id, network, derived.zswapSecretKey, epoch);
@@ -2484,7 +2484,7 @@ export class WalletBg {
       // build issues"). NightExternal signing doesn't need Cardano material,
       // so skip that derivation entirely.
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, this.network, this.accountIndex, { skipCardano: true });
 
       // Map our project's `Network` constant to the SDK's NetworkId string.
       // We avoid duplicating the mapping here — `midnightNetworkId` lives in
@@ -2598,7 +2598,7 @@ export class WalletBg {
 
     try {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, this.network, this.accountIndex, { skipCardano: true });
 
       const { Network } = await import('@/models/types');
       let networkId: string;
@@ -2721,7 +2721,7 @@ export class WalletBg {
       // skipCardano:true: the BG-bundle pbkdf2/sha512 shim breaks on the
       // Cardano BIP-32 derivation path. We don't need Cardano keys for a
       // Midnight transfer — same workaround we use in signMidnightSegments.
-      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
       // Everything from here to the matching finally runs with live key
       // material in memory. The wipe used to begin only at the SDK call, which
       // left the sponsor-derivation block outside it: a wrong sponsor password
@@ -2920,7 +2920,7 @@ export class WalletBg {
       // skipCardano:true: same BG-bundle pbkdf2 polyfill workaround as
       // balanceAndSignMidnightUnshieldedTransfer. Cardano material isn't
       // needed for a shielded send.
-      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
       let sponsorDustSeed: Uint8Array | undefined;
       try {
       assertSession();
