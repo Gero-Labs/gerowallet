@@ -5,13 +5,18 @@ import { LedgerKeyAgent } from '@cardano-sdk/hardware-ledger';
 import {
   AddressType,
   CommunicationType,
+  errors,
   KeyPurpose,
   KeyRole,
   TxInId,
+  util,
   type SignTransactionContext,
 } from '@cardano-sdk/key-management';
+import { HexBlob } from '@cardano-sdk/util';
 import {
   DatumType,
+  type BIP32Path,
+  type GetExtendedPublicKeyRequest,
   type SignedTransactionData,
   type SignTransactionRequest,
   type TxOutput,
@@ -62,6 +67,15 @@ const OWN_CONTEXT: SignTransactionContext = {
     [TxInId({ index: 0, txId: Cardano.TransactionId('aa'.repeat(32)) })]: { index: 0, role: KeyRole.External },
   },
 };
+
+/** The wallet's input (aa…#0) and change back to it: an ordinary transaction, nothing re-encoded. */
+const ORDINARY_TX = [
+  '84a3',
+  `00 81825820${'aa'.repeat(32)}00`, // inputs
+  `01 81825839${Cardano.Address.fromBech32(WALLET_ADDRESS).toBytes()}1a004c4b40`, // outputs: change
+  '02 1a00030d40', // fee
+  'a0 f5 f6',
+].join('').replace(/ /g, '');
 
 /** Signing TESTNET_TX: the wallet's input (aa…#0) and its testnet change address. */
 const TESTNET_CONTEXT: SignTransactionContext = {
@@ -189,14 +203,6 @@ describe('signLedgerTransaction: a testnet body’s network id, 0', () => {
 describe('signLedgerTransaction: the multisig witness of the wallet’s own account', () => {
   const hardened = (index: number) => index + 0x80000000;
   const multisigPath = (account: number) => [hardened(1854), hardened(1815), hardened(account), 0, 0];
-  /** The wallet's input (aa…#0) and change back to it: an ordinary transaction, nothing re-encoded. */
-  const ORDINARY_TX = [
-    '84a3',
-    `00 81825820${'aa'.repeat(32)}00`, // inputs
-    `01 81825839${Cardano.Address.fromBech32(WALLET_ADDRESS).toBytes()}1a004c4b40`, // outputs: change
-    '02 1a00030d40', // fee
-    'a0 f5 f6',
-  ].join('').replace(/ /g, '');
 
   it('asks for account 1’s multisig key on account #1, where the agent would ask for account 0’s', async () => {
     const signTransaction = signingDevice(SDK_ENCODED_TX_ID);
@@ -209,13 +215,13 @@ describe('signLedgerTransaction: the multisig witness of the wallet’s own acco
     expect(signTransaction.mock.lastCall![0]).toMatchObject({ additionalWitnessPaths: [multisigPath(1)] });
   });
 
-  it('leaves account #0’s multisig transaction to the agent, which asks for account 0’s key', async () => {
+  it('takes account #0’s multisig transaction from the agent too, and asks for account 0’s key', async () => {
     const signTransaction = signingDevice(SDK_ENCODED_TX_ID);
     const agentSignTransaction = vi.spyOn(agent, 'signTransaction');
 
     await signLedgerTransaction(agent, body(SDK_ENCODED_TX), CONTEXT);
 
-    expect(agentSignTransaction).toHaveBeenCalledOnce();
+    expect(agentSignTransaction).not.toHaveBeenCalled();
     expect(signTransaction.mock.lastCall![0]).toMatchObject({ additionalWitnessPaths: [multisigPath(0)] });
   });
 
@@ -245,13 +251,13 @@ describe('signLedgerTransaction: the multisig witness of the wallet’s own acco
 
 describe('signLedgerTransaction: otherwise LedgerKeyAgent.signTransaction', () => {
   it('leaves a transaction whose outputs the agent maps byte for byte to the agent', async () => {
-    signingDevice(SDK_ENCODED_TX_ID);
+    const txBody = body(ORDINARY_TX);
+    signingDevice(txBody.hash());
     const agentSignTransaction = vi.spyOn(agent, 'signTransaction');
-    const txBody = body(SDK_ENCODED_TX);
 
-    await signLedgerTransaction(agent, txBody, CONTEXT);
+    await signLedgerTransaction(agent, txBody, OWN_CONTEXT);
 
-    expect(agentSignTransaction).toHaveBeenCalledWith(txBody, CONTEXT);
+    expect(agentSignTransaction).toHaveBeenCalledWith(txBody, OWN_CONTEXT);
   });
 
   /** The request, less what signLedgerTransaction replaces: inline datum and reference script bytes. */
@@ -317,5 +323,109 @@ describe('signLedgerTransaction: otherwise LedgerKeyAgent.signTransaction', () =
     expect(agentError).toBeInstanceOf(Error);
     expect(error).toBeInstanceOf((agentError as Error).constructor);
     expect(error).toEqual(agentError);
+  });
+});
+
+describe('signLedgerTransaction: each witness carries the public key of its own path', () => {
+  /** The all-zero-entropy test wallet, whose m/1852'/1815'/0' is WALLET_ACCOUNT_XPUB, as the device holds it. */
+  let rootKey: Crypto.Bip32PrivateKeyHex;
+  beforeAll(() => {
+    rootKey = bip32Ed25519.fromBip39Entropy(Buffer.alloc(32), '');
+  });
+  const keyAt = (path: BIP32Path) => bip32Ed25519.derivePrivateKey(rootKey, path);
+  const publicKeyAt = (path: BIP32Path) => bip32Ed25519.getRawPublicKey(bip32Ed25519.getBip32PublicKey(keyAt(path)));
+  const accountPath = (purpose: KeyPurpose, account: number): BIP32Path =>
+    [util.harden(purpose), util.harden(1815), util.harden(account)];
+  const firstKeyPath = (purpose: KeyPurpose, account: number): BIP32Path =>
+    util.accountKeyDerivationPathToBip32Path(account, { index: 0, role: KeyRole.External }, purpose);
+
+  /** The wallet's account on the Ledger, with the account key the device holds for it. */
+  const walletAgent = (account: number, chainId: Cardano.ChainId = Cardano.ChainIds.Mainnet) =>
+    new LedgerKeyAgent(
+      {
+        accountIndex: account,
+        chainId,
+        communicationType: CommunicationType.Web,
+        extendedAccountPublicKey: bip32Ed25519.getBip32PublicKey(keyAt(accountPath(KeyPurpose.STANDARD, account))),
+        purpose: KeyPurpose.STANDARD,
+      },
+      { bip32Ed25519, logger: console },
+    );
+
+  /**
+   * The device: signs the transaction id with the key at each input path and extra witness path
+   * it is asked for, and exports any account key it is asked for.
+   */
+  const walletLedger = (txId: string) => {
+    const signTransaction = vi.fn(
+      async ({ tx, additionalWitnessPaths = [] }: SignTransactionRequest): Promise<SignedTransactionData> => ({
+        txHashHex: txId,
+        witnesses: [...tx.inputs.flatMap(({ path }) => (path ? [path] : [])), ...additionalWitnessPaths].map((path) => ({
+          path,
+          witnessSignatureHex: bip32Ed25519.sign(bip32Ed25519.getRawPrivateKey(keyAt(path)), HexBlob(txId)),
+        })),
+        auxiliaryDataSupplement: null,
+      }),
+    );
+    const getExtendedPublicKey = vi.fn(async ({ path }: GetExtendedPublicKeyRequest) => {
+      const xpub = bip32Ed25519.getBip32PublicKey(keyAt(path));
+      return { publicKeyHex: xpub.slice(0, 64), chainCodeHex: xpub.slice(64) };
+    });
+    vi.spyOn(LedgerKeyAgent, 'checkDeviceConnection').mockResolvedValue({ signTransaction, getExtendedPublicKey } as never);
+    return { getExtendedPublicKey };
+  };
+
+  /** For each witness, whether its signature verifies against the key it carries, over the transaction id. */
+  const verified = (signatures: Cardano.Signatures, txId: string) =>
+    [...signatures].map(([publicKey, signature]) => bip32Ed25519.verify(signature, HexBlob(txId), publicKey));
+
+  it('holds the wallet the fixtures were written for', () => {
+    expect(bip32Ed25519.getBip32PublicKey(keyAt(accountPath(KeyPurpose.STANDARD, 0)))).toBe(WALLET_ACCOUNT_XPUB);
+  });
+
+  it.each([
+    ['account #0, a body the agent sends as is', 0, SDK_ENCODED_TX, SDK_ENCODED_TX_ID],
+    ['account #1, a body the agent sends as is', 1, SDK_ENCODED_TX, SDK_ENCODED_TX_ID],
+    ['account #0, a body only the wallet sends as is', 0, NO_COLLATERAL_TX, NO_COLLATERAL_TX_ID],
+    ['account #1, a body only the wallet sends as is', 1, NO_COLLATERAL_TX, NO_COLLATERAL_TX_ID],
+  ])('pairs the multisig witness with its 1854\' key: %s', async (_, account, txCbor, txId) => {
+    const { getExtendedPublicKey } = walletLedger(txId);
+
+    const signatures = await signLedgerTransaction(walletAgent(account), body(txCbor), CONTEXT);
+
+    expect([...signatures.keys()]).toEqual([publicKeyAt(firstKeyPath(KeyPurpose.MULTI_SIG, account))]);
+    expect(verified(signatures, txId)).toEqual([true]);
+    expect(getExtendedPublicKey).toHaveBeenCalledExactlyOnceWith({ path: accountPath(KeyPurpose.MULTI_SIG, account) });
+  });
+
+  it.each([0, 1])('keeps account #%i’s input witness on its 1852\' key, and exports no other key', async (account) => {
+    const { getExtendedPublicKey } = walletLedger(TESTNET_TX_ID);
+    const context: SignTransactionContext = {
+      ...TESTNET_CONTEXT,
+      knownAddresses: TESTNET_CONTEXT.knownAddresses.map((address) => ({ ...address, accountIndex: account })),
+    };
+
+    const signatures = await signLedgerTransaction(walletAgent(account, Cardano.ChainIds.Preprod), body(TESTNET_TX), context);
+
+    expect([...signatures.keys()]).toEqual([publicKeyAt(firstKeyPath(KeyPurpose.STANDARD, account))]);
+    expect(verified(signatures, TESTNET_TX_ID)).toEqual([true]);
+    expect(getExtendedPublicKey).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['another account', firstKeyPath(KeyPurpose.STANDARD, 1)],
+    ['another account’s multisig key', firstKeyPath(KeyPurpose.MULTI_SIG, 1)],
+    ['a minting policy key', [util.harden(1855), util.harden(1815), util.harden(0)]],
+  ])('refuses a witness under %s, which the wallet never asks for', async (_, path) => {
+    device(async () => ({
+      txHashHex: NO_COLLATERAL_TX_ID,
+      witnesses: [{ path, witnessSignatureHex: 'ab'.repeat(64) }],
+      auxiliaryDataSupplement: null,
+    }));
+
+    const error = await signLedgerTransaction(walletAgent(0), body(NO_COLLATERAL_TX), CONTEXT).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(errors.TransportError);
+    expect((error as errors.TransportError).innerError).toBeInstanceOf(errors.HwMappingError);
   });
 });
