@@ -64,6 +64,12 @@ export interface Wallet {
    * device or seed, which the wallet list groups it under. Non-indexed.
    */
   parentWalletId?: number;
+  /**
+   * Set by the GeroWalletDatabase v17 upgrade on Midnight wallets that may have
+   * been marked backed up without the user confirming the phrase (#1333), and
+   * cleared at login by applyPendingBackupRecheck(). Non-indexed: no new index.
+   */
+  backupRecheckPending?: boolean;
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
   mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
   mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)
