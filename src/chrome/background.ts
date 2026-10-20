@@ -93,6 +93,7 @@ import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-
 // imports stay lazy inside them.
 import * as shieldedAddressCodecs from '@midnightntwrk/wallet-sdk-address-format';
 import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorAddresses';
+import { connectorConfiguration } from '@/chains/midnight/midnightConnectorConfiguration';
 import {
   decodeUnboundTransaction,
   isSealedMidnightTransaction,
@@ -6611,32 +6612,9 @@ app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
     const { midnightStore } = await import('@/stores/midnightStore');
     const endpoints = getMidnightEndpoints(wallet.network);
     if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${wallet.network}`);
-    // A dApp has no way to reach Gero's internal cloud prover directly, so
-    // when the user's preference is 'remote' the network's default proof
-    // server URL remains the least-wrong answer to advertise here (WP-P5:
-    // connector `getProvingProvider()` delegation is a separate, later
-    // phase). Only report the user's own local proof server once they've
-    // actually opted into local mode (WP-P1/P4). zkPaaS mode deliberately
-    // ALSO reports the default: the Arkhia endpoint is useless to a dApp
-    // without the user's API key, and a user-pasted override URL may embed
-    // that key as a path segment — advertising it would hand the user's
-    // paid credential to every connected dApp.
-    const proverServerUri = midnightStore.proofServer.mode === 'local'
-      ? midnightStore.proofServer.localUrl
-      : (endpoints.defaultProofServerUrl || undefined);
     sendResponse({
       id: request.id,
-      data: {
-        // Gero does not hand dApps an indexer or node RPC: Gero's indexer and
-        // node are private, and the wallet's own indexer access goes through
-        // gero-sync's restricted relay, which only serves the wallet SDKs'
-        // operations. dApps bring their own Midnight services.
-        indexerUri: '',
-        indexerWsUri: '',
-        proverServerUri,
-        substrateNodeUri: '',
-        networkId: midnightSdkNetworkId(wallet.network),
-      },
+      data: connectorConfiguration(endpoints, midnightStore.proofServer, midnightSdkNetworkId(wallet.network)),
       target: TARGET,
       sender: SENDER.extension,
     });

@@ -14,6 +14,14 @@ describe('Midnight indexer endpoints', () => {
     expect(endpoints?.geroSyncWsUrl).toBe('wss://sync.gerowallet.io/ws/sync');
   });
 
+  it('points no mainnet or preprod link at a retired Foundation host', () => {
+    // rpc.<env>.midnight.network is on Midnight's retired list and the
+    // preprod explorer link used to ride on it through polkadot.js.
+    for (const network of [Network.MAINNET, Network.PREPROD]) {
+      expect(JSON.stringify(getMidnightEndpoints(network))).not.toMatch(/midnight\.network/);
+    }
+  });
+
   it('ships no Blockfrost or Foundation Midnight endpoint for mainnet or preprod', () => {
     for (const network of [Network.MAINNET, Network.PREPROD]) {
       expect(JSON.stringify(getMidnightEndpoints(network))).not.toMatch(/blockfrost|project_id|midnight\.network\/api/);
