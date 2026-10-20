@@ -11,9 +11,10 @@
     img-color="var(--g-accent)"
   >
     <v-card-text class="receive-body pa-0 pt-2">
-      <!-- Which address: Cardano payment/stake/DRep, Bitcoin address type, or
-           Midnight public/private/DUST. -->
+      <!-- Which address: Cardano payment/stake/DRep, or Midnight public/private/DUST.
+           A Bitcoin wallet has one address type, so it gets no tabs. -->
       <div
+        v-if="segments.length"
         role="tablist"
         class="receive-segments"
         :aria-label="t('receive.addressType')"
@@ -327,7 +328,10 @@ const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Bitcoin state
-const bitcoinAddressType = ref('segwit');
+// The wallet's own address type. Its xpub is the account key of that type's purpose
+// alone (m/84' for SegWit): another type's addresses would come from the wrong key,
+// off the path shown, unknown to other wallets and never synced (issue 1338).
+const bitcoinAddressType = computed(() => loggedWallet.value?.addressType || 'segwit');
 const bitcoinAddressIndex = ref(0);
 const bitcoinAddress = ref('');
 const bitcoinAmount = ref('');
@@ -352,11 +356,7 @@ const activeDrepFormat = computed<DrepFormat | undefined>(() =>
 
 const segments = computed<Segment[]>(() => {
   if (isBitcoinWallet.value) {
-    return [
-      { id: 'segwit', label: t('receive.segwit') },
-      { id: 'legacy', label: t('receive.legacy') },
-      { id: 'taproot', label: t('receive.taproot') },
-    ];
+    return [];
   }
   if (isMidnightWallet.value) {
     return [
@@ -379,12 +379,6 @@ const segments = computed<Segment[]>(() => {
 const activeSegment = computed(() => (isBitcoinWallet.value ? bitcoinAddressType.value : selected.value));
 
 function selectSegment(id: string): void {
-  if (isBitcoinWallet.value) {
-    if (bitcoinAddressType.value === id) return;
-    bitcoinAddressType.value = id;
-    updateBitcoinAddress();
-    return;
-  }
   selected.value = id;
 }
 
@@ -677,6 +671,17 @@ watch(includeChange, () => {
   showAllUsed.value = false;
 });
 
+// A wallet switch while open (from the side panel or another tab) changes the
+// path shown, so derive the new wallet's address too, from index 0 as on open.
+watch(
+  () => [loggedWallet.value?.publicKey, bitcoinAddressType.value],
+  async () => {
+    if (!props.isOpen || !isBitcoinWallet.value) return;
+    bitcoinAddressIndex.value = 0;
+    await deriveBitcoinAddress();
+  },
+);
+
 watch(
   () => props.isOpen,
   async (open) => {
@@ -685,7 +690,6 @@ watch(
     showFull.value = false;
 
     if (isBitcoinWallet.value) {
-      bitcoinAddressType.value = loggedWallet.value?.addressType || 'segwit';
       bitcoinAddressIndex.value = 0;
       bitcoinAmount.value = '';
       bitcoinLabel.value = '';
