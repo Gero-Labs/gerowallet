@@ -1,6 +1,6 @@
 export const geroWalletDbName: string = 'GeroWalletDatabase';
 
-export const geroDBVersion: number = 16;
+export const geroDBVersion: number = 17;
 
 export const geroDBSchema = {
   wallets:
