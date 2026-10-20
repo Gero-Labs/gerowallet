@@ -25,7 +25,7 @@ Midnight data uses Nexus/Gero Sync, while proof generation can use direct
 Foundation/Arkhia services. See [architecture](ARCHITECTURE.md)
 for these boundaries. Feature availability depends on chain and feature flags.
 
-The development package is `2.7.3`; that version is not evidence of a published
+The development package is `2.8.0`; that version is not evidence of a published
 release. The Vue 3 migration is merged. See [maintenance](MAINTENANCE.md) for
 current checks and remaining release work.
 

@@ -1013,6 +1013,24 @@ export default {
 
       // Convert witnesses to signatures map
       const witnessesArray = signedData.witnesses || [];
+      if (signingMode === Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION && witnessesArray.length > 0) {
+        // The stored xpub is 1852', so it cannot identify the 1854' witness.
+        // Export this account's multisig xpub and keep the same strict filter.
+        const exported = await TrezorConnect.cardanoGetPublicKey({
+          path: `m/1854'/1815'/${accountIndex}'`,
+          showOnTrezor: false,
+          derivationType: fullTrezorParams.derivationType,
+        });
+        if (!exported.success) {
+          throw new errors.TransportError('Failed to export multisig account public key', exported.payload);
+        }
+        if (!/^[0-9a-f]{128}$/i.test(exported.payload.publicKey)) {
+          throw new errors.HwMappingError('Trezor returned an invalid multisig account public key');
+        }
+        const multisigXpub = bech32.encode('xpub', bech32.toWords(Buffer.from(exported.payload.publicKey, 'hex')), 1023);
+        expectedPublicKeys.splice(0, expectedPublicKeys.length,
+          this.derivePublicKeyFromXpub(multisigXpub, { role: KeyRole.External, index: 0 }));
+      }
       const signatures = new Map<Ed25519PublicKeyHex, Ed25519SignatureHex>();
 
       for (const witness of witnessesArray) {

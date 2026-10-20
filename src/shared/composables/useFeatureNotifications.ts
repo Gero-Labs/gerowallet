@@ -96,7 +96,7 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   // Settings > Advanced > Submit API
   {
     id: 'settings.advanced.submitApi',
-    version: '2.7.3',
+    version: '2.8.0',
     path: ['settings', 'advanced', 'submitApi'],
     isEnabled: () => featureFlagsStore.isSubmitApiEnabled()
   },
