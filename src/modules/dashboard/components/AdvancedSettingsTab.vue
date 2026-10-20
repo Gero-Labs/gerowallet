@@ -177,7 +177,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import SubmitApiSettingsRow from '@/modules/dashboard/components/SubmitApiSettingsRow.vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
-import { Blockchain } from '@/models/types';
+import { Blockchain, type Wallet } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import GeroStore, { geroStore } from '@/stores/geroStore';
 import { childAccounts, isHardwareWallet, parentWallet, walletDisplayName } from '@/shared/utils/walletAccount';
@@ -334,12 +334,27 @@ const removeAccountCopy = computed(() => (loggedRecord.value && isHardwareWallet
   : { helper: 'accounts.removeAccountHelperSeed', explanation: 'accounts.removeAccountExplanationSeed' }));
 const addedAccounts = computed(() => (loggedRecord.value && !isAddedAccount.value ? childAccounts(loggedRecord.value, geroStore.wallets) : []));
 
+// Logs in to `wallet`, as the drawer's account switcher does: within an unlocked
+// wallet, switching accounts asks for nothing.
+async function switchToWallet(wallet: Wallet): Promise<boolean> {
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.LOGIN, data: { wallet } });
+    return !!(response as { data?: { success?: boolean } } | undefined)?.data?.success;
+  } catch {
+    return false;
+  }
+}
+
 const deleteWalletConfirm = async () => {
   deleteWalletLoading.value = true;
   const name = isAddedAccount.value ? walletDisplayName(loggedRecord.value!, geroStore.wallets) : loggedWallet.value.name;
   const walletIds = [loggedWallet.value.id, ...addedAccounts.value.map((account) => account.id)];
+  // Removing an added account keeps the user in its wallet: switch to account #0 first,
+  // so the record being removed is never the logged one. Deleting account #0 logs out.
+  const head = isAddedAccount.value ? parentWallet(loggedRecord.value!, geroStore.wallets) : undefined;
 
   await handleCardLogout();
+  const switched = head ? await switchToWallet(head) : false;
   for (const walletId of walletIds) {
     // Push notifications: queue the server-side unlink durably BEFORE the wallet record
     // and its keys are deleted (the worker retries it on later starts if it fails now).
@@ -351,8 +366,8 @@ const deleteWalletConfirm = async () => {
     GeroStore.removeWallet(walletId);
   }
 
-  // Then logout
-  await submitLogout();
+  // Then logout, unless the user is now on account #0
+  if (!switched) await submitLogout();
   deleteWalletDialog.value = false;
   deleteWalletLoading.value = false;
   snackbar.fireSuccess(t('settings.walletDeletedSuccess', { name }));
