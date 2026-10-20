@@ -2137,7 +2137,6 @@ async function signNormal() {
         txCbor: payload.tx,
         partialSign: payload.partialSign,
         password: spendingPassword.value,
-        accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value,
         mergeWitnesses: payload.mergeWitnesses || false,
@@ -2201,7 +2200,6 @@ async function signPrf() {
         txCbor: payload.tx,
         partialSign: payload.partialSign,
         password: '',
-        accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value,
         mergeWitnesses: payload.mergeWitnesses || false,
@@ -2615,7 +2613,6 @@ async function signDataNormal() {
         address,
         payload,
         password: spendingPassword.value,
-        accountIndex: 0,
         isUsb: true,
       },
     })), approvalCurrent) as { data: { key?: string; signature?: string; error?: string } };
@@ -2757,7 +2754,7 @@ async function signDataHw() {
     // a spending-password sign — which is why Trezor signData failed with
     // "Wrong password". Maps the Trezor response's signatureData -> { signature, key }.
     if (walletType.value === WalletType.Trezor) {
-      const data = { method: 'signData', address, payload, accountIndex: 0, cip45Authorization: signingRequest?.payload?.cip45Authorization };
+      const data = { method: 'signData', address, payload, cip45Authorization: signingRequest?.payload?.cip45Authorization };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
         ? await awaitFreshApproval(async () => (dispatchTrezor(data)), approvalCurrent)
         : await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
@@ -2785,7 +2782,6 @@ async function signDataHw() {
         address,
         payload,
         password: '',
-        accountIndex: 0,
         isUsb: true,
       },
     })), approvalCurrent) as { data: { key?: string; signature?: string; error?: string } };

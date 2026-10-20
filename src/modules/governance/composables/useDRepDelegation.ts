@@ -142,7 +142,6 @@ export function useDRepDelegation(): UseDRepDelegation {
           walletContext: {
             keys,
             stakeAddress: wallet.stakeAddress,
-            accountIndex: 0,
           },
         });
         assertStakeWalletUnchanged(wallet, t);

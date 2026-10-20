@@ -26,6 +26,7 @@
  */
 import { Blockchain } from '@/models/types';
 import type { Wallet } from '@/models/types';
+import { resolveAccountIndex } from '@/shared/utils/walletAccount';
 
 /** What the sponsor wallet needs to unlock. Exactly one applies. */
 export interface SponsorCredential {
@@ -123,7 +124,7 @@ export async function deriveSponsorDustSeed(
     // skipCardano for the same reason the signing paths use it: the BG
     // bundle's pbkdf2/sha512 shim breaks on the Cardano BIP-32 derivation,
     // and a fee payment needs none of that material.
-    const derived = await deriveMidnightKeys(mnemonic, sponsor.network, 0, { skipCardano: true });
+    const derived = await deriveMidnightKeys(mnemonic, sponsor.network, resolveAccountIndex(sponsor), { skipCardano: true });
     // Only the DUST seed escapes. Everything else derived here — the
     // NightExternal key above all — stays inside this function: the sponsor
     // authorises a fee, never a transfer.

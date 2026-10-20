@@ -272,7 +272,6 @@ async function withdrawWithAbstain(): Promise<void> {
         walletContext: {
           keys: walletKeys,
           stakeAddress: wallet.stakeAddress,
-          accountIndex: 0,
         },
       },
       buildCardanoTransaction,

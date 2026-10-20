@@ -20,10 +20,19 @@ import {
 } from '@cardano-sdk/key-management';
 import { areStringsEqualInConstantTime } from '@cardano-sdk/util';
 
-/** The multisig witness LedgerKeyAgent asks the device for. */
-const multiSigWitnessPaths: BIP32Path[] = [
-  util.accountKeyDerivationPathToBip32Path(0, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG),
+/**
+ * The multisig witness to ask the device for: the CIP-1854 key of the wallet's own account.
+ * LedgerKeyAgent always asks for account 0's, which is the right key only on account #0.
+ */
+const multiSigWitnessPaths = (accountIndex: number): BIP32Path[] => [
+  util.accountKeyDerivationPathToBip32Path(accountIndex, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG),
 ];
+
+/** The agent's error mapping. */
+const agentError = (error: unknown): Error =>
+  (error as { code?: number } | null)?.code === DeviceStatusCodes.ERR_REJECTED_BY_USER
+    ? new errors.AuthenticationError('Transaction signing aborted', error)
+    : new errors.TransportError('Ledger transport failed', error);
 
 const outputFormat = (output: Serialization.TransactionOutput | undefined): TxOutputFormat =>
   output?.isBabbageOutput() ? TxOutputFormat.MAP_BABBAGE : TxOutputFormat.ARRAY_LEGACY;
@@ -68,7 +77,8 @@ const withOriginalBytes = (ledgerOutput: TxOutput, output: Serialization.Transac
  * here waits for upstream: this path is the wallet's own. ledgerSignTransaction.spec.ts compares
  * its device request with the agent's, so an upgrade that changes the agent fails there.
  *
- * Only such a transaction takes the path below, a copy of the agent's own with those put back:
+ * Only such a transaction takes the path below, a copy of the agent's own with those put back,
+ * and so does a multisig-mode transaction past account #0, for its multisig witness path:
  * every other transaction is the agent's to sign, unchanged.
  */
 export async function signLedgerTransaction(
@@ -79,19 +89,21 @@ export async function signLedgerTransaction(
   const body = txBody.toCore();
   const outputs = txBody.outputs();
   const collateralReturn = txBody.collateralReturn();
-  if (
+  const agentSendsBody =
     !outputs.some(agentReencodes) &&
     !(collateralReturn && agentReencodes(collateralReturn)) &&
-    body.networkId !== Cardano.NetworkId.Testnet
-  ) {
+    body.networkId !== Cardano.NetworkId.Testnet;
+  if (agentSendsBody && agent.accountIndex === 0) {
     return agent.signTransaction(txBody, { knownAddresses, txInKeyPathMap });
   }
 
+  let hash: string;
+  let tx: Awaited<ReturnType<typeof toLedgerTx>>;
   try {
-    const hash = txBody.hash();
+    hash = txBody.hash();
     const dRepPublicKey = await agent.derivePublicKey(util.DREP_KEY_DERIVATION_PATH);
     const dRepKeyHashHex = (await Crypto.Ed25519PublicKey.fromHex(dRepPublicKey).hash()).hex();
-    const tx = await toLedgerTx(body, {
+    tx = await toLedgerTx(body, {
       accountIndex: agent.accountIndex,
       chainId: agent.chainId,
       collateralReturnFormat: outputFormat(collateralReturn),
@@ -100,18 +112,28 @@ export async function signLedgerTransaction(
       outputsFormat: outputs.map(outputFormat),
       txInKeyPathMap,
     });
+  } catch (error) {
+    throw agentError(error);
+  }
+  const signingMode = LedgerKeyAgent.getSigningMode(tx);
+  if (agentSendsBody && signingMode !== TransactionSigningMode.MULTISIG_TRANSACTION) {
+    return agent.signTransaction(txBody, { knownAddresses, txInKeyPathMap });
+  }
+
+  try {
     tx.outputs = tx.outputs.map((ledgerOutput, index) => withOriginalBytes(ledgerOutput, outputs[index]));
     if (tx.collateralOutput && collateralReturn) tx.collateralOutput = withOriginalBytes(tx.collateralOutput, collateralReturn);
     tx.includeNetworkId = body.networkId !== undefined;
 
     const { communicationType } = agent.serializableData as SerializableLedgerKeyAgentData;
     const deviceConnection = await LedgerKeyAgent.checkDeviceConnection(communicationType, agent.deviceConnection);
-    const signingMode = LedgerKeyAgent.getSigningMode(tx);
     const result = await deviceConnection.signTransaction({
       options: { tagCborSets: txBody.hasTaggedSets() },
       signingMode,
       tx,
-      ...(signingMode === TransactionSigningMode.MULTISIG_TRANSACTION && { additionalWitnessPaths: multiSigWitnessPaths }),
+      ...(signingMode === TransactionSigningMode.MULTISIG_TRANSACTION && {
+        additionalWitnessPaths: multiSigWitnessPaths(agent.accountIndex),
+      }),
     });
     if (!areStringsEqualInConstantTime(result.txHashHex, hash)) {
       throw new errors.HwMappingError('Ledger computed a different transaction id');
@@ -129,10 +151,6 @@ export async function signLedgerTransaction(
       ),
     );
   } catch (error) {
-    // The agent's error mapping.
-    if ((error as { code?: number } | null)?.code === DeviceStatusCodes.ERR_REJECTED_BY_USER) {
-      throw new errors.AuthenticationError('Transaction signing aborted', error);
-    }
-    throw new errors.TransportError('Ledger transport failed', error);
+    throw agentError(error);
   }
 }

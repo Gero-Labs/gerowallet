@@ -130,7 +130,6 @@ describe('useVoting castVotes', () => {
     expect(args.walletContext).toEqual({
       keys: (mockWalletStore as { keys: unknown }).keys,
       stakeAddress: 'stake_test1abc',
-      accountIndex: 0,
     });
   });
 

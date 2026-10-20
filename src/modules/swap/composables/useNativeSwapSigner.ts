@@ -52,7 +52,6 @@ function cardanoUtxos(): Cardano.Utxo[] {
 interface SignTxData {
   txCbor: string;
   partialSign: true;
-  accountIndex: number;
   utxos: Cardano.Utxo[];
   addresses: unknown;
   mergeWitnesses: false;
@@ -109,7 +108,6 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
     const data: SignTxData = {
       txCbor: cbor,
       partialSign: true,
-      accountIndex: 0,
       utxos: cardanoUtxos(),
       addresses: walletStore.keys,
       mergeWitnesses: false,

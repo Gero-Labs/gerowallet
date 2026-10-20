@@ -251,6 +251,7 @@ import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourc
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
+import { resolveAccountIndex } from '@/shared/utils/walletAccount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -436,7 +437,7 @@ async function runUpgrade() {
     }
 
     const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
-    const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
+    const derived = await deriveMidnightAddresses(mnemonic, wallet.network, resolveAccountIndex(wallet));
 
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');

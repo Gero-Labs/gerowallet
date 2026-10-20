@@ -1228,7 +1228,7 @@ async function signAndSubmit() {
       method: MessageTypes.SIGN_TX,
       data: {
         txCbor: attempt.cbor, partialSign: false, password: attempt.password,
-        accountIndex: 0, utxos: attempt.inputs, addresses: attempt.addresses, mergeWitnesses: false,
+        utxos: attempt.inputs, addresses: attempt.addresses, mergeWitnesses: false,
       },
     }), attempt.current) as { data: { witnesses?: string; error?: string } };
     if (signResult.data.error) throw new Error(signResult.data.error);
@@ -1268,7 +1268,7 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
       const signResult = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: {
-          txCbor: attempt.cbor, partialSign: false, accountIndex: 0,
+          txCbor: attempt.cbor, partialSign: false,
           utxos: attempt.inputs, addresses: attempt.addresses, mergeWitnesses: false,
           privateKeyBytes: Array.from(pkBytes),
         },

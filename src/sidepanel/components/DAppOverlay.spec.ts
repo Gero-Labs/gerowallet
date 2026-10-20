@@ -124,7 +124,7 @@ describe('dApp sign-data authorization freshness', () => {
     validation.resolve();
     await flushPromises();
     expect(mocks.send).toHaveBeenCalledExactlyOnceWith({ method: MessageTypes.SIGN_DATA, data: {
-      address: ADDRESS, payload: '6869', password: 'password', cip45Authorization: undefined, accountIndex: 0, isUsb: true,
+      address: ADDRESS, payload: '6869', password: 'password', cip45Authorization: undefined, isUsb: true,
     } });
     expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(signature);
   });

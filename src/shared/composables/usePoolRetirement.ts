@@ -75,14 +75,13 @@ export function usePoolRetirement() {
         walletContext: {
           keys: keys.value,
           stakeAddress: loggedWallet.value?.stakeAddress || '',
-          accountIndex: 0,
         },
       });
 
       isConfirmDialogOpen.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error building pool retirement transaction:', error);
-      snackbar.setError(error.message || t('errors.unknownError'));
+      snackbar.setError((error instanceof Error && error.message) || t('errors.unknownError'));
     } finally {
       loading.value = false;
     }

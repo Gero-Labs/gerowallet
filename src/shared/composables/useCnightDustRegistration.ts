@@ -509,6 +509,8 @@ export function useCnightDustRegistration() {
       const usingSelfDestination = !chosen || chosen.key === 'self' || !chosen.dustAddress;
       const destinationBech32 = chosen && chosen.key !== 'self' && chosen.dustAddress
         ? chosen.dustAddress
+        // Midnight account #0 of this phrase, whatever this Cardano account's index:
+        // it is the only Midnight account Gero can open for the phrase (#1330).
         : (await deriveMidnightAddresses(mnemonic, wallet.network)).dust;
       const dustAddressHex = dustAddressToHex(destinationBech32);
       // Cache this wallet's own derived DUST address hex — the only reliable
@@ -586,7 +588,6 @@ export function useCnightDustRegistration() {
     const signingData: Record<string, unknown> = {
       txCbor,
       partialSign: false,
-      accountIndex: 0,
       utxos: utxos.value,
       addresses: keys.value,
       mergeWitnesses: false,
@@ -812,6 +813,7 @@ export function useCnightDustRegistration() {
       const outpoint = registrationOutpoint();
       const mnemonic = await decryptMnemonic(credentials);
       const { deriveMidnightAddresses, dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
+      // Midnight account #0 of this phrase, as in register().
       const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
       const dustAddressHex = dustAddressToHex(derived.dust);
       // This flow always derives THIS wallet's own address — cache it for

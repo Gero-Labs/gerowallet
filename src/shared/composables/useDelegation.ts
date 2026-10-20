@@ -234,7 +234,6 @@ export function useDelegation() {
         walletContext: {
           keys: keys.value,
           stakeAddress: loggedWallet.value?.stakeAddress || '',
-          accountIndex: 0,
         }
       });
       assertStakeWalletUnchanged(wallet, t);

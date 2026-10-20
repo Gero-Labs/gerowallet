@@ -123,7 +123,6 @@ export function useUnstake() {
           walletContext: {
             keys: keys.value,
             stakeAddress: loggedWallet.value?.stakeAddress || '',
-            accountIndex: 0,
           }
         });
         assertStakeWalletUnchanged(wallet, t);

@@ -329,7 +329,6 @@ export default defineComponent({
           data: {
             txCbor: cbor,
             partialSign: true,
-            accountIndex: 0,
             utxos: walletStore.utxos,
             addresses: walletStore.keys,
             mergeWitnesses: false,

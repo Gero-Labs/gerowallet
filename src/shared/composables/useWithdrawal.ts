@@ -126,7 +126,6 @@ export function useWithdrawal() {
           walletContext: {
             keys: keys.value,
             stakeAddress: loggedWallet.value?.stakeAddress || '',
-            accountIndex: 0,
           }
         });
       }

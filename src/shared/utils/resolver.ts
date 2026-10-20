@@ -642,7 +642,6 @@ export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
  * @param transaction - The transaction to analyze
  * @param utxos - Available UTXOs
  * @param addresses - Address mappings
- * @param accountIndex - Account index for derivation
  * @param stakeAddress - The stake address for the wallet
  * @returns Array of signers with their derivation paths
  */
@@ -650,7 +649,6 @@ export function analyzeTransactionForSignatures(
   transaction: Cardano.Tx,
   utxos: Cardano.Utxo[],
   addresses: Keys,
-  accountIndex: number,
   stakeAddress: string,
 ): Array<{ derivationPath: number[], type: string }> {
   const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];

@@ -51,8 +51,9 @@ const TREZOR_MANIFEST = {
   email: 'support@gerowallet.io',
 };
 
-const multiSigWitnessPaths: BIP32Path[] = [
-  util.accountKeyDerivationPathToBip32Path(0, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG)
+/** The CIP-1854 multisig witness of the wallet's own account (the SDK's agent always asks for account 0's). */
+const multiSigWitnessPaths = (accountIndex: number): BIP32Path[] => [
+  util.accountKeyDerivationPathToBip32Path(accountIndex, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG)
 ];
 
 const stakeCredentialCert = (certificateType: Trezor.PROTO.CardanoCertificateType): boolean =>
@@ -936,7 +937,7 @@ export default {
 
       // Map additional witness requests for all transactions (payment paths + stake path when needed)
       const additionalWitnessRequests = signingMode === Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION
-        ? multiSigWitnessPaths.map(path => bip32PathToString(path))
+        ? multiSigWitnessPaths(accountIndex).map(path => bip32PathToString(path))
         : mapAdditionalWitnessRequests(body, {
             accountIndex,
             chainId: {
@@ -1034,14 +1035,12 @@ export default {
    * @param address - Address to sign with
    * @param payload - Data to sign (hex)
    * @param networkId - Network Id
-   * @param accountIndex - Account index
-   * @param keys
+   * @param keys - The wallet's keys; the signing path is the matched key's
    */
   async signData(
     address: string,
     payload: string,
     networkId: number,
-    accountIndex: number,
     keys: Keys,
   ): Promise<{
     signatureHex: string;

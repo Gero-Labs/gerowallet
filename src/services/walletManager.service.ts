@@ -61,7 +61,7 @@ import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import { UnlockTargetChangedError } from '@/chrome/unlockStartup';
-import { secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
+import { resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
 // dynamic `import()` here cannot produce a separate chunk — Rollup inlines the
@@ -1238,16 +1238,19 @@ export class WalletManager {
       let encryptedMnemonic: string | undefined;
       let network: string | undefined;
       let chain: string | undefined;
+      let accountIndex = 0;
       if (this.walletBg?.id === walletId) {
         encryptedMnemonic = this.walletBg.encryptedMnemonic;
         network = this.walletBg.network;
         chain = this.walletBg.chain;
+        accountIndex = this.walletBg.accountIndex;
       } else {
         const { getAllWallets } = await import('@/db/gero-db');
         const record = (await getAllWallets())[walletId];
         encryptedMnemonic = record?.encryptedMnemonic;
         network = record?.network;
         chain = record?.chain;
+        if (record) accountIndex = resolveAccountIndex(record);
       }
       if (chain !== Blockchain.MIDNIGHT || !encryptedMnemonic || !network) return;
 
@@ -1257,7 +1260,7 @@ export class WalletManager {
       // deriveCardanoMaterial hits (see walletBg.buildAndSignMidnightShieldedTransfer).
       // Only the zswap seed is consumed.
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const derived = await deriveMidnightKeys(mnemonic, network, accountIndex, { skipCardano: true });
       try {
       prepareMidnightPrivateSession(walletId, network, derived.zswapSecretKey, privateEpoch);
       if (this.walletBg?.id === walletId && this.walletBg.network === network && !walletStore.isLocked) {
