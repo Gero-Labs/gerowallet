@@ -1,16 +1,19 @@
 import {
+  Ada,
   BIP32Path,
   DatumType,
   DeviceStatusCodes,
   TransactionSigningMode,
   TxOutput,
   TxOutputFormat,
+  Witness,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import * as Crypto from '@cardano-sdk/crypto';
 import { LedgerKeyAgent, toLedgerTx } from '@cardano-sdk/hardware-ledger';
 import {
-  Cip1852PathLevelIndexes,
+  Bip32Account,
+  CardanoKeyConst,
   errors,
   KeyPurpose,
   KeyRole,
@@ -27,6 +30,48 @@ import { areStringsEqualInConstantTime } from '@cardano-sdk/util';
 const multiSigWitnessPaths = (accountIndex: number): BIP32Path[] => [
   util.accountKeyDerivationPathToBip32Path(accountIndex, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG),
 ];
+
+/**
+ * The public key each witness the device returns is paired with, read from the witness's own
+ * path. LedgerKeyAgent derives every witness under its 1852' account key, so it pairs a CIP-1854
+ * multisig signature with the 1852' key at the same role and index: a key that did not make it,
+ * and the witness never verifies (issue 1347). Here a 1852' witness takes the agent's key, as
+ * before; a 1854' witness takes the multisig account key, which the wallet does not store, so the
+ * device exports it the first time one comes back. Both only at the wallet's own account, the
+ * only one it asks the device to sign with: any other witness is refused.
+ */
+const witnessPublicKeys = (agent: LedgerKeyAgent, deviceConnection: Pick<Ada, 'getExtendedPublicKey'>) => {
+  let multiSigAccount: Promise<Bip32Account> | undefined;
+  const exportMultiSigAccount = async (): Promise<Bip32Account> => {
+    const { publicKeyHex, chainCodeHex } = await deviceConnection.getExtendedPublicKey({
+      path: [util.harden(KeyPurpose.MULTI_SIG), util.harden(CardanoKeyConst.COIN_TYPE), util.harden(agent.accountIndex)],
+    });
+    return new Bip32Account(
+      {
+        accountIndex: agent.accountIndex,
+        chainId: agent.chainId,
+        extendedAccountPublicKey: Crypto.Bip32PublicKeyHex(`${publicKeyHex}${chainCodeHex}`),
+      },
+      { bip32Ed25519: agent.bip32Ed25519, blake2b: Crypto.blake2b },
+    );
+  };
+
+  return async ({ path }: Witness): Promise<Crypto.Ed25519PublicKeyHex> => {
+    const [purpose, coinType, account, role, index] = path;
+    const ownAccount =
+      path.length === 5 &&
+      coinType === util.harden(CardanoKeyConst.COIN_TYPE) &&
+      account === util.harden(agent.accountIndex);
+    if (ownAccount && purpose === util.harden(KeyPurpose.STANDARD)) {
+      return agent.derivePublicKey({ index, role });
+    }
+    if (ownAccount && purpose === util.harden(KeyPurpose.MULTI_SIG)) {
+      multiSigAccount ??= exportMultiSigAccount();
+      return (await multiSigAccount).derivePublicKey({ index, role });
+    }
+    throw new errors.HwMappingError('Ledger returned a witness for a key the wallet did not ask for');
+  };
+};
 
 /** The agent's error mapping. */
 const agentError = (error: unknown): Error =>
@@ -78,8 +123,9 @@ const withOriginalBytes = (ledgerOutput: TxOutput, output: Serialization.Transac
  * its device request with the agent's, so an upgrade that changes the agent fails there.
  *
  * Only such a transaction takes the path below, a copy of the agent's own with those put back,
- * and so does a multisig-mode transaction past account #0, for its multisig witness path:
- * every other transaction is the agent's to sign, unchanged.
+ * and so does every multisig-mode transaction, on account #0 too: the agent asks for account 0's
+ * multisig witness path whatever the account, and pairs the multisig witness with a 1852' key
+ * (see witnessPublicKeys). Every other transaction is the agent's to sign, unchanged.
  */
 export async function signLedgerTransaction(
   agent: LedgerKeyAgent,
@@ -93,9 +139,6 @@ export async function signLedgerTransaction(
     !outputs.some(agentReencodes) &&
     !(collateralReturn && agentReencodes(collateralReturn)) &&
     body.networkId !== Cardano.NetworkId.Testnet;
-  if (agentSendsBody && agent.accountIndex === 0) {
-    return agent.signTransaction(txBody, { knownAddresses, txInKeyPathMap });
-  }
 
   let hash: string;
   let tx: Awaited<ReturnType<typeof toLedgerTx>>;
@@ -139,13 +182,11 @@ export async function signLedgerTransaction(
       throw new errors.HwMappingError('Ledger computed a different transaction id');
     }
 
+    const witnessPublicKey = witnessPublicKeys(agent, deviceConnection);
     return new Map(
       await Promise.all(
         result.witnesses.map(async (witness): Promise<[Crypto.Ed25519PublicKeyHex, Crypto.Ed25519SignatureHex]> => [
-          await agent.derivePublicKey({
-            index: witness.path[Cip1852PathLevelIndexes.INDEX],
-            role: witness.path[Cip1852PathLevelIndexes.ROLE],
-          }),
+          await witnessPublicKey(witness),
           Crypto.Ed25519SignatureHex(witness.witnessSignatureHex),
         ]),
       ),
