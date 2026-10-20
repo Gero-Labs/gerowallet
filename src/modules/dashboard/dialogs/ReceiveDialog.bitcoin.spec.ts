@@ -4,7 +4,7 @@
 // synced (issue 1338).
 import * as Vue from 'vue';
 import { createTestVuetify } from '@test/helpers/vuetify';
-import { flushPromises, mount } from '@vue/test-utils';
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { deriveBitcoinAddress } = vi.hoisted(() => ({
@@ -41,6 +41,7 @@ function render(addressType: string) {
   });
 }
 
+enableAutoUnmount(afterEach);
 afterEach(() => {
   deriveBitcoinAddress.mockClear();
 });
@@ -58,5 +59,17 @@ describe('ReceiveDialog on a Bitcoin wallet', () => {
     expect(deriveBitcoinAddress.mock.calls.map(([, , type]) => type)).toEqual([addressType]);
     expect(wrapper.text()).toContain(`tb-${addressType}-0-0`);
     expect(wrapper.text()).toContain(`m/${purpose}'/1'/0'/0/0`);
+  });
+
+  it('follows a wallet switch while it is open, so the address matches the path shown', async () => {
+    const wrapper = render('segwit');
+    await flushPromises();
+
+    walletStore.loggedWallet = { id: 2, chain: Blockchain.BITCOIN, network: Network.TESTNET, addressType: 'taproot', publicKey: 'xpub-taproot', accountIndex: 0 } as never;
+    await flushPromises();
+
+    expect(deriveBitcoinAddress).toHaveBeenLastCalledWith('xpub-taproot', Network.TESTNET, 'taproot', 0, 0);
+    expect(wrapper.text()).toContain('tb-taproot-0-0');
+    expect(wrapper.text()).toContain("m/86'/1'/0'/0/0");
   });
 });

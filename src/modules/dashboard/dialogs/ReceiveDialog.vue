@@ -671,6 +671,17 @@ watch(includeChange, () => {
   showAllUsed.value = false;
 });
 
+// A wallet switch while open (from the side panel or another tab) changes the
+// path shown, so derive the new wallet's address too, from index 0 as on open.
+watch(
+  () => [loggedWallet.value?.publicKey, bitcoinAddressType.value],
+  async () => {
+    if (!props.isOpen || !isBitcoinWallet.value) return;
+    bitcoinAddressIndex.value = 0;
+    await deriveBitcoinAddress();
+  },
+);
+
 watch(
   () => props.isOpen,
   async (open) => {
