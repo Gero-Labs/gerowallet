@@ -14,7 +14,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { HDKey } from '@scure/bip32';
 import * as bip39 from 'bip39';
-import { getBitcoinNetwork } from './bitcoinPsbtBuilder';
+import { getBitcoinNetwork, isTaprootScript } from './bitcoinPsbtBuilder';
 import { deriveBitcoinAddressSetFromXpubs, type BitcoinAddressTypeName, type BitcoinDerivationInfo } from './bitcoinKeyManager';
 import type { ISignedTx } from '@/chains/common/interfaces';
 
@@ -86,6 +86,37 @@ function deriveSigningKey(
 }
 
 /**
+ * Signer for the key-path spend of the BIP86 Taproot output of `key`
+ * BIP340 Schnorr signatures made with the private key tweaked by its internal key
+ * alone (no script tree), per BIP341. `publicKey` is the tweaked output key
+ */
+export function taprootKeyPathSigner(key: { privateKey: Uint8Array; publicKey: Uint8Array }): bitcoin.Signer {
+  const internalKey = Buffer.from(key.publicKey.subarray(1, 33));
+  // BIP340 keys have an even y: negate the private key of an odd one
+  const evenKey = key.publicKey[0] === 0x03 ? ecc.privateNegate(key.privateKey) : key.privateKey;
+  const tweakedKey = ecc.privateAdd(evenKey, bitcoin.crypto.taggedHash('TapTweak', internalKey));
+  const outputKey = tweakedKey && ecc.pointFromScalar(tweakedKey);
+  if (!tweakedKey || !outputKey) {
+    throw new Error('Taproot tweak produced an invalid key');
+  }
+  return {
+    publicKey: Buffer.from(outputKey),
+    sign: () => {
+      throw new Error('A Taproot input takes a Schnorr signature');
+    },
+    signSchnorr: (hash: Buffer) => Buffer.from(ecc.signSchnorr(hash, tweakedKey)),
+  };
+}
+
+/**
+ * Whether a PSBT input spends a Taproot output, which takes a Schnorr signature
+ */
+function spendsTaproot(input: bitcoin.Psbt['data']['inputs'][number]): boolean {
+  return !!(input.tapInternalKey || input.tapBip32Derivation?.length
+    || (input.witnessUtxo && isTaprootScript(input.witnessUtxo.script)));
+}
+
+/**
  * The address input `i` spends from, read from the previous output its PSBT data carries
  */
 function spentAddress(psbt: bitcoin.Psbt, i: number, network: bitcoin.Network): string | undefined {
@@ -142,16 +173,18 @@ export function signPsbtWithMnemonic(
 
   for (let i = 0; i < inputCount; i++) {
     try {
-      // Derive signing key using bip32Derivation metadata if available. An input
-      // without it (Gero Sync UTxOs carry no path, nor do most dApp PSBTs) takes the
-      // path of the wallet address it spends from; one that spends from none falls
-      // back to external chain (0) with index 0
+      // Derive signing key using bip32Derivation (tapBip32Derivation on a Taproot
+      // input) metadata if available. An input without it (Gero Sync UTxOs carry no
+      // path, nor do most dApp PSBTs) takes the path of the wallet address it spends
+      // from; one that spends from none falls back to external chain (0) with index 0
       let chain = 0;
       let index = 0;
-      const bip32Deriv = psbtObj.data.inputs[i].bip32Derivation;
-      if (bip32Deriv && bip32Deriv.length > 0) {
+      const input = psbtObj.data.inputs[i];
+      const taproot = spendsTaproot(input);
+      const derivation = input.bip32Derivation?.[0] ?? input.tapBip32Derivation?.[0];
+      if (derivation) {
         // Parse chain and index from the path (e.g. "m/0/3" or "m/1/7")
-        const pathParts = bip32Deriv[0].path.split('/');
+        const pathParts = derivation.path.split('/');
         if (pathParts.length >= 3) {
           chain = parseInt(pathParts[pathParts.length - 2], 10);
           index = parseInt(pathParts[pathParts.length - 1], 10);
@@ -168,22 +201,30 @@ export function signPsbtWithMnemonic(
       }
       const signingKey = deriveSigningKey(accountKey, chain, index);
 
-      // Create signer object compatible with bitcoinjs-lib
-      const signer = {
-        publicKey: Buffer.from(signingKey.publicKey!),
-        sign: (hash: Buffer) => {
-          return Buffer.from(ecc.sign(hash, signingKey.privateKey!));
-        },
-      };
+      if (taproot) {
+        // A key-path spend signs against the internal key: name it if the PSBT doesn't
+        if (!input.tapInternalKey) {
+          psbtObj.updateInput(i, { tapInternalKey: Buffer.from(signingKey.publicKey!.subarray(1, 33)) });
+        }
+        psbtObj.signInput(i, taprootKeyPathSigner({ privateKey: signingKey.privateKey!, publicKey: signingKey.publicKey! }));
+      } else {
+        // Create signer object compatible with bitcoinjs-lib
+        const signer = {
+          publicKey: Buffer.from(signingKey.publicKey!),
+          sign: (hash: Buffer) => {
+            return Buffer.from(ecc.sign(hash, signingKey.privateKey!));
+          },
+        };
 
-      // Sign input with private key
-      psbtObj.signInput(i, signer);
+        // Sign input with private key
+        psbtObj.signInput(i, signer);
+      }
 
       // Validate signature — bitcoinjs-lib calls validator(pubkey, msghash, sig)
       // but tiny-secp256k1 expects verify(hash, pubkey, sig), so wrap to reorder args
       try {
         const isValid = psbtObj.validateSignaturesOfInput(i, (pubkey, msghash, sig) =>
-          ecc.verify(msghash, pubkey, sig)
+          taproot ? ecc.verifySchnorr(msghash, pubkey, sig) : ecc.verify(msghash, pubkey, sig)
         );
         if (!isValid) {
           console.warn(`Warning: Signature validation failed for input ${i}`);

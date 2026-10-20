@@ -15,8 +15,9 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
   return { default: Buffer, Buffer };
 });
 
-import { signPsbtWithMnemonic } from './bitcoinSigner';
-import { deriveBitcoinRootKey } from './bitcoinKeyManager';
+import { signAndFinalizePsbt, signPsbtWithMnemonic, taprootKeyPathSigner } from './bitcoinSigner';
+import { buildSimpleSendPsbt } from './bitcoinPsbtBuilder';
+import { deriveBitcoinAccountXpub, deriveBitcoinAddress, deriveBitcoinRootKey } from './bitcoinKeyManager';
 
 const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
 
@@ -78,5 +79,63 @@ describe('signPsbtWithMnemonic', () => {
     const foreign = pubkeyAt(0, 1, 0, OTHER_PHRASE);
 
     expect(() => signPsbtWithMnemonic(spending(foreign).toHex(), PHRASE, 'Testnet')).toThrow('Failed to sign input 0');
+  });
+});
+
+describe('Taproot (BIP86) wallets', () => {
+  /** The public key at m/86'/1'/0'/chain/index of the test phrase (Testnet). */
+  const taprootKeyAt = (chain: number, index: number) =>
+    NodeBuffer.from(deriveBitcoinRootKey(PHRASE).derive(`m/86'/1'/0'/${chain}/${index}`).publicKey!);
+  const xOnly = (pubkey: Buffer) => pubkey.subarray(1, 33);
+  const taprootScriptOf = (pubkey: Buffer) => bitcoin.payments.p2tr({ internalPubkey: xOnly(pubkey) }).output!;
+
+  /** Checks each input's witness is one Schnorr signature that its output key verifies. */
+  function expectKeyPathSpends(txHex: string, prevouts: Array<{ script: Buffer; value: number }>): void {
+    const tx = bitcoin.Transaction.fromHex(txHex);
+    const scripts = prevouts.map((p) => p.script);
+    const values = prevouts.map((p) => p.value);
+    tx.ins.forEach((input, i) => {
+      expect(input.witness).toHaveLength(1);
+      const [signature] = input.witness;
+      expect(signature).toHaveLength(64);
+      const hash = tx.hashForWitnessV1(i, scripts, values, bitcoin.Transaction.SIGHASH_DEFAULT);
+      expect(ecc.verifySchnorr(hash, scripts[i].subarray(2, 34), signature)).toBe(true);
+    });
+  }
+
+  it('tweaks the key as BIP86 does (its first mainnet receive address)', () => {
+    const key = deriveBitcoinRootKey('abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about')
+      .derive(`m/86'/0'/0'/0/0`);
+
+    const signer = taprootKeyPathSigner({ privateKey: key.privateKey!, publicKey: key.publicKey! });
+
+    expect(xOnly(signer.publicKey).toString('hex')).toBe('a60869f0dbcf1dc659c9cecbaf8050135ea9e8cdc487053f1dc6880949dc684c');
+  });
+
+  it('signs a Taproot input with a Schnorr key-path signature its output key verifies', () => {
+    const script = taprootScriptOf(taprootKeyAt(0, 2));
+    const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet })
+      .addInput({ hash: NodeBuffer.alloc(32, 1), index: 0, witnessUtxo: { script, value: 10_000 } })
+      .addOutput({ script: taprootScriptOf(taprootKeyAt(1, 0)), value: 9_000 });
+
+    const signed = signAndFinalizePsbt(psbt.toHex(), PHRASE, 'Testnet', 'taproot');
+
+    expectKeyPathSpends(signed.hex, [{ script, value: 10_000 }]);
+  });
+
+  it('builds a send from Taproot coins with Taproot path data, then signs it', () => {
+    const xpub = deriveBitcoinAccountXpub(PHRASE, 'Testnet', 'taproot');
+    const address = deriveBitcoinAddress(xpub, 'Testnet', 'taproot', 0, 3);
+    const utxo = { txHash: '11'.repeat(32), index: 0, address, value: 50_000n, confirmed: true, derivationChain: 0, derivationIndex: 3 };
+
+    const unsigned = buildSimpleSendPsbt([utxo], deriveBitcoinAddress(xpub, 'Testnet', 'taproot', 0, 4), 20_000n,
+      deriveBitcoinAddress(xpub, 'Testnet', 'taproot', 1, 0), 2, 'Testnet', xpub);
+
+    const [input] = bitcoin.Psbt.fromHex(unsigned.raw.hex as string).data.inputs;
+    expect(input.bip32Derivation).toBeUndefined();
+    expect(input.tapInternalKey!.toString('hex')).toBe(xOnly(taprootKeyAt(0, 3)).toString('hex'));
+    expect(input.tapBip32Derivation).toMatchObject([{ path: 'm/0/3', leafHashes: [] }]);
+    const signed = signAndFinalizePsbt(unsigned.raw.hex as string, PHRASE, 'Testnet', 'taproot');
+    expectKeyPathSpends(signed.hex, [{ script: input.witnessUtxo!.script, value: 50_000 }]);
   });
 });

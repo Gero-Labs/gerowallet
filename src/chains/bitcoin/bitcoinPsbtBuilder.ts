@@ -54,17 +54,29 @@ export function getBitcoinNetwork(network: string): bitcoin.Network {
   }
 }
 
+/** A PSBT input as `Psbt.addInput` takes it */
+type PsbtInputData = Parameters<bitcoin.Psbt['addInput']>[0];
+
+/**
+ * Whether `script` pays a Taproot (P2TR) output: OP_1 followed by a 32-byte key
+ */
+export function isTaprootScript(script: Uint8Array): boolean {
+  return script.length === 34 && script[0] === bitcoin.opcodes['OP_1'] && script[1] === 0x20;
+}
+
 /**
  * Convert IUnifiedUtxo to PSBT input format
  * Includes witness UTXO data required for SegWit signing
- * Optionally adds bip32Derivation metadata for correct key derivation during signing
+ * Optionally adds derivation metadata for correct key derivation during signing:
+ * bip32Derivation, or for a Taproot input its internal key and tapBip32Derivation
+ * (BIP371), since bitcoinjs-lib refuses bip32Derivation on a Taproot input
  */
 function utxoToPsbtInput(
   utxo: IUnifiedUtxo,
   network: bitcoin.Network,
   sequence: number,
   xpub?: string
-): any {
+): PsbtInputData {
   // Convert hex string to Buffer
   const txidBuffer = Buffer.from(utxo.txHash, 'hex').reverse(); // Reverse for little-endian
 
@@ -74,30 +86,32 @@ function utxoToPsbtInput(
     value: Number(utxo.value), // PSBT expects number, not bigint
   };
 
-  const input: any = {
+  const input: PsbtInputData = {
     hash: txidBuffer,
     index: utxo.index,
     witnessUtxo,
     sequence,
   };
 
-  // Add bip32Derivation if we have derivation info and xpub
+  // Add the derivation metadata if we have derivation info and xpub
   if (xpub && utxo.derivationChain !== undefined && utxo.derivationIndex !== undefined) {
     try {
       const accountNode = HDKey.fromExtendedKey(xpub);
-      const masterFingerprint = accountNode.fingerprint;
-      const childNode = accountNode.derive(`m/${utxo.derivationChain}/${utxo.derivationIndex}`);
-      if (childNode.publicKey) {
-        input.bip32Derivation = [{
-          masterFingerprint: Buffer.from(new Uint8Array([
-            (masterFingerprint >> 24) & 0xff,
-            (masterFingerprint >> 16) & 0xff,
-            (masterFingerprint >> 8) & 0xff,
-            masterFingerprint & 0xff,
-          ])),
-          pubkey: Buffer.from(childNode.publicKey),
-          path: `m/${utxo.derivationChain}/${utxo.derivationIndex}`,
-        }];
+      const masterFingerprint = Buffer.from(new Uint8Array([
+        (accountNode.fingerprint >> 24) & 0xff,
+        (accountNode.fingerprint >> 16) & 0xff,
+        (accountNode.fingerprint >> 8) & 0xff,
+        accountNode.fingerprint & 0xff,
+      ]));
+      const path = `m/${utxo.derivationChain}/${utxo.derivationIndex}`;
+      const childNode = accountNode.derive(path);
+      if (childNode.publicKey && isTaprootScript(witnessUtxo.script)) {
+        // BIP86 key-path output: the x-only child key is its internal key
+        const internalKey = Buffer.from(childNode.publicKey.subarray(1, 33));
+        input.tapInternalKey = internalKey;
+        input.tapBip32Derivation = [{ masterFingerprint, pubkey: internalKey, path, leafHashes: [] }];
+      } else if (childNode.publicKey) {
+        input.bip32Derivation = [{ masterFingerprint, pubkey: Buffer.from(childNode.publicKey), path }];
       }
     } catch (e) {
       console.warn('Failed to add bip32Derivation to PSBT input:', e);
