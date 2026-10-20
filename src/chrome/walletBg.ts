@@ -1624,14 +1624,19 @@ export class WalletBg {
    * other purposes' xpubs — see `deriveBitcoinAddressSet(mnemonic, ...)` in
    * bitcoinKeyManager for the mnemonic-derived, contract-complete union; wiring
    * that at unlock time is a later phase.
+   *
+   * Built once: the xpub, type and network are fixed for a WalletBg, and every
+   * Gero Sync UTxO update reads the derivation map.
    */
   deriveBitcoinAddressSet(): BitcoinAddressSet {
     const addressType = (this.addressType || 'segwit') as BitcoinAddressTypeName;
-    return deriveBitcoinAddressSetFromXpubs(
+    return (this.bitcoinAddressSet ??= deriveBitcoinAddressSetFromXpubs(
       { [addressType]: this.publicKey },
       this.network
-    );
+    ));
   }
+
+  private bitcoinAddressSet?: BitcoinAddressSet;
 
   async fetchBitcoinUtxos(): Promise<IUnifiedUtxo[]> {
     const { BitcoinApi } = await import('@/api/bitcoin-api');

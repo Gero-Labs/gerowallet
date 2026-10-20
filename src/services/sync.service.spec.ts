@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SyncService } from './sync.service';
 import type { WalletBg } from '@/chrome/walletBg';
+import type { WsSyncMessage } from '@/services/websocket.service';
 import { Blockchain } from '@/models/types';
+import WalletStore from '@/stores/walletStore';
 
 vi.mock('@/api/api', () => ({ Api: class {} }));
 vi.mock('@/api/blockchain-api', () => ({ default: {} }));
@@ -9,7 +11,7 @@ vi.mock('@/chrome/walletBg', () => ({ WalletBg: class {} }));
 vi.mock('@cardano-sdk/core', () => ({ Serialization: {} }));
 vi.mock('@/stores/loading', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: { setTip: vi.fn() } }));
-vi.mock('@/stores/walletStore', () => ({ default: { state: {} }, walletStore: {} }));
+vi.mock('@/stores/walletStore', () => ({ default: { state: {}, setUtxos: vi.fn() }, walletStore: {} }));
 vi.mock('@/services/websocket.service', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
 
@@ -257,5 +259,27 @@ describe('stake account recovery and preflight', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Bitcoin UTxOs from Gero Sync', () => {
+  it('carry the chain and index of the wallet address they sit at, so signing uses its key', async () => {
+    const wallet = {
+      chain: Blockchain.BITCOIN,
+      deriveBitcoinAddressSet: () => ({ derivationMap: { 'tb1q-change-2': { addressType: 'segwit', chain: 1, index: 2 } } }),
+    };
+    const service = new SyncService(wallet as unknown as WalletBg);
+
+    await service.applyBitcoinSync({
+      type: 'SYNC',
+      utxos: [
+        { txid: 'aa', vout: 0, value: 1000, address: 'tb1q-change-2' },
+        { txid: 'bb', vout: 1, value: 500, address: 'tb1q-not-watched' },
+      ],
+    } as unknown as WsSyncMessage);
+
+    const [utxos] = vi.mocked(WalletStore.setUtxos).mock.calls[0];
+    expect(utxos).toMatchObject([{ txHash: 'aa', derivationChain: 1, derivationIndex: 2 }, { txHash: 'bb' }]);
+    expect(utxos[1]).not.toHaveProperty('derivationChain');
   });
 });

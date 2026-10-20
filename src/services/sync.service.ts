@@ -451,8 +451,13 @@ export class SyncService {
 
     // 2) UTxOs — full current set per contract; replace + recompute bitcoinBalance
     //    through the same setUtxos path the poller uses (calculateBitcoinBalance).
+    //    Each carries its address's chain/index, as the poller's do, so signing
+    //    uses that address's key.
     if (Array.isArray(payload['utxos'])) {
-      const convertedUtxos = convertBtcUtxos(payload['utxos'] as BtcUtxo[]);
+      const convertedUtxos = convertBtcUtxos(
+        payload['utxos'] as BtcUtxo[],
+        this.walletBg.deriveBitcoinAddressSet().derivationMap,
+      );
       await WalletStore.setUtxos(convertedUtxos);
     }
 

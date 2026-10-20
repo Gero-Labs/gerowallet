@@ -14,6 +14,7 @@
  */
 
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
+import type { BitcoinDerivationInfo } from './bitcoinKeyManager';
 import {
   TransactionType,
   type UnifiedTransaction,
@@ -80,8 +81,15 @@ export interface BtcAccount {
  * unchanged; `confirmed` drives available-vs-total balance; `raw` keeps the wire
  * object (same fields the send-side reads off poller UTxOs, plus a harmless
  * `address`). Entries missing txid/vout are skipped rather than breaking the batch.
+ *
+ * `derivations` maps the wallet's own addresses to their place in its HD tree
+ * (`BitcoinAddressSet.derivationMap`). A UTxO at one of them carries its chain and
+ * index, as the poller's do, so the PSBT built from it names the key that spends it.
  */
-export function convertBtcUtxos(wireUtxos: BtcUtxo[] | undefined | null): IUnifiedUtxo[] {
+export function convertBtcUtxos(
+  wireUtxos: BtcUtxo[] | undefined | null,
+  derivations: Record<string, Pick<BitcoinDerivationInfo, 'chain' | 'index'>> = {},
+): IUnifiedUtxo[] {
   if (!Array.isArray(wireUtxos)) {
     return [];
   }
@@ -90,6 +98,7 @@ export function convertBtcUtxos(wireUtxos: BtcUtxo[] | undefined | null): IUnifi
     if (!u || u.txid == null || u.vout == null) {
       continue;
     }
+    const at = u.address && Object.hasOwn(derivations, u.address) ? derivations[u.address] : undefined;
     try {
       result.push({
         txHash: u.txid,
@@ -98,6 +107,7 @@ export function convertBtcUtxos(wireUtxos: BtcUtxo[] | undefined | null): IUnifi
         value: BigInt(u.value ?? 0),
         confirmed: u.status?.confirmed ?? false,
         raw: u,
+        ...(at && { derivationChain: at.chain, derivationIndex: at.index }),
       });
     } catch {
       // Skip a malformed entry (e.g. non-integer value) rather than break the batch.
