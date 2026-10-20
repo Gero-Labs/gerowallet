@@ -122,3 +122,29 @@ describe('the Remote Signing gate of an added account', () => {
     }
   });
 });
+
+describe('the public key row', () => {
+  it('calls a Cardano key Ed25519', async () => {
+    const wrapper = render({ ...daily });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('settings.ed25519ExtendedKey');
+  });
+
+  it('calls a Bitcoin key an xpub, not Ed25519', async () => {
+    const wrapper = render({ ...daily, chain: 'Bitcoin', addressType: 'segwit' });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('settings.bitcoinExtendedKey');
+    expect(wrapper.text()).not.toContain('settings.ed25519ExtendedKey');
+  });
+
+  it('is not shown on Midnight, whose public key is a list of addresses', async () => {
+    const wrapper = render({ ...daily, chain: 'Midnight', publicKey: '{"unshielded":"mn_addr_test1"}' });
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('accounts.accountPublicKey');
+    expect(wrapper.text()).not.toContain('settings.extendedPublicKey');
+    expect(wrapper.text()).not.toContain('settings.ed25519ExtendedKey');
+  });
+});

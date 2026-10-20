@@ -1,7 +1,7 @@
 <template>
   <v-window-item eager>
     <v-list nav class="transparent px-0">
-      <v-list-item class="px-2 py-1">
+      <v-list-item v-if="showsPublicKey" class="px-2 py-1">
         <v-avatar class="my-0" style="align-self: self-start;">
           <v-icon
             start
@@ -16,7 +16,7 @@
             <h3 style="color: white; font-size: 16px;">{{ inAccountGroup ? $t('accounts.accountPublicKey', { index: loggedWallet?.accountIndex ?? 0 }) : $t('settings.extendedPublicKey') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            {{ $t('settings.ed25519ExtendedKey') }}
+            {{ $t(publicKeyKind) }}
           </v-list-item-subtitle>
           <v-list-item-subtitle class="text-left">
             <CopyButton v-if="loggedWallet" :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
@@ -576,6 +576,14 @@ const isMpcWallet = computed(() => loggedWallet.value?.encryptionMethod === 'mpc
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
 });
+
+// The public key row: a Bitcoin wallet's key is a secp256k1 BIP32 account xpub, the
+// Cardano-family chains' an Ed25519 extended key. A Midnight wallet's publicKey is a
+// JSON of its addresses, not a key, so it gets no row.
+const showsPublicKey = computed(() => loggedWallet.value?.chain !== Blockchain.MIDNIGHT);
+const publicKeyKind = computed(() =>
+  loggedWallet.value?.chain === Blockchain.BITCOIN ? 'settings.bitcoinExtendedKey' : 'settings.ed25519ExtendedKey',
+);
 
 // Remote signing: shown for Cardano software wallets when the server flag is on.
 const canRemoteSigning = computed(() =>
