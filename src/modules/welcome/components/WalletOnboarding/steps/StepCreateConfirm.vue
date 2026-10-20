@@ -288,7 +288,8 @@ const walletCreationStep = async (): Promise<void> => {
         { chain: props.network.blockchain, network: props.network.network },
       );
     }
-    const newPhrase = accounts.length ? { generatedMnemonic: true } : {};
+    // Midnight also generates its phrase here, even with a single account.
+    const newPhrase = preGeneratedMnemonic ? { generatedMnemonic: true } : {};
 
     if (props.securityMethod === 'prf') {
       // ========================================================================

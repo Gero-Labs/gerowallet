@@ -216,6 +216,7 @@ export class WalletManager {
           WalletStore.setLocked(!mpcSessionCache.get(secretsWalletId(wallet)));
         }
 
+        await this.recheckBackup(wallet.id);
         LoadingState.setText('Restoring wallet...');
         // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
         // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
@@ -256,6 +257,23 @@ export class WalletManager {
     if (wallet?.parentWalletId == null) return wallet;
     const { getAllWallets } = await import('@/db/gero-db');
     return withGroupSecrets(wallet, await getAllWallets());
+  }
+
+  /**
+   * A Midnight wallet stamped by the GeroWalletDatabase v17 upgrade goes back to
+   * "backup required" (#1333). Awaited after the WalletBg is built and before it
+   * initializes, so the config loader reads the reset flag and no task outlives
+   * the login. Never throws: a failure keeps the stamp for the next login.
+   */
+  private async recheckBackup(walletId: number): Promise<void> {
+    try {
+      const { applyPendingBackupRecheck } = await import('@/db/gero-db');
+      if (await applyPendingBackupRecheck(walletId)) {
+        debugLog('WalletManager: recovery phrase backup is pending again');
+      }
+    } catch (error) {
+      debugLog('WalletManager: backup recheck deferred:', error);
+    }
   }
 
   /**
@@ -350,6 +368,7 @@ export class WalletManager {
           WalletStore.setLocked(!mpcSessionCache.get(secretsWalletId(wallet)));
         }
 
+        await this.recheckBackup(wallet.id);
         LoadingState.setText('Initializing wallet...');
 
         // Check if this is a first-time restore (no cached data).

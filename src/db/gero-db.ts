@@ -4,7 +4,7 @@ import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/
 import * as bip39 from 'bip39';
 import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
-import { clearDbCache } from '@/db/wallet-db';
+import { clearDbCache, getDb as getWalletDb } from '@/db/wallet-db';
 import { deleteStoreCacheScope } from '@/utils/storeCache';
 import { withoutViewingKey } from '@/chains/midnight/midnightRecordScrub';
 import { sealKeySecret, sealTextSecret } from '@/shared/utils/secretWriters';
@@ -126,7 +126,7 @@ export async function getDb() {
   // resolve to testnet). The Midnight bech32m addresses do change HRP
   // (`mn_addr_preview…` → `mn_addr_stagenet…`), which is correct — they name a
   // different chain.
-  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+  db.version(16).stores(geroDBSchema).upgrade(async (tx) => {
     debugLog('Upgrading GeroWalletDatabase to v16: Midnight preview → stagenet...');
     try {
       const wallets = await tx.table('wallets').toArray();
@@ -139,6 +139,32 @@ export async function getDb() {
       debugLog(`GeroWalletDatabase v16 migration complete (${migrated} Midnight wallet(s) moved to stagenet)`);
     } catch (error) {
       debugLog('GeroWalletDatabase v16 migration failed:', error);
+      throw error;
+    }
+  });
+
+  // Version 17: re-ask Midnight wallets for their recovery phrase backup (#1333).
+  // Midnight creation hands gero-db a phrase generated in the page, and before
+  // the fix every such wallet was stored as a restore, so it was marked backed
+  // up without the user ever confirming the phrase. A created wallet and a
+  // restored one leave identical records, so every Midnight wallet holding a
+  // phrase from before this version is stamped; the stamp is consumed at login
+  // by applyPendingBackupRecheck(), which lives here because the backup flag is
+  // in the per-wallet database this transaction cannot reach. Wallets created
+  // after this upgrade are never stamped: their flag is already right.
+  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+    debugLog('Upgrading GeroWalletDatabase to v17: Midnight backup recheck...');
+    try {
+      const wallets = await tx.table('wallets').toArray();
+      let stamped = 0;
+      for (const wallet of wallets) {
+        if (wallet.chain !== Blockchain.MIDNIGHT || !(wallet.encryptedMnemonic || wallet.prfEncryptedMnemonic)) continue;
+        await tx.table('wallets').update(wallet.id, { backupRecheckPending: true });
+        stamped += 1;
+      }
+      debugLog(`GeroWalletDatabase v17 migration complete (${stamped} Midnight wallet(s) to recheck)`);
+    } catch (error) {
+      debugLog('GeroWalletDatabase v17 migration failed:', error);
       throw error;
     }
   });
@@ -203,6 +229,27 @@ export async function getAllWallets() {
     walletsMap[wallet.id] = wallet;
   });
   return walletsMap;
+}
+
+/**
+ * Consume a wallet's v17 backup-recheck stamp (see the v17 upgrade): a stamped
+ * wallet stored as backed up goes back to "backup required", so the existing
+ * reminder asks once for the phrase to be confirmed. The record is read from
+ * the database, never from a request. The flag is reset before the stamp is
+ * cleared, so an interrupted run only repeats at the next login, and a wallet
+ * already pending backup just loses its stamp. Returns whether it was reset.
+ */
+export async function applyPendingBackupRecheck(walletId: number): Promise<boolean> {
+  const db: Dexie = await getDb();
+  const wallet: Wallet | undefined = await db['wallets'].get(walletId);
+  if (!wallet?.backupRecheckPending) return false;
+  const walletDb = await getWalletDb(walletId);
+  if (!walletDb) return false;
+  const config = walletDb.table('config');
+  const reset = (await config.get('backup'))?.value === true;
+  if (reset) await config.put({ key: 'backup', value: false });
+  await db['wallets'].update(walletId, { backupRecheckPending: undefined });
+  return reset;
 }
 
 export async function createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
