@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Network } from '@/models/types';
-import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9, getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
 import {
   DappProvingUnavailableError,
   describeDappProvingFailure,
@@ -104,6 +104,11 @@ describe('resolveDappProvingTarget', () => {
 
   it('throws when the network has no Midnight endpoints at all', () => {
     expect(() => resolveDappProvingTarget('not-a-midnight-network', base, CONSENT)).toThrow(DappProvingUnavailableError);
+  });
+
+  it('falls back to the ledger-9 default proof server for stagenet on Gero Cloud', () => {
+    expect(resolveDappProvingTarget(Network.STAGENET, base, CONSENT))
+      .toEqual({ url: DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9, source: 'default' });
   });
 
   it('delegates stagenet dapp proofs to the ledger-9 local server', () => {

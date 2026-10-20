@@ -134,7 +134,9 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     network: Network.STAGENET,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
-    defaultProofServerUrl: 'http://localhost:6300',
+    // Ledger 9's local proof server binds 6301 (midnightProofServerPort), so
+    // the stagenet default must not be the ledger-8 server on 6300.
+    defaultProofServerUrl: 'http://localhost:6301',
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
     publicIndexerUrl: 'https://indexer.stagenet.shielded.tools/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws',
@@ -151,7 +153,9 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
     ...geroSyncIndexerRelay('preprod'),
     faucetUrl: 'https://midnight-tmnight-preprod.nethermind.dev',
-    blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.preprod.midnight.network#/explorer',
+    // Explorers as listed in Midnight's networks guide. The old polkadot.js
+    // link rode on rpc.preprod.midnight.network, which is on its retired list.
+    blockExplorerUrl: 'https://preprod.midnightexplorer.com',
     sdkNetworkId: 'preprod',
   },
   [Network.MAINNET]: {
@@ -161,7 +165,8 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     defaultProofServerUrl: 'http://localhost:6300',
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_MAINNET,
     ...geroSyncIndexerRelay('mainnet'),
-    blockExplorerUrl: 'https://explorer.mainnet.cloudwalk.io',
+    // explorer.mainnet.cloudwalk.io now 301s to Cloudwalk's homepage.
+    blockExplorerUrl: 'https://midnightexplorer.com',
     sdkNetworkId: 'mainnet',
   },
 };
