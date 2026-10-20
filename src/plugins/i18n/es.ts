@@ -2808,6 +2808,7 @@ export default {
   'common.backup': 'Respaldar',
   'settings.backupYourSeedPhrase': 'Respalda tu frase de recuperación',
   'settings.backupSeedPhraseWarning': 'Protege tus activos: guarda tu frase de recuperación de forma segura. Si la pierdes, perderás el acceso a todos tus fondos.',
+  'settings.bitcoinExtendedKey': 'Clave pública extendida de Bitcoin (xpub) de la billetera',
   'settings.blockExplorer': 'Explorador de bloques',
   'settings.blockExplorerHelper': 'Dónde se abren los enlaces a transacciones, direcciones y pools de esta billetera',
   'settings.blockExplorerPartial': 'Algunos enlaces no están disponibles en {explorer} y se abren en {fallback}.',

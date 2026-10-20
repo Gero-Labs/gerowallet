@@ -3365,6 +3365,7 @@ export default {
   'settings.backupSeedPhraseWarning': 'Schützen Sie Ihre Vermögenswerte: Bewahren Sie Ihre Wiederherstellungsphrase sicher auf. Wenn Sie sie verlieren, verlieren Sie den Zugriff auf alle Ihre Mittel.',
   'settings.backupWallet': 'Wallet sichern',
   'settings.backupYourSeedPhrase': 'Sichern Sie Ihre Wiederherstellungsphrase',
+  'settings.bitcoinExtendedKey': 'Erweiterter öffentlicher Bitcoin-Schlüssel (xpub) für die Wallet',
   'settings.blockExplorer': 'Block-Explorer',
   'settings.blockExplorerHelper': 'Wo Links zu Transaktionen, Adressen und Pools für diese Wallet geöffnet werden',
   'settings.blockExplorerPartial': 'Manche Links gibt es bei {explorer} nicht, sie öffnen sich stattdessen in {fallback}.',

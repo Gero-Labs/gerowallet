@@ -2874,6 +2874,7 @@ export default {
   'common.backup': 'Backup',
   'settings.backupYourSeedPhrase': 'Backup your seed phrase',
   'settings.backupSeedPhraseWarning': 'Safeguard your assets: store your recovery phrase securely. If you lose it, you\'ll lose access to all your funds.',
+  'settings.bitcoinExtendedKey': 'Bitcoin extended public key (xpub) for the wallet',
   'settings.blockExplorer': 'Block Explorer',
   'settings.blockExplorerHelper': 'Where links to transactions, addresses and pools open for this wallet',
   'settings.blockExplorerPartial': 'Some links aren\'t available on {explorer} and open in {fallback} instead.',
