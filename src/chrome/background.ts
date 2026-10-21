@@ -2359,20 +2359,27 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
     // Anchor mismatch (wrong Google account for this recovery) surfaces as a
     // clean message; the raw MpcValidationError is not leaked.
     const { MpcValidationError, NoRecoveryBackupError } = await import('@/shared/utils/mpc');
+    const { DuplicateWalletError } = await import('@/db/gero-db');
     let message: string;
     let code: string | undefined;
+    // The wallet already on this device, which the restore step logs in to instead.
+    let walletId: number | undefined;
     if (error instanceof NoRecoveryBackupError) {
       message = 'No recovery backup found for this Google account';
       code = 'no_recovery_backup';
     } else if (error instanceof MpcValidationError) {
       message = "This recovery doesn't match this Google account.";
+    } else if (error instanceof DuplicateWalletError) {
+      message = 'This wallet is already on this device';
+      code = 'wallet_exists';
+      walletId = error.existingWallet.id;
     } else {
       message = getErrorMessage(error, 'Failed to recover MPC wallet');
     }
     console.error('Error recovering MPC Google wallet:', message);
     sendResponse({
       id: request.id,
-      data: { success: false, error: message, code },
+      data: { success: false, error: message, code, walletId },
       target: TARGET,
       sender: SENDER.extension,
     });

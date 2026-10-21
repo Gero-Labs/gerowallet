@@ -9,8 +9,10 @@ export interface GoogleWalletBgResponse {
   data?: {
     success?: boolean;
     error?: string;
-    /** Machine-readable failure reason (currently only CREATE_MPC_GOOGLE_WALLET's
-     *  'already_enrolled' 409). Prefer this over matching `error` text. */
+    /** Machine-readable failure reason: CREATE_MPC_GOOGLE_WALLET's 'already_enrolled'
+     *  409, and RECOVER_MPC_GOOGLE_WALLET's 'no_recovery_backup' and 'wallet_exists'
+     *  (the wallet is already on this device; `walletId` names it). Prefer this over
+     *  matching `error` text. */
     code?: string;
     tokens?: { idToken: string; accessToken: string };
     walletId?: number;
