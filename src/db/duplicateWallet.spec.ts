@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { bech32 } from 'bech32';
 import { Blockchain, Network, Theme, WalletType } from '@/models/types';
 import type { Wallet } from '@/models/types';
-import { createNewHardwareWallet, createNewWallet, findExistingWallet, getAllWallets, DuplicateWalletError } from '@/db/gero-db';
+import { createMpcGoogleWallet, createNewHardwareWallet, createNewWallet, findExistingWallet, getAllWallets, DuplicateWalletError } from '@/db/gero-db';
 
 // Fixed test vector — never used to hold funds.
 const MNEMONIC = 'test walk nut penalty hip pave soap entry language right filter choice';
@@ -95,5 +95,32 @@ describe('duplicate hardware pairing', () => {
     const watch = { name: 'Watch', icon: 'icon', type: WalletType.Watch, theme: Theme.GERO, chain: Blockchain.CARDANO, network: Network.MAINNET, publicKey: '' };
     expect(typeof await createNewHardwareWallet({ ...watch, watchAddress: 'addr1-a' })).toBe('number');
     expect(typeof await createNewHardwareWallet({ ...watch, watchAddress: 'addr1-b' })).toBe('number');
+  });
+});
+
+describe('duplicate Google (MPC) restore', () => {
+  // A Google wallet's account xpub as onboarding stores it (bech32 over key + chain code).
+  const GOOGLE_XPUB = bech32.encode('xpub', bech32.toWords(Buffer.from('cd'.repeat(64), 'hex')), 1023);
+
+  function restoreGoogle(name: string, network: string = Network.MAINNET) {
+    return createMpcGoogleWallet({
+      name, icon: 'icon', theme: Theme.GERO, chain: Blockchain.CARDANO, network,
+      userId: 'google-sub-1', publicKey: GOOGLE_XPUB, encryptedDeviceShare: 'sealed-device-share',
+    });
+  }
+
+  it('refuses a second copy of a Google wallet already on this device, and stores none', async () => {
+    const firstId = await restoreGoogle('Daily');
+
+    const refused = await restoreGoogle('Daily again').catch((error: unknown) => error);
+
+    expect(refused).toBeInstanceOf(DuplicateWalletError);
+    expect((refused as DuplicateWalletError).existingWallet.id).toBe(firstId);
+    const copies = Object.values(await storedWallets()).filter((w) => w.publicKey === GOOGLE_XPUB);
+    expect(copies).toHaveLength(1);
+  });
+
+  it('still allows the same Google account on another network', async () => {
+    expect(typeof await restoreGoogle('Daily preprod', Network.PREPROD)).toBe('number');
   });
 });

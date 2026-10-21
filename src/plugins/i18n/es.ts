@@ -3851,6 +3851,7 @@ export default {
   'welcome.unlockPasswordOnly': 'Ingresa tu contraseña de gasto para desbloquear esta billetera.',
   'welcome.setUpPasskeyThisDevice': 'Configurar una PassKey en este dispositivo',
   'welcome.googleWalletAlreadyExists': 'Ya tienes la billetera "{name}" en este dispositivo con esta cuenta.\nInicia sesión en lugar de crear una nueva.',
+  'welcome.googleWalletAlreadyRestored': 'Ya tienes la billetera "{name}" en este dispositivo con esta cuenta.\nInicia sesión en ella en lugar de restaurarla de nuevo.',
   'welcome.logInToThisWallet': 'Iniciar sesión en esta billetera',
   'welcome.googleWalletEnrolledRestore': 'Esta cuenta de Google ya tiene una billetera.\nRestáurala en este dispositivo con tu cuenta de Google y tu contraseña de recuperación.',
   'welcome.restoreThisWallet': 'Restaurar esta billetera',

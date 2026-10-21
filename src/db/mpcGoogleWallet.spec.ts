@@ -57,7 +57,9 @@ describe('findMpcGoogleWallet', () => {
   });
 
   it('does not match a different account', async () => {
-    await createMpcGoogleWallet({ ...base, network: 'mainnet', userId: 'sub-a' });
+    // Another Google account's wallet has its own key (a wallet with the same key on the
+    // same network is the same wallet, which createMpcGoogleWallet refuses to store twice).
+    await createMpcGoogleWallet({ ...base, publicKey: 'xpub-a', network: 'mainnet', userId: 'sub-a' });
     expect(await findMpcGoogleWallet('sub-b', 'cardano', 'mainnet')).toBeNull();
   });
 

@@ -4452,6 +4452,7 @@ export default {
   'welcome.unlockPasswordOnly': 'Gib dein Ausgabepasswort ein, um diese Wallet zu entsperren.',
   'welcome.setUpPasskeyThisDevice': 'Passkey auf diesem Gerät einrichten',
   'welcome.googleWalletAlreadyExists': 'Du hast auf diesem Gerät bereits die Wallet „{name}" mit diesem Konto.\nMelde dich an, statt eine neue zu erstellen.',
+  'welcome.googleWalletAlreadyRestored': 'Du hast auf diesem Gerät bereits die Wallet „{name}" mit diesem Konto.\nMelde dich bei ihr an, statt sie erneut wiederherzustellen.',
   'welcome.logInToThisWallet': 'Bei dieser Wallet anmelden',
   'welcome.googleWalletEnrolledRestore': 'Dieses Google-Konto hat bereits eine Wallet.\nStelle sie auf diesem Gerät mit deinem Google-Konto und deinem Wiederherstellungspasswort wieder her.',
   'welcome.restoreThisWallet': 'Diese Wallet wiederherstellen',

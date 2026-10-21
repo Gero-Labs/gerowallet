@@ -781,6 +781,12 @@ export async function createMpcGoogleWallet(params: {
     mpcPrfSaltId: params.mpcPrfSaltId,
   };
 
+  // A wallet already on this device is logged in to, never restored a second time
+  // (onboarding offers only "Log in" for it): refuse the copy, like every other wallet.
+  const wallets: Record<number, Wallet> = await getAllWallets();
+  const duplicate = findDuplicateWallet(walletData, Object.values(wallets));
+  if (duplicate) throw new DuplicateWalletError(duplicate);
+
   const walletId = await db['wallets'].add(walletData);
   await createNewWalletDb(walletId, false, false);
   return walletId as number;

@@ -3928,6 +3928,7 @@ export default {
   'welcome.unlockPasswordOnly': 'Enter your spending password to unlock this wallet.',
   'welcome.setUpPasskeyThisDevice': 'Set up a passkey on this device',
   'welcome.googleWalletAlreadyExists': 'You already have the wallet "{name}" on this device with this account.\nLog in instead of creating a new one.',
+  'welcome.googleWalletAlreadyRestored': 'You already have the wallet "{name}" on this device with this account.\nLog in to it instead of restoring it again.',
   'welcome.logInToThisWallet': 'Log in to this wallet',
   'welcome.googleWalletEnrolledRestore': 'This Google account already has a wallet.\nRestore it on this device with your Google account and recovery password.',
   'welcome.restoreThisWallet': 'Restore this wallet',

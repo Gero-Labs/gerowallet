@@ -21,9 +21,23 @@
       </div>
     </template>
 
-    <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
+    <!-- This Google account's wallet is already on this device: log in to it, never
+         restore a second copy. -->
+    <v-alert
+      v-if="existingWallet"
+      color="info"
+      icon="mdi-information-outline"
+      variant="outlined"
+      density="compact"
+      border="start"
+      class="mt-3 mb-0"
+    >
+      <span class="t-body" style="white-space: pre-line;">{{ $t('welcome.googleWalletAlreadyRestored', { name: existingWallet.name }) }}</span>
+    </v-alert>
 
-    <v-form ref="restoreForm" v-model="formValid" style="width: 100%;">
+    <v-divider v-if="!existingWallet" class="my-3" style="border-color: var(--g-hairline-1);" />
+
+    <v-form v-if="!existingWallet" ref="restoreForm" v-model="formValid" style="width: 100%;">
       <!-- Wallet name -->
       <label :for="nameId" class="t-label d-block mb-2">{{ $t('welcome.walletName') }}</label>
       <v-text-field
@@ -134,6 +148,15 @@
       <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
       <GButton
+        v-if="existingWallet"
+        tier="primary"
+        @click="openUnlockExisting()"
+        class="step-next"
+      >
+        {{ $t('welcome.logInToThisWallet') }}
+      </GButton>
+      <GButton
+        v-else
         tier="primary"
         :disabled="!canRestore"
         :loading="restoring"
@@ -143,6 +166,16 @@
         {{ $t('welcome.restoreGoogleWallet') }}
       </GButton>
     </div>
+
+    <UnlockWalletDialog
+      v-model="showUnlockDialog"
+      :pre-login-wallet-id="preLoginWalletId"
+      :pre-login-wallet-name="preLoginWalletName"
+      :pre-login-wallet-icon="preLoginWalletIcon"
+      :mpc-prefill-id-token="idToken"
+      :mpc-prefill-email="email"
+      @unlocked="onUnlocked"
+    />
   </div>
 </template>
 
@@ -157,6 +190,8 @@ import networks, { NetworkInfo } from '@/utils/networks';
 import { google } from '@/utils/assets';
 import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
+import { useExistingGoogleWallet } from './useExistingGoogleWallet';
+import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
 const props = defineProps<{
@@ -193,6 +228,17 @@ const showSpending = ref(false);
 const restoring = ref(false);
 const errorMessage = ref('');
 
+const {
+  existingWallet,
+  findExistingWallet,
+  showUnlockDialog,
+  preLoginWalletId,
+  preLoginWalletName,
+  preLoginWalletIcon,
+  openUnlockExisting,
+  onUnlocked,
+} = useExistingGoogleWallet(() => props.network);
+
 // Passkey-first, same as the create flow's Secure step: capability is probed once
 // on mount so the form doesn't jump between layouts while the user is typing. On a
 // fresh device there is no existing passkey to reuse — restore enrolls a NEW one.
@@ -203,6 +249,7 @@ const passkeyError = ref('');
 
 onMounted(async () => {
   passkeyCapable.value = await mpcPasskeyAvailable();
+  if (idToken.value) await findExistingWallet(idToken.value);
 });
 
 async function setUpPasskey(): Promise<void> {
@@ -264,6 +311,8 @@ const signIn = async (): Promise<void> => {
     if (typeof profile.name === 'string' && profile.name.trim()) {
       name.value = profile.name.trim();
     }
+    // Already have this account's wallet on this device? Offer login instead of restore.
+    await findExistingWallet(token);
   } catch (error: unknown) {
     console.error('Google sign-in failed:', error instanceof Error ? error.message : 'unknown error');
     errorMessage.value = error instanceof Error ? error.message : (vmProxy.$t('welcome.googleSignInFailed') as string);
@@ -275,6 +324,7 @@ const signIn = async (): Promise<void> => {
 const changeAccount = (): void => {
   idToken.value = '';
   email.value = '';
+  existingWallet.value = null;
 };
 
 const restore = async (): Promise<void> => {
@@ -308,6 +358,12 @@ const restore = async (): Promise<void> => {
       // feature) gets a clear, actionable message instead of the generic error.
       if (recoverResponse?.data?.code === 'no_recovery_backup') {
         throw new Error(vmProxy.$t('welcome.noRecoveryBackup') as string);
+      }
+      // The wallet is already on this device (nothing was written): offer login to it.
+      if (recoverResponse?.data?.code === 'wallet_exists' && recoverResponse.data.walletId != null) {
+        const { getAllWallets } = await import('@/db/gero-db');
+        existingWallet.value = (await getAllWallets())[recoverResponse.data.walletId] ?? null;
+        if (existingWallet.value) return;
       }
       throw new Error(recoverResponse?.data?.error || (vmProxy.$t('errors.unknownError') as string));
     }
