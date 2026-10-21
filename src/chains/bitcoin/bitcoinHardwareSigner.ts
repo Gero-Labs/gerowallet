@@ -11,6 +11,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { WalletType } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { getBitcoinNetwork, finalizePsbt } from './bitcoinPsbtBuilder';
+import type { LedgerBitcoinAccount } from './ledgerPsbt';
 
 /**
  * Hardware wallet signing result
@@ -30,29 +31,21 @@ export interface HardwareSigningResult {
  * Sign PSBT with Ledger hardware wallet
  *
  * @param psbt PSBT to sign (hex or base64 string)
- * @param network Bitcoin network
- * @param addressType Address type
- * @param accountIndex Account index
+ * @param account The wallet's account: its xpub, network, address type and index
  * @returns Signed PSBT
  */
 export async function signPsbtWithLedger(
   psbt: string,
-  network: string,
-  addressType: string = 'segwit',
-  accountIndex: number = 0
+  account: LedgerBitcoinAccount
 ): Promise<HardwareSigningResult> {
   try {
     const ledger = await import('@/shared/utils/ledger');
 
     // Sign PSBT with Ledger
-    const signedPsbtHex = await ledger.default.signBitcoinTransaction(
-      psbt,
-      addressType,
-      accountIndex
-    );
+    const signedPsbtHex = await ledger.default.signBitcoinTransaction(psbt, account);
 
     // Parse signed PSBT
-    const bitcoinNetwork = getBitcoinNetwork(network);
+    const bitcoinNetwork = getBitcoinNetwork(account.network);
     const signedPsbt = bitcoin.Psbt.fromHex(signedPsbtHex, { network: bitcoinNetwork });
 
     // Finalize and extract transaction
@@ -225,12 +218,14 @@ export async function signPsbtWithHardwareWallet(
   addressType: string = 'segwit',
   options?: {
     accountIndex?: number;  // For Ledger
+    xpub?: string;          // For Ledger: the account xpub its known addresses come from
     urString?: string;      // For Keystone (step 2)
   }
 ): Promise<HardwareSigningResult> {
   switch (walletType) {
     case WalletType.Ledger:
-      return signPsbtWithLedger(psbt, network, addressType, options?.accountIndex || 0);
+      if (!options?.xpub) return { success: false, error: 'Ledger signing needs the account xpub' };
+      return signPsbtWithLedger(psbt, { xpub: options.xpub, network, addressType, accountIndex: options.accountIndex || 0 });
 
     case WalletType.Trezor:
       return signPsbtWithTrezor(psbt, network, addressType);
