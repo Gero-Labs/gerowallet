@@ -126,6 +126,7 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import type { IsoSceneName } from '@/shared/components/iso/isoScenes';
 import cardStore from '@/stores/modules/card';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 import { providerReason } from '@/stores/modules/cardApiErrors';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
@@ -283,6 +284,7 @@ const walletNetworkId = () => networkIdOfAddress(walletStore.loggedWallet.baseAd
  * with its own reason, which {@link explainOrderFailure} turns into the same step.
  */
 async function checkDetails(): Promise<void> {
+  if (!featureFlagsStore.isCardholderDetailsEnabled()) return;
   const run = ++detailsCheck;
   checkingDetails.value = true;
   try {
@@ -323,9 +325,9 @@ function selectType(type: 'virtual' | 'physical'): void {
 }
 
 /**
- * Explains a refused order. Stored details only Zione support can change, and missing details
- * whose form cannot be loaded, get a notice with a way to reach Zione support. Missing details
- * that can be listed send the user to the details step. Anything else is a snackbar.
+ * Explains a refused order. Missing details the wallet can ask for send the user to the details
+ * step. Stored details only Zione support can change, and missing details the wallet cannot ask
+ * for, get a notice with a way to reach Zione support. Anything else is a snackbar.
  */
 async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<void> {
   if (isStoredDetailsRejection(reason)) {
@@ -334,15 +336,11 @@ async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<vo
   }
   if (isMissingDetailsRejection(reason)) {
     const run = detailsCheck;
-    const missing = await cardStore.getMissingCardholderDetails().catch(() => null);
+    const missing = featureFlagsStore.isCardholderDetailsEnabled()
+      ? await cardStore.getMissingCardholderDetails().catch(() => [] as CardholderField[])
+      : [];
     // The modal was reset (closed, or closed and reopened) while this was in flight.
     if (run !== detailsCheck || !props.open) return;
-    if (missing === null) {
-      // The form cannot load. Say that plainly rather than echo "The address field is
-      // required." next to a delivery address the user has already filled in.
-      refusal.value = { kind: 'missing', reason };
-      return;
-    }
     if (missing.length) {
       missingFields.value = missing;
       detailsStillMissing.value = false;
@@ -351,6 +349,12 @@ async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<vo
       snackbar.setError(t('card.details.neededToOrder'));
       return;
     }
+    // Nothing the wallet can ask for: the list failed to load ("User is not a Gerowallet
+    // user", a timeout, an outage), came back empty, named only fields the wallet does not
+    // know, or the step is switched off. Say that plainly rather than echo "The address
+    // field is required." next to a delivery address the user has already filled in.
+    refusal.value = { kind: 'missing', reason };
+    return;
   }
   snackbar.setError(`${t('card.failedToOrderCard')} ${reason || t('card.pleaseTryAgain')}`);
 }

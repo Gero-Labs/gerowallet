@@ -11,7 +11,9 @@ import { handleCardApiError } from './cardApiErrors';
 import { endProviderSession } from './cardSession';
 import { cardUuidFromOrderStatus, depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
 import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
-import { parseMissingFields, type CardholderDetails, type CardholderField } from '@/modules/wallet/utils/cardholderDetails';
+import {
+  DETAILS_CHECK_TIMEOUT_MS, parseMissingFields, type CardholderDetails, type CardholderField,
+} from '@/modules/wallet/utils/cardholderDetails';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -672,9 +674,14 @@ export default {
     }
   },
 
-  /** The cardholder details Zione still needs before it can issue a card; empty when none. */
+  /**
+   * The cardholder details Zione still needs before it can issue a card; empty when none.
+   * Short timeout: the order modal waits on this before showing anything.
+   */
   async getMissingCardholderDetails(): Promise<CardholderField[]> {
-    const response = await getCardApi().axiosInstance.get('/api/kaiserex/cards/cardholder-details/missing');
+    const response = await getCardApi().axiosInstance.get('/api/kaiserex/cards/cardholder-details/missing', {
+      timeout: DETAILS_CHECK_TIMEOUT_MS,
+    });
     return parseMissingFields(response.data);
   },
 

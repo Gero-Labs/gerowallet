@@ -84,6 +84,10 @@ export interface FeatureFlags {
   // background router honours a saved endpoint whatever this says, because a remote
   // flip must never reroute a privacy user's transactions to Gero.
   isSubmitApiEnabled: boolean;
+  // Gero Card "Complete your cardholder details" step. Default ON and a remote KILL-SWITCH:
+  // false skips Zione's cardholder-details endpoints, and an order refused for missing
+  // details then points the user to Zione support. Only an explicit false turns it off.
+  isCardholderDetailsEnabled: boolean;
   // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
   // and for the on-unlock migration to it. Every release since the reader-only one
   // opens gpw2, so turning this off only stops new gpw2 writes. Read by the
@@ -139,6 +143,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     isSubmitApiEnabled: false,
+    isCardholderDetailsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
   },
@@ -223,6 +228,9 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
     // Submit API ships DARK (default false); UI-only gate for the Settings dialog.
     featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
+    // Cardholder-details step ships ON; only an explicit false from the service turns it off.
+    featureFlagsState.flags.isCardholderDetailsEnabled =
+      featureFlagService.getFlag<boolean>('isCardholderDetailsEnabled', true) !== false;
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -318,6 +326,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isSubmitApiEnabled', (newValue) => {
       featureFlagsState.flags['isSubmitApiEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isCardholderDetailsEnabled', (newValue) => {
+      featureFlagsState.flags['isCardholderDetailsEnabled'] = newValue !== false;
     });
     featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
       featureFlagsState.flags['isKeyEnvelopeV2Enabled'] = newValue === true;
@@ -563,6 +574,11 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isSubmitApiEnabled;
   },
 
+  /** Gero Card cardholder-details step; on unless the flag service says false. */
+  isCardholderDetailsEnabled(): boolean {
+    return featureFlagsState.flags.isCardholderDetailsEnabled;
+  },
+
   /**
    * Reset flags (disable all until re-initialized).
    */
@@ -595,6 +611,7 @@ export const featureFlagsStore = {
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       isSubmitApiEnabled: false,
+      isCardholderDetailsEnabled: true,
       isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
     };
