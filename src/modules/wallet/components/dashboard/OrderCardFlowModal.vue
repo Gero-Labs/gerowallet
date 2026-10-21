@@ -44,7 +44,7 @@
           :has-physical-card="hasPhysicalCard"
           @select="selectType"
         />
-        <CardDetailsRejectedNotice v-if="rejectedReason !== null" :reason="rejectedReason" />
+        <CardDetailsRejectedNotice v-if="refusal" :kind="refusal.kind" :reason="refusal.reason" />
         <div class="order-flow__actions">
           <GButton tier="secondary" @click="close">{{ t('common.cancel') }}</GButton>
           <GButton tier="primary" :disabled="!selectedType" :loading="orderingVirtual" @click="continueFromType">
@@ -98,7 +98,7 @@
           />
           <p class="t-caption order-flow__later">{{ t('card.payLaterNote') }}</p>
         </template>
-        <CardDetailsRejectedNotice v-if="!placed && rejectedReason !== null" :reason="rejectedReason" />
+        <CardDetailsRejectedNotice v-if="!placed && refusal" :kind="refusal.kind" :reason="refusal.reason" />
         <div v-if="!placed" class="order-flow__actions">
           <GButton tier="secondary" :disabled="placing" @click="step = 3">{{ t('common.back') }}</GButton>
           <GButton tier="primary" :loading="placing" @click="placeOrder">{{ t('card.placeOrder') }}</GButton>
@@ -135,7 +135,7 @@ import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment
 import {
   emptyAddress, isMissingDetailsRejection, isStoredDetailsRejection, lovelaceFromAda, savedDeliveryAddress,
   toOrderPayload, toProviderAddress,
-  type KnownAddress, type ShippingAddress, type ShippingMethod,
+  type KnownAddress, type OrderRefusalKind, type ShippingAddress, type ShippingMethod,
 } from '@/modules/wallet/utils/cardOrder';
 import type { CardholderField, DetailsSaveResult } from '@/modules/wallet/utils/cardholderDetails';
 import CardSteps from '../ui/CardSteps.vue';
@@ -179,8 +179,11 @@ const savingDetails = ref(false);
 const resumeStep = ref<1 | 4>(1);
 /** The home address saved in this flow, offered for delivery. */
 const residential = ref<ShippingAddress | null>(null);
-/** Zione's reason when it refused characters in details it already holds; null otherwise. */
-const rejectedReason = ref<string | null>(null);
+/**
+ * Why Zione refused the order when only Zione support can help: characters in details it
+ * already holds, or missing details whose form could not be loaded. Null otherwise.
+ */
+const refusal = ref<{ kind: OrderRefusalKind; reason: string } | null>(null);
 let detailsCheck = 0;
 const selectedType = ref<'virtual' | 'physical' | null>(null);
 const address = ref<ShippingAddress>(emptyAddress());
@@ -316,23 +319,30 @@ async function saveDetails(): Promise<void> {
 
 function selectType(type: 'virtual' | 'physical'): void {
   selectedType.value = type;
-  rejectedReason.value = null;
+  refusal.value = null;
 }
 
 /**
- * Explains a refused order: details only Zione support can change get a notice with a way to
- * reach them, missing details send the user to the details step, anything else is a snackbar.
+ * Explains a refused order. Stored details only Zione support can change, and missing details
+ * whose form cannot be loaded, get a notice with a way to reach Zione support. Missing details
+ * that can be listed send the user to the details step. Anything else is a snackbar.
  */
 async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<void> {
   if (isStoredDetailsRejection(reason)) {
-    rejectedReason.value = reason;
+    refusal.value = { kind: 'characters', reason };
     return;
   }
   if (isMissingDetailsRejection(reason)) {
     const run = detailsCheck;
-    const missing = await cardStore.getMissingCardholderDetails().catch(() => [] as CardholderField[]);
+    const missing = await cardStore.getMissingCardholderDetails().catch(() => null);
     // The modal was reset (closed, or closed and reopened) while this was in flight.
     if (run !== detailsCheck || !props.open) return;
+    if (missing === null) {
+      // The form cannot load. Say that plainly rather than echo "The address field is
+      // required." next to a delivery address the user has already filled in.
+      refusal.value = { kind: 'missing', reason };
+      return;
+    }
     if (missing.length) {
       missingFields.value = missing;
       detailsStillMissing.value = false;
@@ -346,7 +356,7 @@ async function explainOrderFailure(reason: string, refusedAt: 1 | 4): Promise<vo
 }
 
 async function continueFromType(): Promise<void> {
-  rejectedReason.value = null;
+  refusal.value = null;
   if (selectedType.value === 'physical') {
     address.value = knownAddress.value ? { ...knownAddress.value.address } : emptyAddress();
     step.value = 2;
@@ -385,7 +395,7 @@ async function continueFromShipping(): Promise<void> {
 
 async function placeOrder(): Promise<void> {
   placing.value = true;
-  rejectedReason.value = null;
+  refusal.value = null;
   try {
     const response = await cardStore.orderPhysicalCard(toOrderPayload(address.value, shippingMethod.value));
     const depositAddress = response?.depositAddress;
@@ -475,7 +485,7 @@ function reset(): void {
   detailsStillMissing.value = false;
   resumeStep.value = 1;
   residential.value = null;
-  rejectedReason.value = null;
+  refusal.value = null;
   selectedType.value = null;
   address.value = emptyAddress();
   shippingMethod.value = 'regular';

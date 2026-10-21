@@ -71,6 +71,13 @@ export function addressLine(address: ShippingAddress, countryName?: string): str
 }
 
 /**
+ * A refused order that only Zione support can resolve: `characters` when Zione refuses text in
+ * details it already holds, `missing` when details are missing and the form to add them could
+ * not be loaded.
+ */
+export type OrderRefusalKind = 'characters' | 'missing';
+
+/**
  * True when Zione refused characters in a card order. The wallet only sends delivery fields that
  * pass Zione's character rules, so the refused text is in the cardholder details Zione already
  * holds, which only Zione support can change.
