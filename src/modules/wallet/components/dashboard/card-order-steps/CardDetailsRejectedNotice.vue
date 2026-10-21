@@ -1,11 +1,12 @@
 <template>
-  <!-- Zione refused characters in details it already holds. The wallet cannot change those
-       (Zione never overwrites a stored value), so the only way forward is Zione support. -->
+  <!-- Zione refused the order and only Zione support can help: it refuses characters in
+       details it already holds (it never overwrites a stored value), or it needs details
+       whose form could not be loaded. -->
   <section class="details-rejected" role="alert" aria-labelledby="details-rejected-title">
     <v-icon class="details-rejected__icon" size="small">mdi-alert-circle-outline</v-icon>
     <div class="details-rejected__body">
-      <h3 id="details-rejected-title" class="t-body-lg">{{ t('card.details.rejectedTitle') }}</h3>
-      <p class="t-body-sm">{{ t('card.details.rejectedBody') }}</p>
+      <h3 id="details-rejected-title" class="t-body-lg">{{ t(copy.title) }}</h3>
+      <p class="t-body-sm">{{ t(copy.body) }}</p>
       <p v-if="reason" class="t-caption">{{ t('card.details.rejectedReason', { reason }) }}</p>
       <div>
         <GButton tier="secondary" :href="supportHref">
@@ -22,16 +23,25 @@ import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import type { OrderRefusalKind } from '@/modules/wallet/utils/cardOrder';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
+  kind?: OrderRefusalKind;
   /** Zione's message, quoted so support can see exactly what was refused. */
   reason?: string;
-}>(), { reason: '' });
+}>(), { kind: 'characters', reason: '' });
 
 const { t } = useTranslation();
 
+const COPY: Record<OrderRefusalKind, { title: string; body: string; subject: string }> = {
+  characters: { title: 'card.details.rejectedTitle', body: 'card.details.rejectedBody', subject: 'card.details.supportSubject' },
+  missing: { title: 'card.details.unavailableTitle', body: 'card.details.unavailableBody', subject: 'card.details.unavailableSubject' },
+};
+
+const copy = computed(() => COPY[props.kind]);
+
 const supportHref = computed(
-  () => `mailto:${CARD_PROVIDER.supportEmail}?subject=${encodeURIComponent(t('card.details.supportSubject'))}`,
+  () => `mailto:${CARD_PROVIDER.supportEmail}?subject=${encodeURIComponent(t(copy.value.subject))}`,
 );
 </script>
 

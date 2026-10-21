@@ -210,6 +210,22 @@ describe('OrderCardFlowModal refused orders', () => {
     expect(snackbar.setError).toHaveBeenCalledWith('card.details.neededToOrder');
   });
 
+  it('explains missing details plainly when the details form cannot be loaded', async () => {
+    // The 2026-10-21 report: both details calls answered 404 (backend route not deployed) and
+    // the order said "The address field is required." with a delivery address filled in.
+    card.getMissingCardholderDetails.mockRejectedValue(refusal(404, ''));
+    card.orderCard.mockRejectedValue(refusal(400, 'The address field is required.'));
+    await open();
+    await orderVirtual();
+    expect(card.getMissingCardholderDetails).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('card.details.unavailableTitle');
+    expect(wrapper.text()).toContain('card.details.unavailableBody');
+    expect(wrapper.text()).toContain('card.details.rejectedReason {"reason":"The address field is required."}');
+    expect(wrapper.find('a[href^="mailto:support@zione.com"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('card.details.rejectedTitle');
+    expect(snackbar.setError).not.toHaveBeenCalled();
+  });
+
   it('ignores a missing-details re-check that lands after the modal was reopened', async () => {
     let finishStale: (fields: string[]) => void = () => undefined;
     card.getMissingCardholderDetails
