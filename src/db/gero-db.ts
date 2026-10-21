@@ -456,11 +456,14 @@ export async function createNewWallet(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let rootKey: any;
   let publicKey: string;
+  // A Bitcoin wallet's master key fingerprint, which PSBT inputs name it by (BIP174)
+  let xfp: string | undefined;
 
   if (chain === Blockchain.BITCOIN) {
     // Bitcoin key derivation
-    const { deriveBitcoinRootKey } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    const { deriveBitcoinRootKey, bitcoinMasterFingerprint } = await import('@/chains/bitcoin/bitcoinKeyManager');
     rootKey = deriveBitcoinRootKey(mnemonic);
+    xfp = bitcoinMasterFingerprint(rootKey);
   } else if (chain === Blockchain.MIDNIGHT) {
     // Midnight key derivation: BIP39 → 64-byte seed. The Midnight SDK
     // (HDWallet + UnshieldedAddress) is intentionally NOT imported here —
@@ -582,6 +585,7 @@ export async function createNewWallet(
         chain,
         network,
         addressType,  // Version 15+: Address type
+        ...(xfp && { xfp }),
         // PRF encryption fields (Version 14+)
         encryptionMethod: 'prf',
         prfEncryptedPrivateKey,
@@ -640,6 +644,7 @@ export async function createNewWallet(
       chain,
       network,
       addressType,  // Version 15+: Address type
+      ...(xfp && { xfp }),
       // Explicitly set encryptionMethod for clarity (optional for backward compatibility)
       encryptionMethod: 'password'
     };
@@ -708,6 +713,7 @@ export async function createAccountWallet(
   }
   const [accountIndex] = assertAccountIndices([account.accountIndex]);
   if (accountIndex === 0) throw new Error('Account #0 is the wallet itself');
+  const parentXfp = (parent as Wallet & { xfp?: string }).xfp;
 
   const record: Omit<Wallet, 'id'> & { theme?: string; passwordLastUpdate: Date } = {
     name: account.name,
@@ -720,6 +726,8 @@ export async function createAccountWallet(
     // Not a secret: lets each screen tell a PassKey or Google account apart
     // without looking up its account #0.
     encryptionMethod: parent.encryptionMethod,
+    // The same phrase, so the same master key fingerprint (Bitcoin PSBTs name it).
+    ...(parentXfp && { xfp: parentXfp }),
     publicKey: account.publicKey,
     accountIndex,
     parentWalletId: parent.id,

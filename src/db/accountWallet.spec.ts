@@ -9,6 +9,9 @@ import { createAccountWallet, createNewHardwareWallet, createNewWallet, derivePu
 import { getDb } from '@/db/wallet-db';
 import { deriveAccountXpubsFromMnemonic } from '@/shared/utils/softwareAccounts';
 import { GROUP_SECRET_FIELDS } from '@/shared/utils/walletAccount';
+import { deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { ripemd160 } from '@noble/hashes/legacy.js';
 
 // Fixed test vector — never used to hold funds.
 const MNEMONIC = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -79,6 +82,18 @@ describe('createAccountWallet on Bitcoin', () => {
     expect(record).toMatchObject({ chain: Blockchain.BITCOIN, network: Network.TESTNET, type: WalletType.Normal, addressType: 'segwit', publicKey: next.publicKey, accountIndex: 1, parentWalletId: btcId });
     expect(record.encryptedMnemonic).toBeUndefined();
     expect(record.encryptedPrivateKey).toBeUndefined();
+  });
+
+  it('stores the phrase’s master key fingerprint, which its added accounts share', async () => {
+    // BIP32: the first four bytes of hash160 of the master public key.
+    const masterFingerprint = Buffer.from(ripemd160(sha256(deriveBitcoinRootKey(MNEMONIC).publicKey!)).subarray(0, 4)).toString('hex');
+    const btcId = await createNewWallet('Savings mainnet', 'icon', Theme.GERO, MNEMONIC, PASSWORD, Blockchain.BITCOIN, Network.MAINNET) as number;
+    const [, next] = await deriveAccountXpubsFromMnemonic(MNEMONIC, [0, 1], { chain: Blockchain.BITCOIN, network: Network.MAINNET });
+
+    const account = await createAccountWallet(btcId, { name: 'Account #1', publicKey: next.publicKey, accountIndex: 1 });
+
+    expect((await stored(btcId)) as Wallet & { xfp?: string }).toMatchObject({ xfp: masterFingerprint });
+    expect((await stored(account.id)) as Wallet & { xfp?: string }).toMatchObject({ xfp: masterFingerprint });
   });
 
   it('refuses a Bitcoin hardware wallet as parent', async () => {
