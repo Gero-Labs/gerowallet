@@ -3546,6 +3546,7 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
 
     // Import Bitcoin transaction building modules
     const { buildSimpleSendPsbt } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { bitcoinAccountPath } = await import('@/chains/bitcoin/bitcoinKeyManager');
     const { BitcoinApi } = await import('@/api/bitcoin-api');
 
     // Step 1: Fetch UTXOs from store (WalletBg doesn't hold UTXOs directly)
@@ -3563,7 +3564,12 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
       changeAddress,
       feeRate,
       walletBg.network,
-      walletBg.publicKey
+      // Each input names its key by the wallet's master fingerprint and full path
+      {
+        xpub: walletBg.publicKey,
+        path: bitcoinAccountPath(walletBg.network, walletBg.addressType, walletBg.accountIndex),
+        masterFingerprint: walletBg.xfp,
+      }
     );
 
     // Step 3: Sign PSBT

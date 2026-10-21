@@ -17,7 +17,7 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
 
 import { signAndFinalizePsbt, signPsbtWithMnemonic, taprootKeyPathSigner } from './bitcoinSigner';
 import { buildSimpleSendPsbt } from './bitcoinPsbtBuilder';
-import { deriveBitcoinAccountXpub, deriveBitcoinAddress, deriveBitcoinRootKey } from './bitcoinKeyManager';
+import { bitcoinMasterFingerprint, deriveBitcoinAccountXpub, deriveBitcoinAddress, deriveBitcoinRootKey } from './bitcoinKeyManager';
 
 const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
 
@@ -129,13 +129,53 @@ describe('Taproot (BIP86) wallets', () => {
     const utxo = { txHash: '11'.repeat(32), index: 0, address, value: 50_000n, confirmed: true, derivationChain: 0, derivationIndex: 3 };
 
     const unsigned = buildSimpleSendPsbt([utxo], deriveBitcoinAddress(xpub, 'Testnet', 'taproot', 0, 4), 20_000n,
-      deriveBitcoinAddress(xpub, 'Testnet', 'taproot', 1, 0), 2, 'Testnet', xpub);
+      deriveBitcoinAddress(xpub, 'Testnet', 'taproot', 1, 0), 2, 'Testnet', { xpub, path: "m/86'/1'/0'", masterFingerprint: 'c0ffee42' });
 
     const [input] = bitcoin.Psbt.fromHex(unsigned.raw.hex as string).data.inputs;
     expect(input.bip32Derivation).toBeUndefined();
     expect(input.tapInternalKey!.toString('hex')).toBe(xOnly(taprootKeyAt(0, 3)).toString('hex'));
-    expect(input.tapBip32Derivation).toMatchObject([{ path: 'm/0/3', leafHashes: [] }]);
+    expect(input.tapBip32Derivation).toMatchObject([{ path: "m/86'/1'/0'/0/3", leafHashes: [] }]);
+    expect(input.tapBip32Derivation![0].masterFingerprint.toString('hex')).toBe('c0ffee42');
     const signed = signAndFinalizePsbt(unsigned.raw.hex as string, PHRASE, 'Testnet', 'taproot');
     expectKeyPathSpends(signed.hex, [{ script: input.witnessUtxo!.script, value: 50_000 }]);
+  });
+});
+
+describe('PSBT derivation metadata (BIP174)', () => {
+  const xpub = deriveBitcoinAccountXpub(PHRASE, 'Testnet', 'segwit');
+  const send = (masterFingerprint?: string) => {
+    const utxo = { txHash: '22'.repeat(32), index: 1, address: deriveBitcoinAddress(xpub, 'Testnet', 'segwit', 1, 5), value: 40_000n, confirmed: true, derivationChain: 1, derivationIndex: 5 };
+    const unsigned = buildSimpleSendPsbt([utxo], deriveBitcoinAddress(xpub, 'Testnet', 'segwit', 0, 9), 10_000n,
+      deriveBitcoinAddress(xpub, 'Testnet', 'segwit', 1, 6), 2, 'Testnet', { xpub, path: "m/84'/1'/0'", masterFingerprint });
+    return unsigned.raw.hex as string;
+  };
+
+  it('names each input by the wallet’s master fingerprint and its full path, as a hardware signer matches it', () => {
+    const [input] = bitcoin.Psbt.fromHex(send('deadbeef')).data.inputs;
+
+    expect(input.bip32Derivation).toHaveLength(1);
+    const [origin] = input.bip32Derivation!;
+    expect(origin.masterFingerprint.toString('hex')).toBe('deadbeef');
+    expect(origin.path).toBe("m/84'/1'/0'/1/5");
+    expect(origin.pubkey.toString('hex')).toBe(pubkeyAt(1, 5).toString('hex'));
+  });
+
+  it('marks an unknown master fingerprint as zero rather than another key’s', () => {
+    const [input] = bitcoin.Psbt.fromHex(send()).data.inputs;
+
+    expect(input.bip32Derivation![0].masterFingerprint.toString('hex')).toBe('00000000');
+    expect(input.bip32Derivation![0].path).toBe("m/84'/1'/0'/1/5");
+  });
+
+  it('is still signed by the software signer at that path', () => {
+    const signed = signPsbtWithMnemonic(send('deadbeef'), PHRASE, 'Testnet');
+
+    expect(signerKeys(signed)).toEqual([pubkeyAt(1, 5).toString('hex')]);
+  });
+
+  it('reads the master fingerprint as BIP32 defines it', () => {
+    const root = deriveBitcoinRootKey('abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+
+    expect(bitcoinMasterFingerprint(root)).toBe('73c5da0a');
   });
 });

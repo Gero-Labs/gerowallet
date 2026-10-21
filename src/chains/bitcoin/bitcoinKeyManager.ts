@@ -54,6 +54,15 @@ export function deriveBitcoinRootKey(mnemonic: string): HDKey {
 }
 
 /**
+ * The master key fingerprint of a BIP32 root key, as 8 hex characters: the first four
+ * bytes of hash160 of its public key. PSBT derivation metadata (BIP174) and hardware
+ * signers name the wallet by it.
+ */
+export function bitcoinMasterFingerprint(rootKey: HDKey): string {
+  return rootKey.fingerprint.toString(16).padStart(8, '0');
+}
+
+/**
  * Derive account extended public key (xpub/ypub/zpub)
  * Path: m/purpose'/coin'/account'
  *

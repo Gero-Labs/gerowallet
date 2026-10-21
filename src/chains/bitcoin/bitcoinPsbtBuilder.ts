@@ -34,9 +34,28 @@ export interface PsbtBuildOptions {
   /** Enable Replace-By-Fee (RBF) */
   rbfEnabled?: boolean;
 
-  /** Account xpub for adding bip32Derivation metadata to inputs (improves signing accuracy) */
-  xpub?: string;
+  /** The account whose keys spend the inputs, for their derivation metadata (improves signing accuracy) */
+  account?: PsbtAccount;
 }
+
+/**
+ * The account an input's key belongs to, as PSBT derivation metadata names it (BIP174).
+ * Hardware signers recognise an input as theirs by the master fingerprint and full path.
+ */
+export interface PsbtAccount {
+  /** Account xpub, m/purpose'/coinType'/account' */
+  xpub: string;
+  /** That account's full path, e.g. m/84'/1'/0' */
+  path: string;
+  /** The wallet's master key fingerprint (8 hex characters), when Gero knows it */
+  masterFingerprint?: string;
+}
+
+/**
+ * BIP174 has no "unknown" master fingerprint: zero is the usual placeholder, which no
+ * device claims as its own.
+ */
+const UNKNOWN_MASTER_FINGERPRINT = Buffer.alloc(4);
 
 /**
  * Get Bitcoin network object
@@ -75,7 +94,7 @@ function utxoToPsbtInput(
   utxo: IUnifiedUtxo,
   network: bitcoin.Network,
   sequence: number,
-  xpub?: string
+  account?: PsbtAccount
 ): PsbtInputData {
   // Convert hex string to Buffer
   const txidBuffer = Buffer.from(utxo.txHash, 'hex').reverse(); // Reverse for little-endian
@@ -93,18 +112,16 @@ function utxoToPsbtInput(
     sequence,
   };
 
-  // Add the derivation metadata if we have derivation info and xpub
-  if (xpub && utxo.derivationChain !== undefined && utxo.derivationIndex !== undefined) {
+  // Add the derivation metadata if we have derivation info and the account: the wallet's
+  // master fingerprint and the key's full path from the master key
+  if (account && utxo.derivationChain !== undefined && utxo.derivationIndex !== undefined) {
     try {
-      const accountNode = HDKey.fromExtendedKey(xpub);
-      const masterFingerprint = Buffer.from(new Uint8Array([
-        (accountNode.fingerprint >> 24) & 0xff,
-        (accountNode.fingerprint >> 16) & 0xff,
-        (accountNode.fingerprint >> 8) & 0xff,
-        accountNode.fingerprint & 0xff,
-      ]));
-      const path = `m/${utxo.derivationChain}/${utxo.derivationIndex}`;
-      const childNode = accountNode.derive(path);
+      const accountNode = HDKey.fromExtendedKey(account.xpub);
+      const masterFingerprint = /^[0-9a-f]{8}$/i.test(account.masterFingerprint ?? '')
+        ? Buffer.from(account.masterFingerprint!, 'hex')
+        : UNKNOWN_MASTER_FINGERPRINT;
+      const path = `${account.path}/${utxo.derivationChain}/${utxo.derivationIndex}`;
+      const childNode = accountNode.derive(`m/${utxo.derivationChain}/${utxo.derivationIndex}`);
       if (childNode.publicKey && isTaprootScript(witnessUtxo.script)) {
         // BIP86 key-path output: the x-only child key is its internal key
         const internalKey = Buffer.from(childNode.publicKey.subarray(1, 33));
@@ -181,7 +198,7 @@ export function buildPsbt(
 
   // Add inputs from selected UTXOs
   for (const utxo of selection.selectedUtxos) {
-    const input = utxoToPsbtInput(utxo, bitcoinNetwork, sequence, options.xpub);
+    const input = utxoToPsbtInput(utxo, bitcoinNetwork, sequence, options.account);
     psbt.addInput(input);
   }
 
@@ -253,6 +270,7 @@ export function buildPsbt(
  * @param changeAddress Change address
  * @param feeRate Fee rate in sat/vB
  * @param network Bitcoin network
+ * @param account The account spending the UTXOs, for the inputs' derivation metadata
  * @returns Unsigned transaction with PSBT
  */
 export function buildSimpleSendPsbt(
@@ -262,7 +280,7 @@ export function buildSimpleSendPsbt(
   changeAddress: string,
   feeRate: number,
   network: string,
-  xpub?: string
+  account?: PsbtAccount
 ): IUnsignedTx {
   const outputs: IOutput[] = [
     {
@@ -282,7 +300,7 @@ export function buildSimpleSendPsbt(
     feeRate,
     changeAddress,
     rbfEnabled: true, // Enable RBF by default
-    xpub,
+    account,
   };
 
   return buildPsbt(params, network, options);
