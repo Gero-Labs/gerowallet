@@ -95,6 +95,14 @@ export function deriveBitcoinAccountXpubs(
   return accountIndices.map((accountIndex) => rootKey.derive(bitcoinAccountPath(network, addressType, accountIndex)).publicExtendedKey);
 }
 
+/** A hardware wallet's Bitcoin account: its xpub, and where the device derives it. */
+export interface BitcoinHardwareAccount {
+  xpub: string;
+  network: string;
+  addressType?: string;
+  accountIndex: number;
+}
+
 /** A Bitcoin account's derivation path: m/purpose'/coinType'/account' (coin type 1 off Mainnet). */
 export function bitcoinAccountPath(network: string, addressType: string = 'segwit', accountIndex: number = 0): string {
   const purpose = getDerivationPurpose(addressType);

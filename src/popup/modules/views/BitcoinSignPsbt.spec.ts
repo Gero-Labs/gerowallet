@@ -68,10 +68,9 @@ describe.each(devices)('%s Bitcoin popup device contract', device => {
     const wrapper = await render(device);
     await button(wrapper, 'wallet.sign').trigger('click');
     await vi.waitFor(() => expect(mocks.returnData).toHaveBeenCalledExactlyOnceWith({ data: returned }));
-    if (device === 'ledger') {
-      expect(mocks.ledger).toHaveBeenCalledExactlyOnceWith(unsigned, { xpub: 'xpub-account', network: 'Mainnet', addressType: 'native-segwit', accountIndex: 0 }, true);
-    }
-    else expect(mocks[device]).toHaveBeenCalledExactlyOnceWith(unsigned, 'native-segwit');
+    const account = { xpub: 'xpub-account', network: 'Mainnet', addressType: 'native-segwit', accountIndex: 0 };
+    if (device === 'ledger') expect(mocks.ledger).toHaveBeenCalledExactlyOnceWith(unsigned, account, true);
+    else expect(mocks[device]).toHaveBeenCalledExactlyOnceWith(unsigned, account);
     expect(finalize).not.toHaveBeenCalled();
     expect(mocks.error).not.toHaveBeenCalled();
   });

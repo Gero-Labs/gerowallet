@@ -28,7 +28,7 @@ import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
-import type { LedgerBitcoinAccount } from '@/chains/bitcoin/ledgerPsbt';
+import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
 
 /**
  * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
@@ -726,7 +726,7 @@ export default {
    */
   async signBitcoinTransaction(
     psbt: string,
-    account: LedgerBitcoinAccount,
+    account: BitcoinHardwareAccount,
     isUsb: boolean = true
   ): Promise<string> {
     try {

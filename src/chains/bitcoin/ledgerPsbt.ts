@@ -15,16 +15,9 @@ import type { AddressFormat } from '@ledgerhq/hw-app-btc/lib/getWalletPublicKey'
 import type { KnownAddressDerivationsMap, SignPsbtBufferOptions } from '@ledgerhq/hw-app-btc/lib/signPsbt/types';
 import { pathStringToArray } from '@ledgerhq/hw-app-btc/lib/bip32';
 import { deserializePsbt } from '@ledgerhq/hw-app-btc/lib/signPsbt/parsePsbt';
-import { bitcoinAccountPath, DEFAULT_BITCOIN_GAP_LIMIT } from './bitcoinKeyManager';
-import { getBitcoinNetwork } from './bitcoinPsbtBuilder';
+import { bitcoinAccountPath, DEFAULT_BITCOIN_GAP_LIMIT, type BitcoinHardwareAccount } from './bitcoinKeyManager';
 
-/** The Ledger Bitcoin account that signs: its xpub and where the device derives it. */
-export interface LedgerBitcoinAccount {
-  xpub: string;
-  network: string;
-  addressType?: string;
-  accountIndex: number;
-}
+export { parseBitcoinPsbt } from './bitcoinPsbtBuilder';
 
 /** BIP174 PSBT_IN_PARTIAL_SIG: keyed by the signing public key. */
 const PSBT_IN_PARTIAL_SIG = 0x02;
@@ -55,7 +48,7 @@ function scriptHash(pubkey: Buffer, addressType: string): Buffer {
  * script names, each with its public key and full path.
  */
 export function ledgerKnownAddressDerivations(
-  account: LedgerBitcoinAccount,
+  account: BitcoinHardwareAccount,
   gapLimit: number = DEFAULT_BITCOIN_GAP_LIMIT,
 ): KnownAddressDerivationsMap {
   const addressType = account.addressType || 'segwit';
@@ -74,7 +67,7 @@ export function ledgerKnownAddressDerivations(
 }
 
 /** The `signPsbtBuffer` options for the account: sign, never finalize. */
-export function ledgerSignPsbtOptions(account: LedgerBitcoinAccount): SignPsbtBufferOptions {
+export function ledgerSignPsbtOptions(account: BitcoinHardwareAccount): SignPsbtBufferOptions {
   const addressType = account.addressType || 'segwit';
   return {
     finalizePsbt: false,
@@ -82,12 +75,6 @@ export function ledgerSignPsbtOptions(account: LedgerBitcoinAccount): SignPsbtBu
     addressFormat: ledgerAddressFormat(addressType),
     knownAddressDerivations: ledgerKnownAddressDerivations(account),
   };
-}
-
-/** A PSBT given as hex or base64. */
-export function parseBitcoinPsbt(value: string, network: string): bitcoin.Psbt {
-  const opts = { network: getBitcoinNetwork(network) };
-  return /^[\da-f]+$/i.test(value) ? bitcoin.Psbt.fromHex(value, opts) : bitcoin.Psbt.fromBase64(value, opts);
 }
 
 /**
