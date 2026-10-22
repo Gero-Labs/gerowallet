@@ -210,3 +210,24 @@ export function describeDappProvingFailure(target: DappProvingTarget, detail: st
     : 'Make sure the proof server is running, or change it in GeroWallet\'s Midnight settings.';
   return `GeroWallet's proof server at ${target.url} could not generate the proof (${detail}). ${hint}`;
 }
+
+/**
+ * Why `getProvingProvider()` refused: the resolved proof server did not
+ * answer its health check. Written for the dapp's error surface, like
+ * {@link describeDappProvingFailure}, and names the fix for each source.
+ * The zkPaaS URL can carry the API key in its path, so it is never echoed.
+ */
+export function describeDappProvingUnreachable(target: DappProvingTarget): string {
+  if (target.source === 'zkpaas') {
+    return 'Arkhia zkPaaS did not answer, so GeroWallet cannot generate proofs for this site. '
+      + "Check the Arkhia API key and endpoint in GeroWallet's Midnight proof-server settings.";
+  }
+  if (target.source === 'local') {
+    return `GeroWallet's local proof server at ${target.url} did not answer. `
+      + "Make sure the proof server is running, or change it in GeroWallet's Midnight proof-server settings.";
+  }
+  return 'GeroWallet is set to prove with Gero Cloud, which only proves transactions the wallet builds itself, '
+    + `so it looked for a local proof server at ${target.url} and got no answer. `
+    + 'Start a local Midnight proof server (docker `midnightntwrk/proof-server`), '
+    + "or choose a local proof server or Arkhia zkPaaS in GeroWallet's Midnight proof-server settings.";
+}
