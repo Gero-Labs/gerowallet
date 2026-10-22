@@ -691,11 +691,13 @@ const verifyAddressOnDevice = async () => {
     const accountIndex = 0;
     const addressIndex = 0;
     const isChange = false;
+    // The network picks the path's coin type: the device shows the address the wallet does.
+    const { network } = loggedWallet.value;
 
     if (loggedWallet.value.type === WalletType.Ledger) {
       // Verify address on Ledger
       const ledger = await import('@/shared/utils/ledger');
-      await ledger.default.verifyBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true);
+      await ledger.default.verifyBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true, network);
     } else if (loggedWallet.value.type === WalletType.Trezor) {
       // Verify address on Trezor
       const data = {
@@ -703,7 +705,8 @@ const verifyAddressOnDevice = async () => {
         addressType,
         accountIndex,
         addressIndex,
-        isChange
+        isChange,
+        network,
       };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
         ? await dispatchTrezor(data)

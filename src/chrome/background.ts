@@ -115,6 +115,7 @@ import {
   assertMpcActionSupported,
 } from '@/chrome/mpcWalletHandlers';
 import type { DeviceShareSecret } from '@/shared/utils/mpc';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -3546,7 +3547,6 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
 
     // Import Bitcoin transaction building modules
     const { buildSimpleSendPsbt } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
-    const { bitcoinAccountPath } = await import('@/chains/bitcoin/bitcoinKeyManager');
     const { BitcoinApi } = await import('@/api/bitcoin-api');
 
     // Step 1: Fetch UTXOs from store (WalletBg doesn't hold UTXOs directly)
@@ -4079,7 +4079,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         coldWalletProps = await trezor.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {
         // Bitcoin wallet - use default SegWit address type
-        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0);
+        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0, network.network);
 
         // Format Bitcoin response to match expected structure
         if (coldWalletProps) {
@@ -4087,7 +4087,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
           coldWalletProps = {
             productName: deviceLabel,
             hwPublicKey: xpub,
-            keys: [{ publicKey: xpub, chainCode: '', path: "m/84'/0'/0'" }],
+            keys: [{ publicKey: xpub, chainCode: '', path: bitcoinAccountPath(network.network, 'segwit', 0) }],
             btSupported: true,
             version: firmwareVersion
           };
@@ -4175,13 +4175,14 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       });
     } else if (request.data.method === 'verifyBitcoinAddress') {
       // Verify Bitcoin address on Trezor device
-      const { addressType, accountIndex, addressIndex, isChange } = request.data;
+      const { addressType, accountIndex, addressIndex, isChange, network } = request.data;
 
       const verifiedAddress = await trezor.verifyBitcoinAddress(
         addressType || 'segwit',
         accountIndex || 0,
         addressIndex || 0,
-        isChange || false
+        isChange || false,
+        network || 'Mainnet'
       );
 
       sendResponse({

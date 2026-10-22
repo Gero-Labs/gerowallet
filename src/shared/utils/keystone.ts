@@ -14,6 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   InvalidAccountIndexError,
   assertAccountIndices,
@@ -429,38 +430,18 @@ export const qrCodeOptions = (encodedUR: string, size: number): Options => {
 // ============================================================================
 
 /**
- * The Bitcoin account a Keystone is asked to export: m/purpose'/0'/account'.
- * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
- * @param accountIndex - Account index (default 0)
- */
-export const keystoneBitcoinAccountPath = (addressType: string = 'segwit', accountIndex: number = 0): string => {
-  let purpose: number;
-  switch (addressType) {
-    case 'legacy':
-      purpose = 44; // BIP44
-      break;
-    case 'taproot':
-      purpose = 86; // BIP86
-      break;
-    case 'segwit':
-    default:
-      purpose = 84; // BIP84
-      break;
-  }
-  return `m/${purpose}'/0'/${accountIndex}'`;
-};
-
-/**
- * Generate QR code for Bitcoin account sync (xpub derivation request)
+ * Generate QR code for Bitcoin account sync (xpub derivation request) at the
+ * account's path, m/purpose'/coinType'/account' (coin type 1' off Mainnet)
+ * @param network - The wallet's network
  * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
  * @param accountIndex - Account index (default 0)
  * @returns QR code options for displaying sync request
  */
-export const generateBitcoinSyncQR = (addressType: string = 'segwit', accountIndex: number = 0): Options => {
+export const generateBitcoinSyncQR = (network: string, addressType: string = 'segwit', accountIndex: number = 0): Options => {
   // Generate key derivation request for Bitcoin (secp256k1 curve)
   const ur: UR = sdk.generateKeyDerivationCall({
     schemas: [{
-      path: keystoneBitcoinAccountPath(addressType, accountIndex),
+      path: bitcoinAccountPath(network, addressType, accountIndex),
       curve: Curve.secp256k1, // Bitcoin uses secp256k1, not ed25519
       algo: DerivationAlgorithm.slip10 // SLIP-0010 for secp256k1
     }],
@@ -479,11 +460,12 @@ export const generateBitcoinSyncQR = (addressType: string = 'segwit', accountInd
  * refused rather than paired.
  *
  * @param ur - UR from scanned QR code
+ * @param network - The network the account was requested on
  * @param addressType - The address type that was requested
  * @param accountIndex - The account that was requested
- * @returns Object containing xpub, master fingerprint, and path
+ * @returns Object containing xpub (already in the wallet's xpub form), master fingerprint, and path
  */
-export const parseBitcoinAccount = (ur: UR, addressType: string = 'segwit', accountIndex: number = 0): {
+export const parseBitcoinAccount = (ur: UR, network: string, addressType: string = 'segwit', accountIndex: number = 0): {
   xpub: string;
   xfp: string;
   path: string;
@@ -502,7 +484,7 @@ export const parseBitcoinAccount = (ur: UR, addressType: string = 'segwit', acco
     throw new Error('Expected a crypto-multi-accounts or crypto-hdkey response');
   }
 
-  const requested = keystoneBitcoinAccountPath(addressType, accountIndex);
+  const requested = bitcoinAccountPath(network, addressType, accountIndex);
   const key = keys.find((k) => `m/${k.getOrigin()?.getPath()}` === requested);
   if (!key) throw new Error('The Keystone did not return the requested Bitcoin account');
 

@@ -6,7 +6,7 @@ import { KeystoneSDK, UR, URDecoder } from '@keystonehq/keystone-sdk';
 import { HDKey } from '@scure/bip32';
 import { mnemonicToSeedSync } from 'bip39';
 import {
-  generateBitcoinPSBTQR, generateBitcoinSyncQR, getKeystoneAccountsUR, keystoneBitcoinAccountPath, parseBitcoinSignature, parseBitcoinAccount,
+  generateBitcoinPSBTQR, generateBitcoinSyncQR, getKeystoneAccountsUR, parseBitcoinSignature, parseBitcoinAccount,
   parseDataSignature, parseKeystoneAccounts, parseSignature,
 } from './keystone';
 import { InvalidAccountIndexError } from './walletAccount';
@@ -73,7 +73,7 @@ describe('Keystone real SDK wire contracts', () => {
       origin: new CryptoKeypath([84, 0, 0].map((index) => new PathComponent({ index, hardened: true })), NativeBuffer.from('12345678', 'hex')),
       parentFingerprint: NativeBuffer.from('87654321', 'hex'),
     });
-    const parsed = parseBitcoinAccount(hdkey.toUR());
+    const parsed = parseBitcoinAccount(hdkey.toUR(), 'Mainnet');
     expect(parsed).toEqual({ xpub: hdkey.getBip32Key(), xfp: '12345678', path: "84'/0'/0'", publicKey: publicKey.toString('hex'), chainCode: '04'.repeat(32) });
   });
 });
@@ -86,27 +86,30 @@ describe('Keystone Bitcoin pairing', () => {
   const FINGERPRINT = NativeBuffer.from(root.fingerprint.toString(16).padStart(8, '0'), 'hex');
   const hardened = (...indices: number[]) => indices.map((index) => new PathComponent({ index, hardened: true }));
 
-  /** The account key the Keystone exports at m/purpose'/0'/account', as it encodes it. */
-  const accountKey = (purpose: number, account: number) => {
-    const node = root.derive(`m/${purpose}'/0'/${account}'`);
+  /** The account key the Keystone exports at m/purpose'/coin'/account', as it encodes it. */
+  const accountKey = (purpose: number, account: number, coin = 0) => {
+    const node = root.derive(`m/${purpose}'/${coin}'/${account}'`);
     return new CryptoHDKey({
       isMaster: false, key: NativeBuffer.from(node.publicKey!), chainCode: NativeBuffer.from(node.chainCode!),
-      origin: new CryptoKeypath(hardened(purpose, 0, account), FINGERPRINT),
+      origin: new CryptoKeypath(hardened(purpose, coin, account), FINGERPRINT),
     });
   };
   const answer = (...keys: CryptoHDKey[]) => new CryptoMultiAccounts(FINGERPRINT, keys).toUR();
-
-  it('asks for the account path the parser reads', () => {
+  /** The account path the pairing QR asks the Keystone for. */
+  const requestedPath = (network: string) => {
     const decoder = new URDecoder();
-    decoder.receivePart(String(generateBitcoinSyncQR('segwit', 0).data));
+    decoder.receivePart(String(generateBitcoinSyncQR(network, 'segwit', 0).data));
     const [schema] = QRHardwareCall.fromCBOR(decoder.resultUR().cbor).getParams().getSchemas();
+    return `m/${schema.getKeypath().getPath()}`;
+  };
 
-    expect(`m/${schema.getKeypath().getPath()}`).toBe(keystoneBitcoinAccountPath('segwit', 0));
-    expect(keystoneBitcoinAccountPath('segwit', 0)).toBe("m/84'/0'/0'");
+  // A testnet account sits at coin type 1', where the software wallet derives it (issue 1327).
+  it.each([['Mainnet', "m/84'/0'/0'"], ['Testnet', "m/84'/1'/0'"]])('asks for the %s account at its own coin type', (network, path) => {
+    expect(requestedPath(network)).toBe(path);
   });
 
   it('reads the account from the crypto-multi-accounts answer, with the master fingerprint', () => {
-    const parsed = parseBitcoinAccount(answer(accountKey(84, 0)), 'segwit', 0);
+    const parsed = parseBitcoinAccount(answer(accountKey(84, 0)), 'Mainnet', 'segwit', 0);
 
     expect(parsed).toMatchObject({ xfp: FINGERPRINT.toString('hex'), path: "84'/0'/0'" });
     // The paired xpub derives the account's own addresses.
@@ -114,19 +117,24 @@ describe('Keystone Bitcoin pairing', () => {
     expect(child(parsed.xpub)).toBe(NativeBuffer.from(root.derive("m/84'/0'/0'/0/3").publicKey!).toString('hex'));
   });
 
+  it('reads a testnet account at coin type 1\', and refuses the coin type 0\' one there', () => {
+    expect(parseBitcoinAccount(answer(accountKey(84, 0, 1)), 'Testnet', 'segwit', 0).path).toBe("84'/1'/0'");
+    expect(() => parseBitcoinAccount(answer(accountKey(84, 0, 0)), 'Testnet', 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
+  });
+
   it('takes the requested account from an answer that carries others', () => {
-    const parsed = parseBitcoinAccount(answer(accountKey(86, 0), accountKey(84, 0)), 'segwit', 0);
+    const parsed = parseBitcoinAccount(answer(accountKey(86, 0), accountKey(84, 0)), 'Mainnet', 'segwit', 0);
 
     expect(parsed.path).toBe("84'/0'/0'");
   });
 
   it('refuses an answer without the requested account', () => {
-    expect(() => parseBitcoinAccount(answer(accountKey(84, 1)), 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
-    expect(() => parseBitcoinAccount(accountKey(84, 1).toUR(), 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
+    expect(() => parseBitcoinAccount(answer(accountKey(84, 1)), 'Mainnet', 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
+    expect(() => parseBitcoinAccount(accountKey(84, 1).toUR(), 'Mainnet', 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
   });
 
   it('refuses another kind of answer', () => {
-    expect(() => parseBitcoinAccount(new UR(NativeBuffer.from('a0', 'hex'), 'crypto-account'))).toThrow('Expected a crypto-multi-accounts or crypto-hdkey response');
+    expect(() => parseBitcoinAccount(new UR(NativeBuffer.from('a0', 'hex'), 'crypto-account'), 'Mainnet')).toThrow('Expected a crypto-multi-accounts or crypto-hdkey response');
   });
 });
 

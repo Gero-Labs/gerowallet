@@ -103,7 +103,7 @@ describe('dispatchTrezor', () => {
     });
 
     test('Bitcoin: calls trezorWeb.initBitcoinTrezor and reformats the response', async () => {
-      mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Bitcoin' } as never);
+      mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Bitcoin', network: 'Mainnet' } as never);
       mockedTrezorWeb.initBitcoinTrezor.mockResolvedValue({
         xpub: 'xpub1btc',
         deviceLabel: 'My Trezor',
@@ -112,7 +112,7 @@ describe('dispatchTrezor', () => {
 
       const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Bitcoin', network: 'Mainnet' });
 
-      expect(mockedTrezorWeb.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0);
+      expect(mockedTrezorWeb.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0, 'Mainnet');
       expect(mockedTrezorWeb.getXpub).not.toHaveBeenCalled();
       expect(resp.data.success).toBe(true);
       expect(resp.data.coldWalletProps).toEqual({
@@ -122,6 +122,17 @@ describe('dispatchTrezor', () => {
         btSupported: true,
         version: '2.6.0',
       });
+    });
+
+    // Issue 1327: a testnet account sits at coin type 1', where the device is asked for it.
+    test('Bitcoin testnet: pairs the account at coin type 1\'', async () => {
+      mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Bitcoin', network: 'Testnet' } as never);
+      mockedTrezorWeb.initBitcoinTrezor.mockResolvedValue({ xpub: 'xpub1test', deviceLabel: 'My Trezor', firmwareVersion: '2.6.0' });
+
+      const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Bitcoin', network: 'Testnet' });
+
+      expect(mockedTrezorWeb.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0, 'Testnet');
+      expect(resp.data.coldWalletProps.keys).toEqual([{ publicKey: 'xpub1test', chainCode: '', path: "m/84'/1'/0'" }]);
     });
   });
 
@@ -188,12 +199,20 @@ describe('dispatchTrezor', () => {
     });
   });
 
+  test('verifyBitcoinAddress: verifies on the wallet\'s network', async () => {
+    mockedTrezorWeb.verifyBitcoinAddress.mockResolvedValue('tb1qaddress');
+
+    await dispatchTrezor({ method: 'verifyBitcoinAddress', addressType: 'taproot', network: 'Testnet' });
+
+    expect(mockedTrezorWeb.verifyBitcoinAddress).toHaveBeenCalledWith('taproot', 0, 0, false, 'Testnet');
+  });
+
   test('verifyBitcoinAddress: calls trezorWeb.verifyBitcoinAddress with defaults applied', async () => {
     mockedTrezorWeb.verifyBitcoinAddress.mockResolvedValue('bc1qaddress');
 
     const resp = await dispatchTrezor({ method: 'verifyBitcoinAddress' });
 
-    expect(mockedTrezorWeb.verifyBitcoinAddress).toHaveBeenCalledWith('segwit', 0, 0, false);
+    expect(mockedTrezorWeb.verifyBitcoinAddress).toHaveBeenCalledWith('segwit', 0, 0, false, 'Mainnet');
     expect(resp).toEqual({
       data: { success: true, address: 'bc1qaddress' },
       target: 'gerowallet',

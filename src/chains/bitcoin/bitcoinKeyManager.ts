@@ -9,38 +9,18 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { HDKey } from '@scure/bip32';
 import * as bip39 from 'bip39';
+import { ACCOUNT_XPUB_VERSION, bitcoinAccountPath } from './bitcoinPaths';
 
 // Initialize ECC library for bitcoinjs-lib
 bitcoin.initEccLib(ecc);
 
-/**
- * Bitcoin key derivation paths (BIP standards)
- */
-export const BitcoinDerivationPaths = {
-  BIP44: 44,      // Legacy P2PKH (1...)
-  BIP49: 49,      // Nested SegWit P2SH-P2WPKH (3...)
-  BIP84: 84,      // Native SegWit P2WPKH (bc1q...) [DEFAULT]
-  BIP86: 86,      // Taproot P2TR (bc1p...)
-};
-
-export const BitcoinCoinType = 0;       // BIP44 coin type for Bitcoin
-export const BitcoinTestnetCoinType = 1; // BIP44 coin type for Bitcoin Testnet
-
-/**
- * Get derivation purpose based on address type
- */
-export function getDerivationPurpose(addressType: string): number {
-  switch (addressType) {
-    case 'legacy':
-      return BitcoinDerivationPaths.BIP44;
-    case 'segwit':
-      return BitcoinDerivationPaths.BIP84;  // DEFAULT
-    case 'taproot':
-      return BitcoinDerivationPaths.BIP86;
-    default:
-      return BitcoinDerivationPaths.BIP84;
-  }
-}
+export {
+  BitcoinDerivationPaths,
+  BitcoinCoinType,
+  BitcoinTestnetCoinType,
+  getDerivationPurpose,
+  bitcoinAccountPath,
+} from './bitcoinPaths';
 
 /**
  * Derive Bitcoin root key from BIP39 mnemonic
@@ -103,11 +83,33 @@ export interface BitcoinHardwareAccount {
   accountIndex: number;
 }
 
-/** A Bitcoin account's derivation path: m/purpose'/coinType'/account' (coin type 1 off Mainnet). */
-export function bitcoinAccountPath(network: string, addressType: string = 'segwit', accountIndex: number = 0): string {
-  const purpose = getDerivationPurpose(addressType);
-  const coinType = network === 'Mainnet' ? BitcoinCoinType : BitcoinTestnetCoinType;
-  return `m/${purpose}'/${coinType}'/${accountIndex}'`;
+/** The extended public key versions a device may export an account in: xpub/tpub, ypub/upub, zpub/vpub. */
+const EXTENDED_PUBLIC_VERSIONS = [0x0488b21e, 0x043587cf, 0x049d7cb2, 0x044a5262, 0x04b24746, 0x045f1cf6];
+
+/**
+ * A device's account key in the form the wallet stores ({@link ACCOUNT_XPUB_VERSION}),
+ * whatever version bytes it was exported with: a Trezor on testnet answers with a
+ * `tpub`, which every derivation here refuses as a version mismatch (issue 1327).
+ * The key itself is unchanged. Refuses anything but an extended public key.
+ */
+export function toAccountXpub(extendedKey: string): string {
+  for (const version of EXTENDED_PUBLIC_VERSIONS) {
+    let key: HDKey;
+    try {
+      key = HDKey.fromExtendedKey(extendedKey, { private: 0, public: version });
+    } catch {
+      continue; // another version
+    }
+    return new HDKey({
+      versions: { private: 0x0488ade4, public: ACCOUNT_XPUB_VERSION },
+      depth: key.depth,
+      index: key.index,
+      parentFingerprint: key.parentFingerprint,
+      chainCode: key.chainCode!,
+      publicKey: key.publicKey!,
+    }).publicExtendedKey;
+  }
+  throw new Error('Not an extended public key');
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   type BitcoinHardwareAccount,
 } from './bitcoinKeyManager';
 import { getBitcoinNetwork, spentAddress } from './bitcoinPsbtBuilder';
+import { trezorCoin } from './bitcoinPaths';
 
 export { parseBitcoinPsbt } from './bitcoinPsbtBuilder';
 
@@ -33,11 +34,6 @@ const SCRIPT_TYPES = {
   segwit: { spend: 'SPENDWITNESS', change: 'PAYTOWITNESS' },
   taproot: { spend: 'SPENDTAPROOT', change: 'PAYTOTAPROOT' },
 } as const satisfies Record<BitcoinAddressTypeName, object>;
-
-/** Trezor Connect's coin for the wallet's network. */
-export function trezorCoin(network: string): 'btc' | 'test' {
-  return network === 'Mainnet' ? 'btc' : 'test';
-}
 
 /** The `TrezorConnect.signTransaction` request for `psbt`, which may spend only the account's own coins. */
 export function trezorSignTransactionParams(psbt: bitcoin.Psbt, account: BitcoinHardwareAccount): Params<SignTransaction> {
