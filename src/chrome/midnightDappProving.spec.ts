@@ -16,6 +16,7 @@ import {
   ProvingUploadStore,
   assertDappProvingAvailable,
   dappProvingErrorCode,
+  preflightDappProving,
   runDappProvingCheck,
   runDappProvingProve,
 } from './midnightDappProving';
@@ -436,5 +437,91 @@ describe('runDappProvingProve with a proving park', () => {
 
     await expect(runDappProvingProve(store, deps, ctx, { uploadId: 'u1', keyLocation: 'midnight/x' })).rejects.toBeInstanceOf(DappProvingFailedError);
     expect(prompt).not.toHaveBeenCalled();
+  });
+});
+
+describe('preflightDappProving', () => {
+  const remotePref: ProofServerPreference = { ...localPref, mode: 'remote' };
+  const zkpaasPref: ProofServerPreference = { ...localPref, mode: 'zkpaas', zkpaasApiKey: 'KEY' };
+
+  it('resolves with the source when the proof server answers its health check', async () => {
+    const checkHealth = vi.fn(async () => true);
+    await expect(preflightDappProving(ctx, { checkHealth })).resolves.toBe('local');
+    expect(checkHealth).toHaveBeenCalledWith(expect.objectContaining({ url: 'http://localhost:6300', source: 'local' }));
+  });
+
+  it('fails fast on Gero Cloud when no local proof server answers, naming the URL and the fix', async () => {
+    const err = await preflightDappProving({ ...ctx, proofServer: remotePref }, { checkHealth: async () => false }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DappProvingUnavailableError);
+    expect((err as Error).message).toMatch(/Gero Cloud, which only proves transactions the wallet builds itself/);
+    expect((err as Error).message).toContain('http://localhost:6300');
+    expect((err as Error).message).toMatch(/midnightntwrk\/proof-server/);
+    expect(dappProvingErrorCode(err)).toBe(MidnightErrorCode.InternalError);
+  });
+
+  it('names the configured local server when it does not answer', async () => {
+    await expect(preflightDappProving(ctx, { checkHealth: async () => false }))
+      .rejects.toThrow(/local proof server at http:\/\/localhost:6300 did not answer/);
+  });
+
+  it('points at the Arkhia key and endpoint when zkPaaS does not answer', async () => {
+    const checkHealth = vi.fn(async () => false);
+    const err = await preflightDappProving({ ...ctx, proofServer: zkpaasPref, provingConsent: ZKPAAS_CONSENT }, { checkHealth }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DappProvingUnavailableError);
+    expect((err as Error).message).toMatch(/Arkhia zkPaaS did not answer.*API key and endpoint/);
+    // The auth headers reach the health check, never the message.
+    expect(checkHealth).toHaveBeenCalledWith(expect.objectContaining({ source: 'zkpaas', headers: { 'x-api-key': 'KEY' } }));
+    expect((err as Error).message).not.toContain('KEY');
+  });
+
+  it('still rejects an unusable preference before any health check', async () => {
+    const checkHealth = vi.fn(async () => true);
+    await expect(preflightDappProving({ ...ctx, proofServer: { ...localPref, mode: 'zkpaas' } }, { checkHealth }))
+      .rejects.toBeInstanceOf(DappProvingUnavailableError);
+    expect(checkHealth).not.toHaveBeenCalled();
+  });
+});
+
+describe('runDappProvingProve park gating (canPrompt)', () => {
+  it('fails at once without prompting when the tab has no visible side panel', async () => {
+    const { ProvingPark } = await import('./midnightProvingPark');
+    const store = new ProvingUploadStore();
+    uploadPart(store, ORIGIN, 'u1', 'preimage', bytes('pre'));
+    const { deps } = fakeDeps({ prove: async () => { throw new Error('network error contacting proof server /prove'); } });
+    const prompt = vi.fn(async (): Promise<'retry'> => 'retry');
+    const preflight = vi.fn(async () => false);
+    deps.park = new ProvingPark({ preflight, prompt, isUnreachable: () => true, now: Date.now });
+    const canPrompt = vi.fn(() => false);
+    deps.canPrompt = canPrompt;
+
+    const err = await runDappProvingProve(store, deps, { ...ctx, tabId: 5 }, { uploadId: 'u1', keyLocation: 'midnight/x' }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(DappProvingFailedError);
+    expect((err as Error).message).toMatch(/http:\/\/localhost:6300 could not generate the proof \(network error contacting proof server \/prove\)/);
+    expect(canPrompt).toHaveBeenCalledWith(5);
+    expect(prompt).not.toHaveBeenCalled();
+    expect(preflight).not.toHaveBeenCalled();
+  });
+
+  it('keeps the retry prompt when the tab\'s side panel is open', async () => {
+    const { ProvingPark } = await import('./midnightProvingPark');
+    const store = new ProvingUploadStore();
+    uploadPart(store, ORIGIN, 'u1', 'preimage', bytes('pre'));
+    let calls = 0;
+    const { deps } = fakeDeps({
+      prove: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('down');
+        return new Uint8Array([7]);
+      },
+    });
+    const prompt = vi.fn(async (): Promise<'retry'> => 'retry');
+    deps.park = new ProvingPark({ preflight: async () => true, prompt, isUnreachable: () => true, now: Date.now });
+    deps.canPrompt = () => true;
+
+    const reply = await runDappProvingProve(store, deps, { ...ctx, tabId: 5 }, { uploadId: 'u1', keyLocation: 'midnight/x' });
+
+    expect(decodeBase64(reply.proof)).toEqual(new Uint8Array([7]));
+    expect(prompt).toHaveBeenCalledTimes(1);
   });
 });

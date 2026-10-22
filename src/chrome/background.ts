@@ -476,6 +476,8 @@ chrome.runtime.onConnect.addListener((port) => {
     try { oldPort.disconnect(); } catch { /* already disconnected */ }
   }
   miniGeroPorts.set(tabId, port);
+  // The panel is open now, so a "waiting for you" notification is stale.
+  clearDappParkedNotification(tabId);
 
   port.onMessage.addListener((message) => {
     if (!message?.requestId) return;
@@ -594,9 +596,74 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
  */
 function parkMidnightRequest(method: string, payload: unknown, tabId: number): Promise<BackgroundResponse> {
   const pending = sendToMiniGero(method, payload, tabId);
-  if (!miniGeroPorts.has(tabId)) void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+  if (!miniGeroPorts.has(tabId)) {
+    void openSidebar(tabId, 'sidepanel/index.html')
+      .then((opened) => {
+        // No gesture, so the panel stayed closed: the badge alone is easy to
+        // miss while the dApp shows "waiting for your approval".
+        if (!opened && !miniGeroPorts.has(tabId)) void showDappParkedNotification(tabId, payload);
+      })
+      .catch(() => undefined);
+  }
   return pending;
 }
+
+// One notification per tab (repeated parks replace it). A click is a user
+// gesture, so it can open the side panel the parked request is waiting in.
+const DAPP_PARKED_NOTIFICATION_PREFIX = 'dappParked:';
+
+/** Hostname of the payload's `website` origin only; never anything else from the payload. */
+function parkedRequestDomain(payload: unknown): string | undefined {
+  const website = payload && typeof payload === 'object' ? (payload as { website?: unknown }).website : undefined;
+  if (typeof website !== 'string') return undefined;
+  try {
+    return new URL(website).hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function showDappParkedNotification(tabId: number, payload: unknown): Promise<void> {
+  try {
+    const locale = await workerLocale();
+    const domain = parkedRequestDomain(payload);
+    await chrome.notifications.create(`${DAPP_PARKED_NOTIFICATION_PREFIX}${tabId}`, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('public/logo128.png'),
+      title: domain
+        ? String(i18n.t('midnight.connector.parkedNotificationTitle', locale, { domain }))
+        : String(i18n.t('midnight.connector.parkedNotificationTitleNoSite', locale)),
+      message: String(i18n.t('midnight.connector.parkedNotificationMessage', locale)),
+    });
+  } catch (e) {
+    debugLog('dApp parked notification skipped:', errorMessage(e));
+  }
+}
+
+function clearDappParkedNotification(tabId: number): void {
+  try {
+    void chrome.notifications.clear(`${DAPP_PARKED_NOTIFICATION_PREFIX}${tabId}`).catch(() => undefined);
+  } catch { /* best effort */ }
+}
+
+chrome.notifications?.onClicked.addListener((notificationId) => {
+  if (!notificationId.startsWith(DAPP_PARKED_NOTIFICATION_PREFIX)) return;
+  const tabId = Number(notificationId.slice(DAPP_PARKED_NOTIFICATION_PREFIX.length));
+  if (Number.isInteger(tabId) && tabId >= 0) {
+    if (sidePanelSupported) {
+      // Called before any await so the click still counts as the gesture.
+      // openSidebar already set this tab's panel path when the park began.
+      chrome.sidePanel.open({ tabId }).catch((e: unknown) => debugLog('dApp parked notification: side panel not opened:', errorMessage(e)));
+    } else {
+      void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+    }
+    chrome.tabs.update(tabId, { active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab) return;
+      chrome.windows.update(tab.windowId, { focused: true }, () => void chrome.runtime.lastError);
+    });
+  }
+  void chrome.notifications.clear(notificationId).catch(() => undefined);
+});
 
 const processedDomains: Set<string> = new Set<string>();
 
@@ -6922,12 +6989,16 @@ app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
       loadMidnightDappProving(),
       import('@/stores/midnightStore'),
     ]);
-    const source = mod.assertDappProvingAvailable({
+    // midnightLocalProver stays dynamic, see loadMidnightProvingPark.
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    const source = await mod.preflightDappProving({
       origin,
       network: wallet.network,
       sdkNetworkId: midnightSdkNetworkId(wallet.network),
       proofServer: midnightStore.proofServer,
       provingConsent: midnightStore.shieldedProvingConsent,
+    }, {
+      checkHealth: (target) => checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.source === 'zkpaas' }),
     });
     debugLog('🌙 connector getProvingProvider', { origin, source });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
@@ -6995,7 +7066,7 @@ async function handleMidnightDappProving(
     try {
       const reply = await mod[op](
         store,
-        { makeProvider: makeLocalProvingProvider, park },
+        { makeProvider: makeLocalProvingProvider, park, canPrompt: (tabId) => miniGeroPorts.has(tabId) },
         {
           origin,
           network: wallet.network,
