@@ -1,5 +1,7 @@
 <template>
-  <v-select
+  <!-- An autocomplete, not a select: with ~200 countries the user types to narrow the list,
+       and Enter picks the first match. -->
+  <v-autocomplete
     :model-value="modelValue || null"
     :label="label"
     :items="countries"
@@ -8,6 +10,8 @@
     :placeholder="placeholder"
     :disabled="disabled"
     :rules="rules"
+    :no-data-text="t('common.noResults')"
+    auto-select-first
     attach
     :menu-props="{ location: 'top' }"
     density="compact"
@@ -30,11 +34,12 @@
         </div>
       </v-list-item>
     </template>
-  </v-select>
+  </v-autocomplete>
 </template>
 
 <script setup lang="ts">
 import countries from '@/plugins/countries';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 withDefaults(defineProps<{
   modelValue: string;
@@ -45,6 +50,8 @@ withDefaults(defineProps<{
 }>(), { placeholder: '', disabled: false, rules: () => [] });
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>();
+
+const { t } = useTranslation();
 </script>
 
 <style lang="scss" scoped>
