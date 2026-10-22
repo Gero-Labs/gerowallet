@@ -20,6 +20,7 @@ import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex 
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
+import { bitcoinAccountPath, bitcoinAddressPath, trezorCoin } from '@/chains/bitcoin/bitcoinPaths';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 
 /**
@@ -1315,39 +1316,25 @@ export default {
   // ============================================================================
 
   /**
-   * Initialize Bitcoin Trezor connection and get extended public key (xpub)
+   * Initialize Bitcoin Trezor connection and get the account's extended public key
    * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
    * @param accountIndex - Account index (default 0)
-   * @returns Bitcoin xpub and device info
+   * @param network - The wallet's network: picks Connect's coin and the path's coin type
+   * @returns Bitcoin xpub, in the wallet's form, and device info
    */
-  async initBitcoinTrezor(addressType: string = 'segwit', accountIndex: number = 0): Promise<{
+  async initBitcoinTrezor(addressType: string = 'segwit', accountIndex: number = 0, network: string = 'Mainnet'): Promise<{
     xpub: string;
     deviceLabel: string;
     firmwareVersion: string;
   }> {
     await this.init();
 
-    // Determine coin and derivation path based on address type
-    let path: string;
-    let coin: string = 'btc'; // Bitcoin mainnet
+    // Loaded here so the Cardano paths that use this module don't bundle Bitcoin's crypto.
+    const { toAccountXpub } = await import('@/chains/bitcoin/bitcoinKeyManager');
 
-    switch (addressType) {
-      case 'legacy':
-        path = `m/44'/0'/${accountIndex}'`; // BIP44
-        break;
-      case 'taproot':
-        path = `m/86'/0'/${accountIndex}'`; // BIP86
-        break;
-      case 'segwit':
-      default:
-        path = `m/84'/0'/${accountIndex}'`; // BIP84
-        break;
-    }
-
-    // Get extended public key from Trezor
     const result = await TrezorConnect.getPublicKey({
-      path,
-      coin,
+      path: bitcoinAccountPath(network, addressType, accountIndex),
+      coin: trezorCoin(network),
       crossChain: false,
     });
 
@@ -1363,7 +1350,8 @@ export default {
       : 'Unknown';
 
     return {
-      xpub: result.payload.xpub,
+      // On testnet the device answers with a tpub; the wallet stores every account key as an xpub.
+      xpub: toAccountXpub(result.payload.xpub),
       deviceLabel,
       firmwareVersion,
     };
@@ -1376,6 +1364,7 @@ export default {
    * @param addressIndex - Address index
    * @param isChange - Internal (change) address or external (receive)
    * @param verify - Display address on device for verification
+   * @param network - The wallet's network: picks Connect's coin and the path's coin type
    * @returns Bitcoin address
    */
   async getAddress(
@@ -1383,33 +1372,30 @@ export default {
     accountIndex: number = 0,
     addressIndex: number = 0,
     isChange: boolean = false,
-    verify: boolean = false
+    verify: boolean = false,
+    network: string = 'Mainnet'
   ): Promise<string> {
     await this.init();
 
-    // Determine path and script type based on address type
-    let path: string;
+    const path = bitcoinAddressPath(network, addressType, accountIndex, isChange, addressIndex);
     let scriptType: 'SPENDADDRESS' | 'SPENDMULTISIG' | 'SPENDWITNESS' | 'SPENDP2SHWITNESS' | 'SPENDTAPROOT';
 
     switch (addressType) {
       case 'legacy':
-        path = `m/44'/0'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
         scriptType = 'SPENDADDRESS'; // P2PKH
         break;
       case 'taproot':
-        path = `m/86'/0'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
         scriptType = 'SPENDTAPROOT'; // P2TR
         break;
       case 'segwit':
       default:
-        path = `m/84'/0'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
         scriptType = 'SPENDWITNESS'; // P2WPKH
         break;
     }
 
     const result = await TrezorConnect.getAddress({
       path,
-      coin: 'btc',
+      coin: trezorCoin(network),
       showOnTrezor: verify,
       scriptType,
     });
@@ -1449,13 +1435,15 @@ export default {
    * @param accountIndex - Account index
    * @param addressIndex - Address index
    * @param isChange - Internal or external address
+   * @param network - The wallet's network
    */
   async verifyBitcoinAddress(
     addressType: string = 'segwit',
     accountIndex: number = 0,
     addressIndex: number = 0,
-    isChange: boolean = false
+    isChange: boolean = false,
+    network: string = 'Mainnet'
   ): Promise<string> {
-    return await this.getAddress(addressType, accountIndex, addressIndex, isChange, true);
+    return await this.getAddress(addressType, accountIndex, addressIndex, isChange, true, network);
   },
 };

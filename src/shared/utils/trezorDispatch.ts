@@ -9,6 +9,7 @@ import i18n from '@/plugins/i18n';
 import WalletStore from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 import { assertAccountIndices } from '@/shared/utils/walletAccount';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 
 /**
  * Document-context dispatcher for Trezor operations (WebUSB + Bridge transport).
@@ -48,7 +49,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
         coldWalletProps = await trezorWeb.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {
         // Bitcoin wallet - use default SegWit address type
-        coldWalletProps = await trezorWeb.initBitcoinTrezor('segwit', 0);
+        coldWalletProps = await trezorWeb.initBitcoinTrezor('segwit', 0, network.network);
 
         // Format Bitcoin response to match expected structure
         if (coldWalletProps) {
@@ -56,7 +57,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
           coldWalletProps = {
             productName: deviceLabel,
             hwPublicKey: xpub,
-            keys: [{ publicKey: xpub, chainCode: '', path: "m/84'/0'/0'" }],
+            keys: [{ publicKey: xpub, chainCode: '', path: bitcoinAccountPath(network.network, 'segwit', 0) }],
             btSupported: true,
             version: firmwareVersion,
           };
@@ -147,13 +148,14 @@ export async function dispatchTrezor(data: any): Promise<any> {
       };
     } else if (data.method === 'verifyBitcoinAddress') {
       // Verify Bitcoin address on Trezor device
-      const { addressType, accountIndex, addressIndex, isChange } = data;
+      const { addressType, accountIndex, addressIndex, isChange, network } = data;
 
       const verifiedAddress = await trezorWeb.verifyBitcoinAddress(
         addressType || 'segwit',
         accountIndex || 0,
         addressIndex || 0,
-        isChange || false
+        isChange || false,
+        network || 'Mainnet'
       );
 
       return {

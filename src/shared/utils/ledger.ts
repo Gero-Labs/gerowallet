@@ -29,6 +29,7 @@ import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
+import { ACCOUNT_XPUB_VERSION, bitcoinAccountPath, bitcoinAddressPath } from '@/chains/bitcoin/bitcoinPaths';
 
 /**
  * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
@@ -626,28 +627,12 @@ export default {
 
       hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Key on Your Ledger Device.');
 
-      // Determine derivation path based on address type
-      let purpose: number;
-      switch (addressType) {
-        case 'legacy':
-          purpose = 44; // BIP44
-          break;
-        case 'taproot':
-          purpose = 86; // BIP86
-          break;
-        case 'segwit':
-        default:
-          purpose = 84; // BIP84
-          break;
-      }
+      const path = bitcoinAccountPath(network, addressType, accountIndex);
 
-      // BIP44 coin type: 0 = mainnet, 1 = testnet
-      const coinType = network === 'Mainnet' ? 0 : 1;
-      const path = `m/${purpose}'/${coinType}'/${accountIndex}'`;
-
-      // Get extended public key from Ledger
-      // getWalletXpub returns a base58-encoded xpub string directly (not an object)
-      const xpub = await btc.getWalletXpub({ path, xpubVersion: 0x0488B21E });
+      // getWalletXpub returns the base58 key directly, in the version asked for: the
+      // wallet's `xpub` form on every network, as a software wallet stores it (a `tpub`
+      // would be refused by every derivation).
+      const xpub = await btc.getWalletXpub({ path, xpubVersion: ACCOUNT_XPUB_VERSION });
 
       return { productName, version, xpub, btSupported };
     } catch (error: unknown) {
@@ -681,24 +666,7 @@ export default {
       const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
       const btc = new AppBtc({ transport });
 
-      // Determine derivation path
-      let purpose: number;
-      switch (addressType) {
-        case 'legacy':
-          purpose = 44;
-          break;
-        case 'taproot':
-          purpose = 86;
-          break;
-        case 'segwit':
-        default:
-          purpose = 84;
-          break;
-      }
-
-      // BIP44 coin type: 0 = mainnet, 1 = testnet
-      const coinType = network === 'Mainnet' ? 0 : 1;
-      const path = `m/${purpose}'/${coinType}'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
+      const path = bitcoinAddressPath(network, addressType, accountIndex, isChange, addressIndex);
 
       if (verify) {
         hardwareLoading.setText('Please Verify Address on Your Ledger Device.');
@@ -757,17 +725,19 @@ export default {
    * @param addressIndex - Address index
    * @param isChange - Internal or external address
    * @param isUsb - Use USB or Bluetooth
+   * @param network - The wallet's network, which picks the coin type of the path
    */
   async verifyBitcoinAddress(
     addressType: string = 'segwit',
     accountIndex: number = 0,
     addressIndex: number = 0,
     isChange: boolean = false,
-    isUsb: boolean = true
+    isUsb: boolean = true,
+    network: string = 'Mainnet'
   ): Promise<void> {
     hardwareLoading.setLoading(true);
     try {
-      await this.getBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true, isUsb);
+      await this.getBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true, isUsb, network);
       hardwareLoading.setLoading(false);
       snackbar.fireSuccess(i18n.t('wallet.ledgerAddressVerified') as string);
     } catch (error: unknown) {

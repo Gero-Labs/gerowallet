@@ -38,12 +38,12 @@ const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as 
 const root = HDKey.fromMasterSeed(mnemonicToSeedSync('legal winner thank year wave sausage worth useful legal winner thank yellow'));
 const FINGERPRINT = NodeBuffer.from(root.fingerprint.toString(16).padStart(8, '0'), 'hex');
 
-/** The Keystone's answer: the account key at m/84'/0'/account', in crypto-multi-accounts. */
-function answer(account: number): { type: string; cbor: string } {
-  const node = root.derive(`m/84'/0'/${account}'`);
+/** The Keystone's answer: the account key at m/84'/coin'/account', in crypto-multi-accounts. */
+function answer(account: number, coin = 0): { type: string; cbor: string } {
+  const node = root.derive(`m/84'/${coin}'/${account}'`);
   const key = new CryptoHDKey({
     isMaster: false, key: NodeBuffer.from(node.publicKey!), chainCode: NodeBuffer.from(node.chainCode!),
-    origin: new CryptoKeypath([84, 0, account].map((index) => new PathComponent({ index, hardened: true })), FINGERPRINT),
+    origin: new CryptoKeypath([84, coin, account].map((index) => new PathComponent({ index, hardened: true })), FINGERPRINT),
   });
   return { type: 'crypto-multi-accounts', cbor: new CryptoMultiAccounts(FINGERPRINT, [key]).toCBOR().toString('hex') };
 }
@@ -51,9 +51,9 @@ function answer(account: number): { type: string; cbor: string } {
 enableAutoUnmount(afterEach);
 afterEach(() => vi.clearAllMocks());
 
-async function scanWithKeystone(ur: { type: string; cbor: string }) {
+async function scanWithKeystone(ur: { type: string; cbor: string }, network: string = Network.MAINNET) {
   const wrapper = mount(StepConnect, {
-    props: { network: networks.resolveNetwork(Blockchain.BITCOIN, Network.MAINNET), walletType: WalletType.Keystone },
+    props: { network: networks.resolveNetwork(Blockchain.BITCOIN, network), walletType: WalletType.Keystone },
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
   });
   await wrapper.find('button.step-next').trigger('click');
@@ -72,6 +72,13 @@ describe('pairing a Keystone as a Bitcoin wallet', () => {
     // The paired xpub derives the account's own addresses.
     expect(HDKey.fromExtendedKey(payload.publicKey).derive('m/0/0').publicKey).toEqual(root.derive("m/84'/0'/0'/0/0").publicKey);
     expect(mocks.setError).not.toHaveBeenCalled();
+  });
+
+  it('pairs a testnet account at coin type 1\' (issue 1327)', async () => {
+    const wrapper = await scanWithKeystone(answer(0, 1), Network.TESTNET);
+
+    const [[payload]] = wrapper.emitted('connected') as [[{ keys: Array<{ path: string }> }]];
+    expect(payload.keys[0].path).toBe("84'/1'/0'");
   });
 
   it('pairs nothing from an answer for another account', async () => {
