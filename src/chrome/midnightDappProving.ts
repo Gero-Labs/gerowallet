@@ -21,6 +21,7 @@ import type { ProverRequestOptions } from '@/chains/midnight/midnightLocalProver
 import {
   DappProvingUnavailableError,
   describeDappProvingFailure,
+  describeDappProvingUnreachable,
   resolveDappProvingTarget,
 } from '@/chains/midnight/midnightProvingTarget';
 import type { DappProvingTarget, ProofServerPreference } from '@/chains/midnight/midnightProvingTarget';
@@ -274,6 +275,18 @@ export interface DappProvingDeps {
   makeProvider: (baseUrl: string, options?: ProverRequestOptions) => ledger.ProvingProvider;
   /** When present (and the context has a tab), an unreachable server prompts instead of failing. */
   park?: ProvingPark;
+  /**
+   * Whether a parked prompt for `tabId` would actually be seen (its side
+   * panel is connected). When it returns false the park is skipped and an
+   * unreachable server fails the proof at once. Absent means "yes", so a
+   * caller that injects a park without this keeps the park-always behaviour.
+   */
+  canPrompt?: (tabId: number) => boolean;
+}
+
+/** Health check for the resolved target; background wires `checkProofServerHealth`. */
+export interface DappProvingPreflightDeps {
+  checkHealth: (target: DappProvingTarget) => Promise<boolean>;
 }
 
 /**
@@ -283,6 +296,26 @@ export interface DappProvingDeps {
  */
 export function assertDappProvingAvailable(ctx: DappProvingContext): DappProvingTarget['source'] {
   return resolveDappProvingTarget(ctx.network, ctx.proofServer, ctx.provingConsent).source;
+}
+
+/**
+ * Async `getProvingProvider()` preflight: everything
+ * {@link assertDappProvingAvailable} checks (same resolution, same errors), plus a health check of the
+ * resolved server. Without it a Gero Cloud user with no local server got a
+ * provider that silently parked every proof behind a prompt the user often
+ * could not see, so the dapp waited for minutes with no error. Throws
+ * {@link DappProvingUnavailableError} naming the URL and the fix.
+ */
+export async function preflightDappProving(
+  ctx: DappProvingContext,
+  deps: DappProvingPreflightDeps,
+): Promise<DappProvingTarget['source']> {
+  const target = resolveDappProvingTarget(ctx.network, ctx.proofServer, ctx.provingConsent);
+  if (!(await deps.checkHealth(target))) {
+    debugLog('🌙 connector getProvingProvider: proof server did not answer', { origin: ctx.origin, source: target.source });
+    throw new DappProvingUnavailableError(describeDappProvingUnreachable(target));
+  }
+  return target.source;
 }
 
 function requireKeyLocation(data: Record<string, unknown>): string {
@@ -322,11 +355,17 @@ async function withProvingTarget<T>(
   const startedAt = Date.now();
   debugLog(`🌙 connector ${op}: start`, { origin: ctx.origin, keyLocation, source: target.source });
   try {
-    // With a park and a tab, an unreachable server prompts the user (retry /
-    // cancel) instead of failing; ProvingParkCancelled carries the last
-    // failure detail as its message, so the wording below stays the same.
-    const result = deps.park && typeof ctx.tabId === 'number'
-      ? await deps.park.run({ origin: ctx.origin, tabId: ctx.tabId, target }, () => run(target))
+    // With a park and a tab whose side panel is open, an unreachable server
+    // prompts the user (retry / cancel) instead of failing;
+    // ProvingParkCancelled carries the last failure detail as its message, so
+    // the wording below stays the same. Without a visible panel a parked
+    // prompt nobody can see is just a hang from the dapp's point of view, so
+    // fail at once instead; the dapp can re-request proving once the user has
+    // started a server.
+    const tabId = ctx.tabId;
+    const park = typeof tabId === 'number' && (deps.canPrompt?.(tabId) ?? true) ? deps.park : undefined;
+    const result = park && typeof tabId === 'number'
+      ? await park.run({ origin: ctx.origin, tabId, target }, () => run(target))
       : await run(target);
     debugLog(`🌙 connector ${op}: ok (${Date.now() - startedAt}ms)`, { origin: ctx.origin, keyLocation });
     return result;
