@@ -626,6 +626,11 @@ function parkedRequestDomain(payload: unknown): string | undefined {
 async function showDappParkedNotification(tabId: number, payload: unknown): Promise<void> {
   try {
     const locale = await workerLocale();
+    // The panel may have connected while the locale loaded. Its connect hook
+    // already cleared this id, so creating the notification now would leave a
+    // stale "waiting for you" toast that nothing clears. Recheck after every
+    // await, and clear again if the panel arrived during the create itself.
+    if (miniGeroPorts.has(tabId)) return;
     const domain = parkedRequestDomain(payload);
     await chrome.notifications.create(`${DAPP_PARKED_NOTIFICATION_PREFIX}${tabId}`, {
       type: 'basic',
@@ -635,6 +640,7 @@ async function showDappParkedNotification(tabId: number, payload: unknown): Prom
         : String(i18n.t('midnight.connector.parkedNotificationTitleNoSite', locale)),
       message: String(i18n.t('midnight.connector.parkedNotificationMessage', locale)),
     });
+    if (miniGeroPorts.has(tabId)) clearDappParkedNotification(tabId);
   } catch (e) {
     debugLog('dApp parked notification skipped:', errorMessage(e));
   }
