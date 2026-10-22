@@ -468,6 +468,20 @@ const mapCerts = (certificates: Cardano.Certificate[], accountIndex: number): Tr
 };
 
 /**
+ * The stake key path of the first of `addresses` that names one. The key-management
+ * helper returns the full BIP32 path (m/1852'/1815'/account'/2/index) at the account
+ * the address was derived for, never an AccountKeyDerivationPath, so it goes to the
+ * device as it is (issue 1328).
+ */
+const firstStakeKeyPath = (addresses: GroupedAddress[]): BIP32Path | undefined => {
+  for (const address of addresses) {
+    const path = util.stakeKeyPathFromGroupedAddress(address);
+    if (path) return path;
+  }
+  return undefined;
+};
+
+/**
  * Resolve stake key path for a withdrawal reward address
  * Matches official SDK implementation from keyPaths.ts
  */
@@ -475,30 +489,9 @@ const resolveStakeKeyPath = (
   rewardAddress: Cardano.RewardAddress,
   knownAddresses: GroupedAddress[]
 ): string | null => {
-  // Find matching known address by reward account
-  const knownAddress = knownAddresses.find(
-    ({ rewardAccount }) => rewardAccount === rewardAddress.toAddress().toBech32()
-  );
-
-  // Get the stake key path from the matched address
-  if (!knownAddress) return null;
-
-  const stakeKeyPath = util.stakeKeyPathFromGroupedAddress(knownAddress);
-  if (!stakeKeyPath) return null;
-
-  // Type guard: ensure we have a valid AccountKeyDerivationPath (not a BIP32Path array)
-  if (typeof stakeKeyPath === 'object' && !Array.isArray(stakeKeyPath) && 'role' in stakeKeyPath && 'index' in stakeKeyPath) {
-    // Convert to BIP32 path string
-    const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
-      knownAddress.accountIndex,
-      stakeKeyPath as AccountKeyDerivationPath,
-      KeyPurpose.STANDARD
-    );
-
-    return bip32PathToString(bip32Path);
-  }
-
-  return null;
+  const rewardAccount = rewardAddress.toAddress().toBech32();
+  const stakeKeyPath = firstStakeKeyPath(knownAddresses.filter((address) => address.rewardAccount === rewardAccount));
+  return stakeKeyPath ? bip32PathToString(stakeKeyPath) : null;
 };
 
 /**
@@ -579,42 +572,25 @@ const toRequiredSigner = (keyHash: Ed25519KeyHashHex, context?: TrezorTxTransfor
     return !!paymentCredential && areStringsEqualInConstantTime(paymentCredential.toString(), keyHash);
   });
 
-  // Try to match against stake credentials
-  const stakeCredKnownAddress = context.knownAddresses.find((address: GroupedAddress) => {
-    const stakeCredential = Cardano.RewardAccount.toHash(address.rewardAccount);
-    return !!stakeCredential && areStringsEqualInConstantTime(stakeCredential.toString(), keyHash);
-  });
-
-  // If we found a payment credential match, return payment key path
+  // If we found a payment credential match, return payment key path: the helper returns
+  // the full BIP32 path at the address's account (issue 1328).
   if (paymentCredKnownAddress) {
-    const paymentKeyPath = util.paymentKeyPathFromGroupedAddress(paymentCredKnownAddress);
-    if (paymentKeyPath && typeof paymentKeyPath === 'object' && !Array.isArray(paymentKeyPath) && 'role' in paymentKeyPath && 'index' in paymentKeyPath) {
-      const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
-        context.accountIndex,
-        paymentKeyPath as AccountKeyDerivationPath,
-        KeyPurpose.STANDARD
-      );
-      return {
-        keyHash: undefined,
-        keyPath: bip32PathToString(bip32Path),
-      };
-    }
+    return {
+      keyHash: undefined,
+      keyPath: bip32PathToString(util.paymentKeyPathFromGroupedAddress(paymentCredKnownAddress)),
+    };
   }
 
-  // If we found a stake credential match, return stake key path
-  if (stakeCredKnownAddress) {
-    const stakeKeyPath = util.stakeKeyPathFromGroupedAddress(stakeCredKnownAddress);
-    if (stakeKeyPath && typeof stakeKeyPath === 'object' && !Array.isArray(stakeKeyPath) && 'role' in stakeKeyPath && 'index' in stakeKeyPath) {
-      const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
-        context.accountIndex,
-        stakeKeyPath as AccountKeyDerivationPath,
-        KeyPurpose.STANDARD
-      );
-      return {
-        keyHash: undefined,
-        keyPath: bip32PathToString(bip32Path),
-      };
-    }
+  // Try to match against stake credentials, and return the stake key path
+  const stakeKeyPath = firstStakeKeyPath(context.knownAddresses.filter((address: GroupedAddress) => {
+    const stakeCredential = Cardano.RewardAccount.toHash(address.rewardAccount);
+    return !!stakeCredential && areStringsEqualInConstantTime(stakeCredential.toString(), keyHash);
+  }));
+  if (stakeKeyPath) {
+    return {
+      keyHash: undefined,
+      keyPath: bip32PathToString(stakeKeyPath),
+    };
   }
 
   // If no match found, return the keyHash
