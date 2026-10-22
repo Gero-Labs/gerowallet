@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { CardanoSignature, CardanoSignDataSignature } from '@keystonehq/bc-ur-registry-cardano';
-import { CryptoHDKey, CryptoKeypath, CryptoMultiAccounts, PathComponent } from '@keystonehq/bc-ur-registry';
+import { CryptoHDKey, CryptoKeypath, CryptoMultiAccounts, PathComponent, QRHardwareCall } from '@keystonehq/bc-ur-registry';
 import { KeystoneSDK, UR, URDecoder } from '@keystonehq/keystone-sdk';
-import { generateBitcoinPSBTQR, getKeystoneAccountsUR, parseBitcoinSignature, parseBitcoinAccount, parseDataSignature, parseKeystoneAccounts, parseSignature } from './keystone';
+import { HDKey } from '@scure/bip32';
+import { mnemonicToSeedSync } from 'bip39';
+import {
+  generateBitcoinPSBTQR, generateBitcoinSyncQR, getKeystoneAccountsUR, keystoneBitcoinAccountPath, parseBitcoinSignature, parseBitcoinAccount,
+  parseDataSignature, parseKeystoneAccounts, parseSignature,
+} from './keystone';
 import { InvalidAccountIndexError } from './walletAccount';
 
 const mocks = vi.hoisted(() => ({ build: vi.fn(() => 'cose-signature'), key: vi.fn(() => 'cose-key') }));
@@ -65,11 +70,63 @@ describe('Keystone real SDK wire contracts', () => {
     const publicKey = NativeBuffer.from('0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798', 'hex');
     const hdkey = new CryptoHDKey({ isMaster: false, isPrivateKey: false, key: publicKey,
       chainCode: NativeBuffer.alloc(32, 4),
-      origin: new CryptoKeypath([new PathComponent({ index: 84, hardened: true }), new PathComponent({ index: 0, hardened: true })], NativeBuffer.from('12345678', 'hex')),
+      origin: new CryptoKeypath([84, 0, 0].map((index) => new PathComponent({ index, hardened: true })), NativeBuffer.from('12345678', 'hex')),
       parentFingerprint: NativeBuffer.from('87654321', 'hex'),
     });
     const parsed = parseBitcoinAccount(hdkey.toUR());
-    expect(parsed).toEqual({ xpub: hdkey.getBip32Key(), xfp: '12345678', path: "84'/0'", publicKey: publicKey.toString('hex'), chainCode: '04'.repeat(32) });
+    expect(parsed).toEqual({ xpub: hdkey.getBip32Key(), xfp: '12345678', path: "84'/0'/0'", publicKey: publicKey.toString('hex'), chainCode: '04'.repeat(32) });
+  });
+});
+
+// A Keystone answers the Bitcoin pairing QR, a key-derivation request, with a
+// crypto-multi-accounts UR, which the parser used to refuse (issue 1326).
+describe('Keystone Bitcoin pairing', () => {
+  // Fixed test vector — never used to hold funds.
+  const root = HDKey.fromMasterSeed(mnemonicToSeedSync('legal winner thank year wave sausage worth useful legal winner thank yellow'));
+  const FINGERPRINT = NativeBuffer.from(root.fingerprint.toString(16).padStart(8, '0'), 'hex');
+  const hardened = (...indices: number[]) => indices.map((index) => new PathComponent({ index, hardened: true }));
+
+  /** The account key the Keystone exports at m/purpose'/0'/account', as it encodes it. */
+  const accountKey = (purpose: number, account: number) => {
+    const node = root.derive(`m/${purpose}'/0'/${account}'`);
+    return new CryptoHDKey({
+      isMaster: false, key: NativeBuffer.from(node.publicKey!), chainCode: NativeBuffer.from(node.chainCode!),
+      origin: new CryptoKeypath(hardened(purpose, 0, account), FINGERPRINT),
+    });
+  };
+  const answer = (...keys: CryptoHDKey[]) => new CryptoMultiAccounts(FINGERPRINT, keys).toUR();
+
+  it('asks for the account path the parser reads', () => {
+    const decoder = new URDecoder();
+    decoder.receivePart(String(generateBitcoinSyncQR('segwit', 0).data));
+    const [schema] = QRHardwareCall.fromCBOR(decoder.resultUR().cbor).getParams().getSchemas();
+
+    expect(`m/${schema.getKeypath().getPath()}`).toBe(keystoneBitcoinAccountPath('segwit', 0));
+    expect(keystoneBitcoinAccountPath('segwit', 0)).toBe("m/84'/0'/0'");
+  });
+
+  it('reads the account from the crypto-multi-accounts answer, with the master fingerprint', () => {
+    const parsed = parseBitcoinAccount(answer(accountKey(84, 0)), 'segwit', 0);
+
+    expect(parsed).toMatchObject({ xfp: FINGERPRINT.toString('hex'), path: "84'/0'/0'" });
+    // The paired xpub derives the account's own addresses.
+    const child = (xpub: string) => NativeBuffer.from(HDKey.fromExtendedKey(xpub).derive('m/0/3').publicKey!).toString('hex');
+    expect(child(parsed.xpub)).toBe(NativeBuffer.from(root.derive("m/84'/0'/0'/0/3").publicKey!).toString('hex'));
+  });
+
+  it('takes the requested account from an answer that carries others', () => {
+    const parsed = parseBitcoinAccount(answer(accountKey(86, 0), accountKey(84, 0)), 'segwit', 0);
+
+    expect(parsed.path).toBe("84'/0'/0'");
+  });
+
+  it('refuses an answer without the requested account', () => {
+    expect(() => parseBitcoinAccount(answer(accountKey(84, 1)), 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
+    expect(() => parseBitcoinAccount(accountKey(84, 1).toUR(), 'segwit', 0)).toThrow('did not return the requested Bitcoin account');
+  });
+
+  it('refuses another kind of answer', () => {
+    expect(() => parseBitcoinAccount(new UR(NativeBuffer.from('a0', 'hex'), 'crypto-account'))).toThrow('Expected a crypto-multi-accounts or crypto-hdkey response');
   });
 });
 
