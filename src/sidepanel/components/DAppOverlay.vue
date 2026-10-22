@@ -1082,7 +1082,7 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
-import { deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
 import { geroStore } from '@/stores/geroStore';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -2725,7 +2725,7 @@ async function signDataPrf() {
   });
 }
 
-// ── Sign Data: Hardware wallet (Ledger/Trezor via background) ──
+// ── Sign Data: Hardware wallet (Ledger in this page, Trezor via its handler) ──
 async function signDataHw() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
@@ -2735,9 +2735,7 @@ async function signDataHw() {
   signing.value = true;
   signError.value = '';
 
-  // The Ledger branch below runs in the background service worker, so the step
-  // labels ledger.ts publishes there never reach this panel — carry a static
-  // one here instead. Either way the device is what the request is waiting on.
+  // Either way the device is what the request is waiting on.
   const isTrezor = walletType.value === WalletType.Trezor;
   hardwareLoading.begin(
     isTrezor ? 'Trezor' : 'Ledger',
@@ -2750,9 +2748,9 @@ async function signDataHw() {
 
     // Trezor: route through the Trezor handler (WebUSB when isTrezorWebUsbEnabled
     // is on, else the SW bridge), exactly like the popup DappSignData view. The
-    // generic SIGN_DATA path only implements Ledger and otherwise falls through to
-    // a spending-password sign — which is why Trezor signData failed with
-    // "Wrong password". Maps the Trezor response's signatureData -> { signature, key }.
+    // background SIGN_DATA path signs with the root key and a spending password, so a
+    // hardware wallet sent there fails with "Wrong password". Maps the Trezor
+    // response's signatureData -> { signature, key }.
     if (walletType.value === WalletType.Trezor) {
       const data = { method: 'signData', address, payload, cip45Authorization: signingRequest?.payload?.cip45Authorization };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
@@ -2774,30 +2772,28 @@ async function signDataHw() {
       return;
     }
 
-    // Ledger (and any other USB HW handled by the SW SIGN_DATA path)
-    const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_DATA,
-      data: {
-        cip45Authorization: signingRequest?.payload?.cip45Authorization,
-        address,
-        payload,
-        password: '',
-        isUsb: true,
-      },
-    })), approvalCurrent) as { data: { key?: string; signature?: string; error?: string } };
-
-    if (res?.data?.error) throw new Error(res.data.error);
-    if (!res?.data?.signature || !res?.data?.key) {
-      throw new Error('Wallet returned an empty signature payload');
-    }
+    // Ledger: sign on the device from this page, as the popup's DappSignData does,
+    // never through the background's password path (issue 1329). The account is the
+    // one the key set's paths are at. WebUSB: this sheet offers no Bluetooth for data.
+    if (!loggedWallet.value) return;
+    const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
+    const signed = await awaitFreshApproval(async () => (ledgerUtils.signData(
+      address,
+      payload,
+      network,
+      accountIndexFromKeys(keys.value),
+      true,
+      ledgerUtils.createKnownAddressesFromKeys(keys.value, network),
+    )), approvalCurrent);
 
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
 
     if (currentRequest.value !== signingRequest) return;
 
-    approve(res.data);
+    approve({ signature: signed.signatureHex, key: signed.signingPublicKeyHex });
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
+    if (!isTrezor) ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] HW sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {

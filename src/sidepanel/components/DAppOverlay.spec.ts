@@ -10,6 +10,7 @@ import { deferred, dialogControls } from '@test/helpers/dialogControls';
 const mocks = vi.hoisted(() => ({
   validate: vi.fn(), send: vi.fn(), approve: vi.fn(), reject: vi.fn(),
   buildSignature: vi.fn(), fromBytes: vi.fn(), ready: vi.fn(),
+  ledgerSignData: vi.fn(), knownAddresses: vi.fn(), ledgerError: vi.fn(),
 }));
 vi.mock('@/services/cip45/signingAuthorization', () => ({ validateCip45Signing: mocks.validate }));
 vi.mock('../composables/useDAppOverlay', async () => {
@@ -34,7 +35,9 @@ vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
 vi.mock('@/shared/utils/converter', () => ({ buildSignatureAndCoseKey: mocks.buildSignature }));
 vi.mock('@cardano-sdk/crypto', async original => ({ ...(await original<object>()), Bip32PrivateKey: { fromBytes: mocks.fromBytes } }));
-vi.mock('@/shared/utils/ledger', () => ({ default: {} }));
+vi.mock('@/shared/utils/ledger', () => ({ default: {
+  signData: mocks.ledgerSignData, createKnownAddressesFromKeys: mocks.knownAddresses, ledgerErrorHandling: mocks.ledgerError,
+} }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: vi.fn() }));
 vi.mock('@/shared/utils/keystone', () => ({ createKeystoneDataSignRequest: vi.fn(), createKeystoneSignRequest: vi.fn(), parseDataSignature: vi.fn(), parseSignature: vi.fn() }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: vi.fn(), end: vi.fn() } }));
@@ -50,6 +53,7 @@ import WalletStore from '@/stores/walletStore';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
+import networks from '@/utils/networks';
 
 // Synthetic enterprise address from a fixed public payment-key hash.
 const ADDRESS = Cardano.Address.fromBytes(HexBlob(`61${'01'.repeat(28)}`)).toBech32();
@@ -221,4 +225,55 @@ describe('dApp sign-data authorization freshness', () => {
       expect(mocks.approve).not.toHaveBeenCalled();
     },
   );
+});
+
+// A Ledger signs CIP-8 data on the device, from the panel, as the popup does. It used
+// to go to the background's SIGN_DATA, which signs with the root key and a password
+// and has no Ledger branch (issue 1329).
+describe('dApp sign-data with a Ledger', () => {
+  const KNOWN = [{ address: ADDRESS }];
+  beforeEach(() => {
+    WalletStore.state.loggedWallet = { ...WalletStore.state.loggedWallet, type: WalletType.Ledger, encryptionMethod: undefined } as never;
+    mocks.knownAddresses.mockReturnValue(KNOWN);
+    mocks.ledgerSignData.mockReset().mockResolvedValue({ signatureHex: 'cose-sign1', signingPublicKeyHex: 'cose-key', addressFieldHex: '61' });
+  });
+
+  it('signs on the device with the account the key set is at, and approves its COSE signature and key', async () => {
+    WalletStore.state.keys = { payment: [{ address: ADDRESS, path: "m/1852'/1815'/2'/0/0" }], change: [], stake: [] } as never;
+    const wrapper = render();
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+
+    const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
+    expect(mocks.knownAddresses).toHaveBeenCalledWith(WalletStore.state.keys, network);
+    expect(mocks.ledgerSignData).toHaveBeenCalledExactlyOnceWith(ADDRESS, '6869', network, 2, true, KNOWN);
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith({ signature: 'cose-sign1', key: 'cose-key' });
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('shows the device error and approves nothing when the Ledger refuses', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const refusal = new Error('Action rejected by user');
+    mocks.ledgerSignData.mockRejectedValue(refusal);
+    const wrapper = render();
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+
+    expect(mocks.ledgerError).toHaveBeenCalledWith(refusal);
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('never publishes a device signature once the request is cancelled', async () => {
+    const response = deferred<{ signatureHex: string; signingPublicKeyHex: string }>();
+    mocks.ledgerSignData.mockReturnValueOnce(response.promise);
+    const wrapper = render();
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+    await interrupt(wrapper, 'cancel');
+    response.resolve({ signatureHex: 'cose-sign1', signingPublicKeyHex: 'cose-key' });
+    await flushPromises();
+
+    expect(mocks.approve).not.toHaveBeenCalled();
+  });
 });
