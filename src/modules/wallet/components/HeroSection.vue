@@ -19,6 +19,7 @@
       :card="currentCard"
       :tracker="currentTracker"
       :expires-at="currentExpiresAt"
+      :sent-payment="currentSentPayment"
       :can-order="canOrderNewCard"
       :show-card-details="showCardDetails"
       :details-loading="detailsLoading"
@@ -54,6 +55,7 @@ import cardStoreModule from '@/stores/modules/card';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
 import { useOrderTracking } from '@/modules/wallet/composables/useOrderTracking';
+import { loadSentFeePayments, sentFeePayment } from '@/modules/wallet/utils/cardFeePayments';
 import { deliveryPaymentState, orderTracker, type OrderTrackerView } from '@/modules/wallet/utils/cardOrderTracker';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
@@ -166,6 +168,14 @@ const currentCardHasUUID = computed(() => !!currentCard.value?.cardData?.card_uu
 const currentTracker = computed(() =>
   currentCard.value && isOrderOnly(currentCard.value) ? trackerFor(currentCard.value) : undefined,
 );
+
+loadSentFeePayments();
+
+/** A delivery fee this wallet already sent for the order in view, while Zione has not confirmed it. */
+const currentSentPayment = computed(() => {
+  const card = currentCard.value;
+  return card && isOrderOnly(card) ? sentFeePayment(card.cardData.order_uuid) ?? undefined : undefined;
+});
 
 const currentExpiresAt = computed(() => {
   const card = currentCard.value;

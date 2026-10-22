@@ -64,6 +64,7 @@ import snackbar from '@/plugins/snackbar';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
+import { rememberSentFeePayment } from '@/modules/wallet/utils/cardFeePayments';
 import { lovelaceFromAda } from '@/modules/wallet/utils/cardOrder';
 import CardSignSection from '../ui/CardSignSection.vue';
 import DeliveryFeePanel from './card-order-steps/DeliveryFeePanel.vue';
@@ -166,7 +167,9 @@ async function prepareFeeTx(): Promise<Cardano.Tx> {
   return Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
 }
 
-function onSubmitted(): void {
+function onSubmitted(txId: string): void {
+  // Remembered so the dashboard never offers to pay this fee again while Zione confirms it.
+  rememberSentFeePayment(props.orderUuid, txId).catch(() => undefined);
   done.value = true;
   emit('success');
 }

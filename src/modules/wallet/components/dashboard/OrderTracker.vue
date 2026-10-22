@@ -44,7 +44,21 @@
         </li>
       </ol>
 
-      <div v-if="view.needsPayment" class="order-tracker__pay">
+      <!-- The fee was already sent from this wallet: never invite a second payment -->
+      <div v-if="view.needsPayment && sentPayment" class="order-tracker__sent" role="status">
+        <p class="t-body-sm">{{ t('card.feeSentBody') }}</p>
+        <div class="order-tracker__actions">
+          <GButton v-if="txUrl" tier="secondary" :href="txUrl" target="_blank" rel="noopener noreferrer">
+            <v-icon size="small" start>mdi-open-in-new</v-icon>
+            {{ t('miniGero.viewOnExplorer') }}
+          </GButton>
+          <GButton tier="tertiary" :href="supportHref">
+            <v-icon size="small" start>mdi-email-outline</v-icon>
+            {{ t('card.details.emailSupport') }}
+          </GButton>
+        </div>
+      </div>
+      <div v-else-if="view.needsPayment" class="order-tracker__pay">
         <span v-if="countdown" class="t-body-sm order-tracker__countdown">
           <v-icon size="small">mdi-clock-outline</v-icon>
           {{ t('card.addressValidFor', { time: countdown }) }}
@@ -72,6 +86,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { CardInfo } from '@/models/card';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { OrderStageId, OrderTrackerView } from '@/modules/wallet/utils/cardOrderTracker';
+import type { SentFeePayment } from '@/modules/wallet/utils/cardFeePayments';
+import { useExplorer } from '@/shared/composables/useExplorer';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import CardChip from '../ui/CardChip.vue';
@@ -82,6 +99,8 @@ const props = defineProps<{
   view: OrderTrackerView;
   /** When the delivery-fee deposit address expires (ISO time), if known. */
   expiresAt?: string;
+  /** A delivery fee this wallet already sent for the order, while Zione has not confirmed it. */
+  sentPayment?: SentFeePayment;
 }>();
 
 const emit = defineEmits<{
@@ -93,6 +112,13 @@ const emit = defineEmits<{
 const { t } = useTranslation();
 
 const physical = computed(() => props.card.cardData.own_type === 'physical');
+const { explorerUrl } = useExplorer();
+const txUrl = computed(() => explorerUrl('tx', props.sentPayment?.txId));
+const supportHref = computed(() => {
+  const subject = encodeURIComponent(t('card.feeSentSubject'));
+  const body = encodeURIComponent(t('card.feeSentMailBody', { order: props.card.cardData.order_uuid, tx: props.sentPayment?.txId ?? '' }));
+  return `mailto:${CARD_PROVIDER.supportEmail}?subject=${subject}&body=${body}`;
+});
 const titleId = computed(() => `order-tracker-${props.card.cardData.order_uuid}`);
 
 function stageLabel(id: OrderStageId): string {
@@ -108,7 +134,7 @@ function stageLabel(id: OrderStageId): string {
 function stageNote(id: OrderStageId): string {
   if (id === 'paid') {
     if (props.view.paymentDetected) return t('card.trackerPaymentDetected');
-    if (props.view.needsPayment) return t('card.trackerAwaitingPayment');
+    if (props.view.needsPayment) return props.sentPayment ? t('card.trackerPaymentSent') : t('card.trackerAwaitingPayment');
   }
   if (id === 'dispatched') return props.view.canActivate ? t('card.trackerOnItsWay') : t('card.trackerPreparing');
   if (id === 'activated') return t('card.trackerActivating');
@@ -130,7 +156,7 @@ const countdown = computed(() => {
 });
 
 watch(
-  () => props.view.needsPayment && !!props.expiresAt,
+  () => props.view.needsPayment && !props.sentPayment && !!props.expiresAt,
   ticking => {
     if (clock) clearInterval(clock);
     clock = ticking ? setInterval(() => { now.value = Date.now(); }, 1000) : null;
@@ -263,6 +289,12 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--g-s-3);
+}
+
+.order-tracker__sent {
+  display: flex;
+  flex-direction: column;
   gap: var(--g-s-3);
 }
 

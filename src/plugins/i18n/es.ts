@@ -805,6 +805,10 @@ export default {
   'card.trackerAutoRefresh': 'Esta página busca actualizaciones automáticamente. Tu tarjeta aparecerá aquí en cuanto Zione la emita.',
 
   'card.trackerAwaitingPayment': 'Esperando el pago del costo de envío',
+  'card.trackerPaymentSent': 'Pago enviado, esperando la confirmación de Zione',
+  'card.feeSentBody': 'Ya enviaste el costo de envío desde esta billetera. Zione todavía tiene que confirmarlo. No vuelvas a pagar: si esto no cambia en una hora, escribe al soporte de Zione con tu transacción.',
+  'card.feeSentSubject': 'Gero Card: costo de envío pagado sin confirmar',
+  'card.feeSentMailBody': 'Pedido {order}, transacción de pago {tx}',
 
   'card.trackerDispatched': 'Enviada',
 

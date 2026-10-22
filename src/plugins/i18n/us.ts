@@ -808,6 +808,10 @@ export default {
   'card.trackerAutoRefresh': 'This page checks for updates automatically. Your card appears here as soon as Zione issues it.',
 
   'card.trackerAwaitingPayment': 'Waiting for the delivery fee',
+  'card.trackerPaymentSent': 'Payment sent, waiting for Zione to confirm',
+  'card.feeSentBody': 'You already sent the delivery fee from this wallet. Zione still has to confirm it. Do not pay again: if this does not change within an hour, email Zione support with your transaction.',
+  'card.feeSentSubject': 'Gero Card: delivery fee paid but not confirmed',
+  'card.feeSentMailBody': 'Order {order}, payment transaction {tx}',
 
   'card.trackerDispatched': 'Dispatched',
 
