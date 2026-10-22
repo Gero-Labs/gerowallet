@@ -27,7 +27,7 @@ function render(modelValue = '') {
 }
 
 // Each row also renders an empty title from `:title="''"`; only the labelled ones count.
-const options = () => [...document.body.querySelectorAll('.v-list-item-title')]
+const options = () => Array.from(document.body.querySelectorAll('.v-list-item-title'))
   .map(node => node.textContent?.trim())
   .filter(Boolean);
 
