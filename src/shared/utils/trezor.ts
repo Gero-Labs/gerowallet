@@ -18,6 +18,10 @@ import { NetworkInfo } from '@/utils/networks';
 import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
+import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
+// Static: this module lives in the background's single bundle, where a dynamic import
+// splits nothing and is read before it is declared (scripts/check-bundle-tdz.mjs).
+import { mergeTrezorSignatures, parseBitcoinPsbt, trezorSignTransactionParams } from '@/chains/bitcoin/trezorPsbt';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 
 /**
@@ -1388,37 +1392,22 @@ export default {
   },
 
   /**
-   * Sign Bitcoin transaction (PSBT) with Trezor
-   * @param psbt - PSBT in base64 format
-   * @param addressType - Bitcoin address type
-   * @param accountIndex - Account index
-   * @returns Signed PSBT in base64 format
+   * Sign a Bitcoin transaction (PSBT) with the Trezor's account
+   * @param psbt - Unsigned PSBT, hex or base64
+   * @param account - The wallet's account: its xpub, network, address type and index
+   * @returns The same PSBT with the device's signatures, in hex (not finalized)
    */
-  async signBitcoinTransaction(
-    psbt: string,
-    _addressType: string = 'segwit',
-    _accountIndex: number = 0
-  ): Promise<string> {
+  async signBitcoinTransaction(psbt: string, account: BitcoinHardwareAccount): Promise<string> {
     await this.init();
 
-    // Trezor Connect supports PSBT signing directly
-    const result = await TrezorConnect.signTransaction({
-      coin: 'btc',
-      inputs: [], // Will be parsed from PSBT
-      outputs: [], // Will be parsed from PSBT
-      // @ts-ignore - PSBT support in newer versions
-      serialize: true,
-      // @ts-ignore
-      psbt,
-    });
+    const unsigned = parseBitcoinPsbt(psbt, account.network);
+    const result = await TrezorConnect.signTransaction(trezorSignTransactionParams(unsigned, account));
 
     if (!result.success) {
       throw new Error(result.payload.error || 'Failed to sign Bitcoin transaction with Trezor');
     }
 
-    // Return signed PSBT
-    // @ts-ignore
-    return result.payload.serializedTx || result.payload.psbt;
+    return mergeTrezorSignatures(unsigned, result.payload.serializedTx).toHex();
   },
 
   /**

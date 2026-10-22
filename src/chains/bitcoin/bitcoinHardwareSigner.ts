@@ -11,7 +11,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { WalletType } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { getBitcoinNetwork, finalizePsbt } from './bitcoinPsbtBuilder';
-import type { LedgerBitcoinAccount } from './ledgerPsbt';
+import type { BitcoinHardwareAccount } from './bitcoinKeyManager';
 
 /**
  * Hardware wallet signing result
@@ -36,7 +36,7 @@ export interface HardwareSigningResult {
  */
 export async function signPsbtWithLedger(
   psbt: string,
-  account: LedgerBitcoinAccount
+  account: BitcoinHardwareAccount
 ): Promise<HardwareSigningResult> {
   try {
     const ledger = await import('@/shared/utils/ledger');
@@ -71,14 +71,12 @@ export async function signPsbtWithLedger(
  * Sign PSBT with Trezor hardware wallet (called from a document/popup context)
  *
  * @param psbt PSBT to sign (hex or base64 string)
- * @param network Bitcoin network
- * @param addressType Address type
+ * @param account The wallet's account: its xpub, network, address type and index
  * @returns Signed PSBT
  */
 export async function signPsbtWithTrezor(
   psbt: string,
-  network: string,
-  addressType: string = 'segwit'
+  account: BitcoinHardwareAccount
 ): Promise<HardwareSigningResult> {
   try {
     // This function is called from a document context (popup), not the background,
@@ -86,14 +84,14 @@ export async function signPsbtWithTrezor(
     let signedPsbtHex: string;
     if (featureFlagsStore.state.flags.isTrezorWebUsbEnabled) {
       const trezorWeb = (await import('@/shared/utils/trezorWeb')).default;
-      signedPsbtHex = await trezorWeb.signTransaction(psbt, addressType);
+      signedPsbtHex = await trezorWeb.signTransaction(psbt, account);
     } else {
       const trezor = (await import('@/shared/utils/trezor')).default;
-      signedPsbtHex = await trezor.signBitcoinTransaction(psbt, addressType);
+      signedPsbtHex = await trezor.signBitcoinTransaction(psbt, account);
     }
 
     // Parse signed PSBT
-    const bitcoinNetwork = getBitcoinNetwork(network);
+    const bitcoinNetwork = getBitcoinNetwork(account.network);
     const signedPsbt = bitcoin.Psbt.fromHex(signedPsbtHex, { network: bitcoinNetwork });
 
     // Finalize and extract transaction
@@ -217,18 +215,20 @@ export async function signPsbtWithHardwareWallet(
   network: string,
   addressType: string = 'segwit',
   options?: {
-    accountIndex?: number;  // For Ledger
-    xpub?: string;          // For Ledger: the account xpub its known addresses come from
+    accountIndex?: number;  // For Ledger and Trezor
+    xpub?: string;          // For Ledger and Trezor: the account xpub their paths come from
     urString?: string;      // For Keystone (step 2)
   }
 ): Promise<HardwareSigningResult> {
+  const account = options?.xpub ? { xpub: options.xpub, network, addressType, accountIndex: options.accountIndex || 0 } : undefined;
   switch (walletType) {
     case WalletType.Ledger:
-      if (!options?.xpub) return { success: false, error: 'Ledger signing needs the account xpub' };
-      return signPsbtWithLedger(psbt, { xpub: options.xpub, network, addressType, accountIndex: options.accountIndex || 0 });
+      if (!account) return { success: false, error: 'Ledger signing needs the account xpub' };
+      return signPsbtWithLedger(psbt, account);
 
     case WalletType.Trezor:
-      return signPsbtWithTrezor(psbt, network, addressType);
+      if (!account) return { success: false, error: 'Trezor signing needs the account xpub' };
+      return signPsbtWithTrezor(psbt, account);
 
     case WalletType.Keystone:
       // Keystone is a two-step process

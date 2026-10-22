@@ -405,6 +405,26 @@ export function parsePsbtFromHex(psbtHex: string, network: string): bitcoin.Psbt
   return bitcoin.Psbt.fromHex(psbtHex, { network: bitcoinNetwork });
 }
 
+/** A PSBT given as hex or base64. */
+export function parseBitcoinPsbt(value: string, network: string): bitcoin.Psbt {
+  const opts = { network: getBitcoinNetwork(network) };
+  return /^[\da-f]+$/i.test(value) ? bitcoin.Psbt.fromHex(value, opts) : bitcoin.Psbt.fromBase64(value, opts);
+}
+
+/**
+ * The address input `i` spends from, read from the previous output its PSBT data carries
+ */
+export function spentAddress(psbt: bitcoin.Psbt, i: number, network: bitcoin.Network): string | undefined {
+  const input = psbt.data.inputs[i];
+  try {
+    const script = input.witnessUtxo?.script
+      ?? (input.nonWitnessUtxo && bitcoin.Transaction.fromBuffer(input.nonWitnessUtxo).outs[psbt.txInputs[i].index]?.script);
+    return script ? bitcoin.address.fromOutputScript(script, network) : undefined;
+  } catch {
+    return undefined; // no standard address script
+  }
+}
+
 /**
  * Parse PSBT from base64 string
  *

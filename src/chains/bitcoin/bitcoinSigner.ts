@@ -14,7 +14,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { HDKey } from '@scure/bip32';
 import * as bip39 from 'bip39';
-import { getBitcoinNetwork, isTaprootScript } from './bitcoinPsbtBuilder';
+import { getBitcoinNetwork, isTaprootScript, spentAddress } from './bitcoinPsbtBuilder';
 import { deriveBitcoinAddressSetFromXpubs, type BitcoinAddressTypeName, type BitcoinDerivationInfo } from './bitcoinKeyManager';
 import type { ISignedTx } from '@/chains/common/interfaces';
 
@@ -114,20 +114,6 @@ export function taprootKeyPathSigner(key: { privateKey: Uint8Array; publicKey: U
 function spendsTaproot(input: bitcoin.Psbt['data']['inputs'][number]): boolean {
   return !!(input.tapInternalKey || input.tapBip32Derivation?.length
     || (input.witnessUtxo && isTaprootScript(input.witnessUtxo.script)));
-}
-
-/**
- * The address input `i` spends from, read from the previous output its PSBT data carries
- */
-function spentAddress(psbt: bitcoin.Psbt, i: number, network: bitcoin.Network): string | undefined {
-  const input = psbt.data.inputs[i];
-  try {
-    const script = input.witnessUtxo?.script
-      ?? (input.nonWitnessUtxo && bitcoin.Transaction.fromBuffer(input.nonWitnessUtxo).outs[psbt.txInputs[i].index]?.script);
-    return script ? bitcoin.address.fromOutputScript(script, network) : undefined;
-  } catch {
-    return undefined; // no standard address script
-  }
 }
 
 /**

@@ -138,6 +138,7 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 import type { Psbt } from 'bitcoinjs-lib';
 import { assertApprovedPsbt } from '@/chains/bitcoin/psbtApproval';
 import { resolveAccountIndex } from '@/shared/utils/walletAccount';
+import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
 
 interface BtcSignPsbtOptions {
   autoFinalized?: boolean;
@@ -290,6 +291,12 @@ const sign = () => approval.run(async () => {
   }
 });
 
+/** The logged hardware wallet's Bitcoin account, which the device signs with. */
+const hardwareAccount = (): BitcoinHardwareAccount => {
+  const wallet = loggedWallet.value;
+  return { xpub: wallet.publicKey, network: wallet.network, addressType: wallet.addressType, accountIndex: resolveAccountIndex(wallet) };
+};
+
 const signWithLedger = async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) return;
@@ -299,10 +306,8 @@ const signWithLedger = async () => {
   hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
   try {
     const { default: ledger } = await awaitFreshApproval(() => import('@/shared/utils/ledger'), approvalCurrent);
-    const wallet = loggedWallet.value;
-    const signedPsbtHex = await awaitFreshApproval(() => ledger.signBitcoinTransaction(request.value.data.psbtHex, {
-      xpub: wallet.publicKey, network: wallet.network, addressType: wallet.addressType, accountIndex: resolveAccountIndex(wallet),
-    }, !isBT.value), approvalCurrent);
+    const account = hardwareAccount();
+    const signedPsbtHex = await awaitFreshApproval(() => ledger.signBitcoinTransaction(request.value.data.psbtHex, account, !isBT.value), approvalCurrent);
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
     const options = request.value.data.options;
@@ -337,12 +342,13 @@ const signWithTrezor = async () => {
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
     let signedPsbtHex: string;
+    const account = hardwareAccount();
     if (featureFlagsStore.state.flags.isTrezorWebUsbEnabled) {
       const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezorWeb'), approvalCurrent);
-      signedPsbtHex = await awaitFreshApproval(() => trezor.signTransaction(request.value.data.psbtHex, loggedWallet.value.addressType), approvalCurrent);
+      signedPsbtHex = await awaitFreshApproval(() => trezor.signTransaction(request.value.data.psbtHex, account), approvalCurrent);
     } else {
       const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezor'), approvalCurrent);
-      signedPsbtHex = await awaitFreshApproval(() => trezor.signBitcoinTransaction(request.value.data.psbtHex, loggedWallet.value.addressType), approvalCurrent);
+      signedPsbtHex = await awaitFreshApproval(() => trezor.signBitcoinTransaction(request.value.data.psbtHex, account), approvalCurrent);
     }
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
