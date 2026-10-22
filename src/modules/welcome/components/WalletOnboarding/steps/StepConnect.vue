@@ -186,7 +186,8 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
     if (props.network?.blockchain === Blockchain.BITCOIN) {
       // Keep the scanned type: UR.from() would label it 'bytes' and parseBitcoinAccount rejects that.
       const bitcoinUR = new UR(Buffer.from(ur.cbor, 'hex'), ur.type);
-      const bitcoinAccount = parseBitcoinAccount(bitcoinUR);
+      // The account the QR asked for (initKeystoneQR); any other key in the answer is refused.
+      const bitcoinAccount = parseBitcoinAccount(bitcoinUR, 'segwit', 0);
 
       const payload: ConnectionPayload = {
         xfp: bitcoinAccount.xfp,
