@@ -137,6 +137,7 @@ import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import type { Psbt } from 'bitcoinjs-lib';
 import { assertApprovedPsbt } from '@/chains/bitcoin/psbtApproval';
+import { resolveAccountIndex } from '@/shared/utils/walletAccount';
 
 interface BtcSignPsbtOptions {
   autoFinalized?: boolean;
@@ -298,9 +299,10 @@ const signWithLedger = async () => {
   hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
   try {
     const { default: ledger } = await awaitFreshApproval(() => import('@/shared/utils/ledger'), approvalCurrent);
-    const signedPsbtHex = await awaitFreshApproval(() => ledger.signBitcoinTransaction(
-      request.value.data.psbtHex, loggedWallet.value.addressType, 0, !isBT.value,
-    ), approvalCurrent);
+    const wallet = loggedWallet.value;
+    const signedPsbtHex = await awaitFreshApproval(() => ledger.signBitcoinTransaction(request.value.data.psbtHex, {
+      xpub: wallet.publicKey, network: wallet.network, addressType: wallet.addressType, accountIndex: resolveAccountIndex(wallet),
+    }, !isBT.value), approvalCurrent);
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
     const options = request.value.data.options;

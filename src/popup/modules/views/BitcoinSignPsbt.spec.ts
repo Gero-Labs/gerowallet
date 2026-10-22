@@ -43,7 +43,7 @@ beforeEach(() => {
   mocks.returnData.mockResolvedValue(undefined);
   mocks.request.mockReset().mockResolvedValue({ data: { psbtHex: unsigned, options: { autoFinalized: false } } });
   for (const device of devices) mocks[device].mockReset().mockResolvedValue(returned);
-  walletStore.loggedWallet = { id: 1, type: WalletType.Ledger, chain: 'Bitcoin', network: 'Mainnet', addressType: 'native-segwit' } as never;
+  walletStore.loggedWallet = { id: 1, type: WalletType.Ledger, chain: 'Bitcoin', network: 'Mainnet', addressType: 'native-segwit', publicKey: 'xpub-account' } as never;
   walletStore.isLocked = false;
   featureFlagsStore.state.flags.isTrezorWebUsbEnabled = false;
   vi.spyOn(window, 'close').mockImplementation(() => {});
@@ -68,7 +68,9 @@ describe.each(devices)('%s Bitcoin popup device contract', device => {
     const wrapper = await render(device);
     await button(wrapper, 'wallet.sign').trigger('click');
     await vi.waitFor(() => expect(mocks.returnData).toHaveBeenCalledExactlyOnceWith({ data: returned }));
-    if (device === 'ledger') expect(mocks.ledger).toHaveBeenCalledExactlyOnceWith(unsigned, 'native-segwit', 0, true);
+    if (device === 'ledger') {
+      expect(mocks.ledger).toHaveBeenCalledExactlyOnceWith(unsigned, { xpub: 'xpub-account', network: 'Mainnet', addressType: 'native-segwit', accountIndex: 0 }, true);
+    }
     else expect(mocks[device]).toHaveBeenCalledExactlyOnceWith(unsigned, 'native-segwit');
     expect(finalize).not.toHaveBeenCalled();
     expect(mocks.error).not.toHaveBeenCalled();

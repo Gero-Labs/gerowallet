@@ -28,6 +28,7 @@ import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
+import type { LedgerBitcoinAccount } from '@/chains/bitcoin/ledgerPsbt';
 
 /**
  * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
@@ -717,31 +718,31 @@ export default {
   },
 
   /**
-   * Sign Bitcoin transaction (PSBT) with Ledger
-   * @param psbtHex - Unsigned PSBT in hex format
-   * @param _addressType - Bitcoin address type (unused: PSBT already encodes the paths to sign)
-   * @param _accountIndex - Account index (unused: PSBT already encodes the paths to sign)
+   * Sign a Bitcoin transaction (PSBT) with the Ledger's account
+   * @param psbt - Unsigned PSBT, hex or base64
+   * @param account - The wallet's account: its xpub, network, address type and index
    * @param isUsb - Use USB or Bluetooth
-   * @returns Signed PSBT in hex format
+   * @returns The same PSBT with the device's signatures, in hex (not finalized)
    */
   async signBitcoinTransaction(
-    psbtHex: string,
-    _addressType: string = 'segwit',
-    _accountIndex: number = 0,
+    psbt: string,
+    account: LedgerBitcoinAccount,
     isUsb: boolean = true
   ): Promise<string> {
     try {
+      // Loaded here so the Cardano screens that use this module don't bundle Bitcoin's crypto.
+      const { ledgerSignPsbtOptions, mergeLedgerSignatures, parseBitcoinPsbt } = await import('@/chains/bitcoin/ledgerPsbt');
+      const unsigned = parseBitcoinPsbt(psbt, account.network);
+      const options = ledgerSignPsbtOptions(account);
       const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
       const btc = new AppBtc({ transport });
 
       hardwareLoading.setText('Please Confirm Transaction on Your Ledger Device.');
 
-      // Sign the PSBT
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const signedPsbt = await (btc as any).signPsbt(psbtHex);
+      const { psbt: signed } = await btc.signPsbtBuffer(unsigned.toBuffer(), options);
 
       hardwareLoading.setLoading(false);
-      return signedPsbt;
+      return mergeLedgerSignatures(unsigned, signed).toHex();
     } catch (error: unknown) {
       console.error('[LEDGER] Error signing Bitcoin transaction:', error);
       hardwareLoading.setLoading(false);
