@@ -171,7 +171,16 @@ const currentTracker = computed(() =>
 
 loadSentFeePayments();
 
-/** A delivery fee this wallet already sent for the order in view, while Zione has not confirmed it. */
+// A fee paid from another browser or device is recorded at gero-backend: fetch it for the order in view.
+watch(
+  () => (currentCard.value && isOrderOnly(currentCard.value) ? currentCard.value.cardData.order_uuid : null),
+  orderUuid => {
+    if (orderUuid) cardStoreModule.syncSentFeePayment(orderUuid);
+  },
+  { immediate: true },
+);
+
+/** A delivery fee already sent for the order in view, from any device, while Zione has not confirmed it. */
 const currentSentPayment = computed(() => {
   const card = currentCard.value;
   return card && isOrderOnly(card) ? sentFeePayment(card.cardData.order_uuid) ?? undefined : undefined;

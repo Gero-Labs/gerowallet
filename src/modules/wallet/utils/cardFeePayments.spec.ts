@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  SENT_FEE_PAYMENT_TTL_MS, loadSentFeePayments, pruneSentFeePayments, rememberSentFeePayment,
+  SENT_FEE_PAYMENT_TTL_MS, adoptSentFeePayment, loadSentFeePayments, pruneSentFeePayments, rememberSentFeePayment,
   resetSentFeePaymentsForTests, sentFeePayment,
 } from './cardFeePayments';
 
@@ -69,6 +69,20 @@ describe('sent fee payments', () => {
     stubStorage({ set: async () => { throw new Error('quota'); } });
     await rememberSentFeePayment('order-1', TX);
     expect(sentFeePayment('order-1')?.txId).toBe(TX);
+  });
+
+  it('adopts a payment another device recorded, unless this browser knows one', async () => {
+    stubStorage();
+    await adoptSentFeePayment('order-1', { txId: TX, sentAt: NOW - 60_000 });
+    expect(sentFeePayment('order-1')).toEqual({ txId: TX, sentAt: NOW - 60_000 });
+    expect(stored['cardSentFeePayments']).toEqual({ 'order-1': { txId: TX, sentAt: NOW - 60_000 } });
+
+    const other = 'a'.repeat(64);
+    await adoptSentFeePayment('order-1', { txId: other, sentAt: NOW });
+    expect(sentFeePayment('order-1')?.txId).toBe(TX);
+
+    await adoptSentFeePayment('order-old', { txId: other, sentAt: NOW - SENT_FEE_PAYMENT_TTL_MS - 1 });
+    expect(sentFeePayment('order-old')).toBeNull();
   });
 
   it('ignores a missing order or transaction', async () => {

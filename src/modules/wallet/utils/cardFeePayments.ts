@@ -6,7 +6,9 @@ import { reactive } from 'vue';
  * address was issued, so the dashboard offered "Complete Payment" again and invited a second
  * payment. While a sent payment is remembered here the dashboard shows it instead of the pay
  * button. Only the order UUID, the transaction id and the time are stored; all are public on
- * chain or meaningless without the account.
+ * chain or meaningless without the account. gero-backend keeps the same record so other
+ * browsers and devices know too (see the card store's rememberFeePayment and
+ * syncSentFeePayment); this local copy covers the time before that answers, or when it cannot.
  */
 export interface SentFeePayment {
   txId: string;
@@ -14,8 +16,11 @@ export interface SentFeePayment {
 }
 
 const STORAGE_KEY = 'cardSentFeePayments';
-/** How long a sent payment is remembered, long enough for Zione support to sort out a stuck one. */
-export const SENT_FEE_PAYMENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * How long a sent payment is remembered. Long, because the pay button must not come back while
+ * Zione support is still sorting out a stuck payment.
+ */
+export const SENT_FEE_PAYMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const state = reactive<{ byOrder: Record<string, SentFeePayment> }>({ byOrder: {} });
 let loading: Promise<void> | null = null;
@@ -54,6 +59,19 @@ export async function rememberSentFeePayment(orderUuid: string | null | undefine
     await area()?.set({ [STORAGE_KEY]: state.byOrder });
   } catch {
     // The dashboard still knows for this page; it only forgets after a reload.
+  }
+}
+
+/** Takes in a payment another device recorded, unless this browser already knows one for the order. */
+export async function adoptSentFeePayment(orderUuid: string, payment: SentFeePayment): Promise<void> {
+  if (state.byOrder[orderUuid]) return;
+  const kept = pruneSentFeePayments({ [orderUuid]: payment }, Date.now());
+  if (!kept[orderUuid]) return;
+  state.byOrder = { ...state.byOrder, ...kept };
+  try {
+    await area()?.set({ [STORAGE_KEY]: state.byOrder });
+  } catch {
+    // Known for this page; the next page asks gero-backend again.
   }
 }
 
