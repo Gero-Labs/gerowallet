@@ -1,5 +1,12 @@
 import { IKeyValueStorage } from '@walletconnect/keyvaluestorage';
-import { getPrivate, getPrivateEntries, removePrivate, setPrivate } from '@/utils/privateStore';
+import {
+  getPrivate,
+  getPrivateEntries,
+  markMovedFromChromeLocal,
+  removePrivate,
+  setPrivate,
+  wasMovedFromChromeLocal,
+} from '@/utils/privateStore';
 
 const PREFIX = 'wc@2:';
 
@@ -10,18 +17,24 @@ const PREFIX = 'wc@2:';
  * content script and the Bring SDK inside it can read all of chrome.storage.local.
  *
  * Older releases kept these entries in chrome.storage.local. The first access
- * moves them across: an entry the private store already holds is newer, so only
- * missing ones are copied, and the chrome.storage copies are removed afterwards.
+ * after the upgrade moves them across: an entry the private store already holds
+ * is newer, so only missing ones are copied, and the chrome.storage copies are
+ * removed afterwards. That happens once, recorded in the private store: any
+ * `wc@2:` entry that shows up in chrome.storage.local later was not written by
+ * WalletConnect (a content script can write there) and is only deleted.
  */
 async function moveLegacyEntries(): Promise<void> {
   if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+  const alreadyMoved = await wasMovedFromChromeLocal(PREFIX);
   const all = (await chrome.storage.local.get(null)) ?? {};
   const legacyKeys = Object.keys(all).filter((key) => key.startsWith(PREFIX));
-  if (legacyKeys.length === 0) return;
-  for (const key of legacyKeys) {
-    if ((await getPrivate(key)) === undefined) await setPrivate(key, all[key]);
+  if (!alreadyMoved) {
+    for (const key of legacyKeys) {
+      if ((await getPrivate(key)) === undefined) await setPrivate(key, all[key]);
+    }
+    await markMovedFromChromeLocal(PREFIX);
   }
-  await chrome.storage.local.remove(legacyKeys);
+  if (legacyKeys.length > 0) await chrome.storage.local.remove(legacyKeys);
 }
 
 let migration: Promise<void> | null = null;

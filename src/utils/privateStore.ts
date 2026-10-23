@@ -76,31 +76,57 @@ function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** Marks a key whose chrome.storage.local copy was already dealt with. */
+export const MOVED_MARKER_PREFIX = '__movedFromChromeLocal:';
+
+/**
+ * Whether the one-time move of `key` out of chrome.storage.local already ran.
+ * After it has, nothing found there is ever adopted again: content scripts can
+ * write chrome.storage.local, so a later value there may have been planted.
+ */
+export async function wasMovedFromChromeLocal(key: string): Promise<boolean> {
+  return (await getPrivate(MOVED_MARKER_PREFIX + key)) === true;
+}
+
+export async function markMovedFromChromeLocal(key: string): Promise<void> {
+  await setPrivate(MOVED_MARKER_PREFIX + key, true);
+}
+
 /**
  * Move one value an older release kept in `chrome.storage.local` into this store,
  * and return the value this store now holds (undefined when neither had one).
  *
- * The chrome.storage copy is deleted only once this store holds a value that reads
- * back equal to it. When this store already has a value, it wins: the old copy is
- * then stale, or was written there by someone else.
+ * The move runs once per key: the first call adopts the old copy if this store
+ * has none, deletes it once this store reads back equal, and records that the key
+ * was handled. Every later call ignores chrome.storage.local (only deleting what
+ * it finds there), so a value written there afterwards, by a content script for
+ * instance, is never adopted. When this store already has a value, it wins.
  */
 export async function moveFromChromeLocal<T = unknown>(key: string): Promise<T | undefined> {
   const current = await getPrivate<T>(key);
   const local = chromeLocal();
   if (!local) return current;
+  const alreadyMoved = await wasMovedFromChromeLocal(key);
   let legacy: unknown;
   try {
     legacy = (await local.get(key))?.[key];
   } catch {
     return current;
   }
-  if (legacy === undefined) return current;
-  if (current === undefined) {
-    await setPrivate(key, legacy);
-    if (!sameJson(await getPrivate(key), legacy)) throw new Error(`Could not move ${key} out of chrome.storage`);
+  if (legacy === undefined) {
+    if (!alreadyMoved) await markMovedFromChromeLocal(key);
+    return current;
   }
+  if (alreadyMoved || current !== undefined) {
+    await local.remove(key);
+    if (!alreadyMoved) await markMovedFromChromeLocal(key);
+    return current;
+  }
+  await setPrivate(key, legacy);
+  if (!sameJson(await getPrivate(key), legacy)) throw new Error(`Could not move ${key} out of chrome.storage`);
+  await markMovedFromChromeLocal(key);
   await local.remove(key);
-  return (current === undefined ? legacy : current) as T;
+  return legacy as T;
 }
 
 /** Test seam: drop the cached connection so a fresh fake IndexedDB can be installed. */

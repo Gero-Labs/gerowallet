@@ -57,4 +57,15 @@ describe('WalletConnect storage', () => {
     expect(await new ChromeStorageAdapter().getItem('wc@2:core:0.3//keychain')).toEqual({ sym: 'mine' });
     expect(local.size).toBe(0);
   });
+
+  it('moves once: entries planted after the move are deleted, never adopted, even after a worker restart', async () => {
+    await new ChromeStorageAdapter().getKeys(); // first access after the upgrade, nothing to move
+    local.set('wc@2:wc@2:client:0.3//session', [{ topic: 'planted' }]);
+
+    resetWalletConnectStorageMigrationForTest(); // a new service worker
+    const storage = new ChromeStorageAdapter();
+    expect(await storage.getItem('wc@2:client:0.3//session')).toBeUndefined();
+    expect(await storage.getKeys()).toEqual([]);
+    expect(local.size).toBe(0);
+  });
 });

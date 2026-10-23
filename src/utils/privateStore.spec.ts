@@ -60,4 +60,20 @@ describe('privateStore', () => {
   it('answers undefined when neither holds the key', async () => {
     expect(await moveFromChromeLocal('nothing')).toBeUndefined();
   });
+
+  it('moves once: a value planted in chrome.storage after the move is never adopted', async () => {
+    expect(await moveFromChromeLocal('crossDeviceIdentity')).toBeUndefined(); // first read after the upgrade
+    local.set('crossDeviceIdentity', { deviceId: 'planted' });
+    expect(await moveFromChromeLocal('crossDeviceIdentity')).toBeUndefined();
+    expect(await getPrivate('crossDeviceIdentity')).toBeUndefined();
+    expect(local.has('crossDeviceIdentity')).toBe(false);
+  });
+
+  it('does not adopt again after a real move and a later delete', async () => {
+    local.set('geroNexusTokens', { accessToken: 'old' });
+    expect(await moveFromChromeLocal('geroNexusTokens')).toEqual({ accessToken: 'old' });
+    await removePrivate('geroNexusTokens');
+    local.set('geroNexusTokens', { accessToken: 'planted' });
+    expect(await moveFromChromeLocal('geroNexusTokens')).toBeUndefined();
+  });
 });
