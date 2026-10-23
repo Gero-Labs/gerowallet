@@ -25,6 +25,7 @@ import { upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { embeddingSite } from '@/chrome/originBinding';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
+import { RESERVED_SIGN_DATA_MESSAGE, reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -1557,6 +1558,10 @@ app.add(METHOD.signData, (request, sendResponse) => {
   // enforce the whitelist here instead of in that pre-check round-trip.
   if (!WalletStore.isWhitelisted(request.origin)) {
     return signDataReply({ error: APIError.Refused });
+  }
+  // Gero's own proofs (device registration, support login) are signData too.
+  if (reservedSigningDomain(request.data?.payload)) {
+    return signDataReply({ error: { code: APIError.Refused.code, info: RESERVED_SIGN_DATA_MESSAGE } });
   }
 
   // Explicit fields only: never spread page-supplied data into the approval
@@ -5163,6 +5168,10 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'cardano_signData': {
             const wcParams = wcRequest.params || {};
+            if (reservedSigningDomain(wcParams.payload)) {
+              await wcService.respondError(topic, id, 4100, RESERVED_SIGN_DATA_MESSAGE);
+              return;
+            }
             await routeWcSigningRequest(
               'signData',
               { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
@@ -5465,6 +5474,14 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'signTx': {
+        // CIP-113 preflight, as at every other entry point: Ledger and Keystone
+        // sign in the page and never reach WalletBg.signTx's own re-check.
+        const cip45ProgrammableRefusal = refusalForProgrammableInputs(params.tx);
+        if (cip45ProgrammableRefusal) {
+          debugLog(cip45ProgrammableRefusal);
+          fail(APIError.Refused.code, CIP113_SIGN_REFUSAL_MESSAGE);
+          break;
+        }
         try {
           const result = await routeCip45SigningRequest(
             'signTx',
@@ -5479,6 +5496,10 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'signData': {
+        if (reservedSigningDomain(params.payload)) {
+          fail(APIError.Refused.code, RESERVED_SIGN_DATA_MESSAGE);
+          break;
+        }
         try {
           const result = await routeCip45SigningRequest(
             'signData',
