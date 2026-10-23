@@ -27,6 +27,7 @@ import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerifi
 import { embeddingSite, promptSite } from '@/chrome/originBinding';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
 import { RESERVED_SIGN_DATA_MESSAGE, reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
+import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -1356,8 +1357,7 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
   if (!WalletStore.isWhitelisted(origin)) return false;
   // (a) Gero-curated allowlist — entries are full origins, compared by exact equality.
   try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const list = (stored?.featureFlags as { collateralTrustedDapps?: unknown })?.collateralTrustedDapps;
+    const list = (await readFeatureFlagMirror())['collateralTrustedDapps'];
     if (Array.isArray(list) && list.some((e) => {
       if (typeof e !== 'string' || e.length === 0) return false;
       try {
@@ -4900,8 +4900,7 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendRes
  */
 async function isWalletConnectEnabled(): Promise<boolean> {
   try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const flags = (stored?.featureFlags as Record<string, unknown>) ?? {};
+    const flags = await readFeatureFlagMirror();
     return flags['isWalletConnectEnabled'] === true; // default OFF; only explicit true enables
   } catch {
     return false;
@@ -5332,8 +5331,7 @@ async function isCip45Enabled(): Promise<boolean> {
   // Build-time default; an explicit value in the mirror still wins.
   const buildDefault = import.meta.env['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
   try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const flags = (stored?.['featureFlags'] as Record<string, unknown>) ?? {};
+    const flags = await readFeatureFlagMirror();
     if (typeof flags['isCip45Enabled'] === 'boolean') {
       return flags['isCip45Enabled'];
     }

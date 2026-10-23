@@ -1,4 +1,5 @@
 import { plainStoreSnapshot } from '@/stores/serialization';
+import { writeFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { reactive } from 'vue';
 import featureFlagService from '@/services/featureFlag.service';
 
@@ -152,15 +153,15 @@ const featureFlagsState = reactive<FeatureFlagsState>({
 });
 
 /**
- * Mirror flags into chrome.storage.local so the background service worker can read
- * them. featureFlagService is EventSource-based and cannot run in an MV3 service
+ * Mirror flags for the background service worker (featureFlagMirror.ts).
+ * featureFlagService is EventSource-based and cannot run in an MV3 service
  * worker, and featureFlagsStore is only initialized in UI contexts, so the
  * background (e.g. walletManager's cross-device bootstrap at login) reads
- * flag-gated decisions from here instead of the in-memory store.
+ * flag-gated decisions from the mirror instead of the in-memory store.
  */
 function persistFlagsForBackground(): void {
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    void chrome.storage.local.set(plainStoreSnapshot({ featureFlags: { ...featureFlagsState.flags } }));
+  if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+    void writeFeatureFlagMirror(plainStoreSnapshot({ ...featureFlagsState.flags })).catch(() => {});
   }
 }
 

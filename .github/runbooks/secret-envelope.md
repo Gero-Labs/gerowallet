@@ -43,7 +43,7 @@ Code: `src/shared/utils/secretEnvelope.ts` (format), `crypto.ts` (readers), `sec
 
 ## 4. Turning the flag on
 
-The flag is defined in the gero-sync flag service. The UI mirrors it to `chrome.storage.local.featureFlags` for the background. It must exist there with default `false` before release N ships.
+The flag is defined in the gero-sync flag service. The UI mirrors it for the background into the extension's private store (`featureFlagMirror.ts`, IndexedDB `gero-private-store`, key `featureFlags`; releases before the storage hardening used `chrome.storage.local.featureFlags`, which nothing reads any more). It must exist in the flag service with default `false` before release N ships.
 
 1. **Synthetic canary.** Set up staff test profiles holding only synthetic wallets: Cardano, Bitcoin and Midnight, one legacy wallet created on v2.6.3, one with 2FA, one with an SPO cold key. Flip the flag for them, run the device test (section 7) and check the counters (section 5).
 2. **Staff wallets.** Enable for staff. Watch support and counters for at least one release cycle.
@@ -109,9 +109,20 @@ Run this on each release candidate of release N (and of any later release that c
 
 **Forcing the flag on a test profile.** The options page rewrites the mirror from the flag service when it loads. Set it after the options page has loaded, or enable the flag for the test account in a non-production flag service.
 
+Run it in the service-worker or options-page console (both belong to the extension origin that owns the private store):
+
 ```js
-const { featureFlags = {} } = await chrome.storage.local.get('featureFlags');
-await chrome.storage.local.set({ featureFlags: { ...featureFlags, isKeyEnvelopeV2Enabled: true } });
+const db = await new Promise((ok, err) => { const r = indexedDB.open('gero-private-store'); r.onsuccess = () => ok(r.result); r.onerror = () => err(r.error); });
+await new Promise((ok, err) => {
+  const items = db.transaction('items', 'readwrite').objectStore('items');
+  const read = items.get('featureFlags');
+  read.onerror = () => err(read.error);
+  read.onsuccess = () => {
+    const write = items.put({ key: 'featureFlags', value: { ...(read.result?.value ?? {}), isKeyEnvelopeV2Enabled: true } });
+    write.onsuccess = () => ok();
+    write.onerror = () => err(write.error);
+  };
+});
 ```
 
 | # | Case | Expected |

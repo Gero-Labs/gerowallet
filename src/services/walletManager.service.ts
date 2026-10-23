@@ -62,6 +62,7 @@ import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import { UnlockTargetChangedError } from '@/chrome/unlockStartup';
 import { UnlockThrottledError, unlockThrottle, verifySecondFactor } from '@/chrome/unlockGuards';
+import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { GROUP_SECRET_FIELDS, resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
@@ -1970,14 +1971,10 @@ export class WalletManager {
    */
   private async isCrossDeviceSigningEnabled(): Promise<boolean> {
     try {
-      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.id) {
         return false;
       }
-      const flags = await new Promise<Record<string, unknown>>((resolve) => {
-        chrome.storage.local.get('featureFlags', (result) => {
-          resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
-        });
-      });
+      const flags = await readFeatureFlagMirror();
       return flags['isCrossDeviceSigningEnabled'] === true;
     } catch {
       return false;
@@ -1993,14 +1990,10 @@ export class WalletManager {
    */
   private async isBitcoinGeroSyncEnabled(): Promise<boolean> {
     try {
-      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.id) {
         return true;
       }
-      const flags = await new Promise<Record<string, unknown>>((resolve) => {
-        chrome.storage.local.get('featureFlags', (result) => {
-          resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
-        });
-      });
+      const flags = await readFeatureFlagMirror();
       return flags['isBitcoinGeroSyncEnabled'] !== false; // default ON; only explicit false = poller
     } catch {
       return true;
