@@ -2502,12 +2502,21 @@ export class WalletBg {
     password?: string,
     prfSecret?: Uint8Array,
     unprovenTxHex?: string,
+    /**
+     * The DUST address the user chose to register for. This route signs the
+     * native NIGHT DUST registration Nexus builds, and that transaction is
+     * checked against it (and the wallet's own keys) before anything is signed.
+     */
+    dustReceiverAddressBech32?: string,
   ): Promise<Array<{ index: number; signatureHex: string }>> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('signMidnightSegments called on non-Midnight wallet');
     }
-    await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
     if (segments.length === 0) return [];
+    if (!unprovenTxHex || !dustReceiverAddressBech32) {
+      throw new Error('The registration transaction and DUST address are required to check it before signing');
+    }
+    await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
 
     // Decrypt the mnemonic once for the batch — we wipe it before returning.
     const { decrypt } = await import('@/shared/utils/crypto');
@@ -2537,64 +2546,76 @@ export class WalletBg {
       // NightExternal signing doesn't need Cardano material, so the derivation
       // skips it (deriveMidnightAccountKeys).
       const derived = await this.deriveMidnightAccountKeys(mnemonic, this.network);
-
-      // Map our project's `Network` constant to the SDK's NetworkId string.
-      // We avoid duplicating the mapping here — `midnightNetworkId` lives in
-      // `midnightKeyManager` and is already used during address derivation.
-      const { Network } = await import('@/models/types');
-      let networkId: string;
-      switch (this.network) {
-        case Network.MAINNET: networkId = 'mainnet'; break;
-        case Network.STAGENET: networkId = 'stagenet'; break;
-        case Network.PREPROD: networkId = 'preprod'; break;
-        case Network.TESTNET: networkId = 'testnet'; break;
-        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
-      }
-
-      const keystore = await midnightKeystore(derived.unshieldedSecretKey, networkId);
-
-      // Sanity: the BG-derived public key must match the one persisted at
-      // wallet creation. A mismatch means the BG bundle's HD-derivation chain
-      // is producing wrong bytes (historically: a broken sha512/HMAC polyfill
-      // — see the skipCardano workaround above) and every signature would
-      // fail Substrate-side with "Custom error: 1". Fail fast instead of
-      // signing garbage; debugLog only (never log key material in prod).
-      const bgPublicKey = schnorrHex(keystore.getPublicKey());
-      const storedPublicKey = this.publicKey
-        ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
-        : undefined;
-      if (storedPublicKey && bgPublicKey !== storedPublicKey) {
-        debugLog('[MidnightSign] BG-derived pubkey does not match stored pubkey — aborting sign');
-        throw new Error('Midnight signing key mismatch. Re-add this wallet');
-      }
-
-      const results: Array<{ index: number; signatureHex: string }> = [];
-      for (const segment of segments) {
-        // Strip an optional 0x prefix BEFORE hex-decoding. Buffer.from(hex)
-        // stops at the first non-hex char, so a 0x-prefixed payload (which
-        // Nexus's /tx/build-unshielded segments carry) would silently decode
-        // to an EMPTY buffer and we'd sign nothing. The DUST-registration
-        // caller sends bare hex, so this is a no-op there.
-        const bareHex = segment.dataHex.startsWith('0x')
-          ? segment.dataHex.slice(2)
-          : segment.dataHex;
-        if (!/^[0-9a-fA-F]+$/.test(bareHex) || bareHex.length % 2 !== 0) {
-          throw new Error(`Segment ${segment.index}: dataHex is not valid hex`);
+      try {
+        // Map our project's `Network` constant to the SDK's NetworkId string.
+        // We avoid duplicating the mapping here — `midnightNetworkId` lives in
+        // `midnightKeyManager` and is already used during address derivation.
+        const { Network } = await import('@/models/types');
+        let networkId: string;
+        switch (this.network) {
+          case Network.MAINNET: networkId = 'mainnet'; break;
+          case Network.STAGENET: networkId = 'stagenet'; break;
+          case Network.PREPROD: networkId = 'preprod'; break;
+          case Network.TESTNET: networkId = 'testnet'; break;
+          default: throw new Error(`Unsupported Midnight network: ${this.network}`);
         }
-        const dataBytes = Buffer.from(bareHex, 'hex');
-        const signature = keystore.signData(dataBytes);
-        // The SDK's `Signature` type is `string` (hex). Pass it through as-is
-        // so Nexus can hand it back to `signUnprovenTransaction`.
-        results.push({ index: segment.index, signatureHex: schnorrHex(signature) });
+
+        const keystore = await midnightKeystore(derived.unshieldedSecretKey, networkId);
+
+        // Sanity: the BG-derived public key must match the one persisted at
+        // wallet creation. A mismatch means the BG bundle's HD-derivation chain
+        // is producing wrong bytes (historically: a broken sha512/HMAC polyfill
+        // — see the skipCardano workaround above) and every signature would
+        // fail Substrate-side with "Custom error: 1". Fail fast instead of
+        // signing garbage; debugLog only (never log key material in prod).
+        const bgPublicKey = schnorrHex(keystore.getPublicKey());
+        const storedPublicKey = this.publicKey
+          ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
+          : undefined;
+        if (storedPublicKey && bgPublicKey !== storedPublicKey) {
+          debugLog('[MidnightSign] BG-derived pubkey does not match stored pubkey — aborting sign');
+          throw new Error('Midnight signing key mismatch. Re-add this wallet');
+        }
+
+        // The segment signature authorizes every input of the intent, so sign only
+        // a registration of this wallet's own NIGHT for the DUST address the user chose.
+        const { assertMidnightDustRegistrationMatches } = await import('@/chains/midnight/midnightBuiltTxGuard');
+        await assertMidnightDustRegistrationMatches(
+          networkId, unprovenTxHex,
+          { ownKeyHex: bgPublicKey, ownAddressHex: derived.addressHex },
+          dustReceiverAddressBech32,
+        );
+
+        const results: Array<{ index: number; signatureHex: string }> = [];
+        for (const segment of segments) {
+          // Strip an optional 0x prefix BEFORE hex-decoding. Buffer.from(hex)
+          // stops at the first non-hex char, so a 0x-prefixed payload (which
+          // Nexus's /tx/build-unshielded segments carry) would silently decode
+          // to an EMPTY buffer and we'd sign nothing. The DUST-registration
+          // caller sends bare hex, so this is a no-op there.
+          const bareHex = segment.dataHex.startsWith('0x')
+            ? segment.dataHex.slice(2)
+            : segment.dataHex;
+          if (!/^[0-9a-fA-F]+$/.test(bareHex) || bareHex.length % 2 !== 0) {
+            throw new Error(`Segment ${segment.index}: dataHex is not valid hex`);
+          }
+          const dataBytes = Buffer.from(bareHex, 'hex');
+          const signature = keystore.signData(dataBytes);
+          // The SDK's `Signature` type is `string` (hex). Pass it through as-is
+          // so Nexus can hand it back to `signUnprovenTransaction`.
+          results.push({ index: segment.index, signatureHex: schnorrHex(signature) });
+        }
+
+        return results;
+      } finally {
+        // Best-effort wipe on every path (a refused build throws above) —
+        // Uint8Array can be zeroed; the BIP39 string lives in the GC heap and is
+        // hard to clear directly, so we drop the reference.
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0);
+        derived.seed.fill(0);
       }
-
-      // Best-effort wipe — Uint8Array can be zeroed; the BIP39 string lives
-      // in the GC heap and is hard to clear directly, so we drop the reference.
-      derived.unshieldedSecretKey.fill(0);
-      derived.dustSecretKey.fill(0);
-      derived.seed.fill(0);
-
-      return results;
     } finally {
       // Even on throw, drop the mnemonic reference so the GC can reclaim it.
       mnemonic = '';
@@ -2731,12 +2752,20 @@ export class WalletBg {
       readonly password?: string;
       readonly prfSecret?: Uint8Array;
     },
+    /**
+     * What the user asked Nexus to build (the `outputs` of its build request).
+     * Nexus's transaction is checked against them before anything is signed.
+     */
+    intendedOutputs: ReadonlyArray<{ address: string; amount: string; token: string }> = [],
   ): Promise<string> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('balanceAndSignMidnightUnshieldedTransfer called on non-Midnight wallet');
     }
     if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
       throw new Error('unprovenTxHex is required');
+    }
+    if (intendedOutputs.length === 0) {
+      throw new Error('The requested outputs are required to check the transaction before signing');
     }
 
     const network = this.network;
@@ -2815,6 +2844,16 @@ export class WalletBg {
             );
           }
         }
+
+        // Nexus built this transaction. Every unshielded input it spends is this
+        // wallet's and the signature below authorizes all of them, so sign only
+        // a transaction that is exactly the send the user asked for.
+        const { assertMidnightTransferMatches } = await import('@/chains/midnight/midnightBuiltTxGuard');
+        await assertMidnightTransferMatches(
+          sdkNetworkId, unprovenTxHex,
+          { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
+          intendedOutputs,
+        );
 
         // Registration lower bound for the dust snapshot bootstrap: the wallet
         // can't have registered for DUST before it was created. For restored

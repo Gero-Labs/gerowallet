@@ -5635,10 +5635,13 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
   try {
     const walletBg = walletManager.getWallet();
     if (!walletBg) throw new Error('No wallet logged in');
-    const { segments, password, prfSecret, unprovenTxHex } = request.data || {};
+    const { segments, password, prfSecret, unprovenTxHex, dustReceiverAddressBech32 } = request.data || {};
     if (!Array.isArray(segments)) throw new Error('segments[] is required');
+    if (dustReceiverAddressBech32 !== undefined && typeof dustReceiverAddressBech32 !== 'string') {
+      throw new Error('dustReceiverAddressBech32 must be a string');
+    }
     const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes, unprovenTxHex);
+    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes, unprovenTxHex, dustReceiverAddressBech32);
     sendResponse({
       id: request.id,
       data: { success: true, signatures },
@@ -5682,10 +5685,18 @@ app.addToOptions(
         walletId: walletManager.getWallet()?.id, network: walletManager.getWallet()?.network,
         locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
       }));
-      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor, proving } = request.data || {};
+      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor, proving, intendedOutputs } = request.data || {};
       const provingArg = parseProvingRequest(proving);
       if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
         throw new Error('unprovenTxHex is required');
+      }
+      // What the user asked Nexus to build; walletBg checks Nexus's transaction against it.
+      if (!Array.isArray(intendedOutputs) || intendedOutputs.length === 0 || !intendedOutputs.every((o: unknown) =>
+        !!o && typeof o === 'object'
+        && typeof (o as { address?: unknown }).address === 'string'
+        && typeof (o as { amount?: unknown }).amount === 'string'
+        && typeof (o as { token?: unknown }).token === 'string')) {
+        throw new Error('intendedOutputs[] ({ address, amount, token }) is required');
       }
       if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs)) {
         throw new Error('ttlMs is required (epoch millis)');
@@ -5729,6 +5740,7 @@ app.addToOptions(
         password,
         prfBytes,
         sponsorArg,
+        intendedOutputs,
       );
       assertSession();
       // Only the wallet-proved path can name the ledger hash here: the proven
