@@ -10,6 +10,8 @@ import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
+import i18n from '@/plugins/i18n';
+import { verifyStrikeWithdrawTx } from '@/modules/market/utils/strikeWithdrawGuard';
 
 /**
  * Strike v2 withdraw quote – wraps the validator response and adds local
@@ -163,6 +165,7 @@ async function signCip8(message: string, password: string, pkBytes?: Uint8Array)
  */
 async function signWithdrawTx(
   txCborHex: string,
+  validatorAddress: string | undefined,
   password: string,
   pkBytes?: Uint8Array,
 ): Promise<string> {
@@ -170,6 +173,20 @@ async function signWithdrawTx(
   const keys = walletStore.keys;
   if (!keys?.payment?.[0]?.address) {
     throw new Error("No active Cardano wallet. Can't sign the withdrawal transaction.");
+  }
+
+  // Strike built this transaction: sign it only if it is the min-UTxO funding it
+  // says it is (see strikeWithdrawGuard.ts).
+  const ownAddresses = [
+    walletStore.loggedWallet?.baseAddress,
+    ...[...(keys.payment ?? []), ...(keys.change ?? [])].map((k) => k.address),
+    ...(utxos ?? []).map(([, out]) => String(out?.address ?? '')),
+  ].filter((a): a is string => !!a);
+  const ownKeyHashes = [...(keys.payment ?? []), ...(keys.stake ?? [])].map((k) => k.cred).filter(Boolean);
+  const violations = verifyStrikeWithdrawTx(txCborHex, { validatorAddress, ownAddresses, ownKeyHashes });
+  if (violations.length > 0) {
+    debugLog('[strike-withdraw] refused the quote transaction:', violations);
+    throw new Error(String(i18n.t('txGuard.builtTxMismatch')));
   }
 
   const signResult = (await Messaging.sendToBackgroundFromOptions({
@@ -312,7 +329,7 @@ export function useStrikeWithdraw() {
       // hand the SIGNED cbor back to Strike — Strike submits it server-side.
       let signedTxCbor: string | undefined;
       if (quote.value.tx_cbor) {
-        signedTxCbor = await signWithdrawTx(quote.value.tx_cbor, password, pkBytes);
+        signedTxCbor = await signWithdrawTx(quote.value.tx_cbor, quote.value.validator_address, password, pkBytes);
       }
 
       status.value = 'submitting';
