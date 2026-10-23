@@ -348,6 +348,31 @@ describe('dApp connect: the account to connect (#1331)', () => {
   });
 });
 
+describe('a request from an embedded frame', () => {
+  const TAB_ICON = 'https://host.example/favicon.ico';
+  const ask = (embeddedIn?: string) => {
+    const base = request();
+    overlay.currentRequest.value = { ...base, payload: { ...base.payload, favIconUrl: TAB_ICON, embeddedIn } } as never;
+  };
+  const icons = (wrapper: View) => wrapper.findAll('img').map((img) => img.attributes('src'));
+
+  it('names the embedding site and never shows the top-level tab’s favicon', () => {
+    ask('https://host.example');
+    const wrapper = render();
+
+    expect(wrapper.text()).toContain('miniGero.embeddedIn');
+    expect(icons(wrapper)).not.toContain(TAB_ICON);
+  });
+
+  it('keeps the tab’s favicon for a top-level request', () => {
+    ask();
+    const wrapper = render();
+
+    expect(wrapper.text()).not.toContain('miniGero.embeddedIn');
+    expect(icons(wrapper)).toContain(TAB_ICON);
+  });
+});
+
 describe('Midnight balanceUnsealedTransaction: the approval names who gets paid', () => {
   it('lists each payment of the dapp’s transaction with its recipient', () => {
     const recipient = 'mn_addr_preprod1recipientxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';

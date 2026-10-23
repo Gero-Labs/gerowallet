@@ -24,7 +24,7 @@ import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, verifySecondF
 import { upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
-import { embeddingSite } from '@/chrome/originBinding';
+import { embeddingSite, promptSite } from '@/chrome/originBinding';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
 import { RESERVED_SIGN_DATA_MESSAGE, reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
@@ -6535,8 +6535,8 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
     return true;
   }
 
-  const favIconUrl = send.tab?.favIconUrl;
-  const connectPayload = { website: origin, favIconUrl };
+  // Names the embedding site for a cross-origin frame, as the Cardano and Bitcoin prompts do.
+  const connectPayload = promptSite(origin, send);
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
@@ -6990,8 +6990,7 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   // the user declined one unrelated one would be a functionality regression,
   // not a security improvement. `connect` is coherent to sticky-deny because
   // it's always the same idempotent action; signData isn't.
-  const favIconUrl = send.tab?.favIconUrl;
-  const signDataPayload = { data, website: origin, favIconUrl };
+  const signDataPayload = { data, ...promptSite(origin, send) };
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.signData, signDataPayload, tabId)
@@ -7072,7 +7071,7 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     }
     const payload = {
       data: { tx: validation.tx, contributions: prompt.contributions, payments: prompt.payments },
-      website: origin, favIconUrl: send.tab?.favIconUrl,
+      ...promptSite(origin, send),
     };
     // The dapp calls this after its (async) proving, so there is no user
     // gesture left to open the panel with. Park the request instead of
@@ -7311,8 +7310,7 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
     return true;
   }
-  const favIconUrl = send.tab?.favIconUrl;
-  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, website: origin, favIconUrl };
+  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, ...promptSite(origin, send) };
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)

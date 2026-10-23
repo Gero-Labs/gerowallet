@@ -1248,7 +1248,9 @@ const faviconAttempt = ref(0);
 const faviconSources = computed(() => {
   const domain = enableDomain.value;
   if (!domain) return [];
-  const tabFavicon = currentRequest.value?.payload?.favIconUrl;
+  // The tab's favicon is the top-level site's: an embedded frame's request
+  // must not borrow it, so it gets only the icon of its own domain.
+  const tabFavicon = embeddedInSite.value ? undefined : currentRequest.value?.payload?.favIconUrl;
   return [
     // Source 1: the real favicon Chrome already loaded for the dApp tab.
     ...(tabFavicon ? [tabFavicon] : []),
