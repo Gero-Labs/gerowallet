@@ -26,6 +26,7 @@ export type TxIntentViolation =
   | 'missingOutput'
   | 'foreignOutput'
   | 'unexpectedInput'
+  | 'missingInput'
   | 'unknownInput'
   | 'unexpectedWithdrawal'
   | 'unexpectedCertificate'
@@ -65,16 +66,54 @@ export interface ExpectedWithdrawal {
   lovelace: bigint;
 }
 
+/**
+ * An output whose exact lovelace the flow cannot know (a script's min-UTxO
+ * deposit), so it is bounded instead: it must pay `address`, carry at most
+ * `maxLovelace`, and hold exactly the assets `assets` accepts.
+ */
+export interface BoundedOutput {
+  address: string;
+  maxLovelace: bigint;
+  /** Accepts the output's assets (unit → quantity). Omitted: no assets. */
+  assets?: (assets: ReadonlyMap<string, bigint>) => boolean;
+  /** Accepts the output's datum. Omitted: not checked. */
+  datum?: (output: Cardano.TxOut) => boolean;
+}
+
+/**
+ * Collateral a Plutus flow needs. The ledger keeps `totalCollateral` of it if a
+ * script fails, and sends the rest to `collateralReturn`, so the wallet's own
+ * collateral is acceptable only with that total stated and bounded and the
+ * return paying the wallet. `isOwnRisk` says which collateral inputs the user
+ * stands to lose (every input except one a sponsor provably lends).
+ */
+export interface CollateralAllowance {
+  maxAtRiskLovelace: bigint;
+  isOwnRisk: (inputRef: string) => boolean;
+}
+
 export interface TxIntent {
   outputs: readonly IntendedOutput[];
+  /** Outputs to a script whose lovelace is bounded rather than known. Each must match one output. */
+  boundedOutputs?: readonly BoundedOutput[];
   /** Addresses that belong to the wallet; every output not requested must pay one. */
   ownAddresses: Iterable<string>;
   /** `txId#index` of the UTxOs the wallet offered the builder. Omitted: not checked. */
   allowedInputs?: Iterable<string>;
+  /** `txId#index` of inputs that must be spent (a script UTxO the flow consumes). */
+  requiredInputs?: Iterable<string>;
   /** Withdrawals the flow asked for, matched exactly. Omitted: none allowed. */
   withdrawals?: readonly ExpectedWithdrawal[];
+  /** Also accept withdrawals of 0 lovelace (the withdraw-zero script authorization); they move no value. */
+  allowZeroWithdrawals?: boolean;
   /** Accepts the certificate list the flow asked for. Omitted: none allowed. */
   certificates?: (certificates: readonly Cardano.Certificate[]) => boolean;
+  /** Accepts the mint (unit → signed quantity). Omitted: no minting or burning allowed. */
+  mint?: (mint: ReadonlyMap<string, bigint>) => boolean;
+  /** Key hashes the flow expects to be required signers. Omitted: none allowed. */
+  requiredSigners?: Iterable<string>;
+  /** Collateral the flow needs. Omitted: none allowed. */
+  collateral?: CollateralAllowance;
   maxFeeLovelace?: bigint;
 }
 
@@ -107,7 +146,7 @@ export function assetMapOf(value: { assets?: unknown } | undefined): Map<string,
   return result;
 }
 
-function lovelaceOf(value: { coins?: unknown } | undefined): bigint {
+export function lovelaceOf(value: { coins?: unknown } | undefined): bigint {
   try {
     return BigInt(String(value?.coins ?? 0));
   } catch {
@@ -200,6 +239,52 @@ function structuralViolations(body: Cardano.TxBody, violations: Set<TxIntentViol
   if (body.donation != null && BigInt(body.donation) > 0n) violations.add('unexpectedDonation');
 }
 
+/**
+ * Index of the output that satisfies each bounded output, or -1. Outputs that
+ * already answered a requested output are not reused.
+ */
+function matchBoundedOutputs(tx: Cardano.Tx, bounded: readonly BoundedOutput[], taken: ReadonlySet<number>): number[] {
+  const outputs = tx.body.outputs ?? [];
+  const used = new Set<number>(taken);
+  return bounded.map((want) => {
+    const wantAddress = canonicalAddress(want.address);
+    const index = outputs.findIndex((o, i) => {
+      if (used.has(i) || canonicalAddress(String(o.address)) !== wantAddress) return false;
+      if (lovelaceOf(o.value) > want.maxLovelace) return false;
+      const assets = assetMapOf(o.value);
+      if (want.assets ? !want.assets(assets) : assets.size > 0) return false;
+      return want.datum ? want.datum(o) : true;
+    });
+    if (index >= 0) used.add(index);
+    return index;
+  });
+}
+
+/**
+ * Collateral is acceptable when the flow allows it and the user's share of it is
+ * bounded: the stated total is within the limit and whatever the ledger returns
+ * comes back to the wallet. Collateral that is entirely a sponsor's is the
+ * sponsor's risk.
+ */
+function collateralAllowed(body: Cardano.TxBody, allowance: CollateralAllowance | undefined, own: ReadonlySet<string>): boolean {
+  const collaterals = body.collaterals ?? [];
+  const present = collaterals.length > 0 || !!body.collateralReturn || body.totalCollateral != null;
+  if (!present) return true;
+  if (!allowance) return false;
+  const ownRisk = collaterals.some((c) => allowance.isOwnRisk(refOf(c)));
+  if (!ownRisk) return true;
+  if (body.collateralReturn && !own.has(canonicalAddress(String(body.collateralReturn.address)))) return false;
+  if (body.totalCollateral == null) return false;
+  return BigInt(body.totalCollateral) <= allowance.maxAtRiskLovelace;
+}
+
+function requiredSignersAllowed(actual: readonly unknown[] | undefined, allowed: Iterable<string> | undefined): boolean {
+  if (!hasEntries(actual)) return true;
+  if (!allowed) return false;
+  const set = new Set(Array.from(allowed, (h) => h.toLowerCase()));
+  return (actual ?? []).every((h) => set.has(String(h).toLowerCase()));
+}
+
 /** Every way `tx` departs from `intent`; empty when it is exactly what was asked for. */
 export function verifyTxIntent(tx: Cardano.Tx, intent: TxIntent): TxIntentViolation[] {
   const body = tx.body;
@@ -209,26 +294,42 @@ export function verifyTxIntent(tx: Cardano.Tx, intent: TxIntent): TxIntentViolat
   const matched = matchIntendedOutputs(tx, intent.outputs);
   if (matched.some((i) => i < 0)) violations.add('missingOutput');
   const matchedSet = new Set(matched.filter((i) => i >= 0));
+  for (const index of matchBoundedOutputs(tx, intent.boundedOutputs ?? [], matchedSet)) {
+    if (index < 0) violations.add('missingOutput');
+    else matchedSet.add(index);
+  }
   (body.outputs ?? []).forEach((o, i) => {
     if (!matchedSet.has(i) && !own.has(canonicalAddress(String(o.address)))) violations.add('foreignOutput');
   });
 
   if (intent.allowedInputs) {
     const allowed = new Set(Array.from(intent.allowedInputs, (r) => r.toLowerCase()));
+    for (const r of intent.requiredInputs ?? []) allowed.add(r.toLowerCase());
     for (const input of body.inputs ?? []) if (!allowed.has(refOf(input))) violations.add('unexpectedInput');
   }
-
-  if (hasEntries(body.collaterals) || body.collateralReturn || body.totalCollateral != null) {
-    violations.add('unexpectedCollateral');
+  if (intent.requiredInputs) {
+    const spent = new Set((body.inputs ?? []).map(refOf));
+    for (const r of intent.requiredInputs) if (!spent.has(r.toLowerCase())) violations.add('missingInput');
   }
-  if (!withdrawalsMatch(body.withdrawals, intent.withdrawals)) violations.add('unexpectedWithdrawal');
+
+  if (!collateralAllowed(body, intent.collateral, own)) violations.add('unexpectedCollateral');
+  const withdrawals = intent.allowZeroWithdrawals
+    ? (body.withdrawals ?? []).filter((w) => BigInt(String(w.quantity ?? 0)) !== 0n)
+    : body.withdrawals;
+  if (!withdrawalsMatch(withdrawals, intent.withdrawals)) violations.add('unexpectedWithdrawal');
 
   const certificates = (body.certificates ?? []) as Cardano.Certificate[];
   if (intent.certificates ? !intent.certificates(certificates) : certificates.length > 0) {
     violations.add('unexpectedCertificate');
   }
-  if (hasEntries(body.requiredExtraSignatures)) violations.add('unexpectedRequiredSigner');
+  if (!requiredSignersAllowed(body.requiredExtraSignatures, intent.requiredSigners)) {
+    violations.add('unexpectedRequiredSigner');
+  }
   structuralViolations(body, violations);
+  if (intent.mint) {
+    violations.delete('unexpectedMint');
+    if (!intent.mint(assetMapOf({ assets: body.mint }))) violations.add('unexpectedMint');
+  }
 
   if (BigInt(body.fee ?? 0n) > (intent.maxFeeLovelace ?? MAX_BUILT_TX_FEE_LOVELACE)) violations.add('feeTooHigh');
   return [...violations];

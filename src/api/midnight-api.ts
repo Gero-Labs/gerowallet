@@ -16,7 +16,12 @@
  */
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+import { Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
+import i18n from '@/plugins/i18n';
 import { parseHttpError } from '@/shared/utils/parser';
+import { verifyDustMappingTx, type DustTxExpectation } from '@/shared/utils/dustTxGuard';
+import { TxIntentMismatchError, type TxIntentViolation } from '@/shared/utils/txIntentGuard';
 import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
@@ -399,6 +404,42 @@ function manageWireBody(request: BuildDustManageTxRequest) {
     registration_utxo_output_index: request.registrationUtxoOutputIndex,
     dust_address_hex: request.dustAddressHex,
   };
+}
+
+/**
+ * What the wallet knows about itself when it asks Nexus for a mapping-validator
+ * transaction: the UTxOs it holds, when it has them (lets a collateral ref Nexus
+ * calls sponsored be told apart from the user's own).
+ */
+export interface DustBuildContext {
+  ownUtxoRefs?: Iterable<string>;
+}
+
+/**
+ * Refuse a mapping-validator transaction that is not what was asked for (see
+ * `dustTxGuard.ts`). Runs on every complete build, before any caller can sign it.
+ */
+function verifyDustBuild(
+  build: BuildDustRegistrationTxResponse,
+  expectation: Omit<DustTxExpectation, 'sponsoredCollateralRef'>,
+): BuildDustRegistrationTxResponse {
+  if (build.status !== 'complete' || !build.txCbor) return build;
+  let violations;
+  try {
+    const tx = Serialization.Transaction.fromCbor(HexBlob(build.txCbor)).toCore();
+    violations = verifyDustMappingTx(tx, { ...expectation, sponsoredCollateralRef: build.sponsoredCollateralRef });
+  } catch (e) {
+    debugLog('DUST build: could not verify the built transaction', e);
+    throw new TxIntentMismatchError(String(i18n.t('txGuard.builtTxMismatch')), []);
+  }
+  if (violations.length > 0) {
+    debugLog('DUST build: refused a transaction that differs from the request', violations);
+    throw new TxIntentMismatchError(
+      String(i18n.t('txGuard.builtTxMismatch')),
+      violations.filter((v): v is TxIntentViolation => v !== 'unsupported'),
+    );
+  }
+  return build;
 }
 
 function convertBuildDustTxResponse(data: BuildDustRegistrationTxResponseWire): BuildDustRegistrationTxResponse {
@@ -882,7 +923,9 @@ export class MidnightApi {
    */
   async buildDustRegistrationTx(
     request: BuildDustRegistrationTxRequest,
+    context: DustBuildContext = {},
   ): Promise<BuildDustRegistrationTxResponse> {
+    let build: BuildDustRegistrationTxResponse;
     try {
       const url = nexusMidnightPathFor(this.network, 'dust/build-registration-tx');
       const wireBody = {
@@ -892,7 +935,7 @@ export class MidnightApi {
       };
       const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(url, wireBody);
       if (status !== 200) throw parseHttpError(data);
-      return convertBuildDustTxResponse(data);
+      build = convertBuildDustTxResponse(data);
     } catch (error) {
       // Nexus refuses to build a second registration when a live one already
       // exists (Midnight allows exactly one per stake credential). Surface a
@@ -906,6 +949,13 @@ export class MidnightApi {
       }
       throw parseHttpError(error);
     }
+    return verifyDustBuild(build, {
+      kind: 'register',
+      network: this.network,
+      cardanoAddress: request.cardanoAddress,
+      dustAddressHex: request.dustAddressHex,
+      ownUtxoRefs: context.ownUtxoRefs,
+    });
   }
 
   /**
@@ -916,16 +966,25 @@ export class MidnightApi {
    */
   async buildDustDeregistrationTx(
     request: BuildDustManageTxRequest,
+    context: DustBuildContext = {},
   ): Promise<BuildDustRegistrationTxResponse> {
+    let build: BuildDustRegistrationTxResponse;
     try {
       const url = nexusMidnightPathFor(this.network, 'dust/build-deregistration-tx');
       const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(
         url, manageWireBody(request));
       if (status !== 200) throw parseHttpError(data);
-      return convertBuildDustTxResponse(data);
+      build = convertBuildDustTxResponse(data);
     } catch (error) {
       throw parseHttpError(error);
     }
+    return verifyDustBuild(build, {
+      kind: 'deregister',
+      network: this.network,
+      cardanoAddress: request.cardanoAddress,
+      registrationRef: `${request.registrationUtxoTxHash}#${request.registrationUtxoOutputIndex}`,
+      ownUtxoRefs: context.ownUtxoRefs,
+    });
   }
 
   /**
@@ -936,16 +995,26 @@ export class MidnightApi {
    */
   async buildDustUpdateTx(
     request: BuildDustManageTxRequest,
+    context: DustBuildContext = {},
   ): Promise<BuildDustRegistrationTxResponse> {
+    let build: BuildDustRegistrationTxResponse;
     try {
       const url = nexusMidnightPathFor(this.network, 'dust/build-update-tx');
       const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(
         url, manageWireBody(request));
       if (status !== 200) throw parseHttpError(data);
-      return convertBuildDustTxResponse(data);
+      build = convertBuildDustTxResponse(data);
     } catch (error) {
       throw parseHttpError(error);
     }
+    return verifyDustBuild(build, {
+      kind: 'update',
+      network: this.network,
+      cardanoAddress: request.cardanoAddress,
+      dustAddressHex: request.dustAddressHex,
+      registrationRef: `${request.registrationUtxoTxHash}#${request.registrationUtxoOutputIndex}`,
+      ownUtxoRefs: context.ownUtxoRefs,
+    });
   }
 
   /**
