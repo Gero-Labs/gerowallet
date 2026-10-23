@@ -4,7 +4,7 @@ import { Blockchain, CoinTypes, HARDENED, Network, WalletTypePurpose } from '@/m
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import { resolvePrivateKey } from './resolver';
 import { accountXpub, type AccountXpub } from './walletAccount';
-import { BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
+import { BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
 
 // bitcoinjs-lib rejects the test runner's Buffer: name each address after its xpub and index instead.
 vi.mock('@/chains/bitcoin/bitcoinKeyManager', () => ({
@@ -111,5 +111,27 @@ describe('discoverBitcoinAccounts', () => {
     const found = await discoverBitcoinAccounts(Network.MAINNET, 'taproot', [btc(0), btc(1)], api);
 
     expect(found.map((account) => account.activity)).toEqual(['unknown', 'used']);
+  });
+});
+
+describe('discoverMidnightAccounts', () => {
+  const account = (accountIndex: number, publicKey: string): AccountXpub => ({ accountIndex, publicKey, keys: [] });
+
+  it('shows each account by its unshielded address and never probes it', () => {
+    const found = discoverMidnightAccounts([
+      account(0, JSON.stringify({ unshielded: 'mn_addr_preprod1zero', dust: 'mn_dust-addr_preprod1zero' })),
+      account(1, JSON.stringify({ unshielded: 'mn_addr_preprod1one' })),
+    ]);
+
+    expect(found.map(({ accountIndex, address, stakeAddress, activity }) => ({ accountIndex, address, stakeAddress, activity }))).toEqual([
+      { accountIndex: 0, address: 'mn_addr_preprod1zero', stakeAddress: '', activity: 'unchecked' },
+      { accountIndex: 1, address: 'mn_addr_preprod1one', stakeAddress: '', activity: 'unchecked' },
+    ]);
+  });
+
+  it('still offers an account whose addresses cannot be read', () => {
+    const [found] = discoverMidnightAccounts([account(2, 'not json')]);
+
+    expect(found).toMatchObject({ accountIndex: 2, address: '', activity: 'unchecked' });
   });
 });

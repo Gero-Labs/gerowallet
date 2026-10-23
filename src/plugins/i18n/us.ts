@@ -5973,4 +5973,5 @@ export default {
   'accounts.moreAccounts': 'More accounts',
   'accounts.createCountHint': 'Each account has its own addresses and balance. You can add more later.',
   'accounts.addLaterCreate': 'Your wallet was created, but its other accounts could not be added. Add them from the wallet list.',
+  'accounts.notChecked': 'Gero can\'t check which Midnight accounts have been used. Choose the ones you want to add.',
 }

@@ -5742,4 +5742,5 @@ export default {
   'accounts.moreAccounts': 'Más cuentas',
   'accounts.createCountHint': 'Cada cuenta tiene sus propias direcciones y su propio saldo. Puedes agregar más después.',
   'accounts.addLaterCreate': 'Tu billetera se creó, pero no se pudieron agregar sus otras cuentas. Agrégalas desde la lista de billeteras.',
+  'accounts.notChecked': 'Gero no puede comprobar qué cuentas de Midnight se han usado. Elige las que quieres agregar.',
 }

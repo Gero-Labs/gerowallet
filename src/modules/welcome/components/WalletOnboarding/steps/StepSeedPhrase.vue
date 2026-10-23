@@ -45,6 +45,7 @@
       <GButton
         tier="primary"
         :disabled="!valid"
+        :loading="busy"
         @click="handleContinue()"
         class="step-next"
       >
@@ -61,7 +62,11 @@ import MnemonicAutocomplete from '@/modules/welcome/components/MnemonicAutocompl
 import { NetworkInfo } from '@/utils/networks';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
-defineProps<{ network: NetworkInfo }>();
+defineProps<{
+  network: NetworkInfo;
+  /** The onboarding is reading the phrase's accounts (several seconds on Midnight). */
+  busy?: boolean;
+}>();
 
 const emit = defineEmits<{
   (e: 'change', mnemonic: string[]): void;

@@ -15,6 +15,8 @@ const env = vi.hoisted(() => {
     wallets: {} as Record<number, Record<string, unknown>>,
     config: {} as Record<number, Record<string, unknown>>,
     decrypt: vi.fn(),
+    decryptText: vi.fn(),
+    deriveMidnightKeys: vi.fn(),
     locked: vi.fn((value: boolean) => { state.isLocked = value; }),
   };
 });
@@ -46,7 +48,8 @@ vi.mock('@/db/wallet-db', () => ({
     table: () => ({ where: ({ key }: { key: string }) => ({ first: async () => (key in (env.config[id] ?? {}) ? { key, value: env.config[id][key] } : undefined) }) }),
   }),
 }));
-vi.mock('@/shared/utils/crypto', () => ({ decryptPrivateKey: env.decrypt }));
+vi.mock('@/shared/utils/crypto', () => ({ decryptPrivateKey: env.decrypt, decrypt: env.decryptText, SecretPurpose: { Mnemonic: 'mnemonic' } }));
+vi.mock('@/chains/midnight/midnightKeyManager', () => ({ deriveMidnightKeys: env.deriveMidnightKeys }));
 vi.mock('@/chrome/mpcSessionCache', () => ({ mpcSessionCache: {
   get: (id: number) => env.sessions.get(id),
   clear: (id: number) => env.sessions.delete(id),
@@ -89,7 +92,12 @@ const other = { id: 20, name: 'Savings', ...base, publicKey: 'xpub-other', encry
 const google = { id: 30, name: 'Google', ...base, type: 'Google', publicKey: 'xpub-g0', encryptionMethod: 'mpc', mpcDeviceShare: 'share', userId: 'sub' };
 const googleAccount = { id: 31, name: 'Account #1', ...base, type: 'Google', publicKey: 'xpub-g1', accountIndex: 1, parentWalletId: 30, encryptionMethod: 'mpc' };
 
-type Internals = { initializeWallet: () => Promise<void>; initializeLastActivityTimestamp: () => Promise<void>; verifyUnlockCredentials: (id: number, credential: string) => Promise<boolean> };
+type Internals = {
+  initializeWallet: () => Promise<void>;
+  initializeLastActivityTimestamp: () => Promise<void>;
+  verifyUnlockCredentials: (id: number, credential: string) => Promise<boolean>;
+  startMidnightPrivateSessionAtUnlock: (id: number, password: string) => Promise<void>;
+};
 
 async function manager() {
   const { WalletManager } = await import('./walletManager.service');
@@ -179,5 +187,31 @@ describe('unlocking an added account', () => {
 
     await expect(internal.verifyUnlockCredentials(11, 'wrong')).resolves.toBe(false);
     await expect(internal.verifyUnlockCredentials(11, 'right')).resolves.toBe(true);
+  });
+});
+
+describe('unlocking an added Midnight account before it is logged in (issue 1330)', () => {
+  const night = { chain: 'Midnight', network: 'Preprod', type: 'Normal', encryptionMethod: 'password' };
+  const nightHead = { id: 40, name: 'Night', ...night, encryptedMnemonic: 'sealed-night', publicKey: '{"unshielded":"mn_addr_preprod1zero"}' };
+  const nightAccount = { id: 41, name: 'Account #1', ...night, accountIndex: 1, parentWalletId: 40, publicKey: '{"unshielded":"mn_addr_preprod1one"}' };
+
+  it('reads the recovery phrase from its account #0, and prepares its own account\'s private session', async () => {
+    env.wallets = { ...env.wallets, 40: nightHead, 41: nightAccount };
+    env.decryptText.mockImplementation((blob: string, password: string) => {
+      if (blob !== 'sealed-night' || password !== 'right') throw new Error('wrong password');
+      return 'the phrase';
+    });
+    const zswapSecretKey = new Uint8Array(32).fill(7);
+    env.deriveMidnightKeys.mockResolvedValue({
+      zswapSecretKey, unshieldedSecretKey: new Uint8Array(32), dustSecretKey: new Uint8Array(32), seed: new Uint8Array(64),
+    });
+    const { internal } = await manager();
+    const session = await import('@/chains/midnight/midnightPrivateSyncSession');
+
+    await internal.startMidnightPrivateSessionAtUnlock(41, 'right');
+
+    expect(env.deriveMidnightKeys).toHaveBeenCalledWith('the phrase', 'Preprod', 1, { skipCardano: true });
+    expect(session.prepareMidnightPrivateSession).toHaveBeenCalledWith(41, 'Preprod', zswapSecretKey, undefined);
+    expect(zswapSecretKey.every((byte) => byte === 0)).toBe(true);
   });
 });

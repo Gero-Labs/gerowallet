@@ -251,7 +251,7 @@ import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourc
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
-import { resolveAccountIndex } from '@/shared/utils/walletAccount';
+import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -415,10 +415,11 @@ async function runUpgrade() {
       }
       const { decryptMnemonicWithPrf } = await import('@/shared/utils/webauthn-prf');
       try {
+        // An added account's phrase is account #0's, encrypted under that id.
         mnemonic = await decryptMnemonicWithPrf(
           wallet.prfEncryptedMnemonic,
           wallet.webAuthnCredentialId,
-          wallet.id.toString(),
+          secretsWalletId(wallet).toString(),
         );
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

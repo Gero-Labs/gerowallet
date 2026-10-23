@@ -50,6 +50,7 @@ import {
 } from '@/models/types';
 import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
+import { withoutViewingKey } from '@/chains/midnight/midnightRecordScrub';
 
 async function encodeViewingKey(network: string, seed: Uint8Array): Promise<string> {
   if (midnightLedgerVersion(network) === 9) {
@@ -366,6 +367,15 @@ export async function deriveMidnightAddresses(
   derived.dustSecretKey.fill(0);
   derived.zswapSecretKey.fill(0);
   return derived.addresses;
+}
+
+/**
+ * The `publicKey` a wallet record of Midnight account `account` stores: its
+ * addresses, serialized as `createNewWallet` stores account #0's
+ * (`deriveWalletPublicKey`), never with the viewing key (PRIV-01).
+ */
+export async function deriveMidnightAccountPublicKey(mnemonic: string, network: string, account: number): Promise<string> {
+  return JSON.stringify(withoutViewingKey(await deriveMidnightAddresses(mnemonic, network, account)));
 }
 
 /**

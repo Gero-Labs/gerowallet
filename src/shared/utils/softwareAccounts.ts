@@ -1,13 +1,15 @@
 // Accounts of a software wallet (recovery phrase, PassKey or Google), derived
 // from its root key. Each account's xpub is what its record stores and what
 // signing checks the derived account key against (deriveSigningAccountKey on
-// Cardano, WalletBg.assertBitcoinAccount on Bitcoin).
+// Cardano, WalletBg.assertBitcoinAccount on Bitcoin). A Midnight account's
+// "xpub" is the addresses JSON its record stores, checked by its unshielded
+// address (WalletBg.deriveMidnightAccountKeys).
 import * as bip39 from 'bip39';
 import { Bip32PrivateKey, ready } from '@cardano-sdk/crypto';
 import { Blockchain, CoinTypes, HARDENED, WalletTypePurpose } from '@/models/types';
 import { accountXpub, assertAccountIndices, cardanoAccountPath, type AccountXpub } from './walletAccount';
 
-/** Which chain's accounts a recovery phrase is read for. Bitcoin derives per address type (default segwit). */
+/** Which chain's accounts a recovery phrase is read for. Bitcoin derives per address type (default segwit), Midnight per network. */
 export interface AccountChain {
   chain: string;
   network: string;
@@ -26,9 +28,21 @@ export async function deriveAccountXpubs(rootKey: Bip32PrivateKey, accountIndice
 /**
  * The same, from a recovery phrase held during a restore or an "Add account".
  * A Bitcoin wallet's stored root key has no chain code, so its accounts can only
- * come from the phrase: m/purpose'/coinType'/account', as base58 xpubs.
+ * come from the phrase: m/purpose'/coinType'/account', as base58 xpubs. A Midnight
+ * wallet stores the seed, and its accounts' addresses need the Midnight SDK: each
+ * account is the addresses JSON its record stores, one after the other since every
+ * one runs the SDK.
  */
 export async function deriveAccountXpubsFromMnemonic(mnemonic: string, accountIndices: number[], chain?: AccountChain): Promise<AccountXpub[]> {
+  if (chain?.chain === Blockchain.MIDNIGHT) {
+    const indices = assertAccountIndices(accountIndices);
+    const { deriveMidnightAccountPublicKey } = await import('@/chains/midnight/midnightKeyManager');
+    const accounts: AccountXpub[] = [];
+    for (const accountIndex of indices) {
+      accounts.push({ accountIndex, publicKey: await deriveMidnightAccountPublicKey(mnemonic, chain.network, accountIndex), keys: [] });
+    }
+    return accounts;
+  }
   if (chain?.chain === Blockchain.BITCOIN) {
     const indices = assertAccountIndices(accountIndices);
     const { deriveBitcoinAccountXpubs } = await import('@/chains/bitcoin/bitcoinKeyManager');

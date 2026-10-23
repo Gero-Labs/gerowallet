@@ -445,6 +445,7 @@ import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import { geroStore } from '@/stores/geroStore';
+import { secretsWallet } from '@/shared/utils/walletAccount';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
 import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
@@ -662,12 +663,14 @@ async function buildSponsorArg(current: () => boolean) {
   if (!sponsor) return undefined;
 
   if (sponsor.encryptionMethod === 'prf') {
-    if (!sponsor.webAuthnCredentialId) throw new Error(t('midnight.sponsor.unlockFailed') as string);
+    // An added account's PassKey is its account #0's, salted with that id.
+    const secrets = secretsWallet(sponsor, geroStore.wallets);
+    if (!secrets.webAuthnCredentialId) throw new Error(t('midnight.sponsor.unlockFailed') as string);
     const { evaluateWalletPrf } = await awaitFreshApproval(() => import('@/shared/utils/passkeyPrf'), current);
     const buf = await evaluateWalletPrf({
-      id: sponsor.id,
-      webAuthnCredentialId: sponsor.webAuthnCredentialId,
-      webAuthnTransports: sponsor.webAuthnTransports,
+      id: secrets.id,
+      webAuthnCredentialId: secrets.webAuthnCredentialId,
+      webAuthnTransports: secrets.webAuthnTransports,
     });
     if (!current()) { new Uint8Array(buf).fill(0); return undefined; }
     return { walletId: sponsor.id, prfSecret: new Uint8Array(buf) };

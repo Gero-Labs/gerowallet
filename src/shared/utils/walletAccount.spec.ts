@@ -75,6 +75,11 @@ describe('resolveAccountIndex', () => {
     expect(resolveAccountIndex({ chain: Blockchain.BITCOIN, type: WalletType.Normal, encryptionMethod: 'prf', accountIndex: 1 })).toBe(1);
   });
 
+  it('allows another account on a Midnight recovery-phrase or PassKey wallet', () => {
+    expect(resolveAccountIndex({ chain: Blockchain.MIDNIGHT, type: WalletType.Normal, accountIndex: 2 })).toBe(2);
+    expect(resolveAccountIndex({ chain: Blockchain.MIDNIGHT, type: WalletType.Normal, encryptionMethod: 'prf', accountIndex: 1 })).toBe(1);
+  });
+
   it.each([-1, 1.5, 0x80000000, Number.NaN, '1'])('refuses %s', (accountIndex) => {
     expect(() => resolveAccountIndex({ ...cardano, accountIndex: accountIndex as number })).toThrow(InvalidAccountIndexError);
   });
@@ -82,7 +87,7 @@ describe('resolveAccountIndex', () => {
   it.each([
     ['a Bitcoin hardware wallet', { chain: Blockchain.BITCOIN, type: WalletType.Ledger }],
     ['a Bitcoin watch wallet', { chain: Blockchain.BITCOIN, type: WalletType.Watch }],
-    ['a Midnight wallet', { chain: Blockchain.MIDNIGHT, type: WalletType.Normal }],
+    ['a Midnight watch wallet', { chain: Blockchain.MIDNIGHT, type: WalletType.Watch }],
     ['a watch wallet', { chain: Blockchain.CARDANO, type: WalletType.Watch }],
     ['a legacy Google wallet', { chain: Blockchain.CARDANO, type: WalletType.Google }],
   ])('refuses an account other than 0 on %s, and accepts account 0', (_, fields) => {
@@ -184,7 +189,7 @@ describe('account groups', () => {
     expect(conflictingWalletNames(head, wallets).sort()).toEqual(['Daily']);
   });
 
-  it('offers more accounts for Cardano hardware, recovery-phrase, PassKey and Google wallets, and Bitcoin recovery phrases', () => {
+  it('offers more accounts for Cardano hardware, recovery-phrase, PassKey and Google wallets, and Bitcoin and Midnight recovery phrases', () => {
     expect(canAddAccounts(head)).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Trezor }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal }))).toBe(true);
@@ -195,7 +200,9 @@ describe('account groups', () => {
     expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN }))).toBe(false); // a Bitcoin Keystone
     expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN, type: WalletType.Normal }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { chain: Blockchain.BITCOIN, type: WalletType.Normal, encryptionMethod: 'prf' }))).toBe(true);
-    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT }))).toBe(false);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT, encryptionMethod: 'prf' }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Watch, chain: Blockchain.MIDNIGHT }))).toBe(false);
   });
 });
 

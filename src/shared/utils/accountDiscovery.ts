@@ -7,7 +7,8 @@ import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 
-export type AccountActivity = 'used' | 'unused' | 'unknown';
+/** 'unknown': the probe failed. 'unchecked': the chain offers no probe (Midnight). */
+export type AccountActivity = 'used' | 'unused' | 'unknown' | 'unchecked';
 
 export interface DiscoveredAccount extends AccountXpub {
   /** First receive address, to show beside the account. */
@@ -83,6 +84,25 @@ export function mergeScannedAccounts(previous: AccountXpub[], scanned: AccountXp
   const merged = new Map(previous.map((account) => [account.accountIndex, account]));
   scanned.forEach((account) => merged.set(account.accountIndex, account));
   return [...merged.values()].sort((a, b) => a.accountIndex - b.accountIndex);
+}
+
+/**
+ * Midnight accounts, shown by their unshielded receive address and never probed
+ * ('unchecked'): Nexus has no REST query for a Midnight account's history, and
+ * the gero-sync socket belongs to the logged-in wallet. So only account #0 is
+ * chosen by default.
+ */
+export function discoverMidnightAccounts(accounts: AccountXpub[]): DiscoveredAccount[] {
+  return accounts.map((account) => {
+    let address = '';
+    try {
+      const unshielded: unknown = JSON.parse(account.publicKey)?.unshielded;
+      if (typeof unshielded === 'string') address = unshielded;
+    } catch {
+      // An unreadable blob shows no address; the account is still offered.
+    }
+    return { ...account, address, stakeAddress: '', activity: 'unchecked' };
+  });
 }
 
 /** Receive addresses checked per Bitcoin account: wallets hand them out in order, so a used account has used one of its first. */

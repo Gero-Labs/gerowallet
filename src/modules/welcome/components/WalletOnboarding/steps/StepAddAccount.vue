@@ -57,7 +57,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
 import GeroStore, { geroStore } from '@/stores/geroStore';
 import snackbar from '@/plugins/snackbar';
-import { discoverAccounts, discoverBitcoinAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { isSameWalletKey } from '@/db/walletIdentity';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
 import { nextAccountIndex, type AccountXpub } from '@/shared/utils/walletAccount';
@@ -81,6 +82,7 @@ const kind = computed<'password' | 'passkey' | 'google'>(() => {
 });
 const accountIndex = computed(() => nextAccountIndex(props.wallet, geroStore.wallets));
 const isBitcoin = computed(() => props.wallet.chain === Blockchain.BITCOIN);
+const isMidnight = computed(() => props.wallet.chain === Blockchain.MIDNIGHT);
 
 const password = ref('');
 const showPassword = ref(false);
@@ -113,7 +115,7 @@ async function deriveXpub(): Promise<string> {
  * page (the documented PRF exception): derive here and wipe it straight away.
  */
 async function derivePassKeyXpub(): Promise<string> {
-  if (isBitcoin.value) return deriveBitcoinPassKeyXpub();
+  if (isBitcoin.value || isMidnight.value) return derivePassKeyAccountFromPhrase();
   const { webAuthnCredentialId, prfEncryptedPrivateKey } = props.wallet;
   if (!webAuthnCredentialId || !prfEncryptedPrivateKey) throw new Error('not-supported');
   const [{ evaluateWalletPrf }, { decryptPrivateKeyWithPrf }, { Bip32PrivateKey }, { deriveAccountXpubs }] = await Promise.all([
@@ -136,11 +138,12 @@ async function derivePassKeyXpub(): Promise<string> {
 }
 
 /**
- * A Bitcoin wallet's stored root key has no chain code, so its accounts come from
- * its recovery phrase, decrypted here with the PassKey and checked against the
- * wallet's own account-#0 xpub (base58: compared exactly).
+ * A Bitcoin wallet's stored root key has no chain code, and a Midnight wallet's
+ * accounts need the Midnight SDK, so their accounts come from the recovery phrase,
+ * decrypted here with the PassKey and checked against the wallet's own account #0:
+ * a Bitcoin xpub exactly, a Midnight one by its unshielded address.
  */
-async function deriveBitcoinPassKeyXpub(): Promise<string> {
+async function derivePassKeyAccountFromPhrase(): Promise<string> {
   const { webAuthnCredentialId, prfEncryptedMnemonic } = props.wallet;
   if (!webAuthnCredentialId || !prfEncryptedMnemonic) throw new Error('not-supported');
   const [{ evaluateWalletPrf }, { decryptMnemonicWithPrfOutput }, { deriveAccountXpubsFromMnemonic }] = await Promise.all([
@@ -153,7 +156,7 @@ async function deriveBitcoinPassKeyXpub(): Promise<string> {
     const mnemonic = await decryptMnemonicWithPrfOutput(prfEncryptedMnemonic, prf, webAuthnCredentialId, String(props.wallet.id));
     const chain = { chain: props.wallet.chain, network: props.wallet.network, addressType: props.wallet.addressType };
     const [own, next] = await deriveAccountXpubsFromMnemonic(mnemonic, [0, accountIndex.value], chain);
-    if (own.publicKey !== props.wallet.publicKey) throw new Error('not-supported');
+    if (!isSameWalletKey(props.wallet.chain, own.publicKey, props.wallet.publicKey)) throw new Error('not-supported');
     return next.publicKey;
   } finally {
     new Uint8Array(prf).fill(0);
@@ -163,6 +166,7 @@ async function deriveBitcoinPassKeyXpub(): Promise<string> {
 /** The account's address and whether it has been used, on the wallet's own chain and network, for the preview. */
 async function probe(found: AccountXpub): Promise<DiscoveredAccount> {
   const { chain, network } = props.wallet;
+  if (isMidnight.value) return discoverMidnightAccounts([found])[0];
   const [result] = isBitcoin.value
     ? await discoverBitcoinAccounts(network, props.wallet.addressType ?? 'segwit', [found])
     : await discoverAccounts(chain, network, [found]);
@@ -212,6 +216,8 @@ const balance = computed(() => (preview.value?.activity === 'used' && preview.va
 const statusLabel = computed(() => {
   if (preview.value?.activity === 'used') return t('accounts.used');
   if (preview.value?.activity === 'unknown') return t('common.unknown');
+  // A Midnight account cannot be checked, so it is neither "used" nor "new".
+  if (preview.value?.activity === 'unchecked') return '';
   return t('miniGero.new');
 });
 const shortAddress = (address: string) => (address.length > 24 ? `${address.slice(0, 12)}…${address.slice(-8)}` : address);
