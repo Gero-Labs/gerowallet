@@ -53,7 +53,6 @@ import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import type { BitcoinUtxo } from '@/api/bitcoin-api';
-import type { Psbt } from 'bitcoinjs-lib';
 import {
   deriveBitcoinAddress,
   deriveBitcoinAddressSetFromXpubs,
@@ -1991,21 +1990,40 @@ export class WalletBg {
   /**
    * Sign a PSBT for a DApp request (Unisat-compatible bitcoin_signPsbt / bitcoin_signPsbts).
    *
+   * Signs exactly the inputs the approval view showed (`reviewBitcoinPsbt`):
+   * the listed `toSignInputs`, each of which must spend from this wallet, or
+   * without that list every input that does. Refuses the PSBT when an input it
+   * would sign has no previous-output value or asks for a sighash other than ALL.
+   *
    * @param psbtHex   - PSBT as hex or base64 string
-   * @param options   - { autoFinalized?: boolean } — if false, returns signed PSBT hex instead of tx hex
+   * @param options   - { autoFinalized?, toSignInputs? }, or a bare toSignInputs list (WalletConnect).
+   *                    autoFinalized false returns the signed PSBT hex instead of tx hex
    * @param password  - Spending password (password wallets)
    * @param prfSecret - Raw PRF output bytes (PRF wallets)
+   * @param ownUtxos  - The wallet's UTxOs, which own-input values are checked against
    * @returns         - Signed PSBT hex, or finalized tx hex when autoFinalized !== false
+   *                    and every input of the transaction is signed
    */
   async signBitcoinDappPsbt(
     psbtHex: string,
-    options?: { autoFinalized?: boolean; toSignInputs?: unknown[] },
+    options?: { autoFinalized?: boolean; toSignInputs?: unknown[] } | unknown[],
     password?: string,
-    prfSecret?: Uint8Array
+    prfSecret?: Uint8Array,
+    ownUtxos: ReadonlyArray<{ txHash: string; index: number; value: bigint | number | string; address?: string }> = [],
   ): Promise<string> {
     const { signPsbtWithMnemonic } = await import('@/chains/bitcoin/bitcoinSigner');
-    const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } = await import('@/chains/bitcoin/psbtReview');
     const { decrypt } = await import('@/shared/utils/crypto');
+
+    // Decide what gets signed before any key is decrypted.
+    const psbt = parsePsbt(psbtHex, this.network);
+    const review = reviewBitcoinPsbt(psbt, {
+      network: this.network,
+      ownAddresses: bitcoinOwnAddresses(this.publicKey, this.addressType, this.network, ownUtxos),
+      ownUtxos,
+      signOptions: options,
+    });
+    assertPsbtSignable(review);
 
     // Decrypt mnemonic
     let mnemonic: string;
@@ -2022,22 +2040,16 @@ export class WalletBg {
       mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
-    const bitcoin = await import('bitcoinjs-lib');
-    const bitcoinNetwork = getBitcoinNetwork(this.network);
-
-    let psbt: Psbt;
-    try {
-      psbt = bitcoin.Psbt.fromHex(psbtHex, { network: bitcoinNetwork });
-    } catch {
-      psbt = bitcoin.Psbt.fromBase64(psbtHex, { network: bitcoinNetwork });
-    }
-
     await this.assertBitcoinAccount(mnemonic);
-    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, this.accountIndex);
+    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, this.accountIndex, review.signIndices);
 
-    if (options?.autoFinalized !== false) {
-      signedPsbt.finalizeAllInputs();
-      return signedPsbt.extractTransaction().toHex();
+    const autoFinalized = Array.isArray(options) ? undefined : options?.autoFinalized;
+    if (autoFinalized !== false) {
+      for (const i of review.signIndices) signedPsbt.finalizeInput(i);
+      // A transaction exists only once every input is final; inputs left to
+      // other signers keep it a PSBT.
+      const complete = signedPsbt.data.inputs.every((input) => input.finalScriptSig || input.finalScriptWitness);
+      return complete ? signedPsbt.extractTransaction().toHex() : signedPsbt.toHex();
     }
     return signedPsbt.toHex();
   }

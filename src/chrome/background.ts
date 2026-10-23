@@ -4663,7 +4663,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
     return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
   }
 
-  const { psbtHexs, options } = request.data;
+  const { psbtHexs, options: batchOptions } = request.data;
   const tabId = request.send?.tab?.id;
   const favIconUrl = request.send?.tab?.favIconUrl;
   const embeddedIn = embeddingSite(request.origin, request.send);
@@ -4674,7 +4674,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   // signPsbt handler above, extracted here since this handler drives it once
   // per PSBT in a sequential loop (matching the popup-only version's original
   // one-popup-per-PSBT behavior).
-  const signOne = async (psbtHex: string): Promise<string> => {
+  const signOne = async (psbtHex: string, options: unknown): Promise<string> => {
     const singleRequest = { ...request, data: { psbtHex, options }, embeddedIn };
 
     const viaPopup = async (): Promise<string> => {
@@ -4712,8 +4712,9 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
 
   const signedHexs: string[] = [];
   try {
-    for (const psbtHex of psbtHexs) {
-      signedHexs.push(await signOne(psbtHex));
+    for (const [i, psbtHex] of (psbtHexs as string[]).entries()) {
+      // Unisat signPsbts takes one options object per PSBT.
+      signedHexs.push(await signOne(psbtHex, Array.isArray(batchOptions) ? batchOptions[i] : batchOptions));
     }
     sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
   } catch (err) {
@@ -4842,7 +4843,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_PSBT, async (request, sendRespon
     assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { psbtHex, options, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
-    const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret);
+    const ownUtxos = (WalletStore.state.utxos || []) as IUnifiedUtxo[];
+    const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret, ownUtxos);
     sendResponse({ id: request.id, data: { success: true, signedHex }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });

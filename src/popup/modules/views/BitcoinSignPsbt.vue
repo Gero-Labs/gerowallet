@@ -7,19 +7,12 @@
           {{ $t('bitcoin.signPsbtRequest') }}
         </v-card-title>
 
-        <!-- PSBT summary -->
+        <!-- PSBT summary: decoded from the same bytes the wallet signs -->
         <v-card flat variant="outlined" style="background-color: #141414!important;" class="pa-2 mb-3">
-          <div class="psbt-row">
-            <span class="psbt-label">{{ $t('bitcoin.inputs') }}</span>
-            <span class="psbt-value">{{ psbtInfo.inputs }}</span>
-          </div>
-          <div class="psbt-row">
-            <span class="psbt-label">{{ $t('bitcoin.outputs') }}</span>
-            <span class="psbt-value">{{ psbtInfo.outputs }}</span>
-          </div>
-          <div class="psbt-row" v-if="psbtInfo.autoFinalized !== undefined">
+          <BitcoinPsbtReview :review="psbtReview" />
+          <div class="psbt-row" v-if="autoFinalized !== undefined">
             <span class="psbt-label">{{ $t('bitcoin.result') }}</span>
-            <span class="psbt-value">{{ psbtInfo.autoFinalized ? $t('bitcoin.finalizedTx') : $t('bitcoin.signedPsbt') }}</span>
+            <span class="psbt-value">{{ autoFinalized ? $t('bitcoin.finalizedTx') : $t('bitcoin.signedPsbt') }}</span>
           </div>
         </v-card>
       </v-card-text>
@@ -46,7 +39,7 @@
             <v-col cols="12" v-else-if="isNormalWallet && isPrfWallet" class="pt-2 pb-0">
               <PassKeyAuthButton
                 v-if="!signed"
-                :disabled="loading"
+                :disabled="loading || psbtBlocked"
                 @success="handlePassKeyAuthSuccess"
                 @error="handlePassKeyAuthError"
                 block class="mb-2"
@@ -134,8 +127,9 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
+import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
+import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import type { Psbt } from 'bitcoinjs-lib';
 import { assertApprovedPsbt } from '@/chains/bitcoin/psbtApproval';
 import { resolveAccountIndex } from '@/shared/utils/walletAccount';
 import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
@@ -148,7 +142,8 @@ interface BtcSignPsbtOptions {
 interface BtcSignPsbtRequest {
   /** Browser-derived embedding site, set by the background. */
   embeddedIn?: string | null;
-  data?: { psbtHex: string; options?: BtcSignPsbtOptions };
+  /** `options` is a bare toSignInputs list on a WalletConnect request. */
+  data?: { psbtHex: string; options?: BtcSignPsbtOptions | unknown[] };
 }
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -188,8 +183,6 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 let keystoneApprovalCurrent: (() => boolean) | null = null;
 
-const psbtInfo = ref({ inputs: 0, outputs: 0, autoFinalized: undefined as boolean | undefined });
-
 const hasWebsite = computed(() => {
   const q = vmProxy.$route?.query;
   return !(q?.['website'] === 'undefined' || !q || Object.keys(q).length === 0);
@@ -204,7 +197,23 @@ const isLedger = computed(() => loggedWallet.value?.type === WalletType.Ledger);
 const isTrezor = computed(() => loggedWallet.value?.type === WalletType.Trezor);
 const isKeystone = computed(() => loggedWallet.value?.type === WalletType.Keystone);
 
+// The review is decoded from request.data, the same psbtHex every signing path
+// below sends. A hardware device signs all of the wallet's own inputs, whatever
+// toSignInputs lists, so its review shows exactly that.
+const { review: psbtReview, blocked: psbtBlocked } = useBitcoinPsbtReview(() => ({
+  psbtHex: request.value?.data?.psbtHex,
+  options: request.value?.data?.options,
+  wallet: loggedWallet.value,
+  utxos: walletStore.utxos,
+  ignoreToSignInputs: isLedger.value || isTrezor.value || isKeystone.value,
+}));
+const autoFinalized = computed(() => {
+  const options = request.value?.data?.options;
+  return options && !Array.isArray(options) ? options.autoFinalized : undefined;
+});
+
 const canSign = computed(() => {
+  if (psbtBlocked.value) return false;
   if (isNormalWallet.value && !isPrfWallet.value) return valid.value;
   return true;
 });
@@ -244,7 +253,7 @@ const doSign = async () => {
   loading.value = true;
   try {
     const { psbtHex, options } = request.value.data;
-    const signingData: { psbtHex: string; options?: BtcSignPsbtOptions; privateKeyBytes?: number[]; password?: string } = { psbtHex, options };
+    const signingData: { psbtHex: string; options?: BtcSignPsbtOptions | unknown[]; privateKeyBytes?: number[]; password?: string } = { psbtHex, options };
 
     if (isPrfWallet.value && privateKeyBytes.value) {
       signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
@@ -274,7 +283,7 @@ const doSign = async () => {
 
 const sign = () => approval.run(async () => {
   const approvalCurrent = approval.capture();
-  if (!approvalCurrent()) return;
+  if (!approvalCurrent() || psbtBlocked.value) return;
   if (isNormalWallet.value) {
     if (isPrfWallet.value) {
       if (privateKeyBytes.value) await awaitFreshApproval(() => doSign(), approvalCurrent);
@@ -310,9 +319,8 @@ const signWithLedger = async () => {
     const signedPsbtHex = await awaitFreshApproval(() => ledger.signBitcoinTransaction(request.value.data.psbtHex, account, !isBT.value), approvalCurrent);
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
-    const options = request.value.data.options;
     let returnHex = signedPsbtHex;
-    if (options?.autoFinalized !== false) {
+    if (autoFinalized.value !== false) {
       // Finalize in browser context
       const bitcoin = await awaitFreshApproval(async () => (import('bitcoinjs-lib')), approvalCurrent);
       const { getBitcoinNetwork } = await awaitFreshApproval(async () => (import('@/chains/bitcoin/bitcoinPsbtBuilder')), approvalCurrent);
@@ -352,9 +360,8 @@ const signWithTrezor = async () => {
     }
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
-    const options = request.value.data.options;
     let returnHex = signedPsbtHex;
-    if (options?.autoFinalized !== false) {
+    if (autoFinalized.value !== false) {
       const bitcoin = await awaitFreshApproval(async () => (import('bitcoinjs-lib')), approvalCurrent);
       const { getBitcoinNetwork } = await awaitFreshApproval(async () => (import('@/chains/bitcoin/bitcoinPsbtBuilder')), approvalCurrent);
       const network = getBitcoinNetwork(loggedWallet.value.network);
@@ -406,9 +413,8 @@ const onKeystoneScan = (ur: UR) => approval.run(async () => {
     keystoneScan.value = false;
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
-    const options = request.value.data.options;
     let returnHex = signedPsbtHex;
-    if (options?.autoFinalized !== false) {
+    if (autoFinalized.value !== false) {
       const bitcoin = await awaitFreshApproval(async () => (import('bitcoinjs-lib')), approvalCurrent);
       const { getBitcoinNetwork } = await awaitFreshApproval(async () => (import('@/chains/bitcoin/bitcoinPsbtBuilder')), approvalCurrent);
       const network = getBitcoinNetwork(loggedWallet.value.network);
@@ -436,22 +442,6 @@ const backKeystoneScan = () => {
   else { approval.invalidate(); keystoneOverlay.value = false; }
 };
 
-const decodePsbt = async (psbtHex: string, options: BtcSignPsbtOptions | undefined) => {
-  try {
-    const bitcoin = await import('bitcoinjs-lib');
-    let psbt: Psbt;
-    try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
-    catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
-    psbtInfo.value = {
-      inputs: psbt.data.inputs.length,
-      outputs: psbt.data.outputs.length,
-      autoFinalized: options?.autoFinalized,
-    };
-  } catch {
-    psbtInfo.value = { inputs: 0, outputs: 0, autoFinalized: options?.autoFinalized };
-  }
-};
-
 onMounted(async () => {
   // This view is only ever opened inside a standalone popup window (see the
   // BITCOIN_METHOD.signPsbt(s) popup fallback in background.ts, which always
@@ -464,8 +454,6 @@ onMounted(async () => {
 
   try {
     request.value = await controller.value.requestData();
-    const { psbtHex, options } = request.value?.data || {};
-    if (psbtHex) await decodePsbt(psbtHex, options);
   } catch (e) {
     console.error('[BitcoinSignPsbt] Failed to get request data:', e);
   }

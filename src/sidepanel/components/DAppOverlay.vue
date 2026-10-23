@@ -412,16 +412,7 @@
           </div>
         </div>
 
-        <div v-if="btcPsbtInfo" class="tx-intents mb-3">
-          <div class="tx-intent-row">
-            <span class="grey--text text-caption">{{ $t('bitcoin.inputs') }}</span>
-            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.inputs }}</span>
-          </div>
-          <div class="tx-intent-row">
-            <span class="grey--text text-caption">{{ $t('bitcoin.outputs') }}</span>
-            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.outputs }}</span>
-          </div>
-        </div>
+        <BitcoinPsbtReview :review="btcPsbtReview" />
 
         <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
@@ -1032,7 +1023,7 @@
       <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword" @click="signBtcPsbtNormal">
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || btcPsbtBlocked" @click="signBtcPsbtNormal">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
@@ -1040,7 +1031,7 @@
       <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded variant="flat" :loading="signing" @click="runBtcPrf(signBtcPsbtPrf)">
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="btcPsbtBlocked" @click="runBtcPrf(signBtcPsbtPrf)">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
@@ -1075,6 +1066,8 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
+import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
+import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
 import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -1459,24 +1452,13 @@ const signDataMessage = computed(() => {
 // Midnight's own signData branch already uses for its unsupported wallet
 // types (see below).
 
-const btcPsbtInfo = ref<{ inputs: number; outputs: number } | null>(null);
-watch(
-  () => currentRequest.value?.method === 'btcSignPsbt' ? (currentRequest.value?.payload as { psbtHex?: string })?.psbtHex : undefined,
-  async (psbtHex) => {
-    btcPsbtInfo.value = null;
-    if (!psbtHex) return;
-    try {
-      const bitcoin = await import('bitcoinjs-lib');
-      let psbt;
-      try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
-      catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
-      btcPsbtInfo.value = { inputs: psbt.data.inputs.length, outputs: psbt.data.outputs.length };
-    } catch (e) {
-      console.error('[DApp] Failed to decode Bitcoin PSBT for preview:', e);
-    }
-  },
-  { immediate: true },
-);
+// Decoded from the same payload the sign handlers below send, by the same
+// review the background signer enforces.
+const { review: btcPsbtReview, blocked: btcPsbtBlocked } = useBitcoinPsbtReview(() => {
+  if (currentRequest.value?.method !== 'btcSignPsbt') return null;
+  const { psbtHex, options } = currentRequest.value.payload as { psbtHex?: string; options?: unknown };
+  return { psbtHex, options, wallet: WalletStore.state.loggedWallet, utxos: WalletStore.state.utxos };
+});
 
 const btcMessageText = computed(() => {
   if (currentRequest.value?.method !== 'btcSignMessage') return '';
@@ -1491,7 +1473,7 @@ async function signBtcPsbtNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
-  if (!currentRequest.value || !spendingPassword.value) return;
+  if (!currentRequest.value || !spendingPassword.value || btcPsbtBlocked.value) return;
   signing.value = true;
   signError.value = '';
   try {
@@ -1517,7 +1499,7 @@ async function signBtcPsbtNormal() {
 async function signBtcPsbtPrf(pkBytes: Uint8Array) {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
-  if (!currentRequest.value) return;
+  if (!currentRequest.value || btcPsbtBlocked.value) return;
   signing.value = true;
   signError.value = '';
   try {
