@@ -1246,8 +1246,10 @@ export class WalletManager {
         accountIndex = this.walletBg.accountIndex;
       } else {
         const { getAllWallets } = await import('@/db/gero-db');
-        const record = (await getAllWallets())[walletId];
-        encryptedMnemonic = record?.encryptedMnemonic;
+        const wallets = await getAllWallets();
+        const record = wallets[walletId];
+        // An added account's phrase is stored on its account #0.
+        encryptedMnemonic = record ? secretsWallet(record, wallets).encryptedMnemonic : undefined;
         network = record?.network;
         chain = record?.chain;
         if (record) accountIndex = resolveAccountIndex(record);

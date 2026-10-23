@@ -23,18 +23,21 @@ import {
 const MAX_ACCOUNT_INDEX = 0x7fffffff;
 
 /**
- * Chains whose records may hold an account other than 0. Midnight signing still
- * derives account 0 throughout, so a record claiming another account there is
- * refused rather than signed for with the wrong key. Bitcoin signs at the
- * record's account for recovery-phrase and PassKey wallets only: its hardware
- * signers still send account 0 paths.
+ * Chains whose records may hold an account other than 0. Bitcoin and Midnight
+ * sign at the record's account for recovery-phrase and PassKey wallets only:
+ * Bitcoin hardware signers still send account 0 paths, and Midnight has no other
+ * kind of wallet.
  */
 const MULTI_ACCOUNT_CHAINS: ReadonlySet<string> = new Set([
   Blockchain.CARDANO,
   Blockchain.APEX_PRIME,
   Blockchain.APEX_VECTOR,
   Blockchain.BITCOIN,
+  Blockchain.MIDNIGHT,
 ]);
+
+/** Chains whose accounts come from the recovery phrase alone: Bitcoin and Midnight. */
+const PHRASE_ACCOUNT_CHAINS: ReadonlySet<string> = new Set([Blockchain.BITCOIN, Blockchain.MIDNIGHT]);
 
 export class InvalidAccountIndexError extends Error {
   constructor(message: string) {
@@ -48,7 +51,7 @@ type AccountRecord = Pick<Wallet, 'accountIndex' | 'chain' | 'type' | 'encryptio
 /** Watch wallets have no keys, and a legacy Google wallet's address comes from a contract. */
 function canHoldOtherAccounts(wallet: AccountRecord): boolean {
   if (!MULTI_ACCOUNT_CHAINS.has(wallet.chain)) return false;
-  if (wallet.chain === Blockchain.BITCOIN) return wallet.type === WalletType.Normal;
+  if (PHRASE_ACCOUNT_CHAINS.has(wallet.chain)) return wallet.type === WalletType.Normal;
   if (wallet.type === WalletType.Watch) return false;
   return !(wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc');
 }
@@ -165,10 +168,10 @@ export function childAccounts<T extends GroupRecord>(parent: T, wallets: WalletL
 
 /**
  * Wallets that can add another account: on Cardano hardware devices, seeds
- * (password or PassKey) and Google wallets; on Bitcoin seeds only.
+ * (password or PassKey) and Google wallets; on Bitcoin and Midnight seeds only.
  */
 export function canAddAccounts(wallet: Pick<Wallet, 'chain' | 'type' | 'encryptionMethod'>): boolean {
-  if (wallet.chain === Blockchain.BITCOIN) return wallet.type === WalletType.Normal;
+  if (PHRASE_ACCOUNT_CHAINS.has(wallet.chain)) return wallet.type === WalletType.Normal;
   if (wallet.chain !== Blockchain.CARDANO) return false;
   if (isHardwareWallet(wallet)) return true;
   return wallet.type === WalletType.Normal || (wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc');

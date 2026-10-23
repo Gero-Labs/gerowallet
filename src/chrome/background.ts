@@ -41,6 +41,7 @@ import {
   urlScan,
 } from '@/chrome/serialization';
 import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
+import { canReplaceWalletKey } from '@/db/walletIdentity';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -5403,6 +5404,13 @@ app.addToOptions(MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY, async (request, sendRe
     const publicKey = stripViewingKeyFromPublicKey(suppliedPublicKey);
     const { getDb } = await import('@/db/gero-db');
     const db = await getDb();
+    // Refreshed addresses stay the record's own account: an added account's must
+    // not become another account's, which would then be signed for in its name.
+    const stored = await db['wallets'].get(walletId) as { chain?: string; publicKey?: string } | undefined;
+    if (stored?.chain !== Blockchain.MIDNIGHT) throw new Error('Not a Midnight wallet');
+    if (!canReplaceWalletKey(Blockchain.MIDNIGHT, stored.publicKey, publicKey)) {
+      throw new Error('These addresses belong to another account');
+    }
     await db['wallets'].update(walletId, { publicKey });
 
     // Refresh the live walletBg if this is the currently logged-in wallet so

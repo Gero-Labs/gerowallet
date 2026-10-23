@@ -49,6 +49,7 @@
         <StepSeedPhrase class="onboarding-step"
           v-else-if="currentStep.key === 'seed'"
           :network="network"
+          :busy="derivingAccounts"
           @change="onMnemonicChange"
           @next="onSeedNext"
           @back="step--"
@@ -84,6 +85,7 @@
           v-model:offered="offeredAccountIndices"
           :accounts="scannedAccounts"
           :source="selectedMethod === 'restore' ? 'seed' : 'device'"
+          :busy="derivingAccounts"
           @next="onAccountsChosen"
           @scan-more="onScanMore"
           @back="onAccountsBack"
@@ -236,9 +238,11 @@ const connection = ref<ConnectionPayload | null>(null);
 // exported or a restored recovery phrase derives, and the ones chosen.
 const { t } = useTranslation();
 const multiAccount = computed(() => featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.CARDANO);
-// A restore also lists Bitcoin accounts; pairing a Bitcoin device still adds account #0 only.
+// A restore also lists Bitcoin and Midnight accounts; pairing a Bitcoin device still
+// adds account #0 only, and Midnight has no hardware wallets.
+const PHRASE_ACCOUNT_CHAINS: readonly string[] = [Blockchain.BITCOIN, Blockchain.MIDNIGHT];
 const multiAccountRestore = computed(() => multiAccount.value
-  || (featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.BITCOIN));
+  || (featureFlagsStore.isMultiAccountEnabled() && PHRASE_ACCOUNT_CHAINS.includes(props.network?.blockchain ?? '')));
 // Creating a recovery-phrase or PassKey wallet asks how many accounts to start with.
 const multiAccountCreate = computed(() => selectedMethod.value === 'create' && multiAccountRestore.value);
 const accountCount = ref(1);
@@ -431,12 +435,21 @@ const onConnected = (payload: ConnectionPayload): void => {
   step.value++;
 };
 const restoredMnemonic = (): string => mnemonic.value.join(' ');
+/** Accounts are being derived from the typed phrase: about half a second each on Midnight. */
+const derivingAccounts = ref(false);
+async function deriveRestoredAccounts(indices: number[]): Promise<AccountXpub[]> {
+  derivingAccounts.value = true;
+  try {
+    const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
+    return await deriveAccountXpubsFromMnemonic(restoredMnemonic(), indices, restoreChain.value);
+  } finally {
+    derivingAccounts.value = false;
+  }
+}
 /** Restore: list the recovery phrase's first accounts before choosing how to secure it. */
 const onSeedNext = async (): Promise<void> => {
-  if (multiAccountRestore.value) {
-    const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
-    scannedAccounts.value = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), FIRST_SCAN, restoreChain.value);
-  }
+  if (derivingAccounts.value) return;
+  if (multiAccountRestore.value) scannedAccounts.value = await deriveRestoredAccounts(FIRST_SCAN);
   step.value++;
 };
 const onAccountsChosen = async (accounts: AccountXpub[]): Promise<void> => {
@@ -454,8 +467,8 @@ const onScanMore = async (): Promise<void> => {
   const next = nextScanIndices(scannedAccounts.value.map((account) => account.accountIndex));
   if (selectedMethod.value === 'restore') {
     // Derived from the recovery phrase in memory: no device to ask again.
-    const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
-    const more = await deriveAccountXpubsFromMnemonic(restoredMnemonic(), next.filter((index) => index !== 0), restoreChain.value);
+    if (derivingAccounts.value) return;
+    const more = await deriveRestoredAccounts(next.filter((index) => index !== 0));
     scannedAccounts.value = [...scannedAccounts.value, ...more];
     return;
   }

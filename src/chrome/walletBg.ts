@@ -85,7 +85,9 @@ import {
 import { debugLog } from '@/utils/debug';
 import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
-import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex } from '@/shared/utils/walletAccount';
+import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex, withGroupSecrets } from '@/shared/utils/walletAccount';
+import { isSameWalletKey } from '@/db/walletIdentity';
+import type { MidnightDerivedKeys } from '@/chains/midnight/midnightKeyManager';
 // Static, not dynamic: walletBg and this module land in the same background
 // IIFE, so a dynamic import buys no code splitting — it only pushes the
 // module's declaration later in the emitted bundle, which is exactly the
@@ -1817,6 +1819,26 @@ export class WalletBg {
   }
 
   /**
+   * This record's Midnight keys, derived from `mnemonic` at its account. An added
+   * account (#1 and up) is refused when the phrase does not derive the unshielded
+   * address its record stores, so it never signs with another account's keys.
+   * Signing needs no Cardano twin keys, so their derivation is skipped (it is also
+   * the part the background bundle's pbkdf2 shim has broken before).
+   */
+  private async deriveMidnightAccountKeys(mnemonic: string, network: string): Promise<MidnightDerivedKeys> {
+    const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+    const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+    if (this.accountIndex > 0 && !isSameWalletKey(Blockchain.MIDNIGHT, JSON.stringify(derived.addresses), this.publicKey)) {
+      derived.unshieldedSecretKey.fill(0);
+      derived.dustSecretKey.fill(0);
+      derived.zswapSecretKey.fill(0);
+      derived.seed.fill(0);
+      throw new InvalidAccountIndexError('The signing key does not belong to this account');
+    }
+    return derived;
+  }
+
+  /**
    * An added Bitcoin account signs at its own index, so its recovery phrase (its
    * account #0's) must derive the record's xpub there: any other key would sign
    * for addresses the wallet does not show. Account #0 records predate the check
@@ -2383,11 +2405,9 @@ export class WalletBg {
     }
 
     try {
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
       const { midnightStore } = await import('@/stores/midnightStore');
-      // skipCardano: same BG-bundle pbkdf2 workaround as the other Midnight paths.
-      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
       try {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
@@ -2440,8 +2460,7 @@ export class WalletBg {
         const { decrypt } = await import('@/shared/utils/crypto');
         mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
       }
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
       try {
         if (!isCurrent()) throw new Error('Wallet changed while authorizing private synchronization');
         prepareMidnightPrivateSession(this.id, network, derived.zswapSecretKey, epoch);
@@ -2490,12 +2509,9 @@ export class WalletBg {
         throw new Error('Zswap (shielded) signing is not yet supported. Phase 3 work pending.');
       }
 
-      // skipCardano: the signing path runs inside the BG service worker where
-      // the bundled pbkdf2/sha512 polyfill chain crashes (CLAUDE.md "pbkdf2
-      // build issues"). NightExternal signing doesn't need Cardano material,
-      // so skip that derivation entirely.
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, this.network, this.accountIndex, { skipCardano: true });
+      // NightExternal signing doesn't need Cardano material, so the derivation
+      // skips it (deriveMidnightAccountKeys).
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, this.network);
 
       // Map our project's `Network` constant to the SDK's NetworkId string.
       // We avoid duplicating the mapping here — `midnightNetworkId` lives in
@@ -2608,8 +2624,7 @@ export class WalletBg {
     }
 
     try {
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, this.network, this.accountIndex, { skipCardano: true });
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, this.network);
 
       const { Network } = await import('@/models/types');
       let networkId: string;
@@ -2724,15 +2739,12 @@ export class WalletBg {
 
     try {
       const { Network } = await import('@/models/types');
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
       const { balanceAndSignUnshieldedTransfer } = await import('@/chains/midnight/midnightTxBuilder');
       const { midnightActions } = await import('@/stores/midnightStore');
 
-      // skipCardano:true: the BG-bundle pbkdf2/sha512 shim breaks on the
-      // Cardano BIP-32 derivation path. We don't need Cardano keys for a
-      // Midnight transfer — same workaround we use in signMidnightSegments.
-      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+      // A Midnight transfer needs no Cardano keys (deriveMidnightAccountKeys skips them).
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
       // Everything from here to the matching finally runs with live key
       // material in memory. The wipe used to begin only at the SDK call, which
       // left the sponsor-derivation block outside it: a wrong sponsor password
@@ -2802,7 +2814,8 @@ export class WalletBg {
           // Throws on a structurally ineligible sponsor BEFORE decrypting.
           sponsorDustSeed = await deriveSponsorDustSeed(
             {
-              sponsor: sponsorWallet,
+              // An added account's phrase and PassKey are its account #0's.
+              sponsor: withGroupSecrets(sponsorWallet, wallets),
               network,
               credential: { password: sponsor.password, prfSecret: sponsor.prfSecret },
             },
@@ -2923,15 +2936,12 @@ export class WalletBg {
 
     try {
       const { Network } = await import('@/models/types');
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
       const { buildAndSignShieldedTransfer, LocalProvingError } = await import('@/chains/midnight/midnightShieldedBuilder');
       const { midnightActions } = await import('@/stores/midnightStore');
 
-      // skipCardano:true: same BG-bundle pbkdf2 polyfill workaround as
-      // balanceAndSignMidnightUnshieldedTransfer. Cardano material isn't
-      // needed for a shielded send.
-      const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+      // Cardano material isn't needed for a shielded send (deriveMidnightAccountKeys skips it).
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
       let sponsorDustSeed: Uint8Array | undefined;
       try {
       assertSession();
@@ -2976,7 +2986,7 @@ export class WalletBg {
           const sponsorWallet = wallets[sponsor.walletId];
           if (!sponsorWallet) throw new Error('Sponsor wallet not found');
           sponsorDustSeed = await deriveSponsorDustSeed({
-            sponsor: sponsorWallet, network,
+            sponsor: withGroupSecrets(sponsorWallet, wallets), network,
             credential: { password: sponsor.password, prfSecret: sponsor.prfSecret },
           }, this.id);
         }
@@ -3112,8 +3122,8 @@ export class WalletBg {
    * Flow:
    *   1. Decrypt the mnemonic (password for password wallets / PRF for PRF
    *      wallets).
-   *   2. Derive the Cardano root key, then the account-0 external-chain
-   *      index-0 payment key (matches `cardanoBaseAddress`).
+   *   2. Derive the Cardano root key, then this record's account's
+   *      external-chain index-0 payment key (matches `cardanoBaseAddress`).
    *   3. Sign `txCborHex.id` with that key, plus the stake key if the tx
    *      needs it (for collateral_return on stake-bound addresses).
    *   4. Apply the witness set to the tx and submit to the Cardano network
@@ -3151,14 +3161,14 @@ export class WalletBg {
     }
 
     try {
-      // 2. Derive Cardano keys from the same mnemonic.
+      // 2. Derive Cardano keys from the same mnemonic, at this record's account:
+      // a Midnight account's Cardano twin is the same account of the phrase. An
+      // added account's key must be the twin its record stores (cardanoXpub).
       const { resolvePrivateKey } = await import('@/shared/utils/resolver');
       const rootKey = resolvePrivateKey(mnemonic);
-      const accountKey = rootKey.derive([
-        WalletTypePurpose.CIP1852,
-        CoinTypes.CARDANO,
-        HARDENED + 0,
-      ]);
+      const accountKey = this.accountIndex === 0
+        ? rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + 0])
+        : deriveSigningAccountKey(rootKey, this.accountIndex, (await this.getMidnightWalletKeys()).cardanoXpub);
       const paymentKey = accountKey.derive([0, 0]).toRawKey(); // external chain, index 0
       const stakeKey = accountKey.derive([2, 0]).toRawKey();   // staking chain
 

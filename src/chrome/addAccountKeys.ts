@@ -3,10 +3,12 @@
 // from the Google session the wallet was unlocked with, here in the background;
 // only the account's public key goes back to the page. A PassKey wallet derives
 // in the page instead, where WebAuthn can run (the documented PRF exception).
-// A Bitcoin wallet's stored root key has no chain code: it derives from its
-// recovery phrase instead.
+// A Bitcoin wallet's stored root key has no chain code, and a Midnight wallet's
+// accounts are its addresses (the Midnight SDK, run on the phrase): both derive
+// from the recovery phrase instead.
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { Blockchain, type Wallet } from '@/models/types';
+import { isSameWalletKey } from '@/db/walletIdentity';
 import { assertAccountIndices, canAddAccounts, isHardwareWallet, secretsWallet } from '@/shared/utils/walletAccount';
 import { deriveAccountXpubs, deriveAccountXpubsFromMnemonic } from '@/shared/utils/softwareAccounts';
 
@@ -45,7 +47,9 @@ export async function deriveAccountXpubFlow(
   if (!canAddAccounts(wallet) || isHardwareWallet(wallet)) throw new AddAccountError('not-supported');
   const [accountIndex] = assertAccountIndices([input.accountIndex]);
   if (accountIndex === 0) throw new AddAccountError('not-supported');
-  if (wallet.chain === Blockchain.BITCOIN) return bitcoinAccountXpub(wallet, accountIndex, input.password, deps);
+  if (wallet.chain === Blockchain.BITCOIN || wallet.chain === Blockchain.MIDNIGHT) {
+    return phraseAccountKey(wallet, accountIndex, input.password, deps);
+  }
 
   let rootKeyBytes: Uint8Array;
   if (wallet.encryptionMethod === 'mpc') {
@@ -76,10 +80,11 @@ export async function deriveAccountXpubFlow(
 }
 
 /**
- * A Bitcoin account's xpub, from the wallet's recovery phrase. The phrase must
- * derive the wallet's own account-#0 xpub (base58: compared exactly).
+ * A Bitcoin account's xpub, or a Midnight account's addresses JSON, from the
+ * wallet's recovery phrase. The phrase must derive the wallet's own account #0:
+ * a Bitcoin xpub exactly (base58), a Midnight one by its unshielded address.
  */
-async function bitcoinAccountXpub(wallet: Wallet, accountIndex: number, password: unknown, deps: DeriveAccountXpubDeps): Promise<string> {
+async function phraseAccountKey(wallet: Wallet, accountIndex: number, password: unknown, deps: DeriveAccountXpubDeps): Promise<string> {
   if (wallet.encryptionMethod === 'prf' || !wallet.encryptedMnemonic) throw new AddAccountError('not-supported');
   if (typeof password !== 'string' || !password) throw new AddAccountError('wrong-password');
   let mnemonic: string;
@@ -90,6 +95,6 @@ async function bitcoinAccountXpub(wallet: Wallet, accountIndex: number, password
   }
   const chain = { chain: wallet.chain, network: wallet.network, addressType: wallet.addressType };
   const [own, account] = await deriveAccountXpubsFromMnemonic(mnemonic, [0, accountIndex], chain);
-  if (own.publicKey !== wallet.publicKey) throw new AddAccountError('not-supported');
+  if (!isSameWalletKey(wallet.chain, own.publicKey, wallet.publicKey)) throw new AddAccountError('not-supported');
   return account.publicKey;
 }

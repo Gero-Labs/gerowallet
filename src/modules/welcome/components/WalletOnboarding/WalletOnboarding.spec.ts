@@ -9,7 +9,7 @@ import type { AccountXpub } from '@/shared/utils/walletAccount';
 const { flags, stub, derive, findExisting } = vi.hoisted(() => ({
   flags: { multiAccount: true, setError: vi.fn() },
   // Each step is a stub that shows its props, so the flow can be driven from here.
-  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet', 'offerAccounts', 'accountCount', 'selected', 'offered'], template: `<div class="${name}" />` }),
+  stub: (name: string) => ({ name, props: ['accountIndices', 'accounts', 'groupPublicKey', 'source', 'wallet', 'offerAccounts', 'accountCount', 'selected', 'offered', 'busy'], template: `<div class="${name}" />` }),
   derive: vi.fn(),
   findExisting: vi.fn(),
 }));
@@ -218,6 +218,42 @@ describe('restoring a recovery phrase with several accounts', () => {
     expect(wrapper.findComponent({ name: 'StepAccounts' }).exists()).toBe(true);
   });
 
+  it('lists a Midnight phrase’s accounts too', async () => {
+    derive.mockImplementation(async (_mnemonic: string, indices: number[]) => indices.map((i) => account(i)));
+    const midnight = networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD);
+    const wrapper = render(null, midnight);
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'restore');
+    await flushPromises();
+    const seed = wrapper.findComponent({ name: 'StepSeedPhrase' });
+    seed.vm.$emit('change', words);
+    seed.vm.$emit('next');
+    await flushPromises();
+
+    expect(derive).toHaveBeenCalledWith(words.join(' '), [0, 1, 2, 3, 4], { chain: Blockchain.MIDNIGHT, network: Network.PREPROD });
+    expect(wrapper.findComponent({ name: 'StepAccounts' }).exists()).toBe(true);
+  });
+
+  it('shows it is reading the accounts, and reads them once however often Continue is pressed', async () => {
+    let finish: (accounts: AccountXpub[]) => void = () => undefined;
+    derive.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const wrapper = render(null, networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD));
+    await flushPromises();
+    wrapper.findComponent({ name: 'StepStart' }).vm.$emit('select', 'restore');
+    await flushPromises();
+    const seed = wrapper.findComponent({ name: 'StepSeedPhrase' });
+    seed.vm.$emit('change', words);
+    seed.vm.$emit('next');
+    seed.vm.$emit('next');
+    await flushPromises();
+
+    expect(seed.props('busy')).toBe(true);
+    expect(derive).toHaveBeenCalledTimes(1);
+    finish([0, 1, 2, 3, 4].map((i) => account(i)));
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'StepAccounts' }).props('busy')).toBe(false);
+  });
+
   it('restores one account, as before, while multi-account is off', async () => {
     flags.multiAccount = false;
     const wrapper = render(null);
@@ -265,11 +301,14 @@ describe('creating a wallet with several accounts', () => {
     expect((await confirmWith(wrapper, 3)).props('accountCount')).toBe(3);
   });
 
-  it('asks on Bitcoin too, but not on a chain without accounts', async () => {
+  it('asks on Bitcoin and Midnight too, but not on a chain onboarding offers no accounts for', async () => {
     expect((await toSecurity(networks.resolveNetwork(Blockchain.BITCOIN, Network.TESTNET))).findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(true);
     const midnight = await toSecurity(networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD));
-    expect(midnight.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(false);
-    expect((await confirmWith(midnight, 3)).props('accountCount')).toBe(1);
+    expect(midnight.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(true);
+    expect((await confirmWith(midnight, 3)).props('accountCount')).toBe(3);
+    const apex = await toSecurity(networks.resolveNetwork(Blockchain.APEX_PRIME, Network.MAINNET));
+    expect(apex.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(false);
+    expect((await confirmWith(apex, 3)).props('accountCount')).toBe(1);
   });
 
   it('creates one account, as before, while multi-account is off', async () => {

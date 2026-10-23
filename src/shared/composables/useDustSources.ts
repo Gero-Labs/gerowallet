@@ -46,6 +46,7 @@ import {
   enumerateCardanoStakeIdentities,
   sourceSecretsRecord,
 } from '@/shared/composables/useCardanoStakeEnumeration';
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 import { debugLog } from '@/utils/debug';
 
 export interface DustSource extends CardanoStakeIdentity {
@@ -364,7 +365,9 @@ export function useDustSources() {
 
   /**
    * Decrypt the SOURCE wallet's mnemonic (the logged wallet's for the twin; an
-   * added account's account #0's, whose PassKey salt is that record's id).
+   * added account's account #0's, whose PassKey salt is that record's id). The
+   * logged wallet may be an added Midnight account itself: its PassKey salt is
+   * then its account #0's id too (secretsWalletId).
    */
   async function decryptSourceMnemonic(
     source: DustSource, credentials: SourceCredentials,
@@ -381,7 +384,7 @@ export function useDustSources() {
         record.prfEncryptedMnemonic,
         credentials.prfOutput,
         record.webAuthnCredentialId,
-        record.id.toString(),
+        secretsWalletId(record).toString(),
       );
     }
     if (!record.encryptedMnemonic) {

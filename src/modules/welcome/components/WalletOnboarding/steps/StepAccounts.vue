@@ -2,7 +2,7 @@
   <div class="step-accounts">
     <div class="step-scroll">
       <p class="accounts-summary t-body-sm" role="status">
-        {{ probing ? t('accounts.checking') : tc(source === 'seed' ? 'accounts.foundSeed' : 'accounts.found', usedCount, { count: usedCount }) }}
+        {{ summary }}
       </p>
       <ul class="accounts-list">
         <li v-for="row in rows" :key="row.accountIndex">
@@ -28,7 +28,7 @@
         </li>
       </ul>
       <p v-if="firstAccountRequired" class="accounts-hint t-caption">{{ t('accounts.firstAccountIncluded') }}</p>
-      <GButton tier="tertiary" compact :disabled="probing" @click="$emit('scan-more')">
+      <GButton tier="tertiary" compact :disabled="probing" :loading="busy" @click="$emit('scan-more')">
         {{ t('accounts.scanMore', { count: ACCOUNTS_PER_SCAN }) }}
       </GButton>
     </div>
@@ -36,7 +36,7 @@
     <div class="onboarding-actions d-flex">
       <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
       <v-spacer />
-      <GButton tier="primary" class="step-next" :disabled="probing || !selectedAccounts.length" @click="$emit('next', selectedAccounts)">
+      <GButton tier="primary" class="step-next" :disabled="probing || busy || !selectedAccounts.length" @click="$emit('next', selectedAccounts)">
         {{ $t('common.continue') }}
       </GButton>
     </div>
@@ -48,7 +48,7 @@ import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { findExistingWallet } from '@/db/gero-db';
-import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { Blockchain } from '@/models/types';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
@@ -63,6 +63,8 @@ const props = defineProps<{
   source?: 'device' | 'seed';
   /** Bitcoin: the address type the accounts' addresses are derived for (default segwit). */
   addressType?: string;
+  /** More accounts are being read from the recovery phrase. */
+  busy?: boolean;
 }>();
 
 defineEmits<{
@@ -84,6 +86,12 @@ const offered = defineModel<number[]>('offered', { default: () => [] });
 const pending = ref(0);
 const probing = computed(() => pending.value > 0);
 
+async function discover(chain: string, network: string, accounts: AccountXpub[]): Promise<DiscoveredAccount[]> {
+  if (chain === Blockchain.MIDNIGHT) return discoverMidnightAccounts(accounts);
+  if (chain === Blockchain.BITCOIN) return discoverBitcoinAccounts(network, props.addressType ?? 'segwit', accounts);
+  return discoverAccounts(chain, network, accounts);
+}
+
 watch(() => props.accounts, async (accounts) => {
   const fresh = accounts.filter((account) => !(account.accountIndex in discovered.value));
   if (!fresh.length) return;
@@ -91,7 +99,7 @@ watch(() => props.accounts, async (accounts) => {
   try {
     const { blockchain: chain, network } = props.network;
     const [found, stored] = await Promise.all([
-      chain === Blockchain.BITCOIN ? discoverBitcoinAccounts(network, props.addressType ?? 'segwit', fresh) : discoverAccounts(chain, network, fresh),
+      discover(chain, network, fresh),
       Promise.all(fresh.map((account) => findExistingWallet({ chain, network, publicKey: account.publicKey }))),
     ]);
     found.forEach((account, i) => {
@@ -137,6 +145,12 @@ const rows = computed<Row[]>(() => [...props.accounts]
   }));
 
 const usedCount = computed(() => rows.value.filter((row) => row.activity === 'used').length);
+const summary = computed(() => {
+  if (probing.value) return t('accounts.checking');
+  // Midnight accounts are never probed, so no count of used ones can be given.
+  if (rows.value.some((row) => row.activity === 'unchecked')) return t('accounts.notChecked');
+  return tc(props.source === 'seed' ? 'accounts.foundSeed' : 'accounts.found', usedCount.value, { count: usedCount.value });
+});
 /** Account #0 is new, so it has to come along with any other account. */
 const firstAccountRequired = computed(() => existing.value[0] === null);
 const isSelected = (index: number) => selected.value.includes(index);

@@ -102,6 +102,28 @@ describe('createAccountWallet on Bitcoin', () => {
   });
 });
 
+describe('createAccountWallet on Midnight (issue 1330)', () => {
+  const blob = (account: string, extra: Record<string, string> = {}) =>
+    JSON.stringify({ unshielded: `mn_addr_preprod1${account}`, shielded: `mn_shield-addr_preprod1${account}`, dust: `mn_dust-addr_preprod1${account}`, ...extra });
+
+  it('stores a Midnight account under its recovery-phrase wallet with none of its secrets, and refuses a copy by its unshielded address', async () => {
+    const nightId = await createNewWallet('Night', 'icon', Theme.GERO, MNEMONIC, PASSWORD, Blockchain.MIDNIGHT, Network.PREPROD, undefined, {
+      midnightAddresses: JSON.parse(blob('zero')),
+    }) as number;
+
+    const account = await createAccountWallet(nightId, { name: 'Account #1', publicKey: blob('one'), accountIndex: 1 });
+
+    const record = await stored(account.id);
+    expect(record).toMatchObject({ chain: Blockchain.MIDNIGHT, network: Network.PREPROD, accountIndex: 1, parentWalletId: nightId, publicKey: blob('one') });
+    for (const field of GROUP_SECRET_FIELDS.filter((name) => name !== 'encryptionMethod')) expect(record[field]).toBeUndefined();
+    // The same account again, its fields in another order, or account #0's address.
+    await expect(createAccountWallet(nightId, { name: 'Again', publicKey: blob('one', { cardanoXpub: 'xpub1twin' }), accountIndex: 2 }))
+      .rejects.toBeInstanceOf(DuplicateWalletError);
+    await expect(createAccountWallet(nightId, { name: 'Zero', publicKey: blob('zero'), accountIndex: 3 }))
+      .rejects.toBeInstanceOf(DuplicateWalletError);
+  });
+});
+
 describe('a new wallet whose phrase the caller generated', () => {
   const backupRow = async (id: number) => (await (await getDb(id)).table('config').toArray())
     .find((row: { key: string }) => row.key === 'backup')?.value;

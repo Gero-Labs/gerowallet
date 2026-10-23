@@ -6,8 +6,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { bech32 } from 'bech32';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 
-const { api } = vi.hoisted(() => ({
+const { api, decryptPhrase } = vi.hoisted(() => ({
   api: { buildDustRegistrationTx: vi.fn(), submitCardanoTx: vi.fn() },
+  decryptPhrase: vi.fn(),
 }));
 vi.mock('@/stores/geroStore', async () => ({ geroStore: (await import('vue')).reactive({ wallets: {} as Record<number, unknown> }) }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: { loggedWallet: { id: 50, name: 'Night', chain: 'Midnight', network: 'Preprod' } } }));
@@ -16,11 +17,15 @@ vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => api }));
 vi.mock('@/chains/midnight/midnightKeyManager', () => ({ dustAddressToHex: () => 'abcd' }));
 vi.mock('@/shared/composables/useCnightDustRegistration', () => ({ CNIGHT_ASSETS: {}, mapDustBuildError: (message: string) => message }));
 vi.mock('@/shared/composables/useDustPending', () => ({ clearDustPending: vi.fn(), markDustPending: vi.fn(), reconcileDustPending: vi.fn() }));
+// A PassKey's PRF output stands in for the authenticator; the phrase comes back as stored.
+vi.mock('@/shared/utils/webauthn-prf', () => ({ decryptMnemonicWithPrfOutput: decryptPhrase }));
 
 import { useDustSources, type DustSource } from './useDustSources';
 import { enumerateCardanoStakeIdentities } from './useCardanoStakeEnumeration';
 import { geroStore } from '@/stores/geroStore';
-import { getAddress, getPaymentKeyExternal, getStakeKey } from '@/chrome/serialization';
+import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
+import { getAddress, getPaymentKeyExternal, getRewardAddress, getStakeKey } from '@/chrome/serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { encrypt } from '@/shared/utils/crypto';
 import { Blockchain, CoinTypes, HARDENED, Network, WalletType, WalletTypePurpose } from '@/models/types';
@@ -87,5 +92,43 @@ describe('an added Cardano account as a cNIGHT source', () => {
 
     expect(result).toEqual({ status: 'error', message: 'Decrypted seed does not derive this Cardano address' });
     expect(api.submitCardanoTx).not.toHaveBeenCalled();
+  });
+});
+
+describe('the Cardano twin of an added Midnight account (issue 1330)', () => {
+  it('is that account of the phrase, unlocked with its account #0’s PassKey', async () => {
+    const twin = accountXpub(1);
+    const baseAddress = getAddress(twin, Blockchain.CARDANO, Network.PREPROD, 0).toBech32();
+    const logged = walletStore.loggedWallet as unknown as Record<string, unknown>;
+    const before = { ...logged };
+    // Midnight account #1, logged in with its account #0's (id 50) PassKey and phrase.
+    Object.assign(logged, {
+      id: 51, type: WalletType.Normal, encryptionMethod: 'prf', accountIndex: 1, parentWalletId: 50, secretsWalletId: 50,
+      prfEncryptedMnemonic: 'prf-phrase', webAuthnCredentialId: 'cred',
+    });
+    Object.assign(midnightStore.addresses, {
+      cardanoBaseAddress: baseAddress,
+      cardanoStakeAddress: getRewardAddress(twin, Blockchain.CARDANO, Network.PREPROD).toBech32(),
+      cardanoPaymentKeyHashHex: getPaymentKeyExternal(twin, 0).hash().hex(),
+    });
+    decryptPhrase.mockResolvedValue(MNEMONIC);
+    try {
+      const identity = (await enumerateCardanoStakeIdentities(Network.PREPROD)).find((row) => row.sameSeed)!;
+      expect(identity).toMatchObject({ accountIndex: 1, canSign: true, encryptionMethod: 'prf' });
+      const source: DustSource = { ...identity, nightBalance: 1n, status: null, statusLoaded: true, registrations: [], registrationsLoaded: true, pendingLocal: false };
+      api.buildDustRegistrationTx.mockResolvedValue({ status: 'complete', txCbor: spendFrom(baseAddress) });
+
+      const result = await useDustSources().registerSource(source, { prfOutput: new ArrayBuffer(32) });
+
+      expect(result).toEqual({ status: 'submitted', txHash: 'tx-id' });
+      expect(decryptPhrase).toHaveBeenCalledWith('prf-phrase', expect.anything(), 'cred', '50');
+      const submitted = Serialization.Transaction.fromCbor(Serialization.TxCBOR(api.submitCardanoTx.mock.calls[0][0]));
+      const signers = (submitted.witnessSet().vkeys()?.values() ?? []).map((witness) => witness.vkey());
+      expect(signers).toContain(getPaymentKeyExternal(twin, 0).hex());
+      expect(signers).not.toContain(getPaymentKeyExternal(accountXpub(0), 0).hex());
+    } finally {
+      for (const key of Object.keys(logged)) delete logged[key];
+      Object.assign(logged, before);
+    }
   });
 });

@@ -97,6 +97,29 @@ export function isSameWalletIdentity(a: WalletIdentity, b: WalletIdentity): bool
 }
 
 /**
+ * True when `a` and `b` are the same account key on `chain`, compared as stored
+ * records are: a Midnight addresses blob by its unshielded address, a Bitcoin
+ * xpub exactly, a bech32 Cardano xpub case-insensitively.
+ */
+export function isSameWalletKey(chain: string, a: string | undefined, b: string | undefined): boolean {
+  return isSameWalletIdentity(
+    toWalletIdentity({ chain, network: '', publicKey: a }),
+    toWalletIdentity({ chain, network: '', publicKey: b }),
+  );
+}
+
+/**
+ * True when `next` may replace a record's stored key `stored`: both name the same
+ * account, or `stored` names none yet (an empty or unreadable Midnight blob). A
+ * refresh of a Midnight record's addresses may add fields, never move the record
+ * to another account.
+ */
+export function canReplaceWalletKey(chain: string, stored: string | undefined, next: string | undefined): boolean {
+  if (!toWalletIdentity({ chain, network: '', publicKey: stored }).key) return true;
+  return isSameWalletKey(chain, stored, next);
+}
+
+/**
  * Find an already-stored wallet that has the same identity as `candidate`.
  *
  * @param candidate - The wallet about to be created/restored.
