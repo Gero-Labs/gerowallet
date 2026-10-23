@@ -243,6 +243,24 @@ export default {
       await updateI18nLocale(previousLocale);
     }
   },
+  /**
+   * "Balances in the wallet list" (#1332). App-wide, so it is stored with the
+   * language in gero-db, whose config live query hands it to every context.
+   */
+  async setWalletListBalances(on: boolean) {
+    const previous = geroStore.config.walletListBalances;
+    geroStore.config.walletListBalances = on;
+    broadcastFromBackground({ config: geroStore.config }, true);
+    try {
+      const { setConfiguration } = await import('@/db/gero-db');
+      await setConfiguration('walletListBalances', on);
+    } catch (error) {
+      // As setLocale does: never show a choice that wasn't saved.
+      geroStore.config.walletListBalances = previous;
+      broadcastFromBackground({ config: geroStore.config }, true);
+      throw error;
+    }
+  },
   setNetwork(network: NetworkInfo) {
     geroStore.network = network;
     broadcastFromBackground({ network });
