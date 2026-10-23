@@ -21,7 +21,7 @@
             {{ shortAddress(addresses[account.id]) }}
           </span>
         </span>
-        <span class="t-caption connect-account__index">{{ t('accounts.label', { index: account.accountIndex ?? 0 }) }}</span>
+        <span v-if="indexLabel(account) !== account.name" class="t-caption connect-account__index">{{ indexLabel(account) }}</span>
       </button>
     </div>
     <p v-if="modelValue !== undefined && modelValue !== loggedId" class="t-caption connect-account__note" role="status">
@@ -62,6 +62,8 @@ watch(() => props.accounts, async (accounts) => {
   if (run === derivation) addresses.value = Object.fromEntries(entries);
 }, { immediate: true });
 
+// An added account is named "Account #N" by default: its number then shows once.
+const indexLabel = (account: Wallet) => t('accounts.label', { index: account.accountIndex ?? 0 });
 const shortAddress = (address: string) => (address.length > 30 ? `${address.slice(0, 15)}…${address.slice(-8)}` : address);
 </script>
 
