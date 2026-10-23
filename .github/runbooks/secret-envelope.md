@@ -12,7 +12,7 @@ Code: `src/shared/utils/secretEnvelope.ts` (format), `crypto.ts` (readers), `sec
 | Mnemonic (`wallets.encryptedMnemonic`) | `gpw1` Argon2id, or legacy CryptoJS (MD5, 1 iteration) | `gpw2` |
 | 2FA TOTP secret, backup codes, legacy PIN hash (`wallet-{id}.config`) | `gpw1` or legacy CryptoJS | `gpw2` |
 | SPO cold key, password-encrypted (`wallet-{id}.config`) | raw hex PBKDF2 | `gpw2` |
-| Strike key (`chrome.storage.local`) | raw hex PBKDF2 | `gpw2` when written or when the password changes; not migrated on unlock |
+| Strike key (extension IndexedDB, `privateStore.ts`; older releases: `chrome.storage.local`, moved on first read) | raw hex PBKDF2 | `gpw2` when written or when the password changes; not migrated on unlock |
 | MPC device share | `gpw1` / legacy | `gpw2` when written; not migrated on unlock |
 
 `gpw2` = Argon2id → XChaCha20-Poly1305. The header is authenticated and has a purpose byte, so a blob only opens for the field it was written for.
