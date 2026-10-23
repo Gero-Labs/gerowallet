@@ -34,6 +34,11 @@ import { Cardano, CollateralParams, Extensions, Paginate } from '@/models/types'
 import { Cardano as CardanoCore } from '@cardano-sdk/core';
 import { GERO_CARDANO_ICON } from './injectIcon';
 import { CHROME_WEB_STORE_URL } from '@/config/storeLinks';
+// Bitcoin dApp surface hard-gated off for 2.7 (HIDE+GATE). When false, Gero
+// does not advertise window.gero_btc, the Wallet-Standard wallet, or
+// window.btc_providers to web pages, and the background refuses every
+// BITCOIN_METHOD.* request (see bitcoinDappGate.ts).
+import { BITCOIN_DAPP_ENABLED } from './bitcoinDappGate';
 // Installs window.midnight[uuid] as a side effect of import (see file).
 import './injectMidnight';
 
@@ -43,12 +48,6 @@ declare global {
     gero_btc: any;
   }
 }
-
-// Bitcoin dApp surface hard-gated off for 2.7 (HIDE+GATE). When false, Gero
-// does not advertise window.gero_btc, the Wallet-Standard wallet, or
-// window.btc_providers to web pages. Background BITCOIN_METHOD.* handlers
-// already reject on non-Bitcoin wallets; this stops capability leakage.
-const BITCOIN_DAPP_ENABLED = false;
 
 // CIP-30
 // Brave Wallet defines `window.cardano` as a read-only, non-configurable
