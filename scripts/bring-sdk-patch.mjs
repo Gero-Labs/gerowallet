@@ -28,7 +28,7 @@
  * The SDK is minified, so every edit is a pattern over its 1.8.0 output. A
  * pattern that does not match exactly once FAILS THE BUILD: an upgrade cannot
  * silently drop a patch. The invariants pin the opt-out storage format that
- * src/chrome/bringOptOut.ts reads, for the same reason. The `vite` dev server
+ * src/chrome/bringAddressSharing.ts reads, for the same reason. The `vite` dev server
  * pre-bundles dependencies with esbuild, which skips this hook; the extension
  * bundles (content, background) are always Rollup builds.
  */
@@ -84,7 +84,7 @@ const ID = '([\\w$]+)';
 // the SDK's own "opted out now" predicate (`_` in 1.8.0), reused by a patch below.
 const OPT_OUT_READ = new RegExp(`let ${ID}=await ${ID}\\.get\\("optOut"\\),${ID}=${ID}\\(\\1\\);`);
 
-/** Pins the opt-out format src/chrome/bringOptOut.ts mirrors. Matched, never changed. */
+/** Pins the opt-out format src/chrome/bringAddressSharing.ts mirrors. Matched, never changed. */
 export const BRING_SDK_INVARIANTS = [
   { name: 'storage key prefix is "bring_"', pattern: new RegExp(`${ID}="bring_"`) },
   { name: 'opt-out is stored as [start, start + duration]', pattern: new RegExp(`\\.set\\("optOut",\\[${ID},\\1\\+${ID}\\]\\)`) },
