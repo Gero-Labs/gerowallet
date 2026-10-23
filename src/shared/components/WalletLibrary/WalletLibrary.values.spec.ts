@@ -43,7 +43,7 @@ vi.mock('@/stores/geroStore', async () => ({ geroStore: (await import('vue')).re
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ config: {} as Record<string, unknown> }) }));
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({
-    t: (key: string, params?: Record<string, unknown>) => (key === 'walletLibrary.valuesUpdated' ? `Updated ${params?.time}` : key),
+    t: (key: string, params?: Record<string, unknown>) => (key === 'walletLibrary.valuesUpdated' ? `Updated ${params?.['time']}` : key),
     tc: (key: string) => key,
   }),
 }));
@@ -55,7 +55,7 @@ vi.mock('vuedraggable', async () => {
     default: vue.defineComponent({
       props: { modelValue: { type: Array, default: () => [] } },
       setup(props, { slots }) {
-        return () => vue.h('ul', (props.modelValue as unknown[]).map((element, index) => slots.item?.({ element, index })));
+        return () => vue.h('ul', (props.modelValue as unknown[]).map((element, index) => slots['item']?.({ element, index })));
       },
     }),
   };
@@ -133,8 +133,8 @@ describe('wallet values in the wallet list', () => {
   });
 
   it('shows no total until every account is valued', async () => {
-    delete state.values.stake1u3;
-    state.pending.stake1u3 = true;
+    delete state.values['stake1u3'];
+    state.pending['stake1u3'] = true;
     const view = await render();
     const main = row(view, 1);
 
