@@ -46,6 +46,9 @@
         <span class="warning--text text-caption">{{ $t('miniGero.embeddedIn', { site: embeddedInSite }) }}</span>
       </div>
 
+      <!-- WalletConnect requests: the domain below is the peer's own claim. -->
+      <WcVerifyNotice :verification="currentRequest.payload?.wcVerify" class="mb-2" />
+
       <!-- DApp Connect -->
       <div v-if="currentRequest.method === 'enable'" class="dapp-connect">
         <!-- Favicon + domain -->
@@ -1090,6 +1093,8 @@ import ledgerUtils from '@/shared/utils/ledger';
 import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
 import { geroStore } from '@/stores/geroStore';
 import ConnectAccountPicker from '@/shared/components/ConnectAccountPicker.vue';
+import WcVerifyNotice from '@/shared/components/WcVerifyNotice.vue';
+import { readWcVerification, wcRiskUrl } from '@/services/walletConnect/verifyContext';
 import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -1124,6 +1129,8 @@ interface ApprovalPayload {
   address?: string;
   payload?: string;
   cip45Authorization?: Cip45Authorization;
+  /** WalletConnect requests: the Verify API verdict on the claimed `website`. */
+  wcVerify?: unknown;
   data?: {
     data?: string;
     options?: { encoding?: MidnightSignDataEncoding };
@@ -2053,7 +2060,8 @@ watch(
       || WalletStore.state.loggedWallet?.baseAddress
       || '';
     const fromAddress = WalletStore.state.loggedWallet?.baseAddress || '';
-    const url = req.payload?.website || '';
+    // A WalletConnect peer's attested origin, not just the domain it claims.
+    const url = wcRiskUrl(req.payload?.website || '', readWcVerification(req.payload?.wcVerify));
 
     // Neutral fallback used when the scan times out, errors, or returns an empty body.
     // The badge maps this to the "Unverified" state instead of hiding entirely so the

@@ -23,6 +23,7 @@ import { unlockAfterStartup } from '@/chrome/unlockStartup';
 import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, verifySecondFactor } from '@/chrome/unlockGuards';
 import { upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
 import { embeddingSite } from '@/chrome/originBinding';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
 import { RESERVED_SIGN_DATA_MESSAGE, reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
@@ -4910,16 +4911,23 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     try {
       const proposalData = proposal.params;
       const peerUrl = proposalData?.proposer?.metadata?.url || '';
+      // The peer names its own URL; the Verify API says where it really is.
+      const wcVerify = assessWcVerification(proposal.verifyContext);
+      if (wcVerify.state === 'scam') {
+        await wcService.rejectSession(proposalData.id, 'Website flagged as malicious');
+        return;
+      }
 
       // Blacklist check: WC pairing had no equivalent of the tab-navigation
       // blacklist scan (handleBlacklisted above) — a malicious dApp's WC
-      // metadata was never checked, unlike a malicious website's URL.
-      if (peerUrl) {
+      // metadata was never checked, unlike a malicious website's URL. Scans the
+      // attested origin too when it differs from the claimed one.
+      for (const scanTarget of wcScanTargets(peerUrl, wcVerify)) {
         try {
           const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
             ? walletStore.config.websiteProtection : true;
           if (websiteProtectionEnabled) {
-            const scanResponse = await urlScan(peerUrl);
+            const scanResponse = await urlScan(scanTarget);
             const verdict = await scanResponse.json();
             if (verdict === 'blacklist') {
               await wcService.rejectSession(proposalData.id, 'Website flagged as malicious');
@@ -4935,33 +4943,30 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       let approved = false;
       const useMiniGero = miniGeroPorts.size > 0;
       console.log(`🔗 WC proposal routing: ${useMiniGero ? 'mini-gero panel' : 'popup'} (miniGeroPorts=${miniGeroPorts.size})`);
+      // Feed the peer URL (+ icon) as query params so PopupHeader renders the
+      // dApp website + favicon + risk scan instead of "N/A" — WC popups carry
+      // no tab origin, unlike injected-dApp popups — plus the Verify verdict.
+      const openProposalPopup = async (): Promise<boolean> => {
+        const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
+        const q = new URLSearchParams({ website: peerUrl || 'WalletConnect', ...wcVerificationQuery(wcVerify) });
+        if (peerIcon) q.set('favIconUrl', peerIcon);
+        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
+        const tab = await focusOrCreatePopup(popupURL, 470, 600);
+        const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: { ...proposalData, wcVerify } }) as { data?: { approved?: boolean } };
+        return !!popupResponse?.data?.approved;
+      };
       if (useMiniGero) {
         try {
-          const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect' }, undefined);
+          const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect', wcVerify }, undefined);
           approved = !!(response.data as { approved?: boolean } | undefined)?.approved;
         } catch (miniErr) {
           // A dead/stale panel port must not silently reject a real approval —
           // fall back to the standalone popup instead of hard-rejecting.
           console.warn('⚠️ WC mini-gero proposal failed, falling back to popup:', miniErr);
-          const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
-          const q = new URLSearchParams({ website: peerUrl || 'WalletConnect' });
-          if (peerIcon) q.set('favIconUrl', peerIcon);
-          const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
-          const tab = await focusOrCreatePopup(popupURL, 470, 600);
-          const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
-          approved = !!popupResponse?.data?.approved;
+          approved = await openProposalPopup();
         }
       } else {
-        // Feed the peer URL (+ icon) as query params so PopupHeader renders the
-        // dApp website + favicon + risk scan instead of "N/A" — WC popups carry
-        // no tab origin, unlike injected-dApp popups.
-        const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
-        const q = new URLSearchParams({ website: peerUrl || 'WalletConnect' });
-        if (peerIcon) q.set('favIconUrl', peerIcon);
-        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
-        const tab = await focusOrCreatePopup(popupURL, 470, 600);
-        const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
-        approved = !!popupResponse?.data?.approved;
+        approved = await openProposalPopup();
       }
 
       if (approved) {
@@ -5007,10 +5012,12 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     popupSize: [number, number],
     /** The request's CAIP-2 chain: the release re-check requires it to stay the wallet's own. */
     chainId: string,
+    /** The Verify API verdict on this request's origin, shown with the claimed domain. */
+    wcVerify: WcVerification,
   ): Promise<void> {
     const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
     const peerMeta = session?.peer?.metadata;
-    const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0] };
+    const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0], wcVerify };
     // The wallet this request was authorized for (onSessionRequest checked it).
     const walletAtRequest = WalletStore.state.loggedWallet ? { ...WalletStore.state.loggedWallet } : null;
     // Release a signature only if that authorization still holds now: the
@@ -5035,7 +5042,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     }
 
     const fakeRequest = { id: `wc-${id}`, data: payload, origin: 'WalletConnect', send: { tab: { id: -1 } } };
-    const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?website=${encodeURIComponent('WalletConnect')}`);
+    // The peer's claimed site, labelled as a WalletConnect claim with its verdict.
+    const popupQuery = new URLSearchParams({ website: peerMeta?.url || 'WalletConnect', ...wcVerificationQuery(wcVerify) });
+    const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?${popupQuery.toString()}`);
     const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
     const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
     if (response.data !== undefined) {
@@ -5051,8 +5060,14 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     const { topic, params, id } = event;
     const { request: wcRequest, chainId } = params;
     const method = wcRequest.method;
+    const wcVerify = assessWcVerification(event.verifyContext);
 
     try {
+      if (wcVerify.state === 'scam') {
+        await wcService.respondError(topic, id, 4100, 'Request flagged as malicious');
+        return;
+      }
+
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet) {
         await wcService.respondError(topic, id, 4100, 'No wallet logged in');
@@ -5162,7 +5177,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'signTx',
               { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
-              topic, id, POPUP.signTx, [470, 852], chainId,
+              topic, id, POPUP.signTx, [470, 852], chainId, wcVerify,
             );
             return;
           }
@@ -5175,7 +5190,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'signData',
               { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
-              topic, id, POPUP.dappSignData, [470, 600], chainId,
+              topic, id, POPUP.dappSignData, [470, 600], chainId, wcVerify,
             );
             return;
           }
@@ -5195,7 +5210,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'btcSignPsbt',
               { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
-              topic, id, POPUP.bitcoinSignPsbt, [470, 600], chainId,
+              topic, id, POPUP.bitcoinSignPsbt, [470, 600], chainId, wcVerify,
             );
             return;
           }
@@ -5204,7 +5219,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'btcSignMessage',
               { message: wcParams.message, type: wcParams.type || 'ecdsa' },
-              topic, id, POPUP.bitcoinSignMessage, [470, 600], chainId,
+              topic, id, POPUP.bitcoinSignMessage, [470, 600], chainId, wcVerify,
             );
             return;
           }

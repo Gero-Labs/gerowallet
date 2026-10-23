@@ -5041,6 +5041,11 @@ export default {
   'walletConnect.sessionExpired': 'Session expired',
   'walletConnect.unsupportedChain': 'Some requested chains are not supported',
   'walletConnect.connectViaWalletConnect': 'Connect via WalletConnect',
+  'walletConnect.verify.via': 'via WalletConnect',
+  'walletConnect.verify.verified': 'domain verified',
+  'walletConnect.verify.unverified': "WalletConnect couldn't verify this domain. Continue only if you opened this connection yourself.",
+  'walletConnect.verify.mismatch': "This request doesn't come from the domain shown. WalletConnect reports {origin}.",
+  'walletConnect.verify.mismatchNoOrigin': "This request doesn't come from the domain shown.",
 
   // Pool Operator (SPO Management)
   'poolOperator.title': 'Pool Operator',
