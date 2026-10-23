@@ -5527,6 +5527,7 @@ export default {
   'midnight.connector.balanceTitle': 'Finanzieren und Gebühren zahlen',
   'midnight.connector.balanceBody': 'Diese Seite bittet deine Wallet, die unten aufgeführten Beträge zu einer von ihr erstellten Transaktion beizusteuern und die Netzwerkgebühr zu zahlen.',
   'midnight.connector.balanceNothing': 'Es werden keine Beträge benötigt; deine Wallet zahlt nur die Netzwerkgebühr.',
+  'midnight.balanceReview.paymentsHeading': 'Zahlungen in dieser Transaktion',
   'midnight.connector.privateBalanceLead': '{domain} möchte dein privates Token-Guthaben lesen.',
   'midnight.connector.privateBalanceWhy': 'Private Guthaben werden auf diesem Gerät aus deinen Schlüsseln berechnet, deshalb muss die Wallet zuerst das Netzwerk nach deinen Notes durchsuchen. Das passiert einmalig und kann einige Minuten dauern.',
   'midnight.connector.privateBalanceSyncing': 'Suche läuft… {percent}%. Die Seite erhält dein Guthaben, sobald dies abgeschlossen ist.',

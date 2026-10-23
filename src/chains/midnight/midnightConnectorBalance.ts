@@ -99,6 +99,131 @@ export function summarizeContributions(
   return [...totals].map(([token, amount]) => ({ token, amount: amount.toString() }));
 }
 
+/** The unshielded offers of `tx`, guaranteed and fallible, across every intent. */
+type OfferView = {
+  readonly inputs: ReadonlyArray<{ readonly owner: ledger.SignatureVerifyingKey }>;
+  readonly outputs: ReadonlyArray<{ readonly owner: ledger.UserAddress; readonly value: bigint; readonly type: ledger.RawTokenType }>;
+};
+type TxWithIntents = { intents?: Map<number, unknown> };
+
+function unshieldedOffers(tx: TxWithIntents): OfferView[] {
+  const offers: OfferView[] = [];
+  for (const intent of tx.intents?.values() ?? []) {
+    const { guaranteedUnshieldedOffer, fallibleUnshieldedOffer } = intent as {
+      guaranteedUnshieldedOffer?: OfferView; fallibleUnshieldedOffer?: OfferView;
+    };
+    if (guaranteedUnshieldedOffer) offers.push(guaranteedUnshieldedOffer);
+    if (fallibleUnshieldedOffer) offers.push(fallibleUnshieldedOffer);
+  }
+  return offers;
+}
+
+const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * How many unshielded inputs of the dapp's `tx` spend from the wallet's own
+ * address (`ownAddress`, a `UserAddress` hex). A dapp never needs one: the
+ * wallet adds its own inputs when it balances. The signer signs every input
+ * the wallet owns, so an input the dapp put in would spend the user's coins
+ * without appearing in the approval, which lists only what balancing adds.
+ */
+export function countWalletOwnedInputs(
+  tx: TxWithIntents,
+  ownAddress: string,
+  addressOfKey: (key: ledger.SignatureVerifyingKey) => ledger.UserAddress = ledger.addressFromKey,
+): number {
+  let count = 0;
+  for (const offer of unshieldedOffers(tx)) {
+    for (const input of offer.inputs) if (sameAddress(addressOfKey(input.owner), ownAddress)) count++;
+  }
+  return count;
+}
+
+export interface ConnectorPayment {
+  /** Raw 32-byte colour as hex; the all-zero colour is native NIGHT. */
+  token: string;
+  /** Base units, decimal string. */
+  amount: string;
+  /** The receiving `UserAddress`, as hex (callers render it as bech32m). */
+  recipient: string;
+}
+
+/**
+ * Where the dapp's `tx` sends unshielded value: every output that does not pay
+ * the wallet, totalled per recipient and colour, so the approval shows who
+ * gets paid and not only what the wallet adds.
+ */
+export function summarizeForeignPayments(tx: TxWithIntents, ownAddress: string): ConnectorPayment[] {
+  const totals = new Map<string, ConnectorPayment & { sum: bigint }>();
+  for (const offer of unshieldedOffers(tx)) {
+    for (const output of offer.outputs) {
+      if (sameAddress(output.owner, ownAddress)) continue;
+      const key = `${output.owner.toLowerCase()}:${output.type}`;
+      const entry = totals.get(key) ?? { token: output.type, recipient: output.owner, amount: '0', sum: 0n };
+      entry.sum += output.value;
+      totals.set(key, entry);
+    }
+  }
+  return [...totals.values()].map(({ token, recipient, sum }) => ({ token, recipient, amount: sum.toString() }));
+}
+
+/** Converts between an unshielded bech32m address (`mn_addr_…`) and its `UserAddress` hex. */
+export async function unshieldedAddressCodec(sdkNetworkId: string): Promise<{
+  toHex(bech32: string): string;
+  toBech32(hex: string): string;
+}> {
+  const { MidnightBech32m, UnshieldedAddress } = await import('@midnightntwrk/wallet-sdk-address-format');
+  return {
+    toHex: (bech32) => UnshieldedAddress.codec.decode(sdkNetworkId, MidnightBech32m.parse(bech32)).hexString,
+    toBech32: (hex) => UnshieldedAddress.codec.encode(sdkNetworkId, new UnshieldedAddress(Buffer.from(hex, 'hex'))).asString(),
+  };
+}
+
+export type ConnectorBalancePrompt =
+  | { ok: true; contributions: ConnectorContribution[]; payments: ConnectorPayment[] }
+  | { ok: false; reason: string };
+
+/**
+ * What the `balanceUnsealedTransaction` approval shows, built before the user
+ * is asked: what the wallet adds (`contributions`) and whom the dapp's
+ * transaction pays (`payments`, recipients as bech32m). Refuses a transaction
+ * that already spends from the wallet (see countWalletOwnedInputs).
+ *
+ * `ownAddress` is the wallet's unshielded bech32m address. When it is unknown
+ * every output is listed as a payment, and the balancer, which knows the
+ * signing key, makes the own-input check before signing in any case.
+ */
+export async function connectorBalancePrompt(
+  txHex: string,
+  sdkNetworkId: string,
+  ownAddress: string,
+): Promise<ConnectorBalancePrompt> {
+  let tx: UnboundTransaction;
+  try {
+    tx = await decodeUnboundTransaction(txHex, sdkNetworkId);
+  } catch {
+    return { ok: false, reason: 'tx is not a valid unsealed transaction for the connected network' };
+  }
+  const codec = await unshieldedAddressCodec(sdkNetworkId);
+  let ownHex = '';
+  try {
+    ownHex = ownAddress ? codec.toHex(ownAddress) : '';
+  } catch {
+    ownHex = '';
+  }
+  if (ownHex && countWalletOwnedInputs(tx, ownHex) > 0) {
+    return { ok: false, reason: 'tx already spends from this wallet; the wallet adds its own inputs when it balances' };
+  }
+  const payments = summarizeForeignPayments(tx, ownHex).map((payment) => {
+    try {
+      return { ...payment, recipient: codec.toBech32(payment.recipient) };
+    } catch {
+      return payment;
+    }
+  });
+  return { ok: true, contributions: summarizeContributions(tx), payments };
+}
+
 /**
  * True when `hex` parses as a sealed (`signature / proof / binding`)
  * transaction under the network's ledger — i.e. it must go to Nexus's

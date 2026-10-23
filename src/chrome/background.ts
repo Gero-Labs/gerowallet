@@ -101,9 +101,8 @@ import * as shieldedAddressCodecs from '@midnightntwrk/wallet-sdk-address-format
 import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorAddresses';
 import { connectorConfiguration } from '@/chains/midnight/midnightConnectorConfiguration';
 import {
-  decodeUnboundTransaction,
+  connectorBalancePrompt,
   isSealedMidnightTransaction,
-  summarizeContributions,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
@@ -7063,22 +7062,23 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
       reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
       return;
     }
-    let contributions;
-    try {
-      contributions = summarizeContributions(
-        await decodeUnboundTransaction(validation.tx, midnightSdkNetworkId(currentWallet.network)),
-      );
-    } catch {
-      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is not a valid unsealed transaction for the connected network') });
+    const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
+    const prompt = await connectorBalancePrompt(
+      validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.addresses.unshielded,
+    );
+    if (prompt.ok === false) {
+      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, prompt.reason) });
       return;
     }
-    const payload = { data: { tx: validation.tx, contributions }, website: origin, favIconUrl: send.tab?.favIconUrl };
+    const payload = {
+      data: { tx: validation.tx, contributions: prompt.contributions, payments: prompt.payments },
+      website: origin, favIconUrl: send.tab?.favIconUrl,
+    };
     // The dapp calls this after its (async) proving, so there is no user
     // gesture left to open the panel with. Park the request instead of
     // failing it (badge; delivered when the user opens the panel; immediate
     // when it is already open) — same treatment as the private-balance and
     // proof-server prompts.
-    const { midnightActions } = await import('@/stores/midnightStore');
     midnightActions.recordSiteActivity(origin, { type: 'funding' });
     parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
       .then((response: BackgroundResponse) => {

@@ -742,6 +742,16 @@
             <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(c) }} {{ contributionTicker(c) }}</span>
           </div>
           <p v-if="balanceContributions.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.balanceNothing') }}</p>
+          <template v-if="balancePayments.length">
+            <p class="grey--text text-caption mt-3 mb-1">{{ $t('midnight.balanceReview.paymentsHeading') }}</p>
+            <div v-for="(p, i) in balancePayments" :key="'pay' + i" class="mb-2" data-testid="midnight-balance-payment">
+              <div class="d-flex justify-space-between">
+                <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
+                <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(p) }} {{ contributionTicker(p) }}</span>
+              </div>
+              <span class="grey--text text-caption g-mono" style="word-break: break-all;">{{ p.recipient }}</span>
+            </div>
+          </template>
           <div class="d-flex align-start mt-2">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
@@ -1296,6 +1306,8 @@ const isBT = ref(false);
 type ConnectorDesiredOutput = { kind: string; type?: string; value: string; recipient: string };
 /** Mirrors `ConnectorContribution` in chains/midnight/midnightConnectorBalance.ts (kept local: that module loads the ledger WASM). */
 type ConnectorContribution = { token: string; amount: string };
+/** Mirrors `ConnectorPayment` there; `recipient` arrives as bech32m. */
+type ConnectorPayment = ConnectorContribution & { recipient: string };
 
 const makeTransferDomain = computed(() => {
   const website = currentRequest.value?.payload?.website || '';
@@ -3119,6 +3131,12 @@ async function signMidnightTransferPrf() {
 const balanceContributions = computed<ConnectorContribution[]>(() => {
   const data = currentRequest.value?.payload?.data as { contributions?: ConnectorContribution[] } | undefined;
   return Array.isArray(data?.contributions) ? (data!.contributions as ConnectorContribution[]) : [];
+});
+// Whom the dapp's own transaction pays (outputs not to this wallet), so the
+// approval shows where value goes and not only what the wallet adds.
+const balancePayments = computed<ConnectorPayment[]>(() => {
+  const data = currentRequest.value?.payload?.data as { payments?: ConnectorPayment[] } | undefined;
+  return Array.isArray(data?.payments) ? (data!.payments as ConnectorPayment[]) : [];
 });
 
 /** A contribution rendered through the same colour-aware helpers as transfer outputs. */

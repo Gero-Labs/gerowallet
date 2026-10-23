@@ -5633,6 +5633,7 @@ export default {
   'midnight.connector.balanceTitle': 'Fund and pay fees',
   'midnight.connector.balanceBody': 'This site asks your wallet to add the funds below to a transaction it built, and to pay its network fee.',
   'midnight.connector.balanceNothing': 'No funds are needed; your wallet only pays the network fee.',
+  'midnight.balanceReview.paymentsHeading': 'Payments in this transaction',
   'midnight.connector.privateBalanceLead': '{domain} wants to read your private token balance.',
   'midnight.connector.privateBalanceWhy': 'Private balances are worked out on this device from your keys, so the wallet has to scan the network for your notes first. This happens once and can take several minutes.',
   'midnight.connector.privateBalanceSyncing': 'Scanning… {percent}%. The site receives your balance when this finishes.',

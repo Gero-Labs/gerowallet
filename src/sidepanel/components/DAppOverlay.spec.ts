@@ -348,6 +348,24 @@ describe('dApp connect: the account to connect (#1331)', () => {
   });
 });
 
+describe('Midnight balanceUnsealedTransaction: the approval names who gets paid', () => {
+  it('lists each payment of the dapp’s transaction with its recipient', () => {
+    const recipient = 'mn_addr_preprod1recipientxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+    overlay.currentRequest.value = {
+      requestId: 'balance-1', method: 'midnight_balanceUnsealedTransaction',
+      payload: { website: 'https://dapp.example', data: {
+        tx: 'abcd', contributions: [], payments: [{ token: '0'.repeat(64), amount: '5000000', recipient }],
+      } },
+    } as never;
+    const wrapper = render();
+
+    const payments = wrapper.findAll('[data-testid="midnight-balance-payment"]');
+    expect(payments).toHaveLength(1);
+    expect(payments[0].text()).toContain(recipient);
+    expect(wrapper.text()).toContain('midnight.balanceReview.paymentsHeading');
+  });
+});
+
 describe('dApp Bitcoin PSBT: signing waits on the review', () => {
   const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
   // Fixed test vectors — never used to hold funds.

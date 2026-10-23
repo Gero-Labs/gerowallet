@@ -5431,6 +5431,7 @@ export default {
   'midnight.connector.balanceTitle': 'Financiar y pagar comisiones',
   'midnight.connector.balanceBody': 'Este sitio le pide a tu billetera que agregue los fondos de abajo a una transacción que creó y que pague su comisión de red.',
   'midnight.connector.balanceNothing': 'No se necesitan fondos; tu billetera solo paga la comisión de red.',
+  'midnight.balanceReview.paymentsHeading': 'Pagos en esta transacción',
   'midnight.connector.privateBalanceLead': '{domain} quiere leer tu saldo de tokens privados.',
   'midnight.connector.privateBalanceWhy': 'Los saldos privados se calculan en este dispositivo a partir de tus claves, así que primero la billetera debe escanear la red en busca de tus notas. Esto ocurre una sola vez y puede tardar varios minutos.',
   'midnight.connector.privateBalanceSyncing': 'Escaneando… {percent}%. El sitio recibirá tu saldo cuando termine.',
