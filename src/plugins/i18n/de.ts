@@ -5867,4 +5867,6 @@ export default {
   'accounts.createCountHint': 'Jedes Konto hat eigene Adressen und ein eigenes Guthaben. Sie können später weitere hinzufügen.',
   'accounts.addLaterCreate': 'Ihre Wallet wurde erstellt, ihre anderen Konten konnten aber nicht hinzugefügt werden. Fügen Sie sie über die Wallet-Liste hinzu.',
   'accounts.notChecked': 'Gero kann nicht prüfen, welche Midnight-Konten verwendet wurden. Wählen Sie die Konten, die Sie hinzufügen möchten.',
+  'accounts.connectAccount': 'Zu verbindendes Konto',
+  'accounts.connectSwitches': 'Gero wechselt zu diesem Konto, wenn Sie zustimmen.',
 }

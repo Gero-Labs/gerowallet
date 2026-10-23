@@ -6,12 +6,13 @@ import { decideSignTxPopup, popupWebsite } from './signTxPopupPolicy';
 import { approvalStillValid } from './approvalRelease';
 
 describe('isConnectApproval', () => {
-  it('accepts only an explicit true', () => {
+  it('accepts only an explicit true, or the id of the account the user picked', () => {
     expect(isConnectApproval({ data: true })).toBe(true);
+    expect(isConnectApproval({ data: { accountId: 2 } })).toBe(true);
   });
 
   it('rejects truthy look-alikes and declines (the old popup Decline sent { data: {} })', () => {
-    for (const data of [{}, [], 'yes', 1, false, null, undefined]) {
+    for (const data of [{}, [], 'yes', 1, false, null, undefined, { accountId: 0 }, { accountId: '2' }, { accountId: 1.5 }, [2]]) {
       expect(isConnectApproval({ data })).toBe(false);
     }
     expect(isConnectApproval(undefined)).toBe(false);
@@ -101,11 +102,13 @@ describe('consent wiring tripwires', () => {
     }
   });
 
-  it('every enable handler connects only on isConnectApproval', () => {
-    for (const name of ['METHOD.enable', 'BITCOIN_METHOD.enable']) {
+  it('every connect handler connects only on readConnectApproval, through connectApproved', () => {
+    for (const name of ['METHOD.enable', 'BITCOIN_METHOD.enable', 'MIDNIGHT_METHOD.connect']) {
       const body = handler(bg, name);
-      expect(body).toContain('isConnectApproval(');
+      expect(body).toContain('readConnectApproval(');
+      expect(body).toContain('connectApproved(');
       expect(body).not.toMatch(/if \(response\.data\)/);
+      expect(body).not.toMatch(/response\.data === true/);
     }
   });
 

@@ -50,6 +50,7 @@ vi.mock('./BottomSheet.vue', () => ({ default: { template: '<section><slot /><sl
 
 import DAppOverlay from './DAppOverlay.vue';
 import WalletStore from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
@@ -275,5 +276,64 @@ describe('dApp sign-data with a Ledger', () => {
     await flushPromises();
 
     expect(mocks.approve).not.toHaveBeenCalled();
+  });
+});
+
+describe('dApp connect: the account to connect (#1331)', () => {
+  const wallet = { chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal };
+  const GROUP = {
+    1: { id: 1, name: 'Main', ...wallet },
+    2: { id: 2, name: 'Account #1', accountIndex: 1, parentWalletId: 1, ...wallet },
+    3: { id: 3, name: 'Account #2', accountIndex: 2, parentWalletId: 1, ...wallet },
+  };
+  const connect = (method: 'enable' | 'midnight_connect', id = 'connect-1') =>
+    ({ requestId: id, method, payload: { website: 'https://dapp.example' } });
+  const rows = (wrapper: View) => wrapper.findAll('[role="radio"]');
+  const row = (wrapper: View, name: string) => rows(wrapper).find((entry) => entry.text().includes(name))!;
+
+  beforeEach(() => {
+    geroStore.wallets = { ...GROUP } as never;
+    overlay.currentRequest.value = connect('enable') as never;
+  });
+  afterEach(() => { geroStore.wallets = {}; });
+
+  it('offers every account of the logged wallet, the logged one chosen', async () => {
+    const wrapper = render();
+    await flushPromises();
+
+    expect(rows(wrapper).map((entry) => entry.attributes('aria-checked'))).toEqual(['true', 'false', 'false']);
+    expect(wrapper.text()).not.toContain('accounts.connectSwitches');
+    await button(wrapper, 'approve').trigger('click');
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith({ accountId: 1 });
+  });
+
+  it.each(['enable', 'midnight_connect'] as const)('names the account the user picked (%s)', async (method) => {
+    overlay.currentRequest.value = connect(method) as never;
+    const wrapper = render();
+    await row(wrapper, 'Account #2').trigger('click');
+
+    expect(row(wrapper, 'Account #2').attributes('aria-checked')).toBe('true');
+    expect(wrapper.text()).toContain('accounts.connectSwitches');
+    await button(wrapper, 'approve').trigger('click');
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith({ accountId: 3 });
+  });
+
+  it('starts each new request on the logged account again', async () => {
+    const wrapper = render();
+    await row(wrapper, 'Account #1').trigger('click');
+    overlay.currentRequest.value = connect('enable', 'connect-2') as never;
+    await nextTick();
+
+    await button(wrapper, 'approve').trigger('click');
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith({ accountId: 1 });
+  });
+
+  it('asks nothing for a wallet with one account, and answers true as before', async () => {
+    geroStore.wallets = { 1: GROUP[1] } as never;
+    const wrapper = render();
+
+    expect(rows(wrapper)).toHaveLength(0);
+    await button(wrapper, 'approve').trigger('click');
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(true);
   });
 });

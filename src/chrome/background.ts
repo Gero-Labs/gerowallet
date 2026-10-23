@@ -16,7 +16,7 @@ import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, M
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
-import { isConnectApproval } from '@/chrome/connectApproval';
+import { approvalNamesActiveAccount, connectApprovedAccount, readConnectApproval, type ConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { unlockAfterStartup } from '@/chrome/unlockStartup';
@@ -491,7 +491,8 @@ chrome.runtime.onConnect.addListener((port) => {
       // Wallet-switch guard: if the active wallet changed since the request
       // was issued, an approval must not be honored silently.
       const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
-      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId) {
+      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId
+        && !approvalNamesActiveAccount(entry.method, message, activeWalletId)) {
         entry.resolve({ error: 'wallet_changed_during_request' });
       } else {
         entry.resolve(message);
@@ -935,6 +936,20 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
   }
 });
 
+/**
+ * Connects `origin` to the account an approved connect prompt names, switching
+ * to it first when the user picked another account of the logged wallet (#1331).
+ * Returns that wallet; null (the dApp is refused) when there is none to connect.
+ */
+function connectApproved(approval: ConnectApproval, shownForId: number | undefined, origin: string) {
+  return connectApprovedAccount(approval, shownForId, origin, {
+    loggedWallet: () => walletManager.getWallet(),
+    wallets: async () => (await import('@/db/gero-db')).getAllWallets(),
+    login: loginWallet,
+    addConnectedDapp: (walletId, site) => WalletStore.addConnectedDapp(walletId, site),
+  });
+}
+
 app.add(METHOD.enable, (request, sendResponse) => {
   const { id, origin, send } = request;
   const tabId = send.tab?.id;
@@ -954,13 +969,13 @@ app.add(METHOD.enable, (request, sendResponse) => {
     // Prefer this tab's panel port, else any open panel (same rationale as
     // handleMiniGeroSignTx — the panel may register under a different tab).
     const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
+    // Read the wallet fresh: a cold-start request may have logged a wallet in
+    // between the initial check and the prompt.
+    const shownForId = walletManager.getWallet()?.id;
     return sendToMiniGero('enable', enablePayload, deliverTabId)
       .then(async (response) => {
-        if (isConnectApproval(response)) {
-          // Read the wallet fresh: a cold-start request may have logged a
-          // wallet in between the initial check and this resolution.
-          const walletNow = walletManager.getWallet();
-          if (walletNow) await WalletStore.addConnectedDapp(walletNow.id, origin);
+        const approval = readConnectApproval(response);
+        if (approval && await connectApproved(approval, shownForId, origin)) {
           reply({ data: true });
         } else {
           // CIP-30: a declined enable() rejects with APIError Refused.
@@ -975,12 +990,15 @@ app.add(METHOD.enable, (request, sendResponse) => {
       `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}` +
         (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
     );
+    // The popup may log a wallet in first (cold start); its group is read at the answer then.
+    const shownForId = walletManager.getWallet()?.id;
     return focusOrCreatePopup(popupURL, 470, 600)
       // The popup shows the same embedding-site warning as the side panel.
       .then(newTab => Messaging.sendToPopupInternal(newTab.id, { ...request, embeddedIn: enablePayload.embeddedIn }))
-      .then((response: BackgroundResponse) => {
+      .then(async (response: BackgroundResponse) => {
         // Only an explicit approval connects; Decline (or anything else) refuses.
-        if (isConnectApproval(response)) reply({ data: true });
+        const approval = readConnectApproval(response);
+        if (approval && await connectApproved(approval, shownForId, origin)) reply({ data: true });
         else reply({ error: APIError.Refused });
       })
       .catch(err => reply({ error: toDappError(err) }));
@@ -3845,20 +3863,32 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
   }
 });
 
+/**
+ * Logs a wallet in, then starts what follows every login: the push-notification
+ * link and WalletConnect. The wallet list, the account switcher and a dApp
+ * connect that picked another account (connectApproved) all log in here.
+ */
+async function loginWallet(wallet: Parameters<typeof walletManager.login>[0]) {
+  const walletBg = await walletManager.login(wallet);
+  if (walletBg) {
+    // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
+    void notifyReassert('login');
+    // Initialize WalletConnect in background (non-blocking), gated by the flag.
+    if (await isWalletConnectEnabled()) {
+      import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+        walletConnectService.initialize()
+          .then(() => setupWalletConnectCallbacks(walletConnectService))
+          .catch(e => console.warn('⚠️ WC init failed:', e));
+      });
+    }
+  }
+  return walletBg;
+}
+
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    const walletBg = await walletManager.login(request.data.wallet);
+    const walletBg = await loginWallet(request.data.wallet);
     if (walletBg) {
-      // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
-      void notifyReassert('login');
-      // Initialize WalletConnect in background (non-blocking), gated by the flag.
-      if (await isWalletConnectEnabled()) {
-        import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
-          walletConnectService.initialize()
-            .then(() => setupWalletConnectCallbacks(walletConnectService))
-            .catch(e => console.warn('⚠️ WC init failed:', e));
-        });
-      }
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4323,25 +4353,32 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
     return reply({ error: APIError.InternalError });
   }
 
-  const handleResponse = (response: BackgroundResponse) => {
+  const handleResponse = async (response: BackgroundResponse) => {
     // Only an explicit approval connects: the popup's Decline must never be
     // read as consent (it used to send a truthy `{}`).
-    if (isConnectApproval(response)) {
-      // Immediately update the background's in-memory whitelist so that subsequent
-      // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
-      // waiting for the Dexie live-query subscription to fire asynchronously.
-      if (!WalletStore.isWhitelisted(origin)) {
-        try {
-          // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
-          const fullOrigin = new URL(origin).origin;
-          const currentDapps = WalletStore.state.connectedDapps || [];
-          WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
-        } catch {}
-      }
-      reply({ data: [currentWallet.baseAddress] });
-    } else {
+    const approval = readConnectApproval(response);
+    if (!approval) {
       reply({ error: response?.error || APIError.Refused });
+      return;
     }
+    // The account the user picked, switched to first when it isn't the logged one.
+    const wallet = await connectApproved(approval, currentWallet.id, origin);
+    if (!wallet) {
+      reply({ error: APIError.Refused });
+      return;
+    }
+    // Immediately update the background's in-memory whitelist so that subsequent
+    // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
+    // waiting for the Dexie live-query subscription to fire asynchronously.
+    if (!WalletStore.isWhitelisted(origin)) {
+      try {
+        // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
+        const fullOrigin = new URL(origin).origin;
+        const currentDapps = WalletStore.state.connectedDapps || [];
+        WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
+      } catch {}
+    }
+    reply({ data: [wallet.baseAddress] });
   };
 
   // Browser-derived top-level site when a cross-origin frame asks; both the
@@ -4350,12 +4387,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
 
   const handleMiniGeroBtcEnable = () => {
     sendToMiniGero('enable', { ...request.data, website: origin, embeddedIn }, tabId)
-      .then(async (response) => {
-        if (isConnectApproval(response)) {
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
-        }
-        handleResponse(response);
-      })
+      .then(handleResponse)
       .catch((err: unknown) => reply({ error: errorMessage(err) || APIError.InternalError }));
   };
 
@@ -6384,10 +6416,12 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
       .then(async (response: BackgroundResponse) => {
-        if (response.data === true) {
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
-        }
-        reply({ data: response.data });
+        const approval = readConnectApproval(response);
+        // Anything but an approval connects nothing (connect() reads a falsy answer as declined).
+        if (!approval) return reply({ data: false });
+        // The account the user picked, switched to first when it isn't the logged one.
+        if (await connectApproved(approval, currentWallet.id, origin)) return reply({ data: true });
+        reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'Could not switch to the chosen account') });
       })
       .catch(err => {
         // Fallback code is deliberately NOT Rejected: Rejected must only ever
