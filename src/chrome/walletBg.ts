@@ -102,6 +102,8 @@ import {
   prepareMidnightPrivateSession,
 } from '@/chains/midnight/midnightPrivateSyncSession';
 import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+// Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
+import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
 import {
@@ -2012,7 +2014,6 @@ export class WalletBg {
     ownUtxos: ReadonlyArray<{ txHash: string; index: number; value: bigint | number | string; address?: string }> = [],
   ): Promise<string> {
     const { signPsbtWithMnemonic } = await import('@/chains/bitcoin/bitcoinSigner');
-    const { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } = await import('@/chains/bitcoin/psbtReview');
     const { decrypt } = await import('@/shared/utils/crypto');
 
     // Decide what gets signed before any key is decrypted.

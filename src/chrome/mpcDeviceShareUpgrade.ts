@@ -33,8 +33,13 @@ export interface DeviceShareStore {
 
 export type DeviceShareUpgradeOutcome = 'upgraded' | 'current' | 'skipped' | 'failed';
 
-export function createDexieDeviceShareStore(): DeviceShareStore {
-  const walletsDb = async (): Promise<Dexie> => (await import('@/db/gero-db')).getDb();
+/**
+ * `walletsDb` opens gero-db. The caller supplies it rather than this module
+ * importing gero-db: in the background's single iife an inlined dynamic import is
+ * a namespace const, and this module is emitted before gero-db's
+ * (scripts/check-bundle-tdz.mjs).
+ */
+export function createDexieDeviceShareStore(walletsDb: () => Promise<Dexie>): DeviceShareStore {
   return {
     async getWallet(walletId) {
       return (await walletsDb()).table('wallets').get(walletId);
@@ -55,7 +60,7 @@ export function createDexieDeviceShareStore(): DeviceShareStore {
 export async function upgradeMpcDeviceShare(
   walletId: number,
   secret: DeviceShareSecret,
-  store: DeviceShareStore = createDexieDeviceShareStore(),
+  store: DeviceShareStore,
 ): Promise<DeviceShareUpgradeOutcome> {
   if (secret.kind !== 'password') return 'skipped';
   try {

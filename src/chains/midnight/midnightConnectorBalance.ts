@@ -9,6 +9,9 @@
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { midnightLedgerVersion } from './midnightLedger';
+// Static: in the background's single iife an inlined dynamic import is read through a
+// namespace const that lands after this module (scripts/check-bundle-tdz.mjs).
+import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
 
 /** 2 MiB of transaction bytes; a contract call is a few hundred KB at most. */
 export const CONNECTOR_BALANCE_MAX_BYTES = 2 * 1024 * 1024;
@@ -172,7 +175,6 @@ export async function unshieldedAddressCodec(sdkNetworkId: string): Promise<{
   toHex(bech32: string): string;
   toBech32(hex: string): string;
 }> {
-  const { MidnightBech32m, UnshieldedAddress } = await import('@midnightntwrk/wallet-sdk-address-format');
   return {
     toHex: (bech32) => UnshieldedAddress.codec.decode(sdkNetworkId, MidnightBech32m.parse(bech32)).hexString,
     toBech32: (hex) => UnshieldedAddress.codec.encode(sdkNetworkId, new UnshieldedAddress(Buffer.from(hex, 'hex'))).asString(),

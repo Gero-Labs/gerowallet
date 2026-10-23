@@ -21,7 +21,7 @@ import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { unlockAfterStartup } from '@/chrome/unlockStartup';
 import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, verifySecondFactor } from '@/chrome/unlockGuards';
-import { upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
+import { createDexieDeviceShareStore, upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
 import { embeddingSite, promptSite } from '@/chrome/originBinding';
@@ -2419,7 +2419,9 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
         reconstructRootKeyBytes,
         sessionCache: mpcSessionCache,
         promoteMpcDeviceShareNext,
-        upgradeDeviceShare: upgradeMpcDeviceShare,
+        upgradeDeviceShare: (walletId, secret) => upgradeMpcDeviceShare(
+          walletId, secret, createDexieDeviceShareStore(async () => (await import('@/db/gero-db')).getDb()),
+        ),
       },
     );
 
