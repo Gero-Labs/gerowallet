@@ -203,6 +203,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Sync WS drop**: reconnect in `websocket.service.ts`; re-subscribe to addresses/stake key on wallet switch
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
+- **`assert` in the background**: the background build stubs `assert` (`\0virtual:assert-stub`), and `requireReturnsDefault` hands CommonJS callers the stub's function, not its namespace. Otherwise `@subsquid/scale-codec` (the Midnight address codecs) gets a namespace and the worker derives no Midnight key at all. `scripts/check-background-interop.mjs` builds a small entry with that config and runs it (CI: "Background CommonJS interop").
 
 ## Chrome Web Store: No Remotely Hosted Code
 - MV3 policy rejects a package if any shipped JS/HTML could load code from a URL (`<script src="https://…">`, remote `importScripts()` / `import()`, script-CDN URLs), **even inside unused dependency code**. 2.7.2 was rejected ("Blue Argon") for `@effect/platform`'s `HttpApiScalar` docs page, which the Midnight SDK pulls in. It shipped because the UI build then ran with `treeshake: false`, which kept unused code reachable through dependency imports. Tree-shaking is back on (PR 1253) and must stay on; the stub and guard below are the second line of defence.

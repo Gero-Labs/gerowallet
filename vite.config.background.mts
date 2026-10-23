@@ -310,7 +310,11 @@ export default defineConfig({
     modulePreload: false,
     commonjsOptions: {
       include: [/node_modules/],
-      requireReturnsDefault: 'auto',
+      // `require('assert')` must be the assert function itself: the stub also has
+      // named exports, so 'auto' would hand CommonJS callers its namespace, which
+      // `__importDefault` wraps again (@subsquid/scale-codec, used by the Midnight
+      // address codecs) and a direct `assert(x)` cannot call.
+      requireReturnsDefault: (id: string) => (id === '\0virtual:assert-stub' ? true : 'auto'),
       defaultIsModuleExports: 'auto',
       esmExternals: true,
       transformMixedEsModules: true,

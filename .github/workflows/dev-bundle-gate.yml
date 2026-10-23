@@ -132,6 +132,14 @@ jobs:
       - name: Bundle TDZ and remote-code guard logic
         run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs scripts/precommit-lint.spec.mjs
 
+      # The background bundle is built here but never run, and unit tests use
+      # Node's own `assert`, so a CommonJS interop mistake in the worker build
+      # ships unseen. One did: `require('assert')` handed @subsquid/scale-codec
+      # the stub's namespace, and the worker could derive no Midnight key. This
+      # builds a small entry with vite.config.background.mts and runs it.
+      - name: Background CommonJS interop
+        run: npx vitest run scripts/check-background-interop.spec.mjs
+
       # i18n parity. vue-i18n renders English (or the raw key) for a missing
       # translation and its warnings are silenced, so a key added to us.ts
       # without de/es ships unseen. These fail on a missing key, placeholder or
