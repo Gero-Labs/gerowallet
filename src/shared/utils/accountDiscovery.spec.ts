@@ -4,7 +4,7 @@ import { Blockchain, CoinTypes, HARDENED, Network, WalletTypePurpose } from '@/m
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import { resolvePrivateKey } from './resolver';
 import { accountXpub, type AccountXpub } from './walletAccount';
-import { BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
+import { accountReceiveAddress, BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
 
 // bitcoinjs-lib rejects the test runner's Buffer: name each address after its xpub and index instead.
 vi.mock('@/chains/bitcoin/bitcoinKeyManager', () => ({
@@ -133,5 +133,23 @@ describe('discoverMidnightAccounts', () => {
     const [found] = discoverMidnightAccounts([account(2, 'not json')]);
 
     expect(found).toMatchObject({ accountIndex: 2, address: '', activity: 'unchecked' });
+  });
+});
+
+describe('accountReceiveAddress', () => {
+  const record = (chain: string, publicKey: string | undefined, addressType?: string) => ({ chain, network: Network.PREPROD, publicKey, addressType });
+
+  it('names each chain\'s account by its first receive address, as the accounts step does', async () => {
+    expect(await accountReceiveAddress(record(Blockchain.CARDANO, account(2).publicKey)))
+      .toBe(getAddress(account(2).publicKey, Blockchain.CARDANO, Network.PREPROD, 0).toBech32());
+    expect(await accountReceiveAddress(record(Blockchain.BITCOIN, 'tpub-two', 'taproot'))).toBe('tpub-two/taproot/0/0');
+    expect(await accountReceiveAddress(record(Blockchain.BITCOIN, 'tpub-two'))).toBe('tpub-two/segwit/0/0');
+    expect(await accountReceiveAddress(record(Blockchain.MIDNIGHT, JSON.stringify({ unshielded: 'mn_addr_preprod1two' })))).toBe('mn_addr_preprod1two');
+  });
+
+  it('shows no address for a record it cannot read', async () => {
+    expect(await accountReceiveAddress(record(Blockchain.CARDANO, undefined))).toBe('');
+    expect(await accountReceiveAddress(record(Blockchain.CARDANO, 'not an xpub'))).toBe('');
+    expect(await accountReceiveAddress(record(Blockchain.MIDNIGHT, 'not json'))).toBe('');
   });
 });

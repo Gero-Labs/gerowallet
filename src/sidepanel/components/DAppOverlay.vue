@@ -86,9 +86,11 @@
           </div>
         </div>
 
+        <ConnectAccountPicker v-model="connectAccountId" :accounts="connectAccounts" :logged-id="connectLoggedId" class="mb-4" />
+
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded variant="flat" @click="approve(true)">
+          <v-btn class="geroButton" rounded variant="flat" @click="approve(connectApproval())">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -531,6 +533,8 @@
             <span class="t-body-sm">{{ $t('midnight.connector.futureRequestsNote') }}</span>
           </div>
         </div>
+
+        <ConnectAccountPicker v-model="connectAccountId" :accounts="connectAccounts" :logged-id="connectLoggedId" class="mb-4" />
 
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
@@ -1084,6 +1088,8 @@ import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
 import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
 import { geroStore } from '@/stores/geroStore';
+import ConnectAccountPicker from '@/shared/components/ConnectAccountPicker.vue';
+import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
@@ -1136,6 +1142,17 @@ const currentRequest = computed(() => opaqueRequest.value as RenderedRequest | n
 onMounted(() => setOverlayReady(true));
 onBeforeUnmount(() => setOverlayReady(false));
 const { t } = useTranslation();
+
+// Connect prompts offer every account of the logged wallet (#1331); each new
+// request starts on the logged one.
+const {
+  accounts: connectAccounts,
+  loggedId: connectLoggedId,
+  selectedId: connectAccountId,
+  reset: resetConnectAccount,
+  approval: connectApproval,
+} = useConnectAccount();
+watch(() => currentRequest.value?.requestId, resetConnectAccount);
 
 // Domain + method label for a queued (not-yet-shown) request, for the queue
 // strip below. Reuses the same URL-hostname extraction as enableDomain/
@@ -2817,11 +2834,11 @@ function midnightError(code: string, reason: string): string {
 
 function approveMidnightConnect() {
   // Whitelisting the origin (WalletStore.addConnectedDapp) happens in
-  // background.ts's MIDNIGHT_METHOD.connect handler once it sees
-  // `response.data === true` — mirrors exactly how the CIP-30 `enable` mini-
-  // gero path is split (background owns the whitelist write, the panel only
-  // signals approve/reject).
-  approve(true);
+  // background.ts's MIDNIGHT_METHOD.connect handler once it reads the
+  // approval — mirrors exactly how the CIP-30 `enable` mini-gero path is split
+  // (background owns the whitelist write and any switch to the chosen account,
+  // the panel only signals approve/reject).
+  approve(connectApproval());
 }
 
 function rejectMidnightConnect() {

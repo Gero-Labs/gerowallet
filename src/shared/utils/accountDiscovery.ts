@@ -4,7 +4,7 @@
 import { Api } from '@/api/api';
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
-import { Blockchain } from '@/models/types';
+import { Blockchain, type Wallet } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 
 /** 'unknown': the probe failed. 'unchecked': the chain offers no probe (Midnight). */
@@ -93,16 +93,35 @@ export function mergeScannedAccounts(previous: AccountXpub[], scanned: AccountXp
  * chosen by default.
  */
 export function discoverMidnightAccounts(accounts: AccountXpub[]): DiscoveredAccount[] {
-  return accounts.map((account) => {
-    let address = '';
-    try {
-      const unshielded: unknown = JSON.parse(account.publicKey)?.unshielded;
-      if (typeof unshielded === 'string') address = unshielded;
-    } catch {
-      // An unreadable blob shows no address; the account is still offered.
+  return accounts.map((account) => ({ ...account, address: midnightUnshieldedAddress(account.publicKey), stakeAddress: '', activity: 'unchecked' }));
+}
+
+/** The unshielded address of a Midnight account's addresses JSON; '' for an unreadable blob. */
+function midnightUnshieldedAddress(publicKey: string): string {
+  try {
+    const unshielded: unknown = JSON.parse(publicKey)?.unshielded;
+    return typeof unshielded === 'string' ? unshielded : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * An account record's first receive address, as the accounts step shows it, so
+ * a picker can tell a wallet's accounts apart. '' when none can be derived.
+ */
+export async function accountReceiveAddress(record: Pick<Wallet, 'chain' | 'network' | 'publicKey' | 'addressType'>): Promise<string> {
+  if (!record.publicKey) return '';
+  try {
+    if (record.chain === Blockchain.MIDNIGHT) return midnightUnshieldedAddress(record.publicKey);
+    if (record.chain === Blockchain.BITCOIN) {
+      const { deriveBitcoinAddress } = await import('@/chains/bitcoin/bitcoinKeyManager');
+      return deriveBitcoinAddress(record.publicKey, record.network, record.addressType || 'segwit', 0, 0);
     }
-    return { ...account, address, stakeAddress: '', activity: 'unchecked' };
-  });
+    return getAddress(record.publicKey, record.chain, record.network, 0).toBech32();
+  } catch {
+    return '';
+  }
 }
 
 /** Receive addresses checked per Bitcoin account: wallets hand them out in order, so a used account has used one of its first. */
