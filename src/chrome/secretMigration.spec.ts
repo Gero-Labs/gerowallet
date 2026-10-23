@@ -10,6 +10,8 @@ import { SECRET_FORMAT_FIXTURES as F } from '@/shared/utils/__fixtures__/secretF
 import {
   createDexieSecretStore,
   migrateWalletSecrets,
+  upgradeLegacyTextSecrets,
+  upgradeSecretsAfterPasswordDecrypt,
   type ConfigRow,
   type SecretMigrationStore,
   type WalletSecretRow,
@@ -290,5 +292,125 @@ describe('createDexieSecretStore (IndexedDB compare-and-swap)', () => {
     ])).toBe(true);
     expect((await db.table('config').get('encryptedTotpSecret')).value).toBe('new-a');
     expect((await db.table('config').get('encryptedBackupCodes')).value).toEqual(['new-b']);
+  });
+});
+
+describe('upgradeLegacyTextSecrets (flag off)', () => {
+  beforeEach(() => setEnvelopeV2EnabledForTest(false));
+
+  function legacyTextStore(): MemoryStore {
+    const store = new MemoryStore();
+    store.wallets.set(1, {
+      id: 1,
+      chain: Blockchain.CARDANO,
+      encryptedPrivateKey: F.rootKey.rawHex,
+      encryptedMnemonic: F.mnemonicBlob.legacy,
+    });
+    store.config.set(1, [
+      { key: 'encryptedTotpSecret', value: F.securityData.legacy },
+      { key: 'encryptedPinHash', value: F.securityData.legacy },
+      { key: 'encryptedBackupCodes', value: [F.securityData.legacy, encryptSecret('code-2', PW)] },
+      { key: 'spo_encryptedColdKey', value: F.coldKey.rawHex },
+      { key: 'spo_coldKeyEncryption', value: 'password' },
+    ]);
+    return store;
+  }
+
+  function setConfig(store: MemoryStore, key: string, value: unknown) {
+    store.config.get(1)!.find(r => r.key === key)!.value = value;
+  }
+
+  it('re-seals the old CryptoJS text blobs as gpw1 and leaves every key blob as it is', async () => {
+    const store = legacyTextStore();
+    const result = await upgradeLegacyTextSecrets(1, PW, store);
+    expect(result.outcome).toBe('migrated');
+
+    const row = store.wallets.get(1)!;
+    expect(row.encryptedPrivateKey).toBe(F.rootKey.rawHex);
+    expect(row.encryptedMnemonic!.startsWith('gpw1.')).toBe(true);
+    expect(result.encryptedMnemonic).toBe(row.encryptedMnemonic);
+    expect(result.encryptedPrivateKey).toBeUndefined();
+    expect(decrypt(row.encryptedMnemonic!, PW, SecretPurpose.Mnemonic)).toBe(F.mnemonic);
+
+    const totp = configValue(store, 'encryptedTotpSecret') as string;
+    const pin = configValue(store, 'encryptedPinHash') as string;
+    const codes = configValue(store, 'encryptedBackupCodes') as string[];
+    expect([totp, pin, ...codes].every(v => v.startsWith('gpw1.'))).toBe(true);
+    expect(decrypt(totp, PW, SecretPurpose.SecurityData)).toBe(TOTP);
+    expect(decrypt(pin, PW, SecretPurpose.SecurityData)).toBe(TOTP);
+    expect(codes.map(c => decrypt(c, PW, SecretPurpose.SecurityData))).toEqual([TOTP, 'code-2']);
+    expect(configValue(store, 'spo_encryptedColdKey')).toBe(F.coldKey.rawHex);
+  });
+
+  it('is idempotent, never writes gpw2 and never touches a list holding gpw2', async () => {
+    const store = legacyTextStore();
+    setConfig(store, 'encryptedBackupCodes', [F.securityData.legacy, F.securityData.gpw2]);
+    await upgradeLegacyTextSecrets(1, PW, store);
+    expect(configValue(store, 'encryptedBackupCodes')).toEqual([F.securityData.legacy, F.securityData.gpw2]);
+    expect(isGpw2(store.wallets.get(1)!.encryptedMnemonic)).toBe(false);
+
+    const calls = store.casWalletCalls;
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('already-current');
+    expect(store.casWalletCalls).toBe(calls);
+  });
+
+  it('does nothing while the flag is on (the gpw2 migration covers it)', async () => {
+    setEnvelopeV2EnabledForTest(true);
+    const store = legacyTextStore();
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('disabled');
+    expect(store.wallets.get(1)!.encryptedMnemonic).toBe(F.mnemonicBlob.legacy);
+  });
+
+  it('writes nothing on a wrong password (the AEAD root key is checked first)', async () => {
+    const store = legacyTextStore();
+    expect((await upgradeLegacyTextSecrets(1, 'wrong-password', store)).outcome).toBe('decrypt_fail');
+    expect(store.wallets.get(1)!.encryptedMnemonic).toBe(F.mnemonicBlob.legacy);
+    expect(configValue(store, 'encryptedTotpSecret')).toBe(F.securityData.legacy);
+    expect(store.casWalletCalls).toBe(0);
+  });
+
+  it('writes nothing when the mnemonic does not derive the stored root key', async () => {
+    const store = legacyTextStore();
+    store.wallets.set(1, { ...store.wallets.get(1)!, encryptedPrivateKey: encryptWithPassword(PW, '11'.repeat(96)) });
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('equivalence_fail');
+    expect(store.wallets.get(1)!.encryptedMnemonic).toBe(F.mnemonicBlob.legacy);
+    expect(configValue(store, 'encryptedTotpSecret')).toBe(F.securityData.legacy);
+  });
+
+  it('never overwrites a concurrent password change (compare-and-swap)', async () => {
+    const store = legacyTextStore();
+    const changed = encryptSecret(F.mnemonic, 'new-password');
+    store.beforeCasWallet = () => {
+      store.wallets.set(1, { ...store.wallets.get(1)!, encryptedMnemonic: changed });
+    };
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('cas_conflict');
+    expect(store.wallets.get(1)!.encryptedMnemonic).toBe(changed);
+    expect(configValue(store, 'encryptedTotpSecret')).toBe(F.securityData.legacy);
+  });
+
+  it('a failed write leaves every blob as it was', async () => {
+    const store = legacyTextStore();
+    store.failCasWallet = true;
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('write_error');
+    expect(store.wallets.get(1)!.encryptedMnemonic).toBe(F.mnemonicBlob.legacy);
+  });
+
+  it('skips PassKey and MPC wallets', async () => {
+    const store = legacyTextStore();
+    store.wallets.set(1, { ...store.wallets.get(1)!, encryptionMethod: 'prf' });
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('not-applicable');
+    store.wallets.set(1, { ...store.wallets.get(1)!, encryptionMethod: 'mpc' });
+    expect((await upgradeLegacyTextSecrets(1, PW, store)).outcome).toBe('not-applicable');
+  });
+
+  it('upgradeSecretsAfterPasswordDecrypt picks the pass from the flag', async () => {
+    const off = legacyTextStore();
+    expect((await upgradeSecretsAfterPasswordDecrypt(1, PW, off)).outcome).toBe('migrated');
+    expect(off.wallets.get(1)!.encryptedMnemonic!.startsWith('gpw1.')).toBe(true);
+
+    setEnvelopeV2EnabledForTest(true);
+    const on = legacyTextStore();
+    expect((await upgradeSecretsAfterPasswordDecrypt(1, PW, on)).outcome).toBe('migrated');
+    expect(isGpw2(on.wallets.get(1)!.encryptedMnemonic)).toBe(true);
   });
 });

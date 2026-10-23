@@ -198,6 +198,28 @@ describe('unlockMpcWalletFlow', () => {
     expect(deps.sessionCache.set).not.toHaveBeenCalled();
   });
 
+  it('upgrades the device share only after it reconstructed this wallet, and never waits on it', async () => {
+    let finish!: () => void;
+    const upgradeDeviceShare = vi.fn(() => new Promise<void>(done => { finish = done; }));
+    const deps = makeDeps({ upgradeDeviceShare });
+    await unlockMpcWalletFlow(baseInput, deps);
+    expect(upgradeDeviceShare).toHaveBeenCalledWith(baseInput.walletId, secret);
+    finish();
+
+    const failing = makeDeps({
+      upgradeDeviceShare: vi.fn(),
+      reconstructRootKeyBytes: vi.fn(async () => { throw new MpcValidationError('mismatch'); }),
+    });
+    await expect(unlockMpcWalletFlow(baseInput, failing)).rejects.toThrow();
+    expect(failing.upgradeDeviceShare).not.toHaveBeenCalled();
+  });
+
+  it('an upgrade failure never fails the unlock', async () => {
+    const deps = makeDeps({ upgradeDeviceShare: vi.fn(async () => { throw new Error('quota'); }) });
+    await expect(unlockMpcWalletFlow(baseInput, deps)).resolves.toBeUndefined();
+    expect(deps.sessionCache.set).toHaveBeenCalled();
+  });
+
   it('throws if the wallet is not found', async () => {
     const deps = makeDeps({ getWallet: vi.fn(async () => undefined) });
     await expect(unlockMpcWalletFlow(baseInput, deps)).rejects.toThrow('MPC wallet not found');
@@ -649,8 +671,8 @@ describe('setRecoveryPasswordFlow', () => {
     expect(deps.createMpcShareSet).toHaveBeenCalledWith(new Uint8Array(32));
     // Corrupt-split guard: the fresh S' is validated against the wallet xpub before rotate.
     expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith(freshSplit.deviceShare, freshSplit.loginShare, wallet.publicKey);
-    // Device factor = S'.device (staged as next).
-    expect(deps.encryptDeviceShare).toHaveBeenCalledWith(freshSplit.deviceShare, secret);
+    // Device factor = S'.device (staged as next), sealed no weaker than the share it replaces.
+    expect(deps.encryptDeviceShare).toHaveBeenCalledWith(freshSplit.deviceShare, secret, wallet.mpcDeviceShare);
     expect(deps.setMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId, `encDev(${freshSplit.deviceShare})`);
     // Login factor = S'.login (rotated on the backend).
     expect(deps.rotate).toHaveBeenCalledWith(baseInput.idToken, wallet.chain, wallet.network, freshSplit.loginShare);

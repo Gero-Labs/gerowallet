@@ -3,6 +3,7 @@ import { Mutex } from 'async-mutex';
 import type Dexie from 'dexie';
 import { SecretPurpose, decrypt, decryptPrivateKey } from '@/shared/utils/crypto';
 import { isGpw2, openGpw2, openGpw2Text, sealGpw2, sealGpw2Text } from '@/shared/utils/secretEnvelope';
+import { encryptSecret, isLegacySecret } from '@/shared/utils/passwordSecret';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { rootKeyFromMnemonic } from '@/shared/utils/rootKeyFromMnemonic';
 import {
@@ -37,8 +38,15 @@ import { debugLog } from '@/utils/debug';
  * accepts every format, so a wallet interrupted between the two databases is fully
  * usable and the next trigger finishes the job. `passwordLastUpdate` is untouched.
  *
- * Not covered here: MPC device shares (not unlocked through this path), the Strike
- * key (chrome.storage.local, no transactional compare-and-swap) and PRF wallets.
+ * Not covered here: MPC device shares (upgraded at MPC unlock, see
+ * `mpcDeviceShareUpgrade.ts`), the Strike key (chrome.storage.local, no
+ * transactional compare-and-swap) and PRF wallets.
+ *
+ * With the flag OFF, `upgradeLegacyTextSecrets` runs the same steps for the old
+ * CryptoJS text blobs only (mnemonic, 2FA data, legacy PIN hash): they are
+ * re-sealed as `gpw1` (Argon2id), the format every supported release reads and
+ * the current flag-off writer already produces. Key blobs and `gpw1`/`gpw2`
+ * fields are never touched in that mode, so it cannot downgrade anything.
  */
 
 export type MigrationOutcome =
@@ -150,11 +158,14 @@ function lockFor(walletId: number): Mutex {
   return lock;
 }
 
+/** Counters for the gpw2 rollout (runbook section 5); the flag-off pass keeps its own. */
+const GPW2_COUNTERS_KEY = 'keyEnvelopeMigration';
+const LEGACY_COUNTERS_KEY = 'legacySecretUpgrade';
+
 /** Non-sensitive local counters for rollout monitoring. Best-effort. */
-async function recordOutcome(outcome: MigrationOutcome): Promise<void> {
+async function recordOutcome(outcome: MigrationOutcome, KEY: string = GPW2_COUNTERS_KEY): Promise<void> {
   if (typeof chrome === 'undefined' || !chrome.runtime?.id || !chrome.storage?.local) return;
   try {
-    const KEY = 'keyEnvelopeMigration';
     const stored = (await chrome.storage.local.get(KEY))?.[KEY] as Record<string, number> | undefined;
     const counts = { ...(stored ?? {}) };
     counts[outcome] = (counts[outcome] ?? 0) + 1;
@@ -171,7 +182,39 @@ interface PlannedConfig {
   next: string | string[];
 }
 
-async function planConfig(rows: ConfigRow[], password: string): Promise<PlannedConfig[]> {
+/** Which config values a pass re-seals, and how. */
+interface ConfigSealPolicy {
+  needsUpgrade(field: ConfigSecretField, value: unknown): boolean;
+  sealText(text: string, password: string, purpose: ConfigSecretField['purpose']): string;
+  sealKey(bytes: Uint8Array, password: string, purpose: ConfigSecretField['purpose']): string;
+}
+
+/** True for an old CryptoJS (MD5, 1 iteration) text blob: neither `gpw1` nor `gpw2`. */
+export function isLegacyCryptoJsBlob(blob: unknown): boolean {
+  return typeof blob === 'string' && blob.length > 0 && !isGpw2(blob) && isLegacySecret(blob);
+}
+
+const GPW2_POLICY: ConfigSealPolicy = {
+  needsUpgrade: (_field, value) => !isConfigValueGpw2(value),
+  sealText: (text, password, purpose) => sealGpw2Text(text, password, purpose),
+  sealKey: (bytes, password, purpose) => sealGpw2(bytes, password, purpose),
+};
+
+const LEGACY_TEXT_POLICY: ConfigSealPolicy = {
+  // Key blobs never had a CryptoJS wrap. A list is upgraded only when nothing in
+  // it is gpw2 already, so this pass can never rewrite a gpw2 element as gpw1.
+  needsUpgrade: (field, value) => {
+    if (field.kind === 'key') return false;
+    const items = Array.isArray(value) ? value : [value];
+    return items.some(isLegacyCryptoJsBlob) && !items.some(v => typeof v === 'string' && isGpw2(v));
+  },
+  sealText: (text, password) => encryptSecret(text, password),
+  sealKey: () => {
+    throw new Error('Key blobs are not upgraded by the legacy pass');
+  },
+};
+
+async function planConfig(rows: ConfigRow[], password: string, policy: ConfigSealPolicy): Promise<PlannedConfig[]> {
   const byKey = new Map(rows.map(r => [r.key, r]));
 
   const planned: PlannedConfig[] = [];
@@ -181,7 +224,7 @@ async function planConfig(rows: ConfigRow[], password: string): Promise<PlannedC
       if (method !== undefined && method !== 'password') continue;
     }
     const row = byKey.get(field.key);
-    if (!row || row.value === undefined || row.value === null || isConfigValueGpw2(row.value)) continue;
+    if (!row || row.value === undefined || row.value === null || !policy.needsUpgrade(field, row.value)) continue;
     let plain: ConfigSecretPlain;
     try {
       plain = openConfigSecret(field, row.value, password);
@@ -192,8 +235,8 @@ async function planConfig(rows: ConfigRow[], password: string): Promise<PlannedC
     const next = await sealConfigSecret(
       field,
       plain,
-      text => sealGpw2Text(text, password, field.purpose),
-      bytes => sealGpw2(bytes, password, field.purpose),
+      text => policy.sealText(text, password, field.purpose),
+      bytes => policy.sealKey(bytes, password, field.purpose),
     );
     if (!sameConfigPlain(openConfigSecret(field, next, password), plain)) {
       throw new MigrationError('readback_fail');
@@ -250,19 +293,43 @@ async function migrate(walletId: number, password: string, store: SecretMigratio
 
   let planned: PlannedConfig[];
   try {
-    planned = await planConfig(await store.getConfig(walletId, CONFIG_KEYS), password);
+    planned = await planConfig(await store.getConfig(walletId, CONFIG_KEYS), password, GPW2_POLICY);
   } catch (e) {
     return { outcome: e instanceof MigrationError ? e.outcome : 'write_error' };
   }
 
   if (Object.keys(next).length === 0 && planned.length === 0) return { outcome: 'already-current' };
 
-  // 5 (per database). Read back from storage and open, before anything is reported.
+  return commitPlanned(walletId, password, store, { expected, next, rootKey, mnemonic }, planned);
+}
+
+interface PlannedWalletRow {
+  expected: WalletBlobs;
+  next: WalletBlobs;
+  /** Plaintexts the read-back must reproduce. */
+  rootKey?: Buffer;
+  mnemonic?: string;
+}
+
+/**
+ * Steps 4 and 5: compare-and-swap writes, one transaction per database, each read
+ * back from storage and opened before anything is reported. The wallets row is
+ * read back before the config write, so every result that hands new blobs to the
+ * caller (for its in-memory copy) has passed the storage read-back.
+ */
+async function commitPlanned(
+  walletId: number,
+  password: string,
+  store: SecretMigrationStore,
+  plan: PlannedWalletRow,
+  planned: PlannedConfig[],
+): Promise<MigrationResult> {
+  const { expected, next, rootKey, mnemonic } = plan;
   const walletRowReadsBack = async (): Promise<boolean> => {
     try {
       const stored = await store.getWallet(walletId);
       if (next.encryptedPrivateKey !== undefined) {
-        if (stored?.encryptedPrivateKey !== next.encryptedPrivateKey) return false;
+        if (stored?.encryptedPrivateKey !== next.encryptedPrivateKey || !rootKey) return false;
         if (!decryptPrivateKey(stored.encryptedPrivateKey, password).equals(rootKey)) return false;
       }
       if (next.encryptedMnemonic !== undefined) {
@@ -286,9 +353,6 @@ async function migrate(walletId: number, password: string, store: SecretMigratio
     }
   };
 
-  // 4. Compare-and-swap writes, one transaction per database. The wallets row is
-  // read back before the config write, so every result that hands new blobs to the
-  // caller (for its in-memory copy) has passed the storage read-back.
   let written: WalletBlobs = {};
   if (Object.keys(next).length > 0) {
     try {
@@ -310,6 +374,56 @@ async function migrate(walletId: number, password: string, store: SecretMigratio
   }
 
   return { outcome: 'migrated', ...next };
+}
+
+/**
+ * Flag-off pass: re-seal the old CryptoJS text blobs (mnemonic, 2FA data, legacy
+ * PIN hash) as `gpw1`, with the same safety steps as the `gpw2` migration. Root
+ * key and key blobs are left as they are.
+ */
+async function upgradeLegacy(walletId: number, password: string, store: SecretMigrationStore): Promise<MigrationResult> {
+  const row = await store.getWallet(walletId);
+  if (!row || !row.encryptedPrivateKey || row.encryptionMethod === 'prf' || row.encryptionMethod === 'mpc') {
+    return { outcome: 'not-applicable' };
+  }
+
+  // 1. The root key is AEAD-protected: opening it proves the password before any
+  // unauthenticated CryptoJS blob is trusted to have decrypted correctly.
+  let rootKey: Buffer;
+  try {
+    rootKey = decryptPrivateKey(row.encryptedPrivateKey, password);
+  } catch {
+    return { outcome: 'decrypt_fail' };
+  }
+
+  const expected: WalletBlobs = {};
+  const next: WalletBlobs = {};
+  let mnemonic: string | undefined;
+  if (row.encryptedMnemonic && isLegacyCryptoJsBlob(row.encryptedMnemonic)) {
+    try {
+      mnemonic = decrypt(row.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+    } catch {
+      return { outcome: 'decrypt_fail' };
+    }
+    // 2. Key equivalence before anything is rewritten.
+    if (!Buffer.from(rootKeyFromMnemonic(row.chain, mnemonic)).equals(rootKey)) return { outcome: 'equivalence_fail' };
+    // 3. Seal + in-memory read-back.
+    const sealed = encryptSecret(mnemonic, password);
+    if (decrypt(sealed, password, SecretPurpose.Mnemonic) !== mnemonic) return { outcome: 'readback_fail' };
+    expected.encryptedMnemonic = row.encryptedMnemonic;
+    next.encryptedMnemonic = sealed;
+  }
+
+  let planned: PlannedConfig[];
+  try {
+    planned = await planConfig(await store.getConfig(walletId, CONFIG_KEYS), password, LEGACY_TEXT_POLICY);
+  } catch (e) {
+    return { outcome: e instanceof MigrationError ? e.outcome : 'write_error' };
+  }
+
+  if (Object.keys(next).length === 0 && planned.length === 0) return { outcome: 'already-current' };
+
+  return commitPlanned(walletId, password, store, { expected, next, rootKey, mnemonic }, planned);
 }
 
 /**
@@ -335,4 +449,50 @@ export async function migrateWalletSecrets(
     await recordOutcome(result.outcome);
   }
   return result;
+}
+
+/**
+ * Flag-off upgrade of a wallet's old CryptoJS text secrets to `gpw1`. Same
+ * contract as `migrateWalletSecrets`: call it after any successful password
+ * decrypt; serialized per wallet (with the gpw2 migration too), never throws.
+ * Does nothing while `isKeyEnvelopeV2Enabled` is on: the gpw2 migration covers
+ * those fields then.
+ */
+export async function upgradeLegacyTextSecrets(
+  walletId: number,
+  password: string,
+  store: SecretMigrationStore = createDexieSecretStore(),
+): Promise<MigrationResult> {
+  if (!password) return { outcome: 'not-applicable' };
+  const result = await lockFor(walletId).runExclusive(async (): Promise<MigrationResult> => {
+    try {
+      if (await refreshEnvelopeV2Flag()) return { outcome: 'disabled' };
+      return await upgradeLegacy(walletId, password, store);
+    } catch {
+      return { outcome: 'write_error' };
+    }
+  });
+  if (result.outcome !== 'disabled' && result.outcome !== 'already-current' && result.outcome !== 'not-applicable') {
+    debugLog(`🔐 Legacy secret upgrade for wallet ${walletId}: ${result.outcome}`);
+    await recordOutcome(result.outcome, LEGACY_COUNTERS_KEY);
+  }
+  return result;
+}
+
+/**
+ * The upgrade to run after a successful password decrypt: the gpw2 migration with
+ * the flag on, the legacy-text pass with it off. Never throws.
+ */
+export async function upgradeSecretsAfterPasswordDecrypt(
+  walletId: number,
+  password: string,
+  store: SecretMigrationStore = createDexieSecretStore(),
+): Promise<MigrationResult> {
+  try {
+    return (await refreshEnvelopeV2Flag())
+      ? await migrateWalletSecrets(walletId, password, store)
+      : await upgradeLegacyTextSecrets(walletId, password, store);
+  } catch {
+    return { outcome: 'write_error' };
+  }
 }

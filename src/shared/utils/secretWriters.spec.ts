@@ -6,7 +6,7 @@ import { SecretPurpose, decrypt, decryptKeyBlob, decryptPrivateKey, encryptWithP
 import { encryptSecret } from './passwordSecret';
 import { isGpw2, openGpw2 } from './secretEnvelope';
 import { setEnvelopeV2EnabledForTest } from './envelopeV2Flag';
-import { sealKeySecret, sealTextSecret } from './secretWriters';
+import { resealKeySecret, resealTextSecret, sealKeySecret, sealTextSecret } from './secretWriters';
 import { rootKeyFromMnemonic } from './rootKeyFromMnemonic';
 import { resolvePrivateKey } from './resolver';
 import { prepareSpendingPasswordRotation } from './passwordRotation';
@@ -33,6 +33,21 @@ describe('secretWriters', () => {
     expect(decrypt(text, F.pw, SecretPurpose.SecurityData)).toBe('2fa');
     expect(decryptKeyBlob(cold, F.pw, SecretPurpose.ColdKey).toString('hex')).toBe(F.coldKey.hex);
     expect(() => openGpw2(cold, F.pw, SecretPurpose.StrikeKey)).toThrow(/purpose mismatch/);
+  });
+
+  it('re-sealing never writes a weaker format than the one replaced, even with the flag off', async () => {
+    setEnvelopeV2EnabledForTest(false);
+    const rootKey = Buffer.from(F.cardanoRootKeyHex, 'hex');
+    const key = await resealKeySecret(rootKey, F.pw, SecretPurpose.RootKey, F.rootKey.gpw2);
+    const text = await resealTextSecret(F.mnemonic, F.pw, SecretPurpose.Mnemonic, F.mnemonicBlob.gpw2);
+    const list = await resealTextSecret('code', F.pw, SecretPurpose.SecurityData, [F.securityData.gpw1, F.securityData.gpw2]);
+    expect(isGpw2(key) && isGpw2(text) && isGpw2(list)).toBe(true);
+    expect(decryptPrivateKey(key, F.pw).toString('hex')).toBe(F.cardanoRootKeyHex);
+    expect(decrypt(text, F.pw, SecretPurpose.Mnemonic)).toBe(F.mnemonic);
+
+    // Older formats move to the current writer (never back to CryptoJS).
+    expect((await resealTextSecret(F.mnemonic, F.pw, SecretPurpose.Mnemonic, F.mnemonicBlob.legacy)).startsWith('gpw1.')).toBe(true);
+    expect(isRawEncryptedKey(await resealKeySecret(rootKey, F.pw, SecretPurpose.RootKey, F.rootKey.rawHex))).toBe(true);
   });
 });
 
@@ -124,6 +139,28 @@ describe('prepareSpendingPasswordRotation', () => {
       expect(decryptKeyBlob((await db.table('config').get('spo_encryptedColdKey')).value, NEW, SecretPurpose.ColdKey).toString('hex')).toBe(F.coldKey.hex);
     }
     expect((await untouched.table('config').get('spo_encryptedColdKey')).value).toBe(F.coldKey.rawHex);
+  });
+
+  it('with the flag turned off again, a password change keeps gpw2 secrets gpw2 (no downgrade)', async () => {
+    setEnvelopeV2EnabledForTest(false);
+    const db = await seedConfig(7010, {
+      encryptedTotpSecret: F.securityData.gpw2,
+      spo_encryptedColdKey: F.coldKey.gpw2,
+      spo_coldKeyEncryption: 'password',
+    });
+    const r = await prepareSpendingPasswordRotation(
+      { id: 7010, encryptedPrivateKey: F.rootKey.gpw2, encryptedMnemonic: F.mnemonicBlob.gpw2 },
+      F.pw,
+      NEW,
+    );
+    await r.commitSecondary();
+    expect(isGpw2(r.encryptedPrivateKey) && isGpw2(r.encryptedMnemonic)).toBe(true);
+    expect(decryptPrivateKey(r.encryptedPrivateKey, NEW).toString('hex')).toBe(F.cardanoRootKeyHex);
+    expect(decrypt(r.encryptedMnemonic!, NEW, SecretPurpose.Mnemonic)).toBe(F.mnemonic);
+    const totp = (await db.table('config').get('encryptedTotpSecret')).value;
+    const cold = (await db.table('config').get('spo_encryptedColdKey')).value;
+    expect(isGpw2(totp) && isGpw2(cold)).toBe(true);
+    expect(decryptKeyBlob(cold, NEW, SecretPurpose.ColdKey).toString('hex')).toBe(F.coldKey.hex);
   });
 
   it('with the flag on, every rotated secret is gpw2', async () => {

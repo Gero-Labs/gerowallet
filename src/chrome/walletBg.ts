@@ -50,7 +50,7 @@ import {
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
 import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
-import { migrateWalletSecrets } from '@/chrome/secretMigration';
+import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import type { BitcoinUtxo } from '@/api/bitcoin-api';
 import type { Psbt } from 'bitcoinjs-lib';
@@ -1479,30 +1479,38 @@ export class WalletBg {
     }
   }
 
-  /** Set once this session's stored secrets are known to be fully `gpw2`, so later signs skip the check. */
-  private storedSecretsCurrent = false;
+  /**
+   * Which upgrade this session already found complete, so later signs skip the
+   * check: 'gpw2' (everything migrated, flag on) or 'gpw1' (no CryptoJS text blob
+   * left, flag off). A flag flip to on still runs the gpw2 migration once.
+   */
+  private storedSecretsCurrent: 'gpw1' | 'gpw2' | null = null;
 
   /**
    * Upgrade stored secrets after a successful password decrypt. With
    * `isKeyEnvelopeV2Enabled` on, every password secret of the wallet moves to
-   * `gpw2` (see `secretMigration.ts`). With it off, only the legacy nested
-   * root-key blob is rewritten to raw PBKDF2 hex, as before.
+   * `gpw2` (see `secretMigration.ts`). With it off, the legacy nested root-key
+   * blob is rewritten to raw PBKDF2 hex and the old CryptoJS text blobs
+   * (mnemonic, 2FA data, legacy PIN hash) are re-sealed as `gpw1`.
    */
   private async upgradeStoredSecrets(rootKeyBuffer: Buffer, password: string): Promise<void> {
-    if (this.storedSecretsCurrent) return;
+    if (this.storedSecretsCurrent === 'gpw2') return;
     try {
+      const done = (outcome: string) => outcome === 'migrated' || outcome === 'already-current' || outcome === 'not-applicable';
       if (!(await refreshEnvelopeV2Flag())) {
+        if (this.storedSecretsCurrent === 'gpw1') return;
         if (isLegacyNestedKey(this.encryptedPrivateKey)) {
           await this.migrateEncryptedPrivateKeyFormat(rootKeyBuffer, password);
         }
+        const legacy = await upgradeLegacyTextSecrets(this.secretsWalletId, password);
+        if (legacy.encryptedMnemonic) this.encryptedMnemonic = legacy.encryptedMnemonic;
+        if (done(legacy.outcome)) this.storedSecretsCurrent = 'gpw1';
         return;
       }
       const result = await migrateWalletSecrets(this.secretsWalletId, password);
       if (result.encryptedPrivateKey) this.encryptedPrivateKey = result.encryptedPrivateKey;
       if (result.encryptedMnemonic) this.encryptedMnemonic = result.encryptedMnemonic;
-      if (result.outcome === 'migrated' || result.outcome === 'already-current' || result.outcome === 'not-applicable') {
-        this.storedSecretsCurrent = true;
-      }
+      if (done(result.outcome)) this.storedSecretsCurrent = 'gpw2';
     } catch (e) {
       debugLog('🔐 Stored-secret upgrade deferred (will retry on next unlock):', e);
     }
@@ -2184,12 +2192,16 @@ export class WalletBg {
       // PASSWORD WALLET - VERIFY BY DECRYPTION
       // ============================================================================
 
+      let rootKey: Buffer;
       try {
-        decryptPrivateKey(this.encryptedPrivateKey, password);
-        return true;
+        rootKey = decryptPrivateKey(this.encryptedPrivateKey, password);
       } catch (e) {
         return false;
       }
+      // A verified password is the moment to upgrade stored secrets (unlock
+      // verifies here). Non-blocking, never affects the answer.
+      void this.upgradeStoredSecrets(rootKey, password);
+      return true;
     }
   }
 
