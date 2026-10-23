@@ -3888,6 +3888,7 @@ export default {
   'security.mpcRevealFailed': 'No se pudo mostrar la frase de recuperación',
   'security.authenticatorCode': 'Código de autenticación',
   'security.unlockFailed': 'No se pudo desbloquear la billetera',
+  'unlockGuard.tooManyAttempts': 'Demasiados intentos. Inténtalo de nuevo en {seconds} segundos.',
   'security.logoutInstead': 'Mejor cerrar sesión',
   'security.passKeyFailed': 'Falló la autenticación con PassKey',
   'security.lockSettings': 'Bloqueo de billetera y PassKey',

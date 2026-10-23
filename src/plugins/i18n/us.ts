@@ -3967,6 +3967,7 @@ export default {
   'security.mpcRevealFailed': 'Could not reveal the recovery phrase',
   'security.authenticatorCode': 'Authenticator Code',
   'security.unlockFailed': 'Failed to unlock wallet',
+  'unlockGuard.tooManyAttempts': 'Too many attempts. Try again in {seconds} seconds.',
   'security.logoutInstead': 'Logout Instead',
   'security.passKeyFailed': 'PassKey authentication failed',
 

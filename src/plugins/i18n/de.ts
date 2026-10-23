@@ -3304,6 +3304,7 @@ export default {
   'security.twoFactorAuth': 'Zwei-Faktor-Authentifizierung',
   'security.unlock': 'Entsperren',
   'security.unlockFailed': 'Wallet konnte nicht entsperrt werden',
+  'unlockGuard.tooManyAttempts': 'Zu viele Versuche. Bitte in {seconds} Sekunden erneut versuchen.',
   'security.unlockMethod': 'Methode zum Entsperren der Wallet',
   'security.unlockMethodUpdateFailed': 'Aktualisierung der Entsperrmethode fehlgeschlagen',
   'security.unlocking': 'Wird entsperrt...',

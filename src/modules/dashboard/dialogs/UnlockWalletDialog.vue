@@ -303,6 +303,8 @@ interface BackgroundMessageResponse {
     success?: boolean;
     error?: string;
     tokens?: { idToken: string; accessToken: string };
+    /** Set when the background refuses an attempt during its back-off. */
+    retryAfterMs?: number;
   };
   error?: string;
 }
@@ -842,6 +844,11 @@ async function handleUnlock(passKeyAuthenticated = false) {
     if (response.data?.success) {
       emit('update:modelValue', false);
       emit('unlocked');
+    } else if (response.data?.retryAfterMs) {
+      showError(t('unlockGuard.tooManyAttempts', { seconds: Math.ceil(response.data.retryAfterMs / 1000) }));
+      pinCode.value = '';
+      pattern.value = [];
+      password.value = '';
     } else if (response.error) {
       showError(t('security.unlockFailed'));
     } else {

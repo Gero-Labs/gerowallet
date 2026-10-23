@@ -61,6 +61,7 @@ import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import { UnlockTargetChangedError } from '@/chrome/unlockStartup';
+import { UnlockThrottledError, unlockThrottle, verifySecondFactor } from '@/chrome/unlockGuards';
 import { resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
@@ -281,10 +282,20 @@ export class WalletManager {
    * @param wallet - Wallet data to log in with
    * @returns WalletBg instance or null if failed
    */
-  async login(wallet): Promise<WalletBg | null> {
+  /**
+   * @param options.requireUnlock - Log the wallet in LOCKED (the background's
+   *   LOGIN decides this: a locked or logged-out session is never unlocked by a
+   *   LOGIN alone). The lock is set before the wallet becomes the logged one.
+   */
+  async login(wallet, options: { requireUnlock?: boolean } = {}): Promise<WalletBg | null> {
+    const requireUnlock = options.requireUnlock === true;
     const pending = this.pendingLogins.get(wallet.id);
-    if (pending) return pending;
-    const operation = this.loginWallet(wallet);
+    if (pending) {
+      const joined = await pending;
+      if (joined && requireUnlock) WalletStore.setLocked(true);
+      return joined;
+    }
+    const operation = this.loginWallet(wallet, requireUnlock);
     this.pendingLogins.set(wallet.id, operation);
     try {
       return await operation;
@@ -293,10 +304,13 @@ export class WalletManager {
     }
   }
 
-  private async loginWallet(requested): Promise<WalletBg | null> {
+  private async loginWallet(requested, requireUnlock = false): Promise<WalletBg | null> {
     // Do not raise transient flags for a wallet that is already initialized.
     // An in-flight initialization is joined by login() before reaching here.
-    if (this.walletBg && this.currentWalletId === requested.id) return this.walletBg;
+    if (this.walletBg && this.currentWalletId === requested.id) {
+      if (requireUnlock) WalletStore.setLocked(true);
+      return this.walletBg;
+    }
 
     debugLog('WalletManager: Starting login process');
     // Set syncing flag BEFORE setLoggedWallet — prevents router from navigating to dashboard
@@ -326,6 +340,10 @@ export class WalletManager {
         // on a switch, so there is no cross-wallet leakage to defend against here.
         TapToolsStore.clear();
         const walletBg = new WalletBg(wallet);
+
+        // Locked BEFORE it becomes the logged wallet, so it is never shown or
+        // served unlocked in between (the switch's logout above cleared the lock).
+        if (requireUnlock && wallet.encryptionMethod !== 'mpc') WalletStore.setLocked(true);
 
         WalletStore.setLoggedWallet({
           id: walletBg.id,
@@ -1025,14 +1043,18 @@ export class WalletManager {
       // Clear cached MPC root-key bytes — signing an MPC wallet after a lock
       // requires re-unlock, same as PRF wallets require a fresh WebAuthn prompt.
       mpcSessionCache.clearAll();
-      // NOTE: deliberately DO NOT clear mpcLoginShareCache here. Keeping the
-      // login share across a lock lets the still-logged-in wallet be re-unlocked
-      // with only the device secret (passkey/spending password) — no repeat
-      // Google sign-in — while re-auth (the passkey/password) is still required.
-      // It is dropped on logout / wallet switch and on browser close (it lives in
-      // chrome.storage.session, which survives service-worker restarts).
       // Set locked state
       WalletStore.setLocked(true);
+      // Drop the cached Google login shares too: an MPC wallet is 2-of-3, and a
+      // cached login share plus the device secret would let a locked wallet be
+      // reopened without Google. After a lock the unlock asks for Google again.
+      // (A service-worker restart is not a lock: the cache survives that.)
+      // Best-effort, after the lock is set, so a storage error never leaves it open.
+      try {
+        await mpcLoginShareCache.clearAll();
+      } catch (e) {
+        console.warn('Failed to clear MPC login shares on lock:', e);
+      }
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again
       debugLog('WalletManager: Wallet locked successfully');
     } catch (error) {
@@ -1060,23 +1082,57 @@ export class WalletManager {
     providedUnlockMethod?: string,
     useWalletBg: boolean = false
   ): Promise<boolean> {
-    // Import security utilities
-    const { verifyPin, verifyPattern, verifyTotpCode, decryptSecurityData } = await import('@/shared/utils/security');
-    const { getDb } = await import('@/db/wallet-db');
-
     // Get security config from wallet database. An added account is unlocked
     // with its account #0's settings and secrets, which only that record holds.
     const { getAllWallets } = await import('@/db/gero-db');
     const walletsMap: Record<number, Wallet> = await getAllWallets();
     const settingsWalletId = walletsMap[walletId] ? secretsWallet(walletsMap[walletId], walletsMap).id : walletId;
+
+    // Back-off after repeated wrong credentials, enforced here rather than in the
+    // UI. A storage error reading the counter must not lock the user out.
+    try {
+      await unlockThrottle.assertAllowed(settingsWalletId);
+    } catch (e) {
+      if (e instanceof UnlockThrottledError) throw e;
+    }
+
+    const valid = await this.checkUnlockCredentials(
+      walletId, settingsWalletId, walletsMap, unlockCredential, totpCode, password, providedUnlockMethod, useWalletBg,
+    );
+    try {
+      if (valid) await unlockThrottle.recordSuccess(settingsWalletId);
+      else await unlockThrottle.recordFailure(settingsWalletId);
+    } catch {
+      // Counting is best-effort; the answer stands.
+    }
+    return valid;
+  }
+
+  /** The credential check itself. Throws on a missing configuration (not counted as a wrong attempt). */
+  private async checkUnlockCredentials(
+    walletId: number,
+    settingsWalletId: number,
+    walletsMap: Record<number, Wallet>,
+    unlockCredential: string | number[],
+    totpCode: string | undefined,
+    password: string | undefined,
+    providedUnlockMethod: string | undefined,
+    useWalletBg: boolean,
+  ): Promise<boolean> {
+    const { verifyPin, verifyPattern, decryptSecurityData } = await import('@/shared/utils/security');
+    const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(settingsWalletId);
     const configTable = db.table('config');
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-    const twoFactorConfig = await configTable.where({ key: 'twoFactorEnabled' }).first();
+    const configuredMethod: string | null = unlockMethodConfig?.value || null;
 
-    // Use provided unlock method (for PassKey override) or read from database
-    const unlockMethod = providedUnlockMethod || unlockMethodConfig?.value;
+    // The configured method decides. A request may name it, or fill in when none is
+    // configured, but never swap a configured PIN for another check.
+    if (providedUnlockMethod && configuredMethod && providedUnlockMethod !== configuredMethod) {
+      return false;
+    }
+    const unlockMethod = configuredMethod || providedUnlockMethod;
 
     if (!unlockMethod) {
       // No unlock method set, verification succeeds
@@ -1097,18 +1153,28 @@ export class WalletManager {
     // when the real MessageSender is one of our own chrome-extension:// pages; a content script (which
     // shares our sender.id) or an injected page script can't reach this flow. UNLOCK must never be added
     // to CONTENT_SCRIPT_OPTIONS_METHODS.
-    // Defense-in-depth: lockpassword-verified requires encryptionMethod === 'prf' to prevent
-    // a normal wallet from bypassing spending password verification if this signal is sent by mistake.
-    // If encryptionMethod lookup fails (DB error → undefined), browserVerified is false and the code
-    // falls through to the normal password branch, which safely fails when trying to decrypt with
-    // the literal string 'lockpassword-verified' as a spending password.
-    let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
-    if (!encryptionMethod) {
-      encryptionMethod = walletsMap[settingsWalletId]?.encryptionMethod;
+    // Each signal is honoured only for the wallet being unlocked, and only when that
+    // wallet's own secrets record is set up for it (never the logged-in wallet's):
+    // - 'passkey-authenticated': a PRF wallet (its PassKey is its credential), or a
+    //   wallet with PassKey unlock switched on and a credential registered;
+    // - 'lockpassword-verified': a PRF wallet whose configured method is its lock
+    //   password. Any other signal falls through to the real check below, which
+    //   fails on the literal string.
+    const settingsRecord = walletsMap[settingsWalletId];
+    const encryptionMethod = settingsRecord?.encryptionMethod;
+    let passKeyUnlockConfigured = false;
+    if (unlockCredential === 'passkey-authenticated') {
+      if (encryptionMethod === 'prf') {
+        passKeyUnlockConfigured = !!settingsRecord?.webAuthnCredentialId;
+      } else {
+        const passKeyForUnlock = await configTable.where({ key: 'passKeyForUnlock' }).first();
+        const credentialId = await configTable.where({ key: 'webAuthnCredentialId' }).first();
+        passKeyUnlockConfigured = passKeyForUnlock?.value === true && !!credentialId?.value;
+      }
     }
     const browserVerified =
-      (unlockCredential === 'passkey-authenticated') ||
-      (unlockCredential === 'lockpassword-verified' && unlockMethod === 'password' && encryptionMethod === 'prf');
+      (unlockCredential === 'passkey-authenticated' && passKeyUnlockConfigured) ||
+      (unlockCredential === 'lockpassword-verified' && configuredMethod === 'password' && encryptionMethod === 'prf');
     if (browserVerified) {
       unlockValid = true;
     } else if (unlockMethod === 'password') {
@@ -1160,6 +1226,12 @@ export class WalletManager {
         } catch (error) {
           unlockValid = false;
         }
+        if (unlockValid) {
+          // A verified password: move old stored secret formats forward. Never blocks or fails unlock.
+          void import('@/chrome/secretMigration')
+            .then(m => m.upgradeSecretsAfterPasswordDecrypt(settingsWalletId, unlockCredential as string))
+            .catch(() => {});
+        }
       }
     } else if (unlockMethod === 'pin') {
       // Check for new format (pinHash) or old format (encryptedPinHash)
@@ -1192,22 +1264,8 @@ export class WalletManager {
     }
 
     // Verify 2FA if enabled
-    if (twoFactorConfig && twoFactorConfig.value === true) {
-      if (!totpCode || !password) {
-        throw new Error('2FA enabled but TOTP code or password not provided');
-      }
-
-      const totpSecretConfig = await configTable.where({ key: 'encryptedTotpSecret' }).first();
-      if (!totpSecretConfig) {
-        throw new Error('TOTP secret not found');
-      }
-
-      const totpSecret = decryptSecurityData(totpSecretConfig.value, password) as string;
-      const totpValid = verifyTotpCode(totpCode, totpSecret);
-
-      if (!totpValid) {
-        return false;
-      }
+    if (!(await verifySecondFactor(configTable, totpCode, password))) {
+      return false;
     }
 
     // Credentialed moment: re-derive the Midnight zswap keys and start the
@@ -1330,7 +1388,7 @@ export class WalletManager {
       debugLog('WalletManager: Wallet unlocked successfully');
       return true;
     } catch (error) {
-      if (error instanceof UnlockTargetChangedError) throw error;
+      if (error instanceof UnlockTargetChangedError || error instanceof UnlockThrottledError) throw error;
       console.error('Error unlocking wallet:', error);
       return false;
     }
@@ -1362,6 +1420,7 @@ export class WalletManager {
 
       return isValid;
     } catch (error) {
+      if (error instanceof UnlockThrottledError) throw error;
       console.error('Error verifying pre-login unlock:', error);
       return false;
     }
