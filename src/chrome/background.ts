@@ -158,6 +158,17 @@ let resolveBooted: () => void = () => {};
 const workerBooted = new Promise<void>((resolve) => { resolveBooted = resolve; });
 const booted = () => Promise.race([workerBooted, new Promise<void>((resolve) => setTimeout(resolve, 15_000))]);
 
+/** True when gero-db holds a wallet record with this id. A read error answers true: login decides. */
+async function isStoredWallet(id: unknown): Promise<boolean> {
+  if (typeof id !== 'number') return false;
+  try {
+    const { getDb } = await import('@/db/gero-db');
+    return (await (await getDb())['wallets'].get(id)) != null;
+  } catch {
+    return true;
+  }
+}
+
 loadWallets().then(async () => {
   // PRIV-01: older releases stored the Midnight viewing key in plaintext on the
   // wallet record. Scrub it before anything reads the records; the live query
@@ -185,6 +196,12 @@ loadWallets().then(async () => {
   // awaited, and it needs no logged-in wallet; the opt-out rule inside makes it a no-op
   // (queue flush only) while the user has not turned notifications on.
   void notifyReassert('start');
+
+  // The logged wallet comes back from storage; only a wallet the database still holds
+  // is logged in again (login then takes its keys and secrets from that record).
+  if (walletStore.loggedWallet && !(await isStoredWallet(walletStore.loggedWallet.id))) {
+    WalletStore.logout();
+  }
 
   if (walletStore.loggedWallet) {
     // Safety: clear stale isLocked if no unlock method is configured
@@ -686,10 +703,14 @@ const processedDomains: Set<string> = new Set<string>();
 // Skips the phishing url-scan/overlay so it can't disrupt the Trezor handshake.
 const TRUSTED_DOMAINS: Set<string> = new Set<string>(['gerowallet.io', 'trezor.io']);
 
-chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
-  const domains = result['processedDomains'] || [];
-  domains.forEach((domain: string) => processedDomains.add(domain));
+// Sites the user let past the phishing check. In chrome.storage.session, which content
+// scripts cannot reach (chrome.storage.local is theirs to write, and a domain added
+// there would skip the check). Older releases kept the list in chrome.storage.local.
+chrome.storage.session.get(['processedDomains'], (result) => {
+  const domains = result['processedDomains'];
+  if (Array.isArray(domains)) domains.forEach((domain: string) => processedDomains.add(domain));
 });
+void chrome.storage.local.remove(['processedDomains', 'lastCleared']).catch(() => undefined);
 
 // Cleanup: drop the orphaned `realFiStore` key. It cached price candles for the removed
 // legacy price-candles store; nothing reads or writes it now, but existing installs still
@@ -710,7 +731,7 @@ chrome.storage.local.get('realFiStore', (result) => {
 
 function clearProcessedDomains() {
   processedDomains.clear();
-  chrome.storage.local.remove(['processedDomains', 'lastCleared'], () => {
+  chrome.storage.session.remove(['processedDomains'], () => {
     if (chrome.runtime.lastError) {
       console.error('Error removing processedDomains from storage:', chrome.runtime.lastError);
     }
@@ -878,7 +899,7 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       const res = await handleBlacklisted(request, details.tabId);
       if (res['data'] === 'proceed') {
         processedDomains.add(domain);
-        await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+        await chrome.storage.session.set({ processedDomains: Array.from(processedDomains) });
         await chrome.tabs.sendMessage(details.tabId, { action: 'removeOverlay', url: request.origin });
       } else if (res['data'] === 'safety') {
         await chrome.tabs.update(details.tabId, { url: 'https://www.google.com' });
@@ -886,7 +907,7 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
         await chrome.tabs.update(details.tabId, { url: chrome.runtime.getURL(`index.html#/transactions?website=${request.origin}`) });
       } else if (res === 'approved') {
         processedDomains.add(domain);
-        await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+        await chrome.storage.session.set({ processedDomains: Array.from(processedDomains) });
       } else if (res === 'skip') {
         // nothing
       } else {

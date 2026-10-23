@@ -62,7 +62,7 @@ import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import { UnlockTargetChangedError } from '@/chrome/unlockStartup';
 import { UnlockThrottledError, unlockThrottle, verifySecondFactor } from '@/chrome/unlockGuards';
-import { resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
+import { GROUP_SECRET_FIELDS, resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
 // dynamic `import()` here cannot produce a separate chunk — Rollup inlines the
@@ -79,6 +79,15 @@ import { resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets }
 // namespace const regresses behind its first reader.
 import midnightSyncService from '@/services/midnight-sync.service';
 import { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession, clearMidnightPrivateSession } from '@/chains/midnight/midnightPrivateSyncSession';
+
+/**
+ * Record fields whose only source is the stored wallet record, with its secrets
+ * (GROUP_SECRET_FIELDS): the wallet's keys and account. When the record lacks one,
+ * the login object must not supply it either (resolveGroupSecrets).
+ */
+const RECORD_IDENTITY_FIELDS: readonly string[] = [
+  'publicKey', 'accountIndex', 'parentWalletId', 'type', 'chain', 'network', 'addressType', 'watchAddress', 'xfp',
+];
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -250,14 +259,23 @@ export class WalletManager {
   }
 
   /**
-   * The record to log in with. An account added under another record stores no
-   * secrets and takes its account #0's (withGroupSecrets); any other wallet is
-   * logged in as given.
+   * The record to log in with. Its keys, account and secrets come from the stored
+   * record, never from the object passed in: at a worker start that is the copy
+   * hydrated from chrome.storage.local, which any content script can rewrite. An
+   * account added under another record stores no secrets and takes its account
+   * #0's (withGroupSecrets). A wallet with no stored record is logged in as given.
    */
   private async resolveGroupSecrets(wallet) {
-    if (wallet?.parentWalletId == null) return wallet;
     const { getAllWallets } = await import('@/db/gero-db');
-    return withGroupSecrets(wallet, await getAllWallets());
+    const wallets = await getAllWallets();
+    const stored = wallets[wallet?.id];
+    if (!stored) return wallet;
+    const record = { ...wallet, ...stored };
+    for (const field of [...GROUP_SECRET_FIELDS, ...RECORD_IDENTITY_FIELDS]) {
+      if (!(field in stored)) delete record[field];
+    }
+    // Also sets secretsWalletId from the stored records, whatever the object said.
+    return withGroupSecrets(record, wallets);
   }
 
   /**
