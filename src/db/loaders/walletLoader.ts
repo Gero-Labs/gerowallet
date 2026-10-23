@@ -7,6 +7,7 @@ import Loading from '@/stores/loading';
 import { debugLog } from '@/utils/debug';
 import { StoredTransaction, TxAsset } from '@/models/transaction.types';
 import { SUBMIT_API_AUTH_CONFIG_KEY } from '@/shared/utils/submitApiConfig';
+import { SECRET_CONFIG_KEYS } from '@/utils/storageRedaction';
 
 /** Loose UTxO shape used for input token-amount resolution (see resolveInputAmounts). */
 type ResolvableUtxo = { tx_hash?: string; output_index?: number; address?: string; amount?: unknown[] };
@@ -112,9 +113,11 @@ export class ContactsLoader extends BaseLoader {
  * Config rows that must never reach walletStore. Everything ConfigLoader loads is
  * broadcast to every extension context and persisted in chrome.storage.local, where
  * content-script storage listeners in every tab can see it. Readers of these rows
- * query the wallet DB directly in the background (src/chrome/submitApiStore.ts).
+ * query the wallet DB directly (the Submit API header only in the background,
+ * src/chrome/submitApiStore.ts; the secrets in SECRET_CONFIG_KEYS from the pages
+ * and the worker that need them).
  */
-export const PRIVATE_CONFIG_KEYS: ReadonlySet<string> = new Set([SUBMIT_API_AUTH_CONFIG_KEY]);
+export const PRIVATE_CONFIG_KEYS: ReadonlySet<string> = new Set([SUBMIT_API_AUTH_CONFIG_KEY, ...SECRET_CONFIG_KEYS]);
 
 export function configRowsToMap(rows: Array<{ key: string; value: unknown }>): Record<string, unknown> {
   return rows.reduce<Record<string, unknown>>((map, row) => {

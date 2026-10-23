@@ -69,6 +69,13 @@ export async function removeContact(id: number, address: string) {
   await db.table('contacts').delete(address);
 }
 
+/** The dApps a wallet is connected to, as its database lists them. */
+export async function getConnectedDapps(walletId: number): Promise<Array<{ id?: number; domain: string; time?: number }>> {
+  const db = await getDb(walletId);
+  if (!db) throw new Error('Wallet database unavailable');
+  return db.table('connected_dapps').toArray();
+}
+
 export async function addConnectedDapp(walletId: number, domain: string) {
   try {
     const db: Dexie = await getDb(walletId);
