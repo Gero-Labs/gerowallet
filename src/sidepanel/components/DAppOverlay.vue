@@ -138,6 +138,7 @@
           v-if="approvalSummary"
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
+          v-model:foreign-value-ack="foreignValueAck"
           :primary-color="primaryColor"
         />
 
@@ -1071,7 +1072,7 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
-import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
@@ -1897,7 +1898,11 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     const walletNetworkId = wallet
       ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
       : null;
-    return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo));
+    const collateral = WalletStore.state.collateral;
+    return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo, {
+      ownUtxos: [...utxos.value, ...(collateral ? [collateral] : [])],
+      deposits: approvalDepositsFrom(networkStore.epochParams),
+    }));
   } catch (e) {
     console.error('[DAppOverlay] Failed to decode signTx CBOR:', e);
     return null;
@@ -1957,6 +1962,10 @@ const signTxNetworkMismatch = computed(() => {
 });
 const networkMismatchAck = ref(false);
 
+// A deposit refunded to someone else, or the wallet's collateral returned to
+// another address (blocking, acknowledged in TxApprovalIntents).
+const foreignValueAck = ref(false);
+
 // Proportional risk friction: the Cardano Shield badge was purely
 // decorative (rendered in TransactionDetailsCard's header, never gated
 // anything). Quiet when safe — low/medium/unverified show only the existing
@@ -1971,6 +1980,7 @@ const signTxBlocked = computed(() =>
   ttlDisplay.value.expired
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
+  || (!!approvalSummary.value?.requiresForeignValueAck && !foreignValueAck.value)
   || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
 
@@ -2121,6 +2131,7 @@ watch(currentRequest, () => {
   faviconAttempt.value = 0;
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
+  foreignValueAck.value = false;
   highRiskAck.value = false;
 });
 

@@ -54,6 +54,7 @@
           class="mt-2"
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
+          v-model:foreign-value-ack="foreignValueAck"
         />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
@@ -253,10 +254,11 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
-import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import filters from '@/shared/utils/filters';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
@@ -323,9 +325,13 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     const walletNetworkId = wallet
       ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
       : null;
+    const collateral = walletStore.collateral;
     return buildTxApprovalSummary(
       tx.value,
-      approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 })),
+      approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 }), {
+        ownUtxos: [...utxos.value, ...(collateral ? [collateral] : [])],
+        deposits: approvalDepositsFrom(networkStore.epochParams),
+      }),
     );
   } catch {
     return null;
@@ -335,11 +341,13 @@ const approvalCard = computed(() =>
   approvalSummary.value ? toTransactionDetailsCardProps(approvalSummary.value, filters.truncate) : null,
 );
 const networkMismatchAck = ref(false);
-// Sign is blocked until a network mismatch is explicitly acknowledged.
+const foreignValueAck = ref(false);
+// Sign is blocked until a network mismatch, and a deposit refund or collateral
+// return to someone else, are explicitly acknowledged.
 const signBlocked = computed(() =>
   !!approvalSummary.value
-  && (approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch)
-  && !networkMismatchAck.value,
+  && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
+    || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)),
 );
 
 const txAutoSubmit = computed(() => {

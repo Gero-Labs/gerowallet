@@ -38,4 +38,19 @@ describe('signTx approval surfaces share one summary', () => {
     const src = read('sidepanel/components/DAppOverlay.vue');
     expect(src).toMatch(/s\.bodyNetworkMismatch \|\| s\.outputNetworkMismatch/);
   });
+
+  // A deposit refunded to someone else, or the wallet's collateral returned to a
+  // foreign address, blocks Sign on both surfaces until acknowledged, and both
+  // give the summary the wallet's UTxOs so "You pay" counts the wallet's inputs.
+  for (const [file, gate] of [
+    ['sidepanel/components/DAppOverlay.vue', /approvalSummary\.value\?\.requiresForeignValueAck && !foreignValueAck\.value/],
+    ['popup/modules/views/SignTx.vue', /approvalSummary\.value\.requiresForeignValueAck && !foreignValueAck\.value/],
+  ] as const) {
+    it(`${file} gates Sign on the foreign-value acknowledgement and passes its UTxOs`, () => {
+      const src = read(file);
+      expect(src).toMatch(gate);
+      expect(src).toContain('v-model:foreign-value-ack="foreignValueAck"');
+      expect(src).toMatch(/ownUtxos: \[\.\.\.utxos\.value/);
+    });
+  }
 });
