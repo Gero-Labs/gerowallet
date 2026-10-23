@@ -20,6 +20,10 @@
  * structural view (ledger 9 wraps a verifying key as `{ tag, value }`).
  */
 
+// Ledger-8 codecs are static: WalletBg imports this module, and in the background's
+// single iife an inlined `await import()` of this package reads a namespace const
+// declared after it (scripts/check-bundle-tdz.mjs). Ledger 9's stays lazy.
+import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
 import { debugLog } from '@/utils/debug';
 
 type KeyLike = string | { value?: unknown };
@@ -240,10 +244,9 @@ export async function midnightAddressDecoder(sdkNetworkId: string): Promise<{
       dustPublicKey: (bech32) => f.DustAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).data,
     };
   }
-  const f = await import('@midnightntwrk/wallet-sdk-address-format');
   return {
-    unshieldedHex: (bech32) => lower(f.UnshieldedAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).hexString),
-    dustPublicKey: (bech32) => f.DustAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).data,
+    unshieldedHex: (bech32) => lower(UnshieldedAddress.codec.decode(id, MidnightBech32m.parse(bech32)).hexString),
+    dustPublicKey: (bech32) => DustAddress.codec.decode(id, MidnightBech32m.parse(bech32)).data,
   };
 }
 

@@ -104,6 +104,7 @@ import {
 import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
+import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
 import {
@@ -2579,7 +2580,6 @@ export class WalletBg {
 
         // The segment signature authorizes every input of the intent, so sign only
         // a registration of this wallet's own NIGHT for the DUST address the user chose.
-        const { assertMidnightDustRegistrationMatches } = await import('@/chains/midnight/midnightBuiltTxGuard');
         await assertMidnightDustRegistrationMatches(
           networkId, unprovenTxHex,
           { ownKeyHex: bgPublicKey, ownAddressHex: derived.addressHex },
@@ -2848,7 +2848,6 @@ export class WalletBg {
         // Nexus built this transaction. Every unshielded input it spends is this
         // wallet's and the signature below authorizes all of them, so sign only
         // a transaction that is exactly the send the user asked for.
-        const { assertMidnightTransferMatches } = await import('@/chains/midnight/midnightBuiltTxGuard');
         await assertMidnightTransferMatches(
           sdkNetworkId, unprovenTxHex,
           { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
