@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
+import { routeFromQuoteEvent, swapSpendBound, type SwapRouteLike } from '../composables/orderSpendBound';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
@@ -296,10 +297,15 @@ function onTransportCancel() {
   transportReject = null;
 }
 
+// The route of the latest quote: what the user agreed to sell, and the order's
+// fees. The signer refuses a built order that takes more than this.
+let quotedRoute: SwapRouteLike | null = null;
+
 const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
   getIsBT: () => isBT.value,
+  getSpendBound: () => (quotedRoute ? swapSpendBound(quotedRoute) : null),
 });
 
 // The widget signs both swaps and order cancels through signTx, so the question sits
@@ -479,7 +485,13 @@ function registerSwapForAlerts(detail: unknown) {
   }
 }
 
+function onQuote(e: Event) {
+  quotedRoute = routeFromQuoteEvent((e as CustomEvent).detail);
+}
+
 function onSwapSubmitted(e: Event) {
+  // The quote is spent: a later signature (e.g. an order cancel) gets no budget from it.
+  quotedRoute = null;
   const detail = (e as CustomEvent).detail;
   emit('swap-submitted', detail);
   registerSwapForAlerts(detail);
@@ -516,6 +528,7 @@ function attach() {
   if (!node) return;
   wireProps();
   tryResolveDefaultGeroTokenOut();
+  node.addEventListener('quote', onQuote);
   node.addEventListener('swap-submitted', onSwapSubmitted);
   node.addEventListener('swap-error', onSwapError);
   node.addEventListener('token-change', onTokenChange);
@@ -528,6 +541,7 @@ function detach() {
   }
   const node = geroSwapEl.value;
   if (!node) return;
+  node.removeEventListener('quote', onQuote);
   node.removeEventListener('swap-submitted', onSwapSubmitted);
   node.removeEventListener('swap-error', onSwapError);
   node.removeEventListener('token-change', onTokenChange);

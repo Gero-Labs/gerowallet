@@ -17,7 +17,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
+import type { SpendBound } from '@/shared/utils/txIntentGuard';
 import { REALFI_ASSETS } from '../assets';
+import { realfiSpendBound } from '../services/realfiSpendBound';
 import {
   buildOrder,
   RealFiOrderError,
@@ -29,8 +31,11 @@ import {
 export type RealFiOrderStage = 'idle' | 'building' | 'signing' | 'submitting' | 'done' | 'error';
 
 export interface RealFiOrderSigner {
-  /** Returns the witness-set CBOR hex for the given unsigned transaction. */
-  signTx(unsignedTxCbor: string): Promise<string>;
+  /**
+   * Returns the witness-set CBOR hex for the given unsigned transaction, refusing
+   * one that takes more from the wallet than `bound` allows.
+   */
+  signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string>;
 }
 
 /** Thrown by a prompt the user dismissed. Not a failure: the flow just stops. */
@@ -109,7 +114,7 @@ export function useRealFiOrder(signer: RealFiOrderSigner) {
     stage.value = 'signing';
     let witnessHex: string;
     try {
-      witnessHex = await signer.signTx(built.txCbor);
+      witnessHex = await signer.signTx(built.txCbor, realfiSpendBound(req, wallet.network));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof SigningCancelled || DISMISSED.has(message)) {

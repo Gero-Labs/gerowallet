@@ -322,7 +322,11 @@
               <div class="review-card">
                 <div class="review-row">
                   <span class="detail-label">{{ $t('miniGero.to') }}</span>
-                  <span class="detail-value">{{ handleName || truncateAddr(paymentAddress) }}</span>
+                  <span class="detail-value">
+                    {{ handleName || truncateAddr(paymentAddress) }}
+                    <!-- A handle is resolved by a server: show the address it resolved to. -->
+                    <span v-if="handleName" class="d-block grey--text text-caption" data-testid="send-review-handle-address">{{ truncateAddr(paymentAddress) }}</span>
+                  </span>
                 </div>
                 <div class="review-row">
                   <span class="detail-label">ADA</span>
@@ -582,6 +586,7 @@ import { useChainContext } from '../../composables/useChainContext';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
+import { matchIntendedOutputs } from '@/shared/utils/txIntentGuard';
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -1148,8 +1153,12 @@ async function buildTransaction() {
     if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
     tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
 
+    // Review what will be signed: the recipient's output as decoded from the built
+    // transaction. nexusTxApi has already refused a transaction without it.
+    const [sentIndex] = matchIntendedOutputs(tx.value, [{ address: recipientAddr, lovelace: coinsAmount, assets: assetsMap }]);
+    if (sentIndex < 0) throw new Error(i18n.t('txGuard.builtTxMismatch') as string);
     txFee.value = tx.value.body.fee;
-    sentOutput.value = outputs[0];
+    sentOutput.value = tx.value.body.outputs[sentIndex];
     txBuilt.value = true;
     return true;
   } catch (e: unknown) {

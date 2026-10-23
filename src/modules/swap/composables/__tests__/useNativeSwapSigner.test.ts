@@ -43,19 +43,95 @@ vi.mock('@cardano-sdk/core', async () => {
     ...actual,
     Serialization: {
       ...actual.Serialization,
-      Transaction: { fromCbor: vi.fn(() => ({ toCore: () => ({}) })) },
+      // An empty transaction by default: it takes nothing, so the spend check passes and
+      // the dispatch tests below exercise only dispatch. The budget tests set their own.
+      Transaction: { fromCbor: vi.fn(() => ({ toCore: () => ({ body: { inputs: [], outputs: [], fee: 0n }, witness: {} }) })) },
       TransactionWitnessSet: { fromCore: vi.fn(() => ({ toCbor: () => 'LEDGER_TREZOR_WIT' })) },
     },
   };
 });
 
+import { Serialization } from '@cardano-sdk/core';
 import { useNativeSwapSigner } from '../useNativeSwapSigner';
+import { swapSpendBound } from '../orderSpendBound';
+
+const OWN = 'addr_test1qpdmx56dml9qtej5vxhejju492w9pfv7j9270wjh0pfe9hdzqxa4r35qhuqx29n693k4gqukhk3lfw37xkp4egvh6raq4d4rzj';
+const DEX = 'addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x';
+const TOKEN = `${'a'.repeat(56)}474552`;
+const TX = 'f'.repeat(64);
+
+// A 100 ADA wallet UTxO, sold for TOKEN: `toDex` lovelace goes to the order script, the rest returns.
+function orderTx(toDex: bigint, extraAssetToDex?: [string, bigint]) {
+  const assets = new Map(extraAssetToDex ? [extraAssetToDex] : []);
+  return {
+    body: {
+      inputs: [{ txId: TX, index: 0 }],
+      outputs: [
+        { address: DEX, value: { coins: toDex, assets } },
+        { address: OWN, value: { coins: 100_000_000n - toDex - 200_000n } },
+      ],
+      fee: 200_000n,
+    },
+    witness: {},
+  };
+}
 
 describe('useNativeSwapSigner', () => {
   beforeEach(() => {
     sendToBackgroundFromOptions.mockReset();
     dispatchTrezor.mockReset();
     walletState.loggedWallet = { type: 'Normal', baseAddress: 'addr_base' };
+    walletState.utxos = [];
+  });
+
+  describe('refuses an order that takes more than the quote allows', () => {
+    const route = { tokenIn: 'lovelace', amountIn: '50000000', batcherFeeLovelace: '2000000', orderDepositLovelace: '2000000' };
+    const bound = swapSpendBound(route);
+    const signWith = async (core: unknown) => {
+      vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => core } as never);
+      walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
+      sendToBackgroundFromOptions
+        .mockResolvedValueOnce({ data: { success: true } })
+        .mockResolvedValueOnce({ data: { witnesses: 'WIT' } });
+      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
+      return signer.signTx('CBOR');
+    };
+
+    it('signs 50 ADA sold plus the order leg', async () => {
+      await expect(signWith(orderTx(62_000_000n))).resolves.toBe('WIT');
+    });
+
+    it('refuses more ADA than the amount sold plus the leg, before asking for anything', async () => {
+      await expect(signWith(orderTx(90_000_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['spendExceeded'] });
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('refuses a token the order was not selling', async () => {
+      walletState.utxos = [];
+      const core = orderTx(52_000_000n, [TOKEN, 5n]);
+      core.body.inputs.push({ txId: TX, index: 1 });
+      vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => core } as never);
+      walletState.utxos = [
+        [{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }],
+        [{ txId: TX, index: 1 }, { address: OWN, value: { coins: 0n, assets: new Map([[TOKEN, 5n]]) } }],
+      ];
+      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
+      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ violations: ['spendExceeded'] });
+    });
+
+    it('without a quote, refuses an order that sends ADA away', async () => {
+      vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => orderTx(10_000_000n) } as never);
+      walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
+      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
+    });
+
+    it('refuses a transaction it cannot decode', async () => {
+      vi.mocked(Serialization.Transaction.fromCbor).mockImplementationOnce(() => { throw new Error('bad cbor'); });
+      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
   });
 
   it('getAddresses maps walletStore.keys + baseAddress', async () => {

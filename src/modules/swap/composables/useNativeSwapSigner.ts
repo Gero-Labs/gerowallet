@@ -11,8 +11,12 @@ import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
+import i18n from '@/plugins/i18n';
+import { debugLog } from '@/utils/debug';
+import { TxIntentMismatchError, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
 import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
+import { DEFAULT_ORDER_SPEND_BOUND } from './orderSpendBound';
 
 /**
  * Native `Signer` for the embedded `<gero-swap>` widget — dispatches signing across
@@ -38,6 +42,12 @@ export interface NativeSwapSignerOptions {
    * connected that way. GeroSwapEmbed.vue asks before each Ledger signature.
    */
   getIsBT?: () => boolean;
+  /**
+   * How much the transaction being signed may take from the wallet (see
+   * orderSpendBound.ts). The swap host answers from the quote the user
+   * accepted. Without one, only a signature that takes almost nothing passes.
+   */
+  getSpendBound?: () => SpendBound | null;
 }
 
 function isPrfWallet(w: Wallet | null | undefined): boolean {
@@ -223,7 +233,35 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
     keystoneReject = null;
   }
 
-  async function signTx(unsignedTxCbor: string): Promise<string> {
+  /**
+   * Refuse a transaction that takes more from the wallet than `bound` allows.
+   * The aggregator and Nexus build these orders; the wallet decides what it signs.
+   */
+  function assertWithinBound(unsignedTxCbor: string, bound: SpendBound): void {
+    let violations;
+    try {
+      const tx = Serialization.Transaction.fromCbor(unsignedTxCbor as never).toCore();
+      const keys = walletStore.keys;
+      const collateral = walletStore.collateral;
+      violations = verifySpendBound(tx, {
+        ownAddresses: [
+          ...[...(keys?.payment || []), ...(keys?.change || [])].map((k: Key) => k.address),
+          walletStore.loggedWallet?.baseAddress,
+        ].filter((a): a is string => !!a),
+        ownUtxos: [...cardanoUtxos(), ...(collateral ? [collateral] : [])],
+      }, bound);
+    } catch (e) {
+      debugLog('Native signer: could not verify the order', e);
+      violations = null;
+    }
+    if (!violations || violations.length > 0) {
+      if (violations) debugLog('Native signer: refused an order over its budget', violations);
+      throw new TxIntentMismatchError(String(i18n.t('txGuard.orderMismatch')), violations ?? []);
+    }
+  }
+
+  async function signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string> {
+    assertWithinBound(unsignedTxCbor, bound ?? opts.getSpendBound?.() ?? DEFAULT_ORDER_SPEND_BOUND);
     const type = walletStore.loggedWallet?.type;
     // Hardware wallets sign in the page, so a collateral input borrowed from the Nexus pool
     // gets its co-signature here; password and PRF wallets get it in the worker's SIGN_TX.

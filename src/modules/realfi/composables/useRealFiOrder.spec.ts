@@ -47,7 +47,13 @@ describe('useRealFiOrder', () => {
       changeAddress: 'addr_test1qbase',
       utxos: ['hex0', 'hex1'],
     });
-    expect(signTx).toHaveBeenCalledWith('84a4unsigned');
+    // ...with a budget: at most the staked USDrf (preprod) and the order's ADA leg may leave.
+    expect(signTx).toHaveBeenCalledWith('84a4unsigned', {
+      maxOutflow: new Map([
+        ['lovelace', 12_000_000n],
+        ['0684f582b8abeb4236b20688744eca788a61cd9881422a7113637f6b55534472', 5_000_000n],
+      ]),
+    });
     // Opaque: the unsigned CBOR goes to the background untouched, with the witnesses beside it.
     expect(send).toHaveBeenCalledWith({
       method: 'SUBMIT_TX',
