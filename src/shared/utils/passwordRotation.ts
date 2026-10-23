@@ -3,6 +3,7 @@ import { SecretPurpose, decrypt, decryptKeyBlob, decryptPrivateKey } from './cry
 import { resealKeySecret, resealTextSecret } from './secretWriters';
 import { CONFIG_SECRET_FIELDS, openConfigSecret, sealConfigSecret, type ConfigSecretField, type ConfigSecretPlain } from './walletSecretFields';
 import { debugLog } from '@/utils/debug';
+import { moveFromChromeLocal, setPrivateMany } from '@/utils/privateStore';
 
 /**
  * Re-encrypt every secret a password wallet stores under its spending password,
@@ -12,7 +13,7 @@ import { debugLog } from '@/utils/debug';
  *  1. `prepare` decrypts the root key and mnemonic with the current password
  *     (throws on a wrong one) and seals them under the new one. It also decrypts
  *     and re-seals the secondary secrets: 2FA data and the password-encrypted SPO
- *     cold key (per-wallet config), and the Strike key (chrome.storage.local). A
+ *     cold key (per-wallet config), and the Strike key (privateStore.ts). A
  *     secondary value that does not open with the current password is already
  *     unusable and is left as it is.
  *  2. The caller writes the wallets row, then calls `commitSecondary`, which is
@@ -89,7 +90,7 @@ interface StrikeRecord {
 async function prepareStrike(wallet: RotationWallet, currentPassword: string, newPassword: string): Promise<{ key: string; record: StrikeRecord } | null> {
   if (!hasChromeStorage() || wallet.encryptionMethod === 'prf') return null;
   const key = `strike_keys_${wallet.id}`;
-  const record = (await chrome.storage.local.get(key))?.[key] as StrikeRecord | undefined;
+  const record = await moveFromChromeLocal<StrikeRecord>(key);
   if (!record || typeof record.privateKeyEncrypted !== 'string') return null;
   let keyBytes: Buffer;
   try {
@@ -159,7 +160,7 @@ export async function prepareSpendingPasswordRotation(
         }
       }
       try {
-        if (strikes.length > 0) await chrome.storage.local.set(Object.fromEntries(strikes.map(({ key, record }) => [key, record])));
+        if (strikes.length > 0) await setPrivateMany(strikes.map(({ key, record }) => ({ key, value: record })));
       } catch (e) {
         debugLog('🔐 Could not re-encrypt secondary secrets after password change:', e);
       }
