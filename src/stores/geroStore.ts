@@ -248,10 +248,18 @@ export default {
    * language in gero-db, whose config live query hands it to every context.
    */
   async setWalletListBalances(on: boolean) {
+    const previous = geroStore.config.walletListBalances;
     geroStore.config.walletListBalances = on;
     broadcastFromBackground({ config: geroStore.config }, true);
-    const { setConfiguration } = await import('@/db/gero-db');
-    await setConfiguration('walletListBalances', on);
+    try {
+      const { setConfiguration } = await import('@/db/gero-db');
+      await setConfiguration('walletListBalances', on);
+    } catch (error) {
+      // As setLocale does: never show a choice that wasn't saved.
+      geroStore.config.walletListBalances = previous;
+      broadcastFromBackground({ config: geroStore.config }, true);
+      throw error;
+    }
   },
   setNetwork(network: NetworkInfo) {
     geroStore.network = network;

@@ -26,4 +26,15 @@ describe('setWalletListBalances', () => {
     expect(env.setConfiguration).toHaveBeenLastCalledWith('walletListBalances', true);
     vi.unstubAllGlobals();
   });
+
+  it('puts the previous choice back when it can\'t be saved', async () => {
+    vi.stubGlobal('chrome', { storage: { local: { set: vi.fn(async () => undefined) } }, runtime: {} });
+    const { default: store, geroStore } = await import('./geroStore');
+    geroStore.config.walletListBalances = true;
+    env.setConfiguration.mockRejectedValueOnce(new Error('database closed'));
+
+    await expect(store.setWalletListBalances(false)).rejects.toThrow('database closed');
+    expect(geroStore.config.walletListBalances).toBe(true);
+    vi.unstubAllGlobals();
+  });
 });
