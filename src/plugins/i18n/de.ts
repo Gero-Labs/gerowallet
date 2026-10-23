@@ -3619,7 +3619,7 @@ export default {
   'settings.setLanguageHelper': 'Anzeigesprache für die Wallet-Oberfläche festlegen',
   'settings.settings': 'Einstellungen',
   'settings.shopEarnPopups': 'Shop & Earn-Popups',
-  'settings.shopEarnPopupsHelper': 'Popup-Benachrichtigungen für Cashback-Angebote beim Einkaufen aktivieren',
+  'settings.shopEarnPopupsHelper': 'Cashback-Angebote beim Einkaufen anzeigen. Wenn du das ausschaltest, wird deine Wallet-Adresse auch nicht mehr mit Bring, unserem Cashback-Partner, geteilt.',
   'settings.showGuide': 'Anleitung anzeigen',
   'settings.showRecoveryPhrase': 'Wiederherstellungsphrase anzeigen',
   'settings.spendingSecuritySettings': 'Sicherheitseinstellungen für Ausgaben',

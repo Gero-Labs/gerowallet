@@ -24,6 +24,7 @@ import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, verifySecondF
 import { upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { embeddingSite } from '@/chrome/originBinding';
+import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -1159,12 +1160,18 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
-  // Gate dApp (CIP-30) callers on the whitelist. The origin-present guard leaves
-  // the trusted internal caller intact: Bring cashback runs in our own content
-  // script and calls this directly (no origin) to bypass the dApp whitelist by
-  // design (see content.ts getWalletAddress). Page requests always carry an
-  // origin (stamped by the relay), so they are always checked.
-  if (request.origin && !WalletStore.isWhitelisted(request.origin)) {
+  // dApp (CIP-30) callers need the whitelist; page requests always carry the
+  // relay-stamped origin. The one origin-less caller is our own content script,
+  // handing the address to Bring cashback (content.ts getWalletAddress): it gets
+  // it only while the user has cashback on. Nobody gets it while locked.
+  if (refuseWhileLocked(request, sendResponse)) return;
+  const releasable = await mayReleaseAddress({
+    origin: request.origin,
+    locked: walletStore.isLocked,
+    isWhitelisted: (origin) => WalletStore.isWhitelisted(origin),
+    bringOptedOut: () => readBringOptOut(),
+  });
+  if (!releasable) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
   }
@@ -1463,6 +1470,13 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
 app.add(METHOD.popupLogin, async (request, sendResponse) => {
   const reply = (opts: ReplyOpts) =>
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+
+  // Our own content script calls this without an origin (Bring's "log in"
+  // button, reachable only from Bring's own iframe). A page request always
+  // carries one and must come from a connected site.
+  if (request.origin !== undefined && !WalletStore.isWhitelisted(request.origin)) {
+    return reply({ error: APIError.Refused });
+  }
 
   // If somehow already logged in, resolve immediately.
   if (WalletStore.state.loggedWallet) {

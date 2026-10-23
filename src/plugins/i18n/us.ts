@@ -3127,7 +3127,7 @@ export default {
   'settings.setCollateral': 'Set Collateral',
   'settings.settings': 'Settings',
   'settings.shopEarnPopups': 'Shop & Earn Popups',
-  'settings.shopEarnPopupsHelper': 'Enable popup notifications for cashback opportunities while shopping',
+  'settings.shopEarnPopupsHelper': 'Show cashback offers while you shop. Turning this off also stops sharing your wallet address with Bring, our cashback partner.',
   'settings.showGuide': 'Show Guide',
   'settings.showRecoveryPhrase': 'Show Recovery Phrase',
   'settings.spendingSecuritySettings': 'Spending Security Settings',

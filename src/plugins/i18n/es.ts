@@ -3060,7 +3060,7 @@ export default {
   'settings.setCollateral': 'Configurar colateral',
   'settings.settings': 'Configuración',
   'settings.shopEarnPopups': 'Ventanas emergentes de Shop & Earn',
-  'settings.shopEarnPopupsHelper': 'Activa las notificaciones emergentes de oportunidades de cashback mientras compras',
+  'settings.shopEarnPopupsHelper': 'Muestra ofertas de cashback mientras compras. Si lo desactivas, también dejas de compartir la dirección de tu billetera con Bring, nuestro socio de cashback.',
   'settings.showGuide': 'Mostrar guía',
   'settings.showRecoveryPhrase': 'Mostrar frase de recuperación',
   'settings.spendingSecuritySettings': 'Seguridad de las transacciones',
