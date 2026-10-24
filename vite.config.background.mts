@@ -156,6 +156,15 @@ assert.match = function (s, r, m) { if (!r.test(s)) fail(s, r, m); };
 assert.doesNotMatch = function (s, r, m) { if (r.test(s)) fail(s, r, m); };
 assert.rejects = async function (fn) { try { await (typeof fn === 'function' ? fn() : fn); } catch (e) { return; } throw new Error('Did not reject'); };
 assert.doesNotReject = async function (fn) { await (typeof fn === 'function' ? fn() : fn); };
+// CommonJS consumers (the Midnight SDK utilities do __importDefault(require("assert")))
+// get this module as a namespace object: it has named exports, so Rollup's
+// requireReturnsDefault:'auto' cannot hand them the default alone. Without an
+// __esModule marker __importDefault wraps the namespace once more and the
+// SDK calls (0, r.default)(...) on an object: "(0 , r.default) is not a
+// function" from every deriveMidnightKeys call (DUST address encoding) in
+// the background worker. The marker makes __importDefault return the
+// namespace itself, whose default export is the function.
+export const __esModule = true;
 export default assert;
 export { assert, fail };
 export const ok = assert.ok;
