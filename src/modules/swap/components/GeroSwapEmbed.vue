@@ -467,6 +467,16 @@ function wireProps() {
   node['ownerPkh'] = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
+// The widget is a Vue custom element: it dispatches every emit as a CustomEvent whose
+// `detail` is the emit's argument ARRAY (`[payload]`), not the payload. Reading
+// `detail.txHash` off that array silently found nothing, so swaps were never
+// registered for fill/cancel alerts and error codes never mapped to a message.
+// A plain payload (older builds, tests) is accepted as well.
+function widgetPayload(e: Event): unknown {
+  const detail = (e as CustomEvent).detail;
+  return Array.isArray(detail) ? detail[0] : detail;
+}
+
 // Ask the worker to watch this swap for a fill or cancel push. Fire-and-forget: a wallet that has not
 // opted in to notifications answers not_registered, and nothing here may block or break the emit.
 function registerSwapForAlerts(detail: unknown) {
@@ -486,13 +496,13 @@ function registerSwapForAlerts(detail: unknown) {
 }
 
 function onQuote(e: Event) {
-  quotedRoute = routeFromQuoteEvent((e as CustomEvent).detail);
+  quotedRoute = routeFromQuoteEvent(widgetPayload(e));
 }
 
 function onSwapSubmitted(e: Event) {
   // The quote is spent: a later signature (e.g. an order cancel) gets no budget from it.
   quotedRoute = null;
-  const detail = (e as CustomEvent).detail;
+  const detail = widgetPayload(e);
   emit('swap-submitted', detail);
   registerSwapForAlerts(detail);
 }
@@ -507,7 +517,7 @@ const SWAP_ERROR_CODE_TO_I18N_KEY: Record<string, string> = {
 };
 
 function onSwapError(e: Event) {
-  const detail = (e as CustomEvent).detail as { code?: string; message?: string } | undefined;
+  const detail = widgetPayload(e) as { code?: string; message?: string } | undefined;
   emit('swap-error', detail);
 
   const key = detail?.code ? SWAP_ERROR_CODE_TO_I18N_KEY[detail.code] : undefined;
@@ -520,7 +530,7 @@ function onTokenChange(e: Event) {
   // emit" comment), so from here on the default-GERO logic above must never override
   // whatever the user has chosen.
   userPickedTokenOut.value = true;
-  emit('token-change', (e as CustomEvent).detail);
+  emit('token-change', widgetPayload(e));
 }
 
 function attach() {

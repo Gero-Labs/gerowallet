@@ -37,14 +37,30 @@ vi.mock('@/stores/tokenMetadataStore', async () => {
   return { default: { state }, tokenMetadataStore: state };
 });
 vi.mock('@/stores/walletStore', () => ({ walletStore: { loggedWallet: { network: 'Mainnet', type: 'Normal' } } }));
+const sendToBackgroundFromOptions = vi.hoisted(() => vi.fn());
+vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions } }));
+const setError = vi.hoisted(() => vi.fn());
+vi.mock('@/plugins/snackbar', () => ({ default: { setError } }));
 
 import GeroSwapEmbed from '../GeroSwapEmbed.vue';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
+import { walletStore } from '@/stores/walletStore';
+import { MessageTypes } from '@/models/MessageTypes';
+import i18n from '@/plugins/i18n';
+
+// What <gero-swap> really dispatches: a Vue custom element puts the emit's argument
+// ARRAY in `detail`, not the payload itself.
+const widgetEvent = (name: string, payload: unknown) => new CustomEvent(name, { detail: [payload] });
+const TX_HASH = 'ab'.repeat(32);
+const ADDRESS = 'addr1q8xf2scs38ttgmhmgpuxv73fcckwa65r56rptlhv3akdyty0wdhwf8eevhfg8cxc6r70ncprncasd2x87x7q9ezxe95q37pkan';
 
 beforeEach(() => {
   // Reset the shared reactive registry between tests so one test's tokens don't leak
   // into the next.
   TokenMetadataStore.state.tokens = {};
+  sendToBackgroundFromOptions.mockReset().mockResolvedValue({ data: { success: true } });
+  setError.mockReset();
+  walletStore.loggedWallet = { network: 'Mainnet', type: 'Normal' } as typeof walletStore.loggedWallet;
 });
 
 describe('GeroSwapEmbed', () => {
@@ -70,12 +86,41 @@ describe('GeroSwapEmbed', () => {
     expect(el.getAttribute('token-out')).toBe('another-policy.token');
   });
 
-  it('re-emits swap-submitted from the element', async () => {
+  it('re-emits swap-submitted from the element with the widget payload', async () => {
     const wrapper = mount(GeroSwapEmbed, {});
     const el = wrapper.find('gero-swap').element;
-    el.dispatchEvent(new CustomEvent('swap-submitted', { detail: { txHash: 'TX' } }));
+    el.dispatchEvent(widgetEvent('swap-submitted', { txHash: 'TX' }));
+    el.dispatchEvent(new CustomEvent('swap-submitted', { detail: { txHash: 'TX2' } })); // a plain payload still works
     await wrapper.vm.$nextTick();
-    expect(wrapper.emitted('swap-submitted')?.[0]?.[0]).toMatchObject({ txHash: 'TX' });
+    expect(wrapper.emitted('swap-submitted')?.[0]?.[0]).toEqual({ txHash: 'TX' });
+    expect(wrapper.emitted('swap-submitted')?.[1]?.[0]).toEqual({ txHash: 'TX2' });
+  });
+
+  it('registers a submitted swap for fill/cancel alerts', async () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 7, baseAddress: ADDRESS } as typeof walletStore.loggedWallet;
+    const wrapper = mount(GeroSwapEmbed, {});
+    wrapper.find('gero-swap').element.dispatchEvent(widgetEvent('swap-submitted', { txHash: TX_HASH, trackingUrl: 'https://x' }));
+    await wrapper.vm.$nextTick();
+    expect(sendToBackgroundFromOptions).toHaveBeenCalledWith({
+      method: MessageTypes.NOTIFY_WATCH_ORDERS,
+      data: { walletId: 7, ownerPkh: expect.stringMatching(/^[0-9a-f]{56}$/), txHashes: [TX_HASH] },
+    });
+  });
+
+  it('does not register a swap without a valid tx hash', async () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 7, baseAddress: ADDRESS } as typeof walletStore.loggedWallet;
+    const wrapper = mount(GeroSwapEmbed, {});
+    wrapper.find('gero-swap').element.dispatchEvent(widgetEvent('swap-submitted', { txHash: 'not-a-hash' }));
+    await wrapper.vm.$nextTick();
+    expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+  });
+
+  it('maps a widget error code to its translated message', async () => {
+    const wrapper = mount(GeroSwapEmbed, {});
+    wrapper.find('gero-swap').element.dispatchEvent(widgetEvent('swap-error', { code: 'NO_ROUTE', message: 'raw' }));
+    await wrapper.vm.$nextTick();
+    expect(setError).toHaveBeenCalledWith(i18n.t('swap.poolNotFound'));
+    expect(wrapper.emitted('swap-error')?.[0]?.[0]).toEqual({ code: 'NO_ROUTE', message: 'raw' });
   });
 
   it('dedupes ADA/lovelace to a single catalog entry even when the registry has its own ADA-ish row', async () => {
@@ -131,7 +176,7 @@ describe('GeroSwapEmbed', () => {
     expect(el.getAttribute('token-out')).toBe('policygero.token'); // default applied
 
     // Simulate the user picking a different Buying token inside the widget.
-    el.dispatchEvent(new CustomEvent('token-change', { detail: { tokenIn: 'lovelace', tokenOut: 'someOtherUnit' } }));
+    el.dispatchEvent(widgetEvent('token-change', { tokenIn: 'lovelace', tokenOut: 'someOtherUnit' }));
     await wrapper.vm.$nextTick();
 
     // Registry changes again post-pick — must NOT stomp the user's choice.
