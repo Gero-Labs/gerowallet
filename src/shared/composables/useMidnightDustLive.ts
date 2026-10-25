@@ -43,6 +43,7 @@ import { midnightStore } from '@/stores/midnightStore';
 import { getMidnightApi } from '@/api/midnight-api';
 import { debugLog } from '@/utils/debug';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
+import { dustAccountStateHasSignal } from '@/chains/midnight/midnightDustBalance';
 
 // Shared module-scope state — one source of truth across all consumers.
 const polledBalance = ref<bigint>(0n);
@@ -196,13 +197,13 @@ watch(
  * store exactly like the "no poll yet" path always did.
  */
 function pathAPollHasSignal(): boolean {
-  return polledAsOfMs.value !== 0 && (
-    polledBalance.value > 0n
-    || polledGenerating.value > 0n
-    || polledCap.value > 0n
-    || polledNightRegistered.value > 0n
-    || polledRegistrationStatus.value === 'Registered'
-  );
+  return polledAsOfMs.value !== 0 && dustAccountStateHasSignal({
+    balance: polledBalance.value,
+    generating: polledGenerating.value,
+    cap: polledCap.value,
+    nightRegistered: polledNightRegistered.value,
+    registrationStatus: polledRegistrationStatus.value,
+  });
 }
 
 export interface MidnightDustLive {
@@ -261,7 +262,8 @@ export function useMidnightDustLive(): MidnightDustLive {
 
   // Path A is dropped, not added, when Path B already contains it (see the file header).
   // `pathBRegistered` is read first so the flag is only consulted once Path B has reported
-  // a registration.
+  // a registration. Same rule as `pathBSupersedesPathA`, which the background's one-off
+  // read uses (`midnightDustBalance.ts`).
   const pathBSupersedesA = computed(() => pathBRegistered.value && pathBIsDestinationWide.value);
 
   const pathABalance = computed<bigint>(() => {

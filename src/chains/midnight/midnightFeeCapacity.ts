@@ -49,8 +49,6 @@
  * warning on the former would flash the notice on every send made before the
  * dust state lands, so `unknown` never warns and never blocks.
  */
-import type { MidnightDustState } from './midnightTypes';
-
 export type MidnightFeeCapacity =
   /** DUST present — the send may proceed (it still may not be *enough*). */
   | 'ok'
@@ -63,36 +61,6 @@ export type MidnightFeeCapacity =
   | 'unverified'
   /** Not yet known. Never block or warn on this. */
   | 'unknown';
-
-/**
- * Path-A-only reading. Kept for callers that genuinely only have the store's
- * `dustState`; the send surfaces must use {@link midnightFeeCapacityLive}.
- *
- * Nothing outside this file's spec calls it or {@link blocksMidnightSend}, so it is left as
- * it was. A new caller must not refuse on its `none` unless the source of `current` accounts
- * for existing DUST outputs (see the file header).
- */
-export function midnightFeeCapacity(
-  dustState: MidnightDustState | null | undefined,
-): MidnightFeeCapacity {
-  if (!dustState) return 'unknown';
-  // `current` is the spendable DUST balance in base units.
-  if (typeof dustState.current !== 'bigint') return 'unknown';
-  return dustState.current > 0n ? 'ok' : 'none';
-}
-
-/**
- * Whether the UI should refuse the send outright.
- *
- * Only `none` blocks: a non-zero balance that turns out to be too small for
- * this particular fee is the chain's call, not ours — we have no fee estimate
- * at this point and inventing one would reject valid sends.
- */
-export function blocksMidnightSend(
-  dustState: MidnightDustState | null | undefined,
-): boolean {
-  return midnightFeeCapacity(dustState) === 'none';
-}
 
 /** The live inputs the send guard needs, from `useMidnightDustLive`. */
 export interface MidnightLiveFeeInputs {
@@ -117,10 +85,12 @@ export interface MidnightLiveFeeInputs {
 }
 
 /**
- * Four-valued like {@link midnightFeeCapacity}, but over the merged live balance:
- * `unknown` until both paths have reported, `ok` for any positive balance, `none`
- * only for a zero the caller asserts is verified, and `unverified` for every other
- * zero. Only `none` blocks.
+ * Four-valued over the merged live balance: `unknown` until both paths have reported,
+ * `ok` for any positive balance, `none` only for a zero the caller asserts is verified,
+ * and `unverified` for every other zero. Only `none` blocks.
+ *
+ * There is deliberately no variant over the store's Path-A `dustState`: it reads zero
+ * for a wallet whose DUST comes from a Cardano cNIGHT registration (issue 1118).
  */
 export function midnightFeeCapacityLive(live: MidnightLiveFeeInputs | null | undefined): MidnightFeeCapacity {
   if (!live || !live.settled) return 'unknown';
@@ -131,6 +101,10 @@ export function midnightFeeCapacityLive(live: MidnightLiveFeeInputs | null | und
 /**
  * Whether the UI should refuse the send outright, judged on the merged live balance.
  * True only for a verified zero, so it is false for every reading the wallet can take today.
+ *
+ * A non-zero balance that turns out to be too small for this particular fee is the
+ * chain's call, not ours: there is no fee estimate at this point, and inventing one
+ * would reject valid sends.
  */
 export function blocksMidnightSendLive(live: MidnightLiveFeeInputs | null | undefined): boolean {
   return midnightFeeCapacityLive(live) === 'none';
