@@ -35,7 +35,7 @@
         <div class="d-flex align-center">
           <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
           <v-icon v-if="token.verified" size="small" color="primary" class="mr-1">mdi-check-decagram</v-icon>
-          <v-tooltip location="top" v-if="isProgrammableRow(token)"  :open-delay="300" content-class="custom-tooltip">
+          <v-tooltip location="top" v-if="isCip113BadgeRow(token)"  :open-delay="300" content-class="custom-tooltip">
             <template v-slot:activator="{ props: activatorProps }">
               <v-chip
                 size="x-small" label
@@ -220,7 +220,7 @@
             />
           </div>
           <div v-else-if="isProgrammableRow(token)" class="text-center py-4 text--secondary text-caption">
-            {{ $t(programmableTooltipKey(token.unit)) }}
+            {{ $t(lockedRowMessageKey(token)) }}
           </div>
           <div v-else class="text-center py-4 text--secondary text-caption">
             {{ $t('market.na') }}
@@ -318,7 +318,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, type Ref } from 'vue';
 import type { Time } from 'lightweight-charts';
-import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
+import { programmableTooltipKey, isProgrammableRow, isCip113BadgeRow, lockedRowMessageKey } from '@/shared/utils/programmableTokenDisplay';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';

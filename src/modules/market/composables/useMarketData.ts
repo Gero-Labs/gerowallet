@@ -57,6 +57,8 @@ export interface MarketToken {
   // Visible but not sendable. Carry it wherever isSnekFun travels — missing here
   // means the verified-only filter silently strips the row.
   isProgrammable?: boolean;
+  /** Holdings rows only: locked at the PLB address AND listed in the CIP-113 registry (issue 1267). */
+  cip113Registered?: boolean;
   // Stable row identity: a unit can appear twice (spendable + locked), and `unit`
   // alone collides as a v-data-table item-key.
   rowKey?: string;

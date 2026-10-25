@@ -15,11 +15,15 @@ async function loadNetworks(deployments: {
   preprod?: readonly string[];
   preview?: readonly string[];
   allowed?: readonly string[];
+  registryPreprod?: readonly string[];
 } = {}) {
   vi.doMock('@/utils/cip113Deployments', () => ({
     CIP113_BASE_MAINNET: deployments.mainnet ?? [],
     CIP113_BASE_PREPROD: deployments.preprod ?? [],
     CIP113_BASE_PREVIEW: deployments.preview ?? [],
+    CIP113_REGISTRY_MAINNET: [],
+    CIP113_REGISTRY_PREPROD: deployments.registryPreprod ?? [],
+    CIP113_REGISTRY_PREVIEW: [],
     // Defaulted WIDE on purpose: the hash parsing/normalization cases below run through
     // preprod and are not about the allowlist. The value actually shipped is pinned by
     // its own test against the real module.
@@ -117,6 +121,16 @@ describe('CIP-113 shipped deployment lists', () => {
     expect([...deployments.CIP113_BASE_PREVIEW]).toEqual(['35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16']);
   });
 
+  // Issue 1267: each deployment's registry node policy, from the platform's bootstrap record
+  // for the bootstrap tx recorded above.
+  it('ships the registry of each current deployment', async () => {
+    const deployments = await import('@/utils/cip113Deployments');
+
+    expect([...deployments.CIP113_REGISTRY_MAINNET]).toEqual(['484e733d122af44e6101988bcc47ed261a7af5c43c797e89d60e3075']);
+    expect([...deployments.CIP113_REGISTRY_PREPROD]).toEqual(['3083d387537f9318b6ff5aeab7de5f5629d26495319b8fafd409222a']);
+    expect([...deployments.CIP113_REGISTRY_PREVIEW]).toEqual(['e5b339ef5b16d6c460759aca1d60e5e045a6f01da4a11b4ee0fec09a']);
+  });
+
   it('resolves the shipped deployment on each network', async () => {
     const networks = (await import('./networks')).default;
 
@@ -180,6 +194,17 @@ describe('networks — CIP-113 network allowlist', () => {
 
     expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, Network.PREVIEW)).toEqual([VALID_PREPROD]);
     expect(networks.resolveProgrammableTokenSupport(Blockchain.CARDANO, Network.PREVIEW)).toBe(true);
+  });
+
+  it('reads no registry where CIP-113 is off, and the configured one where it is on', async () => {
+    const REGISTRY = 'e5b339ef5b16d6c460759aca1d60e5e045a6f01da4a11b4ee0fec09a';
+    const off = await loadNetworks({ preprod: [VALID_PREPROD], registryPreprod: [REGISTRY], allowed: [Network.PREVIEW] });
+    expect(off.resolveCip113RegistryPolicyIds(Blockchain.CARDANO, Network.PREPROD)).toEqual([]);
+
+    vi.resetModules();
+    const on = await loadNetworks({ preprod: [VALID_PREPROD], registryPreprod: [REGISTRY.toUpperCase()] });
+    expect(on.resolveCip113RegistryPolicyIds(Blockchain.CARDANO, Network.PREPROD)).toEqual([REGISTRY]);
+    expect(on.resolveCip113RegistryPolicyIds(Blockchain.CARDANO, Network.MAINNET)).toEqual([]);
   });
 
   // Pins what actually ships. Changing this is the deliberate act of enabling (or

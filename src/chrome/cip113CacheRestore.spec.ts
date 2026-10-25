@@ -14,13 +14,17 @@ import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: vi.fn() } }));
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
 vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconnect: vi.fn() } }));
+// The third I/O boundary: the CIP-113 registry read through the backend's Nexus proxy
+// (issue 1267). Empty, i.e. nothing registered, unless a test says otherwise.
+const registry = vi.hoisted(() => ({ fetch: vi.fn(async () => [] as unknown[]) }));
+vi.mock('@/api/cip113-registry-api', () => ({ fetchAllPolicyAssets: registry.fetch }));
 
 import { WalletBg } from './walletBg';
 import WalletStore, { walletStore, type Account } from '@/stores/walletStore';
 import { getAddress, getStakeKey } from './serialization';
 import { serializeUtxoRows } from './utxoCache';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
-import { CIP113_BASE_PREVIEW } from '@/utils/cip113Deployments';
+import { CIP113_BASE_PREVIEW, CIP113_REGISTRY_PREVIEW } from '@/utils/cip113Deployments';
 import { Blockchain } from '@/models/types';
 
 // clearForWalletSwitch() clears the wallet-scoped alarms; there is no extension API here.
@@ -347,5 +351,82 @@ describe('CIP-113 holdings at a removed deployment', () => {
     expect(walletStore.programmableLockedLovelace).toBe(LOCKED_COINS.toString());
     expect(restarted.findProgrammableInputs(txSpendingRemoved)).toEqual([]);
     expect(restarted.findProgrammableInputs(txSpendingProgrammable)).toEqual([`${PROGRAMMABLE_TX}#0`]);
+  });
+});
+
+// Issue 1267. Paying into the PLB address runs no validator, so anyone can send a token to
+// (PLB script, this wallet's stake key). Only a policy the deployment's registry lists is a
+// CIP-113 holding; anything else is shown as an unverified token. Both stay locked.
+describe('CIP-113 registry check', () => {
+  const REGISTERED = TOKEN; // policy 'a' x 56
+  const SPAM = `${'d'.repeat(56)}${Buffer.from('AIRDROP').toString('hex')}`;
+  const mixedUtxo = () => utxo(PROGRAMMABLE_TX, programmableAddress, LOCKED_COINS, [[REGISTERED, 7n], [SPAM, 1000n]]);
+  // The stand-in above is a plain vi.fn(); Chrome's typings would pick the callback overload.
+  const storageGet = chrome.storage.local.get as unknown as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    WalletStore.clearForWalletSwitch();
+    storageGet.mockReset();
+    registry.fetch.mockReset().mockResolvedValue([
+      { policyId: CIP113_REGISTRY_PREVIEW[0], assetName: '', quantity: '1' },
+      { policyId: CIP113_REGISTRY_PREVIEW[0], assetName: 'a'.repeat(56), quantity: '1' },
+    ]);
+  });
+
+  it('badges the registered policy and shows the other one at the same address as unverified', async () => {
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), mixedUtxo()], true);
+
+    await vi.waitFor(() => expect(walletStore.programmableTokens[REGISTERED]?.cip113Registered).toBe(true));
+    expect(registry.fetch).toHaveBeenCalledWith(NETWORK, CIP113_REGISTRY_PREVIEW[0]);
+    expect(walletStore.programmableTokens[SPAM]).toMatchObject({ isProgrammable: true, cip113Registered: false, verified: false });
+  });
+
+  it('keeps an unregistered token locked: its lovelace stays out of the balance and the UTxO is still refused', async () => {
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), mixedUtxo()], true);
+    WalletStore.setAccount({ controlled_amount: CONTROLLED_TOTAL } as Account);
+
+    expect(walletStore.programmableLockedLovelace).toBe(LOCKED_COINS.toString());
+    expect(walletStore.account?.controlled_amount).toBe(SPENDABLE_COINS.toString());
+    expect(walletStore.utxos).toHaveLength(1);
+    expect(bg.findProgrammableInputs(txSpendingProgrammable)).toEqual([`${PROGRAMMABLE_TX}#0`]);
+  });
+
+  // The cached copy answers without asking Nexus, so a token that arrives during that read
+  // would otherwise wait for the next push before anyone asks about its policy.
+  it('checks a token that arrives during a read once that read ends', async () => {
+    const LATE = `${'e'.repeat(56)}${Buffer.from('LATE').toString('hex')}`;
+    storageGet.mockResolvedValue({
+      cip113Registry: {
+        [NETWORK]: { registryIds: [...CIP113_REGISTRY_PREVIEW], policies: ['a'.repeat(56)], checked: ['a'.repeat(56)], fetchedAt: Date.now() },
+      },
+    });
+    registry.fetch.mockResolvedValue([
+      { policyId: CIP113_REGISTRY_PREVIEW[0], assetName: 'a'.repeat(56), quantity: '1' },
+      { policyId: CIP113_REGISTRY_PREVIEW[0], assetName: 'e'.repeat(56), quantity: '1' },
+    ]);
+    const bg = bootWallet(makeWallet());
+    const registeredOnly = utxo(PROGRAMMABLE_TX, programmableAddress, LOCKED_COINS, [[REGISTERED, 7n]]);
+    const withLate = utxo(PROGRAMMABLE_TX, programmableAddress, LOCKED_COINS, [[REGISTERED, 7n], [LATE, 1n]]);
+
+    await Promise.all([
+      bg.applyUtxos([spendableUtxo(), registeredOnly], true),
+      bg.applyUtxos([spendableUtxo(), withLate], true),
+    ]);
+
+    await vi.waitFor(() => expect(walletStore.programmableTokens[LATE]?.cip113Registered).toBe(true));
+    expect(walletStore.programmableTokens[REGISTERED]?.cip113Registered).toBe(true);
+  });
+
+  // Last: a failed read leaves a minute's back-off in the module.
+  it('badges nothing while the registry cannot be read', async () => {
+    registry.fetch.mockRejectedValue(new Error('HTTP 404'));
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), mixedUtxo()], true);
+    await vi.waitFor(() => expect(registry.fetch).toHaveBeenCalled());
+
+    expect(walletStore.programmableTokens[REGISTERED]).toMatchObject({ cip113Registered: false, verified: false });
+    expect(walletStore.programmableTokens[SPAM]).toMatchObject({ cip113Registered: false, verified: false });
   });
 });

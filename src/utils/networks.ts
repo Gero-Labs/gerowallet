@@ -4,6 +4,9 @@ import {
   CIP113_BASE_MAINNET as CIP113_DEPLOYMENTS_MAINNET,
   CIP113_BASE_PREPROD as CIP113_DEPLOYMENTS_PREPROD,
   CIP113_BASE_PREVIEW as CIP113_DEPLOYMENTS_PREVIEW,
+  CIP113_REGISTRY_MAINNET as CIP113_REGISTRY_DEPLOYMENTS_MAINNET,
+  CIP113_REGISTRY_PREPROD as CIP113_REGISTRY_DEPLOYMENTS_PREPROD,
+  CIP113_REGISTRY_PREVIEW as CIP113_REGISTRY_DEPLOYMENTS_PREVIEW,
 } from '@/utils/cip113Deployments';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
@@ -59,6 +62,9 @@ export interface NetworkInfo {
   // drain (see cip113Deployments.ts). Empty means CIP-113 is
   // unavailable on this network, and it fails closed.
   programmableLogicBaseScriptHashes?: string[];
+  // CIP-113 registry node policies: only a policy minted as a node NFT under one of these is
+  // a CIP-113 token (see cip113Deployments.ts). Empty means nothing is ever registered.
+  cip113RegistryPolicyIds?: string[];
   /**
    * RealFi Earn (USDr / sUSDr yield) availability for this network.
    *
@@ -89,6 +95,10 @@ function normalizeCip113BaseScriptHashes(hashes: readonly string[]): string[] {
 const CIP113_BASE_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_MAINNET);
 const CIP113_BASE_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_PREPROD);
 const CIP113_BASE_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_PREVIEW);
+// Same 56-hex shape check for the registry policies.
+const CIP113_REGISTRY_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_REGISTRY_DEPLOYMENTS_MAINNET);
+const CIP113_REGISTRY_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_REGISTRY_DEPLOYMENTS_PREPROD);
+const CIP113_REGISTRY_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_REGISTRY_DEPLOYMENTS_PREVIEW);
 
 
 export default {
@@ -136,6 +146,7 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_MAINNET,
+      cip113RegistryPolicyIds: CIP113_REGISTRY_MAINNET,
       // RealFi launched on mainnet 2026-10-01. Still behind isRealFiEnabled: this says
       // the network CAN reach RealFi, the flag says whether it is switched on.
       realFiSupport: true,
@@ -185,6 +196,7 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_PREPROD,
+      cip113RegistryPolicyIds: CIP113_REGISTRY_PREPROD,
       // RealFi runs its public testnet on Cardano preprod; this is the only
       // network the Earn surface is reachable from today.
       realFiSupport: true,
@@ -234,6 +246,7 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_PREVIEW,
+      cip113RegistryPolicyIds: CIP113_REGISTRY_PREVIEW,
       networkParams: {
         networkMagic: 2
       }
@@ -709,6 +722,13 @@ export default {
       return []
     }
     return this.resolveNetwork(chain, network)?.programmableLogicBaseScriptHashes || []
+  },
+  // Behind the same two gates as the PLB hashes: with no PLB there is nothing to check.
+  resolveCip113RegistryPolicyIds(chain: string, network: string): string[] {
+    if (this.resolveProgrammableLogicBaseScriptHashes(chain, network).length === 0) {
+      return []
+    }
+    return this.resolveNetwork(chain, network)?.cip113RegistryPolicyIds || []
   },
   resolveProgrammableTokenSupport(chain: string, network: string): boolean {
     return this.resolveProgrammableLogicBaseScriptHashes(chain, network).length > 0

@@ -12,6 +12,7 @@ import {
 } from '@/chrome/submitErrors';
 import { fromAxiosSubmit, isRoutedSubmitError, routedSubmitError, submitCardanoTx } from '@/chrome/submitRouter';
 import networks from '@/utils/networks';
+import { readCip113Registry } from '@/chrome/cip113Registry';
 import { getBlockchainDb } from '@/db';
 import {
   Blockchain,
@@ -533,6 +534,7 @@ export class WalletBg {
     void this.persistProgrammableRefs();
 
     const assets = {};
+    const policies = new Set<string>();
     let lockedLovelace = 0n;
     for (const utxo of this.programmableUtxos) {
       // Before the assets guard: a pure-ADA programmable UTxO still locks its coins.
@@ -545,6 +547,7 @@ export class WalletBg {
         if (cip68Label(assetName) === 100) continue;
         if (!assets[key]) {
           const policyId: Cardano.PolicyId = Cardano.AssetId.getPolicyId(key);
+          policies.add(policyId);
           assets[key] = {
             quantity: 0n,
             unit: key,
@@ -558,11 +561,62 @@ export class WalletBg {
     }
 
     // resolveAsset() handles CIP-68 labels 222/333, so metadata resolves for free.
+    // Every token here stays locked (isProgrammable), but only a policy the CIP-113 registry
+    // lists is shown as a CIP-113 token. Anything else was merely sent to the PLB address,
+    // which runs no validator, so it is shown as an unverified token (issue 1267).
+    const registered = this.cip113RegisteredPolicies;
     const tokens = Object.fromEntries(
-      Object.entries(assets).map(([key, asset]) => [key, { ...resolveAsset(asset), isProgrammable: true }])
+      Object.entries(assets).map(([key, asset]) => {
+        const cip113Registered = registered?.has((asset as { policy_id: string }).policy_id) === true;
+        return [key, {
+          ...resolveAsset(asset),
+          isProgrammable: true,
+          cip113Registered,
+          ...(cip113Registered ? {} : { verified: false }),
+        }];
+      })
     );
 
     WalletStore.setProgrammableTokens(tokens, lockedLovelace.toString());
+    void this.refreshCip113Registry(policies);
+  }
+
+  /** Policies the CIP-113 registry lists on this network; null until it has been read. */
+  private cip113RegisteredPolicies: ReadonlySet<string> | null = null;
+  private cip113RegistryRead: Promise<void> | null = null;
+  /** Policies held when a refresh was asked for during a read; checked once it ends. */
+  private cip113RegistryNext: ReadonlySet<string> | null = null;
+
+  /**
+   * Read the registry for the policies held at the PLB address, and re-aggregate if what it
+   * says changed. One read at a time: a refresh asked for during a read runs after it, for
+   * the policies held by then. readCip113Registry() decides from its cached copy whether
+   * Nexus needs asking at all.
+   */
+  private refreshCip113Registry(policies: ReadonlySet<string>): Promise<void> {
+    if (policies.size === 0) return this.cip113RegistryRead ?? Promise.resolve();
+    if (this.cip113RegistryRead) {
+      this.cip113RegistryNext = policies;
+      return this.cip113RegistryRead;
+    }
+    const registryIds = networks.resolveCip113RegistryPolicyIds(this.chain, this.network);
+    if (registryIds.length === 0) return Promise.resolve();
+    this.cip113RegistryRead = (async () => {
+      const next = await readCip113Registry(this.network, registryIds, [...policies]);
+      if (!next) return;
+      const previous = this.cip113RegisteredPolicies;
+      this.cip113RegisteredPolicies = next;
+      const changed = !previous || previous.size !== next.size || [...next].some((policy) => !previous.has(policy));
+      if (changed) this.setProgrammableAssets(this.programmableUtxos);
+    })().catch((e) => {
+      debugLog('CIP-113: registry refresh failed', e);
+    }).finally(() => {
+      this.cip113RegistryRead = null;
+      const queued = this.cip113RegistryNext;
+      this.cip113RegistryNext = null;
+      if (queued) void this.refreshCip113Registry(queued);
+    });
+    return this.cip113RegistryRead;
   }
 
   /**
