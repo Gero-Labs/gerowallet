@@ -461,6 +461,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { blocksMidnightSendLive, mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
+import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
@@ -807,20 +808,19 @@ const timelineNodes = computed<TimelineNode[]>(() => {
 
 // Compact DUST battery for the progress summary (current / cap), so the user
 // sees their DUST level while the send runs and the reset note has context.
+// The sender's figures are the merged live ones the dashboard battery shows:
+// the store's Path-A `dustState` has cap 0 for a wallet whose DUST comes from
+// a Cardano cNIGHT registration, which hid the bar (issue 1118).
 const dustBattery = computed<{ percent: number } | null>(() => {
   // A sponsored send draws down the SPONSOR's DUST, so that is the bar to
-  // show. Reading midnightStore.dustState here is the sender's state, which
-  // for a sponsored send is empty by definition (that is why a sponsor was
-  // needed) — so cap is 0, this returns null, and the whole block used to
-  // disappear at exactly the moment it mattered most.
+  // show. The sender's own DUST for a sponsored send is empty by definition
+  // (that is why a sponsor was needed) — so cap is 0, this returns null, and
+  // the whole block used to disappear at exactly the moment it mattered most.
   if (sponsorWalletId.value != null) {
     const pct = sponsorCandidate.value ? chargePercent(sponsorCandidate.value) : null;
     return pct === null ? null : { percent: pct };
   }
-  const ds = midnightStore.dustState;
-  if (!ds || ds.cap <= 0n) return null;
-  const raw = Number((ds.current * 10000n) / ds.cap) / 100;
-  return { percent: Math.max(0, Math.min(100, Math.round(raw))) };
+  return dustBatteryPercent(dustLive.dustBalance.value, dustLive.dustCap.value);
 });
 
 // Below this the review step swaps the general fee note for the low-DUST hint
@@ -829,10 +829,7 @@ const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percen
 
 // Truly empty DUST: the (~1 Speck) fee can't be paid, so the hint escalates to
 // the error tone. Any nonzero DUST covers the fee and stays informational.
-const isDustEmpty = computed(() => {
-  const ds = midnightStore.dustState;
-  return !!ds && ds.current <= 0n;
-});
+const isDustEmpty = computed(() => dustLive.settled.value && dustLive.dustBalance.value <= 0n);
 
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);

@@ -6675,8 +6675,13 @@ app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  const dustState = midnightStore.dustState;
-  if (!dustState) {
+  // The merged Path A + Path B balance the battery shows (issue 1118), not the
+  // store's Path-A `dustState`: a wallet whose DUST comes from a Cardano cNIGHT
+  // registration reads {cap:0,balance:0} there, and a dapp would conclude it
+  // cannot pay fees.
+  const { connectorDustBalance } = await import('@/chrome/midnightConnectorDust');
+  const figures = await connectorDustBalance(wallet.network, midnightStore.addresses?.unshielded, midnightStore.addresses?.dust);
+  if (!figures) {
     // Don't guess: reporting {cap:0,balance:0} would read as "you have zero
     // DUST" when the truth is "not loaded yet" — force the dapp to retry.
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, 'DUST state not yet loaded'), target: TARGET, sender: SENDER.extension });
@@ -6684,7 +6689,7 @@ app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
   }
   sendResponse({
     id: request.id,
-    data: { cap: dustState.cap.toString(), balance: dustState.current.toString() },
+    data: { cap: figures.cap.toString(), balance: figures.balance.toString() },
     target: TARGET,
     sender: SENDER.extension,
   });

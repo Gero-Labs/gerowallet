@@ -19,7 +19,7 @@ vi.mock('@/chains/midnight/midnightSponsorLinks', () => ({
 }));
 vi.mock('@/shared/composables/useMidnightDustLive', async () => {
   const { ref } = await import('vue');
-  return { useMidnightDustLive: () => ({ dustBalance: ref(0n), settled: ref(true) }) };
+  return { useMidnightDustLive: () => ({ dustBalance: ref(0n), dustCap: ref(0n), settled: ref(true) }) };
 });
 vi.mock('@/shared/composables/useMidnightSendTimeline', async () => ({ useMidnightSendTimeline: () => [] }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));

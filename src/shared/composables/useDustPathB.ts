@@ -47,6 +47,7 @@ import {
   type MidnightDustRegistrationStatusDto,
 } from '@/api/midnight-api';
 import { enumerateCardanoStakeIdentities } from '@/shared/composables/useCardanoStakeEnumeration';
+import { statusRowsForDustAddress } from '@/chains/midnight/midnightDustBalance';
 import { debugLog } from '@/utils/debug';
 
 const STATUS_BATCH_LIMIT = 50;
@@ -269,10 +270,7 @@ async function refreshFromStakes(network: string, dustAddress: string, key: stri
   // registration (the whole set is protocol-invalid) — so filtering on
   // `registered === true` is sufficient here without an extra
   // `dust/registrations` call per stake.
-  const dustLower = dustAddress.toLowerCase();
-  const kept = rows.filter(
-    (r) => r.registered === true && (r.dustAddress ?? '').toLowerCase() === dustLower,
-  );
+  const kept = statusRowsForDustAddress(rows, dustAddress);
 
   // One row, not a sum: every kept row is the same destination. The source flag moves with
   // the figures it describes, in this same synchronous block (never earlier).
