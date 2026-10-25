@@ -18,7 +18,33 @@ vi.mock('@/chrome/messaging', () => ({
 }));
 vi.mock('@/models/MessageTypes', () => ({ MessageTypes: { SIGN_TX: 'SIGN_TX', VERIFY_SPENDING_PASSWORD: 'VERIFY_SPENDING_PASSWORD', TREZOR: 'TREZOR' } }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: walletState }));
-vi.mock('@/models/types', () => ({ WalletType: { Normal: 'Normal', Ledger: 'Ledger', Trezor: 'Trezor', Keystone: 'Keystone' } }));
+vi.mock('@/models/types', () => ({
+  WalletType: { Normal: 'Normal', Ledger: 'Ledger', Trezor: 'Trezor', Keystone: 'Keystone' },
+  Network: { MAINNET: 'Mainnet', PREPROD: 'Preprod', PREVIEW: 'Preview' },
+}));
+// Input values are proven from their creating transactions (provenInputs.spec.ts covers
+// that with real CBOR). Here the proof answers what `proof.answer` says, by default that
+// every input is exactly what the UTxO list claims.
+const proof = vi.hoisted(() => ({ answer: null as null | ((refs: string[]) => { proven: Map<string, unknown>; unproven: string[] }) }));
+vi.mock('@/shared/utils/provenInputs', async () => {
+  const actual = await vi.importActual<typeof import('@/shared/utils/provenInputs')>('@/shared/utils/provenInputs');
+  return {
+    ...actual,
+    proveOutputs: vi.fn(async (refs: Iterable<string>) => {
+      const list = [...refs];
+      if (proof.answer) return proof.answer(list);
+      const claimed = new Map((walletState.utxos as [{ txId: string; index: number }, unknown][])
+        .map(([txIn, txOut]) => [actual.outputRef(txIn), txOut]));
+      const proven = new Map<string, unknown>();
+      const unproven: string[] = [];
+      for (const ref of list) {
+        if (claimed.has(ref)) proven.set(ref, claimed.get(ref));
+        else unproven.push(ref);
+      }
+      return { proven, unproven };
+    }),
+  };
+});
 // isTrezorWebUsbEnabled defaults OFF — the Trezor test below asserts THIS (flag-off)
 // path explicitly. dispatchTrezor is mocked out too: it transitively imports
 // trezorWeb.ts, which reads `chrome.runtime.id` at module scope (no `chrome` global
@@ -85,6 +111,11 @@ describe('useNativeSwapSigner', () => {
   });
 
   describe('refuses an order that takes more than the quote allows', () => {
+    beforeEach(() => {
+      // The wallet's own address comes from its derived keys, never from the UTxO list.
+      walletState.loggedWallet = { type: 'Normal', baseAddress: OWN };
+      proof.answer = null;
+    });
     const route = { tokenIn: 'lovelace', amountIn: '50000000', batcherFeeLovelace: '2000000', orderDepositLovelace: '2000000' };
     const bound = swapSpendBound(route);
     const signWith = async (core: unknown) => {
@@ -124,6 +155,35 @@ describe('useNativeSwapSigner', () => {
       walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
       const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
       await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
+    });
+
+    it('refuses an order whose input the UTxO list understates', async () => {
+      // gero-sync claims 100 ADA; the transaction that created the input says 1,000 ADA.
+      proof.answer = (refs) => ({
+        proven: new Map(refs.map((ref) => [ref, { address: OWN, value: { coins: 1_000_000_000n } }])),
+        unproven: [],
+      });
+      await expect(signWith(orderTx(62_000_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['misreportedInput'] });
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('refuses an order with an input it cannot prove', async () => {
+      proof.answer = (refs) => ({ proven: new Map(), unproven: refs });
+      await expect(signWith(orderTx(62_000_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['unprovenInput'] });
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('does not count an address the UTxO list names as the wallet\'s change', async () => {
+      // A UTxO list that names the DEX address as the wallet's: the "change" back to it is still an outflow.
+      const core = orderTx(62_000_000n);
+      core.body.outputs[1].address = DEX;
+      vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => core } as never);
+      walletState.utxos = [
+        [{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }],
+        [{ txId: TX, index: 5 }, { address: DEX, value: { coins: 1_000_000n } }],
+      ];
+      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
+      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ violations: ['spendExceeded'] });
     });
 
     it('refuses a transaction it cannot decode', async () => {
@@ -205,9 +265,8 @@ describe('useNativeSwapSigner', () => {
     walletState.loggedWallet = { type: 'Keystone', baseAddress: 'addr_base' };
     const { signer, keystone } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
     const pending = signer.signTx('CBOR');
-    // Let the microtask queue drain so keystoneShow flips before we scan.
-    await Promise.resolve();
-    expect(keystone.keystoneShow.value).toBe(true);
+    // The order is checked (inputs proven) before the QR dialog opens.
+    await vi.waitFor(() => expect(keystone.keystoneShow.value).toBe(true));
     keystone.onKeystoneScan({} as never);
     expect(await pending).toBe('KEYSTONE_WIT');
     expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
@@ -217,8 +276,7 @@ describe('useNativeSwapSigner', () => {
     walletState.loggedWallet = { type: 'Keystone', baseAddress: 'addr_base' };
     const { signer, keystone } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
     const pending = signer.signTx('CBOR');
-    await Promise.resolve();
-    expect(keystone.keystoneShow.value).toBe(true);
+    await vi.waitFor(() => expect(keystone.keystoneShow.value).toBe(true));
     keystone.failKeystone('bad QR code');
     await expect(pending).rejects.toThrow('bad QR code');
     expect(keystone.keystoneShow.value).toBe(false);

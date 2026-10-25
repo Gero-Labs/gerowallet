@@ -37,7 +37,11 @@ export type TxIntentViolation =
   | 'unexpectedRequiredSigner'
   | 'unexpectedDonation'
   | 'feeTooHigh'
-  | 'spendExceeded';
+  | 'spendExceeded'
+  /** An input or collateral whose value could not be proven from its creating transaction. */
+  | 'unprovenInput'
+  /** The UTxO list describes an input differently from the transaction that created it. */
+  | 'misreportedInput';
 
 /**
  * Upper bound for the network fee of a transaction built for the wallet. The
@@ -506,8 +510,12 @@ export interface SpendBound {
 }
 
 export interface OwnWalletView {
+  /** The wallet's own addresses, as it derives them (ownAddresses.ts). The only addresses that count as change. */
   ownAddresses: Iterable<string>;
-  /** Every UTxO the wallet holds, collateral included. */
+  /**
+   * Every UTxO the wallet holds, collateral included, with values the caller has
+   * proven (provenInputs.ts). Their addresses do not widen `ownAddresses`.
+   */
   ownUtxos: readonly Cardano.Utxo[];
 }
 
@@ -550,10 +558,7 @@ export function verifySpendBound(tx: Cardano.Tx, wallet: OwnWalletView, bound: S
   const violations = new Set<TxIntentViolation>();
   const own = canonicalSet(wallet.ownAddresses);
   const ownUtxos = new Map<string, Cardano.TxOut>();
-  for (const [txIn, txOut] of wallet.ownUtxos) {
-    ownUtxos.set(refOf(txIn), txOut);
-    if (txOut?.address) own.add(canonicalAddress(String(txOut.address)));
-  }
+  for (const [txIn, txOut] of wallet.ownUtxos) ownUtxos.set(refOf(txIn), txOut);
 
   const scriptSpent = scriptSpentInputRefs(tx);
 

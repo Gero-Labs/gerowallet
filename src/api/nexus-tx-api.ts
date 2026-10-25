@@ -393,11 +393,16 @@ interface BuildContextFields {
   utxos?: NexusTxInput[];
 }
 
+/**
+ * The addresses change may go to: the change and sender addresses the wallet put
+ * in the request (its own base address). Not the addresses of `utxos`: that list
+ * comes from gero-sync, and an address slipped into it would turn an output to
+ * someone else into "change".
+ */
 function ownAddressesOf(request: BuildContextFields): string[] {
   return [
     request.changeAddress,
     ...(request.senderAddress ? [request.senderAddress] : []),
-    ...(request.utxos ?? []).map((u) => u.address),
   ].filter((a): a is string => !!a);
 }
 

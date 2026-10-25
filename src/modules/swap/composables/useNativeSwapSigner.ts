@@ -13,7 +13,9 @@ import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keysto
 import networks from '@/utils/networks';
 import i18n from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
-import { TxIntentMismatchError, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
+import { TxIntentMismatchError, canonicalAddress, scriptSpentInputRefs, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
+import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
+import { historySource, koiosSource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
 import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
 import { DEFAULT_ORDER_SPEND_BOUND } from './orderSpendBound';
@@ -236,20 +238,46 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   /**
    * Refuse a transaction that takes more from the wallet than `bound` allows.
    * The aggregator and Nexus build these orders; the wallet decides what it signs.
+   *
+   * Nothing here takes gero-sync's word, since it is the same backend trust domain
+   * as the builder. Own addresses are the ones the wallet derives itself, and the
+   * value of every input the budget counts, and of every collateral, is proven from
+   * the CBOR of the transaction that created it (provenInputs.ts). An input that
+   * cannot be proven, or that the UTxO list describes differently, refuses the order.
    */
-  function assertWithinBound(unsignedTxCbor: string, bound: SpendBound): void {
+  async function assertWithinBound(unsignedTxCbor: string, bound: SpendBound): Promise<void> {
     let violations;
     try {
       const tx = Serialization.Transaction.fromCbor(unsignedTxCbor as never).toCore();
-      const keys = walletStore.keys;
-      const collateral = walletStore.collateral;
-      violations = verifySpendBound(tx, {
-        ownAddresses: [
-          ...[...(keys?.payment || []), ...(keys?.change || [])].map((k: Key) => k.address),
-          walletStore.loggedWallet?.baseAddress,
-        ].filter((a): a is string => !!a),
-        ownUtxos: [...cardanoUtxos(), ...(collateral ? [collateral] : [])],
-      }, bound);
+      const scriptSpent = scriptSpentInputRefs(tx);
+      const refs = [
+        ...(tx.body.inputs ?? []).map(outputRef).filter((ref) => !scriptSpent.has(ref)),
+        ...(tx.body.collaterals ?? []).map(outputRef),
+      ];
+      const { proven, unproven } = await proveOutputs(refs, [
+        historySource(walletStore.transactions as unknown[]),
+        koiosSource(walletStore.loggedWallet?.network),
+      ]);
+      const collateral = walletStore.collateral as Cardano.Utxo | null | undefined;
+      const claimed = [...cardanoUtxos(), ...(collateral ? [collateral] : [])];
+      const misreported = claimed.some(([txIn, txOut]) => {
+        const actual = proven.get(outputRef(txIn));
+        return !!actual && !sameOutput(txOut, actual);
+      });
+      if (unproven.length > 0 || misreported) {
+        debugLog('Native signer: could not prove the inputs of the order', { unproven: unproven.length, misreported });
+        violations = [unproven.length > 0 ? 'unprovenInput' as const : 'misreportedInput' as const];
+      } else {
+        const ownAddresses = derivedOwnAddresses(walletStore.keys, walletStore.loggedWallet?.baseAddress);
+        const own = new Set(ownAddresses.map(canonicalAddress));
+        const ownUtxos: Cardano.Utxo[] = [];
+        for (const [ref, txOut] of proven) {
+          if (!own.has(canonicalAddress(String(txOut.address)))) continue;
+          const [txId, index] = ref.split('#');
+          ownUtxos.push([{ txId: txId as Cardano.TransactionId, index: Number(index), address: txOut.address }, txOut]);
+        }
+        violations = verifySpendBound(tx, { ownAddresses, ownUtxos }, bound);
+      }
     } catch (e) {
       debugLog('Native signer: could not verify the order', e);
       violations = null;
@@ -261,7 +289,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   }
 
   async function signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string> {
-    assertWithinBound(unsignedTxCbor, bound ?? opts.getSpendBound?.() ?? DEFAULT_ORDER_SPEND_BOUND);
+    await assertWithinBound(unsignedTxCbor, bound ?? opts.getSpendBound?.() ?? DEFAULT_ORDER_SPEND_BOUND);
     const type = walletStore.loggedWallet?.type;
     // Hardware wallets sign in the page, so a collateral input borrowed from the Nexus pool
     // gets its co-signature here; password and PRF wallets get it in the worker's SIGN_TX.

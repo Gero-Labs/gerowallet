@@ -83,6 +83,13 @@ describe('nexusTxApi refuses a built transaction that differs from the request',
     await expect(nexusTxApi.buildDelegationTx(request, 'Preprod')).rejects.toMatchObject({ violations: ['unexpectedCertificate'] });
   });
 
+  it('does not take an address in the UTxO list as the wallet\'s change', async () => {
+    // gero-sync lists a UTxO at the attacker's address; Nexus pays the attacker as "change".
+    const poisoned = { ...transfer, utxos: [UTXO, { txHash: TX, outputIndex: 1, address: ATTACKER, lovelace: '1000000' }] };
+    nexusReturns(cbor({ outputs: [out(RECIPIENT, 5_000_000n), out(ATTACKER, 94_800_000n)] }));
+    await expect(nexusTxApi.buildTransferTx(poisoned, 'Preprod')).rejects.toMatchObject({ violations: ['foreignOutput'] });
+  });
+
   it('refuses CBOR it cannot decode, and leaves an empty build to the caller', async () => {
     post.mockResolvedValueOnce({ data: { tx_cbor: 'deadbeef', tx_hash: TX } });
     await expect(nexusTxApi.buildTransferTx(transfer, 'Preprod')).rejects.toMatchObject({ name: 'TxIntentMismatchError' });

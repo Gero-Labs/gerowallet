@@ -12,6 +12,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { verifyStrikeWithdrawTx } from '@/modules/market/utils/strikeWithdrawGuard';
+import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
 
 /**
  * Strike v2 withdraw quote – wraps the validator response and adds local
@@ -177,11 +178,8 @@ async function signWithdrawTx(
 
   // Strike built this transaction: sign it only if it is the min-UTxO funding it
   // says it is (see strikeWithdrawGuard.ts).
-  const ownAddresses = [
-    walletStore.loggedWallet?.baseAddress,
-    ...[...(keys.payment ?? []), ...(keys.change ?? [])].map((k) => k.address),
-    ...(utxos ?? []).map(([, out]) => String(out?.address ?? '')),
-  ].filter((a): a is string => !!a);
+  // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts).
+  const ownAddresses = derivedOwnAddresses(keys, walletStore.loggedWallet?.baseAddress);
   const ownKeyHashes = [...(keys.payment ?? []), ...(keys.stake ?? [])].map((k) => k.cred).filter(Boolean);
   const violations = verifyStrikeWithdrawTx(txCborHex, { validatorAddress, ownAddresses, ownKeyHashes });
   if (violations.length > 0) {
