@@ -4301,6 +4301,8 @@ export default {
   'txGuard.unmatchedInputs': '{count} entrada no está en el saldo conocido de tu billetera, así que el monto que pagas es una estimación | {count} entradas no están en el saldo conocido de tu billetera, así que el monto que pagas es una estimación',
   'txGuard.foreignValueTitle': 'Parte de tu ADA puede terminar en manos de otra persona',
   'txGuard.foreignValueBody': 'Esta transacción paga un depósito que se reembolsa a otra persona, o devuelve tu colateral a una dirección que no es tuya si un script falla.',
+  'txGuard.inputsMisreportedTitle': 'Los datos de saldo de tu billetera eran incorrectos para esta transacción',
+  'txGuard.inputsMisreportedBody': 'Las monedas que gasta esta transacción no coinciden con lo que informó el proveedor de datos de tu billetera. Los montos que ves usan los valores registrados en la blockchain. Revísalos con cuidado antes de firmar.',
   'miniGero.futureTransactionsNote': 'Por tu seguridad, cualquier transacción futura de este sitio web requerirá una verificación adicional antes de firmarse.',
   'miniGero.requestQueueIndicator': 'Solicitud {current} de {total}',
   'miniGero.embeddedIn': 'Esta solicitud viene de una página incrustada en {site}. Continúa solo si confías en ambos sitios.',

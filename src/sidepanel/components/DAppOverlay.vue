@@ -142,6 +142,8 @@
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:inputs-misreported-ack="inputsMisreportedAck"
+          :inputs-misreported="inputsMisreported"
           :primary-color="primaryColor"
         />
 
@@ -1079,6 +1081,7 @@ import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
 import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
@@ -1889,25 +1892,49 @@ const txCborForSummary = computed<string | null>(() => {
   return (currentRequest.value.payload?.tx as string | undefined) || null;
 });
 
-// The full approval summary, from the same CBOR the signer hashes. Shared
-// builder (txApprovalSummary.ts) so the popup fallback shows the same effects.
-const approvalSummary = computed<TxApprovalSummary | null>(() => {
+// The transaction of the current sign request, decoded once from the same CBOR
+// the signer hashes.
+const approvalTx = computed<Cardano.Tx | null>(() => {
   const txCbor = txCborForSummary.value;
   if (!txCbor) return null;
   try {
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
-    if (!tx?.body) return null;
+    return tx?.body ? tx : null;
+  } catch (e) {
+    console.error('[DAppOverlay] Failed to decode signTx CBOR:', e);
+    return null;
+  }
+});
+
+// The wallet UTxOs "You pay" counts, checked against the transactions that created
+// them; a misstated one is replaced and Sign waits for an acknowledgement.
+const claimedOwnUtxos = computed<readonly Cardano.Utxo[]>(() => {
+  const collateral = WalletStore.state.collateral;
+  return [...utxos.value, ...(collateral ? [collateral] : [])];
+});
+const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenApprovalUtxos(
+  approvalTx,
+  claimedOwnUtxos,
+  computed(() => loggedWallet.value?.network),
+  () => WalletStore.state.transactions as unknown[],
+);
+
+// The full approval summary. Shared builder (txApprovalSummary.ts) so the popup
+// fallback shows the same effects.
+const approvalSummary = computed<TxApprovalSummary | null>(() => {
+  const tx = approvalTx.value;
+  if (!tx) return null;
+  try {
     const wallet = loggedWallet.value;
     const walletNetworkId = wallet
       ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
       : null;
-    const collateral = WalletStore.state.collateral;
     return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo, {
-      ownUtxos: [...utxos.value, ...(collateral ? [collateral] : [])],
+      ownUtxos: provenOwnUtxos.value,
       deposits: approvalDepositsFrom(networkStore.epochParams),
     }));
   } catch (e) {
-    console.error('[DAppOverlay] Failed to decode signTx CBOR:', e);
+    console.error('[DAppOverlay] Failed to summarize signTx:', e);
     return null;
   }
 });
@@ -1969,6 +1996,10 @@ const networkMismatchAck = ref(false);
 // another address (blocking, acknowledged in TxApprovalIntents).
 const foreignValueAck = ref(false);
 
+// The UTxO list misstated an input this transaction spends (blocking,
+// acknowledged in TxApprovalIntents; amounts already use the proven values).
+const inputsMisreportedAck = ref(false);
+
 // Proportional risk friction: the Cardano Shield badge was purely
 // decorative (rendered in TransactionDetailsCard's header, never gated
 // anything). Quiet when safe — low/medium/unverified show only the existing
@@ -1984,6 +2015,7 @@ const signTxBlocked = computed(() =>
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
   || (!!approvalSummary.value?.requiresForeignValueAck && !foreignValueAck.value)
+  || (inputsMisreported.value && !inputsMisreportedAck.value)
   || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
 
@@ -2136,6 +2168,7 @@ watch(currentRequest, () => {
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
   foreignValueAck.value = false;
+  inputsMisreportedAck.value = false;
   highRiskAck.value = false;
 });
 

@@ -4748,6 +4748,8 @@ export default {
   'txGuard.unmatchedInputs': '{count} Input ist nicht in deinem bekannten Wallet-Guthaben, daher ist der zu zahlende Betrag eine Schätzung | {count} Inputs sind nicht in deinem bekannten Wallet-Guthaben, daher ist der zu zahlende Betrag eine Schätzung',
   'txGuard.foreignValueTitle': 'Ein Teil deiner ADA kann bei jemand anderem landen',
   'txGuard.foreignValueBody': 'Diese Transaktion zahlt eine Kaution, die an jemand anderen zurückerstattet wird, oder gibt deine Sicherheit (Collateral) an eine fremde Adresse zurück, falls ein Skript fehlschlägt.',
+  'txGuard.inputsMisreportedTitle': 'Die Guthabendaten deiner Wallet waren für diese Transaktion falsch',
+  'txGuard.inputsMisreportedBody': 'Die Coins, die diese Transaktion ausgibt, entsprechen nicht dem, was der Datenanbieter deiner Wallet gemeldet hat. Die angezeigten Beträge verwenden die Werte aus der Blockchain. Prüfe sie sorgfältig, bevor du signierst.',
   'miniGero.futureTransactionsNote': 'Zu Ihrer Sicherheit erfordern zukünftige Transaktionen von dieser Website eine zusätzliche Verifizierung vor der Signierung.',
   'miniGero.requestQueueIndicator': 'Anfrage {current} von {total}',
   'miniGero.embeddedIn': 'Diese Anfrage stammt von einer Seite, die in {site} eingebettet ist. Fahren Sie nur fort, wenn Sie beiden Seiten vertrauen.',

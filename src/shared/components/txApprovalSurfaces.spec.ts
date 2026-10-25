@@ -50,7 +50,18 @@ describe('signTx approval surfaces share one summary', () => {
       const src = read(file);
       expect(src).toMatch(gate);
       expect(src).toContain('v-model:foreign-value-ack="foreignValueAck"');
-      expect(src).toMatch(/ownUtxos: \[\.\.\.utxos\.value/);
+      expect(src).toMatch(/return \[\.\.\.utxos\.value, \.\.\.\(collateral \? \[collateral\] : \[\]\)\]/);
+    });
+
+    // The UTxO list comes from gero-sync: what the summary counts is checked against
+    // the transactions that created those UTxOs, and a misstated input holds Sign.
+    it(`${file} counts proven UTxOs and gates Sign on a misstated input`, () => {
+      const src = read(file);
+      expect(src).toContain('useProvenApprovalUtxos(');
+      expect(src).toContain('ownUtxos: provenOwnUtxos.value');
+      expect(src).toMatch(/inputsMisreported\.value && !inputsMisreportedAck\.value/);
+      expect(src).toContain('v-model:inputs-misreported-ack="inputsMisreportedAck"');
+      expect(src).toContain(':inputs-misreported="inputsMisreported"');
     });
   }
 });

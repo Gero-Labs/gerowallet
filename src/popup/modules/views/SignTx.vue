@@ -55,6 +55,8 @@
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:inputs-misreported-ack="inputsMisreportedAck"
+          :inputs-misreported="inputsMisreported"
         />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
@@ -255,6 +257,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
 import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import filters from '@/shared/utils/filters';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
@@ -318,6 +321,18 @@ const addresses = computed(() => {
 
 // Every effect of the tx, from the same CBOR the signer hashes (shared with the
 // side panel). Asset names aren't resolved here, so units show truncated.
+// The wallet UTxOs "You pay" counts are checked against the transactions that
+// created them (useProvenApprovalUtxos); a misstated one blocks Sign until acknowledged.
+const claimedOwnUtxos = computed<readonly Cardano.Utxo[]>(() => {
+  const collateral = walletStore.collateral;
+  return [...utxos.value, ...(collateral ? [collateral] : [])];
+});
+const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenApprovalUtxos(
+  computed(() => tx.value ?? null),
+  claimedOwnUtxos,
+  computed(() => loggedWallet.value?.network),
+  () => walletStore.transactions as unknown[],
+);
 const approvalSummary = computed<TxApprovalSummary | null>(() => {
   if (!tx.value?.body) return null;
   try {
@@ -325,11 +340,10 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     const walletNetworkId = wallet
       ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
       : null;
-    const collateral = walletStore.collateral;
     return buildTxApprovalSummary(
       tx.value,
       approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 }), {
-        ownUtxos: [...utxos.value, ...(collateral ? [collateral] : [])],
+        ownUtxos: provenOwnUtxos.value,
         deposits: approvalDepositsFrom(networkStore.epochParams),
       }),
     );
@@ -342,12 +356,14 @@ const approvalCard = computed(() =>
 );
 const networkMismatchAck = ref(false);
 const foreignValueAck = ref(false);
-// Sign is blocked until a network mismatch, and a deposit refund or collateral
-// return to someone else, are explicitly acknowledged.
+const inputsMisreportedAck = ref(false);
+// Sign is blocked until a network mismatch, a deposit refund or collateral return
+// to someone else, and a misstated input are explicitly acknowledged.
 const signBlocked = computed(() =>
   !!approvalSummary.value
   && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
-    || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)),
+    || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
+    || (inputsMisreported.value && !inputsMisreportedAck.value)),
 );
 
 const txAutoSubmit = computed(() => {

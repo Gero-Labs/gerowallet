@@ -4416,6 +4416,8 @@ export default {
   'txGuard.unmatchedInputs': '{count} input isn\'t in your wallet\'s known balance, so the amount you pay is an estimate | {count} inputs aren\'t in your wallet\'s known balance, so the amount you pay is an estimate',
   'txGuard.foreignValueTitle': 'Some of your ADA can end up with someone else',
   'txGuard.foreignValueBody': 'This transaction pays a deposit that is refunded to someone else, or returns your collateral to an address that isn\'t yours if a script fails.',
+  'txGuard.inputsMisreportedTitle': 'Your wallet\'s balance data was wrong for this transaction',
+  'txGuard.inputsMisreportedBody': 'The coins this transaction spends aren\'t what your wallet\'s data provider reported. The amounts shown use the values recorded on the blockchain. Check them carefully before you sign.',
   'miniGero.futureTransactionsNote': 'For your security, any future transactions from this website will require additional verification before signing.',
   'miniGero.requestQueueIndicator': 'Request {current} of {total}',
   'miniGero.embeddedIn': 'This request comes from a page embedded in {site}. Continue only if you trust both sites.',

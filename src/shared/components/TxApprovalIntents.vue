@@ -122,6 +122,27 @@
       </div>
     </div>
 
+    <!-- The wallet's UTxO list (gero-sync) misstated an input this transaction
+         spends; the amounts above already use the proven values (blocking).
+         The parent gates Sign on the acknowledgement. -->
+    <div v-if="inputsMisreported" class="tx-network-banner mb-3" data-testid="tx-inputs-misreported-banner">
+      <v-icon color="error" size="20" class="mr-2">mdi-database-alert-outline</v-icon>
+      <div class="tx-network-text">
+        <div class="tx-network-title">{{ $t('txGuard.inputsMisreportedTitle') }}</div>
+        <div class="tx-network-body">{{ $t('txGuard.inputsMisreportedBody') }}</div>
+        <v-checkbox
+          :model-value="inputsMisreportedAck"
+          color="error"
+          hide-details
+          theme="dark"
+          density="compact"
+          class="mt-2"
+          :label="$t('signTx.highRiskAck')"
+          @update:model-value="emit('update:inputsMisreportedAck', !!$event)"
+        />
+      </div>
+    </div>
+
     <!-- Network mismatch (blocking): the body network id, or any output
          (own included) or the collateral return, is on a different network
          than the active wallet. The parent gates Sign on the acknowledgement. -->
@@ -156,11 +177,15 @@ const props = withDefaults(defineProps<{
   summary: TxApprovalSummary;
   networkAck: boolean;
   foreignValueAck?: boolean;
+  /** The wallet's UTxO list misstated an input this transaction spends (useProvenApprovalUtxos). */
+  inputsMisreported?: boolean;
+  inputsMisreportedAck?: boolean;
   primaryColor?: string;
-}>(), { foreignValueAck: false, primaryColor: undefined });
+}>(), { foreignValueAck: false, inputsMisreported: false, inputsMisreportedAck: false, primaryColor: undefined });
 const emit = defineEmits<{
   (e: 'update:networkAck', value: boolean): void;
   (e: 'update:foreignValueAck', value: boolean): void;
+  (e: 'update:inputsMisreportedAck', value: boolean): void;
 }>();
 
 const { t } = useTranslation();
