@@ -8,7 +8,7 @@ import {
   BRING_SDK_PATCHES,
   STORAGE_GETTER,
   __geroBringFrameOrigin,
-  __geroFromBringFrame,
+  __geroBringEvent,
   __geroIsBringOrigin,
   __geroIsWebUrl,
   bringSdkPatch,
@@ -163,7 +163,7 @@ describe('patchBringSdk on the installed SDK', () => {
     expect(out).not.toContain('document.querySelector(`#${F}-${chrome.runtime.id}`)');
     expect(out).not.toMatch(/walletAddress:[\w$]+\},"\*"\)/);
     expect(out).not.toMatch(/case"OPEN_CASHBACK_PAGE":let\{url/);
-    expect(out).toContain('__geroFromBringFrame(');
+    expect(out).toContain('__geroBringEvent(');
     expect(out).toContain('__geroIsWebUrl(');
   });
 
@@ -211,12 +211,28 @@ describe('helpers', () => {
     }
   });
 
-  it('trusts a message only from Bring origin, and from Bring\'s frame unless it announces an activation', () => {
+  it('trusts Bring\'s own frame, and from other Bring frames only another wallet\'s activation, defused', () => {
     const frame = { contentWindow: {} };
-    expect(__geroFromBringFrame({ origin: BRING_FRAME, source: frame.contentWindow, data: { action: 'OPT_OUT' } }, frame)).toBe(true);
-    expect(__geroFromBringFrame({ origin: BRING_FRAME, source: {}, data: { action: 'OPT_OUT' } }, frame)).toBe(false);
-    expect(__geroFromBringFrame({ origin: BRING_FRAME, source: {}, data: { action: 'ACTIVATE' } }, null)).toBe(true);
-    expect(__geroFromBringFrame({ origin: 'https://evil.example', source: frame.contentWindow, data: { action: 'OPT_OUT' } }, frame)).toBe(false);
+    const hadChrome = 'chrome' in globalThis;
+    const saved = globalThis.chrome;
+    globalThis.chrome = { runtime: { id: EXT_ID } };
+    try {
+      const own = { origin: BRING_FRAME, source: frame.contentWindow, data: { action: 'OPT_OUT' } };
+      expect(__geroBringEvent(own, frame)).toBe(own);
+      expect(__geroBringEvent({ origin: BRING_FRAME, source: {}, data: { action: 'OPT_OUT' } }, frame)).toBeNull();
+      expect(__geroBringEvent({ origin: 'https://evil.example', source: frame.contentWindow, data: { action: 'OPT_OUT' } }, frame)).toBeNull();
+      // An activation from a frame that is not ours, naming this extension: never ours.
+      expect(__geroBringEvent({ origin: BRING_FRAME, source: {}, data: { action: 'ACTIVATE', extensionId: EXT_ID } }, frame)).toBeNull();
+      expect(__geroBringEvent({ origin: BRING_FRAME, source: {}, data: { action: 'ACTIVATE' } }, null)).toBeNull();
+      const foreign = __geroBringEvent({ origin: BRING_FRAME, source: {}, data: {
+        action: 'ACTIVATE', extensionId: 'another-wallet', domain: 'shop.example', redirectUrl: 'https://x.example', followups: [{ id: 'f' }],
+      } }, frame);
+      expect(foreign?.data).toMatchObject({ action: 'ACTIVATE', extensionId: 'another-wallet', domain: 'shop.example' });
+      expect(foreign?.data.redirectUrl).toBeUndefined();
+      expect(foreign?.data.followups).toBeUndefined();
+    } finally {
+      if (hadChrome) globalThis.chrome = saved; else delete globalThis.chrome;
+    }
   });
 });
 
@@ -278,7 +294,7 @@ describe('content-script bridge', () => {
     expect(sdk.promptLogin).toHaveBeenCalled();
   });
 
-  it('ignores a genuine Bring page the attacker framed itself, except an activation', async () => {
+  it('ignores a genuine Bring page the attacker framed itself, except another wallet\'s activation', async () => {
     const sdk = await initContentScript(PATCHED);
     await injectBringPopup(sdk.listeners);
     const other = plantFrame(`${BRING_FRAME}/elsewhere`, 'attacker-frame');
@@ -287,8 +303,18 @@ describe('content-script bridge', () => {
     post({ action: 'PROMPT_LOGIN' }, { origin: BRING_FRAME, source: other.contentWindow });
     expect(sdk.sendMessage).not.toHaveBeenCalled();
     expect(sdk.promptLogin).not.toHaveBeenCalled();
-    post({ action: 'ACTIVATE', domain: 'shop.example', extensionId: 'another-wallet' }, { origin: BRING_FRAME, source: other.contentWindow });
+    // Naming this extension, it would be treated as our own activation: refused.
+    post({ action: 'ACTIVATE', domain: 'shop.example', redirectUrl: 'https://evil.example', followups: [{ id: 'f' }] },
+      { origin: BRING_FRAME, source: other.contentWindow });
+    expect(sdk.sendMessage).not.toHaveBeenCalled();
+    // Another wallet's activation only quiets our popup: no redirect, no follow-ups.
+    post({ action: 'ACTIVATE', domain: 'shop.example', extensionId: 'another-wallet', redirectUrl: 'https://evil.example', followups: [{ id: 'f' }] },
+      { origin: BRING_FRAME, source: other.contentWindow });
     expect(sentActions(sdk.sendMessage)).toEqual(['ACTIVATE']);
+    const [activation] = sdk.sendMessage.mock.calls[0];
+    expect(activation.extensionId).toBe('another-wallet');
+    expect(activation.redirectUrl).toBeUndefined();
+    expect(activation.followups).toBeUndefined();
   });
 
   it('still serves Bring\'s own iframe', async () => {

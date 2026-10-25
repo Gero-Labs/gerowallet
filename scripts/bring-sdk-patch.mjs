@@ -58,12 +58,23 @@ export function __geroBringFrameOrigin(frame) {
   }
 }
 
-export function __geroFromBringFrame(event, frame) {
-  if (!event || !__geroIsBringOrigin(event.origin)) return false;
-  if (frame && event.source === frame.contentWindow) return true;
-  // Another wallet's Bring popup announcing an activation, so ours goes quiet
-  // on that site (the SDK's own cross-extension rule). Bring origin only.
-  return !!event.data && event.data.action === 'ACTIVATE';
+/**
+ * The window message the content-script bridge may act on, or null.
+ *
+ * Anything from Bring's own iframe, at a Bring origin, passes as is. From any
+ * other frame, even a genuine Bring page someone framed, only another wallet's
+ * activation passes (the SDK's cross-extension rule: our popup goes quiet on
+ * that site), and without its redirect or navigation follow-ups. An activation
+ * naming this extension would make the worker treat it as ours: redirect the tab
+ * and arm browser-wide follow-ups. Only our own iframe may do that.
+ */
+export function __geroBringEvent(event, frame) {
+  if (!event || !__geroIsBringOrigin(event.origin)) return null;
+  if (frame && event.source === frame.contentWindow) return event;
+  const data = event.data;
+  if (!data || typeof data !== 'object' || data.action !== 'ACTIVATE') return null;
+  if (typeof data.extensionId !== 'string' || data.extensionId === chrome.runtime.id) return null;
+  return { data: { ...data, redirectUrl: undefined, followups: undefined }, origin: event.origin, source: event.source };
 }
 
 export function __geroIsWebUrl(url) {
@@ -76,7 +87,7 @@ export function __geroIsWebUrl(url) {
   }
 }
 
-const HELPERS = [__geroIsBringOrigin, __geroBringFrameOrigin, __geroFromBringFrame, __geroIsWebUrl];
+const HELPERS = [__geroIsBringOrigin, __geroBringFrameOrigin, __geroBringEvent, __geroIsWebUrl];
 
 const ID = '([\\w$]+)';
 
@@ -131,10 +142,10 @@ export const BRING_SDK_PATCHES = [
       `${get}=async(e,t=!0)=>{if(e==="walletAddress"&&${optedOut}(await ${get}("optOut",t)))return;if(t){let n=${cache}.get(e);if(n!==null)return n}return new Promise`,
   },
   {
-    name: 'content-script bridge acts only on messages from Bring\'s iframe',
+    name: 'content-script bridge acts only on messages from Bring\'s iframe (and other wallets\' activations, defused)',
     pattern: MESSAGE_LISTENER,
     replace: () => (_m, ev, handler, frameVar, promptLogin, onClose) =>
-      `window.addEventListener("message",${ev}=>{__geroFromBringFrame(${ev},${frameVar})&&${handler}({event:${ev},iframeEl:${frameVar},promptLogin:${promptLogin},onClose:${onClose}})})`,
+      `window.addEventListener("message",${ev}=>{let __geroEv=__geroBringEvent(${ev},${frameVar});__geroEv&&${handler}({event:__geroEv,iframeEl:${frameVar},promptLogin:${promptLogin},onClose:${onClose}})})`,
   },
   {
     name: 'portal listener acts only on Bring-origin messages',
