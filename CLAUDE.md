@@ -180,6 +180,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 ## Feature Flags
 - Self-hosted flag service (gero-sync): `src/services/featureFlag.service.ts` + `src/stores/featureFlagsStore.ts`
 - Backend URL: `VITE_FLAGS_BASE_URL` (see `.env.*`)
+- A failed first fetch is retried (issue 1195): 5s doubling to 60s, for as long as the page is open, waiting for `online` while offline. Until then every flag is its fallback; `featureFlagService.onReady()` tells the store when the flags arrive, and only then does it mirror them to `chrome.storage.local.featureFlags` (never the fallbacks, which would overwrite the background's last known values)
 - Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isHelpCenterEnabled` (dashboard discovery and Blog redirect only; public Help and welcome access remain available while off or loading), `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`, `isBitcoinEnabled` (master visibility gate for the Bitcoin chain: onboarding tile + BTC route guards + BTC nav items), `isSubmitApiEnabled` (UI-only gate for Settings → Advanced → Submit API; the background router honours a saved endpoint whatever the flag says)
 - Route gating: `isRouteUnderMaintenance()` in router.ts
 - Nav hiding: check flag in NavigationDrawer.vue menu items
