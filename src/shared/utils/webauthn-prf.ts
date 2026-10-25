@@ -671,13 +671,16 @@ export async function encryptSpendingPasswordWithPrf(
  * @param encryptedPassword - Hex-encoded encrypted password
  * @param credentialId - Base64-encoded credential ID (must match encryption)
  * @param walletId - Wallet ID for key derivation (must match encryption)
+ * @param providedPrfOutput - PRF output evaluated by the caller (the background,
+ *   which cannot run WebAuthn, checks a PassKey unlock this way)
  * @returns Promise<string> - Decrypted spending password
  * @throws Error if PRF evaluation fails, user cancels, or decryption fails
  */
 export async function decryptSpendingPasswordWithPrf(
   encryptedPassword: string,
   credentialId: string,
-  walletId: string
+  walletId: string,
+  providedPrfOutput?: ArrayBuffer,
 ): Promise<string> {
   debugLog('[PRF] Decrypting spending password for wallet:', walletId);
 
@@ -688,8 +691,8 @@ export async function decryptSpendingPasswordWithPrf(
   const iv = encryptedBytes.subarray(0, 12);
   const ciphertext = encryptedBytes.subarray(12);
 
-  // Step 2: Evaluate PRF (requires user authentication)
-  const prfOutput = await evaluatePrfForWallet(credentialId, walletId);
+  // Step 2: Evaluate PRF (requires user authentication), unless the caller already did
+  const prfOutput = providedPrfOutput || await evaluatePrfForWallet(credentialId, walletId);
 
   // Step 3: Derive non-extractable encryption key (same derivation as encryption)
   const encryptionKey = await deriveEncryptionKeyFromPrf(prfOutput, walletId);
@@ -712,6 +715,78 @@ export async function decryptSpendingPasswordWithPrf(
   } catch (error) {
     console.error('[PRF] Decryption failed:', error);
     throw new Error('Failed to decrypt passkey password - credential may have been re-registered');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PassKey unlock verifier
+// ---------------------------------------------------------------------------
+
+const UNLOCK_VERIFIER_PLAINTEXT = 'gero-passkey-unlock-v1';
+
+async function deriveUnlockVerifierKey(prfOutput: ArrayBuffer, walletId: string): Promise<CryptoKey> {
+  const baseKey = await crypto.subtle.importKey('raw', prfOutput, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      salt: new Uint8Array(),
+      hash: 'SHA-512',
+      // Its own info string: this key never decrypts a secret, and no secret's key opens this.
+      info: new TextEncoder().encode(`gero-wallet-unlock-verifier-v1:${walletId}`),
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+/**
+ * Seal the PassKey unlock verifier of a wallet that is not itself a PRF wallet
+ * (PRF wallets are verified by opening their own PRF-encrypted key). The page
+ * creates it when PassKey unlock is switched on, from that PassKey's PRF output;
+ * the background later checks a PassKey unlock by opening it with the PRF output
+ * the page sends (`openPassKeyUnlockVerifier`). It holds no secret.
+ *
+ * Format: iv (12B) + AES-GCM ciphertext, hex; the credential ID is the AAD.
+ */
+export async function sealPassKeyUnlockVerifier(
+  prfOutput: ArrayBuffer,
+  credentialId: string,
+  walletId: string,
+): Promise<string> {
+  const key = await deriveUnlockVerifierKey(prfOutput, walletId);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(credentialId) },
+    key,
+    new TextEncoder().encode(UNLOCK_VERIFIER_PLAINTEXT),
+  );
+  const out = new Uint8Array(iv.length + sealed.byteLength);
+  out.set(iv);
+  out.set(new Uint8Array(sealed), iv.length);
+  return Buffer.from(out).toString('hex');
+}
+
+/** Whether `prfOutput` opens the verifier sealed for this credential and wallet. Never throws. */
+export async function openPassKeyUnlockVerifier(
+  verifierHex: string,
+  prfOutput: ArrayBuffer,
+  credentialId: string,
+  walletId: string,
+): Promise<boolean> {
+  try {
+    const bytes = Buffer.from(verifierHex, 'hex');
+    if (bytes.length <= 12) return false;
+    const key = await deriveUnlockVerifierKey(prfOutput, walletId);
+    const opened = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: bytes.subarray(0, 12), additionalData: new TextEncoder().encode(credentialId) },
+      key,
+      bytes.subarray(12),
+    );
+    return new TextDecoder().decode(opened) === UNLOCK_VERIFIER_PLAINTEXT;
+  } catch {
+    return false;
   }
 }
 

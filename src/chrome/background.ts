@@ -20,7 +20,7 @@ import { approvalNamesActiveAccount, connectApprovedAccount, readConnectApproval
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { unlockAfterStartup } from '@/chrome/unlockStartup';
-import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, verifySecondFactor } from '@/chrome/unlockGuards';
+import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, setUnlockThrottleMessage, verifySecondFactor, withUnlockThrottle } from '@/chrome/unlockGuards';
 import { createDexieDeviceShareStore, upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
@@ -119,6 +119,7 @@ import {
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
+  MpcCredentialRejectedError,
 } from '@/chrome/mpcWalletHandlers';
 import type { DeviceShareSecret } from '@/shared/utils/mpc';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
@@ -251,6 +252,10 @@ loadWallets().then(async () => {
 // MoonPay frame headers: stripped only for frames this extension opens. Session
 // rules don't survive a browser restart, so (re)install on every worker start.
 installMoonpayFrameRule().catch((e) => debugLog('MoonPay frame rule not installed:', e));
+
+// A back-off error's message is shown as-is by some pages (signing flows): give it
+// the user's language. Read at throw time, so a later language change applies.
+setUnlockThrottleMessage((seconds) => String(i18n.t('unlockGuard.tooManyAttempts', { seconds })));
 
 // Midnight SDK state used to sit in chrome.storage.local, readable by every content
 // script. It now lives in its own IndexedDB; delete the old copies once, even for a
@@ -941,8 +946,10 @@ function refuseWhileLocked(request: { id?: unknown }, sendResponse: (r: unknown)
 
 /**
  * Security settings of the logged-in wallet (Submit API endpoint, cross-device
- * trust and policy) cannot change behind the lock screen. Options handlers only;
- * answers `{ success: false, error }` in the shape those handlers use.
+ * trust and policy, push-notification registration and preferences) and new dApp
+ * sessions (WalletConnect, CIP-45) cannot change behind the lock screen, nor can a
+ * Google account's MPC registration be deleted. Options handlers only; answers
+ * `{ success: false, error }` in the shape those handlers use.
  */
 function refuseSettingsWhileLocked(request: { id?: unknown }, sendResponse: (r: unknown) => void, error: string = 'locked'): boolean {
   if (!walletStore.isLocked) return false;
@@ -2382,16 +2389,6 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     }
     const { secret } = buildDeviceShareSecret(request.data);
 
-    // 2FA, when the wallet has it, applies here as on every other unlock path.
-    // Never log request.data: it carries the TOTP code and the spending password.
-    {
-      const { getDb } = await import('@/db/wallet-db');
-      const configTable = (await getDb(walletId)).table('config');
-      if (!(await verifySecondFactor(configTable, request.data?.totpCode, request.data?.spendingPassword))) {
-        throw new Error('Invalid 2FA code');
-      }
-    }
-
     const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
     const { getAllWallets, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
     const { Api } = await import('@/api/api');
@@ -2415,22 +2412,34 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
           return cached;
         };
 
-    await unlockMpcWalletFlow(
-      { walletId, idToken: idToken || '', secret },
-      {
-        getWallet: async (id) => {
-          const wallets = await getAllWallets();
-          return wallets[id];
+    // One back-off with every other check of this wallet group's secrets: a wrong
+    // 2FA code or a device secret that does not reconstruct the key counts; a
+    // Google or network failure does not.
+    await withUnlockThrottle(walletId, async () => {
+      // 2FA, when the wallet has it, applies here as on every other unlock path.
+      // Never log request.data: it carries the TOTP code and the spending password.
+      const { getDb } = await import('@/db/wallet-db');
+      const configTable = (await getDb(walletId)).table('config');
+      if (!(await verifySecondFactor(configTable, request.data?.totpCode, request.data?.spendingPassword))) {
+        throw new MpcCredentialRejectedError('Invalid 2FA code');
+      }
+      await unlockMpcWalletFlow(
+        { walletId, idToken: idToken || '', secret },
+        {
+          getWallet: async (id) => {
+            const wallets = await getAllWallets();
+            return wallets[id];
+          },
+          getLoginShare,
+          reconstructRootKeyBytes,
+          sessionCache: mpcSessionCache,
+          promoteMpcDeviceShareNext,
+          upgradeDeviceShare: (walletId, secret) => upgradeMpcDeviceShare(
+            walletId, secret, createDexieDeviceShareStore(async () => (await import('@/db/gero-db')).getDb()),
+          ),
         },
-        getLoginShare,
-        reconstructRootKeyBytes,
-        sessionCache: mpcSessionCache,
-        promoteMpcDeviceShareNext,
-        upgradeDeviceShare: (walletId, secret) => upgradeMpcDeviceShare(
-          walletId, secret, createDexieDeviceShareStore(async () => (await import('@/db/gero-db')).getDb()),
-        ),
-      },
-    );
+      );
+    }, { rejected: () => false, rejection: (error) => error instanceof MpcCredentialRejectedError });
 
     // Reconstruct+validate passed — only now is it safe to cache the freshly
     // fetched login share so later re-unlocks this session can skip Google.
@@ -2455,6 +2464,10 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
       sender: SENDER.extension,
     });
   } catch (error) {
+    if (error instanceof UnlockThrottledError) {
+      sendResponse({ id: request.id, data: { success: false, retryAfterMs: error.retryAfterMs, error: error.message }, target: TARGET, sender: SENDER.extension });
+      return true;
+    }
     console.error('Error unlocking MPC wallet:', getErrorMessage(error, 'unlock failed'));
     sendResponse({
       id: request.id,
@@ -2682,6 +2695,8 @@ app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse
  */
 app.addToOptions(MessageTypes.DEREGISTER_MPC_ACCOUNT, async (request, sendResponse) => {
   try {
+    // Reachable from the welcome page while locked: say why, in the user's language.
+    if (refuseSettingsWhileLocked(request, sendResponse, String(i18n.t('welcome.resetGoogleAccountLocked')))) return true;
     const { idToken, chain, network } = request.data || {};
     if (!idToken || !chain || !network) {
       throw new Error('idToken, chain and network are required');
@@ -2847,7 +2862,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     // Note: Never log password data
     const walletBg = walletManager.getWallet();
     if (walletBg) {
-      // Await verifySpendingPassword (now async to support PRF wallets)
+      // Counted toward the wallet's back-off; throws UnlockThrottledError during a wait.
       const isValid = await walletBg.verifySpendingPassword(request.data.password);
       sendResponse({
         id: request.id,
@@ -2864,6 +2879,10 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
       });
     }
   } catch (error) {
+    if (error instanceof UnlockThrottledError) {
+      sendResponse({ id: request.id, data: { success: false, retryAfterMs: error.retryAfterMs, error: error.message }, target: TARGET, sender: SENDER.extension });
+      return true;
+    }
     console.error('Error verifying spending password:', error);
     sendResponse({
       id: request.id,
@@ -3119,6 +3138,7 @@ app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) =>
 app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const result = await notifyActions.setBrowserEnabled(request.data?.enabled === true);
     sendResponse(crossDeviceReply(request.id, { success: true, result, state: await getNotifyState() }));
   } catch (error) {
@@ -3129,6 +3149,7 @@ app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendRe
 app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
     const pkBytes = request.data?.privateKeyBytes;
     const privateKeyBytes = Array.isArray(pkBytes) ? Uint8Array.from(pkBytes) : undefined;
@@ -3143,6 +3164,7 @@ app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse
 app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     await notifyActions.disableWallet(Number(request.data?.walletId));
     sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState() }));
   } catch (error) {
@@ -3153,6 +3175,7 @@ app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendRespons
 app.addToOptions(MessageTypes.NOTIFY_SET_PREFS, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const result = await notifyActions.setPrefs(Number(request.data?.walletId), request.data?.prefs ?? {});
     sendResponse(crossDeviceReply(request.id, { success: result === 'ok', result, state: await getNotifyState() }));
   } catch (error) {
@@ -4084,14 +4107,21 @@ app.addToOptions(MessageTypes.BACKGROUND_READY, (request, sendResponse) => {
   sendResponse({ id: request.id, data: { ready: true }, target: TARGET, sender: SENDER.extension });
 });
 
+/** The PRF output a PassKey unlock carries (`passKeyPrf`, a number[]), or undefined for any other unlock. */
+function passKeyPrfOf(data: { passKeyPrf?: unknown } | undefined): number[] | undefined {
+  return Array.isArray(data?.passKeyPrf) ? (data.passKeyPrf as number[]) : undefined;
+}
+
 app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
+  // A PassKey unlock carries the PassKey's PRF output; wiped once checked. Never logged.
+  const passKeyPrf = passKeyPrfOf(request.data);
   try {
     const { unlockCredential, totpCode, password, unlockMethod } = request.data;
     const success = await unlockAfterStartup(
       booted(),
       request.data.walletId,
       () => walletStore.loggedWallet?.id,
-      () => walletManager.unlock(unlockCredential, totpCode, password, unlockMethod),
+      () => walletManager.unlock(unlockCredential, totpCode, password, unlockMethod, passKeyPrf),
     );
     sendResponse({
       id: request.id,
@@ -4115,13 +4145,16 @@ app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
       sender: SENDER.extension,
       error: getErrorMessage(err, 'unlock-failed'),
     });
+  } finally {
+    passKeyPrf?.fill(0);
   }
 });
 
 app.addToOptions(MessageTypes.VERIFY_PRE_LOGIN_UNLOCK, async (request, sendResponse) => {
+  const passKeyPrf = passKeyPrfOf(request.data);
   try {
     const { walletId, unlockCredential, totpCode, password, unlockMethod } = request.data;
-    const success = await walletManager.verifyPreLoginUnlock(walletId, unlockCredential, totpCode, password, unlockMethod);
+    const success = await walletManager.verifyPreLoginUnlock(walletId, unlockCredential, totpCode, password, unlockMethod, passKeyPrf);
     // The LOGIN that follows a verified pre-login unlock may open the wallet unlocked.
     // Granted per secrets record (account #0 of a group; not MPC-specific despite the helper's name).
     if (success && typeof walletId === 'number') preLoginGrants.grant(await mpcSecretsWalletId(walletId));
@@ -4137,13 +4170,16 @@ app.addToOptions(MessageTypes.VERIFY_PRE_LOGIN_UNLOCK, async (request, sendRespo
       return;
     }
     console.error('pre-login unlock verification error', err);
+    // A string survives messaging; an Error serializes to {}.
     sendResponse({
       id: request.id,
       data: { success: false },
       target: TARGET,
       sender: SENDER.extension,
-      error: err,
+      error: getErrorMessage(err, 'unlock-failed'),
     });
+  } finally {
+    passKeyPrf?.fill(0);
   }
 });
 
@@ -5291,6 +5327,7 @@ app.addToOptions(MessageTypes.WC_PAIR, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.WC_APPROVE_SESSION, async (request, sendResponse) => {
   try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
     const { default: WCStore } = await import('@/stores/walletConnectStore');
     const { id, accounts, chain, network } = request.data;
@@ -5365,6 +5402,7 @@ app.addToOptions(MessageTypes.CIP45_UPDATE_SESSION, async (request, sendResponse
 
 app.addToOptions(MessageTypes.CIP45_BEGIN_SESSION, async (request, sendResponse) => {
   let authorization: Cip45Authorization | undefined;
+  if (refuseSettingsWhileLocked(request, sendResponse)) return true;
   try {
     const { context, dappPeerId } = request.data as { context: Cip45WalletContext; dappPeerId: string };
     authorization = cip45Authorization.begin(cip45Owner(request.send), context, dappPeerId);

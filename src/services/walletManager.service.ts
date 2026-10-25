@@ -63,6 +63,7 @@ import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import { UnlockTargetChangedError } from '@/chrome/unlockStartup';
 import { UnlockThrottledError, unlockThrottle, verifySecondFactor } from '@/chrome/unlockGuards';
 import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
+import { PassKeyUnlockSetupRequiredError, verifyPassKeyUnlockProof } from '@/shared/utils/passKeyUnlockProof';
 import { GROUP_SECRET_FIELDS, resolveAccountIndex, secretsWallet, secretsWalletId, withGroupSecrets } from '@/shared/utils/walletAccount';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
@@ -1084,13 +1085,14 @@ export class WalletManager {
 
   /**
    * Shared verification logic for unlock credentials
-   * Verifies PIN, Pattern, Password, and optional 2FA (PassKey verification handled by WebAuthn in UI)
+   * Verifies PIN, Pattern, Password, a PassKey's PRF output, and optional 2FA
    * @param walletId - Wallet ID to verify against
-   * @param unlockCredential - PIN, pattern, password, or PassKey credential signal
+   * @param unlockCredential - PIN, pattern or password (ignored for a PassKey unlock)
    * @param totpCode - Optional TOTP code if 2FA is enabled
    * @param password - Spending password to decrypt security data
-   * @param providedUnlockMethod - Optional unlock method override (for PassKey)
+   * @param providedUnlockMethod - Optional unlock method override
    * @param useWalletBg - If true, use walletBg for password verification (post-login); if false, use database (pre-login)
+   * @param passKeyPrf - A PassKey unlock: the PassKey's PRF output, evaluated by the page
    * @returns True if verification successful
    */
   private async verifyUnlockCredentials(
@@ -1099,7 +1101,8 @@ export class WalletManager {
     totpCode?: string,
     password?: string,
     providedUnlockMethod?: string,
-    useWalletBg: boolean = false
+    useWalletBg: boolean = false,
+    passKeyPrf?: number[],
   ): Promise<boolean> {
     // Get security config from wallet database. An added account is unlocked
     // with its account #0's settings and secrets, which only that record holds.
@@ -1116,7 +1119,7 @@ export class WalletManager {
     }
 
     const valid = await this.checkUnlockCredentials(
-      walletId, settingsWalletId, walletsMap, unlockCredential, totpCode, password, providedUnlockMethod, useWalletBg,
+      walletId, settingsWalletId, walletsMap, unlockCredential, totpCode, password, providedUnlockMethod, useWalletBg, passKeyPrf,
     );
     try {
       if (valid) await unlockThrottle.recordSuccess(settingsWalletId);
@@ -1137,6 +1140,7 @@ export class WalletManager {
     password: string | undefined,
     providedUnlockMethod: string | undefined,
     useWalletBg: boolean,
+    passKeyPrf?: number[],
   ): Promise<boolean> {
     const { verifyPin, verifyPattern, decryptSecurityData } = await import('@/shared/utils/security');
     const { getDb } = await import('@/db/wallet-db');
@@ -1161,46 +1165,34 @@ export class WalletManager {
     // Verify unlock credential based on method
     let unlockValid = false;
 
-    // Check for browser-verified credentials first (PassKey, PRF lock password).
-    // These signal strings indicate verification already happened in the browser UI context.
-    // Background cannot independently re-verify because:
-    // - PassKey: WebAuthn requires user activation (popup), not available in service worker
-    // - Lock password: @noble/hashes PBKDF2 produces different results in service worker vs browser
-    //   context due to crypto polyfill mismatches (Buffer handling in separate Vite bundles)
-    // Trust boundary: these signals arrive on the options channel (sendToBackgroundFromOptions).
-    // The router (messaging.ts + senderTrust.ts isOptionsSenderAllowed) dispatches that channel only
-    // when the real MessageSender is one of our own chrome-extension:// pages; a content script (which
-    // shares our sender.id) or an injected page script can't reach this flow. UNLOCK must never be added
-    // to CONTENT_SCRIPT_OPTIONS_METHODS.
-    // Each signal is honoured only for the wallet being unlocked, and only when that
-    // wallet's own secrets record is set up for it (never the logged-in wallet's):
-    // - 'passkey-authenticated': a PRF wallet (its PassKey is its credential), or a
-    //   wallet with PassKey unlock switched on and a credential registered;
-    // - 'lockpassword-verified': a PRF wallet whose configured method is its lock
-    //   password. Any other signal falls through to the real check below, which
-    //   fails on the literal string.
+    // Every credential is checked here, never trusted from the page. A PassKey unlock
+    // arrives as the PassKey's PRF output (WebAuthn cannot run in the worker, so the
+    // page evaluates it, salted with this secrets record's id); it counts only if it
+    // opens something sealed with that PassKey for this record (passKeyUnlockProof.ts).
     const settingsRecord = walletsMap[settingsWalletId];
     const encryptionMethod = settingsRecord?.encryptionMethod;
-    let passKeyUnlockConfigured = false;
-    if (unlockCredential === 'passkey-authenticated') {
-      if (encryptionMethod === 'prf') {
-        passKeyUnlockConfigured = !!settingsRecord?.webAuthnCredentialId;
-      } else {
-        const passKeyForUnlock = await configTable.where({ key: 'passKeyForUnlock' }).first();
-        const credentialId = await configTable.where({ key: 'webAuthnCredentialId' }).first();
-        passKeyUnlockConfigured = passKeyForUnlock?.value === true && !!credentialId?.value;
+    const passKeyUsed = passKeyPrf !== undefined;
+    if (passKeyUsed) {
+      if (!Array.isArray(passKeyPrf) || passKeyPrf.length !== 32
+        || !passKeyPrf.every((b) => Number.isInteger(b) && b >= 0 && b <= 255)) {
+        return false;
       }
-    }
-    const browserVerified =
-      (unlockCredential === 'passkey-authenticated' && passKeyUnlockConfigured) ||
-      (unlockCredential === 'lockpassword-verified' && configuredMethod === 'password' && encryptionMethod === 'prf');
-    if (browserVerified) {
-      unlockValid = true;
+      const row = async (key: string) => (await configTable.where({ key }).first())?.value;
+      unlockValid = await verifyPassKeyUnlockProof(
+        settingsRecord ?? {},
+        {
+          passKeyForUnlock: await row('passKeyForUnlock'),
+          webAuthnCredentialId: await row('webAuthnCredentialId'),
+          passKeyUnlockVerifier: await row('passKeyUnlockVerifier'),
+          passKeyEncryptedSpendingPassword: await row('passKeyEncryptedSpendingPassword'),
+        },
+        settingsWalletId,
+        Uint8Array.from(passKeyPrf),
+      );
     } else if (unlockMethod === 'password') {
       if (encryptionMethod === 'prf') {
-        // PRF wallet: verify against lockPasswordHash in DB (defense-in-depth).
-        // Normally PRF wallets arrive as 'lockpassword-verified' (browser-verified above),
-        // but this branch catches edge cases where the browser failed to detect PRF status.
+        // PRF wallet: its lock password, checked against lockPasswordHash (Web Crypto
+        // PBKDF2, the same in the worker and the pages: security.ts verifyPin).
         const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
         if (!lockPasswordHashConfig?.value) {
           throw new Error('Lock password not configured for PRF wallet');
@@ -1223,7 +1215,8 @@ export class WalletManager {
           throw new Error('Encrypted private key not found or password not provided');
         }
 
-        unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string);
+        // Counted once, by verifyUnlockCredentials.
+        unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string, { counted: false });
       } else {
         // NORMAL WALLET - Pre-login: the stored record holding the secrets
         const wallet = walletsMap[settingsWalletId];
@@ -1289,11 +1282,11 @@ export class WalletManager {
 
     // Credentialed moment: re-derive the Midnight zswap keys and start the
     // on-device private sync. Only Normal password wallets qualify: their
-    // `unlockCredential` IS the mnemonic-encrypting spending password. PRF
-    // wallets arrive browser-verified (no usable secret here) and PIN/pattern
+    // `unlockCredential` IS the mnemonic-encrypting spending password. A PassKey or
+    // a PRF wallet's lock password gives no usable secret here, and PIN/pattern
     // don't decrypt the mnemonic, so those start it at the next Midnight send.
     // Fire-and-forget: must never block or fail unlock.
-    if (!browserVerified && unlockMethod === 'password' && encryptionMethod !== 'prf') {
+    if (!passKeyUsed && unlockMethod === 'password' && encryptionMethod !== 'prf') {
       void this.startMidnightPrivateSessionAtUnlock(walletId, unlockCredential as string);
     }
 
@@ -1358,13 +1351,14 @@ export class WalletManager {
   }
 
   /**
-   * Unlock the wallet with PIN/Pattern/Password + optional 2FA (PassKey handled in UI via WebAuthn)
-   * @param unlockCredential - PIN, pattern, password, or PassKey credential signal
+   * Unlock the wallet with PIN/Pattern/Password or a PassKey's PRF output + optional 2FA
+   * @param unlockCredential - PIN, pattern or password (ignored for a PassKey unlock)
    * @param totpCode - Optional TOTP code if 2FA is enabled
    * @param password - Spending password to decrypt security data
+   * @param passKeyPrf - A PassKey unlock: the PassKey's PRF output, evaluated by the page
    * @returns True if unlock successful
    */
-  async unlock(unlockCredential: string | number[], totpCode?: string, password?: string, providedUnlockMethod?: string): Promise<boolean> {
+  async unlock(unlockCredential: string | number[], totpCode?: string, password?: string, providedUnlockMethod?: string, passKeyPrf?: number[]): Promise<boolean> {
     debugLog('WalletManager: Starting unlock process');
 
     try {
@@ -1381,7 +1375,8 @@ export class WalletManager {
         totpCode,
         password,
         providedUnlockMethod,
-        true // Use walletBg for password verification
+        true, // Use walletBg for password verification
+        passKeyPrf,
       );
 
       if (!isValid) {
@@ -1407,7 +1402,8 @@ export class WalletManager {
       debugLog('WalletManager: Wallet unlocked successfully');
       return true;
     } catch (error) {
-      if (error instanceof UnlockTargetChangedError || error instanceof UnlockThrottledError) throw error;
+      if (error instanceof UnlockTargetChangedError || error instanceof UnlockThrottledError
+        || error instanceof PassKeyUnlockSetupRequiredError) throw error;
       console.error('Error unlocking wallet:', error);
       return false;
     }
@@ -1417,7 +1413,7 @@ export class WalletManager {
    * Verify pre-login unlock credentials for a wallet (without logging in)
    * This is used for the pre-login security check
    */
-  async verifyPreLoginUnlock(walletId: number, unlockCredential: string | number[], totpCode?: string, password?: string, providedUnlockMethod?: string): Promise<boolean> {
+  async verifyPreLoginUnlock(walletId: number, unlockCredential: string | number[], totpCode?: string, password?: string, providedUnlockMethod?: string, passKeyPrf?: number[]): Promise<boolean> {
     debugLog('WalletManager: Starting pre-login unlock verification');
 
     try {
@@ -1428,7 +1424,8 @@ export class WalletManager {
         totpCode,
         password,
         providedUnlockMethod,
-        false // Don't use walletBg, load from database instead
+        false, // Don't use walletBg, load from database instead
+        passKeyPrf,
       );
 
       if (isValid) {
@@ -1439,7 +1436,7 @@ export class WalletManager {
 
       return isValid;
     } catch (error) {
-      if (error instanceof UnlockThrottledError) throw error;
+      if (error instanceof UnlockThrottledError || error instanceof PassKeyUnlockSetupRequiredError) throw error;
       console.error('Error verifying pre-login unlock:', error);
       return false;
     }

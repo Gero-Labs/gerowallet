@@ -128,28 +128,100 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('browser-verified unlock signals', () => {
-  it('refuses the PassKey signal for a wallet whose PassKey unlock is not set up', async () => {
+type Verify = (id: number, credential: string | number[], totp?: string, password?: string, method?: string, useWalletBg?: boolean, passKeyPrf?: number[]) => Promise<boolean>;
+
+const prfOf = (fill: number) => new Uint8Array(32).fill(fill);
+const asBuffer = (bytes: Uint8Array) => bytes.slice().buffer as ArrayBuffer;
+
+describe('the background checks every unlock credential itself', () => {
+  it('no longer accepts the old browser-verified signals', async () => {
     const { hashPin } = await import('@/shared/utils/security');
-    env.config[10] = { unlockMethod: 'pin', pinHash: await hashPin('1234') };
-    const { internal } = await manager();
-    await expect(internal.verifyUnlockCredentials(10, 'passkey-authenticated', undefined, undefined, 'pin')).resolves.toBe(false);
-  });
-
-  it('accepts it when PassKey unlock is on and a credential is registered', async () => {
     env.config[10] = { unlockMethod: 'password', passKeyForUnlock: true, webAuthnCredentialId: 'cred-1' };
+    env.config[20] = { unlockMethod: 'password', lockPasswordHash: await hashPin('lock-pass') };
     const { internal } = await manager();
-    await expect(internal.verifyUnlockCredentials(10, 'passkey-authenticated', undefined, undefined, 'password')).resolves.toBe(true);
-    env.config[10] = { unlockMethod: 'password', passKeyForUnlock: true };
     await expect(internal.verifyUnlockCredentials(10, 'passkey-authenticated', undefined, undefined, 'password')).resolves.toBe(false);
+    await expect(internal.verifyUnlockCredentials(20, 'lockpassword-verified', undefined, undefined, 'password')).resolves.toBe(false);
+    await expect(internal.verifyUnlockCredentials(20, 'passkey-authenticated', undefined, undefined, 'password')).resolves.toBe(false);
   });
 
-  it('accepts it for a PassKey (PRF) wallet only when its own record holds the credential', async () => {
-    env.config[20] = { unlockMethod: 'password', lockPasswordHash: 'unused' };
+  it("checks a PRF wallet's lock password against the hash the page stored", async () => {
+    const { hashPin } = await import('@/shared/utils/security');
+    env.config[20] = { unlockMethod: 'password', lockPasswordHash: await hashPin('lock-pass') };
     const { internal } = await manager();
-    await expect(internal.verifyUnlockCredentials(20, 'passkey-authenticated')).resolves.toBe(true);
-    env.wallets[20] = { ...prf, webAuthnCredentialId: undefined };
-    await expect(internal.verifyUnlockCredentials(20, 'passkey-authenticated')).resolves.toBe(false);
+    await expect(internal.verifyUnlockCredentials(20, 'lock-pass', undefined, undefined, 'password')).resolves.toBe(true);
+    await expect(internal.verifyUnlockCredentials(20, 'not-it', undefined, undefined, 'password')).resolves.toBe(false);
+  });
+
+  it('the lock-password hash is plain PBKDF2-HMAC-SHA512, so the worker reads what the page wrote', async () => {
+    // An independent PBKDF2 (Node) produces a hash the shared verifier accepts: no
+    // bundle-specific polyfill is involved in either context.
+    const { pbkdf2Sync, randomBytes } = await import('node:crypto');
+    const { verifyPin, PBKDF2_ITERATIONS, KEY_SIZE, SALT_SIZE } = await import('@/shared/utils/security');
+    const salt = randomBytes(SALT_SIZE);
+    const hash = pbkdf2Sync('lock-pass', salt, PBKDF2_ITERATIONS, KEY_SIZE, 'sha512');
+    const stored = `${salt.toString('hex')}:${hash.toString('hex')}`;
+    await expect(verifyPin('lock-pass', stored)).resolves.toBe(true);
+    await expect(verifyPin('lock-pasS', stored)).resolves.toBe(false);
+  });
+
+  it("accepts a PassKey unlock only with the PassKey's PRF output (verifier sealed when it was switched on)", async () => {
+    const { sealPassKeyUnlockVerifier } = await import('@/shared/utils/webauthn-prf');
+    const verifier = await sealPassKeyUnlockVerifier(asBuffer(prfOf(7)), 'cred-1', '10');
+    env.config[10] = { unlockMethod: 'pin', pinHash: 'aa:bb', passKeyForUnlock: true, webAuthnCredentialId: 'cred-1', passKeyUnlockVerifier: verifier };
+    const { internal } = await manager();
+    const verify = (internal.verifyUnlockCredentials as unknown as Verify).bind(internal);
+    await expect(verify(10, '', undefined, undefined, 'pin', false, Array.from(prfOf(7)))).resolves.toBe(true);
+    await expect(verify(10, '', undefined, undefined, 'pin', false, Array.from(prfOf(8)))).resolves.toBe(false);
+    await expect(verify(10, '', undefined, undefined, 'pin', false, [1, 2, 3])).resolves.toBe(false);
+    // Switched off: the same PassKey no longer unlocks.
+    env.config[10] = { ...env.config[10], passKeyForUnlock: false };
+    await expect(verify(10, '', undefined, undefined, 'pin', false, Array.from(prfOf(7)))).resolves.toBe(false);
+  });
+
+  it('a wallet whose PassKey unlock was switched on before verifiers existed must set it up again', async () => {
+    env.config[10] = { unlockMethod: 'pin', pinHash: 'aa:bb', passKeyForUnlock: true, webAuthnCredentialId: 'cred-1' };
+    const { instance } = await manager();
+    const { PassKeyUnlockSetupRequiredError } = await import('@/shared/utils/passKeyUnlockProof');
+    await expect(instance.verifyPreLoginUnlock(10, '', undefined, undefined, 'pin', Array.from(prfOf(7))))
+      .rejects.toBeInstanceOf(PassKeyUnlockSetupRequiredError);
+  });
+
+  it('falls back to the PassKey-encrypted spending password when autofill sealed one', async () => {
+    const { encryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
+    // Seal it the way the page does, but with a known PRF output.
+    vi.stubGlobal('navigator', { credentials: { get: async () => ({ getClientExtensionResults: () => ({ prf: { results: { first: asBuffer(prfOf(5)) } } }) }) } });
+    const sealed = await encryptSpendingPasswordWithPrf('right', 'Y3JlZA==', '10');
+    env.config[10] = { unlockMethod: 'password', passKeyForUnlock: true, webAuthnCredentialId: 'Y3JlZA==', passKeyEncryptedSpendingPassword: sealed };
+    const { internal } = await manager();
+    const verify = (internal.verifyUnlockCredentials as unknown as Verify).bind(internal);
+    await expect(verify(10, '', undefined, undefined, 'password', false, Array.from(prfOf(5)))).resolves.toBe(true);
+    await expect(verify(10, '', undefined, undefined, 'password', false, Array.from(prfOf(6)))).resolves.toBe(false);
+  });
+
+  it("checks a PassKey (PRF) wallet's PRF output by opening its own PRF-encrypted key", async () => {
+    const { encryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+    const sealedKey = await encryptPrivateKeyWithPrf(new Uint8Array(96).fill(1), 'cred-prf', '20', asBuffer(prfOf(9)));
+    env.wallets[20] = { ...prf, prfEncryptedPrivateKey: sealedKey };
+    env.config[20] = { unlockMethod: 'password', lockPasswordHash: 'aa:bb' };
+    const { internal } = await manager();
+    const verify = (internal.verifyUnlockCredentials as unknown as Verify).bind(internal);
+    await expect(verify(20, '', undefined, undefined, 'password', false, Array.from(prfOf(9)))).resolves.toBe(true);
+    await expect(verify(20, '', undefined, undefined, 'password', false, Array.from(prfOf(4)))).resolves.toBe(false);
+  });
+
+  it('a wrong PassKey counts toward the back-off like any wrong credential', async () => {
+    const { sealPassKeyUnlockVerifier } = await import('@/shared/utils/webauthn-prf');
+    env.config[10] = {
+      unlockMethod: 'pin', pinHash: 'aa:bb', passKeyForUnlock: true, webAuthnCredentialId: 'cred-1',
+      passKeyUnlockVerifier: await sealPassKeyUnlockVerifier(asBuffer(prfOf(7)), 'cred-1', '10'),
+    };
+    const { instance } = await manager();
+    const { UnlockThrottledError, UNLOCK_FREE_ATTEMPTS } = await import('@/chrome/unlockGuards');
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS; n++) {
+      await expect(instance.verifyPreLoginUnlock(10, '', undefined, undefined, 'pin', Array.from(prfOf(8)))).resolves.toBe(false);
+    }
+    await expect(instance.verifyPreLoginUnlock(10, '', undefined, undefined, 'pin', Array.from(prfOf(7))))
+      .rejects.toBeInstanceOf(UnlockThrottledError);
   });
 
   it('decides from the wallet being unlocked, never the logged-in one', async () => {
@@ -164,6 +236,16 @@ describe('browser-verified unlock signals', () => {
     const { internal } = await manager();
     // The right spending password, offered as if the wallet were set to 'password'.
     await expect(internal.verifyUnlockCredentials(10, 'right', undefined, undefined, 'password')).resolves.toBe(false);
+  });
+
+  it('a post-login password unlock counts the attempt once, not again inside WalletBg', async () => {
+    env.config[10] = { unlockMethod: 'password' };
+    env.state.loggedWallet = { ...normal };
+    const { instance } = await manager();
+    const verifySpendingPassword = vi.fn(async (password: string) => password === 'right');
+    (instance as unknown as { walletBg: unknown }).walletBg = { id: 10, verifySpendingPassword };
+    await expect(instance.unlock('right', undefined, undefined, 'password')).resolves.toBe(true);
+    expect(verifySpendingPassword).toHaveBeenCalledWith('right', { counted: false });
   });
 });
 

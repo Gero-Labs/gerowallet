@@ -3937,6 +3937,7 @@ export default {
   'welcome.noRecoveryBackup': 'No recovery backup found for this Google account. This wallet has no stored recovery - unlock it on its original device, or create a new wallet to set one up.',
   'welcome.resetGoogleAccountButton': 'Delete recovery and create a new wallet',
   'welcome.resetGoogleAccountFailed': 'Could not reset the Gero wallet linked to this Google account. Please try again.',
+  'welcome.resetGoogleAccountLocked': 'Unlock your wallet first, then reset this Google account.',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',
@@ -3970,6 +3971,7 @@ export default {
   'unlockGuard.tooManyAttempts': 'Too many attempts. Try again in {seconds} seconds.',
   'security.logoutInstead': 'Logout Instead',
   'security.passKeyFailed': 'PassKey authentication failed',
+  'security.passKeyUnlockSetupRequired': 'Unlock another way, then turn PassKey unlock off and on again in Security settings to keep using it.',
 
   // Security - Settings
   'security.lockSettings': 'Wallet Lock & PassKey',

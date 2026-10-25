@@ -285,7 +285,8 @@ import { debugLog } from '@/utils/debug';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PatternLock from '../components/PatternLock.vue';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
-import { authenticateWebAuthn } from '@/shared/utils/security';
+import { evaluatePrfForWallet } from '@/shared/utils/webauthn-prf';
+import { evaluateWalletPrf } from '@/shared/utils/passkeyPrf';
 import { resolveIcon } from '@/shared/utils/resolver';
 import { verifyPattern } from '@/shared/utils/security';
 import assets from '@/utils/assets';
@@ -343,6 +344,13 @@ const passKeyAutoTriggerUnlock = ref(false);
 const preLoginEncryptionMethod = ref<string | null>(null);
 const cachedLockPasswordHash = ref<string | null>(null);
 const cachedPatternHash = ref<string | null>(null);
+// The record that holds the security settings and PassKey (account #0 of a group);
+// its id salts the PassKey PRF.
+const securityRecord = ref<Wallet | null>(null);
+const securityWalletId = ref<number | null>(null);
+// PRF output of the PassKey just used, held until it is sent (2FA may come first).
+// Not reactive, wiped after every unlock attempt. Never logged.
+let pendingPassKeyPrf: Uint8Array | null = null;
 
 const pinCode = ref('');
 const pinLength = ref(4);
@@ -511,6 +519,9 @@ async function loadSecurityConfig() {
       preLoginEncryptionMethod.value = preLoginWalletRecord?.encryptionMethod || null;
     }
 
+    securityRecord.value = settingsRecord;
+    securityWalletId.value = settingsRecord?.id ?? walletId;
+
     const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(settingsRecord?.id ?? walletId);
     const configTable = db.table('config');
@@ -528,7 +539,7 @@ async function loadSecurityConfig() {
     pinLength.value = pinLengthConfig?.value || 6;
     passKeyAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
 
-    // Pre-cache lock password hash for PRF wallets (avoids duplicate DB read in handleUnlock)
+    // Whether a PRF wallet's lock password is set up (the background checks the password itself)
     if (unlockMethodConfig?.value === 'password') {
       const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
       cachedLockPasswordHash.value = lockPasswordHashConfig?.value || null;
@@ -634,6 +645,20 @@ async function handlePatternComplete(patternData: number[]) {
   }
 }
 
+/**
+ * The PassKey's PRF output, salted with the security record's id (the background
+ * checks it by opening something sealed with that PassKey for that record).
+ */
+async function evaluateUnlockPassKey(credentialId: string): Promise<Uint8Array> {
+  const walletId = securityWalletId.value;
+  if (walletId === null) throw new Error('No wallet to unlock');
+  const record = securityRecord.value;
+  const output = record?.encryptionMethod === 'prf'
+    ? await evaluateWalletPrf({ id: walletId, webAuthnCredentialId: credentialId, webAuthnTransports: record.webAuthnTransports })
+    : await evaluatePrfForWallet(credentialId, String(walletId));
+  return new Uint8Array(output);
+}
+
 async function handlePassKeyAuth() {
   passKeyLoading.value = true;
 
@@ -642,28 +667,24 @@ async function handlePassKeyAuth() {
       throw new Error('No WebAuthn credential found');
     }
 
-    // Use WebAuthn for PassKey authentication
-    debugLog('🔐 Authenticating with WebAuthn credential');
-    const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
+    debugLog('🔐 Evaluating the PassKey for unlock');
+    pendingPassKeyPrf?.fill(0);
+    pendingPassKeyPrf = await evaluateUnlockPassKey(webAuthnCredentialId.value);
 
-    if (authenticated) {
-      debugLog('✅ PassKey authentication successful - unlocking wallet');
+    // Reset password field validation so it doesn't show red during PassKey unlock
+    if (passwordInputRef.value) {
+      (passwordInputRef.value as { resetValidation: () => void }).resetValidation();
+    }
 
-      // Reset password field validation so it doesn't show red during PassKey unlock
-      if (passwordInputRef.value) {
-        (passwordInputRef.value as { resetValidation: () => void }).resetValidation();
-      }
-
-      if (twoFactorEnabled.value) {
-        show2FA.value = true;
-      } else {
-        await handleUnlock(true); // Pass passKeyAuthenticated flag
-      }
+    if (twoFactorEnabled.value) {
+      show2FA.value = true;
     } else {
-      showError(t('security.passKeyFailed'));
+      await handleUnlock(true); // Send the PassKey's PRF output
     }
   } catch (error: unknown) {
-    console.error('PassKey authentication error:', error);
+    console.error('PassKey authentication error:', getErrorMessage(error, 'passkey failed'));
+    pendingPassKeyPrf?.fill(0);
+    pendingPassKeyPrf = null;
     showError(getErrorMessage(error, t('security.passKeyFailed')));
   } finally {
     passKeyLoading.value = false;
@@ -791,35 +812,29 @@ async function handleUnlock(passKeyAuthenticated = false) {
   // Yield to browser so the loading spinner renders before any heavy computation
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+  let passKeyPrf: number[] | undefined;
   try {
     let unlockCredential: string | number[] | null;
 
     if (passKeyAuthenticated) {
-      // PassKey authentication already happened in handlePassKeyAuth()
-      // Signal to backend that PassKey auth was successful
-      unlockCredential = 'passkey-authenticated';
+      // The PassKey was evaluated in handlePassKeyAuth(); the background checks its PRF output.
+      if (!pendingPassKeyPrf) {
+        showError(t('security.passKeyFailed'));
+        return;
+      }
+      passKeyPrf = Array.from(pendingPassKeyPrf);
+      unlockCredential = '';
     } else if (unlockMethod.value === 'pin') {
       unlockCredential = pinCode.value;
     } else if (unlockMethod.value === 'pattern') {
       unlockCredential = pattern.value;
     } else if (unlockMethod.value === 'password' && isPrfWallet.value) {
-      // PRF wallet lock password: verify locally in browser context
-      // (avoids crypto polyfill differences between browser and service worker)
-      // Uses hash cached during loadSecurityConfig() to avoid duplicate DB read
+      // PRF wallet lock password: the background checks it against the stored hash.
       if (!cachedLockPasswordHash.value) {
         showError(t(configLoadError.value ? 'security.unlockFailed' : 'security.lockPasswordNotConfigured'));
         return;
       }
-      const { verifyPin } = await import('@/shared/utils/security');
-      const isValid = await verifyPin(password.value, cachedLockPasswordHash.value);
-      if (!isValid) {
-        showError(t('security.wrongLockPassword'));
-        password.value = '';
-        passwordError.value = true;
-        return;
-      }
-      // Verification passed — signal background (same pattern as passkey-authenticated)
-      unlockCredential = 'lockpassword-verified';
+      unlockCredential = password.value;
     } else {
       // Fallback to spending password (normal wallets)
       unlockCredential = password.value;
@@ -834,10 +849,11 @@ async function handleUnlock(passKeyAuthenticated = false) {
       method: messageType,
       data: {
         walletId,
-        unlockCredential, // PassKey auth signaled via special value 'passkey-authenticated'
+        unlockCredential,
         unlockMethod: unlockMethod.value,
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
-        password: password.value || undefined
+        password: password.value || undefined,
+        ...(passKeyPrf ? { passKeyPrf } : {}),
       }
     }, () => props.modelValue && (props.preLoginWalletId || walletStore.loggedWallet?.id) === walletId) as BackgroundMessageResponse;
     debugLog('Unlock response:', response);
@@ -849,8 +865,12 @@ async function handleUnlock(passKeyAuthenticated = false) {
       pinCode.value = '';
       pattern.value = [];
       password.value = '';
+    } else if (response.error === 'passkey-unlock-setup-required') {
+      showError(t('security.passKeyUnlockSetupRequired'));
     } else if (response.error) {
       showError(t('security.unlockFailed'));
+    } else if (passKeyAuthenticated) {
+      showError(t('security.passKeyFailed'));
     } else {
       // Show errors for each unlock method
       if (unlockMethod.value === 'pin') {
@@ -862,9 +882,8 @@ async function handleUnlock(passKeyAuthenticated = false) {
         pattern.value = [];  // Clear pattern
         setTimeout(() => { patternTooltip.value = false; }, 2000);
       } else {
-        // Password unlock — for PRF wallets, lock password was already verified locally
-        // so a background failure means something else went wrong (DB error, wallet load, etc.)
-        showError(isPrfWallet.value ? t('security.unlockFailed') : t('errors.wrongPassword'));
+        // Password unlock: a PRF wallet's lock password or the spending password
+        showError(isPrfWallet.value ? t('security.wrongLockPassword') : t('errors.wrongPassword'));
         password.value = '';  // Clear password input
         passwordError.value = true;
       }
@@ -878,6 +897,9 @@ async function handleUnlock(passKeyAuthenticated = false) {
       showError(getErrorMessage(error, vmProxy.$t('security.unlockFailed') as string));
     }
   } finally {
+    passKeyPrf?.fill(0);
+    pendingPassKeyPrf?.fill(0);
+    pendingPassKeyPrf = null;
     unlocking.value = false;
   }
 }
@@ -915,6 +937,10 @@ function resetForm() {
   configLoadError.value = false;
   cachedLockPasswordHash.value = null;
   cachedPatternHash.value = null;
+  securityRecord.value = null;
+  securityWalletId.value = null;
+  pendingPassKeyPrf?.fill(0);
+  pendingPassKeyPrf = null;
   preLoginEncryptionMethod.value = null;
   googleIdToken.value = '';
   googleEmail.value = '';

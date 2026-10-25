@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -33,8 +33,21 @@ describe('security settings refuse while locked', () => {
     'SET_DEVICE_SERVE_PROOFS',
     'TRUST_CROSS_DEVICE',
     'UNTRUST_CROSS_DEVICE',
+    // Notification settings: which wallets and events alert the user.
+    'NOTIFY_SET_BROWSER_ENABLED',
+    'NOTIFY_ENABLE_WALLET',
+    'NOTIFY_DISABLE_WALLET',
+    'NOTIFY_SET_PREFS',
+    // Pairing a dApp session over WalletConnect or CIP-45.
+    'WC_APPROVE_SESSION',
+    'CIP45_BEGIN_SESSION',
   ])('%s', name => {
     expect(optionsHandler(name)).toContain('refuseSettingsWhileLocked(request, sendResponse)');
+  });
+
+  it('DEREGISTER_MPC_ACCOUNT (deletes the Google account\'s recovery shares), with a readable reason', () => {
+    expect(optionsHandler('DEREGISTER_MPC_ACCOUNT'))
+      .toContain("refuseSettingsWhileLocked(request, sendResponse, String(i18n.t('welcome.resetGoogleAccountLocked')))");
   });
 
   it('every Submit API handler (set, test, clear)', () => {
@@ -67,5 +80,45 @@ describe('unlock paths', () => {
   it('UNLOCK and the pre-login unlock report the back-off wait', () => {
     expect(optionsHandler('UNLOCK')).toContain('retryAfterMs: err.retryAfterMs');
     expect(optionsHandler('VERIFY_PRE_LOGIN_UNLOCK')).toContain('retryAfterMs: err.retryAfterMs');
+  });
+});
+
+describe('every check of a wallet\'s secrets shares the unlock back-off', () => {
+  it('the MPC unlock counts wrong device secrets and reports the wait', () => {
+    const body = optionsHandler('UNLOCK_MPC_WALLET');
+    expect(body).toContain('withUnlockThrottle(');
+    expect(body).toContain('error instanceof MpcCredentialRejectedError');
+    expect(body).toContain('retryAfterMs: error.retryAfterMs');
+  });
+
+  it('VERIFY_SPENDING_PASSWORD reports the wait', () => {
+    expect(optionsHandler('VERIFY_SPENDING_PASSWORD')).toContain('retryAfterMs: error.retryAfterMs');
+  });
+
+  it('the wait message is translated in the worker', () => {
+    expect(source).toContain("setUnlockThrottleMessage((seconds) => String(i18n.t('unlockGuard.tooManyAttempts', { seconds })))");
+  });
+});
+
+describe('no unlock is granted on the page\'s word', () => {
+  function sources(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return sources(path);
+      return /\.(ts|vue)$/.test(entry.name) && !entry.name.endsWith('.spec.ts') ? [path] : [];
+    });
+  }
+
+  it('the old magic unlock signals are gone from every page and the worker', () => {
+    const offenders = sources(join(__dirname, '..')).filter(path => {
+      const text = readFileSync(path, 'utf8');
+      return text.includes('passkey-authenticated') || text.includes('lockpassword-verified');
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('UNLOCK and the pre-login unlock hand the PassKey PRF output to the worker\'s check', () => {
+    expect(optionsHandler('UNLOCK')).toContain('passKeyPrfOf(request.data)');
+    expect(optionsHandler('VERIFY_PRE_LOGIN_UNLOCK')).toContain('passKeyPrfOf(request.data)');
   });
 });

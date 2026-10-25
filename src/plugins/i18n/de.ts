@@ -3243,6 +3243,7 @@ export default {
   'security.passKeyDeregisteredSuccess': 'PassKey erfolgreich abgemeldet',
   'security.passKeyDeregistrationFailed': 'PassKey-Abmeldung fehlgeschlagen',
   'security.passKeyFailed': 'PassKey-Authentifizierung fehlgeschlagen',
+  'security.passKeyUnlockSetupRequired': 'Entsperre die Wallet auf andere Weise und schalte dann das Entsperren per PassKey in den Sicherheitseinstellungen aus und wieder ein, um es weiter zu nutzen.',
   'security.passKeyInfo': 'Ein PassKey ist eine moderne, kennwortlose Möglichkeit, sich bei Apps und Websites anzumelden, indem die integrierte Sicherheit Ihres Geräts (z. B. Fingerabdruck, Gesichtserkennung oder PIN) anstelle der Eingabe eines Passworts verwendet wird',
   'security.passKeyLegacyDetected': 'Ihr vorhandener PassKey unterstützt die neue sichere PRF-Verschlüsselungsmethode nicht. Bitte löschen Sie ihn und registrieren Sie den PassKey neu, um das PassKey-Autofill weiterhin nutzen zu können.',
   'security.passKeyNotConfigured': 'PassKey ist für dieses Wallet nicht konfiguriert',
@@ -4482,6 +4483,7 @@ export default {
   'welcome.noRecoveryBackup': 'Für dieses Google-Konto wurde kein Wiederherstellungs-Backup gefunden. Diese Wallet hat keine gespeicherte Wiederherstellung - entsperre sie auf dem ursprünglichen Gerät oder erstelle eine neue Wallet, um eine einzurichten.',
   'welcome.resetGoogleAccountButton': 'Wiederherstellung löschen und neue Wallet erstellen',
   'welcome.resetGoogleAccountFailed': 'Die mit diesem Google-Konto verknüpfte Gero-Wallet konnte nicht zurückgesetzt werden. Bitte erneut versuchen.',
+  'welcome.resetGoogleAccountLocked': 'Entsperre zuerst deine Wallet und setze dann dieses Google-Konto zurück.',
 
   // Market
   'market.allTokens': 'Alle Token',
