@@ -18,7 +18,7 @@
             <template #activator="{ props: activatorProps }">
               <v-btn icon variant="text" size="small" v-bind="activatorProps"  :disabled="!ready" class="library-sort"
                 :class="{ 'library-sort--active': sort !== 'custom' }"
-                :aria-label="t('common.sortBy') + ': ' + sortLabel(sort)" :title="t('common.sortBy') + ': ' + sortLabel(sort)">
+                :aria-label="sortButtonLabel" :title="sortButtonLabel">
                 <v-icon size="small">mdi-sort</v-icon>
               </v-btn>
             </template>
@@ -236,6 +236,8 @@ const SORT_LABELS: Record<WalletSort, string> = {
   oldest: 'governance.sortOldest',
 };
 const sortLabel = (option: WalletSort) => t(SORT_LABELS[option]);
+// One translatable sentence, so each language picks its own word order and punctuation (issue 1197).
+const sortButtonLabel = computed(() => t('walletLibrary.sortedBy', { sort: sortLabel(sort.value) }));
 const dragging = ref(false);
 type WalletGroup = typeof groups.value[number];
 const announcement = ref('');
