@@ -104,6 +104,7 @@ import {
 import * as midnightDappProving from '@/chrome/midnightDappProving';
 import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
 import * as provingParkModule from '@/chrome/midnightProvingPark';
+import { connectorDustBalance } from '@/chrome/midnightConnectorDust';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -6679,7 +6680,6 @@ app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
   // store's Path-A `dustState`: a wallet whose DUST comes from a Cardano cNIGHT
   // registration reads {cap:0,balance:0} there, and a dapp would conclude it
   // cannot pay fees.
-  const { connectorDustBalance } = await import('@/chrome/midnightConnectorDust');
   const figures = await connectorDustBalance(wallet.network, midnightStore.addresses?.unshielded, midnightStore.addresses?.dust);
   if (!figures) {
     // Don't guess: reporting {cap:0,balance:0} would read as "you have zero

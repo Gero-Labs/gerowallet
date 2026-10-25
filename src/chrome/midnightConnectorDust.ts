@@ -6,8 +6,15 @@
  * cannot pay fees.
  *
  * Null until both paths have reported; the handler then tells the dApp to retry.
+ *
+ * Imports are static on purpose: the background is one iife, so a dynamic import
+ * splits nothing off and can only leave a namespace declared after its reader
+ * (scripts/check-bundle-tdz.mjs).
  */
-import type { DustFigures, reusedDustReader } from '@/chains/midnight/midnightDustBalance';
+import { midnightStore } from '@/stores/midnightStore';
+import { getMidnightApi } from '@/api/midnight-api';
+import { enumerateCardanoStakeIdentities } from '@/shared/composables/useCardanoStakeEnumeration';
+import { readMergedDustBalance, reusedDustReader, type DustFigures } from '@/chains/midnight/midnightDustBalance';
 
 let reader: ReturnType<typeof reusedDustReader> | null = null;
 
@@ -17,21 +24,15 @@ export async function connectorDustBalance(
   dust: string | undefined,
 ): Promise<DustFigures | null> {
   if (!unshielded || !dust) return null;
-  const [{ midnightStore }, { getMidnightApi }, balance] = await Promise.all([
-    import('@/stores/midnightStore'),
-    import('@/api/midnight-api'),
-    import('@/chains/midnight/midnightDustBalance'),
-  ]);
-  reader ??= balance.reusedDustReader();
-  return reader(`${network}|${unshielded}|${dust}`, () => balance.readMergedDustBalance({
+  reader ??= reusedDustReader();
+  return reader(`${network}|${unshielded}|${dust}`, () => readMergedDustBalance({
     api: getMidnightApi(network),
     unshieldedAddress: unshielded,
     dustAddress: dust,
     storeDustState: midnightStore.dustState,
-    enumerateStakes: async () => {
-      const { enumerateCardanoStakeIdentities } = await import('@/shared/composables/useCardanoStakeEnumeration');
-      return (await enumerateCardanoStakeIdentities(network)).map((identity) => identity.stakeAddress).filter(Boolean);
-    },
+    enumerateStakes: async () => (await enumerateCardanoStakeIdentities(network))
+      .map((identity) => identity.stakeAddress)
+      .filter(Boolean),
   }));
 }
 
