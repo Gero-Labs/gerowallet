@@ -34,6 +34,21 @@ const SSE_RECONNECT_MAX_MS = 60 * 1000;
  */
 const SSE_MAX_RECONNECT_ATTEMPTS = 6;
 
+/**
+ * Retry back-off after a failed first fetch (issue 1195): 5s doubling to a 60s
+ * ceiling, for as long as the page is open. Without it one slow or failed first
+ * request left every flag at its fallback until the page was reloaded.
+ */
+const INIT_RETRY_BASE_MS = 5000;
+const INIT_RETRY_MAX_MS = 60 * 1000;
+
+/**
+ * Timeout for those retries. The first fetch keeps its short timeout because
+ * startup waits for it; a retry runs in the background, so it can wait longer
+ * for a slow network instead of aborting the same way every time.
+ */
+const INIT_RETRY_TIMEOUT_S = 15;
+
 interface FeatureFlagConfig {
   baseUrl: string;
   contextKey: string;
@@ -55,6 +70,11 @@ class FeatureFlagService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private onlineListener: (() => void) | null = null;
+  private initRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private initRetryAttempts = 0;
+
+  /** Called when the first snapshot arrives (see {@link onReady}). */
+  private readyListeners: Array<() => void> = [];
 
   /**
    * Initialize the feature flag service.
@@ -85,16 +105,16 @@ class FeatureFlagService {
     }
 
     this.initializationPromise = (async () => {
+      const config = { baseUrl: resolvedBaseUrl, contextKey: resolvedContextKey };
       try {
-        this.config = { baseUrl: resolvedBaseUrl, contextKey: resolvedContextKey };
+        this.config = config;
 
         await this.fetchSnapshot(timeout ?? 5);
-        this.isInitialized = true;
-        this.openStream();
-        this.startSafetyPoll();
+        if (this.config === config) this.markReady();
       } catch (error) {
-        console.warn('🚩 FeatureFlag initialization failed, will use fallback values:', error);
+        console.warn('🚩 FeatureFlag initialization failed, using fallback values until a retry succeeds:', error);
         this.isInitialized = false;
+        if (this.config === config) this.scheduleInitRetry();
       } finally {
         this.initializationPromise = null;
       }
@@ -150,14 +170,31 @@ class FeatureFlagService {
     return this.isInitialized;
   }
 
+  /**
+   * Run {@code callback} when the service becomes ready, i.e. when its first
+   * snapshot arrives. After a failed first fetch that is when a retry succeeds;
+   * until then {@link getFlag} returns the fallbacks. Returns an unsubscribe
+   * function.
+   */
+  onReady(callback: () => void): () => void {
+    this.readyListeners.push(callback);
+    return () => {
+      const idx = this.readyListeners.indexOf(callback);
+      if (idx > -1) this.readyListeners.splice(idx, 1);
+    };
+  }
+
   /** Close any open streams and clear all listeners. */
   async close(): Promise<void> {
     this.closeStream();
     this.cancelReconnect();
+    this.cancelInitRetry();
     this.stopSafetyPoll();
     this.reconnectAttempts = 0;
+    this.initRetryAttempts = 0;
     this.flagValues = {};
     this.listeners.clear();
+    this.readyListeners = [];
     this.isInitialized = false;
     this.config = null;
   }
@@ -178,6 +215,7 @@ class FeatureFlagService {
     };
   }
 
+  /** Fetch and apply a snapshot. A reply that arrives after {@link close} or a new initialize() is dropped. */
   private async fetchSnapshot(timeoutSeconds: number): Promise<void> {
     const cfg = this.config!;
     const controller = new AbortController();
@@ -196,10 +234,71 @@ class FeatureFlagService {
       }
 
       const snapshot = (await res.json()) as Record<string, unknown>;
-      this.applySnapshot(snapshot);
+      if (this.config === cfg) this.applySnapshot(snapshot);
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** The first snapshot arrived: start the live stream and the safety poll, and tell {@link onReady} listeners. */
+  private markReady(): void {
+    this.isInitialized = true;
+    this.cancelInitRetry();
+    this.initRetryAttempts = 0;
+    this.openStream();
+    this.startSafetyPoll();
+    for (const cb of [...this.readyListeners]) {
+      try {
+        cb();
+      } catch (e) {
+        console.error('🚩 flag ready listener threw:', e);
+      }
+    }
+  }
+
+  private scheduleInitRetry(): void {
+    if (this.isInitialized || !this.config) return;
+    if (this.initRetryTimer !== null) return; // one pending retry at a time
+
+    // Offline: wait for the 'online' event rather than failing every cycle.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.runWhenOnline(() => void this.retryInit());
+      return;
+    }
+
+    const backoff = Math.min(INIT_RETRY_BASE_MS * 2 ** this.initRetryAttempts, INIT_RETRY_MAX_MS);
+    const delay = backoff + Math.floor(Math.random() * 1000);
+    this.initRetryAttempts++;
+
+    this.initRetryTimer = setTimeout(() => {
+      this.initRetryTimer = null;
+      void this.retryInit();
+    }, delay);
+  }
+
+  private async retryInit(): Promise<void> {
+    const config = this.config;
+    if (this.isInitialized || !config) return;
+    try {
+      await this.fetchSnapshot(INIT_RETRY_TIMEOUT_S);
+    } catch (error) {
+      if (this.config === config) {
+        console.warn('🚩 FeatureFlag retry failed, trying again later:', error);
+        this.scheduleInitRetry();
+      }
+      return;
+    }
+    if (this.config !== config || this.isInitialized) return;
+    console.info('🚩 FeatureFlag flags loaded after a retry');
+    this.markReady();
+  }
+
+  private cancelInitRetry(): void {
+    if (this.initRetryTimer !== null) {
+      clearTimeout(this.initRetryTimer);
+      this.initRetryTimer = null;
+    }
+    this.removeOnlineListener();
   }
 
   /**
@@ -285,7 +384,9 @@ class FeatureFlagService {
     // Offline: a blind timer would fail (and spam the console) every cycle —
     // wait for the 'online' event instead.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      this.reconnectWhenOnline();
+      this.runWhenOnline(() => {
+        if (this.isInitialized) this.openStream();
+      });
       return;
     }
 
@@ -313,11 +414,12 @@ class FeatureFlagService {
     }, delay);
   }
 
-  private reconnectWhenOnline(): void {
+  /** Run {@code action} once on the next 'online' event (one waiting action at a time). */
+  private runWhenOnline(action: () => void): void {
     if (this.onlineListener) return;
     this.onlineListener = () => {
       this.removeOnlineListener();
-      if (this.isInitialized) this.openStream();
+      action();
     };
     globalThis.addEventListener('online', this.onlineListener);
   }
