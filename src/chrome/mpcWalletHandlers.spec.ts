@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MpcValidationError, RecoveryBackupStoreError, NoRecoveryBackupError, type DeviceShareSecret } from '@/shared/utils/mpc';
 import {
+  MpcCredentialRejectedError,
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
@@ -224,6 +225,20 @@ describe('unlockMpcWalletFlow', () => {
     const deps = makeDeps({ getWallet: vi.fn(async () => undefined) });
     await expect(unlockMpcWalletFlow(baseInput, deps)).rejects.toThrow('MPC wallet not found');
     expect(deps.sessionCache.set).not.toHaveBeenCalled();
+  });
+
+  it('marks a device secret that does not reconstruct the key as a wrong secret (counted by the back-off)', async () => {
+    const mismatch = makeDeps({ reconstructRootKeyBytes: vi.fn(async () => { throw new MpcValidationError('mismatch'); }) });
+    await expect(unlockMpcWalletFlow(baseInput, mismatch)).rejects.toBeInstanceOf(MpcCredentialRejectedError);
+    const undecryptable = makeDeps({ reconstructRootKeyBytes: vi.fn(async () => { throw new Error('decrypt failed'); }) });
+    await expect(unlockMpcWalletFlow(baseInput, undecryptable)).rejects.toBeInstanceOf(MpcCredentialRejectedError);
+  });
+
+  it('never marks a Google or network failure as a wrong secret', async () => {
+    const offline = makeDeps({ getLoginShare: vi.fn(async () => { throw new Error('network down'); }) });
+    const failure = unlockMpcWalletFlow(baseInput, offline);
+    await expect(failure).rejects.toThrow('network down');
+    await expect(failure).rejects.not.toBeInstanceOf(MpcCredentialRejectedError);
   });
 });
 

@@ -32,10 +32,22 @@ export function unlockDelayAfter(failures: number): number {
   return Math.min(UNLOCK_BASE_DELAY_MS * 2 ** doublings, UNLOCK_MAX_DELAY_MS);
 }
 
+let formatThrottleMessage = (seconds: number): string => `Too many attempts. Try again in ${seconds} seconds.`;
+
+/**
+ * The text a back-off error carries. The worker installs its translated
+ * `unlockGuard.tooManyAttempts` at startup, so a page that shows a handler's
+ * error message as-is (a signing flow, for one) shows the wait in the user's
+ * language.
+ */
+export function setUnlockThrottleMessage(format: (seconds: number) => string): void {
+  formatThrottleMessage = format;
+}
+
 /** Thrown when an unlock is attempted during a back-off. Carries the remaining wait. */
 export class UnlockThrottledError extends Error {
   constructor(readonly retryAfterMs: number) {
-    super('unlock-throttled');
+    super(formatThrottleMessage(Math.ceil(retryAfterMs / 1000)));
     this.name = 'UnlockThrottledError';
   }
 }
@@ -97,6 +109,48 @@ export function createUnlockThrottle(storage: ThrottleStorage = sessionThrottleS
 }
 
 export const unlockThrottle = createUnlockThrottle();
+
+type UnlockThrottle = ReturnType<typeof createUnlockThrottle>;
+
+async function bestEffort(count: () => Promise<unknown>): Promise<void> {
+  try {
+    await count();
+  } catch {
+    // Counting is best-effort: a storage error never blocks or fails the check.
+  }
+}
+
+/**
+ * Check one secret that guards `walletId`'s secrets record under the same back-off
+ * as unlocking: refused (UnlockThrottledError) while a wait runs, a wrong secret
+ * counted, a right one clearing the count. Unlocking, the spending password and an
+ * MPC wallet's device secret all share one counter per secrets record, so none of
+ * them is a second, unthrottled way to guess the same secret.
+ *
+ * `rejected` says whether a result is a wrong secret; a throw counts as one unless
+ * `rejection` says it is something else (a network error, a missing record).
+ */
+export async function withUnlockThrottle<T>(
+  walletId: number,
+  attempt: () => Promise<T>,
+  outcome: { rejected: (result: T) => boolean; rejection?: (error: unknown) => boolean },
+  throttle: UnlockThrottle = unlockThrottle,
+): Promise<T> {
+  try {
+    await throttle.assertAllowed(walletId);
+  } catch (e) {
+    if (e instanceof UnlockThrottledError) throw e;
+  }
+  let result: T;
+  try {
+    result = await attempt();
+  } catch (error) {
+    if (outcome.rejection ? outcome.rejection(error) : true) await bestEffort(() => throttle.recordFailure(walletId));
+    throw error;
+  }
+  await bestEffort(() => (outcome.rejected(result) ? throttle.recordFailure(walletId) : throttle.recordSuccess(walletId)));
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Login lock policy

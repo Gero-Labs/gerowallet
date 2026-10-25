@@ -224,6 +224,7 @@
 </template>
 <script setup lang="ts">
 import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { DappRisk, DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
@@ -785,7 +786,7 @@ const sign = () => approval.run(async () => {
         if (passwordVerification.data.success) {
           await awaitFreshApproval(async () => (signAndReturnTx()), approvalCurrent);
         } else {
-          passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
+          passwordField.value?.showError(passwordCheckFailure(passwordVerification, t('wallet.invalidSpendingPassword')));
         }
       }
     }

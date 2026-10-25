@@ -174,6 +174,7 @@
 </template>
 <script setup lang="ts">
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
@@ -481,7 +482,7 @@ const sign = () => approval.run(async () => {
         })), approvalCurrent) as BackgroundResponse<VerifyPasswordResponse>;
 
         if (!passwordVerification.data.success) {
-          passwordField.value?.showError(t('errors.wrongPassword'));
+          passwordField.value?.showError(passwordCheckFailure(passwordVerification, t('errors.wrongPassword')));
         } else {
           await awaitFreshApproval(async () => (signAndReturnTx()), approvalCurrent);
         }

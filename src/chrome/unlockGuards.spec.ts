@@ -10,8 +10,10 @@ import {
   createPreLoginGrants,
   createUnlockThrottle,
   mustLockAfterLogin,
+  setUnlockThrottleMessage,
   unlockDelayAfter,
   verifySecondFactor,
+  withUnlockThrottle,
   type ThrottleStorage,
 } from './unlockGuards';
 
@@ -158,5 +160,61 @@ describe('verifySecondFactor', () => {
 
   it('fails closed when the secret is missing', async () => {
     await expect(verifySecondFactor(table({ twoFactorEnabled: true }), '123456', PW)).rejects.toThrow('TOTP secret not found');
+  });
+});
+
+describe('withUnlockThrottle: one back-off for every check of a wallet group\'s secrets', () => {
+  const wrongSecret = new Error('wrong secret');
+  const network = new Error('network down');
+  const outcome = { rejected: (ok: boolean) => !ok, rejection: (e: unknown) => e === wrongSecret };
+
+  it('counts wrong secrets (false results and rejections), then refuses until the wait ends', async () => {
+    const c = clock();
+    const throttle = createUnlockThrottle(memoryStorage(), c.now);
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS - 1; n++) {
+      await expect(withUnlockThrottle(1, async () => false, outcome, throttle)).resolves.toBe(false);
+    }
+    await expect(withUnlockThrottle(1, async () => { throw wrongSecret; }, outcome, throttle)).rejects.toBe(wrongSecret);
+    const refused = withUnlockThrottle(1, async () => true, outcome, throttle);
+    await expect(refused).rejects.toBeInstanceOf(UnlockThrottledError);
+    c.advance(UNLOCK_BASE_DELAY_MS);
+    await expect(withUnlockThrottle(1, async () => true, outcome, throttle)).resolves.toBe(true);
+  });
+
+  it('never counts a failure that is not a wrong secret', async () => {
+    const throttle = createUnlockThrottle(memoryStorage());
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS * 2; n++) {
+      await expect(withUnlockThrottle(1, async () => { throw network; }, outcome, throttle)).rejects.toBe(network);
+    }
+    await expect(withUnlockThrottle(1, async () => true, outcome, throttle)).resolves.toBe(true);
+  });
+
+  it('a right secret clears the count', async () => {
+    const throttle = createUnlockThrottle(memoryStorage());
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS - 1; n++) await withUnlockThrottle(1, async () => false, outcome, throttle);
+    await withUnlockThrottle(1, async () => true, outcome, throttle);
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS - 1; n++) {
+      await expect(withUnlockThrottle(1, async () => false, outcome, throttle)).resolves.toBe(false);
+    }
+  });
+
+  it('a counter that cannot be read or written never blocks the check', async () => {
+    const broken: ThrottleStorage = {
+      get: async () => { throw new Error('storage'); },
+      set: async () => { throw new Error('storage'); },
+      remove: async () => { throw new Error('storage'); },
+    };
+    const throttle = createUnlockThrottle(broken);
+    await expect(withUnlockThrottle(1, async () => true, outcome, throttle)).resolves.toBe(true);
+    await expect(withUnlockThrottle(1, async () => false, outcome, throttle)).resolves.toBe(false);
+  });
+
+  it('the wait message is the one the worker installs (its translated text)', () => {
+    setUnlockThrottleMessage((seconds) => `Wait ${seconds}s`);
+    try {
+      expect(new UnlockThrottledError(29_001).message).toBe('Wait 30s');
+    } finally {
+      setUnlockThrottleMessage((seconds) => `Too many attempts. Try again in ${seconds} seconds.`);
+    }
   });
 });

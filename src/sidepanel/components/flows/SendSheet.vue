@@ -551,6 +551,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, toRefs, shallowRef, onScopeDispose, provide } from 'vue';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import debounce from 'lodash/debounce';
 import BottomSheet from '../BottomSheet.vue';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
@@ -1230,7 +1231,7 @@ async function signAndSubmit() {
       data: { password: attempt.password },
     }), attempt.current) as BackgroundResponse<VerifyPasswordResponse>;
     if (!pwResult.data.success) {
-      passwordError.value = 'Wrong spending password';
+      passwordError.value = passwordCheckFailure(pwResult, 'Wrong spending password');
       return;
     }
     const signResult = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({

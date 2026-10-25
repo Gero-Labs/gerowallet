@@ -48,7 +48,7 @@ import {
   toStakeAddress,
 } from '@/chrome/serialization';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
-import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
@@ -105,6 +105,7 @@ import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarge
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
 import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
+import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
 import {
@@ -1433,10 +1434,7 @@ export class WalletBg {
           throw ERROR.wrongPassword; // Password required but not provided
         }
 
-        const { verifySpendingPassword } = await import('@/shared/utils/webauthn-prf');
-        const isValid = await verifySpendingPassword(password, this.prfSpendingPassword);
-
-        if (!isValid) {
+        if (!(await this.verifySpendingPassword(password))) {
           throw ERROR.wrongPassword;
         }
       }
@@ -1469,15 +1467,17 @@ export class WalletBg {
         throw ERROR.wrongPassword;
       }
 
-      try {
-        const buffer: Buffer = decryptPrivateKey(this.encryptedPrivateKey, password);
-        // Silent upgrade of stored secrets. Non-blocking: a failed rewrite must
-        // never break signing; it retries on the next password decrypt.
-        void this.upgradeStoredSecrets(buffer, password);
-        return Bip32PrivateKey.fromBytes(buffer);
-      } catch (e) {
-        throw ERROR.wrongPassword;
-      }
+      const buffer = await withUnlockThrottle(this.secretsWalletId, async () => {
+        try {
+          return decryptPrivateKey(this.encryptedPrivateKey, password);
+        } catch {
+          throw ERROR.wrongPassword;
+        }
+      }, { rejected: () => false });
+      // Silent upgrade of stored secrets. Non-blocking: a failed rewrite must
+      // never break signing; it retries on the next password decrypt.
+      void this.upgradeStoredSecrets(buffer, password);
+      return Bip32PrivateKey.fromBytes(buffer);
     }
   }
 
@@ -1877,7 +1877,6 @@ export class WalletBg {
     prfSecret?: Uint8Array
   ): Promise<{ txHex: string; txId: string }> {
     const { signAndFinalizePsbt } = await import('@/chains/bitcoin/bitcoinSigner');
-    const { decrypt } = await import('@/shared/utils/crypto');
 
     try {
       debugLog('🔐 Signing Bitcoin transaction...');
@@ -1934,7 +1933,7 @@ export class WalletBg {
         }
 
         // Decrypt mnemonic with password
-        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+        const decryptedMnemonic = await this.openMnemonicWithPassword(password);
 
         // Sign and finalize PSBT, with this account's keys
         await this.assertBitcoinAccount(decryptedMnemonic);
@@ -2015,7 +2014,6 @@ export class WalletBg {
     ownUtxos: ReadonlyArray<{ txHash: string; index: number; value: bigint | number | string; address?: string }> = [],
   ): Promise<string> {
     const { signPsbtWithMnemonic } = await import('@/chains/bitcoin/bitcoinSigner');
-    const { decrypt } = await import('@/shared/utils/crypto');
 
     // Decide what gets signed before any key is decrypted.
     const psbt = parsePsbt(psbtHex, this.network);
@@ -2039,7 +2037,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     await this.assertBitcoinAccount(mnemonic);
@@ -2071,7 +2069,6 @@ export class WalletBg {
     password?: string,
     prfSecret?: Uint8Array
   ): Promise<string> {
-    const { decrypt } = await import('@/shared/utils/crypto');
     const { deriveBitcoinRootKey, bitcoinAccountPath } = await import('@/chains/bitcoin/bitcoinKeyManager');
 
     // Decrypt mnemonic
@@ -2086,7 +2083,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     // Derive signing key (this account's first receiving address: m/purpose'/coinType'/account'/0/0)
@@ -2182,41 +2179,52 @@ export class WalletBg {
     return Buffer.concat(parts).toString('base64');
   }
 
-  async verifySpendingPassword(password: string): Promise<boolean> {
+  /**
+   * Whether `password` is this wallet's spending password. Counted toward the
+   * shared back-off of the secrets record (unlockGuards.ts), so this is not a
+   * second, unthrottled way to guess it: during a wait it throws
+   * UnlockThrottledError. `counted: false` is for a caller that counts the attempt
+   * itself (walletManager's unlock). A PRF wallet without a spending password has
+   * no secret to check: it answers true and touches no counter.
+   */
+  async verifySpendingPassword(password: string, { counted = true }: { counted?: boolean } = {}): Promise<boolean> {
+    if (this.encryptionMethod === 'prf' && !this.prfSpendingPassword) return true; // Pure PRF mode (no password)
+    if (!counted) return this.checkSpendingPassword(password);
+    return withUnlockThrottle(this.secretsWalletId, () => this.checkSpendingPassword(password), { rejected: (ok) => !ok });
+  }
+
+  private async checkSpendingPassword(password: string): Promise<boolean> {
     if (this.encryptionMethod === 'prf') {
-      // ============================================================================
-      // PRF WALLET - VERIFY SPENDING PASSWORD HASH
-      // ============================================================================
-
-      // If no spending password hash is stored, password verification is not required
-      if (!this.prfSpendingPassword) {
-        return true; // Pure PRF mode (no password)
-      }
-
-      // Verify password hash (password unlock is enabled)
+      // PRF wallet with password unlock enabled: verify the password hash.
       try {
         const { verifySpendingPassword } = await import('@/shared/utils/webauthn-prf');
-        return await verifySpendingPassword(password, this.prfSpendingPassword);
+        return await verifySpendingPassword(password, this.prfSpendingPassword!);
       } catch (e) {
         return false;
       }
-
-    } else {
-      // ============================================================================
-      // PASSWORD WALLET - VERIFY BY DECRYPTION
-      // ============================================================================
-
-      let rootKey: Buffer;
-      try {
-        rootKey = decryptPrivateKey(this.encryptedPrivateKey, password);
-      } catch (e) {
-        return false;
-      }
-      // A verified password is the moment to upgrade stored secrets (unlock
-      // verifies here). Non-blocking, never affects the answer.
-      void this.upgradeStoredSecrets(rootKey, password);
-      return true;
     }
+
+    // Password wallet: verify by decryption.
+    let rootKey: Buffer;
+    try {
+      rootKey = decryptPrivateKey(this.encryptedPrivateKey, password);
+    } catch (e) {
+      return false;
+    }
+    // A verified password is the moment to upgrade stored secrets (unlock
+    // verifies here). Non-blocking, never affects the answer.
+    void this.upgradeStoredSecrets(rootKey, password);
+    return true;
+  }
+
+  /**
+   * The recovery phrase, opened with the spending password, under the same
+   * back-off as every other check of that password. A wrong password throws.
+   */
+  private async openMnemonicWithPassword(password: string): Promise<string> {
+    const encryptedMnemonic = this.encryptedMnemonic;
+    if (!encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+    return withUnlockThrottle(this.secretsWalletId, async () => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic), { rejected: () => false });
   }
 
   /**
@@ -2414,7 +2422,6 @@ export class WalletBg {
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
     }));
 
-    const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -2427,7 +2434,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     try {
@@ -2483,8 +2490,7 @@ export class WalletBg {
         mnemonic = await decryptMnemonicWithPrfOutput(this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, String(this.secretsWalletId));
       } else {
         if (!password || !this.encryptedMnemonic) throw new Error('Spending password is required');
-        const { decrypt } = await import('@/shared/utils/crypto');
-        mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+        mnemonic = await this.openMnemonicWithPassword(password);
       }
       const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
       try {
@@ -2520,7 +2526,6 @@ export class WalletBg {
     await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
 
     // Decrypt the mnemonic once for the batch — we wipe it before returning.
-    const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -2533,7 +2538,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     try {
@@ -2653,7 +2658,6 @@ export class WalletBg {
       throw new Error('signMidnightConnectorData called on non-Midnight wallet');
     }
 
-    const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -2666,7 +2670,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     try {
@@ -2775,7 +2779,6 @@ export class WalletBg {
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
     }));
     // Decrypt mnemonic (same pattern as signMidnightSegments above).
-    const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -2788,7 +2791,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     try {
@@ -2981,7 +2984,6 @@ export class WalletBg {
 
     // Decrypt mnemonic — same pattern as the unshielded path. PRF wallets
     // need the raw PRF output; password wallets need the password.
-    const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -2994,7 +2996,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     try {
@@ -3207,7 +3209,6 @@ export class WalletBg {
     }
 
     // 1. Decrypt the mnemonic.
-    const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -3220,7 +3221,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password required to sign DUST registration tx');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
+      mnemonic = await this.openMnemonicWithPassword(password);
     }
 
     try {

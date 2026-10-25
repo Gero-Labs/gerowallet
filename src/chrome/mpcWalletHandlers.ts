@@ -218,6 +218,18 @@ export interface UnlockMpcWalletDeps {
 }
 
 /**
+ * The device secret (or the login share it was paired with) did not reconstruct
+ * this wallet's key: a wrong passkey or spending password, as opposed to a network
+ * or Google failure. Unlock attempts that end this way count toward the back-off.
+ */
+export class MpcCredentialRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MpcCredentialRejectedError';
+  }
+}
+
+/**
  * Unlock an MPC wallet for the session: fetch the login share (backend
  * verifies idToken), reconstruct + validate the root key against the
  * wallet's stored xpub, and cache the validated bytes so signs don't
@@ -285,9 +297,10 @@ export async function unlockMpcWalletFlow(
       }
     }
     if (primaryErr instanceof MpcValidationError) {
-      throw new Error('Recovery data mismatch. Unable to unlock this wallet with Google');
+      throw new MpcCredentialRejectedError('Recovery data mismatch. Unable to unlock this wallet with Google');
     }
-    throw primaryErr;
+    // The device share did not open with this secret (or reconstruct): a wrong secret.
+    throw new MpcCredentialRejectedError((primaryErr as Error)?.message || 'Unable to unlock this wallet');
   }
 }
 

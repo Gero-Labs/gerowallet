@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { UR } from '@keystonehq/keystone-sdk';
 import { Messaging } from '@/chrome/messaging';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import type { Wallet, Key } from '@/models/types';
@@ -134,7 +135,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password },
       })) as { data?: { success?: boolean } };
-      if (!verify?.data?.success) throw new Error('Invalid spending password');
+      if (!verify?.data?.success) throw new Error(passwordCheckFailure(verify, 'Invalid spending password'));
       data.password = password;
     }
 

@@ -105,6 +105,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { MessageTypes } from '@/models/MessageTypes';
 import snackbar from '@/plugins/snackbar';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
@@ -144,7 +145,7 @@ async function rotateKes() {
     }) as { data: { success: boolean; error?: string } };
 
     if (!verification.data.success) {
-      snackbar.setError(t('errors.wrongPassword'));
+      snackbar.setError(passwordCheckFailure(verification, t('errors.wrongPassword')));
       return;
     }
 
