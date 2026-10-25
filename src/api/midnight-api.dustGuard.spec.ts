@@ -59,7 +59,11 @@ const nexusReturns = (txCbor: string) => post.mockResolvedValueOnce({
 });
 
 describe('MidnightApi refuses a DUST mapping transaction that differs from the request', () => {
-  beforeEach(() => post.mockReset());
+  beforeEach(() => {
+    post.mockReset();
+    // Koios (the registration-UTxO proof's fallback) is offline in these tests.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+  });
   const api = new MidnightApi(NETWORK);
   const request = { cardanoAddress: OWN, paymentKeyHashHex: 'a'.repeat(56), dustAddressHex: DUST };
 
@@ -90,5 +94,61 @@ describe('MidnightApi refuses a DUST mapping transaction that differs from the r
   it('refuses CBOR it cannot decode', async () => {
     nexusReturns('deadbeef');
     await expect(api.buildDustRegistrationTx(request)).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
+  });
+});
+
+describe('MidnightApi pins the mapping NFT of the registration being spent', () => {
+  const OTHER_NFT = `${'6'.repeat(56)}6d6170` as Cardano.AssetId;
+  /** The real transaction that created the registration UTxO: the mapping NFT at the validator. */
+  const registrationTx = (() => {
+    const core = {
+      id: TX,
+      body: {
+        inputs: [{ txId: '5'.repeat(64), index: 0 }],
+        outputs: [mapping(DUST), out(OWN, 97_000_000n)],
+        fee: 300_000n,
+        mint: new Map([[NFT, 1n]]),
+      },
+      witness: { signatures: new Map() },
+    } as unknown as Cardano.Tx;
+    const tx = Serialization.Transaction.fromCore(core);
+    return { cbor: tx.toCbor(), hash: String(tx.getId()) };
+  })();
+  const proofSources = [async () => new Map([[registrationTx.hash, registrationTx.cbor]])];
+  const manage = { cardanoAddress: OWN, registrationUtxoTxHash: registrationTx.hash, registrationUtxoOutputIndex: 0 };
+  const manageCbor = (body: Partial<Cardano.TxBody>) => Serialization.Transaction.fromCore({
+    id: TX,
+    body: { inputs: [{ txId: registrationTx.hash, index: 0 }], outputs: [], fee: 300_000n, ...body },
+    witness: { signatures: new Map() },
+  } as unknown as Cardano.Tx).toCbor();
+  const api = new MidnightApi(NETWORK);
+
+  beforeEach(() => {
+    post.mockReset();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+  });
+
+  it('accepts a deregistration that burns the registration\'s NFT', async () => {
+    nexusReturns(manageCbor({ outputs: [out(OWN, 98_000_000n)], mint: new Map([[NFT, -1n]]) }));
+    await expect(api.buildDustDeregistrationTx(manage, { proofSources })).resolves.toBeTruthy();
+  });
+
+  it('refuses a deregistration that burns some other token', async () => {
+    nexusReturns(manageCbor({ outputs: [out(OWN, 98_000_000n)], mint: new Map([[OTHER_NFT, -1n]]) }));
+    await expect(api.buildDustDeregistrationTx(manage, { proofSources })).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
+  });
+
+  it('refuses an update that re-locks a different token at the validator', async () => {
+    const wrong = out(VALIDATOR, 1_500_000n, { value: { coins: 1_500_000n, assets: new Map([[OTHER_NFT, 1n]]) }, datum: datum(DUST) });
+    nexusReturns(manageCbor({ outputs: [wrong, out(OWN, 97_000_000n)] }));
+    await expect(api.buildDustUpdateTx({ ...manage, dustAddressHex: DUST }, { proofSources }))
+      .rejects.toMatchObject({ name: 'TxIntentMismatchError' });
+    nexusReturns(manageCbor({ outputs: [mapping(DUST), out(OWN, 97_000_000n)] }));
+    await expect(api.buildDustUpdateTx({ ...manage, dustAddressHex: DUST }, { proofSources })).resolves.toBeTruthy();
+  });
+
+  it('falls back to the one-unit rule when the registration cannot be proven', async () => {
+    nexusReturns(manageCbor({ outputs: [out(OWN, 98_000_000n)], mint: new Map([[OTHER_NFT, -1n]]) }));
+    await expect(api.buildDustDeregistrationTx(manage)).resolves.toBeTruthy();
   });
 });

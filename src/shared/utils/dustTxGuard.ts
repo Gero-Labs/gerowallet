@@ -20,9 +20,15 @@ import {
  * datum must name the DUST address the user chose, so a builder cannot point
  * the user's cNIGHT at someone else's DUST address.
  *
+ * The mapping NFT: on deregister and update it is the token the user's own
+ * registration UTxO holds, which the caller proves from the transaction that
+ * created it (`registrationNftUnit`, see provenInputs.ts); the burn, or the
+ * token re-locked at the validator, must be exactly that one.
+ *
  * Tolerances, each because the wallet has no reviewed constant to pin:
- * - the mapping NFT's policy and name (register mints exactly one unit, +1, into
- *   the validator output; deregister burns exactly one, -1; update moves one);
+ * - the mapping NFT's policy and name on register (it mints exactly one unit,
+ *   +1, into the validator output), and on deregister/update when the
+ *   registration UTxO could not be proven (exactly one unit, -1 / moved);
  * - the validator output's lovelace (its min-UTxO), up to {@link DUST_VALIDATOR_OUTPUT_MAX_LOVELACE};
  * - withdrawals of 0 lovelace (the script's withdraw-zero authorization), which move no value;
  * - the inputs, which Nexus selects: every output, the fee and the collateral are
@@ -44,6 +50,12 @@ export interface DustTxExpectation {
   dustAddressHex?: string;
   /** deregister / update: `txHash#index` of the registration UTxO being spent. */
   registrationRef?: string;
+  /**
+   * deregister / update: the mapping NFT (`policyId + assetNameHex`) that the
+   * registration UTxO holds, as proven from the transaction that created it.
+   * When given, only that token may be burned or re-locked.
+   */
+  registrationNftUnit?: string | null;
   /** A collateral UTxO Nexus says it lends (its own risk, not the user's). */
   sponsoredCollateralRef?: string | null;
   /**
@@ -137,12 +149,15 @@ export function dustMappingTxIntent(tx: Cardano.Tx, exp: DustTxExpectation): TxI
     collateral: { maxAtRiskLovelace: MAX_COLLATERAL_AT_RISK_LOVELACE, isOwnRisk },
   };
 
+  const nft = exp.registrationNftUnit?.toLowerCase() ?? null;
+  const isRegistrationNft = (unit: string | null) => unit !== null && (nft === null || unit.toLowerCase() === nft);
+
   if (exp.kind === 'deregister') {
     if (!exp.registrationRef) return null;
     return {
       ...base,
       requiredInputs: [exp.registrationRef],
-      mint: (mint) => singleUnit(mint, -1n) !== null,
+      mint: (mint) => isRegistrationNft(singleUnit(mint, -1n)),
     };
   }
 
@@ -172,10 +187,23 @@ export function dustMappingTxIntent(tx: Cardano.Tx, exp: DustTxExpectation): TxI
     boundedOutputs: [{
       address: validator.address,
       maxLovelace: DUST_VALIDATOR_OUTPUT_MAX_LOVELACE,
-      assets: (assets) => singleUnit(assets, 1n) !== null,
+      assets: (assets) => isRegistrationNft(singleUnit(assets, 1n)),
       datum,
     }],
   };
+}
+
+/**
+ * The mapping NFT a registration UTxO holds: its single non-ADA token, held
+ * once, at the network's mapping validator. Null when the output is anything
+ * else (then nothing is pinned from it).
+ */
+export function registrationNftOf(output: Cardano.TxOut | undefined, network: string): string | null {
+  const validator = DUST_MAPPING_VALIDATOR[network];
+  if (!output || !validator || String(output.address) !== validator.address) return null;
+  const assets = new Map<string, bigint>();
+  for (const [unit, qty] of output.value?.assets ?? new Map()) assets.set(String(unit), BigInt(qty));
+  return singleUnit(assets, 1n);
 }
 
 /** Every way `tx` departs from the expected mapping-validator transaction; empty when it matches. */

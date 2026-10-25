@@ -20,7 +20,8 @@ import { Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import i18n from '@/plugins/i18n';
 import { parseHttpError } from '@/shared/utils/parser';
-import { verifyDustMappingTx, type DustTxExpectation } from '@/shared/utils/dustTxGuard';
+import { registrationNftOf, verifyDustMappingTx, type DustTxExpectation } from '@/shared/utils/dustTxGuard';
+import { koiosSource, proveOutputs, type TxCborSource } from '@/shared/utils/provenInputs';
 import { TxIntentMismatchError, type TxIntentViolation } from '@/shared/utils/txIntentGuard';
 import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
@@ -413,21 +414,57 @@ function manageWireBody(request: BuildDustManageTxRequest) {
  */
 export interface DustBuildContext {
   ownUtxoRefs?: Iterable<string>;
+  /**
+   * Where to fetch the transaction that created the registration UTxO, to prove
+   * which mapping NFT it holds (provenInputs.ts). The wallet's history first,
+   * when the caller has it; Koios is always tried after.
+   */
+  proofSources?: TxCborSource[];
+}
+
+/**
+ * The mapping NFT the registration UTxO being spent holds, proven from the
+ * transaction that created it; null when it cannot be proven.
+ */
+async function provenRegistrationNft(
+  registrationRef: string,
+  network: string,
+  sources: TxCborSource[],
+): Promise<string | null> {
+  try {
+    const { proven } = await proveOutputs([registrationRef], sources);
+    return registrationNftOf(proven.get(registrationRef.toLowerCase()), network);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Refuse a mapping-validator transaction that is not what was asked for (see
  * `dustTxGuard.ts`). Runs on every complete build, before any caller can sign it.
+ * On deregister and update the mapping NFT is pinned to the one the registration
+ * UTxO provably holds; when that proof is unavailable, the guard's one-unit rule applies.
  */
-function verifyDustBuild(
+async function verifyDustBuild(
   build: BuildDustRegistrationTxResponse,
   expectation: Omit<DustTxExpectation, 'sponsoredCollateralRef'>,
-): BuildDustRegistrationTxResponse {
+  proofSources: TxCborSource[] = [],
+): Promise<BuildDustRegistrationTxResponse> {
   if (build.status !== 'complete' || !build.txCbor) return build;
+  const registrationNftUnit = expectation.kind !== 'register' && expectation.registrationRef
+    ? await provenRegistrationNft(expectation.registrationRef, expectation.network, proofSources)
+    : null;
+  if (expectation.kind !== 'register' && !registrationNftUnit) {
+    debugLog('DUST build: registration UTxO not proven; the mapping NFT is checked by count only');
+  }
   let violations;
   try {
     const tx = Serialization.Transaction.fromCbor(HexBlob(build.txCbor)).toCore();
-    violations = verifyDustMappingTx(tx, { ...expectation, sponsoredCollateralRef: build.sponsoredCollateralRef });
+    violations = verifyDustMappingTx(tx, {
+      ...expectation,
+      registrationNftUnit,
+      sponsoredCollateralRef: build.sponsoredCollateralRef,
+    });
   } catch (e) {
     debugLog('DUST build: could not verify the built transaction', e);
     throw new TxIntentMismatchError(String(i18n.t('txGuard.builtTxMismatch')), []);
@@ -619,6 +656,11 @@ export class MidnightApi {
   private readonly network: string;
   private readonly nexusBaseUrl: string;
   private readonly axiosInstance: AxiosInstance;
+
+  /** The caller's CBOR sources, then Koios on the Cardano network this Midnight network anchors to. */
+  private dustProofSources(context: DustBuildContext): TxCborSource[] {
+    return [...(context.proofSources ?? []), koiosSource(cardanoTwinNetwork(this.network))];
+  }
 
   constructor(network: string) {
     const endpoints = getMidnightEndpoints(network);
@@ -984,7 +1026,7 @@ export class MidnightApi {
       cardanoAddress: request.cardanoAddress,
       registrationRef: `${request.registrationUtxoTxHash}#${request.registrationUtxoOutputIndex}`,
       ownUtxoRefs: context.ownUtxoRefs,
-    });
+    }, this.dustProofSources(context));
   }
 
   /**
@@ -1014,7 +1056,7 @@ export class MidnightApi {
       dustAddressHex: request.dustAddressHex,
       registrationRef: `${request.registrationUtxoTxHash}#${request.registrationUtxoOutputIndex}`,
       ownUtxoRefs: context.ownUtxoRefs,
-    });
+    }, this.dustProofSources(context));
   }
 
   /**

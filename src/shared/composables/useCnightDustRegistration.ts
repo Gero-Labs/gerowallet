@@ -26,6 +26,7 @@
 
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import { historySource } from '@/shared/utils/provenInputs';
 import { geroStore } from '@/stores/geroStore';
 import { Blockchain, Network, Wallet } from '@/models/types';
 import {
@@ -203,6 +204,13 @@ export function useCnightDustRegistration() {
   /** `txHash#index` of every UTxO the wallet holds (lets the build check tell a lent collateral from the user's own). */
   const ownUtxoRefs = (): string[] =>
     ((utxos.value ?? []) as unknown as Array<[{ txId: unknown; index: unknown }, unknown]>).map(([input]) => inputRefOf(input));
+
+  // What the build check knows about the wallet: its UTxOs, and its history, from
+  // which the registration UTxO (and so the mapping NFT) is proven before Koios is asked.
+  const buildContext = () => ({
+    ownUtxoRefs: ownUtxoRefs(),
+    proofSources: [historySource(walletStore.transactions as unknown[])],
+  });
 
   const status = ref<MidnightDustRegistrationStatusDto | null>(null);
   const statusLoading = ref(false);
@@ -506,7 +514,7 @@ export function useCnightDustRegistration() {
         cardanoAddress: wallet.baseAddress,
         paymentKeyHashHex: paymentKeyHashHex ?? '',
         dustAddressHex,
-      }, { ownUtxoRefs: ownUtxoRefs() });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete registration transaction');
       }
@@ -689,7 +697,7 @@ export function useCnightDustRegistration() {
         paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
         registrationUtxoTxHash: outpoint.txHash,
         registrationUtxoOutputIndex: outpoint.outputIndex,
-      }, { ownUtxoRefs: ownUtxoRefs() });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete deregistration transaction');
       }
@@ -748,7 +756,7 @@ export function useCnightDustRegistration() {
         paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
         registrationUtxoTxHash: txHash,
         registrationUtxoOutputIndex: outputIndex,
-      }, { ownUtxoRefs: ownUtxoRefs() });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete deregistration transaction');
       }
@@ -810,7 +818,7 @@ export function useCnightDustRegistration() {
         registrationUtxoTxHash: outpoint.txHash,
         registrationUtxoOutputIndex: outpoint.outputIndex,
         dustAddressHex,
-      }, { ownUtxoRefs: ownUtxoRefs() });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete update transaction');
       }

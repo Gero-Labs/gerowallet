@@ -14,6 +14,13 @@ import { verifyTxIntent, type TxIntentViolation } from '@/shared/utils/txIntentG
  * {@link STRIKE_VALIDATOR_OUTPUT_MAX_LOVELACE}) and its datum, which the wallet
  * has no reviewed schema for; the inputs, which Strike selects (outputs, fee and
  * collateral are bounded, so an input can only add to what returns to the wallet).
+ *
+ * The validator itself is only known from the quote: the Strike constants in
+ * transactionClassifier.ts are the v1 perpetuals contract, used to label
+ * history, and nothing ties them to the V2 withdraw validator. Pinning the
+ * address and the datum needs Strike's published V2 withdraw validator (script
+ * hash per network) and its datum schema, reviewed into a constant here the way
+ * DUST_MAPPING_VALIDATOR is.
  */
 
 /** A min-UTxO output with a datum costs about 1-2 ADA; more than this is not a min-UTxO. */

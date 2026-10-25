@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano } from '@cardano-sdk/core';
 import { DUST_MAPPING_VALIDATOR } from './dustMappingValidator';
-import { verifyDustMappingTx, type DustTxExpectation } from './dustTxGuard';
+import { registrationNftOf, verifyDustMappingTx, type DustTxExpectation } from './dustTxGuard';
 
 const NETWORK = 'Preprod';
 const VALIDATOR = DUST_MAPPING_VALIDATOR[NETWORK].address;
@@ -145,5 +145,18 @@ describe('DUST mapping-validator transaction check', () => {
     expect(verifyDustMappingTx(tx(registerBody), { ...register, network: 'Nowhere' })).toEqual(['unsupported']);
     const enterprise = Cardano.EnterpriseAddress.fromCredentials(net, keyCred('a')).toAddress().toBech32();
     expect(verifyDustMappingTx(tx(registerBody), { ...register, cardanoAddress: enterprise })).toEqual(['unsupported']);
+  });
+});
+
+describe('registrationNftOf', () => {
+  it('is the single token a registration UTxO at the validator holds', () => {
+    expect(registrationNftOf(mappingOut(), NETWORK)).toBe(NFT);
+  });
+
+  it('is nothing for an output elsewhere, with several tokens, or with more than one unit', () => {
+    expect(registrationNftOf(out(OWN, 1n, { value: { coins: 1n, assets: new Map([[NFT, 1n]]) } }), NETWORK)).toBeNull();
+    expect(registrationNftOf(mappingOut(DUST, 1n, new Map([[NFT, 1n], [`${'6'.repeat(56)}00` as Cardano.AssetId, 1n]])), NETWORK)).toBeNull();
+    expect(registrationNftOf(mappingOut(DUST, 1n, new Map([[NFT, 2n]])), NETWORK)).toBeNull();
+    expect(registrationNftOf(undefined, NETWORK)).toBeNull();
   });
 });
