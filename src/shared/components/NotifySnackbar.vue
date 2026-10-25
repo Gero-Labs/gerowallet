@@ -25,6 +25,7 @@
 import { computed, getCurrentInstance } from 'vue';
 import { notifySnackStore, type NotifySnack } from '@/stores/notifySnackStore';
 import NotifyAssetIcons from '@/shared/components/NotifyAssetIcons.vue';
+import { requestSettingsTabOnLoad } from '@/services/notify/notifyStorage';
 
 const items = computed(() => notifySnackStore.state.items);
 const router = getCurrentInstance()?.proxy?.$router;
@@ -32,7 +33,7 @@ const router = getCurrentInstance()?.proxy?.$router;
 function dismiss(id: number) { notifySnackStore.dismiss(id); }
 
 function open(snack: NotifySnack) {
-  if (snack.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: snack.settingsTab } });
+  if (snack.settingsTab) void requestSettingsTabOnLoad({ tab: snack.settingsTab });
   if (router && router.currentRoute.value.fullPath !== snack.path) router.push(snack.path).catch(() => undefined);
   dismiss(snack.id);
 }
