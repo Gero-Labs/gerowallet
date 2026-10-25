@@ -252,6 +252,13 @@ loadWallets().then(async () => {
 // rules don't survive a browser restart, so (re)install on every worker start.
 installMoonpayFrameRule().catch((e) => debugLog('MoonPay frame rule not installed:', e));
 
+// Midnight SDK state used to sit in chrome.storage.local, readable by every content
+// script. It now lives in its own IndexedDB; delete the old copies once, even for a
+// profile that no longer uses Midnight.
+void import('@/chains/midnight/midnightWalletStatePersistence')
+  .then(({ purgeLegacyChromeWalletState }) => purgeLegacyChromeWalletState())
+  .catch((e) => debugLog('Legacy Midnight wallet state not purged:', e));
+
 (async () => {
   // Skip cashback init without its env vars — the SDK throws on missing config.
   const cashbackIdentifier = import.meta.env['VITE_CASHBACK_IDENTIFIER'];
