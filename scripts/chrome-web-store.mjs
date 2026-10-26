@@ -1,8 +1,8 @@
 /**
  * Chrome Web Store release steps for .github/workflows/chrome-web-store.yml.
  *
- *   verify   re-checks the package "Chrome Extension CI/CD" tested and tagged, and that
- *            its ZIP holds exactly the files that were tested.
+ *   verify   re-checks the package that "Chrome Extension CI/CD" built and tested earlier
+ *            in the same run, and that its ZIP holds exactly the files that were tested.
  *   e2e-gate checks a gerowallet-e2e-tests qualification report for that ZIP.
  *   release  uploads that ZIP through the Chrome Web Store API v2 and, if asked, submits
  *            it for review. (v1.1 stopped being supported on October 15, 2026.)

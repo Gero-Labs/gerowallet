@@ -4,17 +4,28 @@ on:
   push:
     branches:
       - main
+  # Builds, tests and archives a candidate. Nothing here tags or releases it: that is
+  # "Chrome Web Store release" (chrome-web-store.yml), whose first job calls this workflow.
   workflow_dispatch:
     inputs:
       expected_version:
         description: 'Reviewed package version already committed in package.json and package-lock.json'
         type: string
         required: true
-      dry_run:
-        description: 'Build, test and archive only; do not create a release tag'
-        type: boolean
-        default: true
+  # A call reports its caller's event (workflow_dispatch), so it is checked as a manual
+  # release: version, MANIFEST_KEY and CHROME_EXTENSION_ID.
+  workflow_call:
+    inputs:
+      expected_version:
+        type: string
         required: true
+    secrets:
+      MANIFEST_KEY:
+        required: false
+      VITE_MOONPAY_API_KEY:
+        required: false
+      VITE_GUARDARIAN_API_KEY:
+        required: false
 permissions:
   contents: read
 
@@ -156,8 +167,8 @@ jobs:
           (cd extension && zip -qr "../release-evidence/Gero-v${CANDIDATE_VERSION}.zip" .)
           (cd release-evidence && sha256sum "Gero-v${CANDIDATE_VERSION}.zip" > SHA256SUMS)
 
-      # Upload the built extension (./extension is gitignored) so a release can
-      # be downloaded + uploaded to the Chrome Web Store from a single CI source.
+      # Upload the built extension (./extension is gitignored). The store release
+      # downloads this artifact later in the same run and uploads its ZIP as it is.
       - name: Upload extension build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -182,55 +193,3 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    if: github.event_name == 'workflow_dispatch' && inputs.dry_run == false
-    env:
-      RELEASE_VERSION: ${{ needs.build.outputs.version }}
-      EXPECTED_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24.19.0'
-
-      - name: Download the tested artifact from this workflow run
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: gero-extension-${{ github.sha }}
-          path: candidate
-
-      - name: Recheck candidate provenance and archive
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import { createHash } from 'node:crypto';
-          import { inspectReleaseArtifact } from './scripts/check-release-artifact.mjs';
-          const recorded = JSON.parse(fs.readFileSync('candidate/release-evidence/artifact.json', 'utf8'));
-          const current = inspectReleaseArtifact('candidate/extension', { expectedVersion: process.env.RELEASE_VERSION, expectedId: process.env.EXPECTED_EXTENSION_ID });
-          const lockHash = createHash('sha256').update(fs.readFileSync('package-lock.json')).digest('hex');
-          if (!current.ok || !current.identityVerified || recorded.sourceSha !== process.env.GITHUB_SHA || recorded.packageLockSha256 !== lockHash || recorded.version !== process.env.RELEASE_VERSION || JSON.stringify(current.checksums) !== JSON.stringify(recorded.checksums)) throw new Error('Downloaded candidate failed version, identity, source, lockfile or artifact integrity verification');
-          NODE
-          (cd candidate/release-evidence && sha256sum -c SHA256SUMS)
-
-      # This tags the tested SHA only. Chrome Web Store submission remains a
-      # separately authorized release operation using the archived ZIP:
-      # chrome-web-store.yml, which finds this run through the tag's message.
-      - name: Tag the tested commit without changing or rebuilding it
-        run: |
-          if git rev-parse --verify "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
-            echo 'Release tag already exists; refusing to replace it' >&2
-            exit 1
-          fi
-          git config user.name 'GitHub Actions'
-          git config user.email 'actions@github.com'
-          git tag --annotate "v${RELEASE_VERSION}" "$GITHUB_SHA" --message "Tested GeroWallet ${RELEASE_VERSION}; workflow ${GITHUB_RUN_ID}"
-          git push origin "refs/tags/v${RELEASE_VERSION}"

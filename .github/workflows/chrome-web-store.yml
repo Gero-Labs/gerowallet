@@ -1,17 +1,17 @@
-# Upload a tested, tagged release to the Chrome Web Store and submit it for review.
+# Build, test and release GeroWallet to the Chrome Web Store, all in one run.
 #
-# "Chrome Extension CI/CD" (ci-cd.yml) builds, tests and archives a candidate, and with
-# dry_run=false tags that commit v<version>, naming its own run in the tag message.
-# This workflow takes that run's archive as it is: it re-checks provenance, version,
-# channel, identity and every file hash, then uploads the same ZIP. It never builds,
-# edits or repacks the package.
+# 1. "Chrome Extension CI/CD" (ci-cd.yml, called as the first job) builds the commit this
+#    workflow runs on, runs the unit suite and archives the package with its checksums.
+# 2. That package is re-checked: version, channel, identity and every file hash, for both
+#    the extension directory and its extracted ZIP.
+# 3. The full isolated browser suites of Gero-Labs/gerowallet-e2e-tests (post-v2.7 in three
+#    shards, plus legacy) run against that ZIP, extracted. Any failure, or a test that
+#    passed only on retry, stops the release.
+# 4. With dry_run=false, the upload job runs in the chrome-web-store-<channel> environment.
+#    Its required reviewers are the release authorization, and its secrets exist only
+#    there. It tags the commit v<version>, then uploads the same ZIP and submits it.
 #
-# Before the upload, the full isolated browser suites of Gero-Labs/gerowallet-e2e-tests
-# (post-v2.7 in three shards, plus legacy) run against that ZIP, extracted. Any failure,
-# or a test that passed only on retry, blocks the upload.
-#
-# The upload job runs in the chrome-web-store-<channel> environment. Its required
-# reviewers are the release authorization, and its secrets exist only there.
+# Nothing is rebuilt, edited or repacked after step 1.
 # Setup and recovery: .github/runbooks/chrome-web-store.md
 name: Chrome Web Store release
 
@@ -19,11 +19,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version already tested and tagged by "Chrome Extension CI/CD" (for example 2.8.0)'
+        description: 'Version committed in package.json and package-lock.json (for example 2.8.0)'
         type: string
         required: true
       channel:
-        description: 'Store listing to update; must be the channel the tested package was built for'
+        description: 'Store listing to update; must be the channel the repository settings build for'
         type: choice
         options: [production, beta]
         default: production
@@ -38,7 +38,7 @@ on:
         required: false
         default: ''
       dry_run:
-        description: 'Verify and e2e-test the package only; do not contact the Chrome Web Store'
+        description: 'Build, test and e2e-test only; no tag, nothing sent to the Chrome Web Store'
         type: boolean
         default: true
 
@@ -51,16 +51,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    name: Chrome Extension CI/CD
+    uses: ./.github/workflows/ci-cd.yml
+    with:
+      expected_version: ${{ inputs.version }}
+    secrets:
+      MANIFEST_KEY: ${{ secrets.MANIFEST_KEY }}
+      VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
+      VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
+
   verify:
     name: Verify the tested package
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      actions: read
     outputs:
-      run_id: ${{ steps.release.outputs.run_id }}
-      sha: ${{ steps.release.outputs.sha }}
       zip_sha256: ${{ steps.package.outputs.zip_sha256 }}
       extension_id: ${{ steps.package.outputs.extension_id }}
     env:
@@ -68,6 +74,7 @@ jobs:
       CHANNEL: ${{ inputs.channel }}
       SUBMISSION: ${{ inputs.submission }}
       DEPLOY_PERCENTAGE: ${{ inputs.deploy_percentage }}
+      DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - name: Check the inputs
         run: |
@@ -94,80 +101,49 @@ jobs:
         with:
           node-version: '24.19.0'
 
-      # The tag is created only by ci-cd.yml's publish job, on the commit its run tested,
-      # with that run's ID in the message. The run must be that workflow, on that commit,
-      # and have succeeded.
-      - name: Find the release tag and the run that tested it
-        id: release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # Only the upload job creates v<version>, on the commit it releases. A tag on
+      # another commit means this version was already released from there. A dry run
+      # releases nothing, so it only warns and goes on testing.
+      - name: Check the release tag
         run: |
           tag="v${RELEASE_VERSION}"
-          if [ "$(git cat-file -t "refs/tags/${tag}" 2>/dev/null)" != 'tag' ]; then
-            echo "::error::${tag} is not an annotated release tag. Run \"Chrome Extension CI/CD\" with expected_version=${RELEASE_VERSION} and dry_run=false first." >&2
-            exit 1
+          if tagged="$(git rev-parse --verify --quiet "refs/tags/${tag}^{commit}")" && [ "$tagged" != "$GITHUB_SHA" ]; then
+            message="${tag} already marks ${tagged}, not ${GITHUB_SHA}. Release a new version."
+            if [ "$DRY_RUN" = 'true' ]; then echo "::warning::${message}"; else echo "::error::${message}" >&2; exit 1; fi
           fi
-          sha="$(git rev-parse "refs/tags/${tag}^{commit}")"
-          run_id="$(git for-each-ref --format='%(contents)' "refs/tags/${tag}" | sed -nE 's/.*workflow ([0-9]+).*/\1/p' | head -n 1)"
-          if [ -z "$run_id" ]; then
-            echo "::error::${tag} does not name the workflow run that tested it" >&2; exit 1
-          fi
-          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > run.json
-          jq -e --arg sha "$sha" '
-            (.path | split("@")[0]) == ".github/workflows/ci-cd.yml"
-            and .event == "workflow_dispatch"
-            and .conclusion == "success"
-            and .head_sha == $sha
-          ' run.json > /dev/null || {
-            echo "::error::Run ${run_id} is not a successful \"Chrome Extension CI/CD\" release run on ${sha}" >&2; exit 1
-          }
-          lock_sha256="$(git show "${sha}:package-lock.json" | sha256sum | cut -d ' ' -f 1)"
-          {
-            echo "sha=${sha}"
-            echo "run_id=${run_id}"
-            echo "lock_sha256=${lock_sha256}"
-          } >> "$GITHUB_OUTPUT"
 
-      - name: Download the tested package from that run
+      - name: Download the tested package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: gero-extension-${{ steps.release.outputs.sha }}
+          name: gero-extension-${{ github.sha }}
           path: candidate
-          run-id: ${{ steps.release.outputs.run_id }}
-          github-token: ${{ github.token }}
 
       - name: Re-check the package and its ZIP
         id: package
-        env:
-          SOURCE_SHA: ${{ steps.release.outputs.sha }}
-          LOCK_SHA256: ${{ steps.release.outputs.lock_sha256 }}
         run: |
           zip="candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip"
           (cd candidate/release-evidence && sha256sum -c SHA256SUMS)
           mkdir unzipped
           unzip -q "$zip" -d unzipped
+          lock_sha256="$(sha256sum package-lock.json | cut -d ' ' -f 1)"
           node scripts/chrome-web-store.mjs verify --candidate candidate --unzipped unzipped \
-            --version "$RELEASE_VERSION" --channel "$CHANNEL" --source-sha "$SOURCE_SHA" --lock-sha256 "$LOCK_SHA256"
+            --version "$RELEASE_VERSION" --channel "$CHANNEL" --source-sha "$GITHUB_SHA" --lock-sha256 "$lock_sha256"
           echo "zip_sha256=$(sha256sum "$zip" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         env:
-          SOURCE_SHA: ${{ steps.release.outputs.sha }}
-          RUN_ID: ${{ steps.release.outputs.run_id }}
           ZIP_SHA256: ${{ steps.package.outputs.zip_sha256 }}
           EXTENSION_ID: ${{ steps.package.outputs.extension_id }}
-          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           {
-            echo "### Gero ${RELEASE_VERSION} (${CHANNEL}) matches what was tested"
+            echo "### Gero ${RELEASE_VERSION} (${CHANNEL}) built, tested and verified"
             echo ""
             echo "| | |"
             echo "|---|---|"
-            echo "| Commit | \`${SOURCE_SHA}\` |"
-            echo "| Tested in | ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID} |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
             echo "| Extension ID | \`${EXTENSION_ID}\` |"
             echo "| ZIP SHA-256 | \`${ZIP_SHA256}\` |"
-            echo "| Next | E2E suites, then $([ "$DRY_RUN" = 'true' ] && echo 'stop (dry run: nothing sent to the store)' || echo "upload, then: ${SUBMISSION}") |"
+            echo "| Next | E2E suites, then $([ "$DRY_RUN" = 'true' ] && echo 'stop (dry run: no tag, nothing sent to the store)' || echo "approval, tag v${RELEASE_VERSION}, upload, then: ${SUBMISSION}") |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # The full isolated suites, on the exact bytes the store will receive. The harness is
@@ -184,9 +160,6 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    permissions:
-      contents: read
-      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -197,7 +170,6 @@ jobs:
           - { suite: legacy, shard: 1, of: 1 }
     env:
       RELEASE_VERSION: ${{ inputs.version }}
-      WALLET_SHA: ${{ needs.verify.outputs.sha }}
       ZIP_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
       SUITE: ${{ matrix.suite }}
     steps:
@@ -227,13 +199,11 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Download the tested package from its run
+      - name: Download the tested package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: gero-extension-${{ needs.verify.outputs.sha }}
+          name: gero-extension-${{ github.sha }}
           path: .candidate
-          run-id: ${{ needs.verify.outputs.run_id }}
-          github-token: ${{ github.token }}
 
       - name: Put the verified ZIP under test
         run: |
@@ -247,7 +217,7 @@ jobs:
         run: npm run test:post-v27 -- --shard=${{ matrix.shard }}/${{ matrix.of }}
         env:
           POST_V27_EXTENSION_PATH: ${{ github.workspace }}/.wallet-under-test/extension
-          WALLET_CANDIDATE_SHA: ${{ needs.verify.outputs.sha }}
+          WALLET_CANDIDATE_SHA: ${{ github.sha }}
           WALLET_RELEASE_ARCHIVE_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
           SUBMIT_API_REQUIRED: 'true'
           EXPLORER_SETTING_REQUIRED: 'true'
@@ -257,7 +227,7 @@ jobs:
         run: npm run test:legacy:isolated -- --shard=${{ matrix.shard }}/${{ matrix.of }}
         env:
           EXTENSION_PATH: ${{ github.workspace }}/.wallet-under-test/extension
-          WALLET_CANDIDATE_SHA: ${{ needs.verify.outputs.sha }}
+          WALLET_CANDIDATE_SHA: ${{ github.sha }}
           WALLET_RELEASE_ARCHIVE_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
           SUBMIT_API_REQUIRED: 'true'
           EXPLORER_SETTING_REQUIRED: 'true'
@@ -266,7 +236,7 @@ jobs:
         run: |
           dir="test-results/$([ "$SUITE" = legacy ] && echo legacy-isolated || echo post-v27)"
           node .release-scripts/scripts/chrome-web-store.mjs e2e-gate --qualification "${dir}/qualification.json" \
-            --wallet-sha "$WALLET_SHA" --archive-sha256 "$ZIP_SHA256"
+            --wallet-sha "$GITHUB_SHA" --archive-sha256 "$ZIP_SHA256"
 
       # Summaries only. This repository is public, and the suites' screenshots, videos and
       # traces can show the disposable recovery phrases the tests create.
@@ -278,7 +248,7 @@ jobs:
             [ -e "$file" ] && cp "$file" "e2e-evidence/$(basename "$(dirname "$file")")-$(basename "$file")"
           done
           printf '{"harnessRepository":"Gero-Labs/gerowallet-e2e-tests","harnessSha":"%s","walletSha":"%s","releaseArchiveSha256":"%s"}\n' \
-            "${harness_sha:-}" "$WALLET_SHA" "$ZIP_SHA256" > e2e-evidence/e2e-run.json
+            "${harness_sha:-}" "$GITHUB_SHA" "$ZIP_SHA256" > e2e-evidence/e2e-run.json
       - name: Upload the e2e summary
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -289,7 +259,7 @@ jobs:
           if-no-files-found: warn
 
   submit:
-    name: Upload to the Chrome Web Store
+    name: Tag and upload to the Chrome Web Store
     needs: [verify, e2e]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
@@ -298,8 +268,7 @@ jobs:
     # are the store credentials for this channel's listing.
     environment: chrome-web-store-${{ inputs.channel }}
     permissions:
-      contents: read
-      actions: read
+      contents: write # the v<version> tag only; see "Tag the release"
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       SUBMISSION: ${{ inputs.submission }}
@@ -308,6 +277,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
@@ -315,18 +285,38 @@ jobs:
         with:
           node-version: '24.19.0'
 
-      - name: Download the tested package from its run
+      - name: Download the tested package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: gero-extension-${{ needs.verify.outputs.sha }}
+          name: gero-extension-${{ github.sha }}
           path: candidate
-          run-id: ${{ needs.verify.outputs.run_id }}
-          github-token: ${{ github.token }}
 
       - name: Confirm it is the ZIP that was verified
         env:
           ZIP_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
         run: echo "${ZIP_SHA256}  candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip" | sha256sum -c -
+
+      # After approval and before the upload, so an uploaded package always has its tag.
+      # A tag already on this commit (from an earlier attempt that failed to upload) is
+      # kept, so that attempt can simply be run again. The token is used in this step only.
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          if tagged="$(git rev-parse --verify --quiet "refs/tags/${tag}^{commit}")"; then
+            if [ "$tagged" != "$GITHUB_SHA" ]; then
+              echo "::error::${tag} already marks ${tagged}, not ${GITHUB_SHA}" >&2; exit 1
+            fi
+            echo "${tag} already marks this commit; keeping it"
+            exit 0
+          fi
+          tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" -f tag="$tag" -f type=commit -f object="$GITHUB_SHA" \
+            -f message="GeroWallet ${RELEASE_VERSION} (${CHANNEL}), tested and approved for the Chrome Web Store; workflow ${GITHUB_RUN_ID}" \
+            --jq .sha)"
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${tag}" -f sha="$tag_object" > /dev/null
+          echo "Tagged ${GITHUB_SHA} as ${tag}"
 
       - name: Upload and submit
         env:

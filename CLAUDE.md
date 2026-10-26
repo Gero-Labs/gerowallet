@@ -75,10 +75,10 @@ npm run design:check      # Design and contrast gates
 See [MAINTENANCE.md](MAINTENANCE.md) for diagnostic baselines and the
 [release runbook](spikes/vue3-migration/RELEASE-READINESS.md) for qualified
 packaging. Legacy `pack:*` utilities do not perform release qualification.
-Store submission is `.github/workflows/chrome-web-store.yml`: it uploads the exact
-package a tagged `ci-cd.yml` run tested, once the full gerowallet-e2e-tests isolated
-suites pass against that ZIP and the environment approves
-(`.github/runbooks/chrome-web-store.md`).
+Releases run through `.github/workflows/chrome-web-store.yml`: its first job calls
+`ci-cd.yml` to build and test the commit, the full gerowallet-e2e-tests isolated suites
+run against that ZIP, and once the environment approves it tags `v<version>` and uploads
+that exact ZIP (`.github/runbooks/chrome-web-store.md`). `ci-cd.yml` alone never tags.
 
 ## Key Rules
 

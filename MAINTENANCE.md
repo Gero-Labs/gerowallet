@@ -159,8 +159,9 @@ Read each workflow for its current selected test paths. The normal pre-commit
 hook lints staged code and runs design/contrast checks. Never bypass it. No
 repository `format` or `preflight` script exists; avoid broad formatting.
 
-The [release workflow](.github/workflows/ci-cd.yml) runs the full suite and
-qualifies a retained artifact. Use the
+The [CI workflow](.github/workflows/ci-cd.yml) runs the full suite and
+qualifies a retained artifact. Releases run it as the first job of
+[Chrome Web Store release](.github/workflows/chrome-web-store.yml). Use the
 [release/recovery procedure](spikes/vue3-migration/RELEASE-READINESS.md) for
 channel identity, committed version, checksums, dry run, and publication.
 Legacy `pack:*` commands alone are not qualification.
