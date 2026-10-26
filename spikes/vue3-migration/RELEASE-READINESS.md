@@ -184,7 +184,9 @@ Store submission is a separate workflow,
 [Chrome Web Store release](../../.github/workflows/chrome-web-store.yml). It finds
 the tagged run through the tag message and downloads that run's package. It
 re-checks provenance, channel, identity and every file hash, including the ZIP's
-extracted contents. Only after a reviewer approves the
+extracted contents. It then runs the full isolated gerowallet-e2e-tests suites
+(post-v2.7 and legacy) against that extracted ZIP. Any failure, or a pass on
+retry, blocks the upload. Only after a reviewer approves the
 `chrome-web-store-<channel>` environment does it upload that ZIP through the
 store API v2 and submit it (staged by default). Setup and recovery are in the
 [store runbook](../../.github/runbooks/chrome-web-store.md).

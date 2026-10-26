@@ -3,6 +3,7 @@
  *
  *   verify   re-checks the package "Chrome Extension CI/CD" tested and tagged, and that
  *            its ZIP holds exactly the files that were tested.
+ *   e2e-gate checks a gerowallet-e2e-tests qualification report for that ZIP.
  *   release  uploads that ZIP through the Chrome Web Store API v2 and, if asked, submits
  *            it for review. (v1.1 stopped being supported on October 15, 2026.)
  *
@@ -75,6 +76,28 @@ export function verifyStoreCandidate({ candidateDir, unzippedDir, version, chann
     if (JSON.stringify(report.checksums) !== checksums) problems.push(`The ${label} does not hold exactly the files the release run tested`);
   }
   return { ok: problems.length === 0, problems, extensionId: recorded.extensionId ?? null };
+}
+
+/**
+ * Reasons an e2e suite's qualification.json does not clear the release.
+ *
+ * The report comes from gerowallet-e2e-tests' qualification reporter. It must be about this
+ * wallet commit and this ZIP, must have run tests, and must have no failures. A test that
+ * passed only on retry also blocks: the harness counts it as incomplete qualification.
+ * Skips are allowed (each carries a reason and a category in the report).
+ */
+export function checkE2eQualification(report, { walletSha, archiveSha256 }) {
+  const problems = [];
+  const counts = report.counts ?? {};
+  if (report.walletSha !== walletSha) problems.push('The e2e report is about another wallet commit');
+  if (report.releaseArchiveSha256 !== archiveSha256) problems.push('The e2e report is about another release ZIP');
+  if (!Array.isArray(report.tests) || report.tests.length === 0) problems.push('The e2e suite ran no tests');
+  for (const status of ['failed', 'timedOut', 'interrupted']) {
+    if (counts[status]) problems.push(`${counts[status]} e2e test(s) ${status === 'timedOut' ? 'timed out' : status}`);
+  }
+  if (counts.flaky) problems.push(`${counts.flaky} e2e test(s) passed only on retry`);
+  if (report.status !== 'passed' && problems.length === 0) problems.push(`The e2e suite ended as "${report.status}"`);
+  return problems;
 }
 
 /** An OAuth access token for the store API: from a service account if one is set, else a refresh token. */
@@ -227,7 +250,14 @@ function percentage(value) {
 }
 
 async function main({ command, options }, env) {
-  if (command !== 'verify' && command !== 'release') throw new Error('Usage: chrome-web-store.mjs verify|release --version <version> …');
+  if (command === 'e2e-gate') {
+    const report = JSON.parse(readFileSync(options.qualification, 'utf8'));
+    const problems = checkE2eQualification(report, { walletSha: options['wallet-sha'], archiveSha256: options['archive-sha256'] });
+    if (problems.length) throw new Error(problems.join('\n'));
+    const { passed = 0, skipped = 0 } = report.counts ?? {};
+    return `${passed} passed, ${skipped} skipped, none failed or passed only on retry`;
+  }
+  if (command !== 'verify' && command !== 'release') throw new Error('Usage: chrome-web-store.mjs verify|e2e-gate|release …');
   if (!VERSION.test(options.version ?? '')) throw new Error('--version must be a Chrome extension version such as 2.8.0');
   if (command === 'verify') {
     const result = verifyStoreCandidate({

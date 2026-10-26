@@ -9,8 +9,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { extensionIdForKey, inspectReleaseArtifact } from './check-release-artifact.mjs';
 import {
-  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, compareVersions, extensionIdForPublicKey,
-  releaseToStore, storeClient, verifyStoreCandidate,
+  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, compareVersions,
+  extensionIdForPublicKey, releaseToStore, storeClient, verifyStoreCandidate,
 } from './chrome-web-store.mjs';
 
 const KEY = Buffer.from('synthetic-public-manifest-key').toString('base64');
@@ -254,5 +254,33 @@ describe('verifyStoreCandidate', () => {
   it('rejects a ZIP that does not hold the tested files', () => {
     write(unzipped(), 'assets/extra.js', 'export {};');
     expect(verify().problems.join('\n')).toContain('ZIP does not hold exactly');
+  });
+});
+
+describe('checkE2eQualification', () => {
+  const walletSha = 'a'.repeat(40);
+  const archiveSha256 = 'b'.repeat(64);
+  const report = changes => ({
+    walletSha, releaseArchiveSha256: archiveSha256, status: 'passed',
+    counts: { passed: 2, failed: 0, timedOut: 0, skipped: 1, interrupted: 0, flaky: 0 },
+    tests: [{ status: 'passed' }, { status: 'passed' }, { status: 'skipped', category: 'device-required' }],
+    ...changes,
+  });
+  const check = changes => checkE2eQualification(report(changes), { walletSha, archiveSha256 }).join('\n');
+
+  it('clears a passing run of this commit and ZIP, skips included', () => {
+    expect(check()).toBe('');
+  });
+
+  it.each([
+    ['another wallet commit', { walletSha: 'c'.repeat(40) }, 'another wallet commit'],
+    ['another ZIP', { releaseArchiveSha256: null }, 'another release ZIP'],
+    ['no tests', { tests: [] }, 'ran no tests'],
+    ['a failure', { status: 'failed', counts: { passed: 1, failed: 1 } }, '1 e2e test(s) failed'],
+    ['a timeout', { status: 'timedout', counts: { passed: 1, timedOut: 1 } }, 'timed out'],
+    ['a pass on retry', { counts: { passed: 2, flaky: 1 } }, 'passed only on retry'],
+    ['an unfinished run', { status: 'interrupted', counts: { passed: 2 } }, 'ended as "interrupted"'],
+  ])('blocks %s', (_name, changes, reason) => {
+    expect(check(changes)).toContain(reason);
   });
 });

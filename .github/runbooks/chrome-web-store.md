@@ -8,8 +8,8 @@ Workflow: [`chrome-web-store.yml`](../workflows/chrome-web-store.yml) (Actions â
 
 1. Commit the reviewed version to `package.json` and `package-lock.json`.
 2. Run **Chrome Extension CI/CD** (`ci-cd.yml`) with `expected_version=<version>` and `dry_run=true`. When that is green, run it again with `dry_run=false`. That run builds and tests the package and archives it with its checksums. It then tags the commit `v<version>`, and the tag message names the run.
-3. Run **Chrome Web Store release** with the same version and `dry_run=true`. This re-checks the package without contacting the store.
-4. Run it again with `dry_run=false`. The upload job waits until an environment reviewer approves it, then uploads the ZIP and submits it.
+3. Run **Chrome Web Store release** with the same version and `dry_run=true`. This re-checks the package and runs the e2e suites against it, without contacting the store.
+4. Run it again with `dry_run=false`. The e2e suites run again. The upload job then waits until an environment reviewer approves it, and uploads and submits the ZIP.
 5. Google reviews the submission. With `submission=staged`, publish it from the Developer Dashboard once it is approved. With `publish`, it goes live as soon as it is approved.
 
 ### What is checked before anything is uploaded
@@ -21,6 +21,7 @@ Workflow: [`chrome-web-store.yml`](../workflows/chrome-web-store.yml) (Actions â
 | Build report | The report is not passing; or its identity, version, channel, commit or `package-lock.json` hash differs from what the tag and inputs say |
 | Files | The extension directory or the extracted ZIP fails the release gate (`check-release-artifact.mjs`), or differs by even one file hash from what was tested |
 | ZIP | Its SHA-256 differs from `SHA256SUMS`, or from the hash verified in the first job |
+| E2E suites | Any test in the full isolated suites of [gerowallet-e2e-tests](https://github.com/Gero-Labs/gerowallet-e2e-tests) fails, times out or passes only on retry, or a suite runs no tests. They are post-v2.7 in three shards, plus legacy, run against the extracted ZIP (see below) |
 | Store item | `CWS_ITEM_ID` is not the package's extension ID, or the item's public key belongs to another extension |
 | Store state | The item is taken down; another version is in review or approved and waiting; or the published version is not lower than this one |
 | Upload | The store reads a different version from the ZIP, or does not accept the upload |
@@ -55,7 +56,19 @@ The channel is fixed when the package is built. `ci-cd.yml` builds for the listi
 | `channel` | `production` or `beta`. This picks the environment, and so the listing and credentials |
 | `submission` | `staged` (default): submit for review, then publish by hand once approved. `publish`: goes live as soon as approved. `upload-only`: replace the draft, submit nothing |
 | `deploy_percentage` | Optional, 1 to 100. Rolls out to that share of users. The store accepts it only for items above 10,000 weekly users. Empty means everyone |
-| `dry_run` | `true` (default) re-checks the package and stops. `false` uploads after approval |
+| `dry_run` | `true` (default) re-checks and e2e-tests the package, then stops. `false` uploads after approval |
+| `e2e_ref` | The gerowallet-e2e-tests branch, tag or commit to run (default `development`). Pin a commit to rerun exactly what an earlier run used |
+
+### The e2e gate
+
+The `e2e` job runs the same harness commands and settings as the e2e repository's own `post-v27-e2e.yml`. Only the wallet under test differs: it is the release ZIP, extracted after its SHA-256 check, not a fresh test build. The suites therefore test the exact bytes the store will receive, with the production extension key and configuration.
+
+The gate does not block on:
+
+- **Skips:** each one carries a reason and a category (device needed, live chain needed, coverage gap and so on) in the job summary. Review them before you approve.
+- **The live suites:** the funded-wallet, real-transaction ones (`@transaction`, `@live`). They need real testnet funds and are not part of the isolated suites.
+
+Each shard keeps its `qualification.json`, the harness provenance (`e2e-provenance.json`), and an `e2e-run.json` naming the harness commit, as the artifact `e2e-<channel>-<version>-<suite>-<shard>-<run>`. Screenshots, videos and traces are never kept: this repository is public, and they can show the disposable recovery phrases the tests create. Inside `qualification.json`, `harnessSha` holds the wallet repository's commit; the harness commit is in `e2e-run.json`.
 
 Each run writes a summary. The upload job keeps the store's answer as the artifact `chrome-web-store-<channel>-<version>-<run>`. That answer holds states and versions only, never a token or credential.
 
@@ -64,6 +77,8 @@ Each run writes a summary. The upload job keeps the store's answer as the artifa
 | Message or situation | What to do |
 |---|---|
 | `v<version> is not an annotated release tag` | Run `ci-cd.yml` with `dry_run=false` for that version first. |
+| An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing the harness, then rerunning with `e2e_ref` set to the fix. Don't release around a red gate. |
+| `passed only on retry` | The legacy suite retries a failed test once on CI. A flaky release test still needs a look. Rerun the workflow; if the same test keeps flaking, fix the test or the wallet first. |
 | The package can no longer be downloaded | `ci-cd.yml` keeps the tested package for 90 days. Its tag already exists and is never replaced, so release a new version. |
 | `Another version is already in review` / `waiting to be published` | Publish or cancel that submission in the Developer Dashboard, then run again. The workflow never cancels a submission itself. |
 | `The store already serves X; Y must be higher` | Bump the version and release again. |

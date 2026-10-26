@@ -6,6 +6,10 @@
 # channel, identity and every file hash, then uploads the same ZIP. It never builds,
 # edits or repacks the package.
 #
+# Before the upload, the full isolated browser suites of Gero-Labs/gerowallet-e2e-tests
+# (post-v2.7 in three shards, plus legacy) run against that ZIP, extracted. Any failure,
+# or a test that passed only on retry, blocks the upload.
+#
 # The upload job runs in the chrome-web-store-<channel> environment. Its required
 # reviewers are the release authorization, and its secrets exist only there.
 # Setup and recovery: .github/runbooks/chrome-web-store.md
@@ -34,9 +38,13 @@ on:
         required: false
         default: ''
       dry_run:
-        description: 'Verify the tested package only; do not contact the Chrome Web Store'
+        description: 'Verify and e2e-test the package only; do not contact the Chrome Web Store'
         type: boolean
         default: true
+      e2e_ref:
+        description: 'gerowallet-e2e-tests branch, tag or commit to run'
+        type: string
+        default: development
 
 permissions:
   contents: read
@@ -163,12 +171,133 @@ jobs:
             echo "| Tested in | ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID} |"
             echo "| Extension ID | \`${EXTENSION_ID}\` |"
             echo "| ZIP SHA-256 | \`${ZIP_SHA256}\` |"
-            echo "| Next | $([ "$DRY_RUN" = 'true' ] && echo 'Dry run: nothing sent to the store' || echo "Upload, then: ${SUBMISSION}") |"
+            echo "| Next | E2E suites, then $([ "$DRY_RUN" = 'true' ] && echo 'stop (dry run: nothing sent to the store)' || echo "upload, then: ${SUBMISSION}") |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The full isolated suites, on the exact bytes the store will receive. The harness is
+  # the e2e repo's own (same commands and settings as its post-v27-e2e.yml); only the
+  # wallet differs: the extracted release ZIP instead of a fresh test build.
+  e2e:
+    name: E2E ${{ matrix.suite }} (${{ matrix.shard }}/${{ matrix.of }})
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: post-v27, shard: 1, of: 3 }
+          - { suite: post-v27, shard: 2, of: 3 }
+          - { suite: post-v27, shard: 3, of: 3 }
+          - { suite: legacy, shard: 1, of: 1 }
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      WALLET_SHA: ${{ needs.verify.outputs.sha }}
+      ZIP_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+      SUITE: ${{ matrix.suite }}
+    steps:
+      - name: Checkout the e2e harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: Gero-Labs/gerowallet-e2e-tests
+          ref: ${{ inputs.e2e_ref }}
+          persist-credentials: false
+
+      # The wallet's own release scripts, from the commit that runs this workflow.
+      - name: Checkout this workflow's scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: .release-scripts
+          persist-credentials: false
+
+      # The harness records provenance against a checkout of the tested commit.
+      - name: Checkout the tested wallet commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          path: .wallet-under-test
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install the harness
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Download the tested package from its run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: gero-extension-${{ needs.verify.outputs.sha }}
+          path: .candidate
+          run-id: ${{ needs.verify.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Put the verified ZIP under test
+        run: |
+          zip=".candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip"
+          echo "${ZIP_SHA256}  ${zip}" | sha256sum -c -
+          unzip -q "$zip" -d .wallet-under-test/extension
+          node scripts/wallet-candidate.mjs record .wallet-under-test "$WALLET_SHA"
+          echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Run the post-v2.7 suite
+        if: matrix.suite == 'post-v27'
+        run: npm run test:post-v27 -- --shard=${{ matrix.shard }}/${{ matrix.of }}
+        env:
+          POST_V27_EXTENSION_PATH: ${{ github.workspace }}/.wallet-under-test/extension
+          WALLET_CANDIDATE_SHA: ${{ needs.verify.outputs.sha }}
+          WALLET_RELEASE_ARCHIVE_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+          SUBMIT_API_REQUIRED: 'true'
+          EXPLORER_SETTING_REQUIRED: 'true'
+
+      - name: Run the legacy suite
+        if: matrix.suite == 'legacy'
+        run: npm run test:legacy:isolated -- --shard=${{ matrix.shard }}/${{ matrix.of }}
+        env:
+          EXTENSION_PATH: ${{ github.workspace }}/.wallet-under-test/extension
+          WALLET_CANDIDATE_SHA: ${{ needs.verify.outputs.sha }}
+          WALLET_RELEASE_ARCHIVE_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+          SUBMIT_API_REQUIRED: 'true'
+          EXPLORER_SETTING_REQUIRED: 'true'
+
+      - name: Check the e2e result for this package
+        run: |
+          dir="test-results/$([ "$SUITE" = legacy ] && echo legacy-isolated || echo post-v27)"
+          node .release-scripts/scripts/chrome-web-store.mjs e2e-gate --qualification "${dir}/qualification.json" \
+            --wallet-sha "$WALLET_SHA" --archive-sha256 "$ZIP_SHA256"
+
+      # Summaries only. This repository is public, and the suites' screenshots, videos and
+      # traces can show the disposable recovery phrases the tests create.
+      - name: Keep the e2e summary
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p e2e-evidence
+          for file in test-results/post-v27/qualification.json test-results/legacy-isolated/qualification.json .wallet-under-test/extension/e2e-provenance.json; do
+            [ -e "$file" ] && cp "$file" "e2e-evidence/$(basename "$(dirname "$file")")-$(basename "$file")"
+          done
+          printf '{"harnessRepository":"Gero-Labs/gerowallet-e2e-tests","harnessSha":"%s","walletSha":"%s","releaseArchiveSha256":"%s"}\n' \
+            "${harness_sha:-}" "$WALLET_SHA" "$ZIP_SHA256" > e2e-evidence/e2e-run.json
+      - name: Upload the e2e summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: e2e-${{ inputs.channel }}-${{ inputs.version }}-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_id }}
+          path: e2e-evidence/
+          retention-days: 90
+          if-no-files-found: warn
 
   submit:
     name: Upload to the Chrome Web Store
-    needs: verify
+    needs: [verify, e2e]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
