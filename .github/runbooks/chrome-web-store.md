@@ -57,18 +57,19 @@ The channel is fixed when the package is built. `ci-cd.yml` builds for the listi
 | `submission` | `staged` (default): submit for review, then publish by hand once approved. `publish`: goes live as soon as approved. `upload-only`: replace the draft, submit nothing |
 | `deploy_percentage` | Optional, 1 to 100. Rolls out to that share of users. The store accepts it only for items above 10,000 weekly users. Empty means everyone |
 | `dry_run` | `true` (default) re-checks and e2e-tests the package, then stops. `false` uploads after approval |
-| `e2e_ref` | The gerowallet-e2e-tests branch, tag or commit to run (default `development`). Pin a commit to rerun exactly what an earlier run used |
 
 ### The e2e gate
 
 The `e2e` job runs the same harness commands and settings as the e2e repository's own `post-v27-e2e.yml`. Only the wallet under test differs: it is the release ZIP, extracted after its SHA-256 check, not a fresh test build. The suites therefore test the exact bytes the store will receive, with the production extension key and configuration.
+
+The harness is always the e2e repository's `development` branch; `e2e-run.json` records the exact commit. There is deliberately no input to pick another ref. This workflow runs with the default branch's cache scope, so running unreviewed harness code there could poison caches that other workflows restore. For the same reason the job checks out no wallet source. The tested commit and the ZIP's SHA-256 are written into each suite's `qualification.json`, and the gate refuses a report for anything else.
 
 The gate does not block on:
 
 - **Skips:** each one carries a reason and a category (device needed, live chain needed, coverage gap and so on) in the job summary. Review them before you approve.
 - **The live suites:** the funded-wallet, real-transaction ones (`@transaction`, `@live`). They need real testnet funds and are not part of the isolated suites.
 
-Each shard keeps its `qualification.json`, the harness provenance (`e2e-provenance.json`), and an `e2e-run.json` naming the harness commit, as the artifact `e2e-<channel>-<version>-<suite>-<shard>-<run>`. Screenshots, videos and traces are never kept: this repository is public, and they can show the disposable recovery phrases the tests create. Inside `qualification.json`, `harnessSha` holds the wallet repository's commit; the harness commit is in `e2e-run.json`.
+Each shard keeps its `qualification.json` and an `e2e-run.json` naming the harness commit, as the artifact `e2e-<channel>-<version>-<suite>-<shard>-<run>`. Screenshots, videos and traces are never kept: this repository is public, and they can show the disposable recovery phrases the tests create. Inside `qualification.json`, `harnessSha` holds the wallet repository's commit; the harness commit is in `e2e-run.json`.
 
 Each run writes a summary. The upload job keeps the store's answer as the artifact `chrome-web-store-<channel>-<version>-<run>`. That answer holds states and versions only, never a token or credential.
 
@@ -77,7 +78,7 @@ Each run writes a summary. The upload job keeps the store's answer as the artifa
 | Message or situation | What to do |
 |---|---|
 | `v<version> is not an annotated release tag` | Run `ci-cd.yml` with `dry_run=false` for that version first. |
-| An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing the harness, then rerunning with `e2e_ref` set to the fix. Don't release around a red gate. |
+| An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing it on the e2e repository's `development` branch, then rerunning. Don't release around a red gate. |
 | `passed only on retry` | The legacy suite retries a failed test once on CI. A flaky release test still needs a look. Rerun the workflow; if the same test keeps flaking, fix the test or the wallet first. |
 | The package can no longer be downloaded | `ci-cd.yml` keeps the tested package for 90 days. Its tag already exists and is never replaced, so release a new version. |
 | `Another version is already in review` / `waiting to be published` | Publish or cancel that submission in the Developer Dashboard, then run again. The workflow never cancels a submission itself. |

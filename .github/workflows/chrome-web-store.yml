@@ -41,10 +41,6 @@ on:
         description: 'Verify and e2e-test the package only; do not contact the Chrome Web Store'
         type: boolean
         default: true
-      e2e_ref:
-        description: 'gerowallet-e2e-tests branch, tag or commit to run'
-        type: string
-        default: development
 
 permissions:
   contents: read
@@ -177,6 +173,12 @@ jobs:
   # The full isolated suites, on the exact bytes the store will receive. The harness is
   # the e2e repo's own (same commands and settings as its post-v27-e2e.yml); only the
   # wallet differs: the extracted release ZIP instead of a fresh test build.
+  #
+  # Nothing here runs code from a ref chosen when the workflow is started. This workflow
+  # runs with the default branch's cache scope, which every branch can read, so such
+  # code could poison caches. The harness is the e2e repo's reviewed development branch,
+  # and no wallet source is checked out: the commit and ZIP hash are bound into each
+  # suite's qualification.json instead, and the gate checks both.
   e2e:
     name: E2E ${{ matrix.suite }} (${{ matrix.shard }}/${{ matrix.of }})
     needs: verify
@@ -203,7 +205,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: Gero-Labs/gerowallet-e2e-tests
-          ref: ${{ inputs.e2e_ref }}
+          ref: development
           persist-credentials: false
 
       # The wallet's own release scripts, from the commit that runs this workflow.
@@ -213,16 +215,7 @@ jobs:
           path: .release-scripts
           persist-credentials: false
 
-      # The harness records provenance against a checkout of the tested commit.
-      - name: Checkout the tested wallet commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.verify.outputs.sha }}
-          path: .wallet-under-test
-          persist-credentials: false
-
-      # No npm cache: this job runs harness code from a chosen ref, and a cache it saved
-      # would be restored by later runs (cache poisoning).
+      # No npm cache either: this job saves nothing that a later run restores.
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -247,7 +240,6 @@ jobs:
           zip=".candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip"
           echo "${ZIP_SHA256}  ${zip}" | sha256sum -c -
           unzip -q "$zip" -d .wallet-under-test/extension
-          node scripts/wallet-candidate.mjs record .wallet-under-test "$WALLET_SHA"
           echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Run the post-v2.7 suite
@@ -282,7 +274,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           mkdir -p e2e-evidence
-          for file in test-results/post-v27/qualification.json test-results/legacy-isolated/qualification.json .wallet-under-test/extension/e2e-provenance.json; do
+          for file in test-results/post-v27/qualification.json test-results/legacy-isolated/qualification.json; do
             [ -e "$file" ] && cp "$file" "e2e-evidence/$(basename "$(dirname "$file")")-$(basename "$file")"
           done
           printf '{"harnessRepository":"Gero-Labs/gerowallet-e2e-tests","harnessSha":"%s","walletSha":"%s","releaseArchiveSha256":"%s"}\n' \
