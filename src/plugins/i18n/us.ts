@@ -5852,6 +5852,7 @@ export default {
   'programmableTokens.listFootnote': 'Locked tokens stay in your wallet, but transfers of them aren\'t supported yet.',
   'programmableTokens.signRefused': 'This transaction moves a CIP-113 programmable token. Gero can\'t sign these transfers yet.',
   'programmableTokens.badgeTooltip': 'CIP-113 programmable token. Gero shows your balance, but transfers of these tokens aren\'t supported yet.',
+  'programmableTokens.unregisteredTooltip': 'This token was sent to your CIP-113 address, but its policy isn\'t in the CIP-113 registry, so Gero treats it as unverified. Gero can\'t move it.',
   // ---- Positions explorer (action detail) ----
   // One key for one concept: this replaced 'assets.clearFilters' and
   // 'transactions.clearFilters', which said the same thing in three spellings.

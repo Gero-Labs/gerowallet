@@ -29,3 +29,24 @@ export function isProgrammableRow(row: { unit?: string; isProgrammable?: boolean
   if (!row.unit) return false;
   return Object.prototype.hasOwnProperty.call(walletStore.programmableTokens || {}, row.unit);
 }
+
+/**
+ * Whether a row gets the CIP-113 badge: a locked row whose policy the CIP-113 registry lists
+ * (issue 1267). Locked is not enough. Paying into the programmable address runs no validator,
+ * so anyone can send any token there, and an unregistered one is shown as an ordinary
+ * unverified token instead. It stays locked: isProgrammableRow() still keeps the swap widget
+ * away from it. The locked-ADA row keeps its lock, which explains the ADA rather than vouching
+ * for a token.
+ */
+export function isCip113BadgeRow(row: { unit?: string; isProgrammable?: boolean } | null | undefined): boolean {
+  if (!isProgrammableRow(row)) return false;
+  if (row?.unit === 'lovelace') return true;
+  const held = (walletStore.programmableTokens || {})[row?.unit ?? ''] as { cip113Registered?: boolean } | undefined;
+  return held?.cip113Registered === true;
+}
+
+/** What a locked row says about itself where it can't be swapped. */
+export function lockedRowMessageKey(row: { unit?: string; isProgrammable?: boolean }): string {
+  if (row.unit === 'lovelace' || isCip113BadgeRow(row)) return programmableTooltipKey(row.unit ?? '');
+  return 'programmableTokens.unregisteredTooltip';
+}

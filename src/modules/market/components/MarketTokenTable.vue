@@ -63,7 +63,7 @@
             <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
-          <v-tooltip location="top" v-if="isProgrammableRow(item)"  :open-delay="300" content-class="custom-tooltip">
+          <v-tooltip location="top" v-if="isCip113BadgeRow(item)"  :open-delay="300" content-class="custom-tooltip">
             <template v-slot:activator="{ props: activatorProps }">
               <v-icon
                 color="var(--g-warning)"
@@ -95,7 +95,7 @@
           {{ item.name }}
         </v-tooltip>
         <v-chip
-          v-if="isProgrammableRow(item)"
+          v-if="isCip113BadgeRow(item)"
           size="x-small" label
           class="ml-1 flex-shrink-0"
           style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-warning); background: var(--g-warning-fill); border: 1px solid var(--g-warning-line);"
@@ -430,7 +430,7 @@
 import '@/shared/styles/compact-pagination.css';
 import { ref, computed, watch, onMounted } from 'vue';
 import type { DataTableHeader, DataTableSortItem } from 'vuetify';
-import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
+import { programmableTooltipKey, isCip113BadgeRow } from '@/shared/utils/programmableTokenDisplay';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
