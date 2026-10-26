@@ -5894,4 +5894,6 @@ export default {
   'bitcoin.feeSpeed': 'Gebührenstufe',
   'common.showPassword': 'Passwort anzeigen',
   'common.hidePassword': 'Passwort verbergen',
+  'bitcoin.psbtFeeUnknown': 'Die Gebühr kann nicht angezeigt werden: Diese Transaktion gibt Coins aus, deren Beträge sie nicht enthält.',
+  'bitcoin.psbtUnreadable': 'Gero kann diese Transaktion nicht lesen. Prüfen Sie auf der Website, was sie bewirkt, bevor Sie signieren.',
 }

@@ -5770,4 +5770,6 @@ export default {
   'bitcoin.feeSpeed': 'Velocidad de la comisión',
   'common.showPassword': 'Mostrar contraseña',
   'common.hidePassword': 'Ocultar contraseña',
+  'bitcoin.psbtFeeUnknown': 'No se puede mostrar la comisión: esta transacción gasta monedas cuyos montos no incluye.',
+  'bitcoin.psbtUnreadable': 'Gero no puede leer esta transacción. Revisa en el sitio qué hace antes de firmar.',
 }

@@ -3,25 +3,10 @@
     <PopupHeader :title="$t('bitcoin.signPsbt')" :show-website="hasWebsite" :disabled="loading">
       <v-card-text class="d-flex flex-column pa-0 fill-height">
         <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
-        <v-card-title class="pa-0 mb-2" style="color: white; font-size: 14px">
-          {{ $t('bitcoin.signPsbtRequest') }}
-        </v-card-title>
+        <p class="t-body-lg btc-sign__title">{{ $t('bitcoin.signPsbtRequest') }}</p>
 
-        <!-- PSBT summary -->
-        <v-card flat variant="outlined" style="background-color: #141414!important;" class="pa-2 mb-3">
-          <div class="psbt-row">
-            <span class="psbt-label">{{ $t('bitcoin.inputs') }}</span>
-            <span class="psbt-value">{{ psbtInfo.inputs }}</span>
-          </div>
-          <div class="psbt-row">
-            <span class="psbt-label">{{ $t('bitcoin.outputs') }}</span>
-            <span class="psbt-value">{{ psbtInfo.outputs }}</span>
-          </div>
-          <div class="psbt-row" v-if="psbtInfo.autoFinalized !== undefined">
-            <span class="psbt-label">{{ $t('bitcoin.result') }}</span>
-            <span class="psbt-value">{{ psbtInfo.autoFinalized ? $t('bitcoin.finalizedTx') : $t('bitcoin.signedPsbt') }}</span>
-          </div>
-        </v-card>
+        <!-- Every output, the fee and the total (same card as the side panel) -->
+        <BitcoinPsbtReview :psbt-hex="request?.data?.psbtHex ?? ''" :result="resultLabel" class="mb-3" />
       </v-card-text>
 
       <v-card-actions class="justify-center pb-0 pt-2 px-0">
@@ -135,7 +120,7 @@ import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import type { Psbt } from 'bitcoinjs-lib';
+import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { assertApprovedPsbt } from '@/chains/bitcoin/psbtApproval';
 import { resolveAccountIndex } from '@/shared/utils/walletAccount';
 import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
@@ -188,7 +173,12 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 let keystoneApprovalCurrent: (() => boolean) | null = null;
 
-const psbtInfo = ref({ inputs: 0, outputs: 0, autoFinalized: undefined as boolean | undefined });
+// What the signature produces, when the site said whether to finalize
+const resultLabel = computed(() => {
+  const autoFinalized = request.value?.data?.options?.autoFinalized;
+  if (autoFinalized === undefined) return '';
+  return autoFinalized ? t('bitcoin.finalizedTx') : t('bitcoin.signedPsbt');
+});
 
 const hasWebsite = computed(() => {
   const q = vmProxy.$route?.query;
@@ -436,22 +426,6 @@ const backKeystoneScan = () => {
   else { approval.invalidate(); keystoneOverlay.value = false; }
 };
 
-const decodePsbt = async (psbtHex: string, options: BtcSignPsbtOptions | undefined) => {
-  try {
-    const bitcoin = await import('bitcoinjs-lib');
-    let psbt: Psbt;
-    try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
-    catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
-    psbtInfo.value = {
-      inputs: psbt.data.inputs.length,
-      outputs: psbt.data.outputs.length,
-      autoFinalized: options?.autoFinalized,
-    };
-  } catch {
-    psbtInfo.value = { inputs: 0, outputs: 0, autoFinalized: options?.autoFinalized };
-  }
-};
-
 onMounted(async () => {
   // This view is only ever opened inside a standalone popup window (see the
   // BITCOIN_METHOD.signPsbt(s) popup fallback in background.ts, which always
@@ -464,8 +438,6 @@ onMounted(async () => {
 
   try {
     request.value = await controller.value.requestData();
-    const { psbtHex, options } = request.value?.data || {};
-    if (psbtHex) await decodePsbt(psbtHex, options);
   } catch (e) {
     console.error('[BitcoinSignPsbt] Failed to get request data:', e);
   }
@@ -475,17 +447,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.psbt-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 0;
-  font-size: 13px;
-}
-.psbt-label {
-  color: rgba(255, 255, 255, 0.6);
-}
-.psbt-value {
-  color: white;
-  font-weight: 500;
+.btc-sign__title {
+  margin: 0 0 var(--g-s-2);
 }
 </style>
