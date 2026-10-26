@@ -222,7 +222,8 @@ jobs:
           (cd candidate/release-evidence && sha256sum -c SHA256SUMS)
 
       # This tags the tested SHA only. Chrome Web Store submission remains a
-      # separately authorized release operation using the archived ZIP.
+      # separately authorized release operation using the archived ZIP:
+      # chrome-web-store.yml, which finds this run through the tag's message.
       - name: Tag the tested commit without changing or rebuilding it
         run: |
           if git rev-parse --verify "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
