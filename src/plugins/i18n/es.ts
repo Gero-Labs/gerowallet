@@ -5766,4 +5766,8 @@ export default {
   'assets.bitcoin': 'Bitcoin',
   'bitcoin.ecosystem': 'Ecosistema Bitcoin',
   'bitcoin.unconfirmedAmount': '+{amount} sin confirmar',
+  'bitcoin.etaMinutes': '~{minutes} min',
+  'bitcoin.feeSpeed': 'Velocidad de la comisión',
+  'common.showPassword': 'Mostrar contraseña',
+  'common.hidePassword': 'Ocultar contraseña',
 }
