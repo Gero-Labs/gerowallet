@@ -47,6 +47,8 @@ Create two environments in Settings → Environments: `chrome-web-store-producti
 - **Variables:** `CWS_PUBLISHER_ID`, and `CWS_ITEM_ID` (that channel's listing).
 - **Secrets:** `CWS_SERVICE_ACCOUNT_JSON`. Alternatively, all of `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` and `CWS_REFRESH_TOKEN`.
 
+The e2e repository is private, and a workflow's own token can read only this repository. Add one **repository** secret (Settings → Secrets and variables → Actions), `E2E_HARNESS_TOKEN`: a fine-grained personal access token whose repository access is only `Gero-Labs/gerowallet-e2e-tests`, with **Contents: Read-only** and nothing else. The organization may have to approve it. Fine-grained tokens expire, so note the date: when it passes, the e2e jobs fail at "Checkout the e2e harness" until the secret holds a new one. The checkout does not keep the token, so the harness code never sees it.
+
 ### Artifact retention
 
 The workflows ask GitHub to keep their artifacts for 90 days, but GitHub never keeps one longer than the repository's retention setting (Settings → Actions → General → "Artifact and log retention"). On 2026-10-26 that setting was 2 days, so a run's package expired 2 days after the run started. The upload job must be approved within that time. Raise the setting if you need longer. Each artifact's expiry date is shown on its run's page.
@@ -86,6 +88,7 @@ Each run writes a summary. The upload job keeps the store's answer as the artifa
 |---|---|
 | The **Chrome Extension CI/CD** job fails | It is the same build as a standalone `ci-cd.yml` run. Fix the cause on the branch, then run the release again. |
 | `v<version> already marks <commit>` | That version was already released from another commit. Bump the version and release again. |
+| `The E2E_HARNESS_TOKEN secret is not set`, or `repository 'https://github.com/Gero-Labs/gerowallet-e2e-tests/' not found` | The harness token is missing, expired or lacks read access to that repository (see [GitHub](#github) setup). Replace the secret, then run again. |
 | An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing it on the e2e repository's `development` branch, then rerunning. Don't release around a red gate. |
 | `passed only on retry` | The legacy suite retries a failed test once on CI. A flaky release test still needs a look. Rerun the workflow; if the same test keeps flaking, fix the test or the wallet first. |
 | The package can no longer be downloaded | It expired before the upload was approved (see [Artifact retention](#artifact-retention)). Nothing was tagged or uploaded, so run the release again; it builds a fresh package. |

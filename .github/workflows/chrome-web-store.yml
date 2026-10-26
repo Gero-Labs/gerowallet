@@ -173,11 +173,24 @@ jobs:
       ZIP_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
       SUITE: ${{ matrix.suite }}
     steps:
+      # The harness repository is private, and this run's own token reads only this
+      # repository. E2E_HARNESS_TOKEN is a read-only token for that one repository; the
+      # checkout does not keep it, so the harness never sees it.
+      - name: Check the harness token
+        env:
+          E2E_HARNESS_TOKEN: ${{ secrets.E2E_HARNESS_TOKEN }}
+        run: |
+          if [ -z "$E2E_HARNESS_TOKEN" ]; then
+            echo "::error::The E2E_HARNESS_TOKEN secret is not set: a read-only token for Gero-Labs/gerowallet-e2e-tests (see .github/runbooks/chrome-web-store.md)" >&2
+            exit 1
+          fi
+
       - name: Checkout the e2e harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: Gero-Labs/gerowallet-e2e-tests
           ref: development
+          token: ${{ secrets.E2E_HARNESS_TOKEN }}
           persist-credentials: false
 
       # The wallet's own release scripts, from the commit that runs this workflow.
