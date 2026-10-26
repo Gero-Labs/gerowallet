@@ -98,6 +98,19 @@ export function formatUsd(value: number | string | null | undefined, opts: { sym
   return opts.symbol === false ? body : `$${body}`;
 }
 
+/** Satoshis in one bitcoin. */
+export const SATS_PER_BTC = 100_000_000;
+
+/** A satoshi amount in BTC, always eight decimals (123456 → "0.00123456", 1234e8 → "1,234.00000000"). */
+export function formatBtc(sats: number | bigint): string {
+  return (Number(sats) / SATS_PER_BTC).toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 });
+}
+
+/** A satoshi amount as a grouped integer (1234567 → "1,234,567"). */
+export function formatSats(sats: number | bigint): string {
+  return Number(sats).toLocaleString('en-US');
+}
+
 /** Format a percentage change (absolute value + %) */
 export function formatChange(change: number): string {
   return Math.abs(change).toFixed(1) + '%';
