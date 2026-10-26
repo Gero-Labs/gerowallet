@@ -6003,4 +6003,5 @@ export default {
   'common.hidePassword': 'Hide password',
   'bitcoin.psbtFeeUnknown': 'The fee can\'t be shown: this transaction spends coins whose amounts it doesn\'t include.',
   'bitcoin.psbtUnreadable': 'Gero can\'t read this transaction. Check what it does on the site before you sign.',
+  'bitcoin.sendSubtitle': 'Send {currency} to any Bitcoin address',
 }

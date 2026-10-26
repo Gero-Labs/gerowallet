@@ -5772,4 +5772,5 @@ export default {
   'common.hidePassword': 'Ocultar contraseña',
   'bitcoin.psbtFeeUnknown': 'No se puede mostrar la comisión: esta transacción gasta monedas cuyos montos no incluye.',
   'bitcoin.psbtUnreadable': 'Gero no puede leer esta transacción. Revisa en el sitio qué hace antes de firmar.',
+  'bitcoin.sendSubtitle': 'Envía {currency} a cualquier dirección de Bitcoin',
 }

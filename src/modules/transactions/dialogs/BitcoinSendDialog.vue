@@ -3,6 +3,7 @@
     size="sm"
     :isOpen="props.modelValue"
     :title="t('send.sendBitcoin')"
+    :subtitle="t('bitcoin.sendSubtitle', { currency: ticker })"
     :img="assts.sendSvg"
     img-color="var(--g-accent)"
     :min-height="0"
