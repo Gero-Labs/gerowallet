@@ -1,114 +1,68 @@
 <template>
-  <v-card variant="outlined" class="liquid-glass">
-    <v-card-title class="d-flex align-center" style="gap: 8px;">
-      <v-icon color="primary" size="small">mdi-store</v-icon>
-      <span class="text-subtitle-1 font-weight-bold">{{ $t('gomining.minerShop') }}</span>
-      <v-spacer />
-      <v-chip size="x-small" variant="outlined" color="success">
-        <v-icon size="x-small" start>mdi-check-circle</v-icon>
-        {{ $t('gomining.poweredByGoMining') }}
-      </v-chip>
-    </v-card-title>
-
-    <v-divider />
-
-    <!-- Loading skeleton -->
-    <v-card-text v-if="loading">
-      <v-row>
-        <v-col v-for="i in 4" :key="i" cols="12" sm="6" md="3">
-          <v-skeleton-loader type="card" />
-        </v-col>
-      </v-row>
-    </v-card-text>
-
-    <!-- Empty state -->
-    <div v-else-if="collections.length === 0" class="text-center pa-8">
-      <v-icon size="56" color="grey" class="mb-3">mdi-store-off</v-icon>
-      <div class="text-body-1">{{ $t('gomining.noCollectionsAvailable') }}</div>
+  <!-- Shared glass-panel material; only layout lives here. -->
+  <section class="glass-panel gm-shop" :aria-label="$t('gomining.minerShop')">
+    <div class="gm-shop__head">
+      <span class="gm-shop__icon"><v-icon size="18">mdi-store-outline</v-icon></span>
+      <span class="t-body-lg">{{ $t('gomining.minerShop') }}</span>
+      <span class="t-caption gm-shop__powered">{{ $t('gomining.poweredByGoMining') }}</span>
     </div>
 
-    <!-- Collections grid -->
-    <v-card-text v-else>
-      <v-row>
-        <v-col
-          v-for="collection in collections"
-          :key="collection.id"
-          cols="12"
-          sm="6"
-          md="4"
-          lg="3"
-        >
-          <v-card variant="outlined" class="collection-card pa-3 d-flex flex-column" style="height: 100%;">
-            <!-- Collection image -->
-            <v-img
-              :src="collection.imageUrl"
-              height="140"
+    <!-- Loading -->
+    <div v-if="loading" class="gm-shop__grid" aria-busy="true">
+      <v-skeleton-loader v-for="i in 4" :key="i" type="card" class="gm-shop__skeleton" />
+    </div>
 
-              class="mb-3 rounded"
-            >
-              <template #placeholder>
-                <v-row class="fill-height ma-0 align-center justify-center"  >
-                  <v-icon size="48" color="#F7931A40">mdi-pickaxe</v-icon>
-                </v-row>
-              </template>
-            </v-img>
+    <!-- Empty -->
+    <div v-else-if="collections.length === 0" class="gm-shop__empty">
+      <v-icon size="40" class="gm-shop__empty-icon">mdi-store-off</v-icon>
+      <span class="t-body-lg">{{ $t('gomining.noCollectionsAvailable') }}</span>
+    </div>
 
-            <!-- Collection name -->
-            <div class="text-subtitle-2 font-weight-bold text-truncate mb-2">
-              {{ collection.name }}
-            </div>
+    <!-- Collections -->
+    <ul v-else class="gm-shop__grid">
+      <li v-for="collection in collections" :key="collection.id" class="glass-tier gm-shop__item">
+        <v-img :src="collection.imageUrl" height="140" class="gm-shop__image" alt="">
+          <template #placeholder>
+            <div class="gm-shop__placeholder"><v-icon size="40">mdi-pickaxe</v-icon></div>
+          </template>
+        </v-img>
 
-            <!-- Stats -->
-            <div class="d-flex align-center justify-space-between mb-1">
-              <span class="text-caption text--secondary">{{ $t('gomining.hashrate') }}</span>
-              <span class="text-caption font-weight-medium primary--text">
-                {{ collection.hashrate }} TH/s
-              </span>
-            </div>
+        <span class="t-body-sm gm-shop__name">{{ collection.name }}</span>
 
-            <div class="d-flex align-center justify-space-between mb-1">
-              <span class="text-caption text--secondary">{{ $t('gomining.efficiency') }}</span>
-              <span class="text-caption font-weight-medium">
-                ${{ collection.efficiency.toFixed(2) }}/TH
-              </span>
-            </div>
+        <dl class="gm-shop__facts">
+          <div class="t-body-sm gm-shop__row">
+            <dt>{{ $t('gomining.hashrate') }}</dt>
+            <dd class="g-num gm-shop__value">{{ $t('gomining.hashrateValue', { value: collection.hashrate }) }}</dd>
+          </div>
+          <div class="t-body-sm gm-shop__row">
+            <dt>{{ $t('gomining.efficiency') }}</dt>
+            <dd class="g-num gm-shop__value">{{ $t('gomining.efficiencyValue', { value: formatUsd(collection.efficiency) }) }}</dd>
+          </div>
+          <div class="t-body-sm gm-shop__row">
+            <dt>{{ $t('gomining.available') }}</dt>
+            <dd class="g-num gm-shop__value">{{ collection.available }}</dd>
+          </div>
+        </dl>
 
-            <div class="d-flex align-center justify-space-between mb-3">
-              <span class="text-caption text--secondary">{{ $t('gomining.available') }}</span>
-              <span class="text-caption font-weight-medium">
-                {{ collection.available }}
-              </span>
-            </div>
-
-            <v-spacer />
-
-            <!-- Price + Buy button -->
-            <div class="d-flex align-center justify-space-between mt-2">
-              <div>
-                <div class="text-caption text--secondary">{{ $t('gomining.price') }}</div>
-                <div class="text-subtitle-2 font-weight-bold">
-                  {{ collection.price.toFixed(2) }} {{ collection.currency }}
-                </div>
-              </div>
-              <v-btn
-                size="small"
-                color="primary"
-                :disabled="collection.available === 0"
-                @click="$emit('buy', collection)"
-              >
-                <v-icon size="small" start>mdi-cart-plus</v-icon>
-                {{ $t('gomining.buy') }}
-              </v-btn>
-            </div>
-          </v-card>
-        </v-col>
-      </v-row>
-    </v-card-text>
-  </v-card>
+        <div class="gm-shop__foot">
+          <div class="gm-shop__price">
+            <span class="t-label">{{ $t('gomining.price') }}</span>
+            <span class="t-body-lg g-num gm-shop__price-value">{{ collection.price.toFixed(2) }} {{ collection.currency }}</span>
+          </div>
+          <GButton tier="secondary" compact :disabled="collection.available === 0" @click="$emit('buy', collection)">
+            <v-icon size="small" start>mdi-cart-plus</v-icon>
+            {{ $t('gomining.buy') }}
+          </GButton>
+        </div>
+      </li>
+    </ul>
+  </section>
 </template>
 
 <script setup lang="ts">
 import type { GoMiningCollection } from '@/api/gomining-api';
+import { formatUsd } from '@/shared/utils/format';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineProps<{
   collections: GoMiningCollection[];
@@ -118,13 +72,143 @@ defineProps<{
 defineEmits<{ buy: [collection: GoMiningCollection] }>();
 </script>
 
-<style scoped>
-.collection-card {
-  transition: border-color 0.2s, transform 0.15s;
-  border-radius: 12px !important;
+<style scoped lang="scss">
+.gm-shop {
+  display: flex;
+  flex-direction: column;
 }
-.collection-card:hover {
-  border-color: #F7931A80;
-  transform: translateY(-2px);
+
+.gm-shop__head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4);
+  border-bottom: 1px solid var(--g-hairline-1);
+}
+
+.gm-shop__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+}
+
+.gm-shop__icon .v-icon {
+  color: var(--g-text-2);
+}
+
+.gm-shop__powered {
+  margin-left: auto;
+}
+
+.gm-shop__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--g-s-1);
+  padding: var(--g-s-6) var(--g-s-4);
+  text-align: center;
+}
+
+.gm-shop__empty-icon {
+  margin-bottom: var(--g-s-2);
+  color: var(--g-text-3);
+}
+
+.gm-shop__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--g-s-3);
+  margin: 0;
+  padding: var(--g-s-4);
+  list-style: none;
+}
+
+.gm-shop__skeleton {
+  border-radius: var(--g-r-card);
+}
+
+/* ── One collection ─────────────────────────────────────── */
+.gm-shop__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  min-width: 0;
+  padding: var(--g-s-3);
+}
+
+.gm-shop__image {
+  flex: 0 0 auto;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+}
+
+.gm-shop__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--g-text-3);
+}
+
+.gm-shop__name {
+  color: var(--g-text-1);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm-shop__facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  margin: 0;
+}
+
+.gm-shop__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
+
+.gm-shop__row dt {
+  color: var(--g-text-3);
+}
+
+.gm-shop__row dd {
+  margin: 0;
+  text-align: right;
+}
+
+.gm-shop__value {
+  color: var(--g-text-1);
+  font-weight: 500;
+}
+
+.gm-shop__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+  margin-top: auto;
+  padding-top: var(--g-s-2);
+  border-top: 1px solid var(--g-hairline-1);
+}
+
+.gm-shop__price {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gm-shop__price-value {
+  font-weight: 600;
 }
 </style>

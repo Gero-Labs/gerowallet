@@ -1,221 +1,160 @@
 <template>
-  <div class="d-flex flex-column gomining-page">
-
-    <!-- ── Loading / initializing ──────────────────────────────────────── -->
-    <div v-if="state === 'loading'" class="d-flex flex-column align-center justify-center fill-height pa-8">
-      <v-progress-circular indeterminate color="primary" size="48" class="mb-4" />
-      <div class="text-body-1">{{ $t('gomining.connecting') }}</div>
-    </div>
-
-    <!-- ── Error ──────────────────────────────────────────────────────── -->
-    <div v-else-if="state === 'error'" class="d-flex flex-column align-center justify-center pa-8">
-      <v-icon size="64" color="error" class="mb-4">mdi-alert-circle-outline</v-icon>
-      <div class="text-h6 font-weight-bold mb-2">{{ $t('gomining.connectionFailed') }}</div>
-      <div class="text-body-2 text--secondary text-center mb-6" style="max-width: 400px;">
-        {{ errorMessage || $t('gomining.connectionFailedDescription') }}
+  <div class="gm">
+    <!-- Header. The GoMining mark is a partner lockup: it names whose surface this is, nothing else. -->
+    <div class="gm__header">
+      <div class="gm__headline">
+        <span class="t-label">{{ $t('bitcoin.ecosystem') }}</span>
+        <h1 class="t-title gm__title">
+          <img :src="gominingLogo" class="gm__logo" alt="" />
+          {{ $t('navigation.goMining') }}
+        </h1>
+        <p class="t-body gm__subtitle">{{ $t('gomining.subtitle') }}</p>
       </div>
-      <v-btn color="primary" variant="outlined" @click="initialize">
-        <v-icon start size="small">mdi-refresh</v-icon>
-        {{ $t('common.tryAgain') }}
-      </v-btn>
+      <div v-if="state === 'ready'" class="gm__header-side">
+        <span class="t-caption gm-status gm-status--ok" role="status">
+          <span class="gm-status__dot" aria-hidden="true"></span>
+          {{ $t('gomining.connected') }}
+        </span>
+      </div>
     </div>
 
-    <!-- ── Main content ───────────────────────────────────────────────── -->
+    <!-- Connecting -->
+    <div v-if="state === 'loading'" class="gm__loading" role="status">
+      <v-progress-circular indeterminate color="var(--g-accent)" size="40" width="3" />
+      <span class="t-body">{{ $t('gomining.connecting') }}</span>
+    </div>
+
+    <!-- Connection failed -->
+    <div v-else-if="state === 'error'" class="glass-panel gm__error" role="alert">
+      <v-icon size="32" class="gm__error-icon">mdi-alert-circle-outline</v-icon>
+      <h2 class="t-heading gm__error-title">{{ $t('gomining.connectionFailed') }}</h2>
+      <p class="t-body gm__error-text">{{ errorMessage || $t('gomining.connectionFailedDescription') }}</p>
+      <GButton tier="secondary" compact @click="initialize()">
+        <v-icon size="small" start>mdi-refresh</v-icon>
+        {{ $t('common.tryAgain') }}
+      </GButton>
+    </div>
+
     <template v-else-if="state === 'ready'">
+      <!-- Segmented tabs -->
+      <div class="gm-tabs" role="tablist" :aria-label="$t('navigation.goMining')">
+        <button
+          v-for="tab in tabs"
+          :id="`gm-tab-${tab.id}`"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === tab.index ? 'true' : 'false'"
+          :aria-controls="`gm-panel-${tab.id}`"
+          :class="['t-body-sm', 'gm-tab', { 'gm-tab--active': activeTab === tab.index }]"
+          @click="activeTab = tab.index"
+        >
+          <v-icon size="small">{{ tab.icon }}</v-icon>
+          {{ $t(tab.labelKey) }}
+          <span v-if="tab.id === 'miners' && miners.length" class="t-caption g-num gm-tab__count">{{ miners.length }}</span>
+        </button>
+      </div>
 
-      <!-- Page header -->
-      <v-row no-gutters class="pa-2 pb-0">
-        <v-col cols="12">
-          <div class="d-flex align-center" style="gap: 12px;">
-            <div class="gomining-logo-wrapper">
-              <img :src="gominingLogo" alt="GoMining" style="width: 22px; height: 22px; object-fit: contain;" />
-            </div>
-            <div>
-              <div class="text-h6 font-weight-bold" style="line-height: 1.2;">GoMining</div>
-              <div class="text-caption text--secondary">{{ $t('gomining.subtitle') }}</div>
-            </div>
-            <v-spacer />
-            <v-chip size="x-small" color="success" variant="outlined" style="border-radius: 6px !important;">
-              <v-icon size="x-small" start>mdi-check-circle</v-icon>
-              {{ $t('gomining.connected') }}
-            </v-chip>
+      <!-- Overview -->
+      <div v-if="activeTab === 0" id="gm-panel-overview" class="gm-overview" role="tabpanel" aria-labelledby="gm-tab-overview">
+        <GoMiningStatsCard
+          class="gm-overview__full"
+          :stats="stats"
+          :loading="loadingStats"
+          @refresh="refreshAll()"
+        />
+
+        <GoMiningBalanceCard
+          :balance="balance"
+          :btc-address="btcAddress"
+          :loading="loadingBalance"
+          @withdraw="showWithdrawDialog = true"
+        />
+
+        <section class="glass-panel gm-chart" :aria-label="$t('gomining.earningsHistory')">
+          <div class="gm-chart__head">
+            <span class="gm-chart__icon"><v-icon size="18">mdi-chart-bar</v-icon></span>
+            <span class="t-body-lg">{{ $t('gomining.earningsHistory') }}</span>
+            <span class="t-caption gm-chart__range">{{ $t('gomining.last14Days') }}</span>
           </div>
-        </v-col>
-      </v-row>
 
-      <!-- ── Tab navigation ── -->
-      <v-row no-gutters class="pa-2">
-        <v-col cols="12">
-          <v-tabs v-model="activeTab" color="primary" height="36">
-            <v-tab class="text-capitalize">
-              <v-icon size="small" start>mdi-view-dashboard</v-icon>
-              {{ $t('gomining.tabOverview') }}
-            </v-tab>
-            <v-tab class="text-capitalize">
-              <v-icon size="small" start>mdi-pickaxe</v-icon>
-              {{ $t('gomining.tabMyMiners') }}
-              <v-badge
-                v-if="miners.length"
-                :content="miners.length"
-                color="primary"
-                inline
-                class="ml-1"
-              />
-            </v-tab>
-            <v-tab class="text-capitalize">
-              <v-icon size="small" start>mdi-store</v-icon>
-              {{ $t('gomining.tabShop') }}
-            </v-tab>
-            <v-tab class="text-capitalize">
-              <v-icon size="small" start>mdi-chart-line</v-icon>
-              {{ $t('gomining.tabEarnings') }}
-            </v-tab>
-          </v-tabs>
-        </v-col>
-      </v-row>
+          <div v-if="earningsChart.length === 0" class="gm-chart__empty">
+            <v-icon size="28" class="gm-chart__empty-icon">mdi-chart-bar</v-icon>
+            <span class="t-caption">
+              {{ miners.length === 0 ? $t('gomining.noMinersForEarnings') : $t('gomining.loadingEarnings') }}
+            </span>
+          </div>
 
-      <v-window v-model="activeTab" class="transparent-tabs">
+          <!-- One bar a day; the amount is in the tooltip and, for readers, in the hidden text. -->
+          <ul v-else class="gm-bars">
+            <li v-for="(pt, i) in earningsChart.slice(-14)" :key="i" class="gm-bars__item">
+              <v-tooltip location="top" content-class="custom-tooltip">
+                <template #activator="{ props: activatorProps }">
+                  <span v-bind="activatorProps" class="gm-bars__bar" :style="{ height: barHeight(pt.amount) }"></span>
+                </template>
+                <span>{{ barLabel(pt) }}</span>
+              </v-tooltip>
+              <span class="gm-sr-only">{{ barLabel(pt) }}</span>
+            </li>
+          </ul>
+        </section>
+      </div>
 
-        <!-- ─ Tab 0: Overview ───────────────────────────────────────────── -->
-        <v-window-item>
-          <v-row no-gutters class="pa-2">
+      <!-- My miners -->
+      <div v-else-if="activeTab === 1" id="gm-panel-miners" role="tabpanel" aria-labelledby="gm-tab-miners">
+        <GoMiningMinersGrid
+          :miners="miners"
+          :loading="loadingMiners"
+          @buy-more="activeTab = 2"
+        />
+      </div>
 
-            <!-- Stats card (full width) -->
-            <v-col cols="12" class="pa-2">
-              <GoMiningStatsCard
-                :stats="stats"
-                :loading="loadingStats"
-                @refresh="refreshAll"
-              />
-            </v-col>
+      <!-- Shop -->
+      <div v-else-if="activeTab === 2" id="gm-panel-shop" role="tabpanel" aria-labelledby="gm-tab-shop">
+        <GoMiningShop
+          :collections="collections"
+          :loading="loadingCollections"
+          @buy="openBuyDialog"
+        />
+      </div>
 
-            <!-- Balance card -->
-            <v-col cols="12" sm="6" md="4" class="pa-2">
-              <GoMiningBalanceCard
-                :balance="balance"
-                :btc-address="btcAddress"
-                :loading="loadingBalance"
-                @withdraw="showWithdrawDialog = true"
-              />
-            </v-col>
+      <!-- Earnings -->
+      <section v-else-if="activeTab === 3" id="gm-panel-earnings" class="glass-panel gm-earnings" role="tabpanel" aria-labelledby="gm-tab-earnings">
+        <div class="gm-earnings__head">
+          <span class="gm-chart__icon"><v-icon size="18">mdi-chart-line</v-icon></span>
+          <span class="t-body-lg">{{ $t('gomining.earningsHistory') }}</span>
+        </div>
 
-            <!-- Earnings chart -->
-            <v-col cols="12" sm="6" md="8" class="pa-2">
-              <v-card variant="outlined" class="liquid-glass pa-4 fill-height earnings-chart-card">
-                <div class="d-flex align-center mb-3" style="gap: 8px;">
-                  <v-icon size="small" color="#F7931A">mdi-chart-bar</v-icon>
-                  <span class="text-subtitle-2 font-weight-bold">{{ $t('gomining.earningsHistory') }}</span>
-                  <v-spacer />
-                  <span class="text-caption text--secondary">{{ $t('gomining.last14Days') }}</span>
-                </div>
+        <div v-if="loadingIncome" class="gm-earnings__body" aria-busy="true">
+          <v-skeleton-loader type="table-row@6" />
+        </div>
 
-                <!-- Empty state -->
-                <div v-if="earningsChart.length === 0" class="d-flex align-center justify-center" style="height: 100px;">
-                  <div class="text-center">
-                    <v-icon size="36" color="grey" class="mb-2">mdi-chart-bar</v-icon>
-                    <div class="text-caption text--secondary">
-                      {{ miners.length === 0 ? $t('gomining.noMinersForEarnings') : $t('gomining.loadingEarnings') }}
-                    </div>
-                  </div>
-                </div>
+        <div v-else-if="incomeHistory.length === 0" class="gm-earnings__empty">
+          <v-icon size="28" class="gm-chart__empty-icon">mdi-history</v-icon>
+          <span class="t-body-lg">{{ $t('gomining.noEarningsYet') }}</span>
+          <span class="t-caption">{{ $t('gomining.noEarningsDescription') }}</span>
+        </div>
 
-                <!-- Bar chart -->
-                <div v-else class="earnings-bars d-flex align-end" style="height: 100px; gap: 3px;">
-                  <v-tooltip location="top"
-                    v-for="(pt, i) in earningsChart.slice(-14)"
-                    :key="i"
-
-                  >
-                    <template #activator="{ props: activatorProps }">
-                      <div v-bind="activatorProps"
-
-                        class="earnings-bar"
-                        :style="barStyle(pt.amount)"
-                      />
-                    </template>
-                    <span>{{ pt.date }}: +{{ pt.amount.toFixed(8) }} BTC</span>
-                  </v-tooltip>
-                </div>
-              </v-card>
-            </v-col>
-
-          </v-row>
-        </v-window-item>
-
-        <!-- ─ Tab 1: My Miners ──────────────────────────────────────────── -->
-        <v-window-item>
-          <v-row no-gutters class="pa-2">
-            <v-col cols="12" class="pa-2">
-              <GoMiningMinersGrid
-                :miners="miners"
-                :loading="loadingMiners"
-                @buy-more="activeTab = 2"
-              />
-            </v-col>
-          </v-row>
-        </v-window-item>
-
-        <!-- ─ Tab 2: Shop ────────────────────────────────────────────────── -->
-        <v-window-item>
-          <v-row no-gutters class="pa-2">
-            <v-col cols="12" class="pa-2">
-              <GoMiningShop
-                :collections="collections"
-                :loading="loadingCollections"
-                @buy="openBuyDialog"
-              />
-            </v-col>
-          </v-row>
-        </v-window-item>
-
-        <!-- ─ Tab 3: Earnings ────────────────────────────────────────────── -->
-        <v-window-item>
-          <v-row no-gutters class="pa-2">
-            <v-col cols="12" class="pa-2">
-              <v-card variant="outlined" class="liquid-glass">
-                <v-card-title class="d-flex align-center" style="gap: 8px;">
-                  <v-icon color="primary" size="small">mdi-chart-line</v-icon>
-                  <span class="text-subtitle-1 font-weight-bold">{{ $t('gomining.earningsHistory') }}</span>
-                </v-card-title>
-
-                <v-divider />
-
-                <v-card-text v-if="loadingIncome">
-                  <v-skeleton-loader type="table-row@6" />
-                </v-card-text>
-
-                <v-card-text v-else-if="incomeHistory.length === 0" class="text-center pa-8">
-                  <v-icon size="56" color="grey" class="mb-3">mdi-history</v-icon>
-                  <div class="text-body-1">{{ $t('gomining.noEarningsYet') }}</div>
-                  <div class="text-caption text--secondary mt-1">{{ $t('gomining.noEarningsDescription') }}</div>
-                </v-card-text>
-
-                <v-data-table
-                  v-else
-                  :headers="earningsHeaders"
-                  :items="incomeHistory"
-                  :items-per-page="10"
-                  class="transparent-table"
-                  density="compact"
-                >
-                  <template #item.amount="{ item }">
-                    <span class="success--text font-weight-medium">
-                      +{{ item.amount.toFixed(8) }} {{ item.currency }}
-                    </span>
-                  </template>
-                  <template #item.date="{ item }">
-                    <span class="text-caption">{{ formatDate(item.date) }}</span>
-                  </template>
-                </v-data-table>
-              </v-card>
-            </v-col>
-          </v-row>
-        </v-window-item>
-
-      </v-window>
+        <!-- The card carries the material; the table is transparent over it. -->
+        <v-data-table
+          v-else
+          :headers="earningsHeaders"
+          :items="incomeHistory"
+          :items-per-page="10"
+          class="gm-table"
+          density="compact"
+        >
+          <template #item.amount="{ item }">
+            <span class="g-num gm-table__in">+{{ formatBtcFromBtc(item.amount) }} {{ item.currency }}</span>
+          </template>
+          <template #item.date="{ item }">
+            <span class="t-body-sm">{{ formatDate(item.date) }}</span>
+          </template>
+        </v-data-table>
+      </section>
     </template>
 
-    <!-- ── Dialogs ─────────────────────────────────────────────────────── -->
+    <!-- Dialogs -->
     <GoMiningWithdrawDialog
       v-if="userId"
       v-model="showWithdrawDialog"
@@ -231,14 +170,15 @@
       :user-id="userId"
       :collection="selectedCollection"
     />
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { toRefs } from 'vue';
+import { ref, computed, onMounted, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { formatBtcFromBtc } from '@/shared/utils/format';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import goMiningApi, {
   type GoMiningUserStats,
   type GoMiningNft,
@@ -254,6 +194,8 @@ import GoMiningShop from './components/GoMiningShop.vue';
 import GoMiningWithdrawDialog from './dialogs/GoMiningWithdrawDialog.vue';
 import GoMiningBuyDialog from './dialogs/GoMiningBuyDialog.vue';
 import gominingLogo from '@/assets/svg/gomining.svg';
+
+const { t } = useTranslation();
 
 // ─── Wallet state ─────────────────────────────────────────────────────────────
 const { loggedWallet } = toRefs(walletStore);
@@ -285,11 +227,18 @@ const showWithdrawDialog = ref(false);
 const showBuyDialog = ref(false);
 const selectedCollection = ref<GoMiningCollection | null>(null);
 
+const tabs = [
+  { id: 'overview', index: 0, icon: 'mdi-view-dashboard-outline', labelKey: 'gomining.tabOverview' },
+  { id: 'miners', index: 1, icon: 'mdi-pickaxe', labelKey: 'gomining.tabMyMiners' },
+  { id: 'shop', index: 2, icon: 'mdi-store-outline', labelKey: 'gomining.tabShop' },
+  { id: 'earnings', index: 3, icon: 'mdi-chart-line', labelKey: 'gomining.tabEarnings' },
+];
+
 // ─── Earnings headers ─────────────────────────────────────────────────────────
 const earningsHeaders = computed(() => [
-  { title: 'Date', key: 'date', sortable: true },
-  { title: 'Amount', key: 'amount', sortable: true },
-  { title: 'Currency', key: 'currency', sortable: false },
+  { title: t('common.date'), key: 'date', sortable: true },
+  { title: t('common.amount'), key: 'amount', sortable: true },
+  { title: t('gomining.currency'), key: 'currency', sortable: false },
 ]);
 
 // ─── Initialization ───────────────────────────────────────────────────────────
@@ -299,7 +248,7 @@ async function initialize() {
 
   if (!btcAddress.value) {
     state.value = 'error';
-    errorMessage.value = 'No Bitcoin wallet address found.';
+    errorMessage.value = t('gomining.noBtcAddress');
     return;
   }
 
@@ -414,20 +363,18 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+
 const maxEarnings = computed(() => {
   if (!earningsChart.value.length) return 1;
   return Math.max(...earningsChart.value.map(p => p.amount), 0.000001);
 });
 
-function barStyle(amount: number) {
-  const pct = Math.max(4, (amount / maxEarnings.value) * 100);
-  return {
-    flex: 1,
-    height: `${pct}%`,
-    background: '#F7931A',
-    borderRadius: '3px 3px 0 0',
-    opacity: 0.85,
-  };
+function barHeight(amount: number): string {
+  return `${Math.max(4, (amount / maxEarnings.value) * 100)}%`;
+}
+
+function barLabel(pt: GoMiningEarningsPoint): string {
+  return t('gomining.earnedOn', { date: pt.date, amount: formatBtcFromBtc(pt.amount) });
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -436,50 +383,285 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-.gomining-page {
+<style scoped lang="scss">
+.gm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
   min-height: 100%;
+  padding: var(--g-s-4);
 }
 
-.gomining-logo-wrapper {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: rgba(247, 147, 26, 0.12);
+/* ── Header ─────────────────────────────────────────────── */
+.gm__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--g-s-4);
+  flex-wrap: wrap;
+}
+
+.gm__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
+
+.gm__title {
   display: flex;
   align-items: center;
+  gap: var(--g-s-3);
+  margin: 0;
+}
+
+.gm__logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.gm__subtitle {
+  margin: 0;
+}
+
+.gm__header-side {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+}
+
+.gm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--g-r-pill);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gm-status--ok {
+  background: var(--g-success-fill);
+  color: var(--g-success);
+}
+
+.gm-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--g-r-pill);
+  background: currentColor;
+}
+
+/* ── Page states ────────────────────────────────────────── */
+.gm__loading,
+.gm__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  gap: var(--g-s-2);
+  padding: var(--g-s-6) var(--g-s-4);
+  text-align: center;
 }
 
-.transparent-tabs {
-  background: transparent !important;
+.gm__error-icon {
+  color: var(--g-error);
 }
 
-.transparent-table {
-  background: transparent !important;
+.gm__error-title {
+  margin: 0;
 }
 
-.earnings-chart-card {
-  border-radius: 10px !important;
+.gm__error-text {
+  max-width: 42ch;
+  margin: 0 0 var(--g-s-2);
 }
 
-.earnings-bars {
-  width: 100%;
-  padding: 0 2px;
+/* ── Segmented tabs ─────────────────────────────────────── */
+.gm-tabs {
+  align-self: flex-start;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-1);
 }
 
-.earnings-bar {
+.gm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  height: 32px;
+  padding: 0 var(--g-s-4);
+  border: 0;
+  border-radius: var(--g-r-pill);
+  background: transparent;
+  color: var(--g-text-2);
+  font-family: inherit;
+  font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
-  min-height: 4px;
-  opacity: 0.75;
-  border-radius: 3px 3px 0 0 !important;
+  transition: background-color var(--g-dur-fast) var(--g-ease), color var(--g-dur-fast) var(--g-ease);
 }
 
-.earnings-bar:hover {
-  opacity: 1 !important;
-  transform: scaleY(1.03);
-  transform-origin: bottom;
+.gm-tab:hover {
+  color: var(--g-text-1);
+}
+
+.gm-tab--active {
+  background: var(--g-hairline-2);
+  color: var(--g-text-1);
+}
+
+.gm-tab .v-icon {
+  color: inherit;
+}
+
+.gm-tab .gm-tab__count {
+  font-weight: 500;
+}
+
+/* ── Overview grid ──────────────────────────────────────── */
+.gm-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--g-s-4);
+}
+
+.gm-overview__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  .gm-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Earnings chart ─────────────────────────────────────── */
+.gm-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4);
+}
+
+.gm-chart__head,
+.gm-earnings__head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+}
+
+.gm-chart__range {
+  margin-left: auto;
+}
+
+.gm-chart__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+}
+
+.gm-chart__icon .v-icon {
+  color: var(--g-text-2);
+}
+
+.gm-chart__empty,
+.gm-earnings__empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g-s-1);
+  min-height: 100px;
+  text-align: center;
+}
+
+.gm-chart__empty-icon {
+  margin-bottom: var(--g-s-1);
+  color: var(--g-text-3);
+}
+
+.gm-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 100px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gm-bars__item {
+  flex: 1 1 0;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  height: 100%;
+}
+
+.gm-bars__bar {
+  display: block;
+  width: 100%;
+  min-height: 4px;
+  border-radius: var(--g-r-chip);
+  background: var(--g-accent);
+  opacity: 0.75;
+  transition: opacity var(--g-dur-fast) var(--g-ease);
+}
+
+.gm-bars__item:hover .gm-bars__bar {
+  opacity: 1;
+}
+
+.gm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Earnings table ─────────────────────────────────────── */
+.gm-earnings {
+  display: flex;
+  flex-direction: column;
+}
+
+.gm-earnings__head {
+  padding: var(--g-s-4);
+  border-bottom: 1px solid var(--g-hairline-1);
+}
+
+.gm-earnings__body {
+  padding: var(--g-s-3);
+}
+
+.gm-earnings__empty {
+  padding: var(--g-s-6) var(--g-s-4);
+}
+
+.gm-table {
+  background: transparent;
+  color: var(--g-text-1);
+}
+
+.gm-table :deep(.v-data-table-header__content) {
+  color: var(--g-text-3);
+  font-weight: 500;
+}
+
+.gm-table__in {
+  color: var(--g-success);
 }
 </style>
