@@ -12,6 +12,8 @@ Workflow: [`chrome-web-store.yml`](../workflows/chrome-web-store.yml) (Actions �
 4. Run it again with `dry_run=false`. The e2e suites run again. The upload job then waits until an environment reviewer approves it, and uploads and submits the ZIP.
 5. Google reviews the submission. With `submission=staged`, publish it from the Developer Dashboard once it is approved. With `publish`, it goes live as soon as it is approved.
 
+Steps 3 and 4 download the package that step 2 archived. Run them before that package expires (see [Artifact retention](#artifact-retention)).
+
 ### What is checked before anything is uploaded
 
 | Check | Fails when |
@@ -45,6 +47,12 @@ Create two environments in Settings → Environments: `chrome-web-store-producti
 - **Deployment branches:** only `development` and `main`. The workflow runs from the branch it was started on. Without this restriction, a changed copy of the workflow on another branch could read the store secrets.
 - **Variables:** `CWS_PUBLISHER_ID`, and `CWS_ITEM_ID` (that channel's listing).
 - **Secrets:** `CWS_SERVICE_ACCOUNT_JSON`. Alternatively, all of `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` and `CWS_REFRESH_TOKEN`.
+
+### Artifact retention
+
+The workflows ask GitHub to keep their artifacts for 90 days, but GitHub never keeps one longer than the repository's retention setting (Settings → Actions → General → "Artifact and log retention"). On 2026-10-26 that setting was 2 days, so the package from a release run expired 2 days after the run started. The store release must run within that time. Raise the setting if you need longer. Each artifact's expiry date is shown on its run's page.
+
+### Release channel
 
 The channel is fixed when the package is built. `ci-cd.yml` builds for the listing that its `MANIFEST_KEY`, `CHROME_EXTENSION_ID` and `VITE_IS_BETA` repository settings describe, and records that channel. A beta package therefore needs those settings pointed at the beta listing before the release run. The store job refuses a package built for another channel, or for an ID other than its environment's `CWS_ITEM_ID`.
 
@@ -80,7 +88,7 @@ Each run writes a summary. The upload job keeps the store's answer as the artifa
 | `v<version> is not an annotated release tag` | Run `ci-cd.yml` with `dry_run=false` for that version first. |
 | An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing it on the e2e repository's `development` branch, then rerunning. Don't release around a red gate. |
 | `passed only on retry` | The legacy suite retries a failed test once on CI. A flaky release test still needs a look. Rerun the workflow; if the same test keeps flaking, fix the test or the wallet first. |
-| The package can no longer be downloaded | `ci-cd.yml` keeps the tested package for 90 days. Its tag already exists and is never replaced, so release a new version. |
+| The package can no longer be downloaded | It expired (see [Artifact retention](#artifact-retention)). Its tag already exists and is never replaced, so release a new version. |
 | `Another version is already in review` / `waiting to be published` | Publish or cancel that submission in the Developer Dashboard, then run again. The workflow never cancels a submission itself. |
 | `The store already serves X; Y must be higher` | Bump the version and release again. |
 | The upload succeeded but the submission failed | The listing's draft now holds the new package. Submit that draft from the Developer Dashboard; don't run the workflow again. |
