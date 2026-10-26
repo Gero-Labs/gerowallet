@@ -180,6 +180,15 @@ ZIP checksum again, then creates only `v<version>` on that exact SHA. It refuses
 an existing tag. It neither bumps versions after testing nor commits to `main`,
 rebuilds the artifact, or submits anything to the Chrome Web Store.
 
+Store submission is a separate workflow,
+[Chrome Web Store release](../../.github/workflows/chrome-web-store.yml). It finds
+the tagged run through the tag message and downloads that run's package. It
+re-checks provenance, channel, identity and every file hash, including the ZIP's
+extracted contents. Only after a reviewer approves the
+`chrome-web-store-<channel>` environment does it upload that ZIP through the
+store API v2 and submit it (staged by default). Setup and recovery are in the
+[store runbook](../../.github/runbooks/chrome-web-store.md).
+
 The authorized `dry_run=true`, `expected_version=2.7.3` hosted invocation passes.
 Its run URL, tested commit, outcome, and measured runner resources are in the
 [historical review-fix record](evidence/review-fixes.json). Store permissions, protected release

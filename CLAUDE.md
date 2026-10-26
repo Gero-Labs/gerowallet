@@ -75,6 +75,9 @@ npm run design:check      # Design and contrast gates
 See [MAINTENANCE.md](MAINTENANCE.md) for diagnostic baselines and the
 [release runbook](spikes/vue3-migration/RELEASE-READINESS.md) for qualified
 packaging. Legacy `pack:*` utilities do not perform release qualification.
+Store submission is `.github/workflows/chrome-web-store.yml`: it uploads the exact
+package a tagged `ci-cd.yml` run tested, after environment approval
+(`.github/runbooks/chrome-web-store.md`).
 
 ## Key Rules
 
