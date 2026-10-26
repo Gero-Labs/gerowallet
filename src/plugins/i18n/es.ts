@@ -5763,4 +5763,7 @@ export default {
   'bitcoin.inputsAndOutputs': 'Entradas y salidas',
   'bitcoin.coinbase': 'Coinbase (recién minado)',
   'bitcoin.dataOutput': 'Salida de datos (OP_RETURN)',
+  'assets.bitcoin': 'Bitcoin',
+  'bitcoin.ecosystem': 'Ecosistema Bitcoin',
+  'bitcoin.unconfirmedAmount': '+{amount} sin confirmar',
 }

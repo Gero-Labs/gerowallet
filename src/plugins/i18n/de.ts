@@ -5887,4 +5887,7 @@ export default {
   'bitcoin.inputsAndOutputs': 'Eingaben & Ausgaben',
   'bitcoin.coinbase': 'Coinbase (neu geschürft)',
   'bitcoin.dataOutput': 'Datenausgabe (OP_RETURN)',
+  'assets.bitcoin': 'Bitcoin',
+  'bitcoin.ecosystem': 'Bitcoin-Ökosystem',
+  'bitcoin.unconfirmedAmount': '+{amount} unbestätigt',
 }
