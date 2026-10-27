@@ -380,7 +380,7 @@ import AllowanceCard from '@/sidepanel/components/agent/AllowanceCard.vue';
 import SupportAuthPrompt from '@/sidepanel/components/SupportAuthPrompt.vue';
 // The text-free Gero mark (antler icon, no wordmark) — same three-way asset
 // NavigationDrawer.vue uses for its own small-size logo rendering
-// (geroNoText/geroNoTextApex/geroNoTextMidnight). Chosen over gero-logo.svg
+// (geroNoText and its per-chain variants). Chosen over gero-logo.svg
 // (also mark-only, but a heavier raster PNG embedded in an SVG wrapper)
 // because it is a single scalable vector path per variant, which stays crisp
 // at the FAB's ~22px render size and costs a fraction of the bytes. Each
@@ -431,8 +431,9 @@ export default defineComponent({
     // FAB always shows the same chain-accented mark the nav drawer does. Each
     // gero-notext*.svg variant bakes its own fixed gradient rather than
     // reading --g-accent, so picking the wrong one shows the wrong brand
-    // color — e.g. Cardano cyan on an Apex or Midnight wallet. Apex Prime and
-    // Vector each get their own variant (teal vs orange).
+    // color — e.g. Cardano cyan on an Apex, Midnight or Bitcoin wallet. Apex
+    // Prime and Vector each get their own variant (teal vs orange), and
+    // Bitcoin its own Bitcoin orange.
     const geroMark = computed(() => {
       switch (walletStore.loggedWallet?.chain) {
         case Blockchain.APEX_PRIME:
@@ -441,6 +442,8 @@ export default defineComponent({
           return assets.geroNoTextVector;
         case Blockchain.MIDNIGHT:
           return assets.geroNoTextMidnight;
+        case Blockchain.BITCOIN:
+          return assets.geroNoTextBitcoin;
         default:
           return assets.geroNoText;
       }
