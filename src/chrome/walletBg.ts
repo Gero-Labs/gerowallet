@@ -117,6 +117,21 @@ import {
  */
 export type AccountInfoRow = Partial<Account>;
 
+/**
+ * Most `programmableAddresses` one SUBSCRIBE sends. gero-sync keeps the first this many and
+ * drops the rest, so the two caps match.
+ */
+export const PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP = 100;
+
+/** The credential in a CIP-113 address's stake (owner) slot, or null for any other shape. */
+function programmableOwner(address: string): string | null {
+  try {
+    return Cardano.Address.fromString(address)?.asBase()?.getStakeCredential().hash ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export class WalletBg {
   api: Api;
   syncService: SyncService;
@@ -498,25 +513,73 @@ export class WalletBg {
     return new Set(networks.resolveProgrammableLogicBaseScriptHashes(this.chain, this.network));
   }
 
-  /**
-   * CIP-113 puts the owner in the address's stake slot. Which key goes there is a
-   * per-deployment convention — stake key for ordinary wallets, payment key for
-   * enterprise ones — so accept either.
-   */
-  private programmableOwnerCredentials(paymentCredentials: Set<string>): Set<string> {
-    const owners = new Set<string>(paymentCredentials);
+  /** This wallet's stake key hash, or null when it cannot be derived. */
+  private ownStakeCredential(): string | null {
     try {
       if (this.type === WalletType.Watch) {
         // No xpub to derive from: the watched address's stake part is the owner.
         const stakeCred = this.stakeAddress ? keyHashFromAddress(this.stakeAddress) : null;
-        if (stakeCred) owners.add(stakeCred as unknown as string);
-      } else {
-        owners.add(getStakeKey(this.publicKey, 0).hash().hex());
+        return stakeCred ? (stakeCred as unknown as string) : null;
       }
+      return getStakeKey(this.publicKey, 0).hash().hex();
     } catch (e) {
       debugLog('CIP-113: could not derive stake credential', e);
+      return null;
     }
+  }
+
+  /**
+   * CIP-113 puts the owner in the address's stake slot. Which key goes there is the
+   * paying dApp's choice — the CIP-113 reference platform uses the stake key, Minswap V3
+   * one of the wallet's payment keys — so accept either.
+   */
+  private programmableOwnerCredentials(paymentCredentials: Set<string>): Set<string> {
+    const owners = new Set<string>(paymentCredentials);
+    const stakeCred = this.ownStakeCredential();
+    if (stakeCred) owners.add(stakeCred);
     return owners;
+  }
+
+  /**
+   * The CIP-113 addresses owned by this wallet's PAYMENT keys, for the gero-sync SUBSCRIBE's
+   * `programmableAddresses`: one per programmable-logic-base script hash and payment key,
+   * external and internal keys interleaved by index so the cap trims the highest indices.
+   *
+   * The SUBSCRIBE anchor is the stake address, so gero-sync already returns the stake-key
+   * convention. These sit under a different reward address each (the payment key in the
+   * stake slot) and are only returned when named here. Empty where CIP-113 is off.
+   */
+  programmableSubscriptionAddresses(): string[] {
+    const bases = [...this.programmableBaseScriptHashes()];
+    if (bases.length === 0) return [];
+    let owners: string[];
+    if (this.type === WalletType.Watch) {
+      owners = this.derivePaymentCredentials();
+    } else {
+      owners = [];
+      const needed = Math.ceil(PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP / bases.length);
+      for (let i = 0; i < this.credentialRange && owners.length < needed; i++) {
+        owners.push(getPaymentKeyExternal(this.publicKey, i).hash().hex());
+        owners.push(getPaymentKeyInternal(this.publicKey, i).hash().hex());
+      }
+    }
+    const networkId = networks.resolveNetworkId(this.chain, this.network) as Cardano.NetworkId;
+    const addresses: string[] = [];
+    for (const owner of owners) {
+      for (const base of bases) {
+        if (addresses.length >= PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP) return addresses;
+        try {
+          addresses.push(Cardano.BaseAddress.fromCredentials(
+            networkId,
+            { hash: Hash28ByteBase16(base), type: Cardano.CredentialType.ScriptHash },
+            { hash: Hash28ByteBase16(owner), type: Cardano.CredentialType.KeyHash },
+          ).toAddress().toBech32());
+        } catch (e) {
+          debugLog('CIP-113: could not build a programmable subscription address', e);
+        }
+      }
+    }
+    return addresses;
   }
 
   /**
@@ -527,7 +590,9 @@ export class WalletBg {
    * The lovelace riding along in these UTxOs is summed separately: it is real ADA the
    * user owns and cannot spend through Gero, so it is shown as a locked row rather than
    * folded into the spendable balance (which would overstate it) or dropped (which
-   * would make it vanish from the wallet entirely).
+   * would make it vanish from the wallet entirely). It is split by owner: only what the
+   * stake key owns is inside the provider's stake-level `controlled_amount` and has to come
+   * off it (see spendableControlledAmount).
    */
   private setProgrammableAssets(utxos: Cardano.Utxo[]) {
     this.programmableUtxos = utxos ?? [];
@@ -535,10 +600,21 @@ export class WalletBg {
 
     const assets = {};
     const policies = new Set<string>();
+    const ownStake = this.ownStakeCredential();
     let lockedLovelace = 0n;
+    let lockedLovelaceOutsideStake = 0n;
     for (const utxo of this.programmableUtxos) {
       // Before the assets guard: a pure-ADA programmable UTxO still locks its coins.
-      lockedLovelace += utxo[1].value.coins ?? 0n;
+      const coins = utxo[1].value.coins ?? 0n;
+      // Unknown owner or unknown stake key counts as inside the stake total: subtracting
+      // too much understates the balance, subtracting too little lets max-send and swap
+      // sizing build transactions that fail.
+      const owner = programmableOwner(utxo[1].address as string);
+      if (ownStake && owner && owner !== ownStake) {
+        lockedLovelaceOutsideStake += coins;
+      } else {
+        lockedLovelace += coins;
+      }
       if (!utxo[1].value.assets) continue;
       for (const [key, quantity] of utxo[1].value.assets) {
         const assetName: Cardano.AssetName = Cardano.AssetId.getAssetName(key);
@@ -577,7 +653,7 @@ export class WalletBg {
       })
     );
 
-    WalletStore.setProgrammableTokens(tokens, lockedLovelace.toString());
+    WalletStore.setProgrammableTokens(tokens, lockedLovelace.toString(), lockedLovelaceOutsideStake.toString());
     void this.refreshCip113Registry(policies);
   }
 
@@ -1445,13 +1521,12 @@ export class WalletBg {
    * which for a never-used wallet is none (verified on preprod and mainnet, 2026-10-13).
    * loadCachedKeys() derives that wallet's keys itself.
    *
-   * LIMITATION — only the stake-key CIP-113 convention is discoverable this way. The
-   * SUBSCRIBE is anchored on this wallet's stake address, so gero-sync only ever fans out
-   * over addresses sharing that stake credential. An address built the other way round
-   * (delegation slot holding a PAYMENT key hash) resolves to a different reward account
-   * and is never returned. classifyUtxoAddress still recognises that convention if handed
-   * such a UTxO, but nothing on this path supplies one — closing it needs a second
-   * subscription or a gero-sync change.
+   * This covers only the stake-key CIP-113 convention: the SUBSCRIBE is anchored on this
+   * wallet's stake address, so gero-sync fans out over addresses sharing that stake
+   * credential. An address built the other way round (delegation slot holding a PAYMENT key
+   * hash, as Minswap V3 pays) resolves to a different reward account. Those are named
+   * explicitly in the SUBSCRIBE's `programmableAddresses` (programmableSubscriptionAddresses())
+   * and gero-sync merges their UTxOs into the same full set.
    */
   subscriptionCredentials(): string[] {
     if (this.programmableBaseScriptHashes().size > 0) return [];
