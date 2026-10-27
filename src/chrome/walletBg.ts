@@ -1474,7 +1474,9 @@ export class WalletBg {
           continue;
         }
       }
-      return added ? this.subscriptionCredentials() : null;
+      if (!added) return null;
+      this.reaccountProgrammableHistory();
+      return this.subscriptionCredentials();
     }
 
     const currentCreds = new Set(this.derivePaymentCredentials());
@@ -1509,7 +1511,24 @@ export class WalletBg {
     }
     this.credentialRange = grown;
     debugLog(`🔑 Expanding credential range to ${this.credentialRange} per chain`);
+    this.reaccountProgrammableHistory();
     return this.subscriptionCredentials();
+  }
+
+  /**
+   * Re-run history accounting after this wallet's keys grew. Which CIP-113 addresses count as
+   * its own (ownProgrammableAddressMatcher) depends on them, and the loader only recalculates
+   * when the transactions table changes: a receipt cached at login under a key past the
+   * initial range would otherwise stay an empty row, because the resubscribe that follows
+   * repeats the same confirmed transactions and writes nothing.
+   */
+  private reaccountProgrammableHistory(): void {
+    if (this.programmableBaseScriptHashes().size === 0) return;
+    // Only a running history: one not loaded yet will read with the grown keys when it starts.
+    const loader = this.loaderFactory?.getLoader('transactions');
+    if (!loader?.isSubscribed()) return;
+    loader.unsubscribe();
+    this.loadTransactions().catch((e) => debugLog('CIP-113: could not re-account transaction history', e));
   }
 
   /**

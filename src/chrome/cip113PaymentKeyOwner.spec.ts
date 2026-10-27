@@ -298,3 +298,58 @@ describe('transaction history of CIP-113 holdings', () => {
     expect(row.receivedAmount).toBe(0);
   });
 });
+
+describe('history after the key range grows', () => {
+  // Owned by external key #25: past the 20 keys a fresh WalletBg starts with.
+  const lateOwned = () => programmableAddress(getPaymentKeyExternal(XPUB, 25).hash().hex());
+  const cachedReceipt = () => ({
+    id: 'd'.repeat(64), tx_hash: 'd'.repeat(64), tx_timestamp: 1, pending: false,
+    utxo: { inputs: [], outputs: [{ output_index: 0, address: lateOwned(), amount: [
+      { unit: 'lovelace', quantity: 2_000_000 }, { unit: TOKEN, quantity: 123 },
+    ] }] },
+  });
+  const keyPastRange = () => getAddress(XPUB, Blockchain.CARDANO, NETWORK, 25).toBech32();
+
+  beforeEach(() => {
+    WalletStore.clearForWalletSwitch();
+  });
+
+  // The receipt was cached by an earlier login, so the resubscribe that follows the expansion
+  // repeats a confirmed transaction and writes nothing: history must recalculate on its own.
+  it('re-accounts a cached receipt once the range covers its owner key', async () => {
+    const bg = bootWallet();
+    const db = await bg.getDb();
+    try {
+      await bg.setAccountTransactions([cachedReceipt()]);
+      await bg.loadTransactions();
+      await vi.waitFor(() => expect(walletStore.transactions).toHaveLength(1));
+      expect(walletStore.transactions[0].receivedAssets).toEqual([]);
+
+      expect(bg.expandCredentialsIfNeeded([keyPastRange()])).not.toBeNull();
+      await bg.setAccountTransactions([cachedReceipt()]);
+
+      await vi.waitFor(() => expect(walletStore.transactions[0].receivedAssets).toEqual([
+        expect.objectContaining({ unit: TOKEN, quantity: 123 }),
+      ]));
+    } finally {
+      bg.unsubscribeAll();
+      await db.delete();
+    }
+  });
+
+  it('does not start a history that is not loaded yet', async () => {
+    const bg = bootWallet();
+    const db = await bg.getDb();
+    try {
+      await bg.setAccountTransactions([cachedReceipt()]);
+
+      expect(bg.expandCredentialsIfNeeded([keyPastRange()])).not.toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(walletStore.transactions).toHaveLength(0);
+    } finally {
+      bg.unsubscribeAll();
+      await db.delete();
+    }
+  });
+});
