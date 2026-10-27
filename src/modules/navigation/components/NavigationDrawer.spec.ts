@@ -43,6 +43,7 @@ import { GOVERNANCE_ITEMS } from './governanceNav';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardStore from '@/stores/modules/card';
+import assets from '@/utils/assets';
 
 function mountDrawer(path: string): VueWrapper {
   h.route.path = path;
@@ -268,5 +269,22 @@ describe('NavigationDrawer: the Governance section', () => {
     // PREFIX of every row key ("navigation.governanceMe") and a text search
     // would pass while the label was still on screen.
     expect(sectionHeadings(wrapper)).not.toContain('navigation.governance');
+  });
+});
+
+describe('NavigationDrawer: the Gero mark', () => {
+  const logo = (w: VueWrapper) => w.find('img[alt="logo"]').attributes('src');
+
+  it('is the Bitcoin-orange mark on a Bitcoin wallet', () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, chain: 'Bitcoin', network: 'Testnet' } as never;
+    wrapper = mountDrawer('/dashboard');
+
+    expect(logo(wrapper)).toBe(assets.geroNoTextBitcoin);
+  });
+
+  it('stays the default mark on a Cardano wallet', () => {
+    wrapper = mountDrawer('/dashboard');
+
+    expect(logo(wrapper)).toBe(assets.geroNoText);
   });
 });
