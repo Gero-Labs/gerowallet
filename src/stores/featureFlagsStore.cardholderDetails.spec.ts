@@ -8,6 +8,8 @@ vi.mock('@/services/featureFlag.service', () => ({
   default: {
     getFlag: vi.fn((_key: string, fallback: unknown) => fallback),
     onFlagChange: vi.fn((key: string, listener: (value: unknown) => void) => { listeners.set(key, listener); }),
+    isReady: vi.fn(() => false),
+    onReady: vi.fn(),
   },
 }));
 
