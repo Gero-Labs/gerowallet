@@ -288,14 +288,24 @@ function swapAssets() {
   const temp = fromAsset.value;
   fromAsset.value = toAsset.value;
   toAsset.value = temp;
-  quote.value = null;
   fromAmount.value = '';
+  discardQuote();
 }
 
 let quoteTimeout: ReturnType<typeof setTimeout> | null = null;
-function debouncedGetQuote() {
+// Bumped on every input change. A reply to an older request is dropped, so the quote (and its
+// memo and inbound address) always belongs to the inputs the form shows now.
+let quoteRequest = 0;
+
+function discardQuote() {
+  quoteRequest++;
   quote.value = null;
   quoteError.value = null;
+  quoteLoading.value = false;
+}
+
+function debouncedGetQuote() {
+  discardQuote();
   if (quoteTimeout) clearTimeout(quoteTimeout);
   if (!isValid.value) return;
   quoteTimeout = setTimeout(fetchQuote, 600);
@@ -303,21 +313,24 @@ function debouncedGetQuote() {
 
 async function fetchQuote() {
   if (!isValid.value) return;
+  const request = ++quoteRequest;
   quoteLoading.value = true;
   quoteError.value = null;
   try {
     const amountInSats = Math.round(parseFloat(fromAmount.value) * 1e8);
-    quote.value = await thorchainApi.getSwapQuote(
+    const result = await thorchainApi.getSwapQuote(
       fromAsset.value,
       toAsset.value,
       amountInSats,
       destinationAddress.value,
     );
+    if (request === quoteRequest) quote.value = result;
   } catch (e: unknown) {
+    if (request !== quoteRequest) return;
     const fallback = t('thorchain.quoteFailed');
     quoteError.value = isAxiosError<{ error?: string }>(e) ? e.response?.data?.error || fallback : fallback;
   } finally {
-    quoteLoading.value = false;
+    if (request === quoteRequest) quoteLoading.value = false;
   }
 }
 
