@@ -165,6 +165,7 @@ export default {
   'walletLibrary.search': "Wallets suchen",
   'walletLibrary.searchPlaceholder': "Name, Wallet- oder Stake-Adresse",
   'walletLibrary.filter': "Wallets filtern",
+  'walletLibrary.sortedBy': "Sortieren nach: {sort}",
   'walletLibrary.allWallets': "Alle Wallets",
   'walletLibrary.favorites': "Favoriten",
   'walletLibrary.newCategory': "Neue Kategorie",
@@ -5751,6 +5752,7 @@ export default {
   'programmableTokens.listFootnote': 'Gesperrte Token bleiben in deiner Wallet, Transfers dieser Token werden aber noch nicht unterstützt.',
   'programmableTokens.signRefused': 'Diese Transaktion bewegt einen programmierbaren CIP-113-Token. Gero kann solche Überweisungen noch nicht signieren.',
   'programmableTokens.badgeTooltip': 'Programmierbarer CIP-113-Token. Gero zeigt dein Guthaben an, Überweisungen dieser Token werden aber noch nicht unterstützt.',
+  'programmableTokens.unregisteredTooltip': 'Dieser Token wurde an deine CIP-113-Adresse gesendet, seine Policy steht aber nicht im CIP-113-Register. Gero behandelt ihn deshalb als nicht verifiziert und kann ihn nicht bewegen.',
   // ---- Positions explorer (action detail) ----
   // One key for one concept: this replaced 'assets.clearFilters' and
   // 'transactions.clearFilters', which said the same thing in three spellings.

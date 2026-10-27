@@ -387,6 +387,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { blocksMidnightSendLive, mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
+import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
@@ -586,21 +587,15 @@ const amountError = computed(() => {
 const isAmountValid = computed(() =>
   !!amount.value && parseAmount(amount.value) > 0n && !amountError.value);
 
-// ── DUST battery (same store source as MidnightSendDialog.vue) ──
-const dustBattery = computed<{ percent: number } | null>(() => {
-  const ds = midnightStore.dustState;
-  if (!ds || ds.cap <= 0n) return null;
-  const raw = Number((ds.current * 10000n) / ds.cap) / 100;
-  return { percent: Math.max(0, Math.min(100, Math.round(raw))) };
-});
+// ── DUST battery (same merged live source as MidnightSendDialog.vue; the
+//    store's Path-A `dustState` hid it for a cNIGHT-backed wallet, issue 1118) ──
+const dustBattery = computed<{ percent: number } | null>(() =>
+  dustBatteryPercent(dustLive.dustBalance.value, dustLive.dustCap.value));
 const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
 
 // Truly empty DUST: the (~1 Speck) fee can't be paid, so the hint escalates to
 // the error tone. Any nonzero DUST covers the fee and stays informational.
-const isDustEmpty = computed(() => {
-  const ds = midnightStore.dustState;
-  return !!ds && ds.current <= 0n;
-});
+const isDustEmpty = computed(() => dustLive.settled.value && dustLive.dustBalance.value <= 0n);
 
 // ── Review model (fed to the shared TransactionDetailsCard, same as the
 //    dashboard dialog) ──

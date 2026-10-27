@@ -60,10 +60,11 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
-import { midnightStore } from '@/stores/midnightStore';
 import { geroStore } from '@/stores/geroStore';
 import MidnightFeeWalletStrip from '@/modules/dashboard/components/MidnightFeeWalletStrip.vue';
 import { loadSponsorCandidates } from '@/chains/midnight/midnightSponsorLookup';
+import { mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import type { SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import {
   clearSponsorLink,
@@ -127,11 +128,18 @@ const networkMismatch = computed(() => (
 
 const sponsorUnlock = computed(() => sponsorRecord.value?.encryptionMethod ?? 'password');
 
-/** Does the ACTIVE wallet hold any DUST of its own? */
-const hasOwnDust = computed(() => {
-  const ds = midnightStore.dustState;
-  return !!ds && typeof ds.current === 'bigint' && ds.current > 0n;
-});
+/**
+ * Does the ACTIVE wallet hold any DUST of its own? Read from the merged live
+ * balance the battery shows, not the store's Path-A `dustState`, which reads
+ * zero for a wallet whose DUST comes from a Cardano cNIGHT registration and
+ * made the strip tell it "No DUST" (issue 1118). Only a zero both paths have
+ * reported counts as none, so the note doesn't flash while Path B loads.
+ */
+const dustLive = useMidnightDustLive();
+const hasOwnDust = computed(() => !mayLackDustLive({
+  dustBalance: dustLive.dustBalance.value,
+  settled: dustLive.settled.value,
+}));
 
 const incomingCandidate = computed<SponsorCandidate | null>(() => (
   incoming.value

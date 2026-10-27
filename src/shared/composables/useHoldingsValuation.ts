@@ -117,6 +117,7 @@ export function useHoldingsValuation() {
       let priceAda = marketToken?.priceAda || 0;
 
       const isNativeToken = unit === 'lovelace' || token.policy_id === '';
+      const cip113Registered = isProgrammable && !isNativeToken && (token as { cip113Registered?: boolean }).cip113Registered === true;
       if (isNativeToken) {
         priceUsd = adaPriceUsd;
         priceAda = 1;
@@ -156,13 +157,18 @@ export function useHoldingsValuation() {
         // RealFi's USDrf/sUSDrf are canonical but new, so neither the market API nor
         // DexHunter vouches for them yet — without this, verified-only (the mainnet
         // default) hides a user's staked balance from their own portfolio.
-        verified: (marketToken?.verified ?? dhToken?.verified ?? isNativeToken) || isRealFiAsset(unit),
+        // A token locked at the PLB address under a policy the CIP-113 registry doesn't list is
+        // shown as unverified whatever its metadata says (issue 1267).
+        verified: isProgrammable && !isNativeToken && !cip113Registered
+          ? false
+          : (marketToken?.verified ?? dhToken?.verified ?? isNativeToken) || isRealFiAsset(unit),
         // Graduated snek.fun tokens are unverified but legit — carry the market
         // flag through so the verified-only filter exempts them and the snek
         // badge renders (mirrors the market list). Missing here = held snek
         // tokens silently stripped by verified-only.
         isSnekFun: marketToken?.isSnekFun ?? false,
         isProgrammable,
+        cip113Registered,
         rowKey: tokenRowKey(unit, isProgrammable),
         isScam: (token as { isScam?: boolean }).isScam ?? false,
         price: priceUsd,

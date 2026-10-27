@@ -99,6 +99,46 @@ export const CIP113_BASE_PREVIEW: readonly string[] = [
   '35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16',
 ];
 
+// CIP-113 REGISTRY node policies, per network (issue 1267). A UTxO at the PLB address can
+// hold any token: paying into a script runs no validator, so anyone can send a token to
+// (PLB script, a user's stake key). Only a policy listed in the deployment's registry is a
+// CIP-113 token; the rest are shown as ordinary unverified tokens, never with the CIP-113
+// badge.
+//
+// What the value is: the registry is one script per deployment whose mint and spend share a
+// hash, so its node NFT policy id IS that script hash. Insert mints one node NFT per
+// registered policy, named after the policy id (`tn == node.key`, lib/linked_list.ak), and
+// nodes are never removed (RegistryRedeemer is only RegistryInit and RegistryInsert,
+// lib/types.ak), both in cardano-foundation/cip113-programmable-tokens @
+// `6b75ba3286b4692ca23059ff51285db357fb09c6`. So the assets minted under this policy, read
+// through Nexus, are exactly the registered policies.
+//
+// Same review bar as the PLB hashes above: a wrong value here fails CLOSED (no policy reads as
+// registered, so nothing gets the CIP-113 badge), but a different deployment's registry would
+// vouch for its tokens. List the registry of every deployment the PLB list keeps.
+//
+// Provenance: `registry.scriptHash` of each network's record in
+// cardano-foundation/cip113-programmable-tokens-platform @
+// `ab75bd5d16f4c7d5e5a5ced54ec3bf3d5ff775ce`,
+// src/programmable-tokens-offchain-java/src/main/resources/protocol-bootstraps-<network>.json,
+// whose `txHash` is the bootstrap tx recorded above and whose `programmableLogicBase` is the
+// PLB hash above.
+
+/** Mainnet registry. Record for bootstrap tx `bfefbd22…cdb72` (PLB `d91d08e3…fa838`). */
+export const CIP113_REGISTRY_MAINNET: readonly string[] = [
+  '484e733d122af44e6101988bcc47ed261a7af5c43c797e89d60e3075',
+];
+
+/** Preprod registry. Record for bootstrap tx `f4118e53…5c896` (PLB `be59f775…511e3`). */
+export const CIP113_REGISTRY_PREPROD: readonly string[] = [
+  '3083d387537f9318b6ff5aeab7de5f5629d26495319b8fafd409222a',
+];
+
+/** Preview registry. Record for bootstrap tx `8e9668a6…d00f9` (PLB `35622813…16c16`). */
+export const CIP113_REGISTRY_PREVIEW: readonly string[] = [
+  'e5b339ef5b16d6c460759aca1d60e5e045a6f01da4a11b4ee0fec09a',
+];
+
 /**
  * Networks where CIP-113 may run at all. Together with the hash lists above this is the
  * whole gate: two build-time constants, both of which must pass.

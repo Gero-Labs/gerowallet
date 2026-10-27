@@ -75,6 +75,10 @@ npm run design:check      # Design and contrast gates
 See [MAINTENANCE.md](MAINTENANCE.md) for diagnostic baselines and the
 [release runbook](spikes/vue3-migration/RELEASE-READINESS.md) for qualified
 packaging. Legacy `pack:*` utilities do not perform release qualification.
+Store submission is `.github/workflows/chrome-web-store.yml`: it uploads the exact
+package a tagged `ci-cd.yml` run tested, once the full gerowallet-e2e-tests isolated
+suites pass against that ZIP and the environment approves
+(`.github/runbooks/chrome-web-store.md`).
 
 ## Key Rules
 
@@ -139,6 +143,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Never signable**: `refusalForProgrammableInputs()` in `background.ts` preflights CIP-30 `signTx`, WalletConnect, cross-device relay and Trezor; `walletBg.signTx` re-checks. The `txId#index` refusal index lives in the existing per-wallet `config` row — no schema bump.
 - **Balance**: `account.controlled_amount` is a stake-level total, so it includes the lovelace at PLB addresses. `walletStore.setAccount()` subtracts `programmableLockedLovelace` from it (carrying the provider figure in `controlled_amount_total` so repeated application is idempotent); the `account` DB row keeps the unadjusted total.
 - **Display**: `walletStore.programmableTokens` → `useHoldingsValuation()` (locked *tokens* priced at 0, locked ADA at the native rate, `isProgrammable`, distinct `rowKey` so a dual-held unit doesn't collide), rendered with a lock badge and the `programmableTokens.badge` chip.
+- **Registry check (issue 1267)**: anyone can pay any token to the PLB address, so the badge needs the policy in the deployment's CIP-113 registry. `CIP113_REGISTRY_*` (`cip113Deployments.ts`, same review bar as the PLB hashes) are the registry node policies: each registered policy has a node NFT under that policy named after the policy id, and nodes are never removed. The background reads them through gero-backend's Nexus proxy (`GET /api/nexus/api/policy/{id}/assets`, `cip113-registry-api.ts`) and caches the list per network in `chrome.storage.local.cip113Registry` (`src/chrome/cip113Registry.ts`: a held policy the copy never asked about is asked about at once, an unlisted one after 10 min, otherwise every 6 h; 1 min back-off after a failed read). `setProgrammableAssets` stamps `cip113Registered` on each token. Fails closed: unread or unlisted ⇒ no chip or lock icon, `verified: false`, no verified-filter exemption (`isCip113BadgeRow()`). The token stays in `programmableTokens`, so it is still locked, unpriced, refused and subtracted from the balance.
 - **CIP-68**: label-100 reference tokens are filtered out of the display; `cip68Label()` in `resolver.ts` strips the label prefix so names don't render as truncated hex.
 
 ## Multi-account (accounts #0..N, issue 1307)
@@ -180,6 +185,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 ## Feature Flags
 - Self-hosted flag service (gero-sync): `src/services/featureFlag.service.ts` + `src/stores/featureFlagsStore.ts`
 - Backend URL: `VITE_FLAGS_BASE_URL` (see `.env.*`)
+- A failed first fetch is retried (issue 1195): 5s doubling to 60s, for as long as the page is open, waiting for `online` while offline. Until then every flag is its fallback; `featureFlagService.onReady()` tells the store when the flags arrive, and only then does it mirror them to `chrome.storage.local.featureFlags` (never the fallbacks, which would overwrite the background's last known values)
 - Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isHelpCenterEnabled` (dashboard discovery and Blog redirect only; public Help and welcome access remain available while off or loading), `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`, `isBitcoinEnabled` (master visibility gate for the Bitcoin chain: onboarding tile + BTC route guards + BTC nav items), `isSubmitApiEnabled` (UI-only gate for Settings → Advanced → Submit API; the background router honours a saved endpoint whatever the flag says), `isCardholderDetailsEnabled` (default ON kill switch for the Gero Card "Complete your cardholder details" step; only an explicit `false` turns it off, and then a missing-details refusal shows the Zione-support notice)
 - Route gating: `isRouteUnderMaintenance()` in router.ts
 - Nav hiding: check flag in NavigationDrawer.vue menu items

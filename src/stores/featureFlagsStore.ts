@@ -187,6 +187,9 @@ export const featureFlagsStore = {
       await featureFlagService.initialize(baseUrl, 'gero-extension', 5);
       this.loadFlags();
       this.subscribeToFlagChanges();
+      // After a failed first fetch the service keeps retrying (issue 1195):
+      // load the real values once it gets them.
+      if (!featureFlagService.isReady()) featureFlagService.onReady(() => this.loadFlags());
       featureFlagsState.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize feature flags:', error);
@@ -241,7 +244,9 @@ export const featureFlagsStore = {
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
-    persistFlagsForBackground();
+    // Fallbacks (the service has no flags yet) would overwrite the background's
+    // last known values with all-off; mirror only flags the server sent.
+    if (featureFlagService.isReady()) persistFlagsForBackground();
   },
 
   /**

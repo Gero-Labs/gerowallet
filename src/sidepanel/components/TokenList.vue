@@ -109,7 +109,7 @@
           <div class="token-info">
             <div class="token-name text-body-2 white--text text-truncate">
               {{ getTokenName(token) }}
-              <v-tooltip location="top" v-if="token.isProgrammable"  :open-delay="300" content-class="custom-tooltip">
+              <v-tooltip location="top" v-if="token.isProgrammable && token.cip113Registered"  :open-delay="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
                   <v-icon
                     size="x-small"
@@ -290,6 +290,8 @@ interface TokenLike {
   verified?: boolean;
   isScam?: boolean;
   isProgrammable?: boolean;
+  /** Locked at the PLB address AND listed in the CIP-113 registry (issue 1267). */
+  cip113Registered?: boolean;
   metadata?: TokenMetadata;
   [key: string]: unknown;
 }
@@ -362,7 +364,8 @@ const adaToken = computed(() => ({
 const filteredTokens = computed(() => {
   if (!rawTokens.value) return [];
 
-  // Programmable tokens are exempt from verified-only: inherently unverified.
+  // CIP-113 tokens are exempt from verified-only: inherently unverified. A token at the PLB
+  // address whose policy the registry doesn't list is not one of them (issue 1267).
   return ([
     ...Object.values(rawTokens.value),
     ...Object.values(rawProgrammableTokens.value || {}),
@@ -370,7 +373,7 @@ const filteredTokens = computed(() => {
     .filter((token: TokenLike) => {
       if (token.policy_id === '') return false;
       if (token.isScam) return false;
-      if (!token.verified && !token.isProgrammable) return false;
+      if (!token.verified && !(token.isProgrammable && token.cip113Registered)) return false;
       return true;
     })
     .sort((a: TokenLike, b: TokenLike) => {
