@@ -178,6 +178,7 @@ import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { sourceSecretsRecord } from '@/shared/composables/useCardanoStakeEnumeration';
+import { secretsWalletId } from '@/shared/utils/walletAccount';
 import { Blockchain, Network } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import {
@@ -318,7 +319,8 @@ async function confirmAction(source: DustSource) {
     if (source.encryptionMethod === 'prf') {
       // Evaluate PRF against the SOURCE wallet's own credential (the logged
       // wallet's for the same-seed twin, the imported record's otherwise, and
-      // an added account's account #0's, which holds its PassKey).
+      // an added account's account #0's, which holds its PassKey). The logged
+      // wallet may be an added Midnight account: its salt is account #0's id.
       const record = sourceSecretsRecord(source);
       const webAuthnCredentialId = record?.webAuthnCredentialId;
       if (!record || !webAuthnCredentialId) {
@@ -326,7 +328,7 @@ async function confirmAction(source: DustSource) {
       }
       const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
       prfOutput = await evaluateWalletPrf({
-        id: record.id,
+        id: secretsWalletId(record),
         webAuthnCredentialId,
         webAuthnTransports: record.webAuthnTransports,
       });

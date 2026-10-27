@@ -2,7 +2,7 @@
 // same chain AND same network AND same derived public key.
 import { describe, it, expect } from 'vitest';
 import { Blockchain, Network } from '@/models/types';
-import { findDuplicateWallet, isSameWalletIdentity, toWalletIdentity } from '@/db/walletIdentity';
+import { canReplaceWalletKey, findDuplicateWallet, isSameWalletIdentity, isSameWalletKey, toWalletIdentity } from '@/db/walletIdentity';
 
 const CARDANO_XPUB = 'xpub1w0zjhrn6n3zvfnzhk8xkgvhy0ehmv8yvgqe4t2ah7q3p9r6l0d2xkq7v0m4';
 const OTHER_CARDANO_XPUB = 'xpub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
@@ -132,5 +132,41 @@ describe('findDuplicateWallet', () => {
   it('returns null for an empty or missing wallet set', () => {
     expect(findDuplicateWallet(cardano(), [])).toBeNull();
     expect(findDuplicateWallet(cardano(), null)).toBeNull();
+  });
+});
+
+// Midnight accounts are told apart by their unshielded address (issue 1330).
+const NIGHT_0 = JSON.stringify({ unshielded: 'mn_addr_preprod1account0', shielded: 'mn_shield-addr_preprod1a', dust: 'mn_dust-addr_preprod1a' });
+const NIGHT_0_MORE = JSON.stringify({ dust: 'mn_dust-addr_preprod1a', unshielded: 'mn_addr_preprod1account0', cardanoXpub: 'xpub1twin' });
+const NIGHT_1 = JSON.stringify({ unshielded: 'mn_addr_preprod1account1', shielded: 'mn_shield-addr_preprod1b', dust: 'mn_dust-addr_preprod1b' });
+
+describe('isSameWalletKey', () => {
+  it('compares a Midnight addresses blob by its unshielded address only', () => {
+    expect(isSameWalletKey(Blockchain.MIDNIGHT, NIGHT_0, NIGHT_0_MORE)).toBe(true);
+    expect(isSameWalletKey(Blockchain.MIDNIGHT, NIGHT_0, NIGHT_1)).toBe(false);
+  });
+
+  it('compares Cardano xpubs case-insensitively and Bitcoin ones exactly', () => {
+    expect(isSameWalletKey(Blockchain.CARDANO, CARDANO_XPUB, CARDANO_XPUB.toUpperCase())).toBe(true);
+    expect(isSameWalletKey(Blockchain.CARDANO, CARDANO_XPUB, OTHER_CARDANO_XPUB)).toBe(false);
+    expect(isSameWalletKey(Blockchain.BITCOIN, BITCOIN_XPUB, BITCOIN_XPUB.toLowerCase())).toBe(false);
+  });
+
+  it('never matches a missing or unreadable key', () => {
+    expect(isSameWalletKey(Blockchain.MIDNIGHT, undefined, undefined)).toBe(false);
+    expect(isSameWalletKey(Blockchain.MIDNIGHT, 'not json', 'not json')).toBe(false);
+  });
+});
+
+describe('canReplaceWalletKey', () => {
+  it('lets a Midnight record gain fields, never move to another account', () => {
+    expect(canReplaceWalletKey(Blockchain.MIDNIGHT, NIGHT_0, NIGHT_0_MORE)).toBe(true);
+    expect(canReplaceWalletKey(Blockchain.MIDNIGHT, NIGHT_1, NIGHT_0)).toBe(false);
+    expect(canReplaceWalletKey(Blockchain.MIDNIGHT, NIGHT_0, 'not json')).toBe(false);
+  });
+
+  it('fills in a record that names no account yet', () => {
+    expect(canReplaceWalletKey(Blockchain.MIDNIGHT, JSON.stringify({ unshielded: '', shielded: '', dust: '' }), NIGHT_1)).toBe(true);
+    expect(canReplaceWalletKey(Blockchain.MIDNIGHT, undefined, NIGHT_1)).toBe(true);
   });
 });

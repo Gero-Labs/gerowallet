@@ -9,7 +9,13 @@ import type { AccountXpub } from '@/shared/utils/walletAccount';
 const mocks = vi.hoisted(() => ({ discover: vi.fn(), discoverBitcoin: vi.fn(), findExisting: vi.fn() }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key, tc: (key: string) => key } }));
 vi.mock('@/db/gero-db', () => ({ findExistingWallet: mocks.findExisting }));
-vi.mock('@/shared/utils/accountDiscovery', () => ({ ACCOUNTS_PER_SCAN: 5, discoverAccounts: mocks.discover, discoverBitcoinAccounts: mocks.discoverBitcoin }));
+vi.mock('@/shared/utils/accountDiscovery', async (importOriginal) => ({
+  ACCOUNTS_PER_SCAN: 5,
+  discoverAccounts: mocks.discover,
+  discoverBitcoinAccounts: mocks.discoverBitcoin,
+  // Midnight accounts are never probed: the real one makes no network call.
+  discoverMidnightAccounts: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoverMidnightAccounts,
+}));
 
 import StepAccounts from './StepAccounts.vue';
 
@@ -147,5 +153,27 @@ describe('choosing Bitcoin accounts', () => {
     expect(mocks.discoverBitcoin).toHaveBeenCalledWith(Network.TESTNET, 'segwit', [0, 1, 2].map(account));
     expect(mocks.discover).not.toHaveBeenCalled();
     expect(checked(wrapper)).toEqual(['true', 'true', 'false']);
+  });
+});
+
+describe('choosing Midnight accounts', () => {
+  const night = (accountIndex: number): AccountXpub => ({
+    accountIndex, publicKey: JSON.stringify({ unshielded: `mn_addr_preprod1account${accountIndex}xxxxxxxxxxxxxxxxxxxx` }), keys: [],
+  });
+
+  it('shows each by its unshielded address, never probes them, and pre-selects account #0 only', async () => {
+    mocks.findExisting.mockResolvedValue(null);
+    const wrapper = render([0, 1, 2].map(night), networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD));
+    await flushPromises();
+
+    expect(mocks.discover).not.toHaveBeenCalled();
+    expect(mocks.discoverBitcoin).not.toHaveBeenCalled();
+    expect(checked(wrapper)).toEqual(['true', 'false', 'false']);
+    expect(rows(wrapper)[1].find('.account-row__address').attributes('title')).toBe('mn_addr_preprod1account1xxxxxxxxxxxxxxxxxxxx');
+    // Nothing was checked, so no account is called used or new.
+    expect(wrapper.find('.accounts-summary').text()).toBe('accounts.notChecked');
+    expect(rows(wrapper)[1].find('.account-row__meta').text()).toBe('');
+    await rows(wrapper)[2].trigger('click');
+    expect(await continueWith(wrapper)).toEqual([0, 2]);
   });
 });

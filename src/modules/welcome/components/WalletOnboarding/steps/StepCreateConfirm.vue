@@ -180,6 +180,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
 import type { Wallet } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
+import { isSameWalletKey } from '@/db/walletIdentity';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
@@ -265,25 +266,25 @@ const walletCreationStep = async (): Promise<void> => {
       cardanoStakeAddress?: string;
       cardanoPaymentKeyHashHex?: string;
     } | undefined;
-    if (props.network.blockchain === 'Midnight') {
-      const bip39 = await import('bip39');
-      const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
-      preGeneratedMnemonic = bip39.generateMnemonic(256);
-      // Addresses only; the derived secret keys are wiped inside (PRIV-01).
-      midnightAddresses = await deriveMidnightAddresses(preGeneratedMnemonic, props.network.network);
-    }
-
     // More than one account: generate the phrase here, as a restore types it, and
     // read the accounts' public keys from it before anything is written or the
     // PassKey is registered. gero-db is told the phrase is new, so it still asks
     // for a backup.
-    let accounts: AccountXpub[] = [];
-    if (props.accountCount > 1 && !preGeneratedMnemonic) {
+    const isMidnight = props.network.blockchain === 'Midnight';
+    if (isMidnight || props.accountCount > 1) {
       const bip39 = await import('bip39');
-      const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
       preGeneratedMnemonic = bip39.generateMnemonic(256);
+    }
+    if (isMidnight) {
+      const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
+      // Addresses only; the derived secret keys are wiped inside (PRIV-01).
+      midnightAddresses = await deriveMidnightAddresses(preGeneratedMnemonic!, props.network.network);
+    }
+    let accounts: AccountXpub[] = [];
+    if (props.accountCount > 1) {
+      const { deriveAccountXpubsFromMnemonic } = await import('@/shared/utils/softwareAccounts');
       accounts = await deriveAccountXpubsFromMnemonic(
-        preGeneratedMnemonic,
+        preGeneratedMnemonic!,
         Array.from({ length: props.accountCount }, (_, index) => index),
         { chain: props.network.blockchain, network: props.network.network },
       );
@@ -420,7 +421,7 @@ const addCreatedAccounts = async (wallet: Wallet | undefined, accounts: AccountX
   const others = accounts.filter((account) => account.accountIndex > 0);
   if (!wallet?.id || !others.length) return;
   try {
-    if (accounts[0]?.publicKey !== wallet.publicKey) throw new Error('account #0 mismatch');
+    if (!isSameWalletKey(wallet.chain, accounts[0]?.publicKey, wallet.publicKey)) throw new Error('account #0 mismatch');
     await GeroStore.addAccounts(wallet.id, others.map((account) => ({
       name: vmProxy.$t('accounts.label', { index: account.accountIndex }) as string,
       publicKey: account.publicKey,

@@ -23,6 +23,7 @@
               <p class="ml-9">{{ $t('miniGero.futureTransactionsNote') }}</p>
             </div>
           </section>
+          <ConnectAccountPicker v-model="connectAccountId" :accounts="connectAccounts" :logged-id="connectLoggedId" class="mt-4" />
     </v-card-text>
     <v-card-actions class="justify-center py-2 px-0">
       <div class="flex-grow-1">
@@ -44,13 +45,14 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { onMounted, ref, toRefs, getCurrentInstance } from 'vue';
+import { onMounted, ref, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
-import WalletStore, { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
+import ConnectAccountPicker from '@/shared/components/ConnectAccountPicker.vue';
+import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 
 const { t } = useTranslation();
 
@@ -59,8 +61,8 @@ const vmProxy = getCurrentInstance()!.proxy as unknown as {
   $route: { query?: Record<string, string | undefined> };
 };
 
-// Get store values
-const { loggedWallet } = toRefs(walletStore);
+// Every account of the logged wallet; the logged one is chosen (#1331).
+const { accounts: connectAccounts, loggedId: connectLoggedId, selectedId: connectAccountId, approval: connectApproval } = useConnectAccount();
 
 // Reactive data
 const consent = ref<boolean>(false);
@@ -80,8 +82,7 @@ const decline = async () => {
 };
 
 const confirm = async () => {
-  // Store the full origin (scheme + host + port), never the bare hostname: a
-  // hostname entry would also authorise http:// and other ports of that name.
+  // A prompt for no real site connects nothing.
   let origin = '';
   try {
     origin = new URL(String(vmProxy.$route.query?.['website'] ?? '')).origin;
@@ -92,9 +93,10 @@ const confirm = async () => {
     await decline();
     return;
   }
-  await WalletStore.addConnectedDapp(loggedWallet.value.id, origin);
+  // The background connects the site to the chosen account (switching to it
+  // first when it isn't the logged one), as for the side panel.
   try {
-    await controller.value?.returnData({ data: true, error: {} });
+    await controller.value?.returnData({ data: connectApproval(), error: {} });
   } catch (e) {
     console.warn('[DappConnect] returnData failed:', e);
   }

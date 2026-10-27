@@ -4,6 +4,7 @@ import { DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9, getMidnightEndpoints } from '@/
 import {
   DappProvingUnavailableError,
   describeDappProvingFailure,
+  describeDappProvingUnreachable,
   isLoopbackProverUrl,
   localUrlForNetwork,
   resolveDappProvingTarget,
@@ -141,6 +142,28 @@ describe('describeDappProvingFailure', () => {
     const text = describeDappProvingFailure({ url: 'http://127.0.0.1:6300', source: 'local' }, 'network error');
     expect(text).toContain('http://127.0.0.1:6300');
     expect(text).toMatch(/running/);
+  });
+});
+
+describe('describeDappProvingUnreachable', () => {
+  it('explains Gero Cloud, the probed URL and both fixes for the default fallback', () => {
+    const text = describeDappProvingUnreachable({ url: 'http://localhost:6300', source: 'default' });
+    expect(text).toMatch(/Gero Cloud, which only proves transactions the wallet builds itself/);
+    expect(text).toContain('looked for a local proof server at http://localhost:6300 and got no answer');
+    expect(text).toMatch(/midnightntwrk\/proof-server/);
+    expect(text).toMatch(/choose a local proof server or Arkhia zkPaaS in GeroWallet's Midnight proof-server settings/);
+  });
+
+  it('names the configured local server', () => {
+    const text = describeDappProvingUnreachable({ url: 'http://127.0.0.1:6300', source: 'local' });
+    expect(text).toContain('local proof server at http://127.0.0.1:6300 did not answer');
+  });
+
+  it('points a zkPaaS user at the key and endpoint without echoing the URL', () => {
+    const text = describeDappProvingUnreachable({ url: 'https://starter.arkhia.io/x/secret-key', source: 'zkpaas', headers: {} });
+    expect(text).toMatch(/Arkhia zkPaaS did not answer/);
+    expect(text).toMatch(/API key and endpoint/);
+    expect(text).not.toContain('secret-key');
   });
 });
 

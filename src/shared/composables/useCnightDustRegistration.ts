@@ -40,7 +40,7 @@ import { clearDustPending, getDustPending, markDustPending, reconcileDustPending
 import { extractNexusErrorMessage, isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
 import { CNIGHT_ASSETS } from '@/shared/utils/cnightAssets';
-import { secretsWalletId } from '@/shared/utils/walletAccount';
+import { resolveAccountIndex, secretsWalletId, walletDisplayName } from '@/shared/utils/walletAccount';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
 export interface DustDestination {
@@ -363,7 +363,8 @@ export function useCnightDustRegistration() {
       } catch {
         dust = '';
       }
-      if (dust) out.push({ key: `wallet:${w.id}`, label: w.name, dustAddress: dust });
+      // An added account is named with its wallet: "Night · Account #1".
+      if (dust) out.push({ key: `wallet:${w.id}`, label: walletDisplayName(w, geroStore.wallets), dustAddress: dust });
     }
     return out;
   });
@@ -509,9 +510,9 @@ export function useCnightDustRegistration() {
       const usingSelfDestination = !chosen || chosen.key === 'self' || !chosen.dustAddress;
       const destinationBech32 = chosen && chosen.key !== 'self' && chosen.dustAddress
         ? chosen.dustAddress
-        // Midnight account #0 of this phrase, whatever this Cardano account's index:
-        // it is the only Midnight account Gero can open for the phrase (#1330).
-        : (await deriveMidnightAddresses(mnemonic, wallet.network)).dust;
+        // The same account of the phrase on Midnight: Midnight account #N's Cardano
+        // twin is Cardano account #N, so the two flows name the same pair (#1330).
+        : (await deriveMidnightAddresses(mnemonic, wallet.network, resolveAccountIndex(wallet))).dust;
       const dustAddressHex = dustAddressToHex(destinationBech32);
       // Cache this wallet's own derived DUST address hex — the only reliable
       // way to identify "primary" in a Duplicated state without a fresh
@@ -813,8 +814,8 @@ export function useCnightDustRegistration() {
       const outpoint = registrationOutpoint();
       const mnemonic = await decryptMnemonic(credentials);
       const { deriveMidnightAddresses, dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
-      // Midnight account #0 of this phrase, as in register().
-      const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
+      // The same account of the phrase on Midnight, as in register().
+      const derived = await deriveMidnightAddresses(mnemonic, wallet.network, resolveAccountIndex(wallet));
       const dustAddressHex = dustAddressToHex(derived.dust);
       // This flow always derives THIS wallet's own address — cache it for
       // primary-marking the same way `register()` does.

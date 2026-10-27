@@ -20,7 +20,7 @@ vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
 
 import { Blockchain } from '@/models/types';
 import { DustDestinationUnsupportedError } from '@/api/midnight-api';
-import { loadSponsorCandidates } from './midnightSponsorLookup';
+import { loadSponsorCandidates, toSponsorRefs } from './midnightSponsorLookup';
 
 const NETWORK = 'Mainnet';
 const SENDER = 1;
@@ -183,5 +183,21 @@ describe('loadSponsorCandidates — fallback for a Nexus without dust/destinatio
 
     expect(candidates.every((c) => c.state === 'unknown')).toBe(true);
     expect(lookupIncomplete).toBe(true);
+  });
+});
+
+describe('toSponsorRefs', () => {
+  it('names an added account with its wallet, and leaves other networks out', () => {
+    const night = { chain: Blockchain.MIDNIGHT, network: 'Preprod', type: 'Normal' };
+    const refs = toSponsorRefs([
+      { id: 1, name: 'Night', ...night, publicKey: JSON.stringify({ dust: 'mn_dust-addr_preprod1zero' }) },
+      { id: 2, name: 'Account #1', ...night, accountIndex: 1, parentWalletId: 1, publicKey: JSON.stringify({ dust: 'mn_dust-addr_preprod1one' }) },
+      { id: 3, name: 'Elsewhere', ...night, network: 'Mainnet', publicKey: '{}' },
+    ] as never, 'Preprod');
+
+    expect(refs).toEqual([
+      { id: 1, name: 'Night', network: 'Preprod', dustAddress: 'mn_dust-addr_preprod1zero' },
+      { id: 2, name: 'Night · Account #1', network: 'Preprod', dustAddress: 'mn_dust-addr_preprod1one' },
+    ]);
   });
 });

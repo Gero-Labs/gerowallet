@@ -86,9 +86,11 @@
           </div>
         </div>
 
+        <ConnectAccountPicker v-model="connectAccountId" :accounts="connectAccounts" :logged-id="connectLoggedId" class="mb-4" />
+
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded variant="flat" @click="approve(true)">
+          <v-btn class="geroButton" rounded variant="flat" @click="approve(connectApproval())">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -531,6 +533,8 @@
             <span class="t-body-sm">{{ $t('midnight.connector.futureRequestsNote') }}</span>
           </div>
         </div>
+
+        <ConnectAccountPicker v-model="connectAccountId" :accounts="connectAccounts" :logged-id="connectLoggedId" class="mb-4" />
 
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
@@ -1082,8 +1086,10 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
-import { deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
+import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
 import { geroStore } from '@/stores/geroStore';
+import ConnectAccountPicker from '@/shared/components/ConnectAccountPicker.vue';
+import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
@@ -1136,6 +1142,17 @@ const currentRequest = computed(() => opaqueRequest.value as RenderedRequest | n
 onMounted(() => setOverlayReady(true));
 onBeforeUnmount(() => setOverlayReady(false));
 const { t } = useTranslation();
+
+// Connect prompts offer every account of the logged wallet (#1331); each new
+// request starts on the logged one.
+const {
+  accounts: connectAccounts,
+  loggedId: connectLoggedId,
+  selectedId: connectAccountId,
+  reset: resetConnectAccount,
+  approval: connectApproval,
+} = useConnectAccount();
+watch(() => currentRequest.value?.requestId, resetConnectAccount);
 
 // Domain + method label for a queued (not-yet-shown) request, for the queue
 // strip below. Reuses the same URL-hostname extraction as enableDomain/
@@ -2725,7 +2742,7 @@ async function signDataPrf() {
   });
 }
 
-// ── Sign Data: Hardware wallet (Ledger/Trezor via background) ──
+// ── Sign Data: Hardware wallet (Ledger in this page, Trezor via its handler) ──
 async function signDataHw() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
@@ -2735,9 +2752,7 @@ async function signDataHw() {
   signing.value = true;
   signError.value = '';
 
-  // The Ledger branch below runs in the background service worker, so the step
-  // labels ledger.ts publishes there never reach this panel — carry a static
-  // one here instead. Either way the device is what the request is waiting on.
+  // Either way the device is what the request is waiting on.
   const isTrezor = walletType.value === WalletType.Trezor;
   hardwareLoading.begin(
     isTrezor ? 'Trezor' : 'Ledger',
@@ -2750,9 +2765,9 @@ async function signDataHw() {
 
     // Trezor: route through the Trezor handler (WebUSB when isTrezorWebUsbEnabled
     // is on, else the SW bridge), exactly like the popup DappSignData view. The
-    // generic SIGN_DATA path only implements Ledger and otherwise falls through to
-    // a spending-password sign — which is why Trezor signData failed with
-    // "Wrong password". Maps the Trezor response's signatureData -> { signature, key }.
+    // background SIGN_DATA path signs with the root key and a spending password, so a
+    // hardware wallet sent there fails with "Wrong password". Maps the Trezor
+    // response's signatureData -> { signature, key }.
     if (walletType.value === WalletType.Trezor) {
       const data = { method: 'signData', address, payload, cip45Authorization: signingRequest?.payload?.cip45Authorization };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
@@ -2774,30 +2789,28 @@ async function signDataHw() {
       return;
     }
 
-    // Ledger (and any other USB HW handled by the SW SIGN_DATA path)
-    const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_DATA,
-      data: {
-        cip45Authorization: signingRequest?.payload?.cip45Authorization,
-        address,
-        payload,
-        password: '',
-        isUsb: true,
-      },
-    })), approvalCurrent) as { data: { key?: string; signature?: string; error?: string } };
-
-    if (res?.data?.error) throw new Error(res.data.error);
-    if (!res?.data?.signature || !res?.data?.key) {
-      throw new Error('Wallet returned an empty signature payload');
-    }
+    // Ledger: sign on the device from this page, as the popup's DappSignData does,
+    // never through the background's password path (issue 1329). The account is the
+    // one the key set's paths are at. WebUSB: this sheet offers no Bluetooth for data.
+    if (!loggedWallet.value) return;
+    const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
+    const signed = await awaitFreshApproval(async () => (ledgerUtils.signData(
+      address,
+      payload,
+      network,
+      accountIndexFromKeys(keys.value),
+      true,
+      ledgerUtils.createKnownAddressesFromKeys(keys.value, network),
+    )), approvalCurrent);
 
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
 
     if (currentRequest.value !== signingRequest) return;
 
-    approve(res.data);
+    approve({ signature: signed.signatureHex, key: signed.signingPublicKeyHex });
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
+    if (!isTrezor) ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] HW sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
@@ -2821,11 +2834,11 @@ function midnightError(code: string, reason: string): string {
 
 function approveMidnightConnect() {
   // Whitelisting the origin (WalletStore.addConnectedDapp) happens in
-  // background.ts's MIDNIGHT_METHOD.connect handler once it sees
-  // `response.data === true` — mirrors exactly how the CIP-30 `enable` mini-
-  // gero path is split (background owns the whitelist write, the panel only
-  // signals approve/reject).
-  approve(true);
+  // background.ts's MIDNIGHT_METHOD.connect handler once it reads the
+  // approval — mirrors exactly how the CIP-30 `enable` mini-gero path is split
+  // (background owns the whitelist write and any switch to the chosen account,
+  // the panel only signals approve/reject).
+  approve(connectApproval());
 }
 
 function rejectMidnightConnect() {

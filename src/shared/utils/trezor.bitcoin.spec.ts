@@ -15,12 +15,14 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
   return { default: Buffer, Buffer };
 });
 
-const connect = vi.hoisted(() => ({ init: vi.fn(), signTransaction: vi.fn() }));
+const connect = vi.hoisted(() => ({ init: vi.fn(), signTransaction: vi.fn(), getPublicKey: vi.fn(), getFeatures: vi.fn(), getAddress: vi.fn() }));
 vi.mock('@trezor/connect-webextension', () => ({ default: connect }));
 vi.mock('@trezor/connect-web', () => ({ default: connect }));
 
-import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
+import { HDKey } from '@scure/bip32';
+import { deriveBitcoinAccountXpub, deriveBitcoinAddress, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
 import { signPsbtWithMnemonic } from '@/chains/bitcoin/bitcoinSigner';
+import { mnemonicToSeedSync } from 'bip39';
 
 const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
 
@@ -84,3 +86,57 @@ describe.each(bundles)('%s Bitcoin signing', (_name, load) => {
     await expect(sign(unsigned.toHex(), account)).rejects.toThrow('Cancelled');
   });
 });
+
+type TrezorBitcoin = {
+  initBitcoinTrezor: (addressType: string, accountIndex: number, network: string) => Promise<{ xpub: string }>;
+  verifyBitcoinAddress: (addressType: string, accountIndex: number, addressIndex: number, isChange: boolean, network: string) => Promise<string>;
+};
+const pairingBundles: Array<[string, () => Promise<TrezorBitcoin>]> = [
+  ['trezor (Bridge)', async () => (await import('./trezor')).default as unknown as TrezorBitcoin],
+  ['trezorWeb (WebUSB)', async () => (await import('./trezorWeb')).default as unknown as TrezorBitcoin],
+];
+
+// Issue 1327: on testnet the account sits at coin type 1', on Connect's testnet coin,
+// and the device's tpub is stored in the wallet's xpub form.
+describe.each(pairingBundles)('%s Bitcoin pairing on testnet', (_name, load) => {
+  let trezor: TrezorBitcoin;
+  beforeAll(async () => { trezor = await load(); });
+  beforeEach(() => {
+    connect.init.mockReset().mockResolvedValue(undefined);
+    connect.getFeatures.mockReset().mockResolvedValue({ success: true, payload: { label: 'T', major_version: 2, minor_version: 8, patch_version: 0 } });
+    connect.getAddress.mockReset().mockResolvedValue({ success: true, payload: { address: 'tb1q-shown' } });
+  });
+
+  it('asks for the account at coin type 1\' on the testnet coin, and stores its key as an xpub', async () => {
+    expect(testnetTpub()).toMatch(/^tpub/);
+    connect.getPublicKey.mockReset().mockResolvedValue({ success: true, payload: { xpub: testnetTpub() } });
+
+    const { xpub } = await trezor.initBitcoinTrezor('segwit', 0, 'Testnet');
+
+    expect(connect.getPublicKey).toHaveBeenCalledWith({ path: "m/84'/1'/0'", coin: 'test', crossChain: false });
+    expect(xpub).toBe(account.xpub);
+    expect(deriveBitcoinAddress(xpub, 'Testnet', 'segwit', 0, 0)).toBe(deriveBitcoinAddress(account.xpub, 'Testnet', 'segwit', 0, 0));
+  });
+
+  it('keeps the mainnet path and coin on mainnet', async () => {
+    const mainnetXpub = deriveBitcoinAccountXpub(PHRASE, 'Mainnet', 'taproot');
+    connect.getPublicKey.mockReset().mockResolvedValue({ success: true, payload: { xpub: mainnetXpub } });
+
+    const { xpub } = await trezor.initBitcoinTrezor('taproot', 0, 'Mainnet');
+
+    expect(connect.getPublicKey).toHaveBeenCalledWith({ path: "m/86'/0'/0'", coin: 'btc', crossChain: false });
+    expect(xpub).toBe(mainnetXpub);
+  });
+
+  it('shows the testnet address the wallet derives', async () => {
+    await trezor.verifyBitcoinAddress('segwit', 0, 0, false, 'Testnet');
+
+    expect(connect.getAddress).toHaveBeenCalledWith({ path: "m/84'/1'/0'/0/0", coin: 'test', showOnTrezor: true, scriptType: 'SPENDWITNESS' });
+  });
+});
+
+/** The test account's testnet key with testnet version bytes, as Connect's `test` coin encodes it. */
+function testnetTpub(): string {
+  const node = HDKey.fromMasterSeed(mnemonicToSeedSync(PHRASE), { private: 0x04358394, public: 0x043587cf }).derive("m/84'/1'/0'");
+  return node.publicExtendedKey;
+}

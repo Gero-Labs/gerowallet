@@ -4,10 +4,11 @@
 import { Api } from '@/api/api';
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
-import { Blockchain } from '@/models/types';
+import { Blockchain, type Wallet } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 
-export type AccountActivity = 'used' | 'unused' | 'unknown';
+/** 'unknown': the probe failed. 'unchecked': the chain offers no probe (Midnight). */
+export type AccountActivity = 'used' | 'unused' | 'unknown' | 'unchecked';
 
 export interface DiscoveredAccount extends AccountXpub {
   /** First receive address, to show beside the account. */
@@ -83,6 +84,44 @@ export function mergeScannedAccounts(previous: AccountXpub[], scanned: AccountXp
   const merged = new Map(previous.map((account) => [account.accountIndex, account]));
   scanned.forEach((account) => merged.set(account.accountIndex, account));
   return [...merged.values()].sort((a, b) => a.accountIndex - b.accountIndex);
+}
+
+/**
+ * Midnight accounts, shown by their unshielded receive address and never probed
+ * ('unchecked'): Nexus has no REST query for a Midnight account's history, and
+ * the gero-sync socket belongs to the logged-in wallet. So only account #0 is
+ * chosen by default.
+ */
+export function discoverMidnightAccounts(accounts: AccountXpub[]): DiscoveredAccount[] {
+  return accounts.map((account) => ({ ...account, address: midnightUnshieldedAddress(account.publicKey), stakeAddress: '', activity: 'unchecked' }));
+}
+
+/** The unshielded address of a Midnight account's addresses JSON; '' for an unreadable blob. */
+function midnightUnshieldedAddress(publicKey: string): string {
+  try {
+    const unshielded: unknown = JSON.parse(publicKey)?.unshielded;
+    return typeof unshielded === 'string' ? unshielded : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * An account record's first receive address, as the accounts step shows it, so
+ * a picker can tell a wallet's accounts apart. '' when none can be derived.
+ */
+export async function accountReceiveAddress(record: Pick<Wallet, 'chain' | 'network' | 'publicKey' | 'addressType'>): Promise<string> {
+  if (!record.publicKey) return '';
+  try {
+    if (record.chain === Blockchain.MIDNIGHT) return midnightUnshieldedAddress(record.publicKey);
+    if (record.chain === Blockchain.BITCOIN) {
+      const { deriveBitcoinAddress } = await import('@/chains/bitcoin/bitcoinKeyManager');
+      return deriveBitcoinAddress(record.publicKey, record.network, record.addressType || 'segwit', 0, 0);
+    }
+    return getAddress(record.publicKey, record.chain, record.network, 0).toBech32();
+  } catch {
+    return '';
+  }
 }
 
 /** Receive addresses checked per Bitcoin account: wallets hand them out in order, so a used account has used one of its first. */

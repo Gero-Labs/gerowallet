@@ -14,11 +14,17 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
   return { default: Buffer, Buffer };
 });
 
-const device = vi.hoisted(() => ({ signPsbtBuffer: vi.fn() }));
+const device = vi.hoisted(() => ({ signPsbtBuffer: vi.fn(), getWalletXpub: vi.fn(), getWalletPublicKey: vi.fn() }));
 vi.mock('@ledgerhq/hw-app-btc', () => ({
-  default: class { signPsbtBuffer = device.signPsbtBuffer; },
+  default: class {
+    signPsbtBuffer = device.signPsbtBuffer;
+    getWalletXpub = device.getWalletXpub;
+    getWalletPublicKey = device.getWalletPublicKey;
+  },
 }));
+vi.mock('@ledgerhq/hw-app-btc/lib/getAppAndVersion', () => ({ getAppAndVersion: vi.fn(async () => ({ version: '2.2.0' })) }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { setText: vi.fn(), setLoading: vi.fn() } }));
+vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn(), fireSuccess: vi.fn() } }));
 
 import { deserializePsbt } from '@ledgerhq/hw-app-btc/lib/signPsbt/parsePsbt';
 import type { SignPsbtBufferOptions } from '@ledgerhq/hw-app-btc/lib/signPsbt/types';
@@ -80,5 +86,27 @@ describe('ledger.signBitcoinTransaction', () => {
     device.signPsbtBuffer.mockImplementation(async (psbt: Buffer) => ({ psbt: deserializePsbt(psbt).serialize() }));
 
     await expect(ledger.signBitcoinTransaction(unsigned.toHex(), account)).rejects.toThrow('did not sign');
+  });
+});
+
+// Issue 1327: a testnet account is asked for at coin type 1', in the wallet's xpub form
+// (a tpub would be refused by every derivation), and verified at the same path.
+describe('ledger Bitcoin pairing and verification', () => {
+  beforeEach(() => {
+    vi.spyOn(ledger, 'connectViaUSB').mockResolvedValue({ deviceModel: { productName: 'Nano X' } } as never);
+    device.getWalletXpub.mockReset().mockResolvedValue(xpub);
+    device.getWalletPublicKey.mockReset().mockResolvedValue({ bitcoinAddress: 'tb1q-shown' });
+  });
+
+  it.each([['Mainnet', "m/84'/0'/0'"], ['Testnet', "m/84'/1'/0'"]])('asks for the %s account at %s, as an xpub', async (network, path) => {
+    await ledger.initBitcoinLedger(false, 'segwit', 0, network);
+
+    expect(device.getWalletXpub).toHaveBeenCalledWith({ path, xpubVersion: 0x0488b21e });
+  });
+
+  it('verifies a testnet address at the path the wallet derives it at', async () => {
+    await ledger.verifyBitcoinAddress('segwit', 0, 2, true, true, 'Testnet');
+
+    expect(device.getWalletPublicKey).toHaveBeenCalledWith("m/84'/1'/0'/1/2", { format: 'bech32', verify: true });
   });
 });

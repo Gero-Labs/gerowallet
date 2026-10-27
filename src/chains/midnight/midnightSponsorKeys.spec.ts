@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Blockchain } from '@/models/types';
+import { Blockchain, WalletType } from '@/models/types';
 import type { Wallet } from '@/models/types';
 import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 
@@ -150,6 +150,56 @@ describe('deriveSponsorDustSeed', () => {
     )).rejects.toThrow(/network-mismatch/);
     expect(decrypt).not.toHaveBeenCalled();
     expect(deriveMidnightKeys).not.toHaveBeenCalled();
+  });
+
+  describe('an added account (issue 1330)', () => {
+    // Account #1 of the wallet whose account #0 is record 2: the background hands it
+    // over with its account #0's secrets (withGroupSecrets).
+    const added = (unshielded: string) => wallet({
+      id: 3,
+      type: WalletType.Normal,
+      accountIndex: 1,
+      parentWalletId: 2,
+      secretsWalletId: 2,
+      encryptionMethod: 'prf',
+      prfEncryptedMnemonic: 'prf-blob',
+      webAuthnCredentialId: 'cred-id',
+      encryptedMnemonic: undefined,
+      publicKey: JSON.stringify({ unshielded }),
+    } as Partial<Wallet>);
+    const keys = (unshielded: string) => ({
+      dustSecretKey: new Uint8Array([1, 2, 3]),
+      unshieldedSecretKey: new Uint8Array([9, 9, 9]),
+      zswapSecretKey: new Uint8Array([4, 4]),
+      seed: new Uint8Array([5, 5]),
+      addresses: { unshielded },
+    });
+
+    it('decrypts with its account #0\'s PassKey salt and derives its own account', async () => {
+      deriveMidnightKeys.mockResolvedValue(keys('mn_addr1one'));
+
+      const seed = await deriveSponsorDustSeed(
+        { sponsor: added('mn_addr1one'), network: 'Mainnet', credential: { prfSecret: new Uint8Array([7]) } },
+        SENDER_ID,
+      );
+
+      expect(decryptMnemonicWithPrfOutput).toHaveBeenCalledWith('prf-blob', expect.any(Uint8Array), 'cred-id', '2');
+      expect(deriveMidnightKeys).toHaveBeenCalledWith('mnemonic words', 'Mainnet', 1, { skipCardano: true });
+      expect(seed).toEqual(new Uint8Array([1, 2, 3]));
+    });
+
+    it('refuses one whose phrase does not derive its address, and wipes what it derived', async () => {
+      const derived = keys('mn_addr1two');
+      deriveMidnightKeys.mockResolvedValue(derived);
+
+      await expect(deriveSponsorDustSeed(
+        { sponsor: added('mn_addr1one'), network: 'Mainnet', credential: { prfSecret: new Uint8Array([7]) } },
+        SENDER_ID,
+      )).rejects.toThrow('does not belong to this account');
+      for (const bytes of [derived.dustSecretKey, derived.unshieldedSecretKey, derived.zswapSecretKey, derived.seed]) {
+        expect(bytes.every((byte) => byte === 0)).toBe(true);
+      }
+    });
   });
 
   it('propagates a wrong-credential failure so the UI can say so', async () => {

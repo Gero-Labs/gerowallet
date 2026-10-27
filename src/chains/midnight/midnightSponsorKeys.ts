@@ -26,7 +26,8 @@
  */
 import { Blockchain } from '@/models/types';
 import type { Wallet } from '@/models/types';
-import { resolveAccountIndex } from '@/shared/utils/walletAccount';
+import { InvalidAccountIndexError, resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccount';
+import { isSameWalletKey } from '@/db/walletIdentity';
 
 /** What the sponsor wallet needs to unlock. Exactly one applies. */
 export interface SponsorCredential {
@@ -37,8 +38,11 @@ export interface SponsorCredential {
 }
 
 export interface SponsorDustSeedRequest {
-  /** The wallet paying the fee — never the wallet signing the inputs. */
-  readonly sponsor: Wallet;
+  /**
+   * The wallet paying the fee — never the wallet signing the inputs. An added
+   * account comes with its account #0's secrets (withGroupSecrets), as at login.
+   */
+  readonly sponsor: Wallet & { secretsWalletId?: number };
   /** Network of the transaction being sponsored. */
   readonly network: string;
   readonly credential: SponsorCredential;
@@ -109,7 +113,7 @@ export async function deriveSponsorDustSeed(
       sponsor.prfEncryptedMnemonic,
       credential.prfSecret,
       sponsor.webAuthnCredentialId,
-      sponsor.id.toString(),
+      secretsWalletId(sponsor).toString(),
     );
   } else {
     if (!credential.password) throw new SponsorNotEligibleError('missing-credential');
@@ -124,7 +128,15 @@ export async function deriveSponsorDustSeed(
     // skipCardano for the same reason the signing paths use it: the BG
     // bundle's pbkdf2/sha512 shim breaks on the Cardano BIP-32 derivation,
     // and a fee payment needs none of that material.
-    const derived = await deriveMidnightKeys(mnemonic, sponsor.network, resolveAccountIndex(sponsor), { skipCardano: true });
+    const accountIndex = resolveAccountIndex(sponsor);
+    const derived = await deriveMidnightKeys(mnemonic, sponsor.network, accountIndex, { skipCardano: true });
+    // An added account pays with its own DUST only: its account #0's phrase must
+    // derive the unshielded address its record stores, as when it signs.
+    if (accountIndex > 0 && !isSameWalletKey(Blockchain.MIDNIGHT, JSON.stringify(derived.addresses), sponsor.publicKey)) {
+      derived.dustSecretKey.fill(0); derived.unshieldedSecretKey.fill(0);
+      derived.zswapSecretKey.fill(0); derived.seed.fill(0);
+      throw new InvalidAccountIndexError('The signing key does not belong to this account');
+    }
     // Only the DUST seed escapes. Everything else derived here — the
     // NightExternal key above all — stays inside this function: the sponsor
     // authorises a fee, never a transfer.

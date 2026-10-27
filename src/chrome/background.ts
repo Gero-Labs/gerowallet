@@ -16,7 +16,7 @@ import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, M
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
-import { isConnectApproval } from '@/chrome/connectApproval';
+import { approvalNamesActiveAccount, connectApprovedAccount, readConnectApproval, type ConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { unlockAfterStartup } from '@/chrome/unlockStartup';
@@ -41,6 +41,7 @@ import {
   urlScan,
 } from '@/chrome/serialization';
 import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
+import { canReplaceWalletKey } from '@/db/walletIdentity';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -115,6 +116,7 @@ import {
   assertMpcActionSupported,
 } from '@/chrome/mpcWalletHandlers';
 import type { DeviceShareSecret } from '@/shared/utils/mpc';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -475,6 +477,8 @@ chrome.runtime.onConnect.addListener((port) => {
     try { oldPort.disconnect(); } catch { /* already disconnected */ }
   }
   miniGeroPorts.set(tabId, port);
+  // The panel is open now, so a "waiting for you" notification is stale.
+  clearDappParkedNotification(tabId);
 
   port.onMessage.addListener((message) => {
     if (!message?.requestId) return;
@@ -487,7 +491,8 @@ chrome.runtime.onConnect.addListener((port) => {
       // Wallet-switch guard: if the active wallet changed since the request
       // was issued, an approval must not be honored silently.
       const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
-      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId) {
+      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId
+        && !approvalNamesActiveAccount(entry.method, message, activeWalletId)) {
         entry.resolve({ error: 'wallet_changed_during_request' });
       } else {
         entry.resolve(message);
@@ -593,9 +598,80 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
  */
 function parkMidnightRequest(method: string, payload: unknown, tabId: number): Promise<BackgroundResponse> {
   const pending = sendToMiniGero(method, payload, tabId);
-  if (!miniGeroPorts.has(tabId)) void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+  if (!miniGeroPorts.has(tabId)) {
+    void openSidebar(tabId, 'sidepanel/index.html')
+      .then((opened) => {
+        // No gesture, so the panel stayed closed: the badge alone is easy to
+        // miss while the dApp shows "waiting for your approval".
+        if (!opened && !miniGeroPorts.has(tabId)) void showDappParkedNotification(tabId, payload);
+      })
+      .catch(() => undefined);
+  }
   return pending;
 }
+
+// One notification per tab (repeated parks replace it). A click is a user
+// gesture, so it can open the side panel the parked request is waiting in.
+const DAPP_PARKED_NOTIFICATION_PREFIX = 'dappParked:';
+
+/** Hostname of the payload's `website` origin only; never anything else from the payload. */
+function parkedRequestDomain(payload: unknown): string | undefined {
+  const website = payload && typeof payload === 'object' ? (payload as { website?: unknown }).website : undefined;
+  if (typeof website !== 'string') return undefined;
+  try {
+    return new URL(website).hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function showDappParkedNotification(tabId: number, payload: unknown): Promise<void> {
+  try {
+    const locale = await workerLocale();
+    // The panel may have connected while the locale loaded. Its connect hook
+    // already cleared this id, so creating the notification now would leave a
+    // stale "waiting for you" toast that nothing clears. Recheck after every
+    // await, and clear again if the panel arrived during the create itself.
+    if (miniGeroPorts.has(tabId)) return;
+    const domain = parkedRequestDomain(payload);
+    await chrome.notifications.create(`${DAPP_PARKED_NOTIFICATION_PREFIX}${tabId}`, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('public/logo128.png'),
+      title: domain
+        ? String(i18n.t('midnight.connector.parkedNotificationTitle', locale, { domain }))
+        : String(i18n.t('midnight.connector.parkedNotificationTitleNoSite', locale)),
+      message: String(i18n.t('midnight.connector.parkedNotificationMessage', locale)),
+    });
+    if (miniGeroPorts.has(tabId)) clearDappParkedNotification(tabId);
+  } catch (e) {
+    debugLog('dApp parked notification skipped:', errorMessage(e));
+  }
+}
+
+function clearDappParkedNotification(tabId: number): void {
+  try {
+    void chrome.notifications.clear(`${DAPP_PARKED_NOTIFICATION_PREFIX}${tabId}`).catch(() => undefined);
+  } catch { /* best effort */ }
+}
+
+chrome.notifications?.onClicked.addListener((notificationId) => {
+  if (!notificationId.startsWith(DAPP_PARKED_NOTIFICATION_PREFIX)) return;
+  const tabId = Number(notificationId.slice(DAPP_PARKED_NOTIFICATION_PREFIX.length));
+  if (Number.isInteger(tabId) && tabId >= 0) {
+    if (sidePanelSupported) {
+      // Called before any await so the click still counts as the gesture.
+      // openSidebar already set this tab's panel path when the park began.
+      chrome.sidePanel.open({ tabId }).catch((e: unknown) => debugLog('dApp parked notification: side panel not opened:', errorMessage(e)));
+    } else {
+      void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+    }
+    chrome.tabs.update(tabId, { active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab) return;
+      chrome.windows.update(tab.windowId, { focused: true }, () => void chrome.runtime.lastError);
+    });
+  }
+  void chrome.notifications.clear(notificationId).catch(() => undefined);
+});
 
 const processedDomains: Set<string> = new Set<string>();
 
@@ -860,6 +936,20 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
   }
 });
 
+/**
+ * Connects `origin` to the account an approved connect prompt names, switching
+ * to it first when the user picked another account of the logged wallet (#1331).
+ * Returns that wallet; null (the dApp is refused) when there is none to connect.
+ */
+function connectApproved(approval: ConnectApproval, shownForId: number | undefined, origin: string) {
+  return connectApprovedAccount(approval, shownForId, origin, {
+    loggedWallet: () => walletManager.getWallet(),
+    wallets: async () => (await import('@/db/gero-db')).getAllWallets(),
+    login: loginWallet,
+    addConnectedDapp: (walletId, site) => WalletStore.addConnectedDapp(walletId, site),
+  });
+}
+
 app.add(METHOD.enable, (request, sendResponse) => {
   const { id, origin, send } = request;
   const tabId = send.tab?.id;
@@ -879,13 +969,13 @@ app.add(METHOD.enable, (request, sendResponse) => {
     // Prefer this tab's panel port, else any open panel (same rationale as
     // handleMiniGeroSignTx — the panel may register under a different tab).
     const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
+    // Read the wallet fresh: a cold-start request may have logged a wallet in
+    // between the initial check and the prompt.
+    const shownForId = walletManager.getWallet()?.id;
     return sendToMiniGero('enable', enablePayload, deliverTabId)
       .then(async (response) => {
-        if (isConnectApproval(response)) {
-          // Read the wallet fresh: a cold-start request may have logged a
-          // wallet in between the initial check and this resolution.
-          const walletNow = walletManager.getWallet();
-          if (walletNow) await WalletStore.addConnectedDapp(walletNow.id, origin);
+        const approval = readConnectApproval(response);
+        if (approval && await connectApproved(approval, shownForId, origin)) {
           reply({ data: true });
         } else {
           // CIP-30: a declined enable() rejects with APIError Refused.
@@ -900,12 +990,15 @@ app.add(METHOD.enable, (request, sendResponse) => {
       `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}` +
         (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
     );
+    // The popup may log a wallet in first (cold start); its group is read at the answer then.
+    const shownForId = walletManager.getWallet()?.id;
     return focusOrCreatePopup(popupURL, 470, 600)
       // The popup shows the same embedding-site warning as the side panel.
       .then(newTab => Messaging.sendToPopupInternal(newTab.id, { ...request, embeddedIn: enablePayload.embeddedIn }))
-      .then((response: BackgroundResponse) => {
+      .then(async (response: BackgroundResponse) => {
         // Only an explicit approval connects; Decline (or anything else) refuses.
-        if (isConnectApproval(response)) reply({ data: true });
+        const approval = readConnectApproval(response);
+        if (approval && await connectApproved(approval, shownForId, origin)) reply({ data: true });
         else reply({ error: APIError.Refused });
       })
       .catch(err => reply({ error: toDappError(err) }));
@@ -3546,7 +3639,6 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
 
     // Import Bitcoin transaction building modules
     const { buildSimpleSendPsbt } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
-    const { bitcoinAccountPath } = await import('@/chains/bitcoin/bitcoinKeyManager');
     const { BitcoinApi } = await import('@/api/bitcoin-api');
 
     // Step 1: Fetch UTXOs from store (WalletBg doesn't hold UTXOs directly)
@@ -3771,20 +3863,32 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
   }
 });
 
+/**
+ * Logs a wallet in, then starts what follows every login: the push-notification
+ * link and WalletConnect. The wallet list, the account switcher and a dApp
+ * connect that picked another account (connectApproved) all log in here.
+ */
+async function loginWallet(wallet: Parameters<typeof walletManager.login>[0]) {
+  const walletBg = await walletManager.login(wallet);
+  if (walletBg) {
+    // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
+    void notifyReassert('login');
+    // Initialize WalletConnect in background (non-blocking), gated by the flag.
+    if (await isWalletConnectEnabled()) {
+      import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+        walletConnectService.initialize()
+          .then(() => setupWalletConnectCallbacks(walletConnectService))
+          .catch(e => console.warn('⚠️ WC init failed:', e));
+      });
+    }
+  }
+  return walletBg;
+}
+
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    const walletBg = await walletManager.login(request.data.wallet);
+    const walletBg = await loginWallet(request.data.wallet);
     if (walletBg) {
-      // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
-      void notifyReassert('login');
-      // Initialize WalletConnect in background (non-blocking), gated by the flag.
-      if (await isWalletConnectEnabled()) {
-        import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
-          walletConnectService.initialize()
-            .then(() => setupWalletConnectCallbacks(walletConnectService))
-            .catch(e => console.warn('⚠️ WC init failed:', e));
-        });
-      }
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4079,7 +4183,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         coldWalletProps = await trezor.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {
         // Bitcoin wallet - use default SegWit address type
-        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0);
+        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0, network.network);
 
         // Format Bitcoin response to match expected structure
         if (coldWalletProps) {
@@ -4087,7 +4191,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
           coldWalletProps = {
             productName: deviceLabel,
             hwPublicKey: xpub,
-            keys: [{ publicKey: xpub, chainCode: '', path: "m/84'/0'/0'" }],
+            keys: [{ publicKey: xpub, chainCode: '', path: bitcoinAccountPath(network.network, 'segwit', 0) }],
             btSupported: true,
             version: firmwareVersion
           };
@@ -4175,13 +4279,14 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       });
     } else if (request.data.method === 'verifyBitcoinAddress') {
       // Verify Bitcoin address on Trezor device
-      const { addressType, accountIndex, addressIndex, isChange } = request.data;
+      const { addressType, accountIndex, addressIndex, isChange, network } = request.data;
 
       const verifiedAddress = await trezor.verifyBitcoinAddress(
         addressType || 'segwit',
         accountIndex || 0,
         addressIndex || 0,
-        isChange || false
+        isChange || false,
+        network || 'Mainnet'
       );
 
       sendResponse({
@@ -4248,25 +4353,32 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
     return reply({ error: APIError.InternalError });
   }
 
-  const handleResponse = (response: BackgroundResponse) => {
+  const handleResponse = async (response: BackgroundResponse) => {
     // Only an explicit approval connects: the popup's Decline must never be
     // read as consent (it used to send a truthy `{}`).
-    if (isConnectApproval(response)) {
-      // Immediately update the background's in-memory whitelist so that subsequent
-      // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
-      // waiting for the Dexie live-query subscription to fire asynchronously.
-      if (!WalletStore.isWhitelisted(origin)) {
-        try {
-          // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
-          const fullOrigin = new URL(origin).origin;
-          const currentDapps = WalletStore.state.connectedDapps || [];
-          WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
-        } catch {}
-      }
-      reply({ data: [currentWallet.baseAddress] });
-    } else {
+    const approval = readConnectApproval(response);
+    if (!approval) {
       reply({ error: response?.error || APIError.Refused });
+      return;
     }
+    // The account the user picked, switched to first when it isn't the logged one.
+    const wallet = await connectApproved(approval, currentWallet.id, origin);
+    if (!wallet) {
+      reply({ error: APIError.Refused });
+      return;
+    }
+    // Immediately update the background's in-memory whitelist so that subsequent
+    // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
+    // waiting for the Dexie live-query subscription to fire asynchronously.
+    if (!WalletStore.isWhitelisted(origin)) {
+      try {
+        // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
+        const fullOrigin = new URL(origin).origin;
+        const currentDapps = WalletStore.state.connectedDapps || [];
+        WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
+      } catch {}
+    }
+    reply({ data: [wallet.baseAddress] });
   };
 
   // Browser-derived top-level site when a cross-origin frame asks; both the
@@ -4275,12 +4387,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
 
   const handleMiniGeroBtcEnable = () => {
     sendToMiniGero('enable', { ...request.data, website: origin, embeddedIn }, tabId)
-      .then(async (response) => {
-        if (isConnectApproval(response)) {
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
-        }
-        handleResponse(response);
-      })
+      .then(handleResponse)
       .catch((err: unknown) => reply({ error: errorMessage(err) || APIError.InternalError }));
   };
 
@@ -5329,6 +5436,13 @@ app.addToOptions(MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY, async (request, sendRe
     const publicKey = stripViewingKeyFromPublicKey(suppliedPublicKey);
     const { getDb } = await import('@/db/gero-db');
     const db = await getDb();
+    // Refreshed addresses stay the record's own account: an added account's must
+    // not become another account's, which would then be signed for in its name.
+    const stored = await db['wallets'].get(walletId) as { chain?: string; publicKey?: string } | undefined;
+    if (stored?.chain !== Blockchain.MIDNIGHT) throw new Error('Not a Midnight wallet');
+    if (!canReplaceWalletKey(Blockchain.MIDNIGHT, stored.publicKey, publicKey)) {
+      throw new Error('These addresses belong to another account');
+    }
     await db['wallets'].update(walletId, { publicKey });
 
     // Refresh the live walletBg if this is the currently logged-in wallet so
@@ -6302,10 +6416,12 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
       .then(async (response: BackgroundResponse) => {
-        if (response.data === true) {
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
-        }
-        reply({ data: response.data });
+        const approval = readConnectApproval(response);
+        // Anything but an approval connects nothing (connect() reads a falsy answer as declined).
+        if (!approval) return reply({ data: false });
+        // The account the user picked, switched to first when it isn't the logged one.
+        if (await connectApproved(approval, currentWallet.id, origin)) return reply({ data: true });
+        reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'Could not switch to the chosen account') });
       })
       .catch(err => {
         // Fallback code is deliberately NOT Rejected: Rejected must only ever
@@ -6921,12 +7037,16 @@ app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
       loadMidnightDappProving(),
       import('@/stores/midnightStore'),
     ]);
-    const source = mod.assertDappProvingAvailable({
+    // midnightLocalProver stays dynamic, see loadMidnightProvingPark.
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    const source = await mod.preflightDappProving({
       origin,
       network: wallet.network,
       sdkNetworkId: midnightSdkNetworkId(wallet.network),
       proofServer: midnightStore.proofServer,
       provingConsent: midnightStore.shieldedProvingConsent,
+    }, {
+      checkHealth: (target) => checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.source === 'zkpaas' }),
     });
     debugLog('🌙 connector getProvingProvider', { origin, source });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
@@ -6994,7 +7114,7 @@ async function handleMidnightDappProving(
     try {
       const reply = await mod[op](
         store,
-        { makeProvider: makeLocalProvingProvider, park },
+        { makeProvider: makeLocalProvingProvider, park, canPrompt: (tabId) => miniGeroPorts.has(tabId) },
         {
           origin,
           network: wallet.network,

@@ -31,6 +31,7 @@
 import { debugLog } from '@/utils/debug';
 import { Blockchain } from '@/models/types';
 import type { Wallet } from '@/models/types';
+import { walletDisplayName } from '@/shared/utils/walletAccount';
 import {
   eligibleSponsorWallets,
   sortSponsorCandidates,
@@ -57,7 +58,10 @@ export function storedDustAddress(wallet: { publicKey?: string }): string {
   }
 }
 
-/** Midnight wallets on `network`, reduced to what the eligibility rule needs. */
+/**
+ * Midnight wallets on `network`, reduced to what the eligibility rule needs. An
+ * added account is named with its wallet ("Night · Account #1").
+ */
 export function toSponsorRefs(
   wallets: readonly (Wallet & { publicKey?: string })[],
   network: string,
@@ -66,7 +70,7 @@ export function toSponsorRefs(
     .filter((w) => w.chain === Blockchain.MIDNIGHT && w.network === network)
     .map((w) => ({
       id: w.id,
-      name: w.name,
+      name: walletDisplayName(w, [...wallets]),
       network: w.network,
       dustAddress: storedDustAddress(w),
     }));

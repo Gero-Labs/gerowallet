@@ -14,6 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   InvalidAccountIndexError,
   assertAccountIndices,
@@ -429,33 +430,18 @@ export const qrCodeOptions = (encodedUR: string, size: number): Options => {
 // ============================================================================
 
 /**
- * Generate QR code for Bitcoin account sync (xpub derivation request)
+ * Generate QR code for Bitcoin account sync (xpub derivation request) at the
+ * account's path, m/purpose'/coinType'/account' (coin type 1' off Mainnet)
+ * @param network - The wallet's network
  * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
  * @param accountIndex - Account index (default 0)
  * @returns QR code options for displaying sync request
  */
-export const generateBitcoinSyncQR = (addressType: string = 'segwit', accountIndex: number = 0): Options => {
-  // Determine derivation path based on address type
-  let purpose: number;
-  switch (addressType) {
-    case 'legacy':
-      purpose = 44; // BIP44
-      break;
-    case 'taproot':
-      purpose = 86; // BIP86
-      break;
-    case 'segwit':
-    default:
-      purpose = 84; // BIP84
-      break;
-  }
-
-  const path = `m/${purpose}'/0'/${accountIndex}'`;
-
+export const generateBitcoinSyncQR = (network: string, addressType: string = 'segwit', accountIndex: number = 0): Options => {
   // Generate key derivation request for Bitcoin (secp256k1 curve)
   const ur: UR = sdk.generateKeyDerivationCall({
     schemas: [{
-      path,
+      path: bitcoinAccountPath(network, addressType, accountIndex),
       curve: Curve.secp256k1, // Bitcoin uses secp256k1, not ed25519
       algo: DerivationAlgorithm.slip10 // SLIP-0010 for secp256k1
     }],
@@ -466,27 +452,48 @@ export const generateBitcoinSyncQR = (addressType: string = 'segwit', accountInd
 };
 
 /**
- * Parse Bitcoin account info from scanned QR code
+ * Parse the Bitcoin account a Keystone exported (issue 1326).
+ *
+ * The key-derivation request from {@link generateBitcoinSyncQR} is answered with a
+ * `crypto-multi-accounts` UR; a lone `crypto-hdkey` is read too. Only the key at the
+ * account path that was asked for is taken, so an answer for another account is
+ * refused rather than paired.
+ *
  * @param ur - UR from scanned QR code
- * @returns Object containing xpub, master fingerprint, and path
+ * @param network - The network the account was requested on
+ * @param addressType - The address type that was requested
+ * @param accountIndex - The account that was requested
+ * @returns Object containing xpub (already in the wallet's xpub form), master fingerprint, and path
  */
-export const parseBitcoinAccount = (ur: UR): {
+export const parseBitcoinAccount = (ur: UR, network: string, addressType: string = 'segwit', accountIndex: number = 0): {
   xpub: string;
   xfp: string;
   path: string;
   publicKey: string;
   chainCode: string;
 } => {
-  // Parse the crypto-hdkey UR
-  if (ur.type !== 'crypto-hdkey') throw new Error('Expected a crypto-hdkey response');
-  const cryptoHDKey = CryptoHDKey.fromCBOR(ur.cbor);
+  let keys: CryptoHDKey[];
+  let xfp: Buffer | undefined;
+  if (ur.type === 'crypto-multi-accounts') {
+    const multiAccounts = CryptoMultiAccounts.fromCBOR(ur.cbor);
+    keys = multiAccounts.getKeys();
+    xfp = multiAccounts.getMasterFingerprint();
+  } else if (ur.type === 'crypto-hdkey') {
+    keys = [CryptoHDKey.fromCBOR(ur.cbor)];
+  } else {
+    throw new Error('Expected a crypto-multi-accounts or crypto-hdkey response');
+  }
+
+  const requested = bitcoinAccountPath(network, addressType, accountIndex);
+  const key = keys.find((k) => `m/${k.getOrigin()?.getPath()}` === requested);
+  if (!key) throw new Error('The Keystone did not return the requested Bitcoin account');
 
   return {
-    xpub: cryptoHDKey.getBip32Key(), // Base58 encoded xpub
-    xfp: cryptoHDKey.getOrigin()?.getSourceFingerprint()?.toString('hex') || '',
-    path: cryptoHDKey.getOrigin()?.getPath() || '',
-    publicKey: cryptoHDKey.getKey().toString('hex'),
-    chainCode: cryptoHDKey.getChainCode()?.toString('hex') || '',
+    xpub: key.getBip32Key(), // Base58 encoded xpub
+    xfp: (xfp ?? key.getOrigin()?.getSourceFingerprint())?.toString('hex') || '',
+    path: key.getOrigin()?.getPath() || '',
+    publicKey: key.getKey().toString('hex'),
+    chainCode: key.getChainCode()?.toString('hex') || '',
   };
 };
 

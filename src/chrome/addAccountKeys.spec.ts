@@ -1,12 +1,16 @@
 // "Add account" for a recovery-phrase or Google wallet, with real key derivation:
 // only the requested account's xpub comes out, from the wallet's own root key.
-import { describe, it, expect, vi } from 'vitest';
+import { beforeAll, describe, it, expect, vi } from 'vitest';
 import * as bip39 from 'bip39';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { Blockchain, Network, WalletType, type Wallet } from '@/models/types';
-import { deriveAccountXpubs } from '@/shared/utils/softwareAccounts';
+import { deriveAccountXpubs, deriveAccountXpubsFromMnemonic } from '@/shared/utils/softwareAccounts';
 import { deriveBitcoinAccountXpub } from '@/chains/bitcoin/bitcoinKeyManager';
 import { AddAccountError, deriveAccountXpubFlow } from './addAccountKeys';
+
+// The Midnight key manager's Cardano helpers load stores that reach for chrome messaging.
+vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: vi.fn() } }));
+vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
 
 // Fixed test vectors — never used to hold funds.
 const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -16,6 +20,13 @@ const ROOT = rootOf(PHRASE);
 const OTHER_ROOT = rootOf(OTHER_PHRASE);
 
 const xpub = async (root: Bip32PrivateKey, index: number) => (await deriveAccountXpubs(root, [index]))[0].publicKey;
+
+/** Midnight accounts #0 to #2 of PHRASE, each as its wallet record stores it (the addresses JSON). */
+const MIDNIGHT = { chain: Blockchain.MIDNIGHT, network: Network.PREPROD };
+let NIGHT: string[] = [];
+beforeAll(async () => {
+  NIGHT = (await deriveAccountXpubsFromMnemonic(PHRASE, [0, 1, 2], MIDNIGHT)).map((account) => account.publicKey);
+}, 60_000);
 
 async function wallets(): Promise<Record<number, Wallet>> {
   const base = { chain: Blockchain.CARDANO, network: Network.PREPROD, publicKey: await xpub(ROOT, 0) };
@@ -28,6 +39,9 @@ async function wallets(): Promise<Record<number, Wallet>> {
     6: { id: 6, name: 'Bitcoin', type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.TESTNET, addressType: 'segwit', encryptionMethod: 'password', encryptedPrivateKey: 'btc-master-key', encryptedMnemonic: 'btc-sealed-phrase', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.TESTNET, 'segwit', 0) },
     7: { id: 7, name: 'Bitcoin PassKey', type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.TESTNET, encryptionMethod: 'prf', prfEncryptedMnemonic: 'prf-phrase', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.TESTNET, 'segwit', 0) },
     8: { id: 8, name: 'Bitcoin Ledger', type: WalletType.Ledger, chain: Blockchain.BITCOIN, network: Network.TESTNET, publicKey: 'xpub-ledger' },
+    10: { id: 10, name: 'Night', type: WalletType.Normal, ...MIDNIGHT, encryptionMethod: 'password', encryptedPrivateKey: 'night-seed', encryptedMnemonic: 'night-sealed-phrase', publicKey: NIGHT[0] },
+    11: { id: 11, name: 'Account #1', type: WalletType.Normal, ...MIDNIGHT, encryptionMethod: 'password', publicKey: NIGHT[1], accountIndex: 1, parentWalletId: 10 },
+    12: { id: 12, name: 'Night PassKey', type: WalletType.Normal, ...MIDNIGHT, encryptionMethod: 'prf', prfEncryptedMnemonic: 'prf-phrase', publicKey: NIGHT[0] },
   };
 }
 
@@ -44,7 +58,7 @@ function deps(overrides: { session?: Uint8Array; root?: Bip32PrivateKey; phrase?
       return bytes;
     }),
     decryptMnemonic: vi.fn((blob: string, password: string) => {
-      if (blob !== 'btc-sealed-phrase' || password !== 'right') throw new Error('wrong password');
+      if (!['btc-sealed-phrase', 'night-sealed-phrase'].includes(blob) || password !== 'right') throw new Error('wrong password');
       return overrides.phrase ?? PHRASE;
     }),
   };
@@ -104,5 +118,26 @@ describe('deriveAccountXpubFlow on Bitcoin', () => {
   it('leaves Bitcoin PassKey and hardware wallets alone', async () => {
     expect(await failure(deriveAccountXpubFlow({ walletId: 7, accountIndex: 1, password: 'right' }, deps()))).toBe('not-supported');
     expect(await failure(deriveAccountXpubFlow({ walletId: 8, accountIndex: 1, password: 'right' }, deps()))).toBe('not-supported');
+  });
+});
+
+describe('deriveAccountXpubFlow on Midnight', () => {
+  it('derives the account\'s addresses from the recovery phrase, never the stored seed', async () => {
+    const d = deps();
+    await expect(deriveAccountXpubFlow({ walletId: 10, accountIndex: 2, password: 'right' }, d)).resolves.toBe(NIGHT[2]);
+    expect(d.decryptRootKey).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it('works from an added account, through its account #0', async () => {
+    await expect(deriveAccountXpubFlow({ walletId: 11, accountIndex: 2, password: 'right' }, deps())).resolves.toBe(NIGHT[2]);
+  }, 60_000);
+
+  it('refuses a wrong password, and a phrase that is not this wallet\'s', async () => {
+    expect(await failure(deriveAccountXpubFlow({ walletId: 10, accountIndex: 1, password: 'wrong' }, deps()))).toBe('wrong-password');
+    expect(await failure(deriveAccountXpubFlow({ walletId: 10, accountIndex: 1, password: 'right' }, deps({ phrase: OTHER_PHRASE })))).toBe('not-supported');
+  }, 60_000);
+
+  it('leaves a Midnight PassKey wallet to the page', async () => {
+    expect(await failure(deriveAccountXpubFlow({ walletId: 12, accountIndex: 1, password: 'right' }, deps()))).toBe('not-supported');
   });
 });

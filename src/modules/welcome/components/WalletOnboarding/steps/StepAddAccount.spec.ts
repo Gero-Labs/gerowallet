@@ -23,7 +23,12 @@ vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn() } }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
 vi.mock('@/stores/geroStore', () => ({ default: { addAccounts: mocks.addAccounts }, geroStore: { get wallets() { return mocks.wallets; } } }));
-vi.mock('@/shared/utils/accountDiscovery', () => ({ discoverAccounts: mocks.discover, discoverBitcoinAccounts: mocks.discoverBitcoin }));
+vi.mock('@/shared/utils/accountDiscovery', async (importOriginal) => ({
+  discoverAccounts: mocks.discover,
+  discoverBitcoinAccounts: mocks.discoverBitcoin,
+  // Midnight accounts are never probed: the real one makes no network call.
+  discoverMidnightAccounts: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoverMidnightAccounts,
+}));
 vi.mock('@/shared/utils/passkeyPrf', () => ({ evaluateWalletPrf: mocks.prf }));
 vi.mock('@/shared/utils/webauthn-prf', () => ({ decryptPrivateKeyWithPrf: mocks.decryptPrf, decryptMnemonicWithPrfOutput: mocks.decryptPhrase }));
 vi.mock('@/shared/utils/softwareAccounts', () => ({ deriveAccountXpubs: mocks.derive, deriveAccountXpubsFromMnemonic: mocks.deriveFromPhrase }));
@@ -187,5 +192,67 @@ describe('adding an account to a Bitcoin wallet', () => {
 
     expect(wrapper.text()).toContain('errors.unknownError');
     expect(mocks.discoverBitcoin).not.toHaveBeenCalled();
+  });
+});
+
+describe('adding an account to a Midnight wallet', () => {
+  const blob = (account: number, extra: Record<string, string> = {}) => JSON.stringify({ unshielded: `mn_addr_preprod1account${account}`, ...extra });
+  const nightBase = { chain: Blockchain.MIDNIGHT, network: Network.PREPROD, addressType: 'unshielded', publicKey: blob(0, { dust: 'mn_dust-addr_preprod1zero' }) };
+  const night: Wallet = { id: 7, name: 'Night', type: WalletType.Normal, encryptionMethod: 'password', encryptedMnemonic: 'sealed', ...nightBase };
+  const passkeyNight: Wallet = { ...night, id: 8, encryptionMethod: 'prf', prfEncryptedMnemonic: 'prf-phrase', webAuthnCredentialId: 'cred', encryptedMnemonic: undefined };
+  const midnightNetwork = networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD);
+  const renderNight = (wallet: Wallet) => {
+    const wrapper = render(wallet);
+    void wrapper.setProps({ network: midnightNetwork });
+    return wrapper;
+  };
+
+  it('finds the account with the spending password in the background, and shows it unprobed', async () => {
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKey: blob(1) } });
+    const wrapper = renderNight(night);
+    await wrapper.find('input[type=password]').setValue('right');
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(mocks.send).toHaveBeenCalledWith({ method: 'DERIVE_ACCOUNT_XPUB', data: { walletId: 7, accountIndex: 1, password: 'right' } });
+    expect(mocks.discover).not.toHaveBeenCalled();
+    expect(mocks.discoverBitcoin).not.toHaveBeenCalled();
+    expect(wrapper.find('[title="mn_addr_preprod1account1"]').exists()).toBe(true);
+    for (const status of ['accounts.used', 'miniGero.new', 'common.unknown']) expect(wrapper.text()).not.toContain(status);
+
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(mocks.addAccounts).toHaveBeenCalledWith(7, [{ name: 'accounts.label', publicKey: blob(1), accountIndex: 1 }]);
+  });
+
+  it('derives a PassKey wallet’s account from its recovery phrase, checked by the unshielded address', async () => {
+    const prf = new ArrayBuffer(4);
+    new Uint8Array(prf).fill(9);
+    mocks.prf.mockResolvedValueOnce(prf);
+    mocks.decryptPhrase.mockResolvedValueOnce('the phrase');
+    // The stored blob has fields the derived one lacks: still account #0.
+    mocks.deriveFromPhrase.mockResolvedValueOnce([{ accountIndex: 0, publicKey: blob(0), keys: [] }, { accountIndex: 1, publicKey: blob(1), keys: [] }]);
+    const wrapper = renderNight(passkeyNight);
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(mocks.decryptPhrase).toHaveBeenCalledWith('prf-phrase', prf, 'cred', '8');
+    expect(mocks.deriveFromPhrase).toHaveBeenCalledWith('the phrase', [0, 1], { chain: Blockchain.MIDNIGHT, network: Network.PREPROD, addressType: 'unshielded' });
+    expect(mocks.decryptPrf).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(new Uint8Array(prf).every((byte) => byte === 0)).toBe(true);
+    expect(wrapper.find('[title="mn_addr_preprod1account1"]').exists()).toBe(true);
+  });
+
+  it('refuses a phrase whose account #0 is another address', async () => {
+    mocks.prf.mockResolvedValueOnce(new ArrayBuffer(4));
+    mocks.decryptPhrase.mockResolvedValueOnce('another phrase');
+    mocks.deriveFromPhrase.mockResolvedValueOnce([{ accountIndex: 0, publicKey: blob(5), keys: [] }, { accountIndex: 1, publicKey: blob(6), keys: [] }]);
+    const wrapper = renderNight(passkeyNight);
+    await continueButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('errors.unknownError');
+    expect(mocks.addAccounts).not.toHaveBeenCalled();
   });
 });
