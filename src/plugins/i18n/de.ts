@@ -1058,7 +1058,7 @@ export default {
   'common.contacts': 'Kontakte',
   'common.contactsHelper': 'Kontakte können in den verschiedenen Sendeansichten ausgewählt werden, um Zeit zu sparen',
   'common.continue': 'Weiter',
-  'common.copy': 'In die Zwischenablage kopieren',
+  'common.copyToClipboard': 'In die Zwischenablage kopieren',
   'common.copied': 'Kopiert',
   'common.create': 'ERSTELLEN',
   'common.dappWebsiteFavicon': 'Favicon der Dapp-Website',

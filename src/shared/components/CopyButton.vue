@@ -66,7 +66,7 @@ const colorB = ref<string | undefined>(undefined);
 const iconOnlyName = computed(() => {
   if (props.title) return undefined;
   if (copied.value) return t('common.copied');
-  return props.label || t('common.copy');
+  return props.label || t('common.copyToClipboard');
 });
 
 const buttonSize = computed(() => {

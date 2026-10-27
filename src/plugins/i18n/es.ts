@@ -937,7 +937,7 @@ export default {
   'common.contacts': 'Contactos',
   'common.contactsHelper': 'Puedes seleccionar contactos en las distintas pantallas de envío para ahorrar tiempo',
   'common.continue': 'Continuar',
-  'common.copy': 'Copiar al portapapeles',
+  'common.copyToClipboard': 'Copiar al portapapeles',
   'common.copied': 'Copiado',
   'common.dappWebsiteFavicon': 'Favicon del sitio web de la dApp',
   'common.date': 'Fecha',
