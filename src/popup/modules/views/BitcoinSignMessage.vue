@@ -43,6 +43,7 @@
               <PassKeyAuthButton
                 v-if="!signed"
                 :disabled="loading"
+                @prf-output="handlePrfOutput"
                 @success="handlePassKeyAuthSuccess"
                 @error="handlePassKeyAuthError"
                 block class="mb-2"
@@ -109,7 +110,12 @@ const form = ref(null);
 const valid = ref(false);
 const loading = ref(false);
 const spendingPassword = ref('');
-const privateKeyBytes = ref<Uint8Array | null>(null);
+/**
+ * The PassKey's raw PRF output: the Bitcoin signer decrypts the recovery phrase with it
+ * (WalletBg.signBitcoinDappMessage). PassKeyAuthButton emits it as `prf-output` just before `success`,
+ * whose PRF-decrypted private key cannot open the phrase and is wiped on arrival.
+ */
+const prfOutput = ref<Uint8Array | null>(null);
 const controller = ref(null);
 const request = ref<BtcSignMessageRequest | null>(null);
 const messageText = ref('');
@@ -131,17 +137,28 @@ const isPrfWallet = computed(() =>
 const approval = useApprovalFreshness(
   () => [request.value, loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId, loggedWallet.value?.encryptionMethod],
   () => !!request.value && !!loggedWallet.value && !walletStore.isLocked,
-  () => { privateKeyBytes.value?.fill(0); privateKeyBytes.value = null; signed.value = false; },
+  () => { prfOutput.value?.fill(0); prfOutput.value = null; signed.value = false; },
 );
-const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+// A copy: the button's array is a view over the buffer it goes on to decrypt with.
+const handlePrfOutput = (bytes: Uint8Array) => {
+  prfOutput.value?.fill(0);
+  prfOutput.value = new Uint8Array(bytes);
+};
+
+const handlePassKeyAuthSuccess = (decryptedKey: Uint8Array) => {
+  decryptedKey.fill(0);
+  if (!prfOutput.value) {
+    snackbar.setError(t('security.passKeyAuthFailed'));
+    return;
+  }
   const approvalCurrent = approval.capture();
-  privateKeyBytes.value = pkBytes;
   setTimeout(() => approvalCurrent() && sign(), 300);
 };
 
 const handlePassKeyAuthError = (error: Error) => {
   snackbar.setError(error.message || t('security.passKeyAuthFailed'));
-  privateKeyBytes.value = null;
+  prfOutput.value?.fill(0);
+  prfOutput.value = null;
 };
 
 const decline = async () => {
@@ -165,8 +182,9 @@ const sign = () => approval.run(async () => {
       type: signingType.value,
     };
 
-    if (isPrfWallet.value && privateKeyBytes.value) {
-      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+    // `privateKeyBytes` is the wire name the background reads the raw PRF output under.
+    if (isPrfWallet.value && prfOutput.value) {
+      signingData.privateKeyBytes = Array.from(prfOutput.value);
     } else {
       if (!(await awaitFreshApproval(async () => (form.value?.validate()), approvalCurrent))?.valid) { loading.value = false; return; }
       signingData.password = spendingPassword.value;

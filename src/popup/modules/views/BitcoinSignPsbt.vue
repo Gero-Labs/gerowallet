@@ -47,6 +47,7 @@
               <PassKeyAuthButton
                 v-if="!signed"
                 :disabled="loading"
+                @prf-output="handlePrfOutput"
                 @success="handlePassKeyAuthSuccess"
                 @error="handlePassKeyAuthError"
                 block class="mb-2"
@@ -174,7 +175,12 @@ const valid = ref(false);
 const loading = ref(false);
 const spendingPassword = ref('');
 
-const privateKeyBytes = ref<Uint8Array | null>(null);
+/**
+ * The PassKey's raw PRF output: the Bitcoin signer decrypts the recovery phrase with it
+ * (WalletBg.signBitcoinDappPsbt). PassKeyAuthButton emits it as `prf-output` just before `success`,
+ * whose PRF-decrypted private key cannot open the phrase and is wiped on arrival.
+ */
+const prfOutput = ref<Uint8Array | null>(null);
 const controller = ref(null);
 const request = ref<BtcSignPsbtRequest | null>(null);
 const signed = ref(false);
@@ -213,16 +219,27 @@ const canSign = computed(() => {
 const approval = useApprovalFreshness(
   () => [request.value, loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId, loggedWallet.value?.encryptionMethod],
   () => !!request.value && !!loggedWallet.value && !walletStore.isLocked,
-  () => { privateKeyBytes.value?.fill(0); privateKeyBytes.value = null; keystoneApprovalCurrent = null; keystoneOverlay.value = false; keystoneScan.value = false; keystoneCbor.value = ''; signed.value = false; signedHex.value = ""; },
+  () => { prfOutput.value?.fill(0); prfOutput.value = null; keystoneApprovalCurrent = null; keystoneOverlay.value = false; keystoneScan.value = false; keystoneCbor.value = ''; signed.value = false; signedHex.value = ""; },
 );
-const handlePassKeyAuthSuccess = async (pkBytes: Uint8Array) => {
-  privateKeyBytes.value = pkBytes;
+// A copy: the button's array is a view over the buffer it goes on to decrypt with.
+const handlePrfOutput = (bytes: Uint8Array) => {
+  prfOutput.value?.fill(0);
+  prfOutput.value = new Uint8Array(bytes);
+};
+
+const handlePassKeyAuthSuccess = async (decryptedKey: Uint8Array) => {
+  decryptedKey.fill(0);
+  if (!prfOutput.value) {
+    snackbar.setError(t('security.passKeyAuthFailed'));
+    return;
+  }
   await sign();
 };
 
 const handlePassKeyAuthError = (error: Error) => {
   snackbar.setError(error.message || t('security.passKeyAuthFailed'));
-  privateKeyBytes.value = null;
+  prfOutput.value?.fill(0);
+  prfOutput.value = null;
 };
 
 const decline = async () => {
@@ -246,8 +263,9 @@ const doSign = async () => {
     const { psbtHex, options } = request.value.data;
     const signingData: { psbtHex: string; options?: BtcSignPsbtOptions; privateKeyBytes?: number[]; password?: string } = { psbtHex, options };
 
-    if (isPrfWallet.value && privateKeyBytes.value) {
-      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+    // `privateKeyBytes` is the wire name the background reads the raw PRF output under.
+    if (isPrfWallet.value && prfOutput.value) {
+      signingData.privateKeyBytes = Array.from(prfOutput.value);
     } else {
       signingData.password = spendingPassword.value;
     }
@@ -277,7 +295,7 @@ const sign = () => approval.run(async () => {
   if (!approvalCurrent()) return;
   if (isNormalWallet.value) {
     if (isPrfWallet.value) {
-      if (privateKeyBytes.value) await awaitFreshApproval(() => doSign(), approvalCurrent);
+      if (prfOutput.value) await awaitFreshApproval(() => doSign(), approvalCurrent);
       return;
     }
     if (!(await awaitFreshApproval(async () => (form.value?.validate()), approvalCurrent))?.valid) return;
