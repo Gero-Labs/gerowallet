@@ -45,7 +45,20 @@ const ERROR_KEYS: Record<string, string> = {
   invalid_signature: 'gomining.errorLinkRefused',
   challenge_expired: 'gomining.errorLinkRefused',
   upstream_unavailable: 'gomining.errorUnavailable',
+  // gero-backend without GoMining credentials, or its Bitcoin data source down
+  not_configured: 'gomining.errorUnavailable',
+  chain_unavailable: 'gomining.errorUnavailable',
 };
+
+/**
+ * Why GoMining could not be loaded: no answer at all (`network`, the user's connection
+ * is worth checking), or gero-backend answered with an error (`service`, theirs is fine).
+ */
+export type GoMiningUnavailableReason = 'network' | 'service';
+
+export function goMiningUnavailableReason(error: unknown): GoMiningUnavailableReason {
+  return error instanceof GoMiningApiError && error.code === 'network_error' ? 'network' : 'service';
+}
 
 /** A message for the user. Backend errors map by code; nothing raw from the server is shown. */
 export function goMiningErrorMessage(error: unknown, t: (key: string) => string): string {
@@ -58,6 +71,7 @@ export function useGoMiningAccount() {
   const config = ref<GoMiningConfig | null>(null);
   const phase = ref<GoMiningPhase>('loading');
   const unsupportedReason = ref<GoMiningUnsupportedReason | null>(null);
+  const unavailableReason = ref<GoMiningUnavailableReason | null>(null);
   const sessionExpired = ref(false);
   const token = ref<string | null>(null);
   let generation = 0;
@@ -69,11 +83,14 @@ export function useGoMiningAccount() {
     const current = ++generation;
     phase.value = 'loading';
     token.value = null;
+    unavailableReason.value = null;
     let loaded: GoMiningConfig;
     try {
       loaded = await goMiningApi.getConfig();
-    } catch {
-      if (current === generation) phase.value = 'unavailable';
+    } catch (error) {
+      if (current !== generation) return;
+      unavailableReason.value = goMiningUnavailableReason(error);
+      phase.value = 'unavailable';
       return;
     }
     if (current !== generation) return;
@@ -153,5 +170,5 @@ export function useGoMiningAccount() {
     { immediate: true },
   );
 
-  return { config, phase, unsupportedReason, sessionExpired, address, wallet, load, connect, withSession, captureGeneration };
+  return { config, phase, unsupportedReason, unavailableReason, sessionExpired, address, wallet, load, connect, withSession, captureGeneration };
 }

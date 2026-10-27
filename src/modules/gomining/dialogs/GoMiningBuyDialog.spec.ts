@@ -83,7 +83,9 @@ function deferred<T>() {
 }
 
 let wrapper: VueWrapper;
-const withSession = vi.fn(<T,>(call: (token: string) => Promise<T>) => call('tok'));
+const withSessionMock = vi.fn((call: (token: string) => Promise<unknown>) => call('tok'));
+// The prop is generic; a vi.fn of it is not, so the mock is handed over under the prop's type.
+const withSession = withSessionMock as unknown as <T>(call: (token: string) => Promise<T>) => Promise<T>;
 
 function mountDialog() {
   wrapper = mount(GoMiningBuyDialog, {
@@ -119,7 +121,7 @@ beforeEach(() => {
   api.reportPayment.mockReset().mockResolvedValue(order({ status: 'payment_detected', txid: TXID }));
   api.getOrder.mockReset();
   send.mockReset().mockResolvedValue({ data: { success: true, txId: TXID } });
-  withSession.mockClear();
+  withSessionMock.mockClear();
   feeEstimate.mockClear();
   (walletStore as unknown as { utxos: unknown[] }).utxos = [{ value: '200000' }, { value: '50000' }];
 });
