@@ -291,6 +291,7 @@ export class WalletBg {
       baseAddress: this.baseAddress,
       stakeAddress: this.stakeAddress,
       isEnterpriseAddress: this.isEnterpriseAddress.bind(this),
+      ownProgrammableAddressMatcher: this.ownProgrammableAddressMatcher.bind(this),
       networkId: this.networkId.bind(this),
       getDb: this.getDb.bind(this),
       getBlockchainDb: this.getBlockchainDb.bind(this),
@@ -538,6 +539,20 @@ export class WalletBg {
     const stakeCred = this.ownStakeCredential();
     if (stakeCred) owners.add(stakeCred);
     return owners;
+  }
+
+  /**
+   * A matcher for the CIP-113 addresses this wallet owns, under either owner convention, or
+   * null where CIP-113 is off. What sits there is the user's (locked), so transaction history
+   * counts what moves in and out of them, unlike any other script address carrying one of the
+   * wallet's keys. Built once per call: a history pass derives the keys once, not per output.
+   */
+  ownProgrammableAddressMatcher(): ((address: string) => boolean) | null {
+    const bases = this.programmableBaseScriptHashes();
+    if (bases.size === 0) return null;
+    const payment = new Set(this.derivePaymentCredentials());
+    const owners = this.programmableOwnerCredentials(payment);
+    return (address: string) => classifyUtxoAddress(address, payment, bases, owners) === 'programmable';
   }
 
   /**

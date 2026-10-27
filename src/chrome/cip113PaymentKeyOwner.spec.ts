@@ -18,9 +18,11 @@ vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.f
 vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconnect: vi.fn() } }));
 vi.mock('@/api/cip113-registry-api', () => ({ fetchAllPolicyAssets: vi.fn(async () => []) }));
 
+import Dexie from 'dexie';
 import { WalletBg, PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP } from './walletBg';
 import WalletStore, { walletStore, totalProgrammableLockedLovelace, type Account } from '@/stores/walletStore';
-import { getAddress, getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } from './serialization';
+import { TransactionsLoader } from '@/db/loaders/walletLoader';
+import { getAddress, getPaymentKeyExternal, getPaymentKeyInternal, getRewardAddress, getStakeKey } from './serialization';
 import { CIP113_BASE_PREVIEW } from '@/utils/cip113Deployments';
 import networks from '@/utils/networks';
 import { Blockchain, WalletType } from '@/models/types';
@@ -215,5 +217,84 @@ describe('programmableSubscriptionAddresses', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('transaction history of CIP-113 holdings', () => {
+  const TX = 'a'.repeat(64);
+  let dbSeq = 0;
+
+  /** One stored transaction paying `outputs`, run through the real loader with the real matcher. */
+  async function historyRow(outputs: { address: string; amount: { unit: string; quantity: number }[] }[]) {
+    const bg = bootWallet();
+    dbSeq += 1;
+    const db = new Dexie(`cip113-history-${dbSeq}`);
+    db.version(1).stores({ transactions: 'id' });
+    await db.open();
+    const loader = new TransactionsLoader(async () => db, {
+      baseAddress: ownAddress,
+      stakeAddress: getRewardAddress(XPUB, Blockchain.CARDANO, NETWORK).toBech32(),
+      chain: Blockchain.CARDANO,
+      network: NETWORK,
+      isEnterpriseAddress: () => false,
+      // As LoaderFactory wires it from WalletBg.
+      ownProgrammableAddressMatcher: () => bg.ownProgrammableAddressMatcher(),
+      networkId: () => 0,
+      setUtxosAndAddresses: async () => {},
+    });
+    try {
+      await db.table('transactions').put({
+        id: TX, tx_hash: TX, tx_timestamp: 1,
+        utxo: { inputs: [], outputs: outputs.map((o, i) => ({ output_index: i, ...o })) },
+      });
+      await loader.load();
+      await vi.waitFor(() => expect(walletStore.transactions).toHaveLength(1));
+      return walletStore.transactions[0];
+    } finally {
+      loader.unsubscribe();
+      await db.delete();
+    }
+  }
+
+  beforeEach(() => {
+    WalletStore.clearForWalletSwitch();
+  });
+
+  // A Minswap V3 fill pays only the payment-key-owned CIP-113 address.
+  it('shows a payment-key-owned receipt instead of an empty row', async () => {
+    const row = await historyRow([{
+      address: paymentOwned,
+      amount: [{ unit: 'lovelace', quantity: 2_000_000 }, { unit: TOKEN, quantity: 123 }],
+    }]);
+
+    expect(row.receivedAssets).toEqual([expect.objectContaining({ unit: TOKEN, quantity: 123 })]);
+    expect(row.receivedAmount).toBe(2_000_000);
+  });
+
+  it('shows a stake-key-owned receipt the same way', async () => {
+    const row = await historyRow([{
+      address: stakeOwned,
+      amount: [{ unit: 'lovelace', quantity: 4_000_000 }, { unit: TOKEN, quantity: 7 }],
+    }]);
+
+    expect(row.receivedAssets).toEqual([expect.objectContaining({ unit: TOKEN, quantity: 7 })]);
+  });
+
+  // The DeFi-deposit rule stands for every other script: one carrying the wallet's stake
+  // key is still foreign to history accounting.
+  it('still ignores another script address carrying the wallet\'s stake key', async () => {
+    const otherScript = Cardano.BaseAddress.fromCredentials(
+      Cardano.NetworkId.Testnet,
+      { hash: Hash28ByteBase16('c'.repeat(56)), type: Cardano.CredentialType.ScriptHash },
+      { hash: Hash28ByteBase16(STAKE_KEY), type: Cardano.CredentialType.KeyHash },
+    ).toAddress().toBech32();
+
+    const row = await historyRow([{
+      address: otherScript,
+      amount: [{ unit: 'lovelace', quantity: 5_000_000 }, { unit: TOKEN, quantity: 1 }],
+    }]);
+
+    expect(row.receivedAssets).toEqual([]);
+    expect(row.receivedAmount).toBe(0);
   });
 });
