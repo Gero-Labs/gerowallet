@@ -1,5 +1,5 @@
 <template>
-  <v-btn class="px-1" :icon="!title" variant="text" :size="buttonSize" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
+  <v-btn class="px-1" :icon="!title" variant="text" :size="buttonSize" :color="colorB" :aria-label="iconOnlyName" :title="iconOnlyName" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
     <v-avatar v-if="avatar" :size="size" style="margin-right: 2px">
       <v-img :src="avatar" :alt="$t('common.avatar')"  />
     </v-avatar>
@@ -11,8 +11,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-
-
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 const props = defineProps({
   value: {
@@ -50,11 +49,25 @@ const props = defineProps({
   avatar: {
     type: String,
     required: false,
-  }
+  },
+  /** What an icon-only button is announced as and shows on hover ("Copy to clipboard" when omitted). A titled button is named by its title. */
+  label: {
+    type: String,
+    required: false,
+  },
 });
 
-const icon = ref('mdi-content-copy');
+const { t } = useTranslation();
+const copied = ref(false);
+const icon = computed(() => (copied.value ? 'mdi-check' : 'mdi-content-copy'));
 const colorB = ref<string | undefined>(undefined);
+
+// An icon has no text for a screen reader to read, so the button needs a name; it says "Copied" while the check mark shows.
+const iconOnlyName = computed(() => {
+  if (props.title) return undefined;
+  if (copied.value) return t('common.copied');
+  return props.label || t('common.copy');
+});
 
 const buttonSize = computed(() => {
   if (props.xSmall) return 'x-small';
@@ -82,10 +95,10 @@ const size = computed(() => {
 
 const copy = async () => {
   await navigator.clipboard.writeText(props.value)
-  icon.value = 'mdi-check'
+  copied.value = true
   colorB.value = 'green'
   setTimeout(() => {
-    icon.value = 'mdi-content-copy'
+    copied.value = false
     colorB.value = props.color
   }, 1000)
 };

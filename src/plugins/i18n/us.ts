@@ -940,6 +940,7 @@ export default {
   'common.contacts': 'Contacts',
   'common.contactsHelper': 'Contacts can be selected in the various send screens to save time',
   'common.continue': 'Continue',
+  'common.copy': 'Copy to clipboard',
   'common.copied': 'Copied',
   'common.dappWebsiteFavicon': 'Dapp Website favicon',
   'common.date': 'Date',
