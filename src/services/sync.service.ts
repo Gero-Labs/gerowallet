@@ -348,7 +348,8 @@ export class SyncService {
         const expanded = this.walletBg.expandCredentialsIfNeeded(syncObject.addresses);
         if (expanded) {
           debugLog(`🔄 Resubscribing with expanded credentials (${expanded.length})`);
-          webSocketService.resubscribe(0, expanded);
+          // The payment keys the CIP-113 addresses are built from grew with the range.
+          webSocketService.resubscribe(0, expanded, this.walletBg.programmableSubscriptionAddresses());
           notifyHooks.credentialsChanged(); // the push registration's credential set grew too (§8.2 step 4)
           return; // resubscribe will trigger a new catch-up with the full credential set
         }
