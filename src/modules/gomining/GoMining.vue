@@ -10,32 +10,74 @@
         </h1>
         <p class="t-body gm__subtitle">{{ $t('gomining.subtitle') }}</p>
       </div>
-      <div v-if="state === 'ready'" class="gm__header-side">
-        <span class="t-caption gm-status gm-status--ok" role="status">
+      <div v-if="phase === 'linked' || config?.environment === 'sandbox'" class="gm__header-side">
+        <span v-if="config?.environment === 'sandbox'" class="t-caption gm-status gm-status--sandbox">
+          {{ $t('gomining.testEnvironment') }}
+        </span>
+        <span v-if="phase === 'linked'" class="t-caption gm-status gm-status--ok" role="status">
           <span class="gm-status__dot" aria-hidden="true"></span>
           {{ $t('gomining.connected') }}
         </span>
       </div>
     </div>
 
-    <!-- Connecting -->
-    <div v-if="state === 'loading'" class="gm__loading" role="status">
+    <!-- Loading GoMining's config and this wallet's session -->
+    <div v-if="phase === 'loading'" class="gm__loading" role="status">
       <v-progress-circular indeterminate color="var(--g-accent)" size="40" width="3" />
       <span class="t-body">{{ $t('gomining.connecting') }}</span>
     </div>
 
-    <!-- Connection failed -->
-    <div v-else-if="state === 'error'" class="glass-panel gm__error" role="alert">
+    <!-- gero-backend's GoMining service could not be reached -->
+    <div v-else-if="phase === 'unavailable'" class="glass-panel gm__error" role="alert">
       <v-icon size="32" class="gm__error-icon">mdi-alert-circle-outline</v-icon>
       <h2 class="t-heading gm__error-title">{{ $t('gomining.connectionFailed') }}</h2>
-      <p class="t-body gm__error-text">{{ errorMessage || $t('gomining.connectionFailedDescription') }}</p>
-      <GButton tier="secondary" compact @click="initialize()">
+      <p class="t-body gm__error-text">{{ $t('gomining.connectionFailedDescription') }}</p>
+      <GButton tier="secondary" compact @click="load()">
         <v-icon size="small" start>mdi-refresh</v-icon>
         {{ $t('common.tryAgain') }}
       </GButton>
     </div>
 
-    <template v-else-if="state === 'ready'">
+    <!-- This wallet cannot link -->
+    <div v-else-if="phase === 'unsupported'" class="glass-panel gm__error" role="status">
+      <v-icon size="32" class="gm__info-icon">mdi-information-outline</v-icon>
+      <h2 class="t-heading gm__error-title">{{ $t('gomining.unsupportedTitle') }}</h2>
+      <p class="t-body gm__error-text">{{ unsupportedText }}</p>
+    </div>
+
+    <!-- Not linked yet: what GoMining is, and the miners on offer -->
+    <template v-else-if="phase === 'unlinked'">
+      <section class="glass-panel gm-link" :aria-label="$t('gomining.linkTitle')">
+        <h2 class="t-heading gm-link__title">{{ $t('gomining.linkTitle') }}</h2>
+        <p class="t-body gm-link__text">{{ $t('gomining.linkDescription') }}</p>
+        <p v-if="sessionExpired" class="t-body-sm gm-link__expired" role="status">{{ $t('gomining.errorSessionExpired') }}</p>
+        <div class="gm-link__actions">
+          <GButton tier="primary" @click="showConnectDialog = true">
+            <v-icon size="small" start>mdi-link-variant</v-icon>
+            {{ $t('common.connect') }}
+          </GButton>
+          <a
+            v-if="config?.referralUrl"
+            :href="config.referralUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="t-body-sm gm-link__referral"
+          >
+            {{ $t('gomining.openGoMiningApp') }}
+            <v-icon size="x-small">mdi-open-in-new</v-icon>
+          </a>
+        </div>
+      </section>
+
+      <GoMiningShop
+        :collections="collections"
+        :orders-enabled="!!config?.ordersEnabled"
+        :loading="loadingCollections"
+        @buy="showConnectDialog = true"
+      />
+    </template>
+
+    <template v-else-if="phase === 'linked'">
       <!-- Segmented tabs -->
       <div class="gm-tabs" role="tablist" :aria-label="$t('navigation.goMining')">
         <button
@@ -55,19 +97,25 @@
         </button>
       </div>
 
+      <div v-if="loadFailed" class="t-body-sm gm-partial" role="status">
+        <v-icon size="small">mdi-alert-outline</v-icon>
+        <span>{{ $t('gomining.partialLoad') }}</span>
+      </div>
+
       <!-- Overview -->
       <div v-if="activeTab === 0" id="gm-panel-overview" class="gm-overview" role="tabpanel" aria-labelledby="gm-tab-overview">
         <GoMiningStatsCard
           class="gm-overview__full"
-          :stats="stats"
-          :loading="loadingStats"
+          :account="accountInfo"
+          :latest-day="latestDay"
+          :loading="refreshing"
           @refresh="refreshAll()"
         />
 
         <GoMiningBalanceCard
-          :balance="balance"
-          :btc-address="btcAddress"
-          :loading="loadingBalance"
+          :balances="balances"
+          :payout-address="accountInfo?.payoutAddress ?? null"
+          :loading="loadingBalances"
           @withdraw="showWithdrawDialog = true"
         />
 
@@ -78,23 +126,23 @@
             <span class="t-caption gm-chart__range">{{ $t('gomining.last14Days') }}</span>
           </div>
 
-          <div v-if="earningsChart.length === 0" class="gm-chart__empty">
+          <div v-if="chartDays.length === 0" class="gm-chart__empty">
             <v-icon size="28" class="gm-chart__empty-icon">mdi-chart-bar</v-icon>
             <span class="t-caption">
-              {{ miners.length === 0 ? $t('gomining.noMinersForEarnings') : $t('gomining.loadingEarnings') }}
+              {{ loadingIncome ? $t('gomining.loadingEarnings') : $t('gomining.noMinersForEarnings') }}
             </span>
           </div>
 
           <!-- One bar a day; the amount is in the tooltip and, for readers, in the hidden text. -->
           <ul v-else class="gm-bars">
-            <li v-for="(pt, i) in earningsChart.slice(-14)" :key="i" class="gm-bars__item">
+            <li v-for="day in chartDays" :key="day.date" class="gm-bars__item">
               <v-tooltip location="top" content-class="custom-tooltip">
                 <template #activator="{ props: activatorProps }">
-                  <span v-bind="activatorProps" class="gm-bars__bar" :style="{ height: barHeight(pt.amount) }"></span>
+                  <span v-bind="activatorProps" class="gm-bars__bar" :style="{ height: barHeight(day.rewardSats) }"></span>
                 </template>
-                <span>{{ barLabel(pt) }}</span>
+                <span>{{ barLabel(day) }}</span>
               </v-tooltip>
-              <span class="gm-sr-only">{{ barLabel(pt) }}</span>
+              <span class="gm-sr-only">{{ barLabel(day) }}</span>
             </li>
           </ul>
         </section>
@@ -104,6 +152,7 @@
       <div v-else-if="activeTab === 1" id="gm-panel-miners" role="tabpanel" aria-labelledby="gm-tab-miners">
         <GoMiningMinersGrid
           :miners="miners"
+          :orders="orders"
           :loading="loadingMiners"
           @buy-more="activeTab = 2"
         />
@@ -113,6 +162,7 @@
       <div v-else-if="activeTab === 2" id="gm-panel-shop" role="tabpanel" aria-labelledby="gm-tab-shop">
         <GoMiningShop
           :collections="collections"
+          :orders-enabled="!!config?.ordersEnabled"
           :loading="loadingCollections"
           @buy="openBuyDialog"
         />
@@ -129,7 +179,7 @@
           <v-skeleton-loader type="table-row@6" />
         </div>
 
-        <div v-else-if="incomeHistory.length === 0" class="gm-earnings__empty">
+        <div v-else-if="days.length === 0" class="gm-earnings__empty">
           <v-icon size="28" class="gm-chart__empty-icon">mdi-history</v-icon>
           <span class="t-body-lg">{{ $t('gomining.noEarningsYet') }}</span>
           <span class="t-caption">{{ $t('gomining.noEarningsDescription') }}</span>
@@ -139,90 +189,105 @@
         <v-data-table
           v-else
           :headers="earningsHeaders"
-          :items="incomeHistory"
+          :items="tableDays"
           :items-per-page="10"
           class="gm-table"
           density="compact"
         >
-          <template #item.amount="{ item }">
-            <span class="g-num gm-table__in">+{{ formatBtcFromBtc(item.amount) }} {{ item.currency }}</span>
-          </template>
           <template #item.date="{ item }">
             <span class="t-body-sm">{{ formatDate(item.date) }}</span>
+          </template>
+          <template #item.poolRewardSats="{ item }">
+            <span class="g-num">{{ formatBtc(item.poolRewardSats) }}</span>
+          </template>
+          <template #item.serviceFeeSats="{ item }">
+            <span class="g-num">{{ formatBtc(item.serviceFeeSats) }}</span>
+          </template>
+          <template #item.rewardSats="{ item }">
+            <span class="g-num gm-table__in">+{{ formatBtc(item.rewardSats) }} BTC</span>
           </template>
         </v-data-table>
       </section>
     </template>
 
     <!-- Dialogs -->
+    <GoMiningConnectDialog
+      v-if="phase === 'unlinked'"
+      v-model="showConnectDialog"
+      :address="address"
+      :connect="connect"
+    />
+
     <GoMiningWithdrawDialog
-      v-if="userId"
+      v-if="phase === 'linked' && accountInfo?.payoutAddress"
       v-model="showWithdrawDialog"
-      :user-id="userId"
-      :btc-address="btcAddress"
-      :balance="balance"
+      :payout-address="accountInfo.payoutAddress"
+      :available-sats="balances?.availableSats ?? 0"
+      :with-session="withSession"
       @success="onWithdrawSuccess"
     />
 
     <GoMiningBuyDialog
-      v-if="userId"
+      v-if="phase === 'linked'"
       v-model="showBuyDialog"
-      :user-id="userId"
       :collection="selectedCollection"
+      :wallet-network="wallet?.network ?? ''"
+      :with-session="withSession"
+      @changed="onOrderChanged"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs } from 'vue';
-import { walletStore } from '@/stores/walletStore';
+import { ref, computed, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { formatBtcFromBtc } from '@/shared/utils/format';
+import { formatBtc } from '@/shared/utils/format';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import snackbar from '@/plugins/snackbar';
 import goMiningApi, {
-  type GoMiningUserStats,
-  type GoMiningNft,
+  GoMiningSessionError,
+  type GoMiningAccount,
+  type GoMiningBalances,
   type GoMiningCollection,
-  type GoMiningBalance,
-  type GoMiningIncomeRecord,
-  type GoMiningEarningsPoint,
+  type GoMiningDay,
+  type GoMiningMiner,
+  type GoMiningOrder,
 } from '@/api/gomining-api';
+import { useGoMiningAccount } from './useGoMiningAccount';
 import GoMiningStatsCard from './components/GoMiningStatsCard.vue';
 import GoMiningBalanceCard from './components/GoMiningBalanceCard.vue';
 import GoMiningMinersGrid from './components/GoMiningMinersGrid.vue';
 import GoMiningShop from './components/GoMiningShop.vue';
+import GoMiningConnectDialog from './dialogs/GoMiningConnectDialog.vue';
 import GoMiningWithdrawDialog from './dialogs/GoMiningWithdrawDialog.vue';
 import GoMiningBuyDialog from './dialogs/GoMiningBuyDialog.vue';
 import gominingLogo from '@/assets/svg/gomining.svg';
 
 const { t } = useTranslation();
 
-// ─── Wallet state ─────────────────────────────────────────────────────────────
-const { loggedWallet } = toRefs(walletStore);
+const { config, phase, unsupportedReason, sessionExpired, address, wallet, load, connect, withSession, captureGeneration } = useGoMiningAccount();
 
-const btcAddress = computed(() => loggedWallet.value?.baseAddress ?? '');
+/** Days of payouts loaded: the chart shows the last 14, the table all of them. */
+const INCOME_DAYS = 30;
 
-// ─── Local state ──────────────────────────────────────────────────────────────
-type PageState = 'loading' | 'error' | 'ready';
-
-const state = ref<PageState>('loading');
-const errorMessage = ref('');
 const activeTab = ref(0);
 
-const userId = ref('');
-const stats = ref<GoMiningUserStats | null>(null);
-const miners = ref<GoMiningNft[]>([]);
+const accountInfo = ref<GoMiningAccount | null>(null);
+const balances = ref<GoMiningBalances | null>(null);
+const miners = ref<GoMiningMiner[]>([]);
+const days = ref<GoMiningDay[]>([]);
+const orders = ref<GoMiningOrder[]>([]);
 const collections = ref<GoMiningCollection[]>([]);
-const balance = ref<GoMiningBalance | null>(null);
-const incomeHistory = ref<GoMiningIncomeRecord[]>([]);
-const earningsChart = ref<GoMiningEarningsPoint[]>([]);
 
-const loadingStats = ref(false);
+const loadingAccount = ref(false);
+const loadingBalances = ref(false);
 const loadingMiners = ref(false);
-const loadingCollections = ref(false);
-const loadingBalance = ref(false);
 const loadingIncome = ref(false);
+const loadingCollections = ref(false);
+/** A part of the page failed to load (a refused session is handled separately). */
+const loadFailed = ref(false);
 
+const showConnectDialog = ref(false);
 const showWithdrawDialog = ref(false);
 const showBuyDialog = ref(false);
 const selectedCollection = ref<GoMiningCollection | null>(null);
@@ -234,153 +299,135 @@ const tabs = [
   { id: 'earnings', index: 3, icon: 'mdi-chart-line', labelKey: 'gomining.tabEarnings' },
 ];
 
-// ─── Earnings headers ─────────────────────────────────────────────────────────
 const earningsHeaders = computed(() => [
   { title: t('common.date'), key: 'date', sortable: true },
-  { title: t('common.amount'), key: 'amount', sortable: true },
-  { title: t('gomining.currency'), key: 'currency', sortable: false },
+  { title: t('gomining.grossReward'), key: 'poolRewardSats', sortable: true },
+  { title: t('gomining.fees'), key: 'serviceFeeSats', sortable: true },
+  { title: t('gomining.netReward'), key: 'rewardSats', sortable: true },
 ]);
 
-// ─── Initialization ───────────────────────────────────────────────────────────
-async function initialize() {
-  state.value = 'loading';
-  errorMessage.value = '';
-
-  if (!btcAddress.value) {
-    state.value = 'error';
-    errorMessage.value = t('gomining.noBtcAddress');
-    return;
+const unsupportedText = computed(() => {
+  switch (unsupportedReason.value) {
+    case 'walletType': return t('gomining.unsupportedWalletType');
+    case 'addressType': return t('gomining.unsupportedAddressType');
+    case 'network': return config.value?.bitcoinNetwork === 'Testnet' ? t('gomining.unsupportedNetworkTestnet') : t('gomining.unsupportedNetworkMainnet');
+    default: return t('gomining.unsupportedChain');
   }
+});
 
+const refreshing = computed(() => loadingAccount.value || loadingBalances.value || loadingMiners.value || loadingIncome.value);
+const latestDay = computed(() => days.value[days.value.length - 1] ?? null);
+const chartDays = computed(() => days.value.slice(-14));
+const tableDays = computed(() => [...days.value].reverse());
+
+// ─── Loading ──────────────────────────────────────────────────────────────────
+
+/** One part of the page. A reply for an earlier wallet is dropped; a refused session ends the link. */
+async function loadPart<T>(flag: { value: boolean }, call: (token: string) => Promise<T>, apply: (value: T) => void) {
+  const fresh = captureGeneration();
+  flag.value = true;
   try {
-    // Create/fetch GoMining account linked to BTC address
-    const user = await goMiningApi.initUser(btcAddress.value);
-    userId.value = user.userId;
-
-    state.value = 'ready';
-
-    // Load all data in parallel (non-blocking after initial auth)
-    await refreshAll();
-  } catch (error: unknown) {
-    console.error('⛏ GoMining: initialization failed', error);
-    state.value = 'error';
-    errorMessage.value = error instanceof Error ? error.message : '';
+    const value = await withSession(call);
+    if (fresh()) apply(value);
+  } catch (error) {
+    if (fresh() && !(error instanceof GoMiningSessionError)) loadFailed.value = true;
+  } finally {
+    if (fresh()) flag.value = false;
   }
+}
+
+function refreshAccount() {
+  return loadPart(loadingAccount, (token) => goMiningApi.getAccount(token), (value) => { accountInfo.value = value; });
+}
+
+function refreshBalances() {
+  return loadPart(loadingBalances, (token) => goMiningApi.getBalances(token), (value) => { balances.value = value; });
+}
+
+function refreshMiners() {
+  return loadPart(loadingMiners, (token) => goMiningApi.getMiners(token), (value) => { miners.value = value; });
+}
+
+function refreshIncome() {
+  return loadPart(loadingIncome, (token) => goMiningApi.getDailyIncome(token, INCOME_DAYS), (value) => { days.value = value; });
+}
+
+function refreshOrders() {
+  // Orders only feed the "in progress" strip, so their failure is not a page warning.
+  const fresh = captureGeneration();
+  return withSession((token) => goMiningApi.getOrders(token))
+    .then((value) => { if (fresh()) orders.value = value; })
+    .catch(() => undefined);
 }
 
 async function refreshAll() {
-  if (!userId.value) return;
-
-  await Promise.allSettled([
-    refreshStats(),
-    refreshMiners(),
-    refreshCollections(),
-    refreshBalance(),
-  ]);
-
-  // Load earnings chart for last 30 days
-  loadEarningsChart();
+  loadFailed.value = false;
+  await Promise.all([refreshAccount(), refreshBalances(), refreshMiners(), refreshIncome(), refreshOrders()]);
 }
 
-async function refreshStats() {
-  loadingStats.value = true;
-  try {
-    stats.value = await goMiningApi.getUserStats(userId.value);
-  } catch (e) {
-    console.warn('⛏ GoMining: failed to load stats', e);
-  } finally {
-    loadingStats.value = false;
-  }
-}
-
-async function refreshMiners() {
-  loadingMiners.value = true;
-  try {
-    miners.value = await goMiningApi.getMyNfts(userId.value);
-  } catch (e) {
-    console.warn('⛏ GoMining: failed to load miners', e);
-  } finally {
-    loadingMiners.value = false;
-  }
-}
-
-async function refreshCollections() {
+async function loadCollections() {
+  const fresh = captureGeneration();
   loadingCollections.value = true;
   try {
-    collections.value = await goMiningApi.getCollections();
-  } catch (e) {
-    console.warn('⛏ GoMining: failed to load collections', e);
+    const value = await goMiningApi.getCollections();
+    if (fresh()) collections.value = value;
+  } catch {
+    if (fresh()) collections.value = [];
   } finally {
-    loadingCollections.value = false;
+    if (fresh()) loadingCollections.value = false;
   }
 }
 
-async function refreshBalance() {
-  loadingBalance.value = true;
-  try {
-    balance.value = await goMiningApi.getBalances(userId.value);
-  } catch (e) {
-    console.warn('⛏ GoMining: failed to load balance', e);
-  } finally {
-    loadingBalance.value = false;
-  }
+function clearAccountData() {
+  accountInfo.value = null;
+  balances.value = null;
+  miners.value = [];
+  days.value = [];
+  orders.value = [];
+  loadFailed.value = false;
+  activeTab.value = 0;
+  showWithdrawDialog.value = false;
+  showBuyDialog.value = false;
 }
 
-async function loadEarningsChart() {
-  loadingIncome.value = true;
-  try {
-    const now = new Date();
-    const dateEnd = now.toISOString().split('T')[0];
-    const dateStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split('T')[0];
-
-    const [chart, history] = await Promise.allSettled([
-      goMiningApi.getEarningsChart(userId.value, dateStart, dateEnd),
-      goMiningApi.getIncomeHistory(userId.value),
-    ]);
-
-    if (chart.status === 'fulfilled') earningsChart.value = chart.value;
-    if (history.status === 'fulfilled') incomeHistory.value = history.value;
-  } finally {
-    loadingIncome.value = false;
-  }
-}
+watch(phase, (next) => {
+  if (next !== 'linked') clearAccountData();
+  if (next === 'linked') void refreshAll();
+  if (next === 'linked' || next === 'unlinked') void loadCollections();
+}, { immediate: true });
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
+
 function openBuyDialog(collection: GoMiningCollection) {
   selectedCollection.value = collection;
   showBuyDialog.value = true;
 }
 
 function onWithdrawSuccess() {
-  // Refresh balance after withdrawal
-  refreshBalance();
+  snackbar.fireSuccess(t('gomining.withdrawalRequested'));
+  void refreshBalances();
+}
+
+function onOrderChanged() {
+  void refreshOrders();
+  void refreshMiners();
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+const maxReward = computed(() => Math.max(1, ...chartDays.value.map((day) => day.rewardSats)));
 
-const maxEarnings = computed(() => {
-  if (!earningsChart.value.length) return 1;
-  return Math.max(...earningsChart.value.map(p => p.amount), 0.000001);
-});
-
-function barHeight(amount: number): string {
-  return `${Math.max(4, (amount / maxEarnings.value) * 100)}%`;
+function barHeight(rewardSats: number): string {
+  return `${Math.max(4, (rewardSats / maxReward.value) * 100)}%`;
 }
 
-function barLabel(pt: GoMiningEarningsPoint): string {
-  return t('gomining.earnedOn', { date: pt.date, amount: formatBtcFromBtc(pt.amount) });
+function barLabel(day: GoMiningDay): string {
+  return t('gomining.earnedOn', { date: formatDate(day.date), amount: formatBtc(day.rewardSats) });
 }
-
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
-onMounted(() => {
-  initialize();
-});
 </script>
 
 <style scoped lang="scss">
@@ -446,6 +493,11 @@ onMounted(() => {
   color: var(--g-success);
 }
 
+.gm-status--sandbox {
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
+}
+
 .gm-status__dot {
   width: 6px;
   height: 6px;
@@ -469,6 +521,10 @@ onMounted(() => {
   color: var(--g-error);
 }
 
+.gm__info-icon {
+  color: var(--g-text-2);
+}
+
 .gm__error-title {
   margin: 0;
 }
@@ -476,6 +532,55 @@ onMounted(() => {
 .gm__error-text {
   max-width: 42ch;
   margin: 0 0 var(--g-s-2);
+}
+
+/* ── Not linked yet ─────────────────────────────────────── */
+.gm-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4);
+}
+
+.gm-link__title,
+.gm-link__text {
+  margin: 0;
+}
+
+.gm-link__text {
+  max-width: 64ch;
+}
+
+.gm-link__expired {
+  margin: 0;
+  color: var(--g-warning);
+}
+
+.gm-link__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-3);
+  margin-top: var(--g-s-2);
+}
+
+.gm-link__referral {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  color: var(--g-text-2);
+}
+
+.gm-link__referral:hover {
+  color: var(--g-text-1);
+}
+
+/* ── Partial load ───────────────────────────────────────── */
+.gm-partial {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  color: var(--g-warning);
 }
 
 /* ── Segmented tabs ─────────────────────────────────────── */

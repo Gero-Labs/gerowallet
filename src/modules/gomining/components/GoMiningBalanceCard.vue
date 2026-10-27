@@ -9,19 +9,19 @@
     <div class="gm-balance__amount">
       <span class="t-label">{{ $t('gomining.availableBalance') }}</span>
       <div class="gm-balance__primary">
-        <span class="t-display g-num">{{ balance ? formatBtcFromBtc(balance.btc) : '0.00000000' }}</span>
+        <span class="t-display g-num">{{ formatBtc(balances?.availableSats ?? 0) }}</span>
         <span class="gm-balance__unit g-mono">BTC</span>
       </div>
-      <span v-if="balance && balance.pendingBtc > 0" class="t-caption g-num gm-balance__pending">
-        <v-icon size="x-small">mdi-clock-outline</v-icon>
-        {{ $t('gomining.pendingAmount', { amount: `${formatBtcFromBtc(balance.pendingBtc)} BTC` }) }}
+      <span v-if="balances && balances.withdrawnSats > 0" class="t-caption g-num gm-balance__pending">
+        <v-icon size="x-small">mdi-arrow-up-circle-outline</v-icon>
+        {{ $t('gomining.withdrawnToDate', { amount: `${formatBtc(balances.withdrawnSats)} BTC` }) }}
       </span>
     </div>
 
     <GButton
       tier="primary"
       block
-      :disabled="!balance || balance.btc <= 0 || loading"
+      :disabled="!balances || balances.availableSats <= 0 || !payoutAddress || loading"
       :loading="loading"
       @click="$emit('withdraw')"
     >
@@ -29,27 +29,27 @@
       {{ $t('gomining.withdraw') }}
     </GButton>
 
-    <div v-if="btcAddress" class="gm-balance__address" :title="btcAddress">
+    <div v-if="payoutAddress" class="gm-balance__address" :title="payoutAddress">
       <v-icon size="x-small" class="gm-balance__check">mdi-check-circle</v-icon>
       <span class="t-caption">{{ $t('gomining.payoutAddress') }}</span>
-      <span class="g-mono gm-balance__address-value">{{ shortAddress(btcAddress) }}</span>
+      <span class="g-mono gm-balance__address-value">{{ shortAddress(payoutAddress) }}</span>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { GoMiningBalance } from '@/api/gomining-api';
-import { formatBtcFromBtc } from '@/shared/utils/format';
+import type { GoMiningBalances } from '@/api/gomining-api';
+import { formatBtc } from '@/shared/utils/format';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineProps<{
-  balance: GoMiningBalance | null;
-  btcAddress?: string;
+  balances: GoMiningBalances | null;
+  /** The linked address GoMining pays withdrawals to. */
+  payoutAddress?: string | null;
   loading?: boolean;
 }>();
 
 defineEmits<{ withdraw: [] }>();
-
 
 function shortAddress(addr: string): string {
   if (!addr || addr.length < 12) return addr;

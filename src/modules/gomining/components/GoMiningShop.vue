@@ -19,43 +19,42 @@
     </div>
 
     <!-- Collections -->
-    <ul v-else class="gm-shop__grid">
-      <li v-for="collection in collections" :key="collection.id" class="glass-tier gm-shop__item">
-        <v-img :src="collection.imageUrl" height="140" class="gm-shop__image" alt="">
-          <template #placeholder>
-            <div class="gm-shop__placeholder"><v-icon size="40">mdi-pickaxe</v-icon></div>
-          </template>
-        </v-img>
-
-        <span class="t-body-sm gm-shop__name">{{ collection.name }}</span>
-
-        <dl class="gm-shop__facts">
-          <div class="t-body-sm gm-shop__row">
-            <dt>{{ $t('gomining.hashrate') }}</dt>
-            <dd class="g-num gm-shop__value">{{ $t('gomining.hashrateValue', { value: collection.hashrate }) }}</dd>
+    <template v-else>
+      <ul class="gm-shop__grid">
+        <li v-for="collection in collections" :key="collection.id" class="glass-tier gm-shop__item">
+          <div class="gm-shop__art" aria-hidden="true"><v-icon size="40">mdi-pickaxe</v-icon></div>
+          <span class="t-body-sm gm-shop__name">{{ $t('gomining.minerTitle', { value: collection.powerTh }) }}</span>
+          <dl class="gm-shop__facts">
+            <div class="t-body-sm gm-shop__row">
+              <dt>{{ $t('gomining.efficiency') }}</dt>
+              <dd class="g-num gm-shop__value">{{ $t('gomining.energyEfficiencyValue', { value: collection.energyEfficiency }) }}</dd>
+            </div>
+            <div class="t-body-sm gm-shop__row">
+              <dt>{{ $t('gomining.projectedReturn') }}</dt>
+              <dd class="g-num gm-shop__value">{{ $t('gomining.percentValue', { value: collection.annualRoiPercent.toFixed(1) }) }}</dd>
+            </div>
+            <div v-if="collection.discountPercent > 0" class="t-body-sm gm-shop__row">
+              <dt>{{ $t('gomining.discount') }}</dt>
+              <dd class="g-num gm-shop__value gm-shop__value--discount">{{ $t('gomining.percentValue', { value: collection.discountPercent.toFixed(1) }) }}</dd>
+            </div>
+          </dl>
+          <div class="gm-shop__foot">
+            <div class="gm-shop__price">
+              <span class="t-label">{{ $t('gomining.price') }}</span>
+              <span class="t-body-lg g-num gm-shop__price-value">{{ formatUsd(collection.priceUsd) }}</span>
+            </div>
+            <GButton tier="secondary" compact :disabled="!ordersEnabled" @click="$emit('buy', collection)">
+              <v-icon size="small" start>mdi-cart-plus</v-icon>
+              {{ $t('gomining.buy') }}
+            </GButton>
           </div>
-          <div class="t-body-sm gm-shop__row">
-            <dt>{{ $t('gomining.efficiency') }}</dt>
-            <dd class="g-num gm-shop__value">{{ $t('gomining.efficiencyValue', { value: formatUsd(collection.efficiency) }) }}</dd>
-          </div>
-          <div class="t-body-sm gm-shop__row">
-            <dt>{{ $t('gomining.available') }}</dt>
-            <dd class="g-num gm-shop__value">{{ collection.available }}</dd>
-          </div>
-        </dl>
-
-        <div class="gm-shop__foot">
-          <div class="gm-shop__price">
-            <span class="t-label">{{ $t('gomining.price') }}</span>
-            <span class="t-body-lg g-num gm-shop__price-value">{{ collection.price.toFixed(2) }} {{ collection.currency }}</span>
-          </div>
-          <GButton tier="secondary" compact :disabled="collection.available === 0" @click="$emit('buy', collection)">
-            <v-icon size="small" start>mdi-cart-plus</v-icon>
-            {{ $t('gomining.buy') }}
-          </GButton>
-        </div>
-      </li>
-    </ul>
+        </li>
+      </ul>
+      <p class="t-caption gm-shop__note">
+        <template v-if="!ordersEnabled">{{ $t('gomining.purchasesSoon') }}</template>
+        {{ $t('gomining.projectionNote') }}
+      </p>
+    </template>
   </section>
 </template>
 
@@ -66,6 +65,8 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineProps<{
   collections: GoMiningCollection[];
+  /** Off until gero-backend confirms orders with GoMining. */
+  ordersEnabled: boolean;
   loading?: boolean;
 }>();
 

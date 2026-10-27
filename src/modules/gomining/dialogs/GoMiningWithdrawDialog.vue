@@ -13,15 +13,15 @@
     <v-card-text class="px-5 pt-1 pb-5 gm-withdraw">
       <div class="t-caption gm-withdraw__balance">
         <span>{{ $t('gomining.availableBalance') }}</span>
-        <span class="g-num gm-withdraw__balance-value">{{ formatBtcFromBtc(balance?.btc ?? 0) }} BTC</span>
+        <span class="g-num gm-withdraw__balance-value">{{ formatBtc(availableSats) }} BTC</span>
       </div>
 
-      <!-- Destination: the bound payout address, whole, so it can be checked. -->
+      <!-- Destination: the linked payout address, whole, so it can be checked. gero-backend sends nowhere else. -->
       <div class="gm-field">
         <span id="gm-withdraw-destination" class="t-label">{{ $t('gomining.destinationAddress') }}</span>
         <div class="gm-input gm-input--static" aria-labelledby="gm-withdraw-destination">
           <v-icon size="small" class="gm-input__check">mdi-check-circle</v-icon>
-          <span class="g-mono gm-input__static">{{ btcAddress }}</span>
+          <span class="g-mono gm-input__static">{{ payoutAddress }}</span>
         </div>
       </div>
 
@@ -33,10 +33,9 @@
           <input
             :value="amount"
             class="t-body-lg g-num gm-input__control gm-input__control--amount"
-            type="number"
-            min="0"
-            :max="balance?.btc ?? 0"
-            step="0.00001"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
             placeholder="0.00000000"
             @input="onAmountInput"
           />
@@ -54,9 +53,9 @@
             :key="type.key"
             type="button"
             role="radio"
-            :aria-checked="withdrawType === type.key ? 'true' : 'false'"
-            :class="['glass-tier', 'gm-type', { 'gm-type--selected': withdrawType === type.key }]"
-            @click="withdrawType = type.key"
+            :aria-checked="speed === type.key ? 'true' : 'false'"
+            :class="['glass-tier', 'gm-type', { 'gm-type--selected': speed === type.key }]"
+            @click="speed = type.key"
           >
             <span class="gm-type__top">
               <v-icon size="small">{{ type.icon }}</v-icon>
@@ -67,17 +66,22 @@
         </div>
       </div>
 
-      <!-- Commission estimate -->
-      <dl v-if="commission && parseFloat(amount) > 0" class="gm-summary">
+      <!-- GoMining's fast-withdrawal fee -->
+      <dl v-if="speed === 'fast' && amountSats && fastFeeSats !== null" class="gm-summary">
         <div class="t-body-sm gm-summary__row">
-          <dt>{{ $t('gomining.networkFee') }}</dt>
-          <dd class="g-num">{{ formatBtcFromBtc(commission.commission) }} BTC</dd>
+          <dt>{{ $t('gomining.goMiningFee') }}</dt>
+          <dd class="g-num">{{ formatBtc(fastFeeSats) }} BTC</dd>
         </div>
         <div class="t-body-sm gm-summary__row gm-summary__row--total">
           <dt>{{ $t('gomining.youWillReceive') }}</dt>
-          <dd class="g-num gm-summary__in">{{ formatBtcFromBtc(commission.net) }} BTC</dd>
+          <dd class="g-num gm-summary__in">{{ formatBtc(Math.max(0, amountSats - fastFeeSats)) }} BTC</dd>
         </div>
       </dl>
+
+      <div v-if="errorMessage" class="t-body-sm gm-notice gm-notice--error" role="alert">
+        <v-icon size="small">mdi-alert-circle-outline</v-icon>
+        <span class="gm-notice__text">{{ errorMessage }}</span>
+      </div>
 
       <div class="gm-withdraw__nav">
         <GButton tier="secondary" :disabled="submitting" @click="close()">{{ $t('common.cancel') }}</GButton>
@@ -92,18 +96,20 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import goMiningApi, { type GoMiningBalance, type GoMiningCommission } from '@/api/gomining-api';
+import goMiningApi, { type GoMiningWithdrawalSpeed, type GoMiningWithdrawalTerms } from '@/api/gomining-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { formatBtcFromBtc } from '@/shared/utils/format';
+import { formatBtc } from '@/shared/utils/format';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import assts from '@/utils/assets';
+import { parseBtcInput, satsToBtcInput } from '../goMiningPayment';
+import { goMiningErrorMessage } from '../useGoMiningAccount';
 
 const props = defineProps<{
   modelValue: boolean;
-  userId: string;
-  btcAddress: string;
-  balance: GoMiningBalance | null;
+  payoutAddress: string;
+  availableSats: number;
+  withSession: <T>(call: (token: string) => Promise<T>) => Promise<T>;
 }>();
 
 const emit = defineEmits<{
@@ -114,86 +120,91 @@ const emit = defineEmits<{
 const { t } = useTranslation();
 
 const amount = ref('');
-const withdrawType = ref<'fast' | '24h'>('fast');
-const commission = ref<GoMiningCommission | null>(null);
+const speed = ref<GoMiningWithdrawalSpeed>('fast');
+const terms = ref<GoMiningWithdrawalTerms | null>(null);
 const submitting = ref(false);
-let commissionTimeout: ReturnType<typeof setTimeout> | null = null;
+const errorMessage = ref('');
+/** One id per withdrawal, so a retry after a lost reply is not paid out twice. */
+let requestId = crypto.randomUUID();
 
 const withdrawTypes = computed(() => [
   { key: 'fast' as const, icon: 'mdi-lightning-bolt', label: t('gomining.fastWithdrawal'), note: t('gomining.fastWithdrawalNote') },
-  { key: '24h' as const, icon: 'mdi-clock-outline', label: t('gomining.standardWithdrawal'), note: t('gomining.standardWithdrawalNote') },
+  { key: 'standard' as const, icon: 'mdi-clock-outline', label: t('gomining.standardWithdrawal'), note: t('gomining.standardWithdrawalNote') },
 ]);
 
-const amountRule = (v: string) => {
-  const n = parseFloat(v);
-  if (!v || isNaN(n) || n <= 0) return t('gomining.enterValidAmount');
-  if (n > (props.balance?.btc ?? 0)) return t('gomining.exceedsBalance');
-  return true;
-};
+const amountSats = computed(() => parseBtcInput(amount.value));
 
-// Shown once something has been typed, as the field's rule used to be.
+const fastFeeSats = computed(() => {
+  const value = amountSats.value;
+  const current = terms.value;
+  if (!value || !current) return null;
+  if (current.fastFeeSats !== null) return current.fastFeeSats;
+  if (current.fastFeePercent !== null) return Math.ceil((value * current.fastFeePercent) / 100);
+  return null;
+});
+
+// Shown once something has been typed.
 const amountError = computed(() => {
   if (!amount.value) return '';
-  const result = amountRule(amount.value);
-  return result === true ? '' : result;
+  const value = amountSats.value;
+  if (!value) return t('gomining.enterValidAmount');
+  if (value > props.availableSats) return t('gomining.exceedsBalance');
+  if (speed.value === 'fast' && terms.value && value < terms.value.fastMinSats) {
+    return t('gomining.belowFastMinimum', { amount: `${formatBtc(terms.value.fastMinSats)} BTC` });
+  }
+  return '';
 });
 
-const isValid = computed(() => {
-  const n = parseFloat(amount.value);
-  return !isNaN(n) && n > 0 && n <= (props.balance?.btc ?? 0);
-});
+const isValid = computed(() => !!amountSats.value && !amountError.value && !!props.payoutAddress);
 
-// The amount stays a string, as the text field kept it: no number cast from the input.
 function onAmountInput(event: Event) {
   amount.value = (event.target as HTMLInputElement).value;
 }
 
 function setMax() {
-  amount.value = (props.balance?.btc ?? 0).toFixed(8);
+  amount.value = satsToBtcInput(props.availableSats);
 }
 
-
-function close() {
-  emit('update:modelValue', false);
+async function loadTerms() {
+  try {
+    terms.value = await props.withSession((token) => goMiningApi.getWithdrawalTerms(token));
+  } catch {
+    // Without terms the backend still refuses an amount under the minimum.
+    terms.value = null;
+  }
 }
-
-// Debounce commission fetch
-watch([amount, withdrawType], () => {
-  commission.value = null;
-  if (commissionTimeout) clearTimeout(commissionTimeout);
-  if (!isValid.value) return;
-
-  commissionTimeout = setTimeout(async () => {
-    try {
-      commission.value = await goMiningApi.getCommission(
-        props.userId,
-        parseFloat(amount.value),
-        'BTC',
-      );
-    } catch {
-      // Non-critical, silently ignore
-    }
-  }, 500);
-});
 
 async function submit() {
-  if (!isValid.value) return;
+  const value = amountSats.value;
+  if (!isValid.value || !value || submitting.value) return;
   submitting.value = true;
+  errorMessage.value = '';
   try {
-    const n = parseFloat(amount.value);
-    if (withdrawType.value === 'fast') {
-      await goMiningApi.withdrawFast(props.userId, n);
-    } else {
-      await goMiningApi.withdraw24h(props.userId, n);
-    }
+    await props.withSession((token) => goMiningApi.withdraw(token, { amountSats: value, speed: speed.value, requestId }));
+    requestId = crypto.randomUUID();
+    submitting.value = false;
     emit('success');
     close();
   } catch (error) {
-    console.error('⛏ GoMining: withdrawal failed', error);
+    errorMessage.value = goMiningErrorMessage(error, t);
   } finally {
     submitting.value = false;
   }
 }
+
+function close() {
+  if (submitting.value) return;
+  emit('update:modelValue', false);
+}
+
+watch(() => props.modelValue, (open) => {
+  if (!open) return;
+  amount.value = '';
+  speed.value = 'fast';
+  errorMessage.value = '';
+  requestId = crypto.randomUUID();
+  void loadTerms();
+}, { immediate: true });
 </script>
 
 <style scoped lang="scss">
@@ -395,6 +406,21 @@ async function submit() {
 
 .gm-summary__row dd.gm-summary__in {
   color: var(--g-success);
+}
+
+.gm-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+}
+
+.gm-notice--error {
+  color: var(--g-error);
+}
+
+.gm-notice__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .gm-withdraw__nav {

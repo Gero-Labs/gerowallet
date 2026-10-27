@@ -25,37 +25,36 @@
     <div class="gm-stats__grid">
       <div class="glass-tier gm-stats__tile">
         <span class="t-label">{{ $t('gomining.totalHashrate') }}</span>
-        <span class="t-heading g-num">{{ stats ? formatHashrate(stats.totalHashrate) : '—' }}</span>
+        <span class="t-heading g-num">{{ account ? formatHashrate(account.totalPowerTh) : '—' }}</span>
       </div>
-
       <div class="glass-tier gm-stats__tile">
-        <span class="t-label">{{ $t('gomining.activeMiners') }}</span>
-        <span class="t-heading g-num">
-          <span class="gm-stats__ok">{{ stats ? stats.activeMiners : '—' }}</span>
-          <span v-if="stats" class="t-caption g-num">/ {{ stats.totalMiners }}</span>
+        <span class="t-label">{{ $t('gomining.miners') }}</span>
+        <span class="t-heading g-num">{{ account ? account.minerCount : '—' }}</span>
+        <span v-if="account && account.minerCount > 0" class="t-caption g-num">
+          {{ $t('gomining.energyEfficiencyValue', { value: account.avgEnergyEfficiency.toFixed(1) }) }}
         </span>
       </div>
-
       <div class="glass-tier gm-stats__tile">
-        <span class="t-label">{{ $t('gomining.dailyEarnings') }}</span>
-        <span class="t-heading g-num gm-stats__ok">{{ stats ? btcAmountLabel(stats.dailyIncomeBtc) : '—' }}</span>
+        <span class="t-label">{{ $t('gomining.latestReward') }}</span>
+        <span class="t-heading g-num gm-stats__ok">{{ latestDay ? btcLabel(latestDay.rewardSats) : '—' }}</span>
       </div>
-
       <div class="glass-tier gm-stats__tile">
         <span class="t-label">{{ $t('gomining.totalEarned') }}</span>
-        <span class="t-heading g-num">{{ stats ? btcAmountLabel(stats.totalEarnedBtc) : '—' }}</span>
+        <span class="t-heading g-num">{{ account ? btcLabel(account.totalIncomeSats) : '—' }}</span>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { GoMiningUserStats } from '@/api/gomining-api';
+import type { GoMiningAccount, GoMiningDay } from '@/api/gomining-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { formatBtcFromBtc } from '@/shared/utils/format';
+import { formatBtc } from '@/shared/utils/format';
 
 defineProps<{
-  stats: GoMiningUserStats | null;
+  account: GoMiningAccount | null;
+  /** The newest daily payout, or null before the first one. */
+  latestDay: GoMiningDay | null;
   loading?: boolean;
 }>();
 
@@ -68,9 +67,8 @@ function formatHashrate(ths: number): string {
   return t('gomining.hashrateValue', { value: ths.toFixed(2) });
 }
 
-/** GoMining reports BTC, not sats. */
-function btcAmountLabel(btc: number): string {
-  return `${formatBtcFromBtc(btc || 0)} BTC`;
+function btcLabel(sats: number): string {
+  return `${formatBtc(sats)} BTC`;
 }
 </script>
 

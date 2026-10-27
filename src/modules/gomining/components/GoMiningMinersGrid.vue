@@ -11,6 +11,18 @@
       </GButton>
     </div>
 
+    <!-- Purchases still being paid or confirmed -->
+    <ul v-if="openOrders.length" class="gm-orders" :aria-label="$t('gomining.purchasesInProgress')">
+      <li v-for="order in openOrders" :key="order.id" class="glass-tier gm-order">
+        <v-icon size="small" class="gm-order__icon">mdi-progress-clock</v-icon>
+        <span class="gm-order__text">
+          <span class="t-body-sm gm-order__title">{{ $t('gomining.minerTitle', { value: order.powerTh }) }}</span>
+          <span class="t-caption">{{ $t(orderStatusKey(order.status)) }}</span>
+        </span>
+        <span class="t-body-sm g-num">{{ formatBtc(order.payment.amountSats) }} BTC</span>
+      </li>
+    </ul>
+
     <!-- Empty -->
     <div v-if="!loading && miners.length === 0" class="gm-miners__empty">
       <v-icon size="40" class="gm-miners__empty-icon">mdi-pickaxe</v-icon>
@@ -30,48 +42,51 @@
     <!-- Miners -->
     <ul v-else class="gm-miners__grid">
       <li v-for="miner in miners" :key="miner.id" class="glass-tier gm-miner">
-        <v-img :src="miner.imageUrl || defaultMinerImage" height="120" class="gm-miner__image" alt="">
+        <v-img :src="miner.imageUrl ?? undefined" height="120" class="gm-miner__image" alt="">
           <template #placeholder>
             <div class="gm-miner__placeholder"><v-icon size="40">mdi-pickaxe</v-icon></div>
           </template>
+          <template #error>
+            <div class="gm-miner__placeholder"><v-icon size="40">mdi-pickaxe</v-icon></div>
+          </template>
         </v-img>
-
         <span class="t-body-sm gm-miner__name">{{ miner.name }}</span>
-
         <dl class="gm-miner__facts">
           <div class="t-body-sm gm-miner__row">
             <dt>{{ $t('gomining.hashrate') }}</dt>
-            <dd class="g-num gm-miner__value">{{ $t('gomining.hashrateValue', { value: miner.hashrate }) }}</dd>
+            <dd class="g-num gm-miner__value">{{ $t('gomining.hashrateValue', { value: miner.powerTh }) }}</dd>
           </div>
           <div class="t-body-sm gm-miner__row">
-            <dt>{{ $t('gomining.dailyIncome') }}</dt>
-            <dd class="g-num gm-miner__value gm-miner__value--in">+{{ formatBtcFromBtc(miner.dailyIncomeBtc) }} BTC</dd>
+            <dt>{{ $t('gomining.efficiency') }}</dt>
+            <dd class="g-num gm-miner__value">{{ $t('gomining.energyEfficiencyValue', { value: miner.energyEfficiency }) }}</dd>
+          </div>
+          <div class="t-body-sm gm-miner__row">
+            <dt>{{ $t('gomining.latestReward') }}</dt>
+            <dd v-if="miner.lastRewardSats !== null" class="g-num gm-miner__value gm-miner__value--in">+{{ formatBtc(miner.lastRewardSats) }} BTC</dd>
+            <dd v-else class="g-num gm-miner__value">—</dd>
           </div>
         </dl>
-
-        <span :class="['t-caption', 'gm-miner__status', `gm-miner__status--${miner.status === 'active' ? 'active' : 'inactive'}`]">
-          <span class="gm-miner__dot" aria-hidden="true"></span>
-          {{ miner.status === 'active' ? $t('gomining.active') : $t('gomining.inactive') }}
-        </span>
       </li>
     </ul>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { GoMiningNft } from '@/api/gomining-api';
-import { formatBtcFromBtc } from '@/shared/utils/format';
+import { computed } from 'vue';
+import { OPEN_ORDER_STATUSES, type GoMiningMiner, type GoMiningOrder } from '@/api/gomining-api';
+import { formatBtc } from '@/shared/utils/format';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import { orderStatusKey } from '../goMiningPayment';
 
-defineProps<{
-  miners: GoMiningNft[];
+const props = defineProps<{
+  miners: GoMiningMiner[];
+  orders?: GoMiningOrder[];
   loading?: boolean;
 }>();
 
 defineEmits<{ 'buy-more': [] }>();
 
-const defaultMinerImage = '';
-
+const openOrders = computed(() => (props.orders ?? []).filter((order) => OPEN_ORDER_STATUSES.includes(order.status)));
 </script>
 
 <style scoped lang="scss">
@@ -214,32 +229,38 @@ const defaultMinerImage = '';
   color: var(--g-success);
 }
 
-.gm-miner__status {
-  display: inline-flex;
+/* ── Purchases in progress ──────────────────────────────── */
+.gm-orders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: var(--g-s-4) var(--g-s-4) 0;
+  list-style: none;
+}
+
+.gm-order {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  align-self: flex-start;
-  gap: 6px;
-  height: 22px;
-  padding: 0 var(--g-s-2);
-  border-radius: var(--g-r-pill);
+  gap: var(--g-s-2) var(--g-s-3);
+  padding: var(--g-s-3);
+}
+
+.gm-order__icon {
+  color: var(--g-text-2);
+}
+
+.gm-order__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gm-order__title {
+  color: var(--g-text-1);
   font-weight: 600;
-  white-space: nowrap;
-}
-
-.gm-miner__status--active {
-  background: var(--g-success-fill);
-  color: var(--g-success);
-}
-
-.gm-miner__status--inactive {
-  background: var(--g-hairline-1);
-  color: var(--g-text-3);
-}
-
-.gm-miner__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--g-r-pill);
-  background: currentColor;
 }
 </style>
