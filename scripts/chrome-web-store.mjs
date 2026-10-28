@@ -1,8 +1,8 @@
 /**
  * Chrome Web Store release steps for .github/workflows/chrome-web-store.yml.
  *
- *   verify   re-checks the package "Chrome Extension CI/CD" tested and tagged, and that
- *            its ZIP holds exactly the files that were tested.
+ *   verify   re-checks the package that "Chrome Extension CI/CD" built and tested earlier
+ *            in the same run, and that its ZIP holds exactly the files that were tested.
  *   e2e-gate checks a gerowallet-e2e-tests qualification report for that ZIP.
  *   release  uploads that ZIP through the Chrome Web Store API v2 and, if asked, submits
  *            it for review. (v1.1 stopped being supported on October 15, 2026.)
@@ -66,8 +66,8 @@ export function verifyStoreCandidate({ candidateDir, unzippedDir, version, chann
   if (recorded.identityVerified !== true || !/^[a-p]{32}$/.test(recorded.extensionId ?? '')) problems.push('The release run did not verify the extension identity');
   if (recorded.version !== version) problems.push(`The tested package is ${recorded.version}, not ${version}`);
   if (recorded.channel !== channel) problems.push(`The tested package was built for the ${recorded.channel} channel, not ${channel}`);
-  if (recorded.sourceSha !== sourceSha) problems.push('The tested package was not built from the commit the release tag points to');
-  if (recorded.packageLockSha256 !== packageLockSha256) problems.push('The tested package was built from a different package-lock.json than the tagged commit');
+  if (recorded.sourceSha !== sourceSha) problems.push('The tested package was not built from the commit being released');
+  if (recorded.packageLockSha256 !== packageLockSha256) problems.push('The tested package was built from a different package-lock.json than the commit being released');
   const options = { expectedVersion: version, expectedId: recorded.extensionId };
   const checksums = JSON.stringify(recorded.checksums ?? {});
   for (const [label, directory] of [['extension directory', join(candidateDir, 'extension')], ['ZIP', unzippedDir]]) {

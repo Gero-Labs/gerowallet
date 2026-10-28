@@ -1,28 +1,27 @@
 # Chrome Web Store release runbook
 
-This runbook covers sending a tested release to the Chrome Web Store. The store only ever receives the exact package that the release run built and tested.
+This runbook covers sending a tested release to the Chrome Web Store. One run of the workflow builds the package, tests it and uploads it, and the store only ever receives the exact package that run built and tested.
 
 Workflow: [`chrome-web-store.yml`](../workflows/chrome-web-store.yml) (Actions → "Chrome Web Store release"). Script: [`scripts/chrome-web-store.mjs`](../../scripts/chrome-web-store.mjs). The script uses the Chrome Web Store API **v2**; Google stopped supporting v1.1 on October 15, 2026.
 
 ## 1. How a version reaches users
 
 1. Commit the reviewed version to `package.json` and `package-lock.json`.
-2. Run **Chrome Extension CI/CD** (`ci-cd.yml`) with `expected_version=<version>` and `dry_run=true`. When that is green, run it again with `dry_run=false`. That run builds and tests the package and archives it with its checksums. It then tags the commit `v<version>`, and the tag message names the run.
-3. Run **Chrome Web Store release** with the same version and `dry_run=true`. This re-checks the package and runs the e2e suites against it, without contacting the store.
-4. Run it again with `dry_run=false`. The e2e suites run again. The upload job then waits until an environment reviewer approves it, and uploads and submits the ZIP.
-5. Google reviews the submission. With `submission=staged`, publish it from the Developer Dashboard once it is approved. With `publish`, it goes live as soon as it is approved.
+2. Run **Chrome Web Store release** with that version and `dry_run=true`. Its first job is **Chrome Extension CI/CD** (`ci-cd.yml`), which builds the commit, runs the unit suite and archives the package with its checksums. The run then re-checks that package and runs the e2e suites against it. Nothing is tagged, and nothing is sent to the store.
+3. Run it again with `dry_run=false`. Everything in step 2 runs again, on a fresh build. The upload job then waits until an environment reviewer approves it. After approval it tags the commit `v<version>`, and the tag message names the run. It then uploads and submits the ZIP.
+4. Google reviews the submission. With `submission=staged`, publish it from the Developer Dashboard once it is approved. With `publish`, it goes live as soon as it is approved.
 
-Steps 3 and 4 download the package that step 2 archived. Run them before that package expires (see [Artifact retention](#artifact-retention)).
+The upload job uses the package built at the start of the same run, so approve it before that package expires (see [Artifact retention](#artifact-retention)). Running **Chrome Extension CI/CD** on its own still builds, tests and archives a package, but it no longer tags or releases anything.
 
 ### What is checked before anything is uploaded
 
 | Check | Fails when |
 |---|---|
-| Release tag | `v<version>` is missing, or is not an annotated tag naming a run |
-| Release run | That run is not a successful `workflow_dispatch` run of `ci-cd.yml` on the tagged commit |
-| Build report | The report is not passing; or its identity, version, channel, commit or `package-lock.json` hash differs from what the tag and inputs say |
+| Build | **Chrome Extension CI/CD** fails: the version differs from `package.json` or `package-lock.json`, `MANIFEST_KEY` or `CHROME_EXTENSION_ID` is missing, a unit test fails, or the built package fails the release gate |
+| Release tag | `v<version>` already marks another commit (a dry run only warns) |
+| Build report | The report is not passing; or its identity, version, channel, commit or `package-lock.json` hash differs from this commit and the inputs |
 | Files | The extension directory or the extracted ZIP fails the release gate (`check-release-artifact.mjs`), or differs by even one file hash from what was tested |
-| ZIP | Its SHA-256 differs from `SHA256SUMS`, or from the hash verified in the first job |
+| ZIP | Its SHA-256 differs from `SHA256SUMS`, or from the hash the verify job recorded |
 | E2E suites | Any test in the full isolated suites of [gerowallet-e2e-tests](https://github.com/Gero-Labs/gerowallet-e2e-tests) fails, times out or passes only on retry, or a suite runs no tests. They are post-v2.7 in three shards, plus legacy, run against the extracted ZIP (see below) |
 | Store item | `CWS_ITEM_ID` is not the package's extension ID, or the item's public key belongs to another extension |
 | Store state | The item is taken down; another version is in review or approved and waiting; or the published version is not lower than this one |
@@ -48,9 +47,11 @@ Create two environments in Settings → Environments: `chrome-web-store-producti
 - **Variables:** `CWS_PUBLISHER_ID`, and `CWS_ITEM_ID` (that channel's listing).
 - **Secrets:** `CWS_SERVICE_ACCOUNT_JSON`. Alternatively, all of `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` and `CWS_REFRESH_TOKEN`.
 
+The e2e repository is private, and a workflow's own token can read only this repository. Add one **repository** secret (Settings → Secrets and variables → Actions), `E2E_HARNESS_TOKEN`: a fine-grained personal access token whose repository access is only `Gero-Labs/gerowallet-e2e-tests`, with **Contents: Read-only** and nothing else. The organization may have to approve it. Fine-grained tokens expire, so note the date: when it passes, the e2e jobs fail at "Checkout the e2e harness" until the secret holds a new one. The checkout does not keep the token, so the harness code never sees it.
+
 ### Artifact retention
 
-The workflows ask GitHub to keep their artifacts for 90 days, but GitHub never keeps one longer than the repository's retention setting (Settings → Actions → General → "Artifact and log retention"). On 2026-10-26 that setting was 2 days, so the package from a release run expired 2 days after the run started. The store release must run within that time. Raise the setting if you need longer. Each artifact's expiry date is shown on its run's page.
+The workflows ask GitHub to keep their artifacts for 90 days, but GitHub never keeps one longer than the repository's retention setting (Settings → Actions → General → "Artifact and log retention"). On 2026-10-26 that setting was 2 days, so a run's package expired 2 days after the run started. The upload job must be approved within that time. Raise the setting if you need longer. Each artifact's expiry date is shown on its run's page.
 
 ### Release channel
 
@@ -64,7 +65,7 @@ The channel is fixed when the package is built. `ci-cd.yml` builds for the listi
 | `channel` | `production` or `beta`. This picks the environment, and so the listing and credentials |
 | `submission` | `staged` (default): submit for review, then publish by hand once approved. `publish`: goes live as soon as approved. `upload-only`: replace the draft, submit nothing |
 | `deploy_percentage` | Optional, 1 to 100. Rolls out to that share of users. The store accepts it only for items above 10,000 weekly users. Empty means everyone |
-| `dry_run` | `true` (default) re-checks and e2e-tests the package, then stops. `false` uploads after approval |
+| `dry_run` | `true` (default) builds, tests and e2e-tests the package, then stops. `false` also tags and uploads it after approval |
 
 ### The e2e gate
 
@@ -85,13 +86,16 @@ Each run writes a summary. The upload job keeps the store's answer as the artifa
 
 | Message or situation | What to do |
 |---|---|
-| `v<version> is not an annotated release tag` | Run `ci-cd.yml` with `dry_run=false` for that version first. |
+| The **Chrome Extension CI/CD** job fails | It is the same build as a standalone `ci-cd.yml` run. Fix the cause on the branch, then run the release again. |
+| `v<version> already marks <commit>` | That version was already released from another commit. Bump the version and release again. |
+| `The E2E_HARNESS_TOKEN secret is not set`, or `repository 'https://github.com/Gero-Labs/gerowallet-e2e-tests/' not found` | The harness token is missing, expired or lacks read access to that repository (see [GitHub](#github) setup). Replace the secret, then run again. |
 | An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing it on the e2e repository's `development` branch, then rerunning. Don't release around a red gate. |
 | `passed only on retry` | The legacy suite retries a failed test once on CI. A flaky release test still needs a look. Rerun the workflow; if the same test keeps flaking, fix the test or the wallet first. |
-| The package can no longer be downloaded | It expired (see [Artifact retention](#artifact-retention)). Its tag already exists and is never replaced, so release a new version. |
+| The package can no longer be downloaded | It expired before the upload was approved (see [Artifact retention](#artifact-retention)). Nothing was tagged or uploaded, so run the release again; it builds a fresh package. |
 | `Another version is already in review` / `waiting to be published` | Publish or cancel that submission in the Developer Dashboard, then run again. The workflow never cancels a submission itself. |
 | `The store already serves X; Y must be higher` | Bump the version and release again. |
-| The upload succeeded but the submission failed | The listing's draft now holds the new package. Submit that draft from the Developer Dashboard; don't run the workflow again. |
+| The upload failed | The commit is already tagged. The tag stays on that commit, so once the cause is fixed in the store or its settings, run the release again on the same commit. |
+| The upload succeeded but the submission failed | The listing's draft now holds the new package, and the commit is tagged. Submit that draft from the Developer Dashboard; don't run the workflow again. |
 | `invalid_grant` | The refresh token was revoked or expired (see the *Testing* note above). Create a new one, or switch to a service account. |
 | HTTP 403 | The service account's email is not on the publisher, or `CWS_PUBLISHER_ID` or `CWS_ITEM_ID` is wrong. |
 | Google rejects the submission | Fix the cause, bump the version and release again. |
