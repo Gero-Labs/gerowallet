@@ -108,7 +108,9 @@
           </v-avatar>
           <div class="token-info">
             <!-- Only the name truncates: the lock or check sits outside the ellipsis, so a long
-                 name ("Minswap Dummy Test") no longer cuts its badge off with it. -->
+                 name ("Minswap Dummy Test") no longer cuts its badge off with it. The flex row
+                 centres the icon, so it needs no nudge: with the old -2px it sat 1px higher
+                 than in the inline layout it replaced. -->
             <div class="token-name token-name-row text-body-2 white--text">
               <span class="text-truncate">{{ getTokenName(token) }}</span>
               <v-tooltip location="top" v-if="token.isProgrammable && token.cip113Registered"  :open-delay="300" content-class="custom-tooltip">
@@ -117,7 +119,6 @@
                     size="x-small"
                     color="var(--g-warning)"
                     class="ml-1 flex-shrink-0"
-                    style="margin-top: -2px"
                     v-bind="activatorProps"
                   >mdi-lock-outline</v-icon>
                 </template>
@@ -128,7 +129,6 @@
                 size="x-small"
                 color="primary"
                 class="ml-1 flex-shrink-0"
-                style="margin-top: -2px"
               >mdi-check-decagram</v-icon>
             </div>
             <div class="token-amount text-caption grey--text">
