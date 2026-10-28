@@ -107,17 +107,18 @@
             <v-icon v-else size="20" color="var(--g-text-3)">mdi-circle-outline</v-icon>
           </v-avatar>
           <div class="token-info">
-            <div class="token-name text-body-2 white--text text-truncate">
-              {{ getTokenName(token) }}
+            <!-- Only the name truncates: the lock or check sits outside the ellipsis, so a long
+                 name ("Minswap Dummy Test") no longer cuts its badge off with it. -->
+            <div class="token-name token-name-row text-body-2 white--text">
+              <span class="text-truncate">{{ getTokenName(token) }}</span>
               <v-tooltip location="top" v-if="token.isProgrammable && token.cip113Registered"  :open-delay="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
                   <v-icon
                     size="x-small"
                     color="var(--g-warning)"
-                    class="ml-1"
+                    class="ml-1 flex-shrink-0"
                     style="margin-top: -2px"
                     v-bind="activatorProps"
-
                   >mdi-lock-outline</v-icon>
                 </template>
                 {{ $t(programmableTooltipKey(token.unit)) }}
@@ -126,7 +127,7 @@
                 v-else-if="token.verified"
                 size="x-small"
                 color="primary"
-                class="ml-1"
+                class="ml-1 flex-shrink-0"
                 style="margin-top: -2px"
               >mdi-check-decagram</v-icon>
             </div>
@@ -185,7 +186,8 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
-import { formatUsd } from '@/shared/utils/format';
+import { formatTokenQuantity, formatUsd } from '@/shared/utils/format';
+import { listedTokens } from '../composables/listedTokens';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -359,27 +361,14 @@ const adaToken = computed(() => ({
   change: adaPriceChange.value,
 }));
 
-// Use walletStore.tokens (enriched with img, verified, isScam from resolver)
-// Filter out: native ADA (shown in BalanceSection), scam tokens, unverified tokens
-const filteredTokens = computed(() => {
-  if (!rawTokens.value) return [];
-
-  // CIP-113 tokens are exempt from verified-only: inherently unverified. A token at the PLB
-  // address whose policy the registry doesn't list is not one of them (issue 1267).
-  return ([
-    ...Object.values(rawTokens.value),
-    ...Object.values(rawProgrammableTokens.value || {}),
-  ] as TokenLike[])
-    .filter((token: TokenLike) => {
-      if (token.policy_id === '') return false;
-      if (token.isScam) return false;
-      if (!token.verified && !(token.isProgrammable && token.cip113Registered)) return false;
-      return true;
-    })
-    .sort((a: TokenLike, b: TokenLike) => {
-      return getTokenFiatValue(b) - getTokenFiatValue(a);
-    });
-});
+// walletStore.tokens (enriched with img, verified, isScam from resolver) plus the CIP-113
+// holdings, filtered by the rule HomePage's header count uses too (listedTokens).
+const filteredTokens = computed(() =>
+  listedTokens(
+    rawTokens.value as Record<string, TokenLike> | null,
+    rawProgrammableTokens.value as Record<string, TokenLike> | null,
+  ).sort((a: TokenLike, b: TokenLike) => getTokenFiatValue(b) - getTokenFiatValue(a)),
+);
 
 // A truly empty wallet holds no ADA and no other tokens. In that case we hide
 // the pinned ADA-0 row and show a single empty state instead of a "0" holding.
@@ -422,12 +411,7 @@ function formatTokenAmount(token: TokenLike): string {
   const decimals = token.metadata?.decimals ?? 0;
   let amount = Number(token.quantity || 0);
   if (decimals > 0) amount = amount / Math.pow(10, decimals);
-  if (amount === 0) return '0';
-  if (amount < 0.001) return '<0.001';
-  return amount.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: amount < 1 ? 6 : 2,
-  });
+  return formatTokenQuantity(amount, decimals);
 }
 
 function formatFiatValue(token: TokenLike): string {
@@ -517,6 +501,11 @@ function onImgError(event: Event) {
   font-size: 13px !important;
   font-weight: 500;
   max-width: 140px;
+}
+
+.token-name-row {
+  display: flex;
+  align-items: center;
 }
 
 .token-amount {
