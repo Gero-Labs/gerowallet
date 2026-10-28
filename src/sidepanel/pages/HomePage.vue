@@ -132,6 +132,7 @@ import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { Blockchain, Network } from '@/models/types';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useAdaLovelace } from '../composables/useAdaLovelace';
+import { listedTokens, type ListableToken } from '../composables/listedTokens';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
@@ -182,17 +183,12 @@ const isEmptyMainnet = computed(() =>
   walletStore.loggedWallet?.network === Network.MAINNET &&
   (!walletStore.account || walletStore.account?.controlled_amount === '0'));
 
-// Count verified, non-scam, non-ADA tokens.
-const ftCount = computed(() => {
-  const tokens = walletStore.tokens;
-  if (!tokens) return 0;
-  return Object.values(tokens).filter((t: { policy_id?: string; isScam?: boolean; verified?: boolean }) => {
-    if (t.policy_id === '') return false;
-    if (t.isScam) return false;
-    if (!t.verified) return false;
-    return true;
-  }).length;
-});
+// The rows TokenList shows below the pinned ADA row, CIP-113 holdings included: the same rule
+// (listedTokens), so the header never counts fewer rows than the list draws.
+const ftCount = computed(() => listedTokens(
+  walletStore.tokens as Record<string, ListableToken> | null,
+  walletStore.programmableTokens as Record<string, ListableToken> | null,
+).length);
 
 // Midnight shows NIGHT + DUST rows. For Cardano, match TokenList: a truly empty
 // wallet (0 ADA, no tokens) shows no rows, so the header count is 0 (hidden).
