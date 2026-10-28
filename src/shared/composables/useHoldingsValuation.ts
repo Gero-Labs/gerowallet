@@ -16,7 +16,7 @@
  */
 import { computed, toRefs } from 'vue';
 import { tokenRowKey } from '@/shared/utils/tokenRowKey';
-import { walletStore } from '@/stores/walletStore';
+import { walletStore, totalProgrammableLockedLovelace } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
@@ -29,7 +29,7 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 import { isRealFiAsset } from '@/modules/realfi/assets';
 
 export function useHoldingsValuation() {
-  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens, programmableLockedLovelace } = toRefs(walletStore);
+  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
@@ -82,8 +82,9 @@ export function useHoldingsValuation() {
     // ADA riding along in the programmable UTxOs. It is the user's, but Gero cannot
     // spend it, so it gets its own locked row instead of joining adaBalance, keyed apart
     // from the spendable row via tokenRowKey() ('lovelace#locked'). Unlike locked CIP-113
-    // tokens, this row keeps its real price and counts toward totals — see below.
-    const lockedLovelace = Number(programmableLockedLovelace.value || '0');
+    // tokens, this row keeps its real price and counts toward totals — see below. Both
+    // owner conventions (stake key and payment key) land in this one row.
+    const lockedLovelace = Number(totalProgrammableLockedLovelace());
     if (lockedLovelace > 0) {
       entries.push(['lovelace', {
         quantity: lockedLovelace,
