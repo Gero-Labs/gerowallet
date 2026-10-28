@@ -222,6 +222,8 @@ jobs:
         run: |
           zip=".candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip"
           echo "${ZIP_SHA256}  ${zip}" | sha256sum -c -
+          # unzip -d creates only the last directory of the path.
+          mkdir -p .wallet-under-test/extension
           unzip -q "$zip" -d .wallet-under-test/extension
           echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
