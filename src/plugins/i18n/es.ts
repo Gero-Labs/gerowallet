@@ -3230,6 +3230,7 @@ export default {
   'swap.fee': 'Comisión',
   'swap.fees': 'Comisiones',
   'swap.batcherFee': 'Comisión del batcher',
+  'swap.tokenSaleTooLarge': 'Gero firma una venta de tokens en un solo swap solo hasta unos {limit} ADA de valor, así que este no se firmó. Divídelo en swaps más pequeños.',
   'swap.partnerFee': 'Comisión del socio',
   'swap.deposits': 'Depósitos',
   'swap.from': 'De',

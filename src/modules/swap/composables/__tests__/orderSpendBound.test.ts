@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ORDER_OVERHEAD_MAX_LOVELACE, SERVICE_FEE_MIN_LOVELACE, routeFromQuoteEvent, swapSpendBound, toBaseUnits, tokenValueLovelace,
+  ORDER_OVERHEAD_MAX_LOVELACE, SERVICE_FEE_MIN_LOVELACE, TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits,
 } from '../orderSpendBound';
 
 const ADA = 1_000_000n;
@@ -19,17 +19,16 @@ describe('swap spend budget', () => {
     expect(adaLeg({ tokenIn: 'lovelace', amountIn: 100_000n * ADA })).toBe(100n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
   });
 
-  it('budgets a token sale as the tokens typed plus a leg sized on the wallet\'s own valuation', () => {
-    // Worth 10,000 ADA at the wallet's price; with 2x headroom the fee is sized on 20,000 ADA.
-    const bound = swapSpendBound({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: 10_000n * ADA });
-    expect(bound.maxOutflow.get(TOKEN)).toBe(500n);
-    expect(bound.maxOutflow.get('lovelace')).toBe(20n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
+  it('budgets a token sale as the tokens typed plus the minimum service fee only, however large', () => {
+    const bound = swapSpendBound({ tokenIn: TOKEN, amountIn: 10n ** 15n });
+    expect(bound.maxOutflow.get(TOKEN)).toBe(10n ** 15n);
+    expect(bound.maxOutflow.get('lovelace')).toBe(ORDER_OVERHEAD_MAX_LOVELACE + SERVICE_FEE_MIN_LOVELACE);
   });
 
-  it('keeps a token sale without a wallet price to the minimum service fee', () => {
-    const minimum = ORDER_OVERHEAD_MAX_LOVELACE + SERVICE_FEE_MIN_LOVELACE;
-    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: null })).toBe(minimum);
-    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n })).toBe(minimum);
+  it('puts the token-sale limit where 10 bps reaches the 1.2 ADA minimum', () => {
+    expect(TOKEN_SALE_LIMIT_ADA).toBe(1_200n);
+    // An ADA sale of that size is still charged only the minimum.
+    expect(adaLeg({ tokenIn: 'lovelace', amountIn: TOKEN_SALE_LIMIT_ADA * ADA })).toBe(ORDER_OVERHEAD_MAX_LOVELACE + SERVICE_FEE_MIN_LOVELACE);
   });
 });
 
@@ -60,11 +59,4 @@ describe('typed amounts', () => {
     expect(toBaseUnits('1', 1.5)).toBeNull();
   });
 
-  it('values tokens at a price per display unit', () => {
-    expect(tokenValueLovelace(1_000_000n, 6, 2.5)).toBe(2_500_000n);
-    expect(tokenValueLovelace(100n, 0, 0.0001)).toBe(10_000n);
-    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '2', undefined]) {
-      expect(tokenValueLovelace(1n, 0, bad)).toBeNull();
-    }
-  });
 });

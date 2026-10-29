@@ -3793,6 +3793,7 @@ export default {
   'swap.auto': 'Automatisch',
   'swap.balance': 'Guthaben',
   'swap.batcherFee': 'Batcher-Gebühr',
+  'swap.tokenSaleTooLarge': 'Gero signiert einen Token-Verkauf in einem Swap nur bis etwa {limit} ADA Wert, deshalb wurde dieser nicht signiert. Teile ihn in kleinere Swaps auf.',
   'swap.buying': 'Kaufen',
   'swap.cardano': 'Cardano',
   'swap.cerraswap': 'CERRASWAP',

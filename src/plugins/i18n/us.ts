@@ -3297,6 +3297,7 @@ export default {
   'swap.fee': 'Fee',
   'swap.fees': 'Fees',
   'swap.batcherFee': 'Batcher Fee',
+  'swap.tokenSaleTooLarge': "Gero signs a token sale in one swap only up to about {limit} ADA in value, so this one wasn't signed. Split it into smaller swaps.",
   'swap.partnerFee': 'Partner Fee',
   'swap.deposits': 'Deposits',
   'swap.from': 'From',

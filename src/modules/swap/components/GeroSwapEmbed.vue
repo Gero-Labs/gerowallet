@@ -122,10 +122,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import {
-  routeFromQuoteEvent, swapSpendBound, toBaseUnits, tokenValueLovelace, type QuotedRoute, type SwapIntent,
+  TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits, type QuotedRoute, type SwapIntent,
 } from '../composables/orderSpendBound';
-import type { SpendBound } from '@/shared/utils/txIntentGuard';
-import marketApi from '@/api/market-api';
+import { TxIntentMismatchError, type SpendBound } from '@/shared/utils/txIntentGuard';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
@@ -319,11 +318,7 @@ async function currentSwapIntent(): Promise<SwapIntent | null> {
   const decimals = tokenIn === 'lovelace' ? 6 : (await resolveToken(tokenIn))?.decimals;
   if (typeof decimals !== 'number') return null;
   const amountIn = toBaseUnits(typed, decimals);
-  if (!amountIn) return null;
-  if (tokenIn === 'lovelace') return { tokenIn, amountIn };
-  const priceAda = getTokenByUnit(tokenIn)?.priceAda
-    ?? (await marketApi.getTokenPrice(tokenIn).catch(() => null))?.priceAda;
-  return { tokenIn, amountIn, tokenValueLovelace: tokenValueLovelace(amountIn, decimals, priceAda) };
+  return amountIn ? { tokenIn, amountIn } : null;
 }
 
 /** The budget for the order being signed, or null (only a signature taking almost nothing passes). */
@@ -343,6 +338,18 @@ const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getSpendBound: spendBoundForSignature,
 });
 
+// Why the wallet last refused to sign, for onSwapError: the widget reports a signer
+// error with code UNKNOWN, which would otherwise show a generic message.
+let signRefusal: string | null = null;
+
+/** A refused order, reworded when it is a token sale over the size the budget allows. */
+function refusalFor(error: TxIntentMismatchError): TxIntentMismatchError {
+  const tokenSale = quotedRoute !== null && sellingUnit.value !== 'lovelace';
+  if (!tokenSale || !error.violations.includes('spendExceeded')) return error;
+  const message = String(i18n.t('swap.tokenSaleTooLarge', { limit: String(TOKEN_SALE_LIMIT_ADA) }));
+  return new TxIntentMismatchError(message, error.violations);
+}
+
 // The widget signs both swaps and order cancels through signTx, so the question sits
 // in front of every Ledger signature. Everything else passes through unchanged.
 const signer = {
@@ -351,7 +358,14 @@ const signer = {
     const w = walletStore.loggedWallet;
     isBT.value = false;
     if (w?.type === WalletType.Ledger && w.btSupported) await chooseTransport();
-    return sharedSigner.signTx(unsignedTxCbor);
+    try {
+      return await sharedSigner.signTx(unsignedTxCbor);
+    } catch (e) {
+      if (!(e instanceof TxIntentMismatchError)) throw e;
+      const refused = refusalFor(e);
+      signRefusal = refused.message;
+      throw refused;
+    }
   },
 };
 const { resolveToken } = useSwapTokenResolver();
@@ -555,8 +569,12 @@ function onSwapError(e: Event) {
   const detail = widgetPayload(e) as { code?: string; message?: string } | undefined;
   emit('swap-error', detail);
 
+  const refusal = signRefusal;
+  signRefusal = null;
   const key = detail?.code ? SWAP_ERROR_CODE_TO_I18N_KEY[detail.code] : undefined;
-  const text = key ? (i18n.t(key) as string) : detail?.message || (i18n.t('errors.unknownError') as string);
+  const text = refusal && detail?.message === refusal
+    ? refusal
+    : key ? (i18n.t(key) as string) : detail?.message || (i18n.t('errors.unknownError') as string);
   snackbar.setError(text);
 }
 function onTokenChange(e: Event) {
