@@ -50,12 +50,20 @@ describe('CIP-113 signing wiring', () => {
     expect(body).toContain('txCbor: prepared.txCbor');
   });
 
-  it('only the preflight and the prepare handler touch the allowance in the worker', () => {
+  it('only the hardware refusal and the prepare handler touch the allowance in the worker', () => {
     const uses = bg.split('\n').filter((line) => /Cip113SignAllowance\(/.test(line));
     expect(uses.map((line) => line.trim().slice(0, 40))).toEqual([
       expect.stringContaining('if (wallet && hasCip113SignAllowance('),
       expect.stringContaining('grantCip113SignAllowance('),
     ]);
+    expect(functionBody(bg, 'function hardwareSignRefusal(')).toContain('hasCip113SignAllowance(');
+  });
+
+  it('the preflight and the TREZOR handler both go through the hardware refusal', () => {
+    expect(section(bg, 'app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT,')).toContain('hardwareSignRefusal(request.data?.txCbor)');
+    expect(section(bg, 'app.addToOptions(MessageTypes.TREZOR,')).toContain('hardwareSignRefusal(txCbor)');
+    // Every other caller of the hardware refusal would be a dApp path that must not read the allowance.
+    expect(bg.match(/hardwareSignRefusal\(/g)).toHaveLength(3);
   });
 
   it('WalletBg.signTx checks the allowance before decrypting and uses it up before signing', () => {
