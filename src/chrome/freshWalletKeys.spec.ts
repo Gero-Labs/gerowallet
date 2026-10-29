@@ -160,3 +160,14 @@ describe('fresh software wallet on a CIP-113 network', () => {
     expect(walletStore.keys).toBeNull();
   });
 });
+
+describe('Keystone wallet record', () => {
+  // The Keystone signers read the paired firmware version through loggedWallet, which
+  // walletManager builds from these fields.
+  it('carries the fingerprint and paired firmware version from the record', () => {
+    const bg = bootWallet({ network: Network.MAINNET, publicKey: XPUB, type: WalletType.Keystone, xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+
+    expect(bg.xfp).toBe('0a1b2c3d');
+    expect(bg.firmwareVersion).toBe('3.2.0');
+  });
+});

@@ -27,12 +27,12 @@ const account = (accountIndex: number): AccountXpub => ({
 const connection = { publicKey: 'xpub-0', keys: [], btSupported: false, xfp: '0a1b2c3d', firmwareVersion: '3.2.0', accounts: [account(0), account(1)] };
 
 let nextId = 50;
-function render(accounts: AccountXpub[]) {
+function render(accounts?: AccountXpub[]) {
   nextId = 50;
   mocks.create.mockImplementation(async (record: Record<string, unknown>) => ({ ...record, id: nextId++ }));
   mocks.send.mockResolvedValue({});
   return mount(StepReview, {
-    props: { network, walletType: WalletType.Keystone, connection, name: 'Cold storage', accounts, groupPublicKey: 'xpub-0' },
+    props: { network, walletType: WalletType.Keystone, connection, name: 'Cold storage', accounts, groupPublicKey: accounts ? 'xpub-0' : undefined },
     global: {
       plugins: [createTestVuetify()],
       config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key, $router: { push: vi.fn(async () => undefined) } }) },
@@ -79,5 +79,14 @@ describe('adding several accounts', () => {
 
     expect(records.map((r) => r.accountIndex)).toEqual([1, 2]);
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ data: { wallet: expect.objectContaining({ accountIndex: 2 }) } }));
+  });
+});
+
+describe('pairing one account', () => {
+  it('keeps the firmware version the device reported on the wallet record', async () => {
+    const records = await create(render());
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ type: WalletType.Keystone, xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
   });
 });

@@ -13,7 +13,14 @@ vi.mock('@/chrome/walletBg', () => ({
   WalletBg: class {
     id: number;
     chain = 'Cardano';
-    constructor(wallet: { id: number }) { this.id = wallet.id; env.constructed(wallet.id); }
+    xfp?: string;
+    firmwareVersion?: string;
+    constructor(wallet: { id: number; xfp?: string; firmwareVersion?: string }) {
+      this.id = wallet.id;
+      this.xfp = wallet.xfp;
+      this.firmwareVersion = wallet.firmwareVersion;
+      env.constructed(wallet.id);
+    }
     getLastSyncInfo = env.lastSync;
   }, alarmListener: vi.fn(),
 }));
@@ -106,6 +113,13 @@ describe('wallet login after worker startup', () => {
     expect(env.locked).not.toHaveBeenCalled();
     expect(env.state.isLocked).toBe(true);
   });
+  // The Keystone signers read both from loggedWallet (keystone.ts createKeystoneSignRequest).
+  it('carries a Keystone\'s fingerprint and paired firmware version to the logged wallet', async () => {
+    const { instance } = await manager();
+    await instance.login({ ...wallet, type: 'Keystone', xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+    expect(env.state.loggedWallet).toMatchObject({ xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+  });
+
   it('does not restart syncing or unlock an already initialized wallet', async () => {
     const { instance } = await manager();
     const first = await instance.login(wallet);
