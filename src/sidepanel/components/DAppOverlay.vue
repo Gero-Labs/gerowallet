@@ -408,16 +408,8 @@
           </div>
         </div>
 
-        <div v-if="btcPsbtInfo" class="tx-intents mb-3">
-          <div class="tx-intent-row">
-            <span class="grey--text text-caption">{{ $t('bitcoin.inputs') }}</span>
-            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.inputs }}</span>
-          </div>
-          <div class="tx-intent-row">
-            <span class="grey--text text-caption">{{ $t('bitcoin.outputs') }}</span>
-            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.outputs }}</span>
-          </div>
-        </div>
+        <!-- Every output, the fee and the total (same card as the popup) -->
+        <BitcoinPsbtReview :psbt-hex="btcPsbtHex" class="mb-3" />
 
         <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
@@ -457,9 +449,10 @@
           </div>
         </div>
 
-        <v-chip size="x-small" color="orange darken-2" text-color="white" class="mb-2">
+        <!-- The signature scheme, named like a transaction tag (neutral, not painted) -->
+        <span class="btc-scheme-tag mb-2">
           {{ btcMessageSigningType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}
-        </v-chip>
+        </span>
         <div class="sign-data-message">
           <p class="white--text text-caption" style="word-break: break-all;">{{ btcMessageText }}</p>
         </div>
@@ -1071,6 +1064,7 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
+import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -1451,23 +1445,9 @@ const signDataMessage = computed(() => {
 // Midnight's own signData branch already uses for its unsupported wallet
 // types (see below).
 
-const btcPsbtInfo = ref<{ inputs: number; outputs: number } | null>(null);
-watch(
-  () => currentRequest.value?.method === 'btcSignPsbt' ? (currentRequest.value?.payload as { psbtHex?: string })?.psbtHex : undefined,
-  async (psbtHex) => {
-    btcPsbtInfo.value = null;
-    if (!psbtHex) return;
-    try {
-      const bitcoin = await import('bitcoinjs-lib');
-      let psbt;
-      try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
-      catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
-      btcPsbtInfo.value = { inputs: psbt.data.inputs.length, outputs: psbt.data.outputs.length };
-    } catch (e) {
-      console.error('[DApp] Failed to decode Bitcoin PSBT for preview:', e);
-    }
-  },
-  { immediate: true },
+// The PSBT shown by BitcoinPsbtReview, which decodes it for the approval card
+const btcPsbtHex = computed(() =>
+  currentRequest.value?.method === 'btcSignPsbt' ? (currentRequest.value?.payload as { psbtHex?: string })?.psbtHex ?? '' : ''
 );
 
 const btcMessageText = computed(() => {
@@ -2457,9 +2437,9 @@ async function signKeystone() {
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const txCbor = signingRequest.payload.tx;
     const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
-    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
+    const signRequestResponse: KeystoneSignRequestResponse = await awaitFreshApproval(() => createKeystoneSignRequest(
       txSerialized, loggedWallet.value, utxos.value, keys.value
-    );
+    ), approvalCurrent);
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
@@ -3813,6 +3793,18 @@ function approveWcSession() {
 .dapp-sign-data {
   display: flex;
   flex-direction: column;
+}
+
+.btc-scheme-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-chip);
+  color: var(--g-text-2);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .sign-data-message {

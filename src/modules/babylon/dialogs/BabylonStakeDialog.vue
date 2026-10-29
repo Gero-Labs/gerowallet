@@ -1,310 +1,258 @@
 <template>
   <BaseDialog
+    size="sm"
     :isOpen="props.modelValue"
-    icon="mdi-lock-clock"
-    :imgSize="40"
     :title="$t('babylon.stakeDialog.title')"
-    :width="500"
-    :height="660"
-    :minHeight="480"
+    :img="assts.coinsStacked"
+    img-color="var(--g-accent)"
+    :min-height="0"
     :scrollable="true"
     :loading="loading"
-    :persistent="true"
+    :persistent="loading || !!privateKeyBytes"
     @close="closeDialog"
   >
-    <v-card-text class="px-5 pt-1 pb-5">
+    <v-card-text class="px-5 pt-1 pb-5 bab-stake">
 
-      <!-- ── Step Progress ── -->
-      <div class="step-track">
-        <div
-          v-for="i in 3"
-          :key="i"
-          class="step-bar"
-          :class="{ 'is-active': currentStep === i, 'is-done': currentStep > i }"
-        />
-      </div>
-      <div class="step-labels">
-        <span
+      <!-- ── Step progress ── -->
+      <ol class="bab-stake__steps">
+        <li
           v-for="(label, i) in stepLabels"
-          :key="i"
-          :class="['step-label', { 'is-active': currentStep === i + 1, 'is-done': currentStep > i + 1 }]"
-        >{{ label }}</span>
-      </div>
+          :key="label"
+          :class="['bab-stake__step', { 'bab-stake__step--active': currentStep === i + 1, 'bab-stake__step--done': currentStep > i + 1 }]"
+          :aria-current="currentStep === i + 1 ? 'step' : undefined"
+        >
+          <span class="bab-stake__step-bar" />
+          <span class="bab-stake__step-label">{{ label }}</span>
+        </li>
+      </ol>
 
-      <!-- ════════════════════════════════════════
-           STEP 1 — Provider + Amount + Duration
-      ════════════════════════════════════════ -->
-      <transition name="step-fade" mode="out-in">
-        <div v-if="currentStep === 1" key="step1" class="step-body">
+      <transition name="bab-step" mode="out-in">
+        <!-- ════ Step 1: provider, amount and duration ════ -->
+        <div v-if="currentStep === 1" key="step1" class="bab-stake__body">
 
-          <!-- Provider info card -->
-          <div v-if="props.selectedProvider" class="provider-strip">
-            <div class="provider-avatar" :style="{ background: providerColorBg(props.selectedProvider.description.moniker) }">
-              <span class="provider-initial" :style="{ color: providerColor(props.selectedProvider.description.moniker) }">
-                {{ props.selectedProvider.description.moniker?.charAt(0)?.toUpperCase() || '?' }}
-              </span>
-            </div>
-            <div class="provider-details">
-              <div class="provider-name">{{ props.selectedProvider.description.moniker || $t('babylon.unknownProvider') }}</div>
-              <div class="provider-commission">
+          <div v-if="props.selectedProvider" class="glass-tier bab-provider">
+            <span class="bab-provider__avatar" aria-hidden="true">{{ providerInitial }}</span>
+            <span class="bab-provider__text">
+              <span class="bab-provider__name">{{ props.selectedProvider.description.moniker || $t('babylon.unknownProvider') }}</span>
+              <span class="t-caption">
                 {{ $t('babylon.commission') }}:
-                <span :style="{ color: commissionColor(props.selectedProvider.commission) }">
+                <span class="g-num" :style="{ color: commissionColor(props.selectedProvider.commission) }">
                   {{ formatCommission(props.selectedProvider.commission) }}
                 </span>
-              </div>
-            </div>
-            <div class="provider-pk-badge">{{ props.selectedProvider.btc_pk.slice(0, 8) }}…</div>
+              </span>
+            </span>
+            <span class="t-caption g-mono bab-provider__pk">{{ props.selectedProvider.btc_pk.slice(0, 8) }}…</span>
           </div>
 
-          <!-- Amount -->
-          <div class="field-block mt-4">
-            <label class="field-label">{{ $t('babylon.stakeDialog.amount') }}</label>
-            <div class="amount-wrap" :class="{ 'is-error': !!amountError }">
-              <span class="btc-badge">₿</span>
+          <label class="bab-field">
+            <span class="t-label">{{ $t('babylon.stakeDialog.amount') }}</span>
+            <span :class="['bab-input', { 'bab-input--error': !!amountError }]">
+              <span class="bab-input__unit g-mono">BTC</span>
               <input
                 v-model="amountBtc"
-                class="amount-input"
+                class="bab-input__control bab-input__control--amount g-num"
                 type="number"
                 step="0.00000001"
                 min="0"
                 placeholder="0.00000000"
                 @input="validateAmount"
               />
-            </div>
-            <div class="amount-meta">
-              <span v-if="amountError" class="field-error-msg">{{ amountError }}</span>
-              <span v-else class="field-hint">
-                Min: {{ formatBtc(props.params?.min_staking_amount ?? 0) }} ·
-                Max: {{ formatBtc(props.params?.max_staking_amount ?? 0) }} BTC
-              </span>
-            </div>
+            </span>
+            <span v-if="amountError" class="bab-field__error">{{ amountError }}</span>
+            <span v-else class="t-caption g-num">
+              {{ $t('babylon.minStake') }} {{ formatBtc(props.params?.min_staking_amount ?? 0) }} · {{ $t('babylon.maxStake') }} {{ formatBtc(props.params?.max_staking_amount ?? 0) }} BTC
+            </span>
+          </label>
+
+          <div class="bab-stake__balance t-caption">
+            <span>{{ $t('send.availableBalance') }}</span>
+            <span class="g-num bab-stake__balance-value">{{ formatBtc(availableBalance) }} BTC</span>
           </div>
 
-          <!-- Balance pill -->
-          <div class="balance-strip mt-3">
-            <v-icon size="12" color="#F7931A" class="mr-1">mdi-bitcoin</v-icon>
-            <span class="balance-key">{{ $t('send.availableBalance') }}:</span>
-            <span class="balance-val">{{ formatBtc(Number(availableBalance)) }} BTC</span>
-          </div>
-
-          <!-- Duration (timelock) slider -->
-          <div class="field-block mt-4">
-            <label class="field-label">
-              {{ $t('babylon.stakeDialog.stakingDuration') }}
-              <span class="ml-1" style="opacity: 0.4; font-size: 11px;">
-                ({{ timelockBlocks.toLocaleString() }} blocks · ≈ {{ timelockDays }} days)
-              </span>
-            </label>
+          <!-- Duration (timelock) -->
+          <div class="bab-field">
+            <span class="bab-field__head">
+              <span class="t-label">{{ $t('babylon.stakeDialog.stakingDuration') }}</span>
+              <span class="t-caption g-num">{{ lockDuration }}</span>
+            </span>
             <v-slider
               v-model="timelockBlocks"
               :min="props.params?.min_staking_time ?? 144"
               :max="props.params?.max_staking_time ?? 64000"
               :step="144"
-              color="#F7931A"
+              color="var(--g-accent)"
               track-color="var(--g-hairline-2)"
               hide-details
-              class="babylon-slider mt-2"
+              :aria-label="$t('babylon.stakeDialog.stakingDuration')"
+              class="bab-slider"
             />
-            <div class="slider-endpoints">
-              <span>{{ props.params?.min_staking_time?.toLocaleString() ?? '—' }} blk</span>
-              <span>{{ props.params?.max_staking_time?.toLocaleString() ?? '—' }} blk</span>
-            </div>
+            <span class="bab-slider__ends t-caption g-num">
+              <span>{{ formatInt(props.params?.min_staking_time) }} {{ $t('babylon.blocks') }}</span>
+              <span>{{ formatInt(props.params?.max_staking_time) }} {{ $t('babylon.blocks') }}</span>
+            </span>
           </div>
-
         </div>
 
-        <!-- ════════════════════════════════════════
-             STEP 2 — Fee Selection
-        ════════════════════════════════════════ -->
-        <div v-else-if="currentStep === 2" key="step2" class="step-body">
-
-          <div class="fee-tier-grid">
-            <div
+        <!-- ════ Step 2: fee ════ -->
+        <div v-else-if="currentStep === 2" key="step2" class="bab-stake__body">
+          <div class="bab-fees" role="radiogroup" :aria-label="$t('bitcoin.feeSpeed')">
+            <button
               v-for="tier in feeTiers"
               :key="tier.key"
-              class="fee-card"
-              :class="{ 'is-selected': selectedFeePriority === tier.key }"
+              type="button"
+              role="radio"
+              :aria-checked="selectedFeePriority === tier.key ? 'true' : 'false'"
+              :class="['glass-tier', 'bab-fee', { 'bab-fee--selected': selectedFeePriority === tier.key }]"
               @click="selectedFeePriority = tier.key"
             >
-              <div class="fee-card-top">
-                <span class="fee-tier-name">{{ tier.label }}</span>
-                <div class="speed-dots">
-                  <span v-for="d in 3" :key="d" class="speed-dot" :class="{ lit: d <= tier.dots }" />
-                </div>
-              </div>
-              <div class="fee-rate-val">{{ feeEstimates[tier.key] }}<span class="fee-rate-unit"> sat/vB</span></div>
-              <div class="fee-time-hint">{{ tier.time }}</div>
-            </div>
+              <span class="bab-fee__top">
+                <span class="bab-fee__name">{{ tier.label }}</span>
+                <span class="bab-fee__dots" aria-hidden="true">
+                  <span v-for="d in 3" :key="d" :class="['bab-fee__dot', { 'bab-fee__dot--lit': d <= tier.dots }]" />
+                </span>
+              </span>
+              <span class="bab-fee__rate g-num">{{ $t('bitcoin.feeRateValue', { value: feeEstimates[tier.key] }) }}</span>
+              <span class="t-caption">{{ tier.time }}</span>
+            </button>
           </div>
 
-          <!-- Staking summary -->
-          <div class="tx-summary mt-5">
-            <div class="summary-row">
-              <span>{{ $t('babylon.stakeDialog.amount') }}</span>
-              <span class="mono">{{ amountBtc }} BTC</span>
+          <dl class="bab-summary">
+            <div class="bab-summary__row">
+              <dt>{{ $t('babylon.stakeDialog.amount') }}</dt>
+              <dd class="g-num">{{ formatBtc(stakingAmountSats) }} BTC</dd>
             </div>
-            <div class="summary-row">
-              <span>{{ $t('babylon.stakeDialog.stakingDuration') }}</span>
-              <span class="mono">{{ timelockBlocks.toLocaleString() }} blocks (≈{{ timelockDays }} days)</span>
+            <div class="bab-summary__row">
+              <dt>{{ $t('babylon.stakeDialog.stakingDuration') }}</dt>
+              <dd class="g-num">{{ lockDuration }}</dd>
             </div>
-            <div class="summary-row">
-              <span>{{ $t('send.estimatedFee') }}</span>
-              <span class="mono">~{{ formatBtc(estimatedFeeSats) }} BTC</span>
+            <div class="bab-summary__row">
+              <dt>{{ $t('send.estimatedFee') }}</dt>
+              <dd class="g-num">≈ {{ formatBtc(estimatedFeeSats) }} BTC</dd>
             </div>
-            <div class="summary-divider" />
-            <div class="summary-row summary-total">
-              <span>{{ $t('babylon.stakeDialog.totalLocked') }}</span>
-              <span class="mono">{{ formatBtc(stakingAmountSats + estimatedFeeSats) }} BTC</span>
+            <div class="bab-summary__row bab-summary__row--total">
+              <dt>{{ $t('babylon.stakeDialog.totalLocked') }}</dt>
+              <dd class="g-num">{{ formatBtc(stakingAmountSats + estimatedFeeSats) }} BTC</dd>
             </div>
-          </div>
+          </dl>
 
-          <div v-if="isInsufficientBalance" class="inline-error mt-3">
-            <v-icon size="14" color="error" class="mr-1">mdi-alert-circle</v-icon>
+          <div v-if="isInsufficientBalance" class="bab-notice bab-notice--error">
+            <v-icon size="small">mdi-alert-circle-outline</v-icon>
             {{ $t('send.insufficientBalance') }}
           </div>
-
         </div>
 
-        <!-- ════════════════════════════════════════
-             STEP 3 — Confirm + Sign
-        ════════════════════════════════════════ -->
-        <div v-else-if="currentStep === 3" key="step3" class="step-body">
+        <!-- ════ Step 3: review and sign ════ -->
+        <div v-else-if="currentStep === 3" key="step3" class="bab-stake__body">
+          <div class="glass-tier bab-review">
+            <span class="t-label">{{ $t('babylon.stakeDialog.amount') }}</span>
+            <span class="bab-review__amount">
+              <span class="t-display g-num">{{ formatBtc(stakingAmountSats) }}</span>
+              <span class="bab-review__unit g-mono">BTC</span>
+            </span>
+            <span class="t-caption">
+              {{ $t('babylon.stakeDialog.willBeLockedFor') }}
+              <span class="g-num bab-review__strong">{{ lockDuration }}</span>
+            </span>
 
-          <!-- Confirm panel -->
-          <div class="confirm-panel">
-            <div class="confirm-amount-row">
-              <span class="confirm-btc-sign">₿</span>
-              <span class="confirm-amount-val">{{ amountBtc }}</span>
-            </div>
-            <div class="confirm-label mt-1">{{ $t('babylon.stakeDialog.willBeLockedFor') }}</div>
-            <div class="confirm-timelock">{{ $t('babylon.stakeDialog.lockDuration', { blocks: timelockBlocks.toLocaleString(), days: timelockDays }) }}</div>
+            <span class="t-label bab-review__to">{{ $t('babylon.stakeDialog.finalityProvider') }}</span>
+            <span class="t-body bab-review__strong">{{ props.selectedProvider?.description.moniker || $t('babylon.unknownProvider') }}</span>
 
-            <div class="confirm-flow-icon">
-              <v-icon size="16" color="var(--g-text-3)">mdi-arrow-down-thin</v-icon>
-            </div>
-
-            <div class="confirm-to-label">{{ $t('babylon.stakeDialog.finalityProvider') }}</div>
-            <div class="confirm-provider-name">{{ props.selectedProvider?.description.moniker || $t('babylon.unknownProvider') }}</div>
-
-            <div class="confirm-meta-grid mt-4">
-              <div class="confirm-meta-item">
-                <span class="confirm-meta-key">{{ $t('send.estimatedFee') }}</span>
-                <span class="confirm-meta-val">{{ formatBtc(estimatedFeeSats) }} BTC</span>
+            <dl class="bab-summary bab-review__meta">
+              <div class="bab-summary__row">
+                <dt>{{ $t('send.estimatedFee') }}</dt>
+                <dd class="g-num">{{ formatBtc(estimatedFeeSats) }} BTC</dd>
               </div>
-              <div class="confirm-meta-sep" />
-              <div class="confirm-meta-item">
-                <span class="confirm-meta-key">{{ $t('babylon.stakeDialog.totalLocked') }}</span>
-                <span class="confirm-meta-val strong">{{ formatBtc(stakingAmountSats + estimatedFeeSats) }} BTC</span>
+              <div class="bab-summary__row bab-summary__row--total">
+                <dt>{{ $t('babylon.stakeDialog.totalLocked') }}</dt>
+                <dd class="g-num">{{ formatBtc(stakingAmountSats + estimatedFeeSats) }} BTC</dd>
               </div>
-            </div>
+            </dl>
           </div>
 
-          <!-- PRF (PassKey) wallet -->
-          <div v-if="isPrfWallet" class="mt-4">
-            <transition name="fade" mode="out-in">
-              <div v-if="!privateKeyBytes" key="prf-auth" class="prf-auth-block">
-                <div class="prf-hint">
-                  <v-icon size="13" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
-                  {{ $t('security.passKeyAuthRequired') }}
-                </div>
-                <button class="prf-auth-btn" @click="authenticateWithPassKey" type="button">
-                  <v-icon size="16" class="mr-2">mdi-fingerprint</v-icon>
-                  {{ $t('security.authenticateWithPassKey') }}
-                </button>
-              </div>
-              <div v-else key="prf-done" class="prf-authed-strip">
-                <v-icon size="14" color="success" class="mr-2">mdi-check-circle</v-icon>
-                <span>{{ $t('security.passKeyAuthenticated') }}</span>
-                <button class="prf-reauth-btn" @click="privateKeyBytes = null" type="button">
-                  <v-icon size="12">mdi-refresh</v-icon>
-                </button>
-              </div>
-            </transition>
-          </div>
+          <!-- PassKey (PRF) wallet -->
+          <template v-if="isPrfWallet">
+            <div v-if="!privateKeyBytes" class="bab-auth">
+              <span class="t-caption">{{ $t('security.passKeyAuthRequired') }}</span>
+              <GButton tier="secondary" block @click="authenticateWithPassKey()">
+                <v-icon size="small" start>mdi-fingerprint</v-icon>
+                {{ $t('security.authenticateWithPassKey') }}
+              </GButton>
+            </div>
+            <div v-else class="bab-notice bab-notice--success">
+              <v-icon size="small">mdi-check-circle-outline</v-icon>
+              <span class="bab-notice__text">{{ $t('security.passKeyAuthenticated') }}</span>
+              <v-btn
+                icon
+                variant="text"
+                size="x-small"
+                :aria-label="$t('security.authenticateWithPassKey')"
+                :title="$t('security.authenticateWithPassKey')"
+                @click="privateKeyBytes = null"
+              >
+                <v-icon size="small">mdi-refresh</v-icon>
+              </v-btn>
+            </div>
+          </template>
 
-          <!-- Normal wallet: password -->
-          <div v-else class="field-block mt-4">
-            <label class="field-label">{{ $t('send.spendingPassword') }}</label>
-            <div class="glass-input-wrap">
+          <!-- Password wallet -->
+          <label v-else class="bab-field">
+            <span class="t-label">{{ $t('send.spendingPassword') }}</span>
+            <span class="bab-input">
               <input
                 v-model="password"
-                class="glass-input"
+                class="bab-input__control"
                 :type="showPassword ? 'text' : 'password'"
-                :placeholder="$t('send.enterPassword')"
+                :placeholder="$t('security.enterSpendingPassword')"
+                autocomplete="current-password"
                 @keyup.enter="confirmStake"
               />
-              <button class="input-icon-btn" @click="showPassword = !showPassword" type="button">
-                <v-icon size="15" color="var(--g-text-3)">
-                  {{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}
-                </v-icon>
-              </button>
-            </div>
+              <v-btn
+                icon
+                variant="text"
+                size="small"
+                :aria-label="showPassword ? $t('common.hidePassword') : $t('common.showPassword')"
+                @click="showPassword = !showPassword"
+              >
+                <v-icon size="small">{{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+              </v-btn>
+            </span>
+          </label>
+
+          <div v-if="txStatus.message" :class="['bab-notice', `bab-notice--${txStatus.type}`]" role="status">
+            <v-icon size="small">{{ STATUS_ICONS[txStatus.type] }}</v-icon>
+            <span class="bab-notice__text">{{ txStatus.message }}</span>
           </div>
 
-          <!-- Transaction Status -->
-          <transition name="fade">
-            <div v-if="txStatus.message" class="tx-status mt-3" :class="txStatus.type">
-              <v-icon size="14" class="mr-1">
-                {{ txStatus.type === 'success' ? 'mdi-check-circle' : txStatus.type === 'error' ? 'mdi-alert-circle' : 'mdi-information' }}
-              </v-icon>
-              {{ txStatus.message }}
-            </div>
-          </transition>
-
-          <!-- Success: show explorer link -->
-          <div v-if="successTxId" class="mt-2 text-center">
-            <a
-              :href="explorerUrl(successTxId)"
-              target="_blank"
-              class="explorer-link"
-              @click.stop
-            >
-              <v-icon size="x-small" class="mr-1">mdi-open-in-new</v-icon>
-              {{ $t('babylon.stakeDialog.viewOnExplorer') }}
-            </a>
-          </div>
+          <a
+            v-if="successTxId"
+            :href="explorerUrl(successTxId)"
+            target="_blank"
+            rel="noopener"
+            class="t-caption bab-stake__explorer"
+          >
+            <v-icon size="14">mdi-open-in-new</v-icon>
+            {{ $t('babylon.stakeDialog.viewOnExplorer') }}
+          </a>
         </div>
       </transition>
 
       <!-- ── Navigation ── -->
-      <div class="nav-row">
-        <button
-          v-if="currentStep > 1 && !loading && !successTxId"
-          class="back-btn"
-          @click="prevStep"
-          type="button"
-        >
-          <v-icon size="14" class="mr-1">mdi-arrow-left</v-icon>
+      <div class="bab-stake__nav">
+        <GButton v-if="currentStep > 1 && !loading && !successTxId" tier="secondary" @click="prevStep()">
+          <v-icon size="small" start>mdi-arrow-left</v-icon>
           {{ $t('common.back') }}
-        </button>
-        <div v-else />
+        </GButton>
+        <span v-else />
 
-        <button
-          v-if="currentStep < 3 && !successTxId"
-          class="next-btn"
-          :class="{ 'is-disabled': !isStepValid }"
-          :disabled="!isStepValid"
-          @click="nextStep"
-          type="button"
-        >
+        <GButton v-if="currentStep < 3 && !successTxId" tier="primary" :disabled="!isStepValid" @click="nextStep()">
           {{ $t('common.continue') }}
-          <v-icon size="14" class="ml-1">mdi-arrow-right</v-icon>
-        </button>
-        <button
-          v-else-if="!successTxId"
-          class="stake-btn"
-          :class="{ 'is-disabled': !isStepValid || loading }"
-          :disabled="!isStepValid || loading"
-          @click="confirmStake"
-          type="button"
-        >
-          <v-progress-circular v-if="loading" indeterminate :size="14" :width="2" color="var(--g-text-1)" class="mr-2" />
-          <v-icon v-else size="14" class="mr-1">mdi-lock-plus-outline</v-icon>
+          <v-icon size="small" end>mdi-arrow-right</v-icon>
+        </GButton>
+        <GButton v-else-if="!successTxId" tier="primary" :disabled="!isStepValid" :loading="loading" @click="confirmStake()">
+          <v-icon size="small" start>mdi-lock-plus-outline</v-icon>
           {{ $t('babylon.stakeDialog.stakeNow') }}
-        </button>
-        <button v-else class="next-btn" @click="closeDialog" type="button">
-          {{ $t('common.close') }}
-        </button>
+        </GButton>
+        <GButton v-else tier="secondary" @click="closeDialog()">{{ $t('common.close') }}</GButton>
       </div>
 
     </v-card-text>
@@ -312,14 +260,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { toRefs } from 'vue';
+import { ref, computed, watch, toRefs } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { BabylonParamVersion, BabylonFinalityProvider } from '@/api/babylon-api';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import assts from '@/utils/assets';
+import { formatBtc, formatInt } from '@/shared/utils/format';
 
 const { t } = useTranslation();
 const { loggedWallet, utxos } = toRefs(walletStore);
@@ -337,6 +287,12 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
   (e: 'staked', txId: string): void;
 }>();
+
+const STATUS_ICONS = {
+  success: 'mdi-check-circle-outline',
+  error: 'mdi-alert-circle-outline',
+  info: 'mdi-information-outline',
+} as const;
 
 // Step state
 const currentStep = ref(1);
@@ -358,9 +314,9 @@ const selectedFeePriority = ref<'fast' | 'medium' | 'slow'>('medium');
 const feeEstimates = ref({ fast: 50, medium: 25, slow: 10 });
 
 const feeTiers = computed(() => [
-  { key: 'fast' as const,   label: t('send.fast'),   time: '~10 min', dots: 3 },
-  { key: 'medium' as const, label: t('send.medium'), time: '~30 min', dots: 2 },
-  { key: 'slow' as const,   label: t('send.slow'),   time: '~60 min', dots: 1 },
+  { key: 'fast' as const,   label: t('send.fast'),   time: t('bitcoin.etaMinutes', { minutes: 10 }), dots: 3 },
+  { key: 'medium' as const, label: t('send.medium'), time: t('bitcoin.etaMinutes', { minutes: 30 }), dots: 2 },
+  { key: 'slow' as const,   label: t('send.slow'),   time: t('bitcoin.etaMinutes', { minutes: 60 }), dots: 1 },
 ]);
 
 // Transaction state
@@ -384,6 +340,13 @@ const stakingAmountSats = computed(() => {
 const estimatedFeeSats = computed(() => 250 * feeEstimates.value[selectedFeePriority.value]);
 
 const timelockDays = computed(() => Math.round((timelockBlocks.value * 10) / 60 / 24));
+
+// "1,000 blocks (≈7 days)", shown on every step
+const lockDuration = computed(() =>
+  t('babylon.stakeDialog.lockDuration', { blocks: formatInt(timelockBlocks.value), days: timelockDays.value })
+);
+
+const providerInitial = computed(() => props.selectedProvider?.description.moniker?.charAt(0)?.toUpperCase() || '?');
 
 const isPrfWallet = computed(() =>
   loggedWallet.value?.encryptionMethod === 'prf' ||
@@ -422,8 +385,8 @@ function validateAmount() {
   const sats = Math.round(n * 1e8);
   const min = props.params?.min_staking_amount ?? 0;
   const max = props.params?.max_staking_amount ?? Infinity;
-  if (sats < min) amountError.value = `Min ${formatBtc(min)} BTC`;
-  else if (sats > max) amountError.value = `Max ${formatBtc(max)} BTC`;
+  if (sats < min) amountError.value = t('babylon.stakeDialog.minAmount', { amount: formatBtc(min) });
+  else if (sats > max) amountError.value = t('babylon.stakeDialog.maxAmount', { amount: formatBtc(max) });
 }
 
 async function updateFeeEstimate() {
@@ -541,10 +504,6 @@ function closeDialog() {
 }
 
 // Helpers
-function formatBtc(sats: number): string {
-  return (sats / 1e8).toFixed(8);
-}
-
 function formatCommission(commission: string): string {
   return `${(parseFloat(commission) * 100).toFixed(1)}%`;
 }
@@ -557,15 +516,6 @@ function commissionColor(commission: string): string {
   return 'var(--g-error)';
 }
 
-const PROVIDER_COLORS = ['#F7931A', '#1e88e5', '#43a047', '#e53935', '#00acc1', '#8e24aa', '#f4511e'];
-function providerColor(name: string | undefined): string {
-  if (!name) return PROVIDER_COLORS[0];
-  return PROVIDER_COLORS[name.charCodeAt(0) % PROVIDER_COLORS.length];
-}
-function providerColorBg(name: string | undefined): string {
-  return providerColor(name) + '18';
-}
-
 // Sync timelock with params when they change
 watch(() => props.params, (p) => {
   if (p) timelockBlocks.value = p.min_staking_time;
@@ -573,542 +523,406 @@ watch(() => props.params, (p) => {
 </script>
 
 <style scoped lang="scss">
-/* ── Step Progress ── */
-.step-track {
+.bab-stake {
   display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: var(--g-s-4);
 }
 
-.step-bar {
+/* ── Step progress ──────────────────────────────────────── */
+.bab-stake__steps {
+  display: flex;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bab-stake__step {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--g-text-3);
+}
+
+.bab-stake__step-bar {
   height: 3px;
   border-radius: var(--g-r-chip);
   background: var(--g-hairline-2);
-  transition: background 0.3s ease;
+  transition: background-color var(--g-dur-base) var(--g-ease);
 }
 
-.step-bar.is-active {
-  background: #F7931A;
-}
-
-.step-bar.is-done {
-  background: rgba(247, 147, 26, 0.45);
-}
-
-.step-labels {
-  display: flex;
-  margin-bottom: 20px;
-}
-
-.step-label {
-  flex: 1;
-  font-size: 11px;
+.bab-stake__step-label {
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-  transition: color 0.3s ease;
+  transition: color var(--g-dur-base) var(--g-ease);
 }
 
-.step-label.is-active { color: #F7931A; }
-.step-label.is-done   { color: rgba(247, 147, 26, 0.55); }
-
-.step-body { min-height: 200px; }
-
-.step-fade-enter-active,
-.step-fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
-.step-fade-enter-from        { opacity: 0; transform: translateX(12px); }
-.step-fade-leave-to     { opacity: 0; transform: translateX(-12px); }
-
-/* ── Provider strip ── */
-.provider-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: rgba(247, 147, 26, 0.06);
-  border: 1px solid rgba(247, 147, 26, 0.18);
-  border-radius: var(--g-r-card);
+.bab-stake__step--active .bab-stake__step-bar,
+.bab-stake__step--done .bab-stake__step-bar {
+  background: var(--g-accent);
 }
 
-.provider-avatar {
-  width: 36px; height: 36px;
-  border-radius: var(--g-r-control);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+.bab-stake__step--done .bab-stake__step-bar {
+  opacity: 0.45;
 }
 
-.provider-initial {
-  font-size: 14px;
-  font-weight: 800;
+.bab-stake__step--active .bab-stake__step-label {
+  color: var(--g-accent);
 }
 
-.provider-details { flex: 1; min-width: 0; }
-
-.provider-name {
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.provider-commission { font-size: 11px; opacity: 0.55; margin-top: 2px; }
-
-.provider-pk-badge {
-  font-family: var(--g-font-mono);
-  font-size: 11px;
-  opacity: 0.3;
-  flex-shrink: 0;
-}
-
-/* ── Fields ── */
-.field-block { display: flex; flex-direction: column; gap: 6px; }
-
-.field-label {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-}
-
-.field-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
-}
-
-.field-error-msg { font-size: 11px; color: var(--g-error); }
-
-/* ── Amount input ── */
-.amount-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
-  overflow: hidden;
-  transition: border-color 0.2s ease;
-}
-
-.amount-wrap:focus-within {
-  border-color: rgba(247, 147, 26, 0.5);
-  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
-}
-
-.amount-wrap.is-error { border-color: var(--g-error); }
-
-.btc-badge {
-  padding: 0 14px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #F7931A;
-  border-right: 1px solid var(--g-hairline-1);
-  height: 48px;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.amount-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  padding: 0 14px;
-  height: 48px;
-  font-size: 20px;
-  font-weight: 300;
-  color: var(--g-text-1);
-  letter-spacing: -0.02em;
-  min-width: 0;
-}
-
-.amount-input::placeholder { color: var(--g-text-3); }
-.amount-input::-webkit-outer-spin-button,
-.amount-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.amount-input[type=number] { -moz-appearance: textfield; }
-
-.amount-meta { min-height: 16px; margin-top: 4px; }
-
-/* ── Balance strip ── */
-.balance-strip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 12px;
-  background: rgba(247, 147, 26, 0.06);
-  border: 1px solid rgba(247, 147, 26, 0.14);
-  border-radius: var(--g-r-control);
-}
-
-.balance-key { font-size: 11px; color: var(--g-text-3); }
-.balance-val { font-size: 12px; font-weight: 600; color: var(--g-text-2); margin-left: 2px; }
-
-/* ── Slider ── */
-.babylon-slider :deep(.v-slider__thumb) {
-  background: #F7931A !important;
-  border-color: #F7931A !important;
-}
-
-.babylon-slider :deep(.v-slider__track-fill) {
-  background: rgba(247, 147, 26, 0.7) !important;
-}
-
-.slider-endpoints {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  opacity: 0.3;
-  margin-top: 2px;
-  letter-spacing: 0.04em;
-}
-
-/* ── Fee tier cards ── */
-.fee-tier-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.fee-card {
-  @include g-glass-tier(false);
-  padding: 14px 12px;
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
-}
-
-.fee-card:hover {
-  @include g-glass-tier-hover(false);
-  transform: translateY(-1px);
-}
-
-.fee-card.is-selected {
-  background: rgba(247, 147, 26, 0.08);
-  border-color: rgba(247, 147, 26, 0.45);
-}
-
-.fee-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.fee-tier-name {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.bab-stake__step--done .bab-stake__step-label {
   color: var(--g-text-2);
 }
 
-.fee-card.is-selected .fee-tier-name { color: #F7931A; }
-
-.speed-dots { display: flex; gap: 3px; }
-.speed-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--g-hairline-3); }
-.speed-dot.lit { background: var(--g-text-3); }
-.fee-card.is-selected .speed-dot.lit { background: #F7931A; }
-
-.fee-rate-val {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--g-text-1);
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-
-.fee-rate-unit { font-size: 11px; font-weight: 400; color: var(--g-text-3); }
-
-.fee-time-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
-  margin-top: 3px;
-}
-
-/* ── Summary ── */
-.tx-summary {
-  @include g-glass-tier(false);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
-  padding: 14px 16px;
-}
-
-.summary-row {
+.bab-stake__body {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--g-text-3);
-  padding: 4px 0;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  min-height: 200px;
 }
 
-.summary-divider { height: 1px; background: var(--g-hairline-1); margin: 6px 0; }
+.bab-step-enter-active,
+.bab-step-leave-active {
+  transition: opacity var(--g-dur-fast) var(--g-ease);
+}
 
-.summary-total {
+.bab-step-enter-from,
+.bab-step-leave-to {
+  opacity: 0;
+}
+
+/* ── Provider strip ─────────────────────────────────────── */
+.bab-provider {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
+}
+
+.bab-provider__avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  color: var(--g-text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bab-provider__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bab-provider__name {
+  color: var(--g-text-1);
   font-size: 13px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bab-provider__pk {
+  flex: none;
+  line-height: 1.3;
+}
+
+/* ── Fields ─────────────────────────────────────────────── */
+.bab-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bab-field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+  flex-wrap: wrap;
+}
+
+.bab-field__error {
+  color: var(--g-error);
+  font-size: 12px;
+}
+
+/* Inputs are controls, not surfaces: solid raised fill. The focus ring lives on the
+   wrapper, so the bare input inside needs none of its own. */
+.bab-input {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  min-height: var(--g-btn-h);
+  padding: 0 var(--g-s-1) 0 var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.bab-input:focus-within {
+  border-color: var(--g-accent);
+}
+
+.bab-input--error,
+.bab-input--error:focus-within {
+  border-color: var(--g-error);
+}
+
+.bab-input__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--g-btn-h);
+  border: 0;
+  background: transparent;
+  color: var(--g-text-1);
+  font-size: 13px;
+  outline: none;
+}
+
+.bab-input__control::placeholder {
+  color: var(--g-text-3);
+}
+
+.bab-input__control--amount {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* A number field without the browser's spin buttons */
+.bab-input__control--amount::-webkit-outer-spin-button,
+.bab-input__control--amount::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.bab-input__control--amount[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.bab-input__unit {
+  color: var(--g-text-3);
+  font-size: 12px;
+}
+
+.bab-stake__balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bab-stake__balance-value {
   color: var(--g-text-1);
 }
 
-.summary-total .mono { color: #F7931A; }
-.mono { font-family: var(--g-font-mono); }
+.bab-slider__ends {
+  display: flex;
+  justify-content: space-between;
+}
 
-.inline-error {
+/* ── Fee tiers ──────────────────────────────────────────── */
+.bab-fees {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--g-s-2);
+}
+
+.bab-fee {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--g-s-3);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.bab-fee:hover {
+  @include g-glass-tier-hover;
+}
+
+.bab-fee--selected,
+.bab-fee--selected:hover {
+  @include g-glass-tier-active;
+}
+
+.bab-fee__top {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: var(--g-s-1);
+}
+
+.bab-fee__name {
+  color: var(--g-text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bab-fee__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.bab-fee__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-3);
+}
+
+.bab-fee__dot--lit {
+  background: var(--g-accent);
+}
+
+.bab-fee__rate {
+  color: var(--g-text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Summary ────────────────────────────────────────────── */
+.bab-summary {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.bab-summary__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  padding: var(--g-s-2) 0;
+  border-top: 1px solid var(--g-hairline-1);
+  font-size: 13px;
+}
+
+.bab-summary__row dt {
+  color: var(--g-text-3);
+}
+
+.bab-summary__row dd {
+  margin: 0;
+  color: var(--g-text-1);
+  text-align: right;
+}
+
+.bab-summary__row--total dd {
+  font-weight: 600;
+}
+
+/* ── Review ─────────────────────────────────────────────── */
+.bab-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  padding: var(--g-s-4);
+}
+
+.bab-review__amount {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-s-2);
+  line-height: 1.1;
+}
+
+.bab-review__unit {
+  color: var(--g-text-3);
+  font-size: 14px;
+}
+
+.bab-review__strong {
+  color: var(--g-text-1);
+}
+
+.bab-review__to {
+  margin-top: var(--g-s-3);
+}
+
+.bab-review__meta {
+  margin-top: var(--g-s-3);
+}
+
+/* ── Auth and notices ───────────────────────────────────── */
+.bab-auth {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+}
+
+.bab-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-2) var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  color: var(--g-text-2);
+  font-size: 13px;
+}
+
+.bab-notice .v-icon {
+  color: inherit;
+}
+
+.bab-notice__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bab-notice--success {
+  border-color: var(--g-success-line);
+  background: var(--g-success-fill);
+  color: var(--g-success);
+}
+
+.bab-notice--error {
+  border-color: var(--g-error-line);
+  background: var(--g-error-fill);
   color: var(--g-error);
 }
 
-/* ── Confirm panel ── */
-.confirm-panel {
-  @include g-glass-tier(false);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
-  padding: 20px 20px 16px;
-  text-align: center;
+.bab-notice--info {
+  color: var(--g-info);
 }
 
-.confirm-amount-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-  line-height: 1;
-}
-
-.confirm-btc-sign { font-size: 24px; font-weight: 700; color: #F7931A; }
-
-.confirm-amount-val {
-  font-size: 32px;
-  font-weight: 300;
-  color: var(--g-text-1);
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--g-font-mono);
-}
-
-.confirm-label { font-size: 11px; color: var(--g-text-3); }
-.confirm-timelock { font-size: 13px; font-weight: 600; color: #F7931A; margin-top: 2px; }
-
-.confirm-flow-icon { margin: 10px auto 6px; opacity: 0.5; }
-
-.confirm-to-label {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-  margin-bottom: 4px;
-}
-
-.confirm-provider-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--g-text-2);
-}
-
-.confirm-meta-grid {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 0 0;
-}
-
-.confirm-meta-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.confirm-meta-sep { width: 1px; height: 28px; background: var(--g-hairline-1); }
-
-.confirm-meta-key {
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-}
-
-.confirm-meta-val { font-size: 12px; color: var(--g-text-2); font-family: var(--g-font-mono); }
-.confirm-meta-val.strong { color: var(--g-text-1); font-weight: 600; }
-
-/* ── PRF auth ── */
-.prf-auth-block { display: flex; flex-direction: column; gap: 10px; }
-
-.prf-hint {
-  display: flex;
-  align-items: center;
-  font-size: 11px;
-  color: var(--g-text-3);
-}
-
-.prf-authed-strip {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  background: var(--g-success-fill);
-  border: 1px solid var(--g-success-line);
-  border-radius: var(--g-r-control);
-  font-size: 12px;
-  color: var(--g-success);
-  gap: 4px;
-}
-
-.prf-reauth-btn {
-  margin-left: auto;
-  padding: 2px 6px;
-  background: transparent;
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-control);
-  cursor: pointer;
-  color: var(--g-text-3);
-  display: flex;
-  align-items: center;
-}
-
-.prf-auth-btn {
-  width: 100%;
-  padding: 11px 16px;
-  background: rgba(247, 147, 26, 0.12);
-  border: 1px solid rgba(247, 147, 26, 0.30);
-  border-radius: var(--g-r-control);
-  cursor: pointer;
-  color: #F7931A;
-  font-size: 13px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease;
-}
-
-.prf-auth-btn:hover { background: rgba(247, 147, 26, 0.20); }
-
-/* ── Password field ── */
-.glass-input-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
-  overflow: hidden;
-  transition: border-color 0.2s ease;
-}
-
-.glass-input-wrap:focus-within {
-  border-color: rgba(247, 147, 26, 0.5);
-  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
-}
-
-.glass-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  padding: 11px 14px;
-  font-size: 13px;
-  color: var(--g-text-1);
-  min-width: 0;
-}
-
-.glass-input::placeholder { color: var(--g-text-3); }
-
-.input-icon-btn {
-  flex-shrink: 0;
-  padding: 0 12px;
-  height: 42px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  border-left: 1px solid var(--g-hairline-1);
-}
-
-.input-icon-btn:hover { background: var(--g-overlay); }
-
-/* ── Tx status ── */
-.tx-status {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  border-radius: var(--g-r-control);
-  font-size: 12px;
-}
-
-.tx-status.success { background: var(--g-success-fill); border: 1px solid var(--g-success-line); color: var(--g-success); }
-.tx-status.error   { background: var(--g-error-fill); border: 1px solid var(--g-error-line); color: var(--g-error); }
-.tx-status.info    { background: rgba(122, 167, 255, 0.12); border: 1px solid rgba(122, 167, 255, 0.25); color: var(--g-info); }
-
-/* ── Explorer link ── */
-.explorer-link {
+.bab-stake__explorer {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
-  color: #F7931A;
-  opacity: 0.75;
+  gap: var(--g-s-1);
+  align-self: center;
+  color: var(--g-accent);
   text-decoration: none;
-  transition: opacity 0.15s;
 }
 
-.explorer-link:hover { opacity: 1; text-decoration: underline; }
+.bab-stake__explorer:hover {
+  text-decoration: underline;
+}
 
-/* ── Navigation ── */
-.nav-row {
+/* ── Navigation ─────────────────────────────────────────── */
+.bab-stake__nav {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  margin-top: 20px;
+  gap: var(--g-s-3);
 }
-
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-pill);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--g-text-3);
-  cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease;
-}
-
-.back-btn:hover {
-  border-color: var(--g-hairline-3);
-  color: var(--g-text-2);
-}
-
-.next-btn,
-.stake-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 9px 22px;
-  background: linear-gradient(135deg, #F7931A, #e8820e);
-  border: none;
-  border-radius: var(--g-r-pill);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--g-on-grad);
-  cursor: pointer;
-  transition: opacity 0.2s ease, transform 0.15s ease;
-}
-
-.next-btn:hover:not(:disabled),
-.stake-btn:hover:not(:disabled) {
-  opacity: 0.92;
-  transform: translateY(-1px);
-}
-
-.next-btn.is-disabled,
-.stake-btn.is-disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
-/* ── Transitions ── */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

@@ -176,7 +176,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   async function signKeystone(cbor: string): Promise<string> {
     // Same opaque cbor, parsed (not re-encoded) for the QR sign request.
     const txSerialized = Serialization.Transaction.fromCbor(cbor as never);
-    const signRequestResponse = createKeystoneSignRequest(
+    const signRequestResponse = await createKeystoneSignRequest(
       txSerialized,
       walletStore.loggedWallet,
       cardanoUtxos(),

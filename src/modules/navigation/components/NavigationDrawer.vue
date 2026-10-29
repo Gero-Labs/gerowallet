@@ -364,8 +364,8 @@ const isMidnight = computed(() => {
   return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
 });
 
-// Nav-bar Gero mark, tinted per chain. Apex Prime (teal) and Vector (orange)
-// use their own variants so the logo matches the chain's onboarding art.
+// Nav-bar Gero mark, tinted per chain. Apex Prime (teal), Vector (orange) and
+// Bitcoin (Bitcoin orange) use their own variants so the logo matches the chain's accent.
 const navLogo = computed(() => {
   switch (loggedWallet.value?.chain) {
     case Blockchain.APEX_PRIME:
@@ -374,6 +374,8 @@ const navLogo = computed(() => {
       return assets.geroNoTextVector;
     case Blockchain.MIDNIGHT:
       return assets.geroNoTextMidnight;
+    case Blockchain.BITCOIN:
+      return assets.geroNoTextBitcoin;
     default:
       return assets.geroNoText;
   }

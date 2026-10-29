@@ -36,6 +36,8 @@ vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension })
 vi.mock('@trezor/connect-web', () => ({ default: connectWeb }));
 // See trezor.datum.spec.ts: the package entry cannot load under the Node CI pins.
 vi.mock('@trezor/connect', async () => ({ PROTO: (await import('@trezor/connect/lib/constants')).PROTO }));
+// The worker's CIP-113 answer (cip113SignPreflight.spec.ts): nothing here is refused.
+vi.mock('@/shared/utils/cip113SignPreflight', () => ({ assertCip113SignAllowed: vi.fn(async () => undefined) }));
 
 import ledgerUtils from './ledger';
 import trezor from './trezor';
@@ -75,6 +77,15 @@ const OWN_TX = [
 ].join('').replace(/ /g, '');
 /** The device answers with witnesses its xpub (the wallet's) verifies. */
 const XPUB = bech32.encode('xpub', bech32.toWords(Buffer.from(WALLET_ACCOUNT_XPUB, 'hex')), 1023);
+/** OWN_TX with its certificate swapped for a zero withdrawal from `rewardAccount` (29 bytes, hex). */
+const withdrawalTx = (rewardAccount: string) => [
+  '84a4',
+  `00 81825820${'aa'.repeat(32)}00`, // inputs
+  `01 81825839${Cardano.Address.fromBech32(WALLET_ADDRESS).toBytes()}1a004c4b40`, // outputs: change
+  '02 1a00030d40', // fee
+  `05 a1 581d${rewardAccount} 00`, // withdrawals
+  'a0 f5 f6',
+].join('').replace(/ /g, '');
 const OWN_TX_ID = Serialization.Transaction.fromCbor(Serialization.TxCBOR(OWN_TX)).getId();
 const ownTx = () => Serialization.Transaction.fromCbor(Serialization.TxCBOR(OWN_TX)).toCore();
 
@@ -152,11 +163,31 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
     await expect(signTransaction(tx.toCore(), keysOnAccount(1), scriptUtxos, false, MAINNET, XPUB, NO_COLLATERAL_TX)).rejects.toThrow(/multisig account public key/);
   });
 
-  async function deviceRequest(keys: Keys): Promise<Trezor.CardanoSignTransaction & { additionalWitnessRequests?: string[] }> {
-    connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: { hash: OWN_TX_ID, witnesses: [] } });
-    await signTransaction(ownTx(), keys, UTXOS, false, MAINNET, XPUB, OWN_TX);
+  async function deviceRequest(keys: Keys, txCbor = OWN_TX): Promise<Trezor.CardanoSignTransaction & { additionalWitnessRequests?: string[] }> {
+    const tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+    connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: { hash: tx.getId(), witnesses: [] } });
+    await signTransaction(tx.toCore(), keys, UTXOS, false, MAINNET, XPUB, txCbor);
     return connect.cardanoSignTransaction.mock.lastCall![0];
   }
+
+  it('asks for the stake witness for a withdrawal of the wallet’s own rewards', async () => {
+    const request = await deviceRequest(keysOnAccount(1), withdrawalTx(`e1${'22'.repeat(28)}`));
+
+    expect(request.withdrawals?.[0].path).toBe("m/1852'/1815'/1'/2/0");
+    expect(request.additionalWitnessRequests).toEqual(["m/1852'/1815'/1'/2/0"]);
+  });
+
+  // A CIP-113 transfer runs three zero withdrawals of scripts; the stake key is not asked for
+  // them, and a witness nobody asked for is bytes the fee did not count.
+  it.each([
+    ['a script', `f1${'cc'.repeat(28)}`],
+    ['another key', `e1${'33'.repeat(28)}`],
+  ])('asks for no stake witness for a withdrawal of %s', async (_, rewardAccount) => {
+    const request = await deviceRequest(keysOnAccount(1), withdrawalTx(rewardAccount));
+
+    expect(request.withdrawals?.[0].path).toBeUndefined();
+    expect(request.additionalWitnessRequests).toBeUndefined();
+  });
 
   it('asks for the input, the change output and the stake witness under account 1', async () => {
     const request = await deviceRequest(keysOnAccount(1));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano } from '@cardano-sdk/core';
-import { cardanoUtxoToNexusInput, NEXUS_MAX_INPUTS, nexusErrorMessage, walletUtxosToNexusInputs } from './nexus-tx-api';
+import { cardanoUtxoToNexusInput, NEXUS_MAX_INPUTS, nexusErrorCode, nexusErrorMessage, walletUtxosToNexusInputs } from './nexus-tx-api';
 import { convertNexusUtxos } from '@/services/nexusUtxo';
 import { HASH_ONLY_DATUM_UTXO, INLINE_DATUM_UTXOS } from '@/shared/utils/__fixtures__/mainnetDatumUtxos';
 
@@ -66,5 +66,20 @@ describe('nexusErrorMessage', () => {
   it('returns undefined when the body carries no message', () => {
     expect(nexusErrorMessage({})).toBeUndefined();
     expect(nexusErrorMessage(undefined)).toBeUndefined();
+  });
+});
+
+describe('nexusErrorCode', () => {
+  it("reads a CIP-113 422's errorCode from the response the interceptor keeps", () => {
+    const error = Object.assign(new Error('module not supported'), {
+      response: { status: 422, data: { message: 'module not supported', errorCode: 'MODULE_UNSUPPORTED' } },
+    });
+    expect(nexusErrorCode(error)).toBe('MODULE_UNSUPPORTED');
+  });
+
+  it('is undefined without a well-formed code', () => {
+    expect(nexusErrorCode(new Error('network down'))).toBeUndefined();
+    expect(nexusErrorCode({ response: { data: { errorCode: '<script>' } } })).toBeUndefined();
+    expect(nexusErrorCode(undefined)).toBeUndefined();
   });
 });

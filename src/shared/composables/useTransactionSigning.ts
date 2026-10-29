@@ -434,7 +434,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
 
       // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value as Cardano.Utxo[], keys.value);
+      const signRequestResponse: KeystoneSignRequestResponse = await createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value as Cardano.Utxo[], keys.value);
+      if (!attempt.current()) return false;
       keystoneApproval = { attempt, requestId: signRequestResponse.requestId };
 
       // Extract type and cbor as plain strings to avoid Vue reactivity wrapping

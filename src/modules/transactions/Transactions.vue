@@ -50,6 +50,7 @@
         :aria-label="$t('transactions.transactionDetails')"
       >
         <MidnightTransactionDetails v-if="isMidnight" :transactionInfo="transactionInfo" />
+        <BitcoinTransactionDetails v-else-if="isBitcoin" :transactionInfo="transactionInfo" />
         <TransactionDetails v-else :transactionInfo="transactionInfo" />
       </section>
     </div>
@@ -86,6 +87,7 @@
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import TransactionDetails from '@/shared/components/TransactionDetails.vue';
+import BitcoinTransactionDetails from '@/modules/transactions/components/BitcoinTransactionDetails.vue';
 import UtxosTable from '@/modules/transactions/components/UtxosTable.vue';
 import UtxoDetail from '@/modules/transactions/components/UtxoDetail.vue';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
@@ -104,6 +106,7 @@ const vmProxy = getCurrentInstance()!.proxy;
 const route = vmProxy.$route;
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+const isBitcoin = computed(() => walletStore.loggedWallet?.chain === Blockchain.BITCOIN);
 
 const activeTab = ref(route.query?.['tab'] === 'utxos' ? 1 : 0);
 const utxosVisited = ref(activeTab.value === 1);
