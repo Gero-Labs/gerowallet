@@ -24,8 +24,7 @@ vi.mock('../composables/useChainContext', async () => {
   const { ref } = await import('vue');
   return { useChainContext: () => ({ themeColors: ref({ primary: '#fff' }) }) };
 });
-// BitcoinPsbtReview (mounted by the PSBT approval) reads the named `walletStore`; both
-// exports share one state so a test sets the logged wallet once.
+// As in the real module, the default export's state is the named walletStore.
 vi.mock('@/stores/walletStore', async () => {
   const state = (await import('vue')).reactive({
     loggedWallet: {}, isLocked: false, keys: { payment: [], change: [], stake: [] }, utxos: [],
