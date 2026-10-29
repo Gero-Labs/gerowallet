@@ -179,9 +179,43 @@ const ownRequiredSignerKey = (keys: Keys, keyHash: Ed25519KeyHashHex): Key | und
 };
 
 /**
+ * The stake credential of a reward (stake) address. It is not a base address, so
+ * BaseAddress.fromAddress() gives undefined for it; in @cardano-sdk/core a reward
+ * address holds its one credential as the payment credential.
+ */
+const rewardAddressCredential = (stakeAddress: string): Cardano.Credential => {
+  const rewardAddress = Cardano.RewardAddress.fromAddress(Cardano.Address.fromBech32(stakeAddress));
+  if (!rewardAddress) throw new Error('The withdrawal is not from a reward address');
+  return rewardAddress.getPaymentCredential();
+};
+
+/**
+ * The stake credential hashes this wallet's stake key signs for: certificates whose
+ * stake credential is the wallet's stake key, and withdrawals from its reward address.
+ * Another credential (someone else's key, a script) is not this wallet's to sign. A
+ * key set with no stake cred (not expected) keeps every certificate, as the software
+ * signer's resolver does, rather than drop a witness the wallet's own action needs.
+ */
+const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: string | undefined): Cardano.Credential['hash'][] => {
+  const ownStakeCreds = new Set(keys.stake.map((key) => String(key.cred ?? '').toLowerCase()).filter(Boolean));
+  const hashes: Cardano.Credential['hash'][] = [];
+  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
+    // Check if certificate has stakeCredential property (all stake-related certs do)
+    if (!('stakeCredential' in cert) || !cert.stakeCredential) return;
+    if (ownStakeCreds.size === 0 || ownStakeCreds.has(cert.stakeCredential.hash.toLowerCase())) {
+      hashes.push(cert.stakeCredential.hash);
+    }
+  });
+  txCore.body.withdrawals?.forEach((withdrawal: Cardano.Withdrawal) => {
+    if (withdrawal.stakeAddress === stakeAddress) hashes.push(rewardAddressCredential(withdrawal.stakeAddress).hash);
+  });
+  return hashes;
+};
+
+/**
  * Helper function to get owned keypaths and addresses for hash-based signing
  */
-const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Transaction, utxos: Cardano.Utxo[]) => {
+const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Transaction, utxos: Cardano.Utxo[], stakeAddress: string | undefined) => {
   const ownedKeypathList: CryptoKeypath[] = [];
   const ownedAddressList: string[] = [];
   const addedPaths = new Set<string>(); // Track added paths to avoid duplicates
@@ -220,25 +254,11 @@ const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Trans
     if (key) addKey(key);
   });
 
-  // Also check for stake key if there are certificates or withdrawals
-  if ((txCore.body.certificates && txCore.body.certificates.length > 0) ||
-      (txCore.body.withdrawals && txCore.body.withdrawals.length > 0)) {
-    const stakeKey = keys.stake[0];
-    if (stakeKey) addKey(stakeKey);
-  }
+  // The stake key, when a certificate or withdrawal is the wallet's own
+  const stakeKey = keys.stake[0];
+  if (stakeKey && ownStakeSignerHashes(txCore, keys, stakeAddress).length > 0) addKey(stakeKey);
 
   return { ownedKeypathList, ownedAddressList };
-};
-
-/**
- * The stake credential of a reward (stake) address. It is not a base address, so
- * BaseAddress.fromAddress() gives undefined for it; in @cardano-sdk/core a reward
- * address holds its one credential as the payment credential.
- */
-const rewardAddressCredential = (stakeAddress: string): Cardano.Credential => {
-  const rewardAddress = Cardano.RewardAddress.fromAddress(Cardano.Address.fromBech32(stakeAddress));
-  if (!rewardAddress) throw new Error('The withdrawal is not from a reward address');
-  return rewardAddress.getPaymentCredential();
 };
 
 export interface KeystoneSignRequestResponse {
@@ -315,24 +335,8 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
     });
 
     // Also check for certificates and withdrawals (for staking operations)
-    if ((txCore.body.certificates && txCore.body.certificates.length > 0) || (txCore.body.withdrawals && txCore.body.withdrawals.length > 0)) {
-      const stakePath = keys.stake[0]?.path || '';
-      if (txCore.body.certificates) {
-        txCore.body.certificates.forEach((cert: Cardano.Certificate) => {
-          // Check if certificate has stakeCredential property (all stake-related certs do)
-          if ('stakeCredential' in cert && cert.stakeCredential) {
-            addSigner(cert.stakeCredential.hash, stakePath);
-          }
-        })
-      }
-      if (txCore.body.withdrawals && txCore.body.withdrawals.length > 0) {
-        txCore.body.withdrawals.forEach((withdrawal: Cardano.Withdrawal) => {
-          if (withdrawal.stakeAddress === walletData.stakeAddress) {
-            addSigner(rewardAddressCredential(withdrawal.stakeAddress).hash, stakePath);
-          }
-        })
-      }
-    }
+    const stakePath = keys.stake[0]?.path || '';
+    ownStakeSignerHashes(txCore, keys, walletData.stakeAddress).forEach((keyHash) => addSigner(keyHash, stakePath));
     return {keystoneUtxos, extraSigners}
   }
 
@@ -353,7 +357,7 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
 
     debugLog('[Keystone] Using hash-based signing for transaction:', txHash);
 
-    const { ownedKeypathList, ownedAddressList } = getOwnedKeyAddressList(xfp, keys, tx, utxos);
+    const { ownedKeypathList, ownedAddressList } = getOwnedKeyAddressList(xfp, keys, tx, utxos, walletData.stakeAddress);
 
     debugLog('[Keystone] Owned keypaths:', ownedKeypathList.length);
     debugLog('[Keystone] Owned addresses:', ownedAddressList);

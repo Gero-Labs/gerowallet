@@ -230,15 +230,28 @@ describe('Keystone Cardano sign request: extra signers', () => {
     },
     witness: { signatures: new Map() },
   });
-  const request = (body: Partial<Cardano.TxBody>, outputCount?: number) =>
-    createKeystoneSignRequest(tx(body, outputCount), { xfp: '0a1b2c3d', stakeAddress }, utxos, keys);
+  const request = (body: Partial<Cardano.TxBody>, outputCount?: number, keySet: Keys = keys) =>
+    createKeystoneSignRequest(tx(body, outputCount), { xfp: '0a1b2c3d', stakeAddress }, utxos, keySet);
   /** The extra signers the Keystone is asked for, as it decodes the request. */
-  const signersOf = (body: Partial<Cardano.TxBody>) => {
-    const response = request(body);
+  const signersOf = (body: Partial<Cardano.TxBody>, keySet?: Keys) => {
+    const response = request(body, 1, keySet);
     expect(response.useHash).toBe(false);
     return CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()
       .map((signer) => ({ keyHash: signer.getKeyHash().toString('hex'), keyPath: `m/${signer.getKeyPath()}` }));
   };
+  /** The key paths a hash-signing request (2048 bytes or more) asks the Keystone for. */
+  const hashPathsOf = (body: Partial<Cardano.TxBody>) => {
+    const response = request(body, 40);
+    expect(response.useHash).toBe(true);
+    // Registry 0.5.0's decoder leaves each path as its raw data item, despite the type.
+    const paths = CardanoSignTxHashRequest.fromCBOR(response.ur.cbor).getPaths() as unknown as DataItem[];
+    return paths.map((path) => `m/${CryptoKeypath.fromDataItem(path).getPath()}`);
+  };
+  const voteDelegationOf = (stakeCredential: Cardano.Credential): Cardano.Certificate => ({
+    __typename: Cardano.CertificateType.VoteDelegation, stakeCredential, dRep: { __typename: 'AlwaysAbstain' },
+  });
+  const foreignStakeCred = keyHash('cc');
+  const scriptStakeCred = { type: Cardano.CredentialType.ScriptHash, hash: Hash28ByteBase16('ff'.repeat(28)) };
 
   it('asks for each required signer that is one of the wallet\'s keys, at that key\'s path', () => {
     expect(signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(changeCred), signerHash(stakeCred)] }))
@@ -258,14 +271,34 @@ describe('Keystone Cardano sign request: extra signers', () => {
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  // A transaction of 2048 bytes or more is signed by hash, with the key paths listed.
   it('asks for the wallet\'s required signers in a hash-signing request', () => {
-    const response = request({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(stakeCred)] }, 40);
-    expect(response.useHash).toBe(true);
-    // Registry 0.5.0's decoder leaves each path as its raw data item, despite the type.
-    const paths = CardanoSignTxHashRequest.fromCBOR(response.ur.cbor).getPaths() as unknown as DataItem[];
-    expect(paths.map((path) => `m/${CryptoKeypath.fromDataItem(path).getPath()}`))
+    expect(hashPathsOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(stakeCred)] }))
       .toEqual([PAYMENT_PATH, OTHER_PAYMENT_PATH, STAKE_PATH]);
+  });
+
+  it('does not sign a certificate for another key or a script with the stake key', () => {
+    expect(signersOf({ certificates: [voteDelegationOf(foreignStakeCred), voteDelegationOf(scriptStakeCred)] })).toEqual([]);
+  });
+
+  it('signs only the wallet\'s own certificate when the transaction carries others too', () => {
+    expect(signersOf({ certificates: [voteDelegationOf(foreignStakeCred), voteDelegation] }))
+      .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
+  });
+
+  it('asks for the stake key in a hash-signing request only for the wallet\'s own certificate or withdrawal', () => {
+    expect(hashPathsOf({
+      certificates: [voteDelegationOf(foreignStakeCred), voteDelegationOf(scriptStakeCred)],
+      withdrawals: [{ stakeAddress: rewardAccount(scriptStakeCred), quantity: 0n }],
+    })).toEqual([PAYMENT_PATH]);
+    expect(hashPathsOf({ certificates: [voteDelegation] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+    expect(hashPathsOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+  });
+
+  // As the software signer's resolver does: a key set that cannot tell, signs.
+  it('keeps signing certificates with the stake key when the key set has no stake cred', () => {
+    const withoutStakeCred: Keys = { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] };
+    expect(signersOf({ certificates: [voteDelegationOf(foreignStakeCred)] }, withoutStakeCred))
+      .toEqual([{ keyHash: foreignStakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
   it('asks the stake key to sign a withdrawal from the wallet\'s own reward address', () => {
@@ -279,6 +312,6 @@ describe('Keystone Cardano sign request: extra signers', () => {
   });
 
   it('does not sign a withdrawal from another reward address', () => {
-    expect(signersOf({ withdrawals: [{ stakeAddress: rewardAccount(keyHash('cc')), quantity: 1_000_000n }] })).toEqual([]);
+    expect(signersOf({ withdrawals: [{ stakeAddress: rewardAccount(foreignStakeCred), quantity: 1_000_000n }] })).toEqual([]);
   });
 });
