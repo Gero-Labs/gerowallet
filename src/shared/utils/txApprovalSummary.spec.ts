@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { buildTxApprovalSummary, formatLovelace, type ApprovalContext } from './txApprovalSummary';
+import { approvalContextFromKeys, buildTxApprovalSummary, formatLovelace, type ApprovalContext } from './txApprovalSummary';
 
 const OWN_ADDR = 'addr_test1qpdmx56dml9qtej5vxhejju492w9pfv7j9270wjh0pfe9hdzqxa4r35qhuqx29n693k4gqukhk3lfw37xkp4egvh6raq4d4rzj';
 const CHANGE_ADDR = 'addr_test1qqy44ytv354nqrs0f3hfsecj45w623wgqskt7nx84qd8v6lgxeg90kc8dfzpcg9xl8nuhvdesgq5cz6ejq83vk60hpns2c2kwh';
@@ -25,6 +25,7 @@ const ctx = (over: Partial<ApprovalContext> = {}): ApprovalContext => ({
   ownRewardAccounts: new Set([OWN_REWARD]),
   ownDrepKeyHashes: new Set([OWN_DREP_HASH]),
   ownCcHotKeyHashes: new Set(),
+  ownCcColdKeyHashes: new Set(),
   walletNetworkId: Cardano.NetworkId.Testnet,
   resolveAsset: () => ({ name: 'Token', decimals: 0 }),
   ...over,
@@ -115,6 +116,18 @@ describe('buildTxApprovalSummary', () => {
     expect(s.requiredSigners).toEqual([{ keyHash: OWN_PAYMENT_HASH, isOwn: true }, { keyHash: 'f'.repeat(56), isOwn: false }]);
     expect(s.validityStartSlot).toBe(1000);
     expect(s.ttlSlot).toBe(2000);
+  });
+
+  it('marks a required signer naming any key the signers sign with as the wallet\'s own, whatever its case', () => {
+    const COLD = '1c'.repeat(28);
+    const HOT = '2d'.repeat(28);
+    const wallet = approvalContextFromKeys(
+      { payment: [{ cred: OWN_PAYMENT_HASH }], drep129: [{ cred: OWN_DREP_HASH }], ccHot: [{ cred: HOT }], ccCold: [{ cred: COLD }] },
+      Cardano.NetworkId.Testnet,
+      () => ({ name: 'Token', decimals: 0 }),
+    );
+    const s = buildTxApprovalSummary(tx({ requiredExtraSignatures: [COLD, HOT, OWN_DREP_HASH, OWN_PAYMENT_HASH.toUpperCase(), 'f'.repeat(56)] }), wallet);
+    expect(s.requiredSigners.map((signer) => signer.isOwn)).toEqual([true, true, true, true, false]);
   });
 
   it('flags a body network id or any output (own included) on another network', () => {

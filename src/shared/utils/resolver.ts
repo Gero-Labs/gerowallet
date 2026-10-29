@@ -11,6 +11,7 @@ import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import { HARDENED, ChainDerivations, Keys } from '@/models/types';
 import { debugLog } from '@/utils/debug';
+import { credSet } from '@/shared/utils/keyCreds';
 import assetsModule from '@/utils/assets';
 
 // Service worker compatible icon resolution
@@ -658,15 +659,24 @@ export function analyzeTransactionForSignatures(
   // tx really does. If the key set carries no creds of a kind (not expected
   // for a normal wallet), fall back to the old behaviour rather than drop a
   // witness the wallet's own action needs.
-  const credsOf = (...lists: Array<Array<{ cred?: string }> | undefined>) =>
-    new Set(lists.flatMap((l) => (Array.isArray(l) ? l : []).map((k) => String(k?.cred ?? '').toLowerCase()).filter(Boolean)));
   const keySet = (addresses ?? {}) as Partial<Keys>;
-  const ownStakeCreds = credsOf(keySet.stake);
-  const ownDrepCreds = credsOf(keySet.drep105, keySet.drep129);
-  const ownCcHotCreds = credsOf(keySet.ccHot);
-  const ownCcColdCreds = credsOf(keySet.ccCold);
+  const ownStakeCreds = credSet(keySet.stake);
+  const ownDrepCreds = credSet(keySet.drep105, keySet.drep129);
+  const ownCcHotCreds = credSet(keySet.ccHot);
+  const ownCcColdCreds = credSet(keySet.ccCold);
   const ownedOrUnknown = (owned: Set<string>, hash: unknown) =>
     owned.size === 0 || (typeof hash === 'string' && owned.has(hash.toLowerCase()));
+  // A reward account is the wallet's when it is its stake address or carries one of its stake
+  // key hashes, as the Keystone signer matches it, so a caller without the stake address
+  // (a fee estimate, say) still counts the witness.
+  const isOwnRewardAccount = (account: Cardano.RewardAccount) => {
+    if (stakeAddress && account === stakeAddress) return true;
+    try {
+      return ownStakeCreds.has(Cardano.RewardAccount.toHash(account).toLowerCase());
+    } catch {
+      return false;
+    }
+  };
 
   // Check transaction inputs
   for (const input of transaction.body.inputs) {
@@ -709,6 +719,22 @@ export function analyzeTransactionForSignatures(
     }
   }
 
+  // Collateral is witnessed like an input: a collateral UTxO at one of the wallet's payment or
+  // change keys needs that key's signature even when no input uses it (as Trezor and Keystone
+  // map it). One the wallet doesn't hold at a known key adds nothing.
+  for (const collateral of transaction.body.collaterals ?? []) {
+    const utxo = utxos.find(u => u[0].txId === collateral.txId && u[0].index === collateral.index);
+    const address = utxo?.[1].address;
+    const key = address
+      && (addresses.payment?.find((addr) => addr.address === address) ?? addresses.change?.find((addr) => addr.address === address));
+    if (key && key.path) {
+      requiredSigners.push({
+        derivationPath: parseDerivationPath(key.path),
+        type: 'payment'
+      });
+    }
+  }
+
   // Check for certificates (staking operations and governance)
   if (transaction.body.certificates && transaction.body.certificates.length > 0) {
     for (const certificate of transaction.body.certificates) {
@@ -740,8 +766,8 @@ export function analyzeTransactionForSignatures(
         const poolCert = certificate as Cardano.PoolRegistrationCertificate;
         if (poolCert.poolParameters?.owners) {
           for (const owner of poolCert.poolParameters.owners) {
-            // If this wallet's stake address is an owner, require stake key signature
-            if (owner === stakeAddress) {
+            // If this wallet is an owner (its stake address or stake key hash), require stake key signature
+            if (isOwnRewardAccount(owner)) {
               requiredSigners.push({
                 derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
                 type: 'stake'
@@ -833,7 +859,7 @@ export function analyzeTransactionForSignatures(
   // Check for withdrawals
   if (transaction.body.withdrawals && transaction.body.withdrawals.length > 0) {
     for (const rewardAddress of transaction.body.withdrawals) {
-      if (rewardAddress.stakeAddress === stakeAddress) {
+      if (isOwnRewardAccount(rewardAddress.stakeAddress)) {
         // Need stake key signature for withdrawal
         requiredSigners.push({
           derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
@@ -883,15 +909,21 @@ export function analyzeTransactionForSignatures(
         }
       }
 
-      // Else it may name the wallet's DRep key or a committee key, each derived at index 0
-      // of its role, as the certificate and vote branches above sign them. Only a hash the
-      // key set carries counts: a required signer is often another party's key (a multisig).
-      if (!foundMatch) {
-        const roleKey = ownDrepCreds.has(hash) ? { role: ChainDerivations.DREP, type: 'drep' }
-          : ownCcColdCreds.has(hash) ? { role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, type: 'ccCold' }
-            : ownCcHotCreds.has(hash) ? { role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, type: 'ccHot' }
-              : undefined;
-        if (roleKey) requiredSigners.push({ derivationPath: [roleKey.role, 0], type: roleKey.type });
+      // Else it may name the wallet's DRep key or a committee key, signed at that key's own path
+      // (index 0 of its role when the key set carries none, as the certificate and vote branches
+      // above sign them). Only a hash the key set carries counts: a required signer is often
+      // another party's key (a multisig).
+      const governanceKeys: Array<[Array<{ cred?: string; path?: string }> | undefined, number, string]> = [
+        [keySet.drep105, ChainDerivations.DREP, 'drep'],
+        [keySet.drep129, ChainDerivations.DREP, 'drep'],
+        [keySet.ccCold, ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 'ccCold'],
+        [keySet.ccHot, ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 'ccHot'],
+      ];
+      for (const [list, role, type] of foundMatch ? [] : governanceKeys) {
+        const key = (Array.isArray(list) ? list : []).find((k) => String(k?.cred ?? '').toLowerCase() === hash);
+        if (!key) continue;
+        requiredSigners.push({ derivationPath: key.path ? parseDerivationPath(key.path) : [role, 0], type });
+        break;
       }
     }
   }

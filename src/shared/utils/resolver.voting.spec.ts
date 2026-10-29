@@ -119,6 +119,14 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
     const requiring = (...hashes: string[]) => ({ body: { inputs: [], outputs: [], requiredExtraSignatures: hashes } }) as never;
     const own = keys({ drep129: [{ cred: CRED, path: '' }], ccCold: [{ cred: COLD, path: '' }], ccHot: [{ cred: HOT, path: '' }] });
 
+    it('signs a governance required signer at the key\'s own path when the key set carries one', () => {
+      const withPaths = keys({ drep129: [{ cred: CRED, path: "m/1852'/1815'/1'/3/2" }], ccCold: [{ cred: COLD, path: "m/1852'/1815'/1'/4/1" }] });
+      expect(analyzeTransactionForSignatures(requiring(CRED, COLD), [], withPaths, '')).toEqual([
+        { derivationPath: [ChainDerivations.DREP, 2], type: 'drep' },
+        { derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 1], type: 'ccCold' },
+      ]);
+    });
+
     it('signs a required signer naming our DRep key or a committee key, at that key\'s role', () => {
       expect(analyzeTransactionForSignatures(requiring(CRED, COLD, HOT), [], own, '')).toEqual([
         { derivationPath: [ChainDerivations.DREP, 0], type: 'drep' },
@@ -159,6 +167,59 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
     it('signs nothing for a hash that is not one of our keys, even with no key of that kind to compare against', () => {
       expect(analyzeTransactionForSignatures(requiring(FOREIGN), [], own, '')).toHaveLength(0);
       expect(analyzeTransactionForSignatures(requiring(CRED, COLD, HOT), [], keys({}), '')).toHaveLength(0);
+    });
+  });
+
+  describe('collateral', () => {
+    const INPUT_ADDR = 'addr_test_input_key';
+    const COLLATERAL_ADDR = 'addr_test_collateral_key';
+    const wallet = keys({
+      payment: [
+        { address: INPUT_ADDR, cred: 'a1'.repeat(28), path: "m/1852'/1815'/1'/0/5" },
+        { address: COLLATERAL_ADDR, cred: 'b2'.repeat(28), path: "m/1852'/1815'/1'/0/0" },
+      ],
+    });
+    const utxo = (txId: string, index: number, address: string) =>
+      [{ txId, index, address }, { address, value: { coins: 5_000_000n } }] as unknown as Cardano.Utxo;
+    const utxos = [utxo('11'.repeat(32), 0, INPUT_ADDR), utxo('22'.repeat(32), 1, COLLATERAL_ADDR)];
+    const spending = (collaterals: Array<{ txId: string; index: number }>) => ({ body: {
+      inputs: [{ txId: '11'.repeat(32), index: 0 }], outputs: [], collaterals,
+    } }) as never;
+
+    it('signs for a collateral UTxO at a key no input uses', () => {
+      expect(analyzeTransactionForSignatures(spending([{ txId: '22'.repeat(32), index: 1 }]), utxos, wallet, '')).toEqual([
+        { derivationPath: [ChainDerivations.EXTERNAL, 5], type: 'payment' },
+        { derivationPath: [ChainDerivations.EXTERNAL, 0], type: 'payment' },
+      ]);
+    });
+
+    it('signs once when the collateral sits at an input\'s key, and not at all for a collateral UTxO it does not know', () => {
+      expect(analyzeTransactionForSignatures(spending([{ txId: '11'.repeat(32), index: 0 }, { txId: '33'.repeat(32), index: 0 }]), utxos, wallet, ''))
+        .toEqual([{ derivationPath: [ChainDerivations.EXTERNAL, 5], type: 'payment' }]);
+    });
+  });
+
+  describe('reward accounts', () => {
+    const STAKE = 'a3'.repeat(28);
+    const rewardAccount = (hash: string) => Cardano.RewardAddress.fromCredentials(
+      Cardano.NetworkId.Testnet, { type: Cardano.CredentialType.KeyHash, hash: hash as Cardano.Credential['hash'] },
+    ).toAddress().toBech32();
+    const wallet = keys({ stake: [{ cred: STAKE, path: "m/1852'/1815'/1'/2/0" }] });
+    const stakeSigner = { derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0], type: 'stake' };
+    const withdrawing = (account: string) => ({ body: { inputs: [], outputs: [], withdrawals: [{ stakeAddress: account, quantity: 1n }] } }) as never;
+    const owning = (owner: string) => ({ body: { inputs: [], outputs: [], certificates: [{
+      __typename: Cardano.CertificateType.PoolRegistration, poolParameters: { owners: [owner] },
+    }] } }) as never;
+
+    it('signs a withdrawal and a pool ownership by stake key hash when no stake address is given', () => {
+      expect(analyzeTransactionForSignatures(withdrawing(rewardAccount(STAKE)), [], wallet, '')).toEqual([stakeSigner]);
+      // Spread: a pool registration also flags the cold key on the array itself.
+      expect([...analyzeTransactionForSignatures(owning(rewardAccount(STAKE)), [], wallet, '')]).toEqual([stakeSigner]);
+    });
+
+    it('signs nothing for another reward account', () => {
+      expect(analyzeTransactionForSignatures(withdrawing(rewardAccount(FOREIGN)), [], wallet, '')).toHaveLength(0);
+      expect(analyzeTransactionForSignatures(owning(rewardAccount(FOREIGN)), [], wallet, '')).toHaveLength(0);
     });
   });
 

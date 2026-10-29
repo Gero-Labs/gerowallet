@@ -14,6 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
+import { credSet } from '@/shared/utils/keyCreds';
 import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
@@ -223,10 +224,6 @@ interface ExtraSigner extends SigningKey { keyHash: string }
 /** A key list of the key set, empty when an older or partial key set has none. */
 const keyList = (list: Key[] | undefined): Key[] => (Array.isArray(list) ? list : []);
 
-/** The lowercase key hashes (`cred`) of the given key lists. */
-const credsOf = (...lists: Array<Key[] | undefined>): Set<string> =>
-  new Set(lists.flatMap(keyList).map((key) => String(key.cred ?? '').toLowerCase()).filter(Boolean));
-
 /** A DRep ID is not an address, so a DRep key lists none. */
 const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | undefined =>
   key?.path ? { path: key.path, ...(listsAddress && key.address ? { address: key.address } : {}) } : undefined;
@@ -272,7 +269,7 @@ const isOwnKeyHash = (owned: Set<string>, credential: { type: Cardano.Credential
  * action needs.
  */
 const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: string | undefined): string[] => {
-  const ownStakeCreds = credsOf(keys.stake);
+  const ownStakeCreds = credSet(keys.stake);
   const isOwnRewardAccount = (account: Cardano.RewardAccount) =>
     account === stakeAddress || ownStakeCreds.has(Cardano.RewardAccount.toHash(account).toLowerCase());
   const hashes: string[] = [];
@@ -303,7 +300,7 @@ const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: stri
  * update and retirement certificates, and the votes it casts as that DRep.
  */
 const ownDrepSignerHashes = (txCore: Cardano.Tx, keys: Keys): string[] => {
-  const ownDrepCreds = credsOf(keys.drep105, keys.drep129);
+  const ownDrepCreds = credSet(keys.drep105, keys.drep129);
   const hashes: string[] = [];
   txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
     if ('dRepCredential' in cert && cert.dRepCredential && isOwnKeyHash(ownDrepCreds, cert.dRepCredential)) hashes.push(cert.dRepCredential.hash);
@@ -321,8 +318,8 @@ const ownDrepSignerHashes = (txCore: Cardano.Tx, keys: Keys): string[] => {
  * credential an authorization names does not sign it.
  */
 const ownCommitteeSignerHashes = (txCore: Cardano.Tx, keys: Keys): { cold: string[]; hot: string[] } => {
-  const ownColdCreds = credsOf(keys.ccCold);
-  const ownHotCreds = credsOf(keys.ccHot);
+  const ownColdCreds = credSet(keys.ccCold);
+  const ownHotCreds = credSet(keys.ccHot);
   const cold: string[] = [];
   const hot: string[] = [];
   txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
@@ -352,7 +349,13 @@ const ownCommitteeSignerHashes = (txCore: Cardano.Tx, keys: Keys): { cold: strin
  * listed even when an input's key is the one it names.
  */
 const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], stakeAddress: string | undefined) => {
-  const utxoOf = (txIn: Cardano.TxIn) => utxos.find(([known]) => known.txId === txIn.txId && known.index === txIn.index);
+  // Indexed once by `txId#index`, the first of any duplicate kept, as a scan would find it.
+  const utxoByRef = new Map<string, Cardano.Utxo>();
+  utxos.forEach((utxo) => {
+    const ref = `${utxo[0].txId}#${utxo[0].index}`;
+    if (!utxoByRef.has(ref)) utxoByRef.set(ref, utxo);
+  });
+  const utxoOf = (txIn: Cardano.TxIn) => utxoByRef.get(`${txIn.txId}#${txIn.index}`);
   const addressOf = ([txIn, txOut]: Cardano.Utxo) => txIn.address || txOut.address;
   const keyAt = (address: string) => keyList(keys.payment).find((key) => key.address === address)
     || keyList(keys.change).find((key) => key.address === address);
@@ -411,14 +414,14 @@ export interface KeystoneSignRequestResponse {
 export const createKeystoneSignRequest = async (tx: Serialization.Transaction, walletData, utxos: Cardano.Utxo[], keys: Keys): Promise<KeystoneSignRequestResponse> => {
   // Keystone signs whatever QR it is shown, and the page cannot read the CIP-113 refusal
   // index; every caller, the dApp approvals included, passes through here.
-  await assertCip113SignAllowed(tx.toCbor(), i18n.t('wallet.keystoneSigningFailed') as string);
+  const txCborHex = tx.toCbor();
+  await assertCip113SignAllowed(txCborHex, i18n.t('wallet.keystoneSigningFailed') as string);
 
   // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
   const txCore = tx.toCore();
   assertFirmwareShowsCertificates(txCore, walletData.firmwareVersion);
 
   const xfp = walletData.xfp ?? "";
-  const txCborHex = tx.toCbor();
   const cborBuffer = Buffer.from(txCborHex, 'hex');
   const { inputs, extra } = walletSigners(txCore, keys, utxos, walletData.stakeAddress);
 
