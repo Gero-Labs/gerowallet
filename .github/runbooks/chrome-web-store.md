@@ -49,6 +49,7 @@ There is no key to store or rotate. The upload job sends GitHub's OIDC token to 
    PROJECT_ID=emerald-result-490621-p2
    PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
    SA=gero-cws-release@$PROJECT_ID.iam.gserviceaccount.com
+   gcloud config set project "$PROJECT_ID"
 
    gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
 
@@ -72,7 +73,7 @@ There is no key to store or rotate. The upload job sends GitHub's OIDC token to 
 
 4. The last two lines print the values of two environment variables, `CWS_WIF_PROVIDER` and `CWS_WIF_SERVICE_ACCOUNT` (see [GitHub](#github)). The provider path holds the project **number**, not the project ID.
 
-GitHub adds the `environment` claim to the OIDC token only for a job that names an environment, so the condition admits the upload job and nothing else in this repository. For the beta listing, add `chrome-web-store-beta` to the condition, for example `assertion.environment in ['chrome-web-store-production', 'chrome-web-store-beta']`, with `gcloud iam workload-identity-pools providers update-oidc`.
+GitHub adds the `environment` claim to the OIDC token only for a job that names an environment, so the condition admits the upload job and nothing else in this repository. Keep the `github` pool for this provider alone, and don't put the binding on a pool other workflows share. The binding covers every provider in its pool, so a pool that also holds a looser provider (one that admits every Gero-Labs repository, for example) would let any job of this repository use the service account without approval. For the beta listing, add `chrome-web-store-beta` to the condition, for example `assertion.environment in ['chrome-web-store-production', 'chrome-web-store-beta']`, with `gcloud iam workload-identity-pools providers update-oidc`.
 
 #### Alternatives
 
