@@ -50,6 +50,30 @@ describe('extensionIdForPublicKey', () => {
 });
 
 describe('accessToken', () => {
+  it('returns a token from Workload Identity Federation as is, without calling Google', async () => {
+    const fetch = vi.fn();
+    expect(await accessToken({ accessToken: TOKEN }, { fetch })).toBe(TOKEN);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('prefers that token over a service account key and a refresh token', async () => {
+    const fetch = vi.fn(async () => reply(200, { access_token: 'ya29.other-token' }));
+    const credentials = {
+      accessToken: TOKEN,
+      serviceAccountJson: JSON.stringify({ client_email: 'release@gero.iam.gserviceaccount.com', private_key: 'not-used' }),
+      clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh',
+    };
+    expect(await accessToken(credentials, { fetch })).toBe(TOKEN);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the other credentials when the federation step was skipped', async () => {
+    const fetch = vi.fn(async () => reply(200, { access_token: TOKEN }));
+    expect(await accessToken({ accessToken: '', clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' }, { fetch })).toBe(TOKEN);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0][0]).toBe(TOKEN_URI);
+  });
+
   it('exchanges a refresh token', async () => {
     const fetch = vi.fn(async () => reply(200, { access_token: TOKEN }));
     expect(await accessToken({ clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' }, { fetch })).toBe(TOKEN);
@@ -85,7 +109,9 @@ describe('accessToken', () => {
 
   it('refuses incomplete credentials before calling Google', async () => {
     const fetch = vi.fn();
-    await expect(accessToken({ clientId: 'id', refreshToken: 'refresh' }, { fetch })).rejects.toThrow('CWS_CLIENT_SECRET');
+    const failure = accessToken({ clientId: 'id', refreshToken: 'refresh' }, { fetch });
+    await expect(failure).rejects.toThrow('CWS_CLIENT_SECRET');
+    await expect(failure).rejects.toThrow(/^No store credentials\. Set the CWS_WIF_PROVIDER and CWS_WIF_SERVICE_ACCOUNT variables/);
     expect(fetch).not.toHaveBeenCalled();
   });
 });
