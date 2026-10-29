@@ -103,6 +103,25 @@ test('reset() turns isMultiAccountEnabled back off', () => {
   expect(featureFlagsStore.isMultiAccountEnabled()).toBe(false);
 });
 
+test('exposes isCip113Enabled, defaulting to false, following the remote flag and a live flip', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isCip113Enabled()).toBe(false);
+
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isCip113Enabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isCip113Enabled()).toBe(true);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isCip113Enabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isCip113Enabled()).toBe(false);
+
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isCip113Enabled()).toBe(false);
+});
+
 // After a failed first fetch the service retries (issue 1195); the store must
 // pick the real values up then, and must not hand the background all-off
 // fallbacks in the meantime.
