@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const env = vi.hoisted(() => ({ setConfiguration: vi.fn(async () => undefined), broadcast: vi.fn() }));
 vi.mock('@/utils/storageSync', () => ({ getContextType: () => 'background' }));
-vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: env.broadcast } }));
+vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: env.broadcast, registerSnapshot: vi.fn() } }));
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
 vi.mock('@/db/gero-db', () => ({
   deleteWallet: vi.fn(), createNewWallet: vi.fn(), createNewHardwareWallet: vi.fn(), createAccountWallet: vi.fn(),
