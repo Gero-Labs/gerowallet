@@ -40,7 +40,6 @@ vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn() } }));
 
 import GeroSwapEmbed from '../GeroSwapEmbed.vue';
 
-const ADA = 1_000_000n;
 const TOKEN = `${'cd'.repeat(28)}534e454b`;
 const widgetEvent = (name: string, payload: unknown) => new CustomEvent(name, { detail: [payload] });
 // What a server could put in a quote: far more sold, and fees to match.
@@ -75,7 +74,7 @@ describe('GeroSwapEmbed spend budget', () => {
     const { el } = mountWithInput('50');
     el.dispatchEvent(widgetEvent('quote', inflatedQuote('lovelace')));
     const bound = await budget();
-    expect(bound?.maxOutflow.get('lovelace')).toBe(62n * ADA);
+    expect(bound?.maxOutflow.get('lovelace')).toBe(56_700_000n);
     expect([...(bound?.maxOutflow.keys() ?? [])]).toEqual(['lovelace']);
   });
 
@@ -87,17 +86,17 @@ describe('GeroSwapEmbed spend budget', () => {
     const bound = await budget();
     expect(resolveToken).toHaveBeenCalledWith(TOKEN);
     expect(bound?.maxOutflow.get(TOKEN)).toBe(500n);
-    // 30 bps of 2 x 10,000 ADA, plus the largest DEX overhead.
-    expect(bound?.maxOutflow.get('lovelace')).toBe(65_500_000n);
+    // 10 bps of 2 x 10,000 ADA, plus the largest DEX overhead.
+    expect(bound?.maxOutflow.get('lovelace')).toBe(25_500_000n);
   });
 
-  it('asks the market API for a price the cache does not hold, and keeps to the floor without one', async () => {
+  it('asks the market API for a price the cache does not hold, and keeps to the minimum fee without one', async () => {
     getTokenPrice.mockResolvedValueOnce({ priceAda: 20 });
     const { el } = mountWithInput('500', { tokenIn: TOKEN });
     el.dispatchEvent(widgetEvent('quote', inflatedQuote(TOKEN)));
-    expect((await budget())?.maxOutflow.get('lovelace')).toBe(65_500_000n);
+    expect((await budget())?.maxOutflow.get('lovelace')).toBe(25_500_000n);
     expect(getTokenPrice).toHaveBeenCalledWith(TOKEN);
-    expect((await budget())?.maxOutflow.get('lovelace')).toBe(12n * ADA);
+    expect((await budget())?.maxOutflow.get('lovelace')).toBe(6_700_000n);
   });
 
   it('gives no budget for an amount it cannot read or a token without decimals', async () => {

@@ -8,9 +8,9 @@ import type { SpendBound } from '@/shared/utils/txIntentGuard';
  */
 
 /**
- * ADA an order may take besides what is sold: the DEX deposit, batcher and
- * service fees and any execution budget. The swap widget itself assumes 12 ADA
- * for this leg before a quote exists; only a large trade's service fee raises it.
+ * ADA a RealFi order may take besides what it locks. RealFi's own costs live in
+ * its SDK and are not reviewed here, so this stays a flat allowance; swaps size
+ * their leg from Gero's fee schedule instead (swapSpendBound).
  */
 export const ORDER_LEG_FLOOR_LOVELACE = 12_000_000n;
 
@@ -38,13 +38,14 @@ export const ORDER_OVERHEAD_MAX_LOVELACE = 5_500_000n;
 export const SERVICE_FEE_MIN_LOVELACE = 1_200_000n;
 
 /**
- * The highest service fee rate the budget allows, in basis points of the
- * trade's ADA side. Gero charges 10 (cardano-market-data `aggregator.fee-rate`);
- * 30 leaves room to raise it without a wallet release. A rate above this needs
- * the constant raised in the same release, or large swaps are refused. The
- * wallet passes no partner key, so no partner fee is allowed.
+ * The service fee rate the budget allows, in basis points of the trade's ADA
+ * side: exactly what Gero charges the wallet. The wallet's swap calls reach Nexus
+ * as a device, never with an API key, so no per-key rate override and no partner
+ * fee applies and the engine's global `aggregator.fee-rate` (0.001) is the rate.
+ * Raising that rate needs this raised in the same release, or large swaps are
+ * refused.
  */
-export const SERVICE_FEE_MAX_BPS = 30n;
+export const SERVICE_FEE_MAX_BPS = 10n;
 
 /** Room on the wallet's own price of a sold token: it can move between the quote and the fill. */
 export const TOKEN_VALUE_HEADROOM = 2n;
@@ -105,13 +106,14 @@ function ceilDiv(a: bigint, b: bigint): bigint {
 
 /**
  * What a swap may take: the amount the user typed of the token they are
- * selling, plus the order's ADA leg, never below the floor. The leg is bounded
- * from Gero's published fee schedule, not from the quote's fee fields: the
- * largest DEX overhead plus the service fee at SERVICE_FEE_MAX_BPS of the
- * trade's ADA side (what is sold when selling ADA; else the sold tokens at the
- * wallet's own price, with headroom, or nothing without one). The network fee
- * is not part of it: verifySpendBound allows the transaction's own fee on top
- * and refuses one over MAX_BUILT_TX_FEE_LOVELACE.
+ * selling, plus the order's ADA leg. The leg comes from Gero's published fee
+ * schedule, not from the quote's fee fields: the largest DEX overhead plus the
+ * service fee at SERVICE_FEE_MAX_BPS of the trade's ADA side (what is sold when
+ * selling ADA; else the sold tokens at the wallet's own price, with headroom, or
+ * nothing without one), never below its 1.2 ADA minimum. No flat floor on top:
+ * anything a floor allowed beyond those costs a builder could take. The network
+ * fee is not part of it: verifySpendBound allows the transaction's own fee on
+ * top and refuses one over MAX_BUILT_TX_FEE_LOVELACE.
  */
 export function swapSpendBound(intent: SwapIntent): SpendBound {
   const tokenIn = intent.tokenIn.toLowerCase();
@@ -120,8 +122,7 @@ export function swapSpendBound(intent: SwapIntent): SpendBound {
     : (intent.tokenValueLovelace ?? 0n) * TOKEN_VALUE_HEADROOM;
   const rated = ceilDiv(adaSide * SERVICE_FEE_MAX_BPS, 10_000n);
   const serviceFee = rated > SERVICE_FEE_MIN_LOVELACE ? rated : SERVICE_FEE_MIN_LOVELACE;
-  const leg = ORDER_OVERHEAD_MAX_LOVELACE + serviceFee;
-  const adaLeg = leg > ORDER_LEG_FLOOR_LOVELACE ? leg : ORDER_LEG_FLOOR_LOVELACE;
+  const adaLeg = ORDER_OVERHEAD_MAX_LOVELACE + serviceFee;
   const maxOutflow = new Map<string, bigint>();
   if (tokenIn === 'lovelace') {
     maxOutflow.set('lovelace', intent.amountIn + adaLeg);

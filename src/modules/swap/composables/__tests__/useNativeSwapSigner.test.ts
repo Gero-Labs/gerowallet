@@ -116,7 +116,7 @@ describe('useNativeSwapSigner', () => {
       walletState.loggedWallet = { type: 'Normal', baseAddress: OWN };
       proof.answer = null;
     });
-    // 50 ADA typed: the leg is the 12 ADA floor.
+    // 50 ADA typed: the leg is 5.5 ADA of DEX overhead and the 1.2 ADA minimum service fee.
     const bound = swapSpendBound({ tokenIn: 'lovelace', amountIn: 50_000_000n });
     const signWith = async (core: unknown) => {
       vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => core } as never);
@@ -129,7 +129,11 @@ describe('useNativeSwapSigner', () => {
     };
 
     it('signs 50 ADA sold plus the order leg', async () => {
-      await expect(signWith(orderTx(62_000_000n))).resolves.toBe('WIT');
+      await expect(signWith(orderTx(56_700_000n))).resolves.toBe('WIT');
+    });
+
+    it('refuses a lovelace more than the amount sold plus the leg', async () => {
+      await expect(signWith(orderTx(56_700_001n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['spendExceeded'] });
     });
 
     it('takes a budget the host works out asynchronously', async () => {
@@ -173,13 +177,13 @@ describe('useNativeSwapSigner', () => {
         proven: new Map(refs.map((ref) => [ref, { address: OWN, value: { coins: 1_000_000_000n } }])),
         unproven: [],
       });
-      await expect(signWith(orderTx(62_000_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['misreportedInput'] });
+      await expect(signWith(orderTx(56_700_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['misreportedInput'] });
       expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
     });
 
     it('refuses an order with an input it cannot prove', async () => {
       proof.answer = (refs) => ({ proven: new Map(), unproven: refs });
-      await expect(signWith(orderTx(62_000_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['unprovenInput'] });
+      await expect(signWith(orderTx(56_700_000n))).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['unprovenInput'] });
       expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
     });
 

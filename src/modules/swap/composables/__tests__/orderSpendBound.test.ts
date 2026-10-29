@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ORDER_LEG_FLOOR_LOVELACE, ORDER_OVERHEAD_MAX_LOVELACE, routeFromQuoteEvent, swapSpendBound, toBaseUnits, tokenValueLovelace,
+  ORDER_OVERHEAD_MAX_LOVELACE, SERVICE_FEE_MIN_LOVELACE, routeFromQuoteEvent, swapSpendBound, toBaseUnits, tokenValueLovelace,
 } from '../orderSpendBound';
 
 const ADA = 1_000_000n;
@@ -9,25 +9,27 @@ const adaLeg = (intent: Parameters<typeof swapSpendBound>[0]) =>
   swapSpendBound(intent).maxOutflow.get('lovelace')! - (intent.tokenIn === 'lovelace' ? intent.amountIn : 0n);
 
 describe('swap spend budget', () => {
-  it('allows the amount typed plus the 12 ADA floor for an ordinary swap', () => {
-    expect(swapSpendBound({ tokenIn: 'lovelace', amountIn: 50n * ADA }).maxOutflow.get('lovelace')).toBe(62n * ADA);
+  it('allows the amount typed plus the largest DEX overhead and the minimum service fee for an ordinary swap', () => {
+    // 50 ADA: 5 ADA at 10 bps is below the 1.2 ADA minimum. No flat floor on top.
+    expect(swapSpendBound({ tokenIn: 'lovelace', amountIn: 50n * ADA }).maxOutflow.get('lovelace')).toBe(56_700_000n);
   });
 
-  it('raises the leg only by the service fee at 30 bps of a large ADA sale', () => {
-    // 100,000 ADA: 300 ADA at 30 bps, plus the largest DEX overhead.
-    expect(adaLeg({ tokenIn: 'lovelace', amountIn: 100_000n * ADA })).toBe(300n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
+  it('raises the leg only by the service fee at 10 bps of a large ADA sale', () => {
+    // 100,000 ADA: 100 ADA at 10 bps, plus the largest DEX overhead.
+    expect(adaLeg({ tokenIn: 'lovelace', amountIn: 100_000n * ADA })).toBe(100n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
   });
 
   it('budgets a token sale as the tokens typed plus a leg sized on the wallet\'s own valuation', () => {
     // Worth 10,000 ADA at the wallet's price; with 2x headroom the fee is sized on 20,000 ADA.
     const bound = swapSpendBound({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: 10_000n * ADA });
     expect(bound.maxOutflow.get(TOKEN)).toBe(500n);
-    expect(bound.maxOutflow.get('lovelace')).toBe(60n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
+    expect(bound.maxOutflow.get('lovelace')).toBe(20n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
   });
 
-  it('keeps a token sale without a wallet price to the floor', () => {
-    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: null })).toBe(ORDER_LEG_FLOOR_LOVELACE);
-    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n })).toBe(ORDER_LEG_FLOOR_LOVELACE);
+  it('keeps a token sale without a wallet price to the minimum service fee', () => {
+    const minimum = ORDER_OVERHEAD_MAX_LOVELACE + SERVICE_FEE_MIN_LOVELACE;
+    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: null })).toBe(minimum);
+    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n })).toBe(minimum);
   });
 });
 
