@@ -3,18 +3,39 @@
 // bytes they carry are what is checked.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { send, walletState } = vi.hoisted(() => ({
+const { send, walletState, deviceSign, signerOptions, cosign, prompt } = vi.hoisted(() => ({
   send: vi.fn(),
   walletState: {
     keys: { payment: [{ address: 'addr_p', cred: 'p', path: "m/1852'/1815'/0'/0/0" }], change: [], stake: [] },
     utxos: [['fee-utxo']] as unknown[],
+    loggedWallet: undefined as { type: string; network: string } | undefined,
   },
+  deviceSign: vi.fn(),
+  signerOptions: [] as unknown[],
+  cosign: vi.fn(),
+  prompt: { begin: vi.fn(), end: vi.fn() },
 }));
 
 vi.mock('@/chrome/messaging', () => ({
   Messaging: { sendToBackgroundFromOptions: (...args: unknown[]) => send(...args) },
 }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: walletState }));
+// The device itself is out of scope here (cip113HardwareSigners.spec.ts maps T3 to each
+// device's request); what is checked is what the page does with its answer.
+vi.mock('@/shared/composables/useHardwareTxSigner', () => ({
+  signsOnDevice: (type: string | undefined) => ['Ledger', 'Trezor', 'Keystone'].includes(type ?? ''),
+  useHardwareTxSigner: (options: unknown) => {
+    signerOptions.push(options);
+    return { sign: (cbor: string) => deviceSign(cbor), keystone: {} };
+  },
+}));
+vi.mock('@/api/nexus-collateral-api', () => ({
+  nexusCollateralApi: { cosign: (...args: unknown[]) => cosign(...args) },
+}));
+vi.mock('@/shared/utils/witnessSets', () => ({
+  mergeWitnessSets: async (user: string, extra: string) => `${user}+${extra}`,
+}));
+vi.mock('@/plugins/hardwareLoading', () => ({ default: prompt }));
 
 import { cip113SendErrorKey, useCip113Send } from './useCip113Send';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -40,6 +61,7 @@ const methods = () => send.mock.calls.map(([message]) => (message as { method: s
 describe('useCip113Send', () => {
   beforeEach(() => {
     send.mockReset();
+    walletState.loggedWallet = undefined;
   });
 
   it('prepares, verifies the password, signs and submits the CBOR untouched, in that order', async () => {
@@ -199,6 +221,135 @@ describe('useCip113Send', () => {
     const flow = useCip113Send();
     expect(await flow.signAndSubmit()).toBe(false);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('useCip113Send on a hardware wallet', () => {
+  const REF = `${'ee'.repeat(32)}#3`;
+
+  beforeEach(() => {
+    send.mockReset();
+    deviceSign.mockReset();
+    cosign.mockReset();
+    prompt.begin.mockReset();
+    prompt.end.mockReset();
+    signerOptions.length = 0;
+    walletState.loggedWallet = { type: 'Ledger', network: 'Preprod' };
+  });
+
+  it('signs the CBOR untouched on the device, never in the worker, and submits that signature', async () => {
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared,
+      [MessageTypes.SUBMIT_TX]: () => ({ txId: TX_ID }),
+    });
+    deviceSign.mockResolvedValue('DEVICE_WITNESSES');
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(true);
+    expect(deviceSign).toHaveBeenCalledWith(TX_CBOR);
+    expect(methods()).toEqual([MessageTypes.CIP113_PREPARE_TRANSFER, MessageTypes.SUBMIT_TX]);
+    expect(send.mock.calls[1][0]).toMatchObject({ data: { txCbor: TX_CBOR, witnessHex: 'DEVICE_WITNESSES' } });
+    expect(cosign).not.toHaveBeenCalled();
+    expect(prompt.begin).toHaveBeenCalledWith('Ledger');
+    expect(prompt.end).toHaveBeenCalled();
+    expect(flow.stage.value).toBe('done');
+  });
+
+  it("hands the Ledger the user's transport choice", () => {
+    const getIsBT = () => true;
+    useCip113Send({ getIsBT });
+    expect(signerOptions).toEqual([{ getIsBT }]);
+  });
+
+  it('shows no device prompt for Keystone, whose QR dialog asks instead', async () => {
+    walletState.loggedWallet = { type: 'Keystone', network: 'Preprod' };
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared,
+      [MessageTypes.SUBMIT_TX]: () => ({ txId: TX_ID }),
+    });
+    deviceSign.mockResolvedValue('KEYSTONE_WITNESSES');
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(true);
+    expect(prompt.begin).not.toHaveBeenCalled();
+  });
+
+  it("adds Nexus's witness for collateral it lent, before submitting", async () => {
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: () => ({
+        success: true,
+        result: { txCbor: TX_CBOR, txId: TX_ID, summary: { ...SUMMARY, sponsoredCollateralRef: REF } },
+      }),
+      [MessageTypes.SUBMIT_TX]: () => ({ txId: TX_ID }),
+    });
+    deviceSign.mockResolvedValue('DEVICE_WITNESSES');
+    cosign.mockResolvedValue({ witness: 'POOL_WITNESS' });
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(true);
+    expect(cosign).toHaveBeenCalledWith(TX_CBOR, REF, 'cardano-preprod');
+    expect(send.mock.calls[1][0]).toMatchObject({ data: { txCbor: TX_CBOR, witnessHex: 'DEVICE_WITNESSES+POOL_WITNESS' } });
+  });
+
+  it("keeps the review when Nexus won't co-sign, having sent nothing", async () => {
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: () => ({
+        success: true,
+        result: { txCbor: TX_CBOR, txId: TX_ID, summary: { ...SUMMARY, sponsoredCollateralRef: REF } },
+      }),
+    });
+    deviceSign.mockResolvedValue('DEVICE_WITNESSES');
+    cosign.mockRejectedValue(new Error('cosign 503'));
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('SIGN_FAILED');
+    expect(flow.stage.value).toBe('review');
+    expect(methods()).not.toContain(MessageTypes.SUBMIT_TX);
+  });
+
+  it('asks for a new build when the worker refuses the device signature', async () => {
+    respond({ [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared });
+    deviceSign.mockRejectedValue(new Error(CIP113_SIGN_REFUSAL_MESSAGE));
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('EXPIRED');
+    expect(flow.prepared.value).toBeNull();
+    expect(flow.stage.value).toBe('idle');
+    expect(prompt.end).toHaveBeenCalled();
+  });
+
+  it('keeps the review when the device is cancelled or fails', async () => {
+    respond({ [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared });
+    deviceSign.mockRejectedValue(new Error('Keystone signing cancelled'));
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('SIGN_FAILED');
+    expect(flow.stage.value).toBe('review');
+    expect(flow.prepared.value?.txId).toBe(TX_ID);
+    expect(methods()).not.toContain(MessageTypes.SUBMIT_TX);
+  });
+
+  it('treats a failed submit after the device signed as unconfirmed', async () => {
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared,
+      [MessageTypes.SUBMIT_TX]: () => { throw new Error('port closed'); },
+    });
+    deviceSign.mockResolvedValue('DEVICE_WITNESSES');
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('SUBMIT_FAILED');
+    expect(flow.prepared.value).toBeNull();
   });
 });
 

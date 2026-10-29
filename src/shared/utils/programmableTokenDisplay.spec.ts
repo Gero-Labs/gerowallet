@@ -1,7 +1,7 @@
 // Four render sites share this helper, so the two locked cases can't drift apart:
 // a programmable token Gero won't transfer, vs the ADA locked inside those UTxOs
 // (priced and counted in the portfolio total, but not spendable through Gero).
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   canSendProgrammable,
   cip113SendAvailable,
@@ -14,6 +14,13 @@ import {
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
+import { isCip113SendHardware } from '@/utils/cip113Deployments';
+
+// The hardware gate ships empty; a test opens it by handing the real check another list.
+vi.mock('@/utils/cip113Deployments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/cip113Deployments')>();
+  return { ...actual, isCip113SendHardware: vi.fn(actual.isCip113SendHardware) };
+});
 
 describe('programmableTooltipKey', () => {
   it('explains locked ADA on the lovelace row', () => {
@@ -166,5 +173,34 @@ describe('canSendProgrammable', () => {
     }
     walletStore.loggedWallet = null;
     expect(canSendProgrammable(row)).toBe(false);
+  });
+
+  describe('with hardware Send allowed for Ledger only', () => {
+    const real = vi.mocked(isCip113SendHardware).getMockImplementation()!;
+    beforeEach(() => {
+      vi.mocked(isCip113SendHardware).mockImplementation((type) => real(type, ['Ledger']));
+    });
+    afterEach(() => {
+      vi.mocked(isCip113SendHardware).mockImplementation(real);
+    });
+
+    it('offers Send to a Ledger wallet and to no other device', () => {
+      const row = { unit: REGISTERED, isProgrammable: true };
+      walletStore.loggedWallet = wallet({ type: WalletType.Ledger });
+      expect(canSendProgrammable(row)).toBe(true);
+      for (const type of [WalletType.Trezor, WalletType.Keystone, WalletType.Watch]) {
+        walletStore.loggedWallet = wallet({ type });
+        expect(canSendProgrammable(row), type).toBe(false);
+      }
+    });
+
+    it('keeps the flag and the network gates for a Ledger wallet', () => {
+      const row = { unit: REGISTERED, isProgrammable: true };
+      walletStore.loggedWallet = wallet({ type: WalletType.Ledger, network: Network.MAINNET });
+      expect(canSendProgrammable(row)).toBe(false);
+      walletStore.loggedWallet = wallet({ type: WalletType.Ledger });
+      featureFlagsStore.state.flags.isCip113Enabled = false;
+      expect(canSendProgrammable(row)).toBe(false);
+    });
   });
 });
