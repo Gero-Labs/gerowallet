@@ -1,273 +1,158 @@
 <template>
-  <div class="ecosystem-widget">
-    <div class="eco-body">
-      <!-- Header -->
-      <div class="eco-header">
-        <div class="eco-header-left">
-          <div class="eco-icon">
-            <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
-              <circle cx="10" cy="10" r="8" stroke="#F7931A" stroke-width="1.5" />
-              <path d="M7 10l2 2 4-4" stroke="#F7931A" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div>
-            <span class="eco-title">Bitcoin Ecosystem</span>
-          </div>
-        </div>
-        <span class="eco-count">{{ ecosystemItems.length }} MODULES</span>
-      </div>
-
-      <!-- Items grid -->
-      <div class="eco-items">
-        <router-link
-          v-for="item in ecosystemItems"
-          :key="item.route"
-          :to="item.route"
-          class="eco-item"
-          :style="{ '--item-color': item.color }"
-        >
-          <div class="item-accent-bar" />
-          <div class="item-icon-wrap">
-            <img v-if="item.img" :src="item.img" width="16" height="16" :alt="item.name" />
-            <v-icon v-else :color="item.color" size="16">{{ item.icon }}</v-icon>
-          </div>
-          <div class="item-text">
-            <span class="item-name">{{ item.name }}</span>
-            <span class="item-desc">{{ item.desc }}</span>
-          </div>
-          <div class="item-arrow">
-            <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" width="8" height="8">
-              <path d="M2 5h6M5 2l3 3-3 3"/>
-            </svg>
-          </div>
-        </router-link>
-      </div>
+  <!-- Shortcuts to the Bitcoin modules this wallet can open. Shared glass-panel
+       shell with glass-tier tiles; modules are named, not painted, so the
+       chain accent stays the only colour. -->
+  <section v-if="items.length" class="glass-panel btc-eco" :aria-label="$t('bitcoin.ecosystem')">
+    <h3 class="t-heading btc-eco__title">{{ $t('bitcoin.ecosystem') }}</h3>
+    <div class="btc-eco__grid">
+      <router-link
+        v-for="item in items"
+        :key="item.route"
+        :to="item.route"
+        class="glass-tier btc-eco__item"
+      >
+        <span class="btc-eco__icon"><v-icon size="small">{{ item.icon }}</v-icon></span>
+        <span class="btc-eco__text">
+          <span class="btc-eco__name">{{ $t(item.titleKey) }}</span>
+          <span class="t-caption btc-eco__desc">{{ $t(item.descKey) }}</span>
+        </span>
+        <v-icon size="small" class="btc-eco__chevron">mdi-chevron-right</v-icon>
+      </router-link>
     </div>
-
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
-import ordinalsLogo from '@/assets/svg/ordinals.svg';
+import { computed, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import networks from '@/utils/networks';
 
-const { t } = useTranslation();
+const { loggedWallet } = toRefs(walletStore);
 
-const ecosystemItems = [
-  {
-    route: '/ordinals',
-    icon: null,
-    img: ordinalsLogo,
-    name: 'ORDINALS',
-    desc: t('ordinals.subtitle'),
-    color: '#F7931A',
-  },
-  {
-    route: '/lightning',
-    icon: 'mdi-lightning-bolt',
-    name: 'LIGHTNING',
-    desc: t('lightning.subtitle'),
-    color: '#FFD700',
-  },
-  {
-    route: '/babylon',
-    icon: 'mdi-lock-clock',
-    name: 'BABYLON',
-    desc: 'BTC staking protocol',
-    color: '#9B72CF',
-  },
-  {
-    route: '/thorchain',
-    icon: 'mdi-swap-horizontal-bold',
-    name: 'THORCHAIN',
-    desc: 'Cross-chain swaps',
-    color: '#00D5BD',
-  },
+type SupportResolver = (chain: string, network: string) => boolean;
+
+interface EcosystemItem {
+  route: string;
+  icon: string;
+  titleKey: string;
+  descKey: string;
+  /** The same capability gate as the route guard and the navigation drawer. */
+  supported: SupportResolver;
+  /** An extra flag a module needs beyond isBitcoinEnabled. */
+  flag?: () => boolean;
+}
+
+const ITEMS: EcosystemItem[] = [
+  { route: '/ordinals', icon: 'mdi-image-multiple-outline', titleKey: 'navigation.ordinals', descKey: 'ordinals.subtitle', supported: networks.resolveOrdinalsSupport },
+  { route: '/lightning', icon: 'mdi-lightning-bolt', titleKey: 'navigation.lightning', descKey: 'lightning.subtitle', supported: networks.resolveLightningSupport },
+  { route: '/babylon', icon: 'mdi-lock-clock', titleKey: 'navigation.babylon', descKey: 'babylon.subtitle', supported: networks.resolveBabylonSupport },
+  { route: '/thorchain', icon: 'mdi-swap-horizontal', titleKey: 'navigation.thorchain', descKey: 'thorchain.subtitle', supported: networks.resolveThorchainSupport },
   {
     route: '/gomining',
     icon: 'mdi-pickaxe',
-    name: 'GOMINING',
-    desc: 'Cloud mining NFTs',
-    color: '#F7931A',
+    titleKey: 'navigation.goMining',
+    descKey: 'gomining.subtitle',
+    supported: networks.resolveGoMiningSupport,
+    // The drawer shows GoMining as under maintenance while this flag is off; no shortcut to that.
+    flag: () => featureFlagsStore.isGoMiningEnabled(),
   },
-  {
-    route: '/mempool',
-    icon: 'mdi-database-clock-outline',
-    name: 'MEMPOOL',
-    desc: 'Network fee explorer',
-    color: '#1e88e5',
-  },
+  { route: '/mempool', icon: 'mdi-database-clock-outline', titleKey: 'navigation.mempool', descKey: 'mempool.subtitle', supported: networks.resolveMempoolSupport },
 ];
+
+const items = computed(() => {
+  const chain = loggedWallet.value?.chain;
+  const network = loggedWallet.value?.network;
+  if (!chain || !network || !featureFlagsStore.isBitcoinEnabled()) return [];
+  return ITEMS.filter((item) => item.supported.call(networks, chain, network) && (item.flag?.() ?? true));
+});
 </script>
 
-<style scoped>
-/* ─── Liquid Glass Shell ────────────────────────────────────── */
-.ecosystem-widget {
-  position: relative;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-sheet);
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.18),
-    0 16px 48px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.3s ease;
+<style scoped lang="scss">
+/* Surface comes from the shared .glass-panel material; only layout lives here. */
+.btc-eco {
+  padding: var(--g-s-4);
 }
 
-.ecosystem-widget:hover {
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.22),
-    0 24px 60px rgba(0, 0, 0, 0.36),
-    0 0 0 1px rgba(255, 255, 255, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+.btc-eco__title {
+  margin: 0 0 var(--g-s-3);
 }
 
-.eco-body {
-  padding: 16px 18px;
-}
-
-/* ─── Header ────────────────────────────────────────────────── */
-.eco-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.eco-header-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.eco-icon {
-  width: 32px;
-  height: 32px;
-  background: rgba(247, 147, 26, 0.12);
-  border: 1px solid rgba(247, 147, 26, 0.2);
-  border-radius: var(--g-r-control);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.eco-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--g-text-1);
-  letter-spacing: -0.01em;
-}
-
-.eco-count {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--g-text-3);
-}
-
-/* ─── Item Grid ─────────────────────────────────────────────── */
-.eco-items {
+.btc-eco__grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--g-s-2);
 }
 
-@media (max-width: 600px) {
-  .eco-items {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 960px) {
+  .btc-eco__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-.eco-item {
-  position: relative;
+@media (max-width: 600px) {
+  .btc-eco__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.btc-eco__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 10px 10px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
+  color: inherit;
   text-decoration: none;
-  overflow: hidden;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease);
 }
 
-.eco-item:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: var(--g-hairline-3);
-  transform: translateY(-2px) scale(1.01);
+.btc-eco__item:hover {
+  @include g-glass-tier-hover;
 }
 
-.item-accent-bar {
-  position: absolute;
-  top: 10%;
-  left: 0;
-  bottom: 10%;
-  width: 2px;
-  background: var(--item-color);
-  opacity: 0.5;
-  border-radius: 0 2px 2px 0;
-  transition: opacity 0.2s, height 0.2s;
-}
-
-.eco-item:hover .item-accent-bar {
-  opacity: 0.85;
-  top: 0;
-  bottom: 0;
-}
-
-.item-icon-wrap {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--g-r-control);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--g-hairline-1);
-  display: flex;
+.btc-eco__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
 }
 
-.item-text {
-  flex: 1;
+.btc-eco__icon .v-icon {
+  color: var(--g-text-2);
+  transition: color var(--g-dur-fast) var(--g-ease);
+}
+
+.btc-eco__item:hover .btc-eco__icon .v-icon {
+  color: var(--g-accent);
+}
+
+.btc-eco__text {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
-.item-name {
-  font-size: 12px;
-  font-weight: 600;
+.btc-eco__name {
   color: var(--g-text-1);
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btc-eco__name,
+.btc-eco__desc {
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: -0.01em;
-}
-
-.item-desc {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--g-text-3);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.item-arrow {
+.btc-eco__chevron {
+  flex: 0 0 auto;
   color: var(--g-text-3);
-  flex-shrink: 0;
-  transition: color 0.2s, transform 0.2s;
-}
-
-.eco-item:hover .item-arrow {
-  color: var(--g-text-3);
-  transform: translateX(2px);
 }
 </style>

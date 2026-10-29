@@ -4,13 +4,15 @@
 // checks what came back against the intent (cip113VerifyTransfer.ts) before the caller grants
 // the one-shot signing allowance for its id.
 //
-// Software wallets only for now (password, PassKey, Google): Ledger, Keystone and Trezor get
-// their signer fixes first (step D). Preprod and preview only (decision 11).
+// Software wallets (password, PassKey, Google), and the hardware wallets listed in
+// CIP113_SEND_HARDWARE_WALLET_TYPES (empty until each device has passed a preprod run).
+// Preprod and preview only (decision 11).
 
 import { Cardano } from '@cardano-sdk/core';
 import type { Keys } from '@/models/types';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import { isCip113SendHardware } from '@/utils/cip113Deployments';
 import {
   CIP113_MAX_FEE_INPUTS,
   type Cip113TransferBuildRequest,
@@ -88,8 +90,8 @@ const UTXO_REF = /^[0-9a-f]{64}#\d{1,5}$/;
 export async function prepareCip113Transfer(request: unknown, env: Cip113PrepareEnv): Promise<Cip113PreparedTransfer> {
   const { unit, quantity, recipientAddress } = readRequest(request);
 
-  if (env.chain !== Blockchain.CARDANO || !SOFTWARE_WALLET_TYPES.has(env.walletType)) {
-    throw new Cip113PrepareError('WALLET_UNSUPPORTED', 'Sending programmable tokens needs a Cardano software wallet');
+  if (env.chain !== Blockchain.CARDANO || !(SOFTWARE_WALLET_TYPES.has(env.walletType) || isCip113SendHardware(env.walletType))) {
+    throw new Cip113PrepareError('WALLET_UNSUPPORTED', 'Sending programmable tokens is not available for this wallet');
   }
   const scripts = networks.resolveCip113TransferScripts(env.chain, env.network);
   if (!scripts) throw new Cip113PrepareError('NETWORK_UNSUPPORTED', `Sending programmable tokens is not available on ${env.network}`);

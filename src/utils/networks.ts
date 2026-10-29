@@ -464,7 +464,9 @@ export default {
       buySupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
-      goMiningSupport: false,
+      // GoMining's sandbox takes order payments in testnet BTC. The page asks
+      // gero-backend which network it serves and refuses any other.
+      goMiningSupport: true,
       babylonSupport: true,
       ordinalsSupport: false,
       thorchainSupport: false,

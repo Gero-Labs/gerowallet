@@ -1,63 +1,128 @@
 <template>
-  <v-card variant="outlined" class="liquid-glass pa-4">
-    <div class="d-flex align-center mb-3" style="gap: 12px;">
-      <v-icon color="#F7931A">mdi-bitcoin</v-icon>
-      <span class="text-subtitle-1 font-weight-bold">{{ $t('gomining.miningBalance') }}</span>
+  <!-- Shared glass-panel material; only layout lives here. -->
+  <section class="glass-panel gm-balance" :aria-label="$t('gomining.miningBalance')">
+    <div class="gm-balance__head">
+      <span class="gm-balance__icon"><v-icon size="18">mdi-bitcoin</v-icon></span>
+      <span class="t-body-lg">{{ $t('gomining.miningBalance') }}</span>
     </div>
 
-    <!-- Available balance -->
-    <div class="text-center my-4">
-      <div class="text-caption text--secondary mb-1">{{ $t('gomining.availableBalance') }}</div>
-      <div class="text-h5 font-weight-bold">
-        {{ balance ? formatBtc(balance.btc) : '0.00000000' }}
-        <span class="text-subtitle-2 text--secondary ml-1">BTC</span>
+    <div class="gm-balance__amount">
+      <span class="t-label">{{ $t('gomining.availableBalance') }}</span>
+      <div class="gm-balance__primary">
+        <span class="t-display g-num">{{ formatBtc(balances?.availableSats ?? 0) }}</span>
+        <span class="gm-balance__unit g-mono">BTC</span>
       </div>
-      <div class="text-caption text--secondary mt-1" v-if="balance && balance.pendingBtc > 0">
-        <v-icon size="x-small" class="mr-1">mdi-clock-outline</v-icon>
-        {{ formatBtc(balance.pendingBtc) }} BTC {{ $t('gomining.pending') }}
-      </div>
+      <span v-if="balances && balances.withdrawnSats > 0" class="t-caption g-num gm-balance__pending">
+        <v-icon size="x-small">mdi-arrow-up-circle-outline</v-icon>
+        {{ $t('gomining.withdrawnToDate', { amount: `${formatBtc(balances.withdrawnSats)} BTC` }) }}
+      </span>
     </div>
 
-    <!-- Withdraw button -->
-    <v-btn
+    <GButton
+      tier="primary"
       block
-      color="primary"
-      variant="outlined"
-      :disabled="!balance || balance.btc <= 0 || loading"
+      :disabled="!balances || balances.availableSats <= 0 || !payoutAddress || loading"
       :loading="loading"
       @click="$emit('withdraw')"
     >
-      <v-icon start size="small">mdi-arrow-up-circle-outline</v-icon>
+      <v-icon size="small" start>mdi-arrow-up-circle-outline</v-icon>
       {{ $t('gomining.withdraw') }}
-    </v-btn>
+    </GButton>
 
-    <!-- BTC address info -->
-    <div class="mt-3 d-flex align-center" style="gap: 8px;" v-if="btcAddress">
-      <v-icon size="x-small" color="success">mdi-check-circle</v-icon>
-      <span class="text-caption text--secondary">
-        {{ $t('gomining.payoutAddress') }}: {{ shortAddress(btcAddress) }}
-      </span>
+    <div v-if="payoutAddress" class="gm-balance__address" :title="payoutAddress">
+      <v-icon size="x-small" class="gm-balance__check">mdi-check-circle</v-icon>
+      <span class="t-caption">{{ $t('gomining.payoutAddress') }}</span>
+      <span class="g-mono gm-balance__address-value">{{ shortAddress(payoutAddress) }}</span>
     </div>
-  </v-card>
+  </section>
 </template>
 
 <script setup lang="ts">
-import type { GoMiningBalance } from '@/api/gomining-api';
+import type { GoMiningBalances } from '@/api/gomining-api';
+import { formatBtc } from '@/shared/utils/format';
+import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineProps<{
-  balance: GoMiningBalance | null;
-  btcAddress?: string;
+  balances: GoMiningBalances | null;
+  /** The linked address GoMining pays withdrawals to. */
+  payoutAddress?: string | null;
   loading?: boolean;
 }>();
 
 defineEmits<{ withdraw: [] }>();
-
-function formatBtc(btc: number): string {
-  return btc.toFixed(8);
-}
 
 function shortAddress(addr: string): string {
   if (!addr || addr.length < 12) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 </script>
+
+<style scoped lang="scss">
+.gm-balance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  height: 100%;
+  padding: var(--g-s-4);
+}
+
+.gm-balance__head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+}
+
+.gm-balance__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+}
+
+.gm-balance__icon .v-icon {
+  color: var(--g-text-2);
+}
+
+.gm-balance__amount {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
+
+.gm-balance__primary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-s-2);
+  line-height: 1.1;
+}
+
+.gm-balance__unit {
+  color: var(--g-text-3);
+}
+
+.gm-balance__pending {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+}
+
+.gm-balance__address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-1);
+}
+
+.gm-balance__check {
+  color: var(--g-success);
+}
+
+.gm-balance__address-value {
+  color: var(--g-text-1);
+}
+</style>

@@ -5,6 +5,7 @@ import { nextTick } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
+import { Psbt } from 'bitcoinjs-lib';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
 
 const mocks = vi.hoisted(() => ({
@@ -335,5 +336,47 @@ describe('dApp connect: the account to connect (#1331)', () => {
     expect(rows(wrapper)).toHaveLength(0);
     await button(wrapper, 'approve').trigger('click');
     expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(true);
+  });
+});
+
+// The Bitcoin signer decrypts a PassKey wallet's recovery phrase with the raw PRF output
+// (WalletBg.signBitcoinDappPsbt / signBitcoinDappMessage). The popup's `privateKey` mode
+// answers with the PRF-decrypted private key instead, which cannot open the phrase.
+describe('Bitcoin dApp signing with a PassKey', () => {
+  const psbtHex = new Psbt().addInput({ hash: '01'.repeat(32), index: 0 })
+    .addOutput({ address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', value: 1000 }).toHex();
+  const btcRequests = [
+    ['message', { requestId: 'btc-message', method: 'btcSignMessage', payload: { message: 'hello', type: 'bip322-simple' } },
+      MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, { success: true, signature: 'btc-signature' }, 'btc-signature'],
+    ['PSBT', { requestId: 'btc-psbt', method: 'btcSignPsbt', payload: { psbtHex, options: { autoFinalized: false } } },
+      MessageTypes.BITCOIN_DAPP_SIGN_PSBT, { success: true, signedHex: 'signed-psbt' }, 'signed-psbt'],
+  ] as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    WalletStore.state.loggedWallet = {
+      id: 1, type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.MAINNET, encryptionMethod: 'prf',
+    } as never;
+  });
+
+  function finishRawPrf(prfOutput: number[]) {
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: new URL(chrome.runtime.getURL('')).origin,
+      data: { type: 'PASSKEY_AUTH_RESULT', payload: { success: true, prfOutput } },
+    }));
+  }
+
+  it.each(btcRequests)('signs a %s with the raw PRF output from the PassKey popup', async (_kind, btcRequest, method, reply, approved) => {
+    overlay.currentRequest.value = btcRequest as never;
+    mocks.send.mockResolvedValue({ data: reply });
+    const wrapper = render();
+
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+    expect(window.open).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('mode=rawPrf'), 'PassKeyAuth', expect.any(String));
+
+    finishRawPrf([9, 8, 7]);
+    await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(approved));
+    expect(mocks.send).toHaveBeenCalledExactlyOnceWith({ method, data: expect.objectContaining({ privateKeyBytes: [9, 8, 7] }) });
   });
 });

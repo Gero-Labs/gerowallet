@@ -2,20 +2,23 @@ import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain, WalletType } from '@/models/types';
 import networks from '@/utils/networks';
+import { isCip113SendHardware } from '@/utils/cip113Deployments';
 
 /**
  * Whether Gero's own Send of a CIP-113 token is offered to the logged wallet: the
- * `isCip113Enabled` flag, a Cardano software wallet that signs in the worker (password,
- * PassKey or Sign in with Google), and a network whose transfer scripts are configured
- * (preprod and preview). Hardware wallets wait for their signer fixes and a device run.
+ * `isCip113Enabled` flag, a Cardano wallet that can sign it (password, PassKey, Sign in with
+ * Google, or a hardware wallet listed in CIP113_SEND_HARDWARE_WALLET_TYPES, empty until each
+ * device has passed a preprod run), and a network whose transfer scripts are configured
+ * (preprod and preview).
  */
 export function cip113SendAvailable(): boolean {
   const wallet = walletStore.loggedWallet;
   if (!wallet || !featureFlagsStore.isCip113Enabled()) return false;
   if (wallet.chain !== Blockchain.CARDANO) return false;
-  const software = wallet.type === WalletType.Normal
-    || (wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc');
-  return software && networks.resolveCip113TransferScripts(wallet.chain, wallet.network) !== null;
+  const signer = wallet.type === WalletType.Normal
+    || (wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc')
+    || isCip113SendHardware(wallet.type);
+  return signer && networks.resolveCip113TransferScripts(wallet.chain, wallet.network) !== null;
 }
 
 /**

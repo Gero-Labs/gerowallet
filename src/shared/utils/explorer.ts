@@ -268,10 +268,13 @@ export function getExplorerUrl(
       const path = APEX_PATHS[type]?.(id);
       return path ? APEX_HOSTS[chain] + path : '';
     }
-    case Blockchain.BITCOIN:
-      if (type === 'tx') return `https://mempool.space/tx/${seg(id)}`;
-      if (type === 'block') return `https://mempool.space/block/${seg(id)}`;
+    case Blockchain.BITCOIN: {
+      // Bitcoin's testnet is testnet4 (the wallet's Esplora backend is mempool.space/testnet4).
+      const host = network === Network.TESTNET ? 'https://mempool.space/testnet4' : 'https://mempool.space';
+      if (type === 'tx') return `${host}/tx/${seg(id)}`;
+      if (type === 'block') return `${host}/block/${seg(id)}`;
       return '';
+    }
     default:
       return '';
   }

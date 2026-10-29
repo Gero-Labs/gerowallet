@@ -1,11 +1,12 @@
 // CIP113_PREPARE_TRANSFER's work, without the message plumbing: the background chooses the
 // inputs, asks Nexus, and hands back only a transaction it verified. Nexus is replaced by a
 // stub that answers with T3, the real transfer it built on preprod.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { Blockchain, Network } from '@/models/types';
 import { Cip113PrepareError, type Cip113PrepareEnv, ownKeys, prepareCip113Transfer } from './cip113PrepareTransfer';
+import { isCip113SendHardware } from '@/utils/cip113Deployments';
 import type { Cip113TransferBuildRequest } from '@/api/nexus-tx-api';
 import {
   FEE_INPUT,
@@ -19,6 +20,12 @@ import {
   TEST_WALLET_PLB_ADDRESS,
   TEST_WALLET_STAKE_KEY_HASH,
 } from './__fixtures__/cip113Preprod';
+
+// The hardware gate ships empty; a test opens it by handing the real check another list.
+vi.mock('@/utils/cip113Deployments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/cip113Deployments')>();
+  return { ...actual, isCip113SendHardware: vi.fn(actual.isCip113SendHardware) };
+});
 
 function utxo(txId: string, index: number, address: string, coins: bigint, assets?: Record<string, bigint>): Cardano.Utxo {
   return [
@@ -116,6 +123,32 @@ describe('prepareCip113Transfer', () => {
       expect((await refusal(prepareCip113Transfer(REQUEST, e))).code).toBe('WALLET_UNSUPPORTED');
       expect(e.build).not.toHaveBeenCalled();
     }
+  });
+
+  describe('with hardware Send allowed', () => {
+    const real = vi.mocked(isCip113SendHardware).getMockImplementation()!;
+    beforeEach(() => {
+      vi.mocked(isCip113SendHardware).mockImplementation((type) => real(type, ['Ledger', 'Trezor', 'Keystone']));
+    });
+    afterEach(() => {
+      vi.mocked(isCip113SendHardware).mockImplementation(real);
+    });
+
+    it('builds the same verified transaction for a listed device', async () => {
+      for (const walletType of ['Ledger', 'Trezor', 'Keystone']) {
+        const prepared = await prepareCip113Transfer(REQUEST, env({ walletType }));
+        expect(prepared.txCbor).toBe(T3_UNSIGNED_TX);
+        expect(prepared.txId).toBe(T3_TX_ID);
+      }
+    });
+
+    it('still refuses a watch wallet and another chain', async () => {
+      for (const overrides of [{ walletType: 'Watch' }, { walletType: 'Ledger', chain: Blockchain.BITCOIN }]) {
+        const e = env(overrides);
+        expect((await refusal(prepareCip113Transfer(REQUEST, e))).code).toBe('WALLET_UNSUPPORTED');
+        expect(e.build).not.toHaveBeenCalled();
+      }
+    });
   });
 
   it('refuses mainnet (decision 11)', async () => {
