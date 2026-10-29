@@ -20,6 +20,13 @@ export const ORDER_LEG_FLOOR_LOVELACE = 12_000_000n;
  */
 export const NO_ORDER_LOVELACE = 2_000_000n;
 
+/**
+ * Room on top of the quote's `estimatedTxFeeLovelace`: the network fee is
+ * estimated before the order is built, and the built transaction may cost a
+ * little more.
+ */
+export const NETWORK_FEE_MARGIN_LOVELACE = 1_000_000n;
+
 /** The budget when nothing more specific is known: no tokens, a little ADA. */
 export const DEFAULT_ORDER_SPEND_BOUND: SpendBound = {
   maxOutflow: new Map([['lovelace', NO_ORDER_LOVELACE]]),
@@ -29,9 +36,12 @@ export const DEFAULT_ORDER_SPEND_BOUND: SpendBound = {
 export interface SwapRouteLike {
   tokenIn: string;
   amountIn: string;
+  /** The DEX the order goes to; picks the widget's default deposit and execution budget. */
+  dex?: string | null;
   aggregatorFeeLovelace?: string | number | null;
   batcherFeeLovelace?: string | number | null;
   partnerFeeLovelace?: string | number | null;
+  estimatedTxFeeLovelace?: string | number | null;
   orderDepositLovelace?: string | number | null;
   executionBudgetLovelace?: string | number | null;
 }
@@ -58,12 +68,32 @@ export function routeFromQuoteEvent(detail: unknown): SwapRouteLike | null {
   return route as SwapRouteLike;
 }
 
-/** What a swap may take: the quoted amount of the sold token, plus the order's ADA leg. */
+/**
+ * The deposit and execution budget the widget assumes when a quote leaves them
+ * out (its `nm()` in src/vendor/gero-swap/gero-swap.js): Splash 1.5 ADA deposit
+ * and 2 ADA execution, MuesliSwap no deposit, every other DEX a 2 ADA deposit.
+ */
+function orderReserve(route: SwapRouteLike): bigint {
+  const dex = String(route.dex ?? '').toUpperCase();
+  const deposit = route.orderDepositLovelace != null && route.orderDepositLovelace !== ''
+    ? lovelace(route.orderDepositLovelace)
+    : dex === 'SPLASH' ? 1_500_000n : dex === 'MUESLISWAP' ? 0n : 2_000_000n;
+  const execution = route.executionBudgetLovelace != null && route.executionBudgetLovelace !== ''
+    ? lovelace(route.executionBudgetLovelace)
+    : dex === 'SPLASH' ? 2_000_000n : 0n;
+  return deposit + execution;
+}
+
+/**
+ * What a swap may take: the quoted amount of the sold token, plus the order's
+ * ADA leg as the widget itself counts it (deposit, execution budget, aggregator,
+ * batcher, partner and network fees; its change reserve comes back, so it is not
+ * counted), with a margin on the estimated network fee. Never below the floor.
+ */
 export function swapSpendBound(route: SwapRouteLike): SpendBound {
   const amountIn = BigInt(route.amountIn);
-  const leg = lovelace(route.aggregatorFeeLovelace) + lovelace(route.batcherFeeLovelace)
-    + lovelace(route.partnerFeeLovelace) + lovelace(route.orderDepositLovelace)
-    + lovelace(route.executionBudgetLovelace);
+  const leg = orderReserve(route) + lovelace(route.aggregatorFeeLovelace) + lovelace(route.batcherFeeLovelace)
+    + lovelace(route.partnerFeeLovelace) + lovelace(route.estimatedTxFeeLovelace) + NETWORK_FEE_MARGIN_LOVELACE;
   const adaLeg = leg > ORDER_LEG_FLOOR_LOVELACE ? leg : ORDER_LEG_FLOOR_LOVELACE;
   const tokenIn = route.tokenIn.toLowerCase();
   const maxOutflow = new Map<string, bigint>();

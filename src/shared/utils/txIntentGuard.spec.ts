@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano } from '@cardano-sdk/core';
+import { minAdaRequired } from '@cardano-sdk/tx-construction';
 import {
   drepRegistrationMatches,
+  DEFAULT_COINS_PER_UTXO_BYTE,
   matchIntendedOutputs,
   MAX_BUILT_TX_FEE_LOVELACE,
   parseDRepTarget,
@@ -65,6 +67,19 @@ describe('verifyTxIntent', () => {
     expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, 1_400_000n, [[TOKEN, 10n]])] }), want)).toEqual([]);
     expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, 9_000_000n, [[TOKEN, 10n]])] }), want)).toContain('missingOutput');
     expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, 1_000_000n, [[TOKEN, 11n]])] }), want)).toContain('missingOutput');
+  });
+
+  it('accepts a top-up past 2 ADA only up to the protocol minimum for that output', () => {
+    // 60 different tokens need far more than the asked 1 ADA plus 2 ADA of slack.
+    const bundle: [string, bigint][] = Array.from({ length: 60 }, (_, i) => [`${i.toString(16).padStart(56, '0')}4e4654`, 1n]);
+    const want = intent({ outputs: [send(1_000_000n, bundle)] });
+    const required = minAdaRequired(out(RECIPIENT, 10_000_000n, bundle) as unknown as Cardano.TxOut, DEFAULT_COINS_PER_UTXO_BYTE);
+    expect(required).toBeGreaterThan(3_000_000n);
+    expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, required, bundle)] }), want)).toEqual([]);
+    expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, required * 3n / 2n, bundle)] }), want)).toContain('missingOutput');
+    // A higher live parameter raises what counts as the minimum.
+    const higher = intent({ outputs: [send(1_000_000n, bundle)], coinsPerUtxoByte: DEFAULT_COINS_PER_UTXO_BYTE * 2n });
+    expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, required * 3n / 2n, bundle)] }), higher)).toEqual([]);
   });
 
   it('accepts any amount in a send-max output', () => {

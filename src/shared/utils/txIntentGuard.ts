@@ -1,4 +1,5 @@
 import { Cardano } from '@cardano-sdk/core';
+import { minAdaRequired } from '@cardano-sdk/tx-construction';
 
 /**
  * Verify a transaction someone else built before the wallet signs it.
@@ -53,9 +54,27 @@ export const MAX_BUILT_TX_FEE_LOVELACE = 5_000_000n;
 /**
  * A requested output that carries tokens may come back with more lovelace than
  * asked: the builder raises it to the minimum UTxO value. This is how much more
- * it may add before the output no longer counts as the one requested.
+ * it may always add. More is accepted only when the output then holds no more
+ * than the protocol minimum for that very output (isMinUtxoTopUp): a bundle of
+ * many tokens can need well over 2 ADA, and the extra goes to the recipient the
+ * user chose, never anywhere else.
  */
 export const TOKEN_OUTPUT_LOVELACE_SLACK = 2_000_000n;
+
+/**
+ * coinsPerUTxOByte on mainnet, preprod and preview since Babbage. A caller with
+ * the live protocol parameters passes them in the intent instead.
+ */
+export const DEFAULT_COINS_PER_UTXO_BYTE = 4_310n;
+
+/** The output holds at most the ledger's minimum for it (10% leeway for the builder's rounding). */
+function isMinUtxoTopUp(output: Cardano.TxOut, coins: bigint, coinsPerUtxoByte: bigint): boolean {
+  try {
+    return coins * 10n <= minAdaRequired(output, coinsPerUtxoByte) * 11n;
+  } catch {
+    return false;
+  }
+}
 
 export interface IntendedOutput {
   address: string;
@@ -119,6 +138,8 @@ export interface TxIntent {
   /** Collateral the flow needs. Omitted: none allowed. */
   collateral?: CollateralAllowance;
   maxFeeLovelace?: bigint;
+  /** Live coinsPerUTxOByte, for recognising a min-UTxO top-up. Default DEFAULT_COINS_PER_UTXO_BYTE. */
+  coinsPerUtxoByte?: bigint;
 }
 
 // ── value helpers ──
@@ -184,7 +205,7 @@ function sameAssets(have: ReadonlyMap<string, bigint>, want: ReadonlyMap<string,
   return true;
 }
 
-function outputMatches(output: Cardano.TxOut, want: IntendedOutput, wantAddress: string): boolean {
+function outputMatches(output: Cardano.TxOut, want: IntendedOutput, wantAddress: string, coinsPerUtxoByte: bigint): boolean {
   if (canonicalAddress(String(output.address)) !== wantAddress) return false;
   const wantAssets = new Map<string, bigint>();
   want.assets.forEach((qty, unit) => { if (qty !== 0n) wantAssets.set(unit, qty); });
@@ -192,19 +213,24 @@ function outputMatches(output: Cardano.TxOut, want: IntendedOutput, wantAddress:
   if (want.lovelace === 'max') return true;
   const coins = lovelaceOf(output.value);
   if (wantAssets.size === 0) return coins === want.lovelace;
-  return coins >= want.lovelace && coins - want.lovelace <= TOKEN_OUTPUT_LOVELACE_SLACK;
+  if (coins < want.lovelace) return false;
+  return coins - want.lovelace <= TOKEN_OUTPUT_LOVELACE_SLACK || isMinUtxoTopUp(output, coins, coinsPerUtxoByte);
 }
 
 /**
  * Index of the transaction output that satisfies each requested output, or -1.
  * Each transaction output answers at most one request, in request order.
  */
-export function matchIntendedOutputs(tx: Cardano.Tx, intended: readonly IntendedOutput[]): number[] {
+export function matchIntendedOutputs(
+  tx: Cardano.Tx,
+  intended: readonly IntendedOutput[],
+  coinsPerUtxoByte: bigint = DEFAULT_COINS_PER_UTXO_BYTE,
+): number[] {
   const outputs = tx.body.outputs ?? [];
   const used = new Set<number>();
   return intended.map((want) => {
     const wantAddress = canonicalAddress(want.address);
-    const index = outputs.findIndex((o, i) => !used.has(i) && outputMatches(o, want, wantAddress));
+    const index = outputs.findIndex((o, i) => !used.has(i) && outputMatches(o, want, wantAddress, coinsPerUtxoByte));
     if (index >= 0) used.add(index);
     return index;
   });
@@ -295,7 +321,7 @@ export function verifyTxIntent(tx: Cardano.Tx, intent: TxIntent): TxIntentViolat
   const violations = new Set<TxIntentViolation>();
   const own = canonicalSet(intent.ownAddresses);
 
-  const matched = matchIntendedOutputs(tx, intent.outputs);
+  const matched = matchIntendedOutputs(tx, intent.outputs, intent.coinsPerUtxoByte);
   if (matched.some((i) => i < 0)) violations.add('missingOutput');
   const matchedSet = new Set(matched.filter((i) => i >= 0));
   for (const index of matchBoundedOutputs(tx, intent.boundedOutputs ?? [], matchedSet)) {
