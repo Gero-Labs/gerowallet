@@ -9,7 +9,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bech32 } from 'bech32';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import type { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { Hash28ByteBase16, type Bip32PrivateKey } from '@cardano-sdk/crypto';
 
 vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: vi.fn() } }));
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
@@ -17,7 +17,7 @@ vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconne
 
 import { WalletBg } from './walletBg';
 import WalletStore from '@/stores/walletStore';
-import { getAddress, getPaymentKeyExternal, getStakeKey } from './serialization';
+import { getAddress, getCcColdKey, getPaymentKeyExternal, getStakeKey } from './serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { InvalidAccountIndexError, withGroupSecrets } from '@/shared/utils/walletAccount';
 import { encryptWithPassword } from '@/shared/utils/crypto';
@@ -117,6 +117,34 @@ describe('WalletBg on account #1', () => {
     const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
 
     expect(signingKeys(witnesses)).toEqual([getPaymentKeyExternal(accountXpub(0), 0).hex()]);
+  });
+
+  it('signs its own committee resignation with that account’s committee cold key', async () => {
+    const bg = bootWallet({ publicKey: accountXpub(1), accountIndex: 1 });
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const address = keys.payment[0].address as Cardano.PaymentAddress;
+    const { utxos } = spendFrom(address);
+    const txCbor = Serialization.Transaction.fromCore({
+      id: Cardano.TransactionId('00'.repeat(32)),
+      body: {
+        inputs: [{ txId: utxos[0][0].txId, index: 0 }],
+        outputs: [{ address, value: { coins: 2_000_000n } }],
+        fee: 200_000n,
+        certificates: [{
+          __typename: Cardano.CertificateType.ResignCommitteeCold,
+          coldCredential: { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(keys.ccCold[0].cred) },
+          anchor: null,
+        }],
+      },
+      witness: { signatures: new Map() },
+    }).toCbor();
+
+    const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
+
+    expect(signingKeys(witnesses).sort()).toEqual([
+      getPaymentKeyExternal(accountXpub(1), 0).hex(),
+      getCcColdKey(accountXpub(1), 0).hex(),
+    ].sort());
   });
 
   it('refuses to sign when the record’s index and xpub name different accounts', async () => {

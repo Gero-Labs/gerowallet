@@ -664,6 +664,7 @@ export function analyzeTransactionForSignatures(
   const ownStakeCreds = credsOf(keySet.stake);
   const ownDrepCreds = credsOf(keySet.drep105, keySet.drep129);
   const ownCcHotCreds = credsOf(keySet.ccHot);
+  const ownCcColdCreds = credsOf(keySet.ccCold);
   const ownedOrUnknown = (owned: Set<string>, hash: unknown) =>
     owned.size === 0 || (typeof hash === 'string' && owned.has(hash.toLowerCase()));
 
@@ -755,6 +756,20 @@ export function analyzeTransactionForSignatures(
       if (certificate.__typename === Cardano.CertificateType.PoolRetirement) {
         // Pool retirement requires cold key signature (handled by pool signing flow)
         (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
+      }
+
+      // A committee hot-key authorization or cold resignation is witnessed by its cold
+      // credential, so only OUR committee cold key signs it. A script cold credential is
+      // witnessed by its script, and the hot credential an authorization names signs nothing.
+      if (certificate.__typename === Cardano.CertificateType.AuthorizeCommitteeHot ||
+          certificate.__typename === Cardano.CertificateType.ResignCommitteeCold) {
+        const { coldCredential } = certificate;
+        if (coldCredential?.type === Cardano.CredentialType.KeyHash && ownedOrUnknown(ownCcColdCreds, coldCredential.hash)) {
+          requiredSigners.push({
+            derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 0],
+            type: 'ccCold'
+          });
+        }
       }
     }
   }

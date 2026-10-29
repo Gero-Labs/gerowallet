@@ -112,4 +112,39 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
     expect(analyzeTransactionForSignatures(cert(CRED), [], own, '').some(s => s.type === 'stake')).toBe(true);
     expect(analyzeTransactionForSignatures(cert(FOREIGN), [], own, '').some(s => s.type === 'stake')).toBe(false);
   });
+
+  describe('committee certificates', () => {
+    const HOT = 'e'.repeat(56);
+    const credential = (hash: string, type = Cardano.CredentialType.KeyHash) => ({ type, hash });
+    const authorization = (cold: { type: Cardano.CredentialType; hash: string }, hot = credential(HOT)) => ({
+      __typename: Cardano.CertificateType.AuthorizeCommitteeHot, coldCredential: cold, hotCredential: hot,
+    });
+    const resignation = (cold: { type: Cardano.CredentialType; hash: string }) => ({
+      __typename: Cardano.CertificateType.ResignCommitteeCold, coldCredential: cold, anchor: null,
+    });
+    const withCertificates = (...certificates: unknown[]) => ({ body: { inputs: [], outputs: [], certificates } }) as never;
+    const own = keys({ ccCold: [{ cred: CRED, path: '' }], ccHot: [{ cred: HOT, path: '' }] });
+    const coldSigner = { derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 0], type: 'ccCold' };
+
+    it('adds the cold-key witness for our own hot-key authorization and resignation', () => {
+      expect(analyzeTransactionForSignatures(withCertificates(authorization(credential(CRED))), [], own, '')).toEqual([coldSigner]);
+      expect(analyzeTransactionForSignatures(withCertificates(resignation(credential(CRED))), [], own, '')).toEqual([coldSigner]);
+    });
+
+    it('adds it once for several certificates of our cold key', () => {
+      expect(analyzeTransactionForSignatures(withCertificates(authorization(credential(CRED)), resignation(credential(CRED))), [], own, ''))
+        .toEqual([coldSigner]);
+    });
+
+    it('adds nothing for another cold credential, even when the authorized hot key is ours', () => {
+      expect(analyzeTransactionForSignatures(withCertificates(authorization(credential(FOREIGN)), resignation(credential(FOREIGN))), [], own, ''))
+        .toHaveLength(0);
+    });
+
+    it('adds nothing for a script cold credential, even with no cold cred to compare against', () => {
+      const script = credential(CRED, Cardano.CredentialType.ScriptHash);
+      expect(analyzeTransactionForSignatures(withCertificates(authorization(script), resignation(script)), [], own, '')).toHaveLength(0);
+      expect(analyzeTransactionForSignatures(withCertificates(resignation(script)), [], keys({}), '')).toHaveLength(0);
+    });
+  });
 });
