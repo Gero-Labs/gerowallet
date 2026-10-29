@@ -51,9 +51,9 @@ function answer(account: number, coin = 0): { type: string; cbor: string } {
 enableAutoUnmount(afterEach);
 afterEach(() => vi.clearAllMocks());
 
-async function scanWithKeystone(ur: { type: string; cbor: string }, network: string = Network.MAINNET) {
+async function scanWithKeystone(ur: { type: string; cbor: string }, network: string = Network.MAINNET, chain: string = Blockchain.BITCOIN, accountIndices?: number[]) {
   const wrapper = mount(StepConnect, {
-    props: { network: networks.resolveNetwork(Blockchain.BITCOIN, network), walletType: WalletType.Keystone },
+    props: { network: networks.resolveNetwork(chain, network), walletType: WalletType.Keystone, accountIndices },
     global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
   });
   await wrapper.find('button.step-next').trigger('click');
@@ -87,5 +87,39 @@ describe('pairing a Keystone as a Bitcoin wallet', () => {
     expect(wrapper.emitted('connected')).toBeUndefined();
     expect(mocks.setError).toHaveBeenCalledTimes(1);
     expect(mocks.fireSuccess).not.toHaveBeenCalled();
+  });
+});
+
+// The pairing answer carries the firmware version from 1.7.2 on; signing reads it
+// to refuse what the firmware cannot show (pool registrations before 1.5.8).
+describe('pairing a Keystone as a Cardano wallet', () => {
+  /** A Cardano account key at m/1852'/1815'/account' (synthetic bytes), in crypto-multi-accounts. */
+  const cardanoAnswer = (version?: string, ...accounts: number[]) => {
+    const keys = (accounts.length ? accounts : [0]).map((account) => new CryptoHDKey({
+      isMaster: false, key: NodeBuffer.alloc(32, account + 1), chainCode: NodeBuffer.alloc(32, account + 2),
+      origin: new CryptoKeypath([1852, 1815, account].map((index) => new PathComponent({ index, hardened: true })), FINGERPRINT),
+    }));
+    return { type: 'crypto-multi-accounts', cbor: new CryptoMultiAccounts(FINGERPRINT, keys, 'Keystone 3 Pro', undefined, version).toCBOR().toString('hex') };
+  };
+  const connected = (wrapper: Awaited<ReturnType<typeof scanWithKeystone>>) =>
+    (wrapper.emitted('connected') as [[{ xfp: string; firmwareVersion?: string; accounts?: unknown[] }]])[0][0];
+
+  it('records the firmware version the device reports', async () => {
+    const payload = connected(await scanWithKeystone(cardanoAnswer('3.2.0'), Network.MAINNET, Blockchain.CARDANO));
+
+    expect(payload).toMatchObject({ xfp: FINGERPRINT.toString('hex'), firmwareVersion: '3.2.0' });
+  });
+
+  it('records no version from firmware that sends the fixed 1.1.0', async () => {
+    const payload = connected(await scanWithKeystone(cardanoAnswer('1.1.0'), Network.MAINNET, Blockchain.CARDANO));
+
+    expect(payload).not.toHaveProperty('firmwareVersion');
+  });
+
+  it('records the version when several accounts are paired at once', async () => {
+    const payload = connected(await scanWithKeystone(cardanoAnswer('3.2.0', 0, 1), Network.MAINNET, Blockchain.CARDANO, [0, 1]));
+
+    expect(payload).toMatchObject({ firmwareVersion: '3.2.0' });
+    expect(payload.accounts).toHaveLength(2);
   });
 });

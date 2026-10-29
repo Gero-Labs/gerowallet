@@ -70,6 +70,13 @@ export interface Wallet {
    * cleared at login by applyPendingBackupRecheck(). Non-indexed: no new index.
    */
   backupRecheckPending?: boolean;
+  /**
+   * Keystone: the firmware version the device reported when it was paired, e.g. "3.2.0".
+   * Firmware 1.7.2 and later report it; older firmware answers with a fixed "1.1.0",
+   * which keystoneFirmwareVersion() does not record, and a Keystone paired before Gero
+   * recorded it has none. Non-indexed: no schema bump.
+   */
+  firmwareVersion?: string;
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
   mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
   mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)

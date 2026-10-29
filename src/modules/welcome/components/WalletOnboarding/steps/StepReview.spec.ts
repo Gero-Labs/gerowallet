@@ -24,7 +24,7 @@ const network = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
 const account = (accountIndex: number): AccountXpub => ({
   accountIndex, publicKey: `xpub-${accountIndex}`, keys: [{ publicKey: `pk-${accountIndex}`, chainCode: 'cc', path: `m/1852'/1815'/${accountIndex}'` }],
 });
-const connection = { publicKey: 'xpub-0', keys: [], btSupported: false, xfp: '0a1b2c3d', accounts: [account(0), account(1)] };
+const connection = { publicKey: 'xpub-0', keys: [], btSupported: false, xfp: '0a1b2c3d', firmwareVersion: '3.2.0', accounts: [account(0), account(1)] };
 
 let nextId = 50;
 function render(accounts: AccountXpub[]) {
@@ -59,7 +59,7 @@ describe('adding several accounts', () => {
       ['accounts.label:1', 'xpub-1', 1, 50],
       ['accounts.label:4', 'xpub-4', 4, 50],
     ]);
-    expect(records[1]).toMatchObject({ type: WalletType.Keystone, chain: Blockchain.CARDANO, network: Network.MAINNET, xfp: '0a1b2c3d' });
+    expect(records[1]).toMatchObject({ type: WalletType.Keystone, chain: Blockchain.CARDANO, network: Network.MAINNET, xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
     expect(records.every((r) => !('accounts' in r))).toBe(true);
   });
 

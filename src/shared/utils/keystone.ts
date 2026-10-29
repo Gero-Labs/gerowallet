@@ -14,6 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import i18n from '@/plugins/i18n';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   InvalidAccountIndexError,
@@ -86,12 +87,53 @@ export const getKeystoneAccountsUR = (accountIndices: number[]): Options => {
   return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190);
 }
 
+type FirmwareVersion = [number, number, number];
+
+/** "3.2.0", or with the firmware's edition suffix ("3.2.0 - Cypherpunk", "3.2.0 - BTC"). */
+const parseFirmwareVersion = (version: string | undefined): FirmwareVersion | undefined => {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})( - [A-Za-z]{1,16})?$/.exec(version ?? '');
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+};
+
+const isOlderFirmware = (version: FirmwareVersion, than: FirmwareVersion): boolean =>
+  (version[0] - than[0] || version[1] - than[1] || version[2] - than[2]) < 0;
+
+/** The first firmware that answers pairing with its own version; older firmware sends a fixed 1.1.0. */
+const FIRST_FIRMWARE_REPORTING_VERSION: FirmwareVersion = [1, 7, 2];
+/** The first firmware that parses and shows a pool registration certificate. */
+const POOL_REGISTRATION_FIRMWARE: FirmwareVersion = [1, 5, 8];
+
+/**
+ * The firmware version a Keystone reported in its pairing answer, or undefined when
+ * the answer does not tell: no version, one that does not parse, or the fixed "1.1.0"
+ * that firmware up to 1.7.0 sends instead of its own.
+ */
+export const keystoneFirmwareVersion = (multiAccounts: CryptoMultiAccounts): string | undefined => {
+  const reported = multiAccounts.getVersion();
+  const parsed = parseFirmwareVersion(reported);
+  return parsed && !isOlderFirmware(parsed, FIRST_FIRMWARE_REPORTING_VERSION) ? reported : undefined;
+};
+
+/**
+ * Refuses a pool registration on firmware known to be too old to show one, so the
+ * device is never asked to sign a certificate its screen leaves out. An unknown
+ * version (a Keystone paired before Gero recorded it, or firmware that does not
+ * report it) is not refused.
+ */
+const assertFirmwareShowsCertificates = (txCore: Cardano.Tx, firmwareVersion: string | undefined) => {
+  const version = parseFirmwareVersion(firmwareVersion);
+  if (!version || !isOlderFirmware(version, POOL_REGISTRATION_FIRMWARE)) return;
+  if (txCore.body.certificates?.some((cert) => cert.__typename === Cardano.CertificateType.PoolRegistration)) {
+    throw new Error(i18n.t('wallet.keystoneFirmwareNoPoolRegistration', { version: POOL_REGISTRATION_FIRMWARE.join('.') }) as string);
+  }
+};
+
 /**
  * The accounts in a Keystone `crypto-multi-accounts` answer, by the path each key
  * carries. Only the accounts that were asked for are kept, so a device answering
  * with other paths can never add an account the user did not see listed.
  */
-export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: AccountXpub[] } => {
+export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: AccountXpub[]; firmwareVersion?: string } => {
   const multiAccounts = CryptoMultiAccounts.fromCBOR(cbor);
   const wanted = new Set(assertAccountIndices(accountIndices));
   const accounts = multiAccounts.getKeys()
@@ -99,7 +141,8 @@ export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): {
     .filter((account) => wanted.has(account.accountIndex))
     .sort((a, b) => a.accountIndex - b.accountIndex);
   if (accounts.length === 0) throw new InvalidAccountIndexError('The Keystone did not return the requested accounts');
-  return { xfp: multiAccounts.getMasterFingerprint().toString('hex'), accounts };
+  const firmwareVersion = keystoneFirmwareVersion(multiAccounts);
+  return { xfp: multiAccounts.getMasterFingerprint().toString('hex'), accounts, ...(firmwareVersion && { firmwareVersion }) };
 }
 
 export const parseSignature = (ur: UR): CardanoSignature => {
@@ -283,7 +326,7 @@ export interface KeystoneSignRequestResponse {
 /**
  * Creates a Keystone signing request from a transaction
  * @param tx - The transaction to sign (Serialization.Transaction)
- * @param walletData - Wallet data containing xfp and stakeAddress
+ * @param walletData - Wallet data containing xfp, stakeAddress and the paired firmwareVersion
  * @param utxos - Array of UTXOs for input resolution
  * @param keys - keys mapping for derivation paths
  * @returns UR object with type and cbor properties for QR code generation
@@ -352,6 +395,8 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
     ownStakeSignerHashes(txCore, keys, walletData.stakeAddress).forEach((keyHash) => addSigner(keyHash, stakePath));
     return {keystoneUtxos, extraSigners}
   }
+
+  assertFirmwareShowsCertificates(tx.toCore(), walletData.firmwareVersion);
 
   const xfp = walletData.xfp ?? "";
   const txCborHex = tx.toCbor();

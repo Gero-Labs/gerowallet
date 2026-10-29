@@ -201,6 +201,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
@@ -350,6 +351,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,

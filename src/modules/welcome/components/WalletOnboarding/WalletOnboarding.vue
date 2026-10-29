@@ -195,6 +195,7 @@ interface ConnectionPayload {
   keys: Array<{ publicKey: string; chainCode: string; path: string }>;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
   accounts?: AccountXpub[];
 }
 

@@ -161,6 +161,7 @@ export class WalletBg {
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
 
   encryptedPrivateKey: string;
   passwordLastUpdate: Date;
@@ -219,6 +220,7 @@ export class WalletBg {
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
+    this.firmwareVersion = wallet.firmwareVersion;
     this.api = new Api(wallet, this.provider);
 
     // Chain-specific address derivation

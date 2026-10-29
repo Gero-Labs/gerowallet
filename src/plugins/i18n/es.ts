@@ -3493,6 +3493,7 @@ export default {
   'wallet.keystoneScanError': 'Error del escáner de Keystone',
   'wallet.keystoneSign': 'Firmar con Keystone',
   'wallet.keystoneSigningFailed': 'Falló la firma con Keystone',
+  'wallet.keystoneFirmwareNoPoolRegistration': 'Este firmware de Keystone no puede mostrar registros de pool. Actualízalo a la versión {version} o posterior e inténtalo de nuevo.',
   'wallet.keystoneSupport': '3 Pro',
   'wallet.ledger': 'Ledger',
   'wallet.ledgerAppClosed': 'La app de Cardano está cerrada',

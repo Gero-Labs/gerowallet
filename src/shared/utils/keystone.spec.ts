@@ -11,8 +11,8 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import type { Keys } from '@/models/types';
 import {
-  createKeystoneSignRequest, generateBitcoinPSBTQR, generateBitcoinSyncQR, getKeystoneAccountsUR, parseBitcoinSignature,
-  parseBitcoinAccount, parseDataSignature, parseKeystoneAccounts, parseSignature,
+  createKeystoneSignRequest, generateBitcoinPSBTQR, generateBitcoinSyncQR, getKeystoneAccountsUR, keystoneFirmwareVersion,
+  parseBitcoinSignature, parseBitcoinAccount, parseDataSignature, parseKeystoneAccounts, parseSignature,
 } from './keystone';
 import { InvalidAccountIndexError } from './walletAccount';
 
@@ -157,6 +157,14 @@ describe('Keystone multi-account pairing', () => {
     ], FINGERPRINT),
   });
   const answer = (...keys: CryptoHDKey[]) => new CryptoMultiAccounts(FINGERPRINT, keys).toCBOR();
+  const answerFrom = (version: string, ...keys: CryptoHDKey[]) =>
+    new CryptoMultiAccounts(FINGERPRINT, keys, 'Keystone 3 Pro', undefined, version).toCBOR();
+
+  it('records the firmware version the device reports, and none for the fixed 1.1.0 of older firmware', () => {
+    expect(parseKeystoneAccounts(answerFrom('3.2.0', accountKey(0, 1)), [0]).firmwareVersion).toBe('3.2.0');
+    expect(parseKeystoneAccounts(answerFrom('1.1.0', accountKey(0, 1)), [0])).not.toHaveProperty('firmwareVersion');
+    expect(parseKeystoneAccounts(answer(accountKey(0, 1)), [0])).not.toHaveProperty('firmwareVersion');
+  });
 
   it('asks for the accounts in one key-derivation request', () => {
     const options = getKeystoneAccountsUR([0, 1, 2]);
@@ -178,6 +186,21 @@ describe('Keystone multi-account pairing', () => {
 
   it('refuses an answer with none of them', () => {
     expect(() => parseKeystoneAccounts(answer(accountKey(9, 5)), [0, 1])).toThrow(InvalidAccountIndexError);
+  });
+});
+
+// Firmware 1.7.2 and later answer pairing with their own version; up to 1.7.0 the
+// answer carries a fixed "1.1.0" (DEVICE_VERSION in keystone3-firmware).
+describe('Keystone firmware version at pairing', () => {
+  const versionOf = (version?: string) =>
+    keystoneFirmwareVersion(new CryptoMultiAccounts(NativeBuffer.from('0a1b2c3d', 'hex'), [], 'Keystone 3 Pro', undefined, version));
+
+  it.each(['1.7.2', '3.2.0', '3.2.0 - Cypherpunk'])('records %s', (version) => {
+    expect(versionOf(version)).toBe(version);
+  });
+
+  it.each(['1.1.0', '1.7.0', undefined, '', 'v3.2.0', '3.2', '3.2.0; drop'])('records nothing for %s', (version) => {
+    expect(versionOf(version)).toBeUndefined();
   });
 });
 
@@ -320,6 +343,24 @@ describe('Keystone Cardano sign request: extra signers', () => {
   it('asks for the stake key in a hash-signing request only for a pool the wallet owns', () => {
     expect(hashPathsOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
     expect(hashPathsOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([PAYMENT_PATH]);
+  });
+
+  describe('firmware too old to show a pool registration (before 1.5.8)', () => {
+    const onFirmware = (firmwareVersion: string | undefined, body: Partial<Cardano.TxBody>) => () =>
+      createKeystoneSignRequest(tx(body), { xfp: '0a1b2c3d', stakeAddress, firmwareVersion }, utxos, keys);
+    const poolRegistration = { certificates: [poolRegistrationOwnedBy(stakeAddress)] };
+
+    it('refuses a pool registration before asking the device', () => {
+      expect(onFirmware('1.5.6', poolRegistration)).toThrow('This Keystone firmware cannot show pool registrations. Update it to 1.5.8 or later');
+    });
+
+    it.each(['1.5.8', '3.2.0', undefined])('lets firmware %s sign it', (firmwareVersion) => {
+      expect(onFirmware(firmwareVersion, poolRegistration)).not.toThrow();
+    });
+
+    it('lets old firmware sign a transaction without a pool registration', () => {
+      expect(onFirmware('1.5.6', { certificates: [voteDelegation] })).not.toThrow();
+    });
   });
 
   // As the software signer's resolver does: a key set that cannot tell, signs.
