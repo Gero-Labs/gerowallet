@@ -168,6 +168,8 @@ export function useHoldingsValuation() {
         // badge renders (mirrors the market list). Missing here = held snek
         // tokens silently stripped by verified-only.
         isSnekFun: marketToken?.isSnekFun ?? false,
+        // Same for Solada graduates.
+        isSolada: marketToken?.isSolada ?? false,
         isProgrammable,
         cip113Registered,
         rowKey: tokenRowKey(unit, isProgrammable),

@@ -54,4 +54,32 @@ describe('market table real Vuetify 4 contract', () => {
     expect(wrapper.find('tr.night-dust-row').exists()).toBe(false);
     expect(wrapper.find('tr.night-dust-attached').exists()).toBe(false);
   });
+  it('badges launchpad rows: CIP-113 lock, then snek.fun, then Solada, then verified', () => {
+    const wrapper = render([
+      token('SNEK', 6, { isSnekFun: true }),
+      token('SOL', 5, { isSolada: true }),
+      token('SOLV', 4, { isSolada: true, verified: true }),
+      token('VER', 3, { verified: true }),
+      token('LOCK', 2, { unit: 'lovelace', rowKey: 'locked:lovelace', isProgrammable: true, isSolada: true }),
+      token('PLAIN', 1),
+    ]);
+    const row = (ticker: string) => wrapper.findAll('tbody tr').find(tr => tr.find('.token-ticker').text() === ticker)!;
+    const badges = (ticker: string) => ['.programmable-badge', '.snek-badge', '.solada-badge', '.verified-check']
+      .filter(sel => row(ticker).find(sel).exists());
+
+    expect(badges('SNEK')).toEqual(['.snek-badge']);
+    expect(badges('SOL')).toEqual(['.solada-badge']);
+    expect(badges('SOLV')).toEqual(['.solada-badge']);
+    expect(badges('VER')).toEqual(['.verified-check']);
+    expect(badges('LOCK')).toEqual(['.programmable-badge']);
+    expect(badges('PLAIN')).toEqual([]);
+
+    const snek = row('SNEK').find('.snek-badge');
+    expect(snek.attributes('title')).toBe('snek.fun');
+    expect(snek.classes()).toContain('mdi-snake');
+    const solada = row('SOL').find('.solada-badge');
+    expect(solada.attributes('title')).toBe('Solada');
+    expect(solada.classes()).toContain('mdi-rocket-launch-outline');
+    expect(solada.attributes('style')).toContain('var(--g-info)');
+  });
 });

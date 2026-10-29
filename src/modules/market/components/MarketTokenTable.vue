@@ -79,8 +79,16 @@
             v-else-if="item.isSnekFun"
             class="snek-badge"
             style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: var(--g-surface); border-radius: 50%;"
-            title="snek.fun"
-          >mdi-snake</v-icon>
+            :title="$t(LAUNCHPADS.snekfun.labelKey)"
+            :icon="LAUNCHPADS.snekfun.icon"
+          />
+          <v-icon
+            v-else-if="item.isSolada"
+            class="solada-badge"
+            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: var(--g-info); background: var(--g-surface); border-radius: 50%;"
+            :title="$t(LAUNCHPADS.solada.labelKey)"
+            :icon="LAUNCHPADS.solada.icon"
+          />
           <v-icon
             v-else-if="item.verified"
             color="var(--g-accent)"
@@ -431,6 +439,7 @@ import '@/shared/styles/compact-pagination.css';
 import { ref, computed, watch, onMounted } from 'vue';
 import type { DataTableHeader, DataTableSortItem } from 'vuetify';
 import { programmableTooltipKey, isCip113BadgeRow } from '@/shared/utils/programmableTokenDisplay';
+import { LAUNCHPADS } from '@/modules/market/utils/launchpads';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
