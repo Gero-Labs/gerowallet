@@ -2449,9 +2449,9 @@ async function signKeystone() {
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const txCbor = signingRequest.payload.tx;
     const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
-    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
+    const signRequestResponse: KeystoneSignRequestResponse = await awaitFreshApproval(() => createKeystoneSignRequest(
       txSerialized, loggedWallet.value, utxos.value, keys.value
-    );
+    ), approvalCurrent);
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;

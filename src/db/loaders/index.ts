@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import { LoaderRegistry } from './base';
+import { LoaderRegistry, type ILoader } from './base';
 import { AssetsLoader, GenesisLoader, EpochParamsLoader } from './network';
 import {
   AccountLoader,
@@ -25,6 +25,7 @@ export class LoaderFactory {
       baseAddress: string;
       stakeAddress: string;
       isEnterpriseAddress: () => boolean;
+      ownProgrammableAddressMatcher?: () => ((address: string) => boolean) | null;
       networkId: () => number;
       getDb: () => Promise<Dexie>;
       getBlockchainDb: () => Promise<Dexie>;
@@ -75,9 +76,10 @@ export class LoaderFactory {
   }
 
   /**
-   * Load specific data by loader key
+   * Load specific data by loader key. Typed as the loader contract's own result, which
+   * callers pass straight through.
    */
-  async load(key: string): Promise<any> {
+  async load(key: string): ReturnType<ILoader['load']> {
     const loader = this.registry.getLoader(key);
     if (!loader) {
       throw new Error(`Loader '${key}' not found`);
