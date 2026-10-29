@@ -5799,6 +5799,8 @@ export default {
   'gomining.errorSessionExpired': 'Tu sesión de GoMining terminó. Vuelve a conectar para continuar.',
   'gomining.errorSignFailed': 'La billetera no pudo firmar el mensaje.',
   'gomining.errorUnavailable': 'GoMining no está disponible por el momento. Inténtalo más tarde.',
+  'gomining.unavailableTitle': 'GoMining no está disponible',
+  'gomining.unavailableDescription': 'GoMining no está disponible por el momento. Tu billetera y tus fondos no se ven afectados. Inténtalo de nuevo en unos minutos.',
   'gomining.fees': 'Comisiones',
   'gomining.getBtcPrice': 'Obtener precio en BTC',
   'gomining.goMiningFee': 'Comisión de GoMining',

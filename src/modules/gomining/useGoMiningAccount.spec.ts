@@ -71,6 +71,30 @@ describe('loading', () => {
     await vi.waitFor(() => expect(account.phase.value).toBe('unavailable'));
   });
 
+  it('blames the connection only when the backend gave no answer at all', async () => {
+    api.getConfig.mockRejectedValueOnce(new GoMiningApiError('network_error', 0));
+    const offline = start();
+    await vi.waitFor(() => expect(offline.phase.value).toBe('unavailable'));
+    expect(offline.unavailableReason.value).toBe('network');
+    scope.stop();
+
+    // gero-backend answered, with an error (here: the routes are not deployed)
+    api.getConfig.mockRejectedValueOnce(new GoMiningApiError('request_failed', 404));
+    const missing = start();
+    await vi.waitFor(() => expect(missing.phase.value).toBe('unavailable'));
+    expect(missing.unavailableReason.value).toBe('service');
+  });
+
+  it('forgets why it was unavailable once a retry loads', async () => {
+    api.getConfig.mockRejectedValueOnce(new GoMiningApiError('request_failed', 503));
+    const account = start();
+    await vi.waitFor(() => expect(account.unavailableReason.value).toBe('service'));
+
+    await account.load();
+    expect(account.phase.value).toBe('unlinked');
+    expect(account.unavailableReason.value).toBeNull();
+  });
+
   it('turns away a wallet that cannot link, before any session is read', async () => {
     (walletStore as { loggedWallet: unknown }).loggedWallet = btcWallet(1, { addressType: 'legacy' });
     await writeGoMiningSession(1, { token: 'tok_old', expiresAt: FUTURE() }, 'tb1qwallet1', Network.TESTNET);
@@ -167,5 +191,11 @@ describe('goMiningErrorMessage', () => {
     expect(goMiningErrorMessage(new GoMiningApiError('quote_expired', 409), t)).toBe('gomining.errorQuoteExpired');
     expect(goMiningErrorMessage(new GoMiningApiError('something_new', 500), t)).toBe('common.somethingWentWrong');
     expect(goMiningErrorMessage(new Error('stack trace here'), t)).toBe('common.somethingWentWrong');
+  });
+
+  it('calls a backend without GoMining set up, or without its chain data, unavailable', () => {
+    const t = (key: string) => key;
+    expect(goMiningErrorMessage(new GoMiningApiError('not_configured', 503), t)).toBe('gomining.errorUnavailable');
+    expect(goMiningErrorMessage(new GoMiningApiError('chain_unavailable', 502), t)).toBe('gomining.errorUnavailable');
   });
 });

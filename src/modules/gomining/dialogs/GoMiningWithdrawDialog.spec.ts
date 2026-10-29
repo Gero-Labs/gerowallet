@@ -31,7 +31,9 @@ import GoMiningWithdrawDialog from './GoMiningWithdrawDialog.vue';
 import goMiningApi, { GoMiningApiError } from '@/api/gomining-api';
 
 const api = vi.mocked(goMiningApi);
-const withSession = vi.fn(<T,>(call: (token: string) => Promise<T>) => call('tok'));
+const withSessionMock = vi.fn((call: (token: string) => Promise<unknown>) => call('tok'));
+// The prop is generic; a vi.fn of it is not, so the mock is handed over under the prop's type.
+const withSession = withSessionMock as unknown as <T>(call: (token: string) => Promise<T>) => Promise<T>;
 let wrapper: VueWrapper;
 
 function mountDialog(availableSats = 500_000) {
@@ -53,7 +55,7 @@ const amountInput = () => wrapper.find('input.gm-input__control--amount');
 beforeEach(() => {
   api.getWithdrawalTerms.mockReset().mockResolvedValue({ fastMinSats: 100_000, fastFeePercent: null, fastFeeSats: 2_000 });
   api.withdraw.mockReset().mockResolvedValue(undefined);
-  withSession.mockClear();
+  withSessionMock.mockClear();
 });
 
 afterEach(() => { wrapper?.unmount(); });

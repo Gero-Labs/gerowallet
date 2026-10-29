@@ -5923,6 +5923,8 @@ export default {
   'gomining.errorSessionExpired': 'Ihre GoMining-Sitzung ist beendet. Verbinden Sie sich erneut, um fortzufahren.',
   'gomining.errorSignFailed': 'Die Wallet konnte die Nachricht nicht signieren.',
   'gomining.errorUnavailable': 'GoMining ist vorübergehend nicht verfügbar. Versuchen Sie es später erneut.',
+  'gomining.unavailableTitle': 'GoMining ist nicht verfügbar',
+  'gomining.unavailableDescription': 'GoMining ist vorübergehend nicht verfügbar. Ihre Wallet und Ihr Guthaben sind nicht betroffen. Versuchen Sie es in ein paar Minuten erneut.',
   'gomining.fees': 'Gebühren',
   'gomining.getBtcPrice': 'BTC-Preis abrufen',
   'gomining.goMiningFee': 'GoMining-Gebühr',

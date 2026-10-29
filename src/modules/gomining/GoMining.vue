@@ -27,11 +27,18 @@
       <span class="t-body">{{ $t('gomining.connecting') }}</span>
     </div>
 
-    <!-- gero-backend's GoMining service could not be reached -->
+    <!-- GoMining could not be loaded. Only a request that got no answer at all points at the
+         user's connection; an error reply from gero-backend is ours, so it says so. -->
     <div v-else-if="phase === 'unavailable'" class="glass-panel gm__error" role="alert">
       <v-icon size="32" class="gm__error-icon">mdi-alert-circle-outline</v-icon>
-      <h2 class="t-heading gm__error-title">{{ $t('gomining.connectionFailed') }}</h2>
-      <p class="t-body gm__error-text">{{ $t('gomining.connectionFailedDescription') }}</p>
+      <template v-if="unavailableReason === 'network'">
+        <h2 class="t-heading gm__error-title">{{ $t('gomining.connectionFailed') }}</h2>
+        <p class="t-body gm__error-text">{{ $t('gomining.connectionFailedDescription') }}</p>
+      </template>
+      <template v-else>
+        <h2 class="t-heading gm__error-title">{{ $t('gomining.unavailableTitle') }}</h2>
+        <p class="t-body gm__error-text">{{ $t('gomining.unavailableDescription') }}</p>
+      </template>
       <GButton tier="secondary" compact @click="load()">
         <v-icon size="small" start>mdi-refresh</v-icon>
         {{ $t('common.tryAgain') }}
@@ -265,7 +272,7 @@ import gominingLogo from '@/assets/svg/gomining.svg';
 
 const { t } = useTranslation();
 
-const { config, phase, unsupportedReason, sessionExpired, address, wallet, load, connect, withSession, captureGeneration } = useGoMiningAccount();
+const { config, phase, unsupportedReason, unavailableReason, sessionExpired, address, wallet, load, connect, withSession, captureGeneration } = useGoMiningAccount();
 
 /** Days of payouts loaded: the chart shows the last 14, the table all of them. */
 const INCOME_DAYS = 30;

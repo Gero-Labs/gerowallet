@@ -6030,6 +6030,8 @@ export default {
   'gomining.errorSessionExpired': 'Your GoMining session ended. Connect again to continue.',
   'gomining.errorSignFailed': "The wallet couldn't sign the message.",
   'gomining.errorUnavailable': 'GoMining is temporarily unavailable. Try again later.',
+  'gomining.unavailableTitle': 'GoMining is unavailable',
+  'gomining.unavailableDescription': "GoMining is temporarily unavailable. Your wallet and funds aren't affected. Try again in a few minutes.",
   'gomining.fees': 'Fees',
   'gomining.getBtcPrice': 'Get BTC price',
   'gomining.goMiningFee': 'GoMining fee',
