@@ -1,40 +1,68 @@
 import { describe, expect, it } from 'vitest';
-import { ORDER_LEG_FLOOR_LOVELACE, swapSpendBound } from '../orderSpendBound';
+import {
+  ORDER_LEG_FLOOR_LOVELACE, ORDER_OVERHEAD_MAX_LOVELACE, routeFromQuoteEvent, swapSpendBound, toBaseUnits, tokenValueLovelace,
+} from '../orderSpendBound';
 
 const ADA = 1_000_000n;
-const adaLeg = (route: Parameters<typeof swapSpendBound>[0]) => swapSpendBound(route).maxOutflow.get('lovelace')! - BigInt(route.amountIn);
+const TOKEN = `${'ab'.repeat(28)}474552`;
+const adaLeg = (intent: Parameters<typeof swapSpendBound>[0]) =>
+  swapSpendBound(intent).maxOutflow.get('lovelace')! - (intent.tokenIn === 'lovelace' ? intent.amountIn : 0n);
 
 describe('swap spend budget', () => {
-  it('never goes below the floor', () => {
-    expect(adaLeg({ tokenIn: 'lovelace', amountIn: '1000000', batcherFeeLovelace: '1000000' })).toBe(ORDER_LEG_FLOOR_LOVELACE);
+  it('allows the amount typed plus the 12 ADA floor for an ordinary swap', () => {
+    expect(swapSpendBound({ tokenIn: 'lovelace', amountIn: 50n * ADA }).maxOutflow.get('lovelace')).toBe(62n * ADA);
   });
 
-  it('counts the quoted fees and deposit once the leg is above the floor', () => {
-    const route = {
-      tokenIn: 'lovelace', amountIn: '100000000', dex: 'MINSWAP_V2',
-      aggregatorFeeLovelace: '5000000', batcherFeeLovelace: '4000000', partnerFeeLovelace: '1000000',
-      orderDepositLovelace: '3000000',
-    };
-    expect(adaLeg(route)).toBe(5n * ADA + 4n * ADA + ADA + 3n * ADA);
+  it('raises the leg only by the service fee at 30 bps of a large ADA sale', () => {
+    // 100,000 ADA: 300 ADA at 30 bps, plus the largest DEX overhead.
+    expect(adaLeg({ tokenIn: 'lovelace', amountIn: 100_000n * ADA })).toBe(300n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
   });
 
-  it('does not let the quote\'s network fee estimate widen the budget', () => {
-    // verifySpendBound already allows the transaction's own fee (capped) on top of the budget.
-    const route = { tokenIn: 'lovelace', amountIn: '1', aggregatorFeeLovelace: '13000000', estimatedTxFeeLovelace: '900000000' };
-    expect(adaLeg(route)).toBe(13n * ADA + 2n * ADA);
+  it('budgets a token sale as the tokens typed plus a leg sized on the wallet\'s own valuation', () => {
+    // Worth 10,000 ADA at the wallet's price; with 2x headroom the fee is sized on 20,000 ADA.
+    const bound = swapSpendBound({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: 10_000n * ADA });
+    expect(bound.maxOutflow.get(TOKEN)).toBe(500n);
+    expect(bound.maxOutflow.get('lovelace')).toBe(60n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
   });
 
-  it('uses the widget\'s own deposit and execution defaults when the quote leaves them out', () => {
-    const fees = { aggregatorFeeLovelace: '8000000', batcherFeeLovelace: '4000000' };
-    const base = 8n * ADA + 4n * ADA;
-    expect(adaLeg({ tokenIn: 'lovelace', amountIn: '1', dex: 'SPLASH', ...fees })).toBe(base + 1_500_000n + 2n * ADA);
-    expect(adaLeg({ tokenIn: 'lovelace', amountIn: '1', dex: 'MUESLISWAP', ...fees })).toBe(base);
-    expect(adaLeg({ tokenIn: 'lovelace', amountIn: '1', dex: 'WINGRIDERS_V2', ...fees })).toBe(base + 2n * ADA);
+  it('keeps a token sale without a wallet price to the floor', () => {
+    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n, tokenValueLovelace: null })).toBe(ORDER_LEG_FLOOR_LOVELACE);
+    expect(adaLeg({ tokenIn: TOKEN, amountIn: 500n })).toBe(ORDER_LEG_FLOOR_LOVELACE);
+  });
+});
+
+describe('quote events', () => {
+  it('reads the route a quote event carries, or nothing', () => {
+    expect(routeFromQuoteEvent([{ route: { tokenIn: 'lovelace', amountIn: '5' } }])).toEqual({ tokenIn: 'lovelace', amountIn: '5' });
+    expect(routeFromQuoteEvent({ route: { tokenIn: '', amountIn: '5' } })).toBeNull();
+    expect(routeFromQuoteEvent({ route: { tokenIn: 'lovelace', amountIn: '-5' } })).toBeNull();
+    expect(routeFromQuoteEvent(null)).toBeNull();
+  });
+});
+
+describe('typed amounts', () => {
+  it('converts the way the widget does, cutting extra decimals', () => {
+    expect(toBaseUnits('1.5', 6)).toBe(1_500_000n);
+    expect(toBaseUnits('1.1234567', 6)).toBe(1_123_456n);
+    expect(toBaseUnits('.5', 6)).toBe(500_000n);
+    expect(toBaseUnits('5.', 6)).toBe(5_000_000n);
+    expect(toBaseUnits('12.9', 0)).toBe(12n);
+    expect(toBaseUnits(' 7 ', 2)).toBe(700n);
   });
 
-  it('budgets a token sale as the token amount plus the ADA leg', () => {
-    const bound = swapSpendBound({ tokenIn: 'AABB', amountIn: '500' });
-    expect(bound.maxOutflow.get('aabb')).toBe(500n);
-    expect(bound.maxOutflow.get('lovelace')).toBe(ORDER_LEG_FLOOR_LOVELACE);
+  it('refuses anything that is not a plain non-negative decimal', () => {
+    for (const bad of ['', '.', '-1', '1e3', 'abc', '1,000', undefined, null, {}]) {
+      expect(toBaseUnits(bad, 6)).toBeNull();
+    }
+    expect(toBaseUnits('1', -1)).toBeNull();
+    expect(toBaseUnits('1', 1.5)).toBeNull();
+  });
+
+  it('values tokens at a price per display unit', () => {
+    expect(tokenValueLovelace(1_000_000n, 6, 2.5)).toBe(2_500_000n);
+    expect(tokenValueLovelace(100n, 0, 0.0001)).toBe(10_000n);
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '2', undefined]) {
+      expect(tokenValueLovelace(1n, 0, bad)).toBeNull();
+    }
   });
 });

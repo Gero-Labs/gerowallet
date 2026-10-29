@@ -121,7 +121,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
-import { routeFromQuoteEvent, swapSpendBound, type SwapRouteLike } from '../composables/orderSpendBound';
+import {
+  routeFromQuoteEvent, swapSpendBound, toBaseUnits, tokenValueLovelace, type QuotedRoute, type SwapIntent,
+} from '../composables/orderSpendBound';
+import type { SpendBound } from '@/shared/utils/txIntentGuard';
+import marketApi from '@/api/market-api';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
@@ -297,15 +301,46 @@ function onTransportCancel() {
   transportReject = null;
 }
 
-// The route of the latest quote: what the user agreed to sell, and the order's
-// fees. The signer refuses a built order that takes more than this.
-let quotedRoute: SwapRouteLike | null = null;
+// A quote only tells us an order is being placed. What the signer lets the order take
+// comes from what the user asked for: the token they are selling (our prop and the
+// widget's own token-change events) and the amount they typed (the widget exposes its
+// input as `amountIn`). Never from the quote: the server that quotes builds the order.
+let quotedRoute: QuotedRoute | null = null;
+const sellingUnit = ref<string>(props.tokenIn ?? 'lovelace');
+watch(() => props.tokenIn, (unit) => {
+  if (unit !== undefined) sellingUnit.value = unit;
+});
+
+async function currentSwapIntent(): Promise<SwapIntent | null> {
+  if (!quotedRoute) return null;
+  const tokenIn = sellingUnit.value;
+  const typed = (geroSwapEl.value as unknown as { amountIn?: unknown } | null)?.amountIn;
+  // The decimals the widget converted the typed amount with: ours, through resolveToken.
+  const decimals = tokenIn === 'lovelace' ? 6 : (await resolveToken(tokenIn))?.decimals;
+  if (typeof decimals !== 'number') return null;
+  const amountIn = toBaseUnits(typed, decimals);
+  if (!amountIn) return null;
+  if (tokenIn === 'lovelace') return { tokenIn, amountIn };
+  const priceAda = getTokenByUnit(tokenIn)?.priceAda
+    ?? (await marketApi.getTokenPrice(tokenIn).catch(() => null))?.priceAda;
+  return { tokenIn, amountIn, tokenValueLovelace: tokenValueLovelace(amountIn, decimals, priceAda) };
+}
+
+/** The budget for the order being signed, or null (only a signature taking almost nothing passes). */
+async function spendBoundForSignature(): Promise<SpendBound | null> {
+  try {
+    const intent = await currentSwapIntent();
+    return intent ? swapSpendBound(intent) : null;
+  } catch {
+    return null;
+  }
+}
 
 const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
   getIsBT: () => isBT.value,
-  getSpendBound: () => (quotedRoute ? swapSpendBound(quotedRoute) : null),
+  getSpendBound: spendBoundForSignature,
 });
 
 // The widget signs both swaps and order cancels through signTx, so the question sits
@@ -530,7 +565,10 @@ function onTokenChange(e: Event) {
   // emit" comment), so from here on the default-GERO logic above must never override
   // whatever the user has chosen.
   userPickedTokenOut.value = true;
-  emit('token-change', widgetPayload(e));
+  const detail = widgetPayload(e);
+  const tokenIn = (detail as { tokenIn?: unknown } | undefined)?.tokenIn;
+  if (typeof tokenIn === 'string' && tokenIn) sellingUnit.value = tokenIn;
+  emit('token-change', detail);
 }
 
 function attach() {

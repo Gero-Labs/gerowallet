@@ -47,10 +47,11 @@ export interface NativeSwapSignerOptions {
   getIsBT?: () => boolean;
   /**
    * How much the transaction being signed may take from the wallet (see
-   * orderSpendBound.ts). The swap host answers from the quote the user
-   * accepted. Without one, only a signature that takes almost nothing passes.
+   * orderSpendBound.ts). The swap host answers from what the user asked to
+   * swap, read when the signature is requested. Without one, only a signature
+   * that takes almost nothing passes.
    */
-  getSpendBound?: () => SpendBound | null;
+  getSpendBound?: () => SpendBound | null | Promise<SpendBound | null>;
 }
 
 function isPrfWallet(w: Wallet | null | undefined): boolean {
@@ -290,7 +291,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   }
 
   async function signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string> {
-    await assertWithinBound(unsignedTxCbor, bound ?? opts.getSpendBound?.() ?? DEFAULT_ORDER_SPEND_BOUND);
+    await assertWithinBound(unsignedTxCbor, bound ?? (await opts.getSpendBound?.()) ?? DEFAULT_ORDER_SPEND_BOUND);
     const type = walletStore.loggedWallet?.type;
     // Hardware wallets sign in the page, so a collateral input borrowed from the Nexus pool
     // gets its co-signature here; password and PRF wallets get it in the worker's SIGN_TX.

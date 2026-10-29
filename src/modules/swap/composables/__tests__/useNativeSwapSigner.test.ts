@@ -116,8 +116,8 @@ describe('useNativeSwapSigner', () => {
       walletState.loggedWallet = { type: 'Normal', baseAddress: OWN };
       proof.answer = null;
     });
-    const route = { tokenIn: 'lovelace', amountIn: '50000000', batcherFeeLovelace: '2000000', orderDepositLovelace: '2000000' };
-    const bound = swapSpendBound(route);
+    // 50 ADA typed: the leg is the 12 ADA floor.
+    const bound = swapSpendBound({ tokenIn: 'lovelace', amountIn: 50_000_000n });
     const signWith = async (core: unknown) => {
       vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => core } as never);
       walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
@@ -130,6 +130,16 @@ describe('useNativeSwapSigner', () => {
 
     it('signs 50 ADA sold plus the order leg', async () => {
       await expect(signWith(orderTx(62_000_000n))).resolves.toBe('WIT');
+    });
+
+    it('takes a budget the host works out asynchronously', async () => {
+      vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => orderTx(90_000_000n) } as never);
+      walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
+      const { signer } = useNativeSwapSigner({
+        getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: async () => bound,
+      });
+      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['spendExceeded'] });
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
     });
 
     it('refuses more ADA than the amount sold plus the leg, before asking for anything', async () => {
