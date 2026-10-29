@@ -534,13 +534,14 @@ export const generateBitcoinSyncQR = (network: string, addressType: string = 'se
  * The key-derivation request from {@link generateBitcoinSyncQR} is answered with a
  * `crypto-multi-accounts` UR; a lone `crypto-hdkey` is read too. Only the key at the
  * account path that was asked for is taken, so an answer for another account is
- * refused rather than paired.
+ * refused rather than paired. Only the `crypto-multi-accounts` answer carries the
+ * firmware version (firmware 1.7.2 and later, the first that accepts this request).
  *
  * @param ur - UR from scanned QR code
  * @param network - The network the account was requested on
  * @param addressType - The address type that was requested
  * @param accountIndex - The account that was requested
- * @returns Object containing xpub (already in the wallet's xpub form), master fingerprint, and path
+ * @returns Object containing xpub (already in the wallet's xpub form), master fingerprint, path, and the firmware version when the answer reports one
  */
 export const parseBitcoinAccount = (ur: UR, network: string, addressType: string = 'segwit', accountIndex: number = 0): {
   xpub: string;
@@ -548,13 +549,16 @@ export const parseBitcoinAccount = (ur: UR, network: string, addressType: string
   path: string;
   publicKey: string;
   chainCode: string;
+  firmwareVersion?: string;
 } => {
   let keys: CryptoHDKey[];
   let xfp: Buffer | undefined;
+  let firmwareVersion: string | undefined;
   if (ur.type === 'crypto-multi-accounts') {
     const multiAccounts = CryptoMultiAccounts.fromCBOR(ur.cbor);
     keys = multiAccounts.getKeys();
     xfp = multiAccounts.getMasterFingerprint();
+    firmwareVersion = keystoneFirmwareVersion(multiAccounts);
   } else if (ur.type === 'crypto-hdkey') {
     keys = [CryptoHDKey.fromCBOR(ur.cbor)];
   } else {
@@ -571,6 +575,7 @@ export const parseBitcoinAccount = (ur: UR, network: string, addressType: string
     path: key.getOrigin()?.getPath() || '',
     publicKey: key.getKey().toString('hex'),
     chainCode: key.getChainCode()?.toString('hex') || '',
+    ...(firmwareVersion && { firmwareVersion }),
   };
 };
 

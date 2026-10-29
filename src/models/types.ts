@@ -71,10 +71,11 @@ export interface Wallet {
    */
   backupRecheckPending?: boolean;
   /**
-   * Keystone: the firmware version the device reported when it was paired, e.g. "3.2.0".
-   * Firmware 1.7.2 and later report it; older firmware answers with a fixed "1.1.0",
-   * which keystoneFirmwareVersion() does not record, and a Keystone paired before Gero
-   * recorded it has none. Non-indexed: no schema bump.
+   * Keystone (Cardano and Bitcoin): the firmware version the device reported when it was
+   * paired, e.g. "3.2.0". Firmware 1.7.2 and later report it; older firmware answers with
+   * a fixed "1.1.0", which keystoneFirmwareVersion() does not record. A Keystone paired
+   * before Gero recorded it, or a Bitcoin account exported as a lone crypto-hdkey, has
+   * none. Non-indexed: no schema bump.
    */
   firmwareVersion?: string;
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)

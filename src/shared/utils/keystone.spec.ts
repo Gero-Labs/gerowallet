@@ -141,6 +141,14 @@ describe('Keystone Bitcoin pairing', () => {
   it('refuses another kind of answer', () => {
     expect(() => parseBitcoinAccount(new UR(NativeBuffer.from('a0', 'hex'), 'crypto-account'), 'Mainnet')).toThrow('Expected a crypto-multi-accounts or crypto-hdkey response');
   });
+
+  it('records the firmware version the device reports, and none for the fixed 1.1.0 or a lone crypto-hdkey', () => {
+    const answerFrom = (version: string) => new CryptoMultiAccounts(FINGERPRINT, [accountKey(84, 0)], 'Keystone 3 Pro', undefined, version).toUR();
+
+    expect(parseBitcoinAccount(answerFrom('3.2.0'), 'Mainnet', 'segwit', 0).firmwareVersion).toBe('3.2.0');
+    expect(parseBitcoinAccount(answerFrom('1.1.0'), 'Mainnet', 'segwit', 0)).not.toHaveProperty('firmwareVersion');
+    expect(parseBitcoinAccount(accountKey(84, 0).toUR(), 'Mainnet', 'segwit', 0)).not.toHaveProperty('firmwareVersion');
+  });
 });
 
 describe('Keystone multi-account pairing', () => {

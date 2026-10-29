@@ -39,13 +39,13 @@ const root = HDKey.fromMasterSeed(mnemonicToSeedSync('legal winner thank year wa
 const FINGERPRINT = NodeBuffer.from(root.fingerprint.toString(16).padStart(8, '0'), 'hex');
 
 /** The Keystone's answer: the account key at m/84'/coin'/account', in crypto-multi-accounts. */
-function answer(account: number, coin = 0): { type: string; cbor: string } {
+function answer(account: number, coin = 0, version?: string): { type: string; cbor: string } {
   const node = root.derive(`m/84'/${coin}'/${account}'`);
   const key = new CryptoHDKey({
     isMaster: false, key: NodeBuffer.from(node.publicKey!), chainCode: NodeBuffer.from(node.chainCode!),
     origin: new CryptoKeypath([84, coin, account].map((index) => new PathComponent({ index, hardened: true })), FINGERPRINT),
   });
-  return { type: 'crypto-multi-accounts', cbor: new CryptoMultiAccounts(FINGERPRINT, [key]).toCBOR().toString('hex') };
+  return { type: 'crypto-multi-accounts', cbor: new CryptoMultiAccounts(FINGERPRINT, [key], 'Keystone 3 Pro', undefined, version).toCBOR().toString('hex') };
 }
 
 enableAutoUnmount(afterEach);
@@ -87,6 +87,16 @@ describe('pairing a Keystone as a Bitcoin wallet', () => {
     expect(wrapper.emitted('connected')).toBeUndefined();
     expect(mocks.setError).toHaveBeenCalledTimes(1);
     expect(mocks.fireSuccess).not.toHaveBeenCalled();
+  });
+
+  it('records the firmware version the device reports, and none for the fixed 1.1.0', async () => {
+    const reported = await scanWithKeystone(answer(0, 0, '3.2.0'));
+    const fixed = await scanWithKeystone(answer(0, 0, '1.1.0'));
+
+    const [[withVersion]] = reported.emitted('connected') as [[{ firmwareVersion?: string }]];
+    const [[withoutVersion]] = fixed.emitted('connected') as [[{ firmwareVersion?: string }]];
+    expect(withVersion.firmwareVersion).toBe('3.2.0');
+    expect(withoutVersion).not.toHaveProperty('firmwareVersion');
   });
 });
 

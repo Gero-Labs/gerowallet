@@ -203,6 +203,7 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
           path: bitcoinAccount.path,
         }],
         btSupported: false,
+        ...(bitcoinAccount.firmwareVersion ? { firmwareVersion: bitcoinAccount.firmwareVersion } : {}),
       };
 
       snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
