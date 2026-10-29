@@ -132,6 +132,22 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
         .toEqual([{ derivationPath: [ChainDerivations.DREP, 0], type: 'drep' }]);
     });
 
+    it('matches a payment, change or stake key whatever case either side spells its hash in', () => {
+      const PAYMENT = 'ab'.repeat(28);
+      const CHANGE = 'cd'.repeat(28);
+      const STAKE = 'ef'.repeat(28);
+      const wallet = keys({
+        payment: [{ cred: PAYMENT, path: "m/1852'/1815'/1'/0/3" }],
+        change: [{ cred: CHANGE.toUpperCase(), path: "m/1852'/1815'/1'/1/2" }],
+        stake: [{ cred: STAKE, path: "m/1852'/1815'/1'/2/0" }],
+      });
+      expect(analyzeTransactionForSignatures(requiring(PAYMENT.toUpperCase(), CHANGE, STAKE.toUpperCase()), [], wallet, '')).toEqual([
+        { derivationPath: [ChainDerivations.EXTERNAL, 3], type: 'payment' },
+        { derivationPath: [ChainDerivations.INTERNAL, 2], type: 'payment' },
+        { derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0], type: 'stake' },
+      ]);
+    });
+
     it('signs once when a required signer and our own vote both name the DRep key', () => {
       const tx = { body: { inputs: [], outputs: [], requiredExtraSignatures: [CRED], votingProcedures: [{
         voter: { __typename: Cardano.VoterType.dRepKeyHash, credential: { type: Cardano.CredentialType.KeyHash, hash: CRED } },

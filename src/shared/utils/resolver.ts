@@ -850,6 +850,8 @@ export function analyzeTransactionForSignatures(
     for (const keyHash of transaction.body.requiredExtraSignatures) {
       debugLog(`🔍 Looking for required key hash: ${keyHash}`);
       let foundMatch = false;
+      // Hex key hashes, compared whatever case either side spells them in.
+      const hash = String(keyHash).toLowerCase();
 
       // Search through all known addresses in the wallet store keys
       const addressTypes = ['payment', 'change', 'stake'];
@@ -864,7 +866,7 @@ export function analyzeTransactionForSignatures(
               debugLog(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
               // Compare key hash directly from wallet store
               // Use cred field if keyHash is not available (this is the actual field name in WalletStore)
-              if (keyHash === addressInfo.cred) {
+              if (hash === String(addressInfo.cred).toLowerCase()) {
                 const pathArray = parseDerivationPath(addressInfo.path);
                 debugLog(`🔍 Full parsed path: [${pathArray.join(',')}]`);
                 debugLog(`🔍 Should be: [0, 0] for external address index 0`);
@@ -885,7 +887,6 @@ export function analyzeTransactionForSignatures(
       // of its role, as the certificate and vote branches above sign them. Only a hash the
       // key set carries counts: a required signer is often another party's key (a multisig).
       if (!foundMatch) {
-        const hash = String(keyHash).toLowerCase();
         const roleKey = ownDrepCreds.has(hash) ? { role: ChainDerivations.DREP, type: 'drep' }
           : ownCcColdCreds.has(hash) ? { role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, type: 'ccCold' }
             : ownCcHotCreds.has(hash) ? { role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, type: 'ccHot' }
