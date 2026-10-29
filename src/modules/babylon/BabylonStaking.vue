@@ -1,460 +1,350 @@
 <template>
-  <v-container fluid class="pa-3 babylon-page">
-
+  <div class="bab">
     <!-- Header -->
-    <div class="d-flex align-center mb-4" style="gap: 12px;">
-      <div class="babylon-icon-wrap">
-        <img :src="assets.coinsStacked" width="26" height="26" alt="Babylon" style="object-fit: contain; filter: brightness(0) saturate(100%) invert(79%) sepia(31%) saturate(6636%) hue-rotate(347deg) brightness(98%) contrast(97%);" />
+    <div class="bab__header">
+      <div class="bab__headline">
+        <span class="t-label">{{ $t('bitcoin.ecosystem') }}</span>
+        <h1 class="t-title">{{ $t('babylon.title') }}</h1>
+        <p class="t-body bab__subtitle">{{ $t('babylon.subtitle') }}</p>
       </div>
-      <div>
-        <div class="text-h6 font-weight-bold babylon-title">{{ $t('navigation.staking') }}</div>
-        <div class="text-caption babylon-subtitle">{{ $t('babylon.subtitle') }}</div>
+      <div class="bab__header-side">
+        <GButton tier="secondary" compact :loading="loading" @click="refresh()">
+          <v-icon start size="16" color="var(--g-accent)">mdi-refresh</v-icon>
+          {{ $t('common.refresh') }}
+        </GButton>
       </div>
-      <v-spacer />
-      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh" class="refresh-btn">
-        <v-icon size="small">mdi-refresh</v-icon>
-      </v-btn>
     </div>
 
     <!-- Error -->
-    <v-alert
-      v-if="error"
-      type="warning"
-      variant="outlined"
-      density="compact"
-      closable
-      class="mb-3"
-      @update:model-value="error = null"
-      style="border-radius: var(--g-r-control) !important;"
-    >{{ error }}</v-alert>
+    <div v-if="error" class="bab-notice bab-notice--error" role="alert">
+      <v-icon size="small">mdi-alert-circle-outline</v-icon>
+      <span class="bab-notice__text">{{ error }}</span>
+      <v-btn
+        icon
+        variant="text"
+        size="small"
+        :aria-label="$t('common.close')"
+        :title="$t('common.close')"
+        @click="error = null"
+      >
+        <v-icon size="small">mdi-close</v-icon>
+      </v-btn>
+    </div>
 
-    <!-- ── BEGINNER INTRO BANNER ───────────────────────────── -->
+    <!-- Beginner intro -->
     <v-expand-transition>
-      <div v-if="showIntro" class="intro-banner liquid-glass mb-4">
-        <div class="intro-icon-wrap">
-          <v-icon color="#F7931A" size="22">mdi-bitcoin</v-icon>
+      <section v-if="showIntro" class="glass-panel bab-intro" :aria-label="$t('babylon.intro.title')">
+        <span class="bab-intro__icon" aria-hidden="true">
+          <v-icon size="small">mdi-school-outline</v-icon>
+        </span>
+        <div class="bab-intro__text">
+          <h2 class="t-body-lg bab-intro__title">{{ $t('babylon.intro.title') }}</h2>
+          <p class="t-body-sm bab-intro__body">{{ $t('babylon.intro.body') }}</p>
+          <ol class="bab-intro__steps">
+            <li v-for="stepKey in introSteps" :key="stepKey" class="t-caption">{{ $t(stepKey) }}</li>
+          </ol>
         </div>
-        <div class="intro-text">
-          <div class="intro-title">{{ $t('babylon.intro.title') }}</div>
-          <div class="intro-body">{{ $t('babylon.intro.body') }}</div>
-          <div class="intro-steps mt-2">
-            <div v-for="step in introSteps" :key="step.icon" class="intro-step">
-              <v-icon size="x-small" color="primary" class="mr-1">{{ step.icon }}</v-icon>
-              <span>{{ $t(step.textKey) }}</span>
-            </div>
-          </div>
-        </div>
-        <v-btn icon variant="text" size="x-small" class="intro-dismiss" @click="dismissIntro">
-          <v-icon size="small" style="opacity: 0.45;">mdi-close</v-icon>
-        </v-btn>
-      </div>
+        <GButton tier="tertiary" compact @click="dismissIntro()">{{ $t('babylon.intro.dismiss') }}</GButton>
+      </section>
     </v-expand-transition>
 
-    <!-- ── HERO CARD ─────────────────────────────────────── -->
-    <div class="hero-card liquid-glass mb-4">
-      <div class="hero-glow" />
-
-      <div class="hero-body">
-        <!-- Left: position summary -->
-        <div class="hero-left">
-          <div class="hero-eyebrow">
-            <v-icon size="x-small" color="#F7931A" class="mr-1">mdi-bitcoin</v-icon>
-            <span>{{ $t('babylon.yourPosition') || 'Your Staked Position' }}</span>
+    <!-- Position hero -->
+    <section class="glass-panel bab-hero" :aria-label="$t('babylon.yourPosition')">
+      <div class="bab-hero__top">
+        <div class="bab-hero__headline">
+          <span class="t-label">{{ $t('babylon.yourPosition') }}</span>
+          <div class="bab-hero__amount">
+            <span class="t-display g-num">{{ totalPersonalStaked }}</span>
+            <span class="g-mono bab-hero__unit">BTC</span>
           </div>
-          <div class="hero-amount">
-            <span class="hero-amount-number">{{ totalPersonalStaked }}</span>
-            <span class="hero-amount-unit">BTC</span>
-          </div>
-          <div class="hero-meta" v-if="delegations.length > 0">
-            <v-chip size="x-small" color="rgba(247,147,26,0.2)" text-color="primary" class="mr-1" style="border: 1px solid rgba(247,147,26,0.3);">
-              {{ delegations.length }} {{ delegations.length === 1 ? $t('babylon.delegation') || 'delegation' : $t('babylon.delegations') || 'delegations' }}
-            </v-chip>
-          </div>
-          <div class="hero-meta-empty text-caption" v-else style="opacity: 0.45; margin-top: 4px;">
-            {{ $t('babylon.noPositionYet') || 'No active position yet' }}
-          </div>
+          <span v-if="delegations.length > 0" class="t-caption g-num">
+            {{ delegations.length }} {{ delegations.length === 1 ? $t('babylon.delegation') : $t('babylon.delegations') }}
+          </span>
+          <span v-else class="t-caption">{{ $t('babylon.noPositionYet') }}</span>
         </div>
 
-        <!-- Right: CTA -->
-        <div class="hero-right">
-          <v-btn
-            class="stake-cta"
-            :class="{ 'stake-cta--pulse': delegations.length === 0 && currentParams }"
+        <div class="bab-hero__cta">
+          <GButton
+            tier="primary"
             :disabled="!currentParams && !loading"
             :loading="loading && !currentParams"
             @click="stakeDialog = true"
           >
             <v-icon start size="small">mdi-plus</v-icon>
             {{ $t('babylon.stakeNow') }}
-          </v-btn>
-          <div v-if="currentParams" class="cta-hint text-caption">
-            {{ formatBtc(currentParams.min_staking_amount) }}–{{ formatBtc(currentParams.max_staking_amount) }} BTC
-          </div>
+          </GButton>
+          <span v-if="currentParams" class="t-caption g-num">
+            {{ btcAmount(currentParams.min_staking_amount) }}–{{ btcAmount(currentParams.max_staking_amount) }} BTC
+          </span>
         </div>
       </div>
 
-      <!-- Stats strip with tooltips -->
-      <div class="hero-stats">
-        <div class="hstat" v-for="s in heroStats" :key="s.key">
-          <div class="hstat-val">{{ s.value }}</div>
-          <div class="hstat-label">
-            <span>{{ s.label }}</span>
-            <v-tooltip location="bottom"  max-width="220" content-class="babylon-tooltip">
+      <!-- Network stats -->
+      <div class="bab-hero__stats">
+        <div v-for="s in heroStats" :key="s.key" class="glass-tier bab-tile">
+          <span class="bab-tile__label">
+            <span class="t-label">{{ s.label }}</span>
+            <v-tooltip location="bottom" max-width="220" content-class="custom-tooltip">
               <template #activator="{ props: activatorProps }">
-                <v-icon v-bind="activatorProps"  class="hstat-info">mdi-information-outline</v-icon>
+                <v-icon v-bind="activatorProps" size="14" class="bab-info">mdi-information-outline</v-icon>
               </template>
               <span>{{ s.tooltip }}</span>
             </v-tooltip>
+          </span>
+          <span class="t-heading g-num">{{ s.value }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Staking parameters -->
+    <section v-if="currentParams" class="glass-panel bab-params" :aria-label="$t('babylon.stakingParams') + currentParams.version">
+      <span class="t-label bab-params__title">
+        <v-icon size="14">mdi-tune-variant</v-icon>
+        {{ $t('babylon.stakingParams') }}{{ currentParams.version }}
+      </span>
+      <dl class="bab-params__items">
+        <div v-for="p in paramItems" :key="p.key" class="bab-params__item">
+          <dt class="bab-params__key">
+            <span class="t-label">{{ p.label }}</span>
+            <v-tooltip location="bottom" max-width="200" content-class="custom-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <v-icon v-bind="activatorProps" size="14" class="bab-info">mdi-information-outline</v-icon>
+              </template>
+              {{ p.tooltip }}
+            </v-tooltip>
+          </dt>
+          <dd class="t-body-sm g-num bab-params__val">{{ p.value }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- My delegations -->
+    <section v-if="delegations.length > 0" class="glass-panel bab-section" :aria-label="$t('babylon.myDelegations')">
+      <div class="bab-section__head">
+        <div class="bab-section__titles">
+          <h2 class="t-heading bab-section__title">{{ $t('babylon.myDelegations') }}</h2>
+          <span class="t-caption g-num">{{ delegations.length }}</span>
+        </div>
+      </div>
+
+      <ul class="bab-list">
+        <li v-for="d in delegations" :key="d.staking_tx_hash_hex" class="glass-tier bab-deleg">
+          <div class="bab-deleg__top">
+            <v-tooltip location="bottom" max-width="220" content-class="custom-tooltip">
+              <template #activator="{ props: activatorProps }">
+                <span v-bind="activatorProps" :class="['bab-status', `bab-status--${delegationTone(d.state)}`]">
+                  <v-icon size="12">{{ delegationStateIcon(d.state) }}</v-icon>
+                  {{ $t(`babylon.state.${d.state}`) }}
+                </span>
+              </template>
+              {{ $t(`babylon.tooltip.state.${d.state}`) }}
+            </v-tooltip>
+            <v-btn
+              icon
+              variant="text"
+              size="small"
+              :aria-label="$t('babylon.stakeDialog.viewOnExplorer')"
+              :title="$t('babylon.stakeDialog.viewOnExplorer')"
+              @click="openTx(d.staking_tx_hash_hex)"
+            >
+              <v-icon size="small">mdi-open-in-new</v-icon>
+            </v-btn>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- ── STAKING PARAMETERS (compact) ──────────────────── -->
-    <div v-if="currentParams" class="params-strip liquid-glass mb-3">
-      <div class="params-strip-title">
-        <v-icon size="x-small" color="primary" class="mr-1">mdi-tune-variant</v-icon>
-        <span class="t-label" style="opacity: 0.7;">
-          {{ $t('babylon.stakingParams') || 'Parameters v' }}{{ currentParams.version }}
-        </span>
-      </div>
-      <div class="params-strip-items">
-        <div class="pitem">
-          <span class="pitem-label">
-            {{ $t('babylon.minStake') }}
-            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ props: activatorProps }">
-                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
-              </template>
-              {{ $t('babylon.tooltip.minStake') }}
-            </v-tooltip>
-          </span>
-          <span class="pitem-val">{{ formatBtc(currentParams.min_staking_amount) }} BTC</span>
-        </div>
-        <div class="pitem-sep" />
-        <div class="pitem">
-          <span class="pitem-label">
-            {{ $t('babylon.maxStake') }}
-            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ props: activatorProps }">
-                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
-              </template>
-              {{ $t('babylon.tooltip.maxStake') }}
-            </v-tooltip>
-          </span>
-          <span class="pitem-val">{{ formatBtc(currentParams.max_staking_amount) }} BTC</span>
-        </div>
-        <div class="pitem-sep" />
-        <div class="pitem">
-          <span class="pitem-label">
-            {{ $t('babylon.duration') || 'Duration' }}
-            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ props: activatorProps }">
-                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
-              </template>
-              {{ $t('babylon.tooltip.duration') }}
-            </v-tooltip>
-          </span>
-          <span class="pitem-val">{{ (currentParams.min_staking_time ?? 0).toLocaleString() }}–{{ (currentParams.max_staking_time ?? 0).toLocaleString() }} <span style="opacity:0.5; font-size:11px;">blk</span></span>
-        </div>
-        <div class="pitem-sep" />
-        <div class="pitem">
-          <span class="pitem-label">
-            {{ $t('babylon.unbondingTime') }}
-            <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
-              <template #activator="{ props: activatorProps }">
-                <v-icon v-bind="activatorProps"  class="pitem-info">mdi-information-outline</v-icon>
-              </template>
-              {{ $t('babylon.tooltip.unbondingTime') }}
-            </v-tooltip>
-          </span>
-          <span class="pitem-val">{{ formatUnbonding(currentParams.unbonding_time) }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── MY DELEGATIONS ─────────────────────────────────── -->
-    <div v-if="delegations.length > 0" class="mb-4">
-      <div class="section-header mb-2">
-        <v-icon size="small" color="primary" class="mr-1">mdi-safe-square-outline</v-icon>
-        <span class="section-title">{{ $t('babylon.myDelegations') }}</span>
-        <v-chip size="x-small" color="rgba(247,147,26,0.15)" text-color="primary" class="ml-2"
-          style="border: 1px solid rgba(247,147,26,0.25);">{{ delegations.length }}</v-chip>
-      </div>
-
-      <v-card
-        v-for="d in delegations"
-        :key="d.staking_tx_hash_hex"
-        variant="outlined"
-        class="delegation-card liquid-glass mb-2"
-      >
-        <div class="delegation-inner">
-          <!-- Status bar -->
-          <div class="delegation-status-bar" :class="`status-${d.state}`" />
-
-          <div class="delegation-content">
-            <div class="d-flex align-center mb-2" style="gap: 8px;">
-              <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
-                <template #activator="{ props: activatorProps }">
-                  <v-chip v-bind="activatorProps" size="x-small" :color="delegationStateColor(d.state)" text-color="white" style="font-size: 11px; font-weight: 700; letter-spacing: 0.04em;" >
-                    <v-icon size="x-small" start>{{ delegationStateIcon(d.state) }}</v-icon>
-                    {{ $t(`babylon.state.${d.state}`) || d.state }}
-                  </v-chip>
-                </template>
-                {{ $t(`babylon.tooltip.state.${d.state}`) || d.state }}
-              </v-tooltip>
-              <v-spacer />
-              <v-btn icon variant="text" size="x-small" @click="openTx(d.staking_tx_hash_hex)" style="opacity: 0.5;">
-                <v-icon size="x-small">mdi-open-in-new</v-icon>
-              </v-btn>
+          <dl class="bab-facts">
+            <div class="bab-facts__item">
+              <dt class="t-label">{{ $t('babylon.stakedAmount') }}</dt>
+              <dd class="t-body-sm g-num">{{ btcAmount(d.staking_value) }} <span class="bab-unit">BTC</span></dd>
             </div>
-
-            <div class="delegation-metrics">
-              <div class="dmetric">
-                <div class="dmetric-label">{{ $t('babylon.stakedAmount') }}</div>
-                <div class="dmetric-val">{{ formatBtc(d.staking_value) }} <span class="dmetric-unit">BTC</span></div>
-              </div>
-              <div class="dmetric">
-                <div class="dmetric-label">{{ $t('babylon.lockTime') }}</div>
-                <div class="dmetric-val">{{ (d.staking_tx?.timelock ?? 0).toLocaleString() }} <span class="dmetric-unit">blks</span></div>
-              </div>
-              <div class="dmetric">
-                <div class="dmetric-label">{{ $t('babylon.startHeight') }}</div>
-                <div class="dmetric-val">#{{ (d.staking_tx?.start_height ?? 0).toLocaleString() }}</div>
-              </div>
+            <div class="bab-facts__item">
+              <dt class="t-label">{{ $t('babylon.lockTime') }}</dt>
+              <dd class="t-body-sm g-num">{{ formatInt(d.staking_tx?.timelock ?? 0) }} <span class="bab-unit">{{ $t('babylon.blocks') }}</span></dd>
             </div>
-          </div>
-        </div>
-      </v-card>
-    </div>
+            <div class="bab-facts__item">
+              <dt class="t-label">{{ $t('babylon.startHeight') }}</dt>
+              <dd class="t-body-sm g-num">{{ formatInt(d.staking_tx?.start_height ?? 0) }}</dd>
+            </div>
+          </dl>
+        </li>
+      </ul>
+    </section>
 
-    <!-- ── FINALITY PROVIDERS ─────────────────────────────── -->
-    <div>
-      <!-- Section header row -->
-      <div class="section-header mb-2">
-        <div class="d-flex align-center" style="gap: 6px;">
-          <v-icon size="small" color="primary">mdi-shield-half-full</v-icon>
-          <span class="section-title">{{ $t('babylon.finalityProviders') }}</span>
-          <v-tooltip location="bottom"  max-width="260" content-class="babylon-tooltip">
+    <!-- Finality providers -->
+    <section class="glass-panel bab-section" :aria-label="$t('babylon.finalityProviders')">
+      <div class="bab-section__head">
+        <div class="bab-section__titles">
+          <h2 class="t-heading bab-section__title">{{ $t('babylon.finalityProviders') }}</h2>
+          <v-tooltip location="bottom" max-width="260" content-class="custom-tooltip">
             <template #activator="{ props: activatorProps }">
-              <v-icon v-bind="activatorProps"  style="font-size: 13px; opacity: 0.4; cursor: help;">mdi-information-outline</v-icon>
+              <v-icon v-bind="activatorProps" size="14" class="bab-info">mdi-information-outline</v-icon>
             </template>
             {{ $t('babylon.tooltip.finalityProvider') }}
           </v-tooltip>
-          <v-chip v-if="providers.length > 0" size="x-small" variant="outlined" style="border-color: rgba(247,147,26,0.3); color: rgba(247,147,26,0.8);">
-            {{ providers.length }}
-          </v-chip>
+          <span v-if="providers.length > 0" class="t-caption g-num">{{ providers.length }}</span>
         </div>
-        <v-text-field
-          v-model="searchQuery"
-          density="compact"
-          hide-details
-          clearable
-          :placeholder="$t('babylon.searchProviders')"
-          prepend-inner-icon="mdi-magnify"
-          class="provider-search"
-          style="max-width: 200px;"
-        />
+        <label class="bab-search">
+          <v-icon size="small" class="bab-search__icon">mdi-magnify</v-icon>
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="bab-search__input"
+            :placeholder="$t('babylon.searchProviders')"
+            :aria-label="$t('common.search')"
+            @keydown.esc="searchQuery = ''"
+          />
+        </label>
       </div>
 
-      <!-- Sort + filter row -->
-      <div class="sort-row mb-3">
-        <span class="sort-label">{{ $t('babylon.sortBy') }}:</span>
-        <div class="sort-chips">
-          <div
+      <!-- Sort -->
+      <div class="bab-sort" role="group" :aria-label="$t('babylon.sortBy')">
+        <span class="t-label">{{ $t('babylon.sortBy') }}</span>
+        <div class="bab-sort__group">
+          <button
             v-for="s in sortOptions"
             :key="s.key"
-            class="sort-chip"
-            :class="{ 'sort-chip--active': sortKey === s.key }"
+            type="button"
+            :class="['bab-sort__btn', { 'bab-sort__btn--active': sortKey === s.key }]"
+            :aria-pressed="sortKey === s.key ? 'true' : 'false'"
             @click="setSort(s.key)"
           >
             {{ s.label }}
-            <v-icon v-if="sortKey === s.key" style="font-size: 11px; margin-left: 2px;">
-              {{ sortAsc ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
-            </v-icon>
-          </div>
+            <v-icon v-if="sortKey === s.key" size="14">{{ sortAsc ? 'mdi-arrow-up' : 'mdi-arrow-down' }}</v-icon>
+          </button>
         </div>
       </div>
 
-      <!-- Column labels (with tooltips) -->
-      <div v-if="filteredProviders.length > 0" class="provider-col-headers mb-1">
-        <div style="flex: 1;" />
-        <div v-for="col in providerCols" :key="col.key" class="pcol">
-          <v-tooltip location="bottom"  max-width="200" content-class="babylon-tooltip">
+      <!-- Column legend (each label explains the metric under it) -->
+      <div v-if="filteredProviders.length > 0" class="bab-cols">
+        <span class="bab-cols__spacer" />
+        <span v-for="col in providerCols" :key="col.key" class="bab-cols__col">
+          <v-tooltip location="bottom" max-width="200" content-class="custom-tooltip">
             <template #activator="{ props: activatorProps }">
-              <span v-bind="activatorProps" class="pcol-label" >{{ col.label }}</span>
+              <span v-bind="activatorProps" class="t-label bab-cols__label">{{ col.label }}</span>
             </template>
             {{ col.tooltip }}
           </v-tooltip>
-        </div>
-        <div style="width: 20px;" />
+        </span>
+        <span class="bab-cols__end" />
       </div>
 
       <v-skeleton-loader v-if="loading && providers.length === 0" type="list-item-two-line@4" />
 
-      <div v-if="!loading && filteredProviders.length === 0" class="providers-empty">
-        <v-icon color="rgba(247,147,26,0.3)" size="32">mdi-shield-off-outline</v-icon>
-        <div class="text-caption mt-2" style="opacity: 0.45;">{{ searchQuery ? $t('babylon.noProvidersSearch') : $t('babylon.noProviders') }}</div>
+      <div v-if="!loading && filteredProviders.length === 0" class="bab-empty">
+        <v-icon size="32" class="bab-empty__icon">mdi-shield-off-outline</v-icon>
+        <span class="t-caption">{{ searchQuery ? $t('babylon.noProvidersSearch') : $t('babylon.noProviders') }}</span>
       </div>
 
-      <div class="providers-list">
-        <v-card
-          v-for="(provider, idx) in filteredProviders"
+      <ul class="bab-list">
+        <li
+          v-for="provider in filteredProviders"
           :key="provider.btc_pk"
-          variant="outlined"
-          class="provider-card liquid-glass"
-          :class="{ 'provider-card--expanded': expandedPk === provider.btc_pk }"
-          :style="{ animationDelay: `${idx * 30}ms` }"
-          @click="toggleExpand(provider)"
+          :class="['glass-tier', 'bab-fp', { 'bab-fp--open': expandedPk === provider.btc_pk }]"
         >
-          <!-- ── Summary row ── -->
-          <div class="provider-inner">
-            <!-- Avatar -->
-            <div class="provider-avatar" :style="{ background: providerColorBg(provider.description.moniker) }">
-              <span class="provider-initial" :style="{ color: providerColor(provider.description.moniker) }">
-                {{ provider.description.moniker?.charAt(0)?.toUpperCase() || '?' }}
-              </span>
-            </div>
+          <!-- Summary row: the whole row toggles the details -->
+          <button
+            type="button"
+            class="bab-fp__summary"
+            :aria-expanded="expandedPk === provider.btc_pk ? 'true' : 'false'"
+            :aria-controls="providerPanelId(provider)"
+            @click="toggleExpand(provider)"
+          >
+            <span class="bab-fp__avatar" aria-hidden="true">{{ providerInitial(provider) }}</span>
 
-            <!-- Info -->
-            <div class="provider-info">
-              <div class="d-flex align-center" style="gap: 5px;">
-                <span class="provider-name">{{ provider.description.moniker || $t('babylon.unknownProvider') }}</span>
-                <!-- Identity badge -->
-                <v-tooltip location="bottom" v-if="provider.description.identity"  max-width="200" content-class="babylon-tooltip">
+            <span class="bab-fp__info">
+              <span class="bab-fp__name-row">
+                <span class="bab-fp__name">{{ provider.description.moniker || $t('babylon.unknownProvider') }}</span>
+                <v-tooltip v-if="provider.description.identity" location="bottom" max-width="200" content-class="custom-tooltip">
                   <template #activator="{ props: activatorProps }">
-                    <v-icon v-bind="activatorProps"  style="font-size: 12px; color: var(--g-accent); opacity: 0.75; cursor: help;">mdi-check-decagram</v-icon>
+                    <v-icon v-bind="activatorProps" size="14" class="bab-fp__verified">mdi-check-decagram</v-icon>
                   </template>
                   {{ $t('babylon.identityVerified') }}: {{ provider.description.identity }}
                 </v-tooltip>
-                <!-- Website icon -->
-                <v-btn
-                  v-if="provider.description.website"
-                  icon variant="text" size="x-small"
-                  style="width: 14px; height: 14px; opacity: 0.35;"
-                  @click.stop="openWebsite(provider.description.website)"
-                >
-                  <v-icon style="font-size: 11px;">mdi-web</v-icon>
-                </v-btn>
-              </div>
-              <div class="provider-pk" style="font-family: var(--g-font-mono); opacity: 0.35; font-size: 11px;">
-                {{ provider.btc_pk.slice(0, 12) }}…{{ provider.btc_pk.slice(-8) }}
-              </div>
-            </div>
+              </span>
+              <span class="t-caption g-mono bab-fp__pk">{{ provider.btc_pk.slice(0, 12) }}…{{ provider.btc_pk.slice(-8) }}</span>
+            </span>
 
-            <!-- Metrics -->
-            <div class="provider-metrics">
-              <div class="pmetric" :class="{ 'pmetric--sorted': sortKey === 'commission' }">
-                <div class="pmetric-val" :style="{ color: commissionColor(provider.commission) }">
+            <span class="bab-fp__metrics">
+              <span :class="['bab-fp__metric', { 'bab-fp__metric--sorted': sortKey === 'commission' }]">
+                <span class="bab-fp__metric-val g-num" :style="{ color: commissionColor(provider.commission) }">
                   {{ formatCommission(provider.commission) }}
-                </div>
-                <div class="pmetric-label">{{ $t('babylon.col.fee') }}</div>
-              </div>
-              <div class="pmetric" :class="{ 'pmetric--sorted': sortKey === 'tvl' }">
-                <div class="pmetric-val">{{ formatBtcCompact(provider.active_tvl) }}</div>
-                <div class="pmetric-label">{{ $t('babylon.col.tvl') }}</div>
-              </div>
-              <div class="pmetric" :class="{ 'pmetric--sorted': sortKey === 'stakers' }">
-                <div class="pmetric-val">{{ (provider.active_delegations ?? 0).toLocaleString() }}</div>
-                <div class="pmetric-label">{{ $t('babylon.col.stakers') }}</div>
-              </div>
-            </div>
+                </span>
+                <span class="t-label">{{ $t('babylon.col.fee') }}</span>
+              </span>
+              <span :class="['bab-fp__metric', { 'bab-fp__metric--sorted': sortKey === 'tvl' }]">
+                <span class="bab-fp__metric-val g-num">{{ formatBtcCompact(provider.active_tvl) }}</span>
+                <span class="t-label">{{ $t('babylon.col.tvl') }}</span>
+              </span>
+              <span :class="['bab-fp__metric', { 'bab-fp__metric--sorted': sortKey === 'stakers' }]">
+                <span class="bab-fp__metric-val g-num">{{ formatInt(provider.active_delegations ?? 0) }}</span>
+                <span class="t-label">{{ $t('babylon.col.stakers') }}</span>
+              </span>
+            </span>
 
-            <!-- Expand chevron -->
-            <v-icon size="small" class="provider-chevron" :class="{ 'provider-chevron--open': expandedPk === provider.btc_pk }">
-              mdi-chevron-down
-            </v-icon>
-          </div>
+            <v-icon size="small" class="bab-fp__chevron">mdi-chevron-down</v-icon>
+          </button>
 
-          <!-- ── Expanded details ── -->
+          <!-- Details -->
           <v-expand-transition>
-            <div v-if="expandedPk === provider.btc_pk" class="provider-expanded" @click.stop>
-              <div class="provider-expanded-body">
+            <div v-if="expandedPk === provider.btc_pk" :id="providerPanelId(provider)" class="bab-fp__details">
+              <p v-if="provider.description.details" class="t-body-sm bab-fp__desc">{{ provider.description.details }}</p>
+              <p v-else class="t-body-sm bab-fp__desc bab-fp__desc--empty">{{ $t('babylon.noDescription') }}</p>
 
-                <!-- Description -->
-                <div v-if="provider.description.details" class="provider-desc">
-                  {{ provider.description.details }}
-                </div>
-                <div v-else class="provider-desc provider-desc--empty">
-                  {{ $t('babylon.noDescription') }}
-                </div>
-
-                <!-- Links row -->
-                <div v-if="provider.description.website || provider.description.security_contact" class="provider-links-row">
-                  <a
-                    v-if="provider.description.website"
-                    :href="normalizeUrl(provider.description.website)"
-                    target="_blank"
-                    class="provider-link"
-                    @click.stop
-                  >
-                    <v-icon size="x-small" class="mr-1">mdi-web</v-icon>
-                    {{ provider.description.website }}
-                  </a>
-                  <span v-if="provider.description.security_contact" class="provider-contact">
-                    <v-icon size="x-small" class="mr-1">mdi-shield-account-outline</v-icon>
-                    {{ provider.description.security_contact }}
-                  </span>
-                </div>
-
-                <!-- Total stats row -->
-                <div class="provider-total-stats">
-                  <div class="ptstat">
-                    <div class="ptstat-label">{{ $t('babylon.activeTVL') }}</div>
-                    <div class="ptstat-val">{{ formatBtc(provider.active_tvl) }} <span class="ptstat-unit">BTC</span></div>
-                  </div>
-                  <template v-if="provider.total_tvl != null">
-                  <div class="ptstat-sep" />
-                  <div class="ptstat">
-                    <div class="ptstat-label">{{ $t('babylon.totalTvl') }}</div>
-                    <div class="ptstat-val">{{ formatBtc(provider.total_tvl) }} <span class="ptstat-unit">BTC</span></div>
-                  </div>
-                  </template>
-                  <div class="ptstat-sep" />
-                  <div class="ptstat">
-                    <div class="ptstat-label">{{ $t('babylon.activeStakers') }}</div>
-                    <div class="ptstat-val">{{ (provider.active_delegations ?? 0).toLocaleString() }}</div>
-                  </div>
-                  <template v-if="provider.total_delegations != null">
-                  <div class="ptstat-sep" />
-                  <div class="ptstat">
-                    <div class="ptstat-label">{{ $t('babylon.totalStakers') }}</div>
-                    <div class="ptstat-val">{{ (provider.total_delegations ?? 0).toLocaleString() }}</div>
-                  </div>
-                  </template>
-                </div>
-
-                <!-- BTC PK (full) -->
-                <div class="provider-pk-full">
-                  <span class="ptstat-label">{{ $t('babylon.btcPk') }}</span>
-                  <span class="provider-pk-hex">{{ provider.btc_pk }}</span>
-                </div>
-
-                <!-- Stake CTA -->
-                <v-btn
-                  color="primary"
-                  theme="dark"
-                  size="small"
-                  block
-                  class="provider-stake-btn"
-                  @click.stop="selectProvider(provider)"
+              <div v-if="provider.description.website || provider.description.security_contact" class="bab-fp__links">
+                <a
+                  v-if="provider.description.website"
+                  :href="normalizeUrl(provider.description.website)"
+                  target="_blank"
+                  rel="noopener"
+                  class="t-caption bab-fp__link"
                 >
-                  <v-icon start size="small">mdi-lock-plus-outline</v-icon>
-                  {{ $t('babylon.stakeWith', { name: provider.description.moniker || $t('babylon.unknownProvider') }) }}
-                </v-btn>
+                  <v-icon size="14">mdi-web</v-icon>
+                  {{ provider.description.website }}
+                </a>
+                <span v-if="provider.description.security_contact" class="t-caption bab-fp__contact">
+                  <v-icon size="14">mdi-shield-account-outline</v-icon>
+                  {{ provider.description.security_contact }}
+                </span>
               </div>
+
+              <dl class="bab-facts bab-facts--boxed">
+                <div class="bab-facts__item">
+                  <dt class="t-label">{{ $t('babylon.activeTVL') }}</dt>
+                  <dd class="t-body-sm g-num">{{ btcAmount(provider.active_tvl) }} <span class="bab-unit">BTC</span></dd>
+                </div>
+                <div v-if="provider.total_tvl != null" class="bab-facts__item">
+                  <dt class="t-label">{{ $t('babylon.totalTvl') }}</dt>
+                  <dd class="t-body-sm g-num">{{ btcAmount(provider.total_tvl) }} <span class="bab-unit">BTC</span></dd>
+                </div>
+                <div class="bab-facts__item">
+                  <dt class="t-label">{{ $t('babylon.activeStakers') }}</dt>
+                  <dd class="t-body-sm g-num">{{ formatInt(provider.active_delegations ?? 0) }}</dd>
+                </div>
+                <div v-if="provider.total_delegations != null" class="bab-facts__item">
+                  <dt class="t-label">{{ $t('babylon.totalStakers') }}</dt>
+                  <dd class="t-body-sm g-num">{{ formatInt(provider.total_delegations ?? 0) }}</dd>
+                </div>
+              </dl>
+
+              <div class="bab-fp__pk-full">
+                <span class="t-label">{{ $t('babylon.btcPk') }}</span>
+                <span class="t-caption g-mono">{{ provider.btc_pk }}</span>
+              </div>
+
+              <GButton tier="secondary" block @click="selectProvider(provider)">
+                <v-icon start size="16" color="var(--g-accent)">mdi-lock-plus-outline</v-icon>
+                {{ $t('babylon.stakeWith', { name: provider.description.moniker || $t('babylon.unknownProvider') }) }}
+              </GButton>
             </div>
           </v-expand-transition>
-        </v-card>
-      </div>
+        </li>
+      </ul>
 
-      <v-btn v-if="hasMore" variant="text" color="primary" block @click="loadMore" :loading="loadingMore" size="small" class="mt-2">
+      <GButton v-if="hasMore" tier="tertiary" block :loading="loadingMore" @click="loadMore()">
         <v-icon start size="small">mdi-chevron-down</v-icon>
         {{ $t('common.loadMore') }}
-      </v-btn>
-    </div>
+      </GButton>
+    </section>
 
-    <!-- Babylon Stake Dialog -->
     <BabylonStakeDialog
       v-model="stakeDialog"
       :params="currentParams"
@@ -464,19 +354,21 @@
       :staker-btc-pk="stakerBtcPk"
       @staked="refresh"
     />
-  </v-container>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { toRefs } from 'vue';
+import { ref, computed, onMounted, toRefs } from 'vue';
 import BabylonStakeDialog from './dialogs/BabylonStakeDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import babylonApi, { type BabylonParamVersion, type BabylonFinalityProvider, type BabylonDelegation, type BabylonStats } from '@/api/babylon-api';
 import { deriveXOnlyPubKeyFromXpub } from '@/chains/bitcoin/bitcoinKeyManager';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
-import assets from '@/utils/assets';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { formatBtc, formatInt } from '@/shared/utils/format';
 
+const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 
 const loading = ref(false);
@@ -490,16 +382,19 @@ type SortKey = 'tvl' | 'commission' | 'stakers' | 'name';
 const sortKey = ref<SortKey>('tvl');
 const sortAsc = ref(false);
 
-// Expanded provider card
+// Expanded provider row
 const expandedPk = ref<string | null>(null);
 
 function toggleExpand(provider: BabylonFinalityProvider) {
   expandedPk.value = expandedPk.value === provider.btc_pk ? null : provider.btc_pk;
 }
 
-function openWebsite(url: string) {
-  const href = normalizeUrl(url);
-  window.open(href, '_blank');
+function providerPanelId(provider: BabylonFinalityProvider): string {
+  return `bab-fp-${provider.btc_pk.slice(0, 16)}`;
+}
+
+function providerInitial(provider: BabylonFinalityProvider): string {
+  return provider.description.moniker?.charAt(0)?.toUpperCase() || '?';
 }
 
 function normalizeUrl(url: string): string {
@@ -543,53 +438,65 @@ const totalPersonalStaked = computed(() => {
   const sats = delegations.value
     .filter(d => ['active', 'pending'].includes(d.state))
     .reduce((sum, d) => sum + d.staking_value, 0);
-  return (sats / 1e8).toFixed(8);
+  return formatBtc(sats);
 });
 
-const introSteps = [
-  { icon: 'mdi-numeric-1-circle-outline', textKey: 'babylon.intro.step1' },
-  { icon: 'mdi-numeric-2-circle-outline', textKey: 'babylon.intro.step2' },
-  { icon: 'mdi-numeric-3-circle-outline', textKey: 'babylon.intro.step3' },
-];
+const introSteps = ['babylon.intro.step1', 'babylon.intro.step2', 'babylon.intro.step3'];
 
 const heroStats = computed(() => [
   {
     key: 'tvl',
-    label: 'Active TVL',
-    value: stats.value ? `${formatBtc(stats.value.active_tvl)} BTC` : '—',
-    tooltip: 'Total BTC currently locked and actively staked across all Babylon participants',
+    label: t('babylon.activeTVL'),
+    value: stats.value ? `${btcAmount(stats.value.active_tvl)} BTC` : '—',
+    tooltip: t('babylon.tooltip.activeTvl'),
   },
   {
     key: 'stakers',
-    label: 'Stakers',
-    value: stats.value ? (stats.value.total_stakers ?? stats.value.active_stakers ?? 0).toLocaleString() : '—',
-    tooltip: 'Number of unique Bitcoin addresses currently participating in Babylon staking',
+    label: t('babylon.stakersLabel'),
+    value: stats.value ? formatInt(stats.value.total_stakers ?? stats.value.active_stakers ?? 0) : '—',
+    tooltip: t('babylon.tooltip.totalStakers'),
   },
   {
     key: 'providers',
-    label: 'Providers',
-    value: stats.value ? (stats.value.active_finality_providers ?? providers.value.length).toString() : '—',
-    tooltip: 'Finality Providers are validator nodes that use your delegated BTC to secure and finalize blocks on the Babylon chain',
+    label: t('babylon.providers'),
+    value: stats.value ? formatInt(stats.value.active_finality_providers ?? providers.value.length) : '—',
+    tooltip: t('babylon.tooltip.activeProviders'),
   },
   {
     key: 'unbonding',
-    label: 'Unbonding',
+    label: t('babylon.unbondingTime'),
     value: currentParams.value ? formatUnbonding(currentParams.value.unbonding_time) : '—',
-    tooltip: 'Minimum wait time after requesting to unstake before your BTC becomes withdrawable',
+    tooltip: t('babylon.tooltip.unbondingWait'),
   },
 ]);
 
+const paramItems = computed(() => {
+  const p = currentParams.value;
+  if (!p) return [];
+  return [
+    { key: 'min', label: t('babylon.minStake'), tooltip: t('babylon.tooltip.minStake'), value: `${btcAmount(p.min_staking_amount)} BTC` },
+    { key: 'max', label: t('babylon.maxStake'), tooltip: t('babylon.tooltip.maxStake'), value: `${btcAmount(p.max_staking_amount)} BTC` },
+    {
+      key: 'duration',
+      label: t('babylon.duration'),
+      tooltip: t('babylon.tooltip.duration'),
+      value: `${formatInt(p.min_staking_time ?? 0)}–${formatInt(p.max_staking_time ?? 0)} ${t('babylon.blocks')}`,
+    },
+    { key: 'unbonding', label: t('babylon.unbondingTime'), tooltip: t('babylon.tooltip.unbondingTime'), value: formatUnbonding(p.unbonding_time) },
+  ];
+});
+
 const sortOptions = computed(() => [
-  { key: 'tvl' as SortKey, label: 'TVL' },
-  { key: 'commission' as SortKey, label: 'Fee' },
-  { key: 'stakers' as SortKey, label: 'Stakers' },
-  { key: 'name' as SortKey, label: 'Name' },
+  { key: 'tvl' as SortKey, label: t('babylon.col.tvl') },
+  { key: 'commission' as SortKey, label: t('send.fee') },
+  { key: 'stakers' as SortKey, label: t('babylon.stakersLabel') },
+  { key: 'name' as SortKey, label: t('common.name') },
 ]);
 
 const providerCols = computed(() => [
-  { key: 'fee', label: 'Fee', tooltip: 'Commission percentage charged on your staking rewards' },
-  { key: 'tvl', label: 'TVL', tooltip: 'Total Value Locked: BTC currently delegated to this provider' },
-  { key: 'stakers', label: 'Stakers', tooltip: 'Number of active staking delegations to this provider' },
+  { key: 'fee', label: t('babylon.col.fee'), tooltip: t('babylon.tooltip.col.fee') },
+  { key: 'tvl', label: t('babylon.col.tvl'), tooltip: t('babylon.tooltip.col.tvl') },
+  { key: 'stakers', label: t('babylon.col.stakers'), tooltip: t('babylon.tooltip.col.stakers') },
 ]);
 
 function setSort(key: SortKey) {
@@ -625,32 +532,22 @@ const filteredProviders = computed(() => {
   });
 });
 
-const PROVIDER_COLORS = ['#F7931A', '#1e88e5', '#43a047', '#F7931A', '#e53935', '#00acc1', '#8e24aa', '#f4511e'];
-
-function providerColor(name: string | undefined): string {
-  if (!name) return PROVIDER_COLORS[0];
-  return PROVIDER_COLORS[name.charCodeAt(0) % PROVIDER_COLORS.length];
-}
-
-function providerColorBg(name: string | undefined): string {
-  return providerColor(name) + '18';
-}
-
-function formatBtc(sats: number | undefined | null): string {
-  if (sats == null || isNaN(sats as number)) return '—';
-  return (sats / 1e8).toFixed(8);
+/** The shared 8-decimal BTC format, with a dash for a value the API did not send. */
+function btcAmount(sats: number | undefined | null): string {
+  if (sats == null || Number.isNaN(sats)) return '—';
+  return formatBtc(sats);
 }
 
 // Compact BTC display: shows fewer decimals for zero or small values
 function formatBtcCompact(sats: number | undefined | null): string {
-  if (sats == null || isNaN(sats as number)) return '—';
+  if (sats == null || Number.isNaN(sats)) return '—';
   const btc = sats / 1e8;
   if (btc === 0) return '0';
   if (btc < 0.001) return btc.toFixed(8);
   return btc.toFixed(4);
 }
 
-// Commission color: green ≤5%, neutral ≤9%, orange ≤10%, red >10%
+// Commission color: green ≤5%, neutral <10%, warning at 10%, error above
 function commissionColor(commission: string): string {
   const pct = parseFloat(commission) * 100;
   if (pct <= 5) return 'var(--g-success)';
@@ -667,14 +564,15 @@ function formatCommission(commission: string): string {
   return `${(parseFloat(commission) * 100).toFixed(1)}%`;
 }
 
-function delegationStateColor(state: string): string {
+type StatusTone = 'success' | 'warning' | 'accent' | 'neutral';
+
+function delegationTone(state: string): StatusTone {
   switch (state) {
     case 'active': return 'success';
     case 'pending': return 'warning';
-    case 'unbonding': return 'primary';
+    case 'unbonding': return 'accent';
     case 'withdrawable': return 'success';
-    case 'withdrawn': return 'var(--g-text-3)';
-    default: return 'var(--g-text-3)';
+    default: return 'neutral';
   }
 }
 
@@ -729,7 +627,7 @@ async function refresh() {
       if (deleg) delegations.value = deleg.data;
     }
   } catch (e) {
-    error.value = 'Failed to load Babylon staking data';
+    error.value = t('babylon.loadFailed');
     console.error('⛓ Babylon:', e);
   } finally {
     loading.value = false;
@@ -752,693 +650,645 @@ async function loadMore() {
 onMounted(() => refresh());
 </script>
 
-<style scoped>
-/* ── Page ── */
-.babylon-page {
-  --bab-purple: var(--g-accent);
-  --bab-purple-dim: rgba(247, 147, 26, 0.15);
-  --bab-orange: var(--g-accent);
-  --bab-glass: var(--g-hairline-1);
-  --bab-border: var(--g-hairline-1);
-}
-
-.babylon-icon-wrap {
-  width: 40px; height: 40px;
-  border-radius: var(--g-r-card);
-  background: rgba(247, 147, 26, 0.1);
-  border: 1px solid rgba(247, 147, 26, 0.2);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-
-.babylon-title { letter-spacing: -0.01em; }
-.babylon-subtitle { opacity: 0.5; font-size: 11px; }
-
-.refresh-btn { opacity: 0.5; }
-.refresh-btn:hover { opacity: 1; }
-
-/* ── Intro Banner ── */
-.intro-banner {
-  border-radius: var(--g-r-card) !important;
-  border: 1px solid rgba(247, 147, 26, 0.2) !important;
-  background: rgba(247, 147, 26, 0.06) !important;
-  padding: 14px 14px 14px 16px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.intro-icon-wrap {
-  width: 32px; height: 32px;
-  border-radius: var(--g-r-control);
-  background: rgba(247, 147, 26, 0.12);
-  border: 1px solid rgba(247, 147, 26, 0.2);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.intro-text { flex: 1; min-width: 0; }
-
-.intro-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--bab-orange);
-  margin-bottom: 4px;
-  letter-spacing: -0.01em;
-}
-
-.intro-body {
-  font-size: 11px;
-  opacity: 0.65;
-  line-height: 1.5;
-}
-
-.intro-steps {
+<style scoped lang="scss">
+/* ── Page ───────────────────────────────────────────────── */
+.bab {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--g-s-4);
+  padding: var(--g-s-4);
 }
 
-.intro-step {
-  font-size: 11px;
-  opacity: 0.55;
+.bab__header {
   display: flex;
-  align-items: center;
-}
-
-.intro-dismiss {
-  flex-shrink: 0;
-  margin-top: -4px;
-  margin-right: -4px;
-}
-
-/* ── Hero Card ── */
-.hero-card {
-  border-radius: var(--g-r-sheet) !important;
-  border: 1px solid rgba(247, 147, 26, 0.18) !important;
-  background: rgba(247, 147, 26, 0.05) !important;
-  position: relative;
-  overflow: hidden;
-}
-
-.hero-glow {
-  position: absolute;
-  top: -60px; right: -60px;
-  width: 220px; height: 220px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(247,147,26,0.18) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.hero-body {
-  display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  padding: 20px 20px 16px;
-  gap: 16px;
+  gap: var(--g-s-4);
+  flex-wrap: wrap;
 }
 
-.hero-left { flex: 1; }
+.bab__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
 
-.hero-eyebrow {
+.bab__headline h1 {
+  margin: 0;
+}
+
+.bab__subtitle {
+  margin: 0;
+}
+
+.bab__header-side {
   display: flex;
   align-items: center;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  opacity: 0.55;
-  margin-bottom: 6px;
+  gap: var(--g-s-2);
 }
 
-.hero-amount {
+/* ── Notices ────────────────────────────────────────────── */
+.bab-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-2) var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  color: var(--g-text-2);
+  font-size: 13px;
+}
+
+.bab-notice .v-icon {
+  color: inherit;
+}
+
+.bab-notice__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bab-notice--error {
+  border-color: var(--g-error-line);
+  background: var(--g-error-fill);
+  color: var(--g-error);
+}
+
+/* ── Intro ──────────────────────────────────────────────── */
+.bab-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4);
+}
+
+.bab-intro__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  color: var(--g-accent);
+}
+
+.bab-intro__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
+
+.bab-intro__title,
+.bab-intro__body {
+  margin: 0;
+}
+
+.bab-intro__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--g-s-1) 0 0;
+  padding-left: var(--g-s-4);
+}
+
+/* ── Position hero ──────────────────────────────────────── */
+.bab-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  padding: var(--g-s-4);
+}
+
+.bab-hero__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  flex-wrap: wrap;
+}
+
+.bab-hero__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+
+.bab-hero__amount {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  line-height: 1;
-  margin-bottom: 8px;
+  gap: var(--g-s-2);
+  line-height: 1.1;
 }
 
-.hero-amount-number {
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  color: var(--bab-purple);
-}
-
-.hero-amount-unit {
+.bab-hero__unit {
+  color: var(--g-text-3);
   font-size: 14px;
-  font-weight: 600;
-  opacity: 0.5;
-  letter-spacing: 0.04em;
 }
 
-.hero-right {
+.bab-hero__cta {
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: var(--g-s-1);
 }
 
-.stake-cta {
-  background: var(--g-grad) !important;
-  color: var(--g-text-1) !important;
-  border-radius: var(--g-r-control) !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.03em;
-  text-transform: none !important;
-  padding: 0 20px !important;
-  height: 40px !important;
-  transition: transform var(--g-dur-fast) ease !important;
-}
-
-.stake-cta:hover {
-  transform: translateY(-1px);
-}
-
-.cta-hint {
-  opacity: 0.4;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Hero stats strip */
-.hero-stats {
+.bab-hero__stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid var(--bab-border);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--g-s-2);
 }
 
-.hstat {
-  padding: 12px 16px;
-  text-align: center;
-  position: relative;
+@media (max-width: 720px) {
+  .bab-hero__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.hstat:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: 0; top: 20%; height: 60%;
-  width: 1px;
-  background: var(--bab-border);
-}
-
-.hstat-val {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--bab-purple);
-  margin-bottom: 2px;
-}
-
-.hstat-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-}
-
-.hstat-info {
-  font-size: 11px !important;
-  cursor: help;
-  opacity: 0.6;
-  transition: opacity var(--g-dur-fast);
-}
-
-.hstat-info:hover { opacity: 1; }
-
-/* ── Params Strip ── */
-.params-strip {
-  border-radius: var(--g-r-control) !important;
-  border: 1px solid rgba(247, 147, 26, 0.12) !important;
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.params-strip-title {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.params-strip-items {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.pitem {
+.bab-tile {
   display: flex;
   flex-direction: column;
-  padding: 0 14px;
+  gap: var(--g-s-1);
+  padding: var(--g-s-3);
 }
 
-.pitem-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.4;
-  margin-bottom: 1px;
+.bab-tile__label {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--g-s-1);
 }
 
-.pitem-info {
-  font-size: 11px !important;
+.bab-info {
+  color: var(--g-text-3);
   cursor: help;
-  transition: opacity var(--g-dur-fast);
 }
 
-.pitem-val {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
+/* ── Parameters ─────────────────────────────────────────── */
+.bab-params {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-4);
+  flex-wrap: wrap;
+  padding: var(--g-s-3) var(--g-s-4);
 }
 
-.pitem-sep {
-  width: 1px;
-  height: 24px;
-  background: var(--bab-border);
-  flex-shrink: 0;
+.bab-params__title {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
 }
 
-/* ── Section headers ── */
-.section-header {
+.bab-params__items {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.bab-params__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--g-s-3);
+}
+
+.bab-params__item + .bab-params__item {
+  border-left: 1px solid var(--g-hairline-1);
+}
+
+.bab-params__key {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
+}
+
+.bab-params__val {
+  margin: 0;
+  color: var(--g-text-1);
+}
+
+/* ── Sections and lists ─────────────────────────────────── */
+.bab-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4);
+}
+
+.bab-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.75;
-}
-
-/* ── Sort row ── */
-.sort-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sort-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.4;
-  flex-shrink: 0;
-}
-
-.sort-chips {
-  display: flex;
-  gap: 4px;
+  gap: var(--g-s-3);
   flex-wrap: wrap;
 }
 
-.sort-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: var(--g-r-pill);
-  border: 1px solid rgba(247, 147, 26, 0.25);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  color: var(--g-text-3);
-  background: transparent;
-  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
-  user-select: none;
-}
-
-.sort-chip:hover {
-  border-color: rgba(247, 147, 26, 0.5);
-  color: rgba(247, 147, 26, 0.75);
-  background: rgba(247, 147, 26, 0.06);
-}
-
-.sort-chip--active {
-  border-color: rgba(247, 147, 26, 0.5) !important;
-  color: var(--g-accent) !important;
-  background: rgba(247, 147, 26, 0.12) !important;
-}
-
-/* ── Provider column headers ── */
-.provider-col-headers {
+.bab-section__titles {
   display: flex;
   align-items: center;
-  padding: 0 14px;
+  gap: var(--g-s-2);
 }
 
-.pcol {
-  width: 52px;
+.bab-section__title {
+  margin: 0;
+}
+
+.bab-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── Delegation state chip (a control-sized pill, so the tint is a fill) ── */
+.bab-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  height: 22px;
+  padding: 0 var(--g-s-2);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-pill);
+  color: var(--g-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.bab-status .v-icon {
+  color: inherit;
+}
+
+.bab-status--success {
+  color: var(--g-success);
+  border-color: var(--g-success-line);
+  background: var(--g-success-fill);
+}
+
+.bab-status--warning {
+  color: var(--g-warning);
+  border-color: var(--g-warning-line);
+  background: var(--g-warning-fill);
+}
+
+.bab-status--accent {
+  color: var(--g-accent);
+  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
+}
+
+.bab-status--neutral {
+  color: var(--g-text-3);
+}
+
+/* ── Delegations ────────────────────────────────────────── */
+.bab-deleg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
+}
+
+.bab-deleg__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
+
+/* ── Facts grids ────────────────────────────────────────── */
+.bab-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--g-s-3);
+  margin: 0;
+}
+
+.bab-facts--boxed {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  padding: var(--g-s-2) var(--g-s-3);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+}
+
+.bab-facts__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bab-facts__item dd {
+  margin: 0;
+  color: var(--g-text-1);
+}
+
+.bab-unit {
+  color: var(--g-text-3);
+  font-size: 11px;
+}
+
+/* ── Search pill ────────────────────────────────────────── */
+.bab-search {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  height: 36px;
+  max-width: 220px;
+  padding: 0 var(--g-s-3);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-1);
+  cursor: text;
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+/* The field's focus ring lives on the pill, so the input inside needs none of its own. */
+.bab-search:focus-within {
+  border-color: var(--g-accent);
+}
+
+.bab-search .bab-search__icon {
+  color: var(--g-text-3);
+}
+
+.bab-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--g-text-1);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.bab-search__input::placeholder {
+  color: var(--g-text-3);
+}
+
+/* ── Sort control ───────────────────────────────────────── */
+.bab-sort {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  flex-wrap: wrap;
+}
+
+.bab-sort__group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-1);
+}
+
+.bab-sort__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  height: 28px;
+  padding: 0 var(--g-s-3);
+  border: 0;
+  border-radius: var(--g-r-pill);
+  background: transparent;
+  color: var(--g-text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease), color var(--g-dur-fast) var(--g-ease);
+}
+
+.bab-sort__btn:hover {
+  color: var(--g-text-1);
+}
+
+.bab-sort__btn--active {
+  background: var(--g-hairline-2);
+  color: var(--g-text-1);
+}
+
+.bab-sort__btn .v-icon {
+  color: inherit;
+}
+
+/* ── Column legend, aligned with the metrics in each row ── */
+.bab-cols {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-4);
+  padding: 0 var(--g-s-3);
+}
+
+.bab-cols__spacer {
+  flex: 1;
+}
+
+.bab-cols__col {
+  width: 56px;
   text-align: right;
 }
 
-.pcol-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  opacity: 0.3;
+.bab-cols__label {
   cursor: help;
   border-bottom: 1px dashed var(--g-hairline-3);
-  transition: opacity var(--g-dur-fast);
 }
 
-.pcol-label:hover { opacity: 0.6; }
-
-/* ── Provider search ── */
-.provider-search :deep(.v-field) {
-  --v-input-control-height: 32px;
-  --v-field-input-padding-top: 0px;
-  --v-field-input-padding-bottom: 0px;
-  --v-field-padding-start: 0px;
-  --v-field-padding-end: 0px;
-  background: var(--bab-glass) !important;
-  border: 1px solid var(--bab-border) !important;
-  border-radius: var(--g-r-control) !important;
-  font-size: 12px;
-  padding-inline: 0;
+.bab-cols__end {
+  width: 24px;
 }
-.provider-search :deep(.v-field__overlay) {
-  opacity: 0;
-}
-.provider-search :deep(input::placeholder) { opacity: 0.35; }
 
-/* ── Delegations ── */
-.delegation-card {
-  border-radius: var(--g-r-control) !important;
-  border: 1px solid rgba(247, 147, 26, 0.15) !important;
+/* ── Provider rows ──────────────────────────────────────── */
+.bab-fp {
   overflow: hidden;
+  transition: background-color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease);
 }
 
-.delegation-inner { display: flex; }
-
-.delegation-status-bar {
-  width: 3px;
-  flex-shrink: 0;
-}
-.status-active { background: var(--g-success); }
-.status-pending { background: var(--g-warning); }
-.status-unbonding { background: var(--g-accent); }
-.status-withdrawable { background: var(--g-success); }
-.status-withdrawn { background: var(--g-text-3); }
-
-.delegation-content { padding: 12px; flex: 1; }
-
-.delegation-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.bab-fp:hover {
+  @include g-glass-tier-hover;
 }
 
-.dmetric-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  opacity: 0.4;
-  margin-bottom: 2px;
+.bab-fp--open {
+  @include g-glass-tier-active;
 }
 
-.dmetric-val {
-  font-size: 13px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.dmetric-unit {
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.45;
-  letter-spacing: 0.04em;
-}
-
-/* ── Providers ── */
-.providers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.provider-card {
-  cursor: pointer;
-  border-radius: var(--g-r-control) !important;
-  border: 1px solid var(--bab-border) !important;
-  transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease, box-shadow var(--g-dur-fast) ease;
-  animation: fadeSlideIn 0.3s ease both;
-}
-
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.provider-card:hover {
-  border-color: rgba(247, 147, 26, 0.35) !important;
-  transform: translateX(2px);
-  box-shadow: -3px 0 0 0 var(--bab-purple) !important;
-}
-
-.provider-inner {
+.bab-fp__summary {
   display: flex;
   align-items: center;
-  padding: 12px 14px;
-  gap: 12px;
+  gap: var(--g-s-3);
+  width: 100%;
+  padding: var(--g-s-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.provider-avatar {
-  width: 36px; height: 36px;
+.bab-fp__avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border-radius: var(--g-r-control);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-
-.provider-initial {
+  background: var(--g-hairline-1);
+  color: var(--g-text-1);
   font-size: 14px;
-  font-weight: 800;
-  line-height: 1;
+  font-weight: 600;
 }
 
-.provider-info { flex: 1; min-width: 0; }
+.bab-fp__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
-.provider-name {
+.bab-fp__name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+
+.bab-fp__name {
+  color: var(--g-text-1);
   font-size: 13px;
   font-weight: 600;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 2px;
+  white-space: nowrap;
 }
 
-.provider-metrics {
+.bab-fp__verified {
+  flex: none;
+  color: var(--g-accent);
+  cursor: help;
+}
+
+.bab-fp__pk {
+  line-height: 1.3;
+}
+
+.bab-fp__metrics {
+  flex: none;
   display: flex;
-  gap: 16px;
-  flex-shrink: 0;
+  gap: var(--g-s-4);
 }
 
-.pmetric { text-align: right; min-width: 44px; }
-
-.pmetric--sorted .pmetric-val {
-  color: var(--bab-orange);
+.bab-fp__metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 56px;
 }
 
-.pmetric--sorted .pmetric-label {
-  opacity: 0.55;
+.bab-fp__metric-val {
+  color: var(--g-text-2);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.pmetric-val {
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+.bab-fp__metric--sorted .bab-fp__metric-val {
+  color: var(--g-text-1);
 }
 
-.pmetric-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.35;
+.bab-fp__chevron {
+  flex: none;
+  width: 24px;
+  color: var(--g-text-3);
+  transition: transform var(--g-dur-base) var(--g-ease);
 }
 
-.provider-chevron {
-  color: rgba(247, 147, 26, 0.35) !important;
-  transition: transform var(--g-dur-base) ease, opacity var(--g-dur-fast) ease;
-  flex-shrink: 0;
-}
-
-.provider-chevron--open {
+.bab-fp--open .bab-fp__chevron {
   transform: rotate(180deg);
-  color: rgba(247, 147, 26, 0.7) !important;
 }
 
-.provider-card:hover .provider-chevron {
-  opacity: 1 !important;
-  color: rgba(247, 147, 26, 0.6) !important;
+@media (max-width: 600px) {
+  .bab-cols {
+    display: none;
+  }
+
+  .bab-fp__metrics {
+    gap: var(--g-s-2);
+  }
 }
 
-.provider-card--expanded {
-  border-color: rgba(247, 147, 26, 0.3) !important;
-}
-
-/* ── Expanded content ── */
-.provider-expanded {
+.bab-fp__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
   border-top: 1px solid var(--g-hairline-1);
 }
 
-.provider-expanded-body {
-  padding: 12px 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.bab-fp__desc {
+  margin: 0;
 }
 
-.provider-desc {
-  font-size: 11px;
-  line-height: 1.55;
-  opacity: 0.6;
-}
-
-.provider-desc--empty {
-  opacity: 0.25;
+.bab-fp__desc--empty {
+  color: var(--g-text-3);
   font-style: italic;
 }
 
-.provider-links-row {
+.bab-fp__links {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+  gap: var(--g-s-3);
 }
 
-.provider-link {
-  font-size: 11px;
-  color: var(--g-accent) !important;
-  text-decoration: none;
-  display: flex;
+.bab-fp__link,
+.bab-fp__contact {
+  display: inline-flex;
   align-items: center;
-  opacity: 0.8;
-  max-width: 220px;
+  gap: var(--g-s-1);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: opacity var(--g-dur-fast);
 }
 
-.provider-link:hover { opacity: 1; text-decoration: underline; }
+.bab-fp__link {
+  color: var(--g-accent);
+  text-decoration: none;
+}
 
-.provider-contact {
-  font-size: 11px;
-  opacity: 0.4;
+.bab-fp__link:hover {
+  text-decoration: underline;
+}
+
+.bab-fp__pk-full {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.provider-total-stats {
+/* ── Empty state ────────────────────────────────────────── */
+.bab-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  background: var(--g-hairline-1);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-control);
-  overflow: hidden;
-}
-
-.ptstat {
-  flex: 1;
-  padding: 8px 10px;
+  gap: var(--g-s-2);
+  padding: var(--g-s-6) var(--g-s-4);
   text-align: center;
-  position: relative;
 }
 
-.ptstat:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: 0; top: 20%; height: 60%;
-  width: 1px;
-  background: var(--g-hairline-1);
-}
-
-.ptstat-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.35;
-  margin-bottom: 2px;
-}
-
-.ptstat-val {
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-
-.ptstat-unit {
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.4;
-}
-
-.ptstat-sep {
-  width: 1px;
-  height: 30px;
-  background: var(--g-hairline-1);
-  flex-shrink: 0;
-}
-
-.provider-pk-full {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.provider-pk-hex {
-  font-family: var(--g-font-mono);
-  font-size: 11px;
-  opacity: 0.3;
-  word-break: break-all;
-}
-
-.provider-stake-btn {
-  border-radius: var(--g-r-control) !important;
-  font-weight: 700 !important;
-  text-transform: none !important;
-  letter-spacing: 0.02em !important;
-}
-
-/* ── Empty state ── */
-.providers-empty {
-  text-align: center;
-  padding: 40px 16px;
-  opacity: 0.7;
-}
-
-/* ── Tooltip ── */
-:deep(.babylon-tooltip) {
-  font-size: 11px !important;
-  line-height: 1.4 !important;
-  background: var(--g-overlay) !important;
-  border: 1px solid rgba(247, 147, 26, 0.2) !important;
-  border-radius: var(--g-r-control) !important;
-  padding: 8px 10px !important;
+.bab-empty__icon {
+  color: var(--g-text-3);
 }
 </style>

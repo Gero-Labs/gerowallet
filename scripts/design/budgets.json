@@ -1,17 +1,17 @@
 {
-  "hexOccurrences": 672,
-  "hexDistinct": 252,
+  "hexOccurrences": 564,
+  "hexDistinct": 234,
   "fontSizeDistinct": 61,
-  "radiusDistinct": 49,
+  "radiusDistinct": 42,
   "zIndexDistinct": 16,
-  "backdropFilters": 87,
-  "uppercase": 108,
-  "infiniteAnimations": 62,
-  "importantCount": 1731,
-  "lowAlphaText": 19,
+  "backdropFilters": 69,
+  "uppercase": 81,
+  "infiniteAnimations": 55,
+  "importantCount": 1484,
+  "lowAlphaText": 18,
   "transitionAll": 1,
   "corruptedMdiNames": 0,
-  "formatFnForks": 15,
-  "clickableDivs": 92,
-  "outlineNone": 17
+  "formatFnForks": 13,
+  "clickableDivs": 88,
+  "outlineNone": 16
 }

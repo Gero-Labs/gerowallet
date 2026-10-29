@@ -398,11 +398,12 @@ export const featureFlagsStore = {
   },
 
   /**
-   * Check if GoMining integration is enabled
+   * Check if GoMining integration is enabled. Driven by the gero-sync
+   * `isGoMiningEnabled` flag (default off); the Bitcoin pages also need
+   * `isBitcoinEnabled`.
    */
   isGoMiningEnabled(): boolean {
-    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
-    return false;
+    return featureFlagsState.flags.isGoMiningEnabled;
   },
 
   /**

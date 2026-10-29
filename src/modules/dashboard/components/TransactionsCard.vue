@@ -271,7 +271,7 @@
                   <template v-if="hideBalances">••••••</template>
                   <template v-else>{{ formatRowAmount(item) }}</template>
                 </span>
-                <span v-if="adaPrice > 0" class="tx-row__fiat g-num">
+                <span v-if="nativePrice > 0" class="tx-row__fiat g-num">
                   <template v-if="hideBalances">{{ getCurrencySymbol() }}•••</template>
                   <template v-else>{{ formatRowFiat(item) }}</template>
                 </span>
@@ -411,8 +411,10 @@ const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOI
 
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
-// Live Kraken ticker price for ADA
-const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
+// Live ticker price of the native coin: BTC on Bitcoin, ADA everywhere else
+const nativePrice = computed(() => (isBitcoin.value ? priceStore.btcUsd?.lastPrice : priceStore.adaUsd?.lastPrice) || 0);
+// Bitcoin records hold satoshis (8 decimals); the other chains' hold 6-decimal base units
+const nativeDecimals = computed(() => (isBitcoin.value ? 8 : 6));
 
 // Wallet addresses, stake address and contacts the classifiers compare against
 const classifyCtx = computed(() => buildClassifyContext(loggedWallet.value, keys.value, contacts.value));
@@ -791,11 +793,14 @@ const currencySymbol = computed(() =>
   loggedWallet.value ? networks.resolveCurrencySymbol(loggedWallet.value.chain, loggedWallet.value.network) : '',
 );
 
-const formatRowAmount = (item: StoredTransaction): string =>
-  withMinusSign(filters.toCurrency(item.ada ?? 0, true, 0, currencySymbol.value, '', false));
+// A native-coin amount; Bitcoin keeps all 8 decimals so small payments don't round to zero
+const formatNativeAmount = (amount: number): string =>
+  withMinusSign(filters.toCurrency(amount, true, isBitcoin.value ? 8 : 0, currencySymbol.value, '', false, nativeDecimals.value));
+
+const formatRowAmount = (item: StoredTransaction): string => formatNativeAmount(item.ada ?? 0);
 
 const formatRowFiat = (item: StoredTransaction): string =>
-  withMinusSign(filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice.value), true, 0, getCurrencySymbol(), '', false, 6));
+  withMinusSign(filters.toCurrency(convertFiat((item.ada ?? 0) * nativePrice.value), true, 0, getCurrencySymbol(), '', false, nativeDecimals.value));
 
 const amountClass = (item: StoredTransaction): string => {
   if (isPendingTooLong(item)) return 'tx-row__amount--failed';
@@ -859,7 +864,7 @@ const groupedTransactions = computed(() => {
         label: dayLabel(item.tx_timestamp),
         net: hideBalances.value || !loggedWallet.value
           ? ''
-          : withMinusSign(filters.toCurrency(net, true, 0, currencySymbol.value, '', false)),
+          : formatNativeAmount(net),
         items: [],
       };
       groups.push(group);
