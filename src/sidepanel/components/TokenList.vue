@@ -156,7 +156,7 @@
          Shown only when the wallet actually holds one, so it never becomes chrome. -->
     <div v-if="hasProgrammableHoldings" class="programmable-note text-caption">
       <v-icon size="x-small" color="var(--g-warning)" class="mr-1">mdi-lock-outline</v-icon>
-      {{ $t('programmableTokens.listFootnote') }}
+      {{ $t(programmableListFootnoteKey()) }}
     </div>
 
     <!-- Empty state: only a truly empty wallet (0 ADA, no tokens) reaches here,
@@ -170,7 +170,7 @@
 
 <script setup lang="ts">
 import { computed, toRefs } from 'vue';
-import { programmableTooltipKey } from '@/shared/utils/programmableTokenDisplay';
+import { programmableListFootnoteKey, programmableTooltipKey } from '@/shared/utils/programmableTokenDisplay';
 import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';

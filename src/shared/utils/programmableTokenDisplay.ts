@@ -1,16 +1,49 @@
 import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { Blockchain, WalletType } from '@/models/types';
+import networks from '@/utils/networks';
+
+/**
+ * Whether Gero's own Send of a CIP-113 token is offered to the logged wallet: the
+ * `isCip113Enabled` flag, a Cardano software wallet that signs in the worker (password,
+ * PassKey or Sign in with Google), and a network whose transfer scripts are configured
+ * (preprod and preview). Hardware wallets wait for their signer fixes and a device run.
+ */
+export function cip113SendAvailable(): boolean {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet || !featureFlagsStore.isCip113Enabled()) return false;
+  if (wallet.chain !== Blockchain.CARDANO) return false;
+  const software = wallet.type === WalletType.Normal
+    || (wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc');
+  return software && networks.resolveCip113TransferScripts(wallet.chain, wallet.network) !== null;
+}
+
+/**
+ * Whether a row offers Send: a registered CIP-113 token (never the locked-ADA row, and
+ * never a token merely sent to the programmable address), where Send is available.
+ */
+export function canSendProgrammable(row: { unit?: string; isProgrammable?: boolean } | null | undefined): boolean {
+  return !!row && row.unit !== 'lovelace' && isCip113BadgeRow(row) && cip113SendAvailable();
+}
 
 /**
  * Which tooltip explains a locked (CIP-113) holdings row. Two different things carry
- * `isProgrammable`: the programmable token itself, which Gero will not build a transfer
- * for, and the ADA riding along in its UTxO — ordinary ADA that is merely stuck there,
- * priced and counted in the portfolio total unlike the token. Returns the key rather than
- * the string so templates can call it directly.
+ * `isProgrammable`: the programmable token itself, and the ADA riding along in its UTxO —
+ * ordinary ADA that is merely stuck there, priced and counted in the portfolio total unlike
+ * the token. Where Send is available the token can be moved, so the copy says so. Returns
+ * the key rather than the string so templates can call it directly.
  */
 export function programmableTooltipKey(unit: string): string {
-  return unit === 'lovelace'
-    ? 'programmableTokens.lockedAdaTooltip'
-    : 'programmableTokens.badgeTooltip';
+  const sendable = cip113SendAvailable();
+  if (unit === 'lovelace') {
+    return sendable ? 'programmableTokens.lockedAdaTooltipSendable' : 'programmableTokens.lockedAdaTooltip';
+  }
+  return sendable ? 'programmableTokens.badgeTooltipSendable' : 'programmableTokens.badgeTooltip';
+}
+
+/** The footnote under a holdings list that includes locked tokens. */
+export function programmableListFootnoteKey(): string {
+  return cip113SendAvailable() ? 'programmableTokens.listFootnoteSendable' : 'programmableTokens.listFootnote';
 }
 
 /**
@@ -47,6 +80,7 @@ export function isCip113BadgeRow(row: { unit?: string; isProgrammable?: boolean 
 
 /** What a locked row says about itself where it can't be swapped. */
 export function lockedRowMessageKey(row: { unit?: string; isProgrammable?: boolean }): string {
+  if (canSendProgrammable(row)) return 'programmableTokens.noSwapCanSend';
   if (row.unit === 'lovelace' || isCip113BadgeRow(row)) return programmableTooltipKey(row.unit ?? '');
   return 'programmableTokens.unregisteredTooltip';
 }
