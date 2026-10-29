@@ -24,9 +24,13 @@ vi.mock('../composables/useChainContext', async () => {
   const { ref } = await import('vue');
   return { useChainContext: () => ({ themeColors: ref({ primary: '#fff' }) }) };
 });
-vi.mock('@/stores/walletStore', async () => ({ default: { state: (await import('vue')).reactive({
-  loggedWallet: {}, isLocked: false, keys: { payment: [], change: [], stake: [] }, utxos: [],
-}) } }));
+// As in the real module, the default export's state is the named walletStore.
+vi.mock('@/stores/walletStore', async () => {
+  const state = (await import('vue')).reactive({
+    loggedWallet: {}, isLocked: false, keys: { payment: [], change: [], stake: [] }, utxos: [],
+  });
+  return { default: { state }, walletStore: state };
+});
 vi.mock('@/stores/networkStore', () => ({ networkStore: { tip: null }, isBitcoinTip: () => false }));
 vi.mock('@/stores/priceStore', () => ({ priceStore: {} }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: { privateSyncStatus: 'idle', proofServer: { mode: 'local' } } }));
