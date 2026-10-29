@@ -4875,6 +4875,7 @@ export default {
   'walletConnect.disconnectConfirm': '¿Desconectar de {name}?',
   'walletConnect.invalidUri': 'URI de WalletConnect no válido',
   'walletConnect.pairingFailed': 'Falló la vinculación',
+  'walletConnect.unlockToPair': 'Desbloquea tu billetera para conectar una dApp.',
   'walletConnect.sessionExpired': 'La sesión expiró',
   'walletConnect.unsupportedChain': 'Algunas de las cadenas solicitadas no son compatibles',
   'walletConnect.connectViaWalletConnect': 'Conectar con WalletConnect',

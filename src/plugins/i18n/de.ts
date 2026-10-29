@@ -4263,6 +4263,7 @@ export default {
   'walletConnect.invalidUri': 'Ungültige WalletConnect-URI',
   'walletConnect.noActiveSessions': 'Keine aktiven WalletConnect-Sitzungen',
   'walletConnect.pairingFailed': 'Kopplung fehlgeschlagen',
+  'walletConnect.unlockToPair': 'Entsperre deine Wallet, um eine dApp zu verbinden.',
   'walletConnect.pasteUri': 'WalletConnect-URI einfügen',
   'walletConnect.reject': 'Ablehnen',
   'walletConnect.requestedChains': 'Angeforderte Chains',

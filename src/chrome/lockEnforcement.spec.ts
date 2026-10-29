@@ -38,7 +38,8 @@ describe('security settings refuse while locked', () => {
     'NOTIFY_ENABLE_WALLET',
     'NOTIFY_DISABLE_WALLET',
     'NOTIFY_SET_PREFS',
-    // Pairing a dApp session over WalletConnect or CIP-45.
+    // Pairing a dApp session over WalletConnect or CIP-45. WC_PAIR is reachable from any page's `wc:` link.
+    'WC_PAIR',
     'WC_APPROVE_SESSION',
     'CIP45_BEGIN_SESSION',
   ])('%s', name => {

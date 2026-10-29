@@ -5057,6 +5057,7 @@ export default {
   'walletConnect.disconnectConfirm': 'Disconnect from {name}?',
   'walletConnect.invalidUri': 'Invalid WalletConnect URI',
   'walletConnect.pairingFailed': 'Pairing failed',
+  'walletConnect.unlockToPair': 'Unlock your wallet to connect a dApp.',
   'walletConnect.sessionExpired': 'Session expired',
   'walletConnect.unsupportedChain': 'Some requested chains are not supported',
   'walletConnect.connectViaWalletConnect': 'Connect via WalletConnect',
