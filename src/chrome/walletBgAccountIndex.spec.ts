@@ -17,7 +17,7 @@ vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconne
 
 import { WalletBg } from './walletBg';
 import WalletStore from '@/stores/walletStore';
-import { getAddress, getCcColdKey, getPaymentKeyExternal, getStakeKey } from './serialization';
+import { getAddress, getCcColdKey, getDrepKey, getPaymentKeyExternal, getStakeKey } from './serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { InvalidAccountIndexError, withGroupSecrets } from '@/shared/utils/walletAccount';
 import { encryptWithPassword } from '@/shared/utils/crypto';
@@ -119,9 +119,8 @@ describe('WalletBg on account #1', () => {
     expect(signingKeys(witnesses)).toEqual([getPaymentKeyExternal(accountXpub(0), 0).hex()]);
   });
 
-  it('signs its own committee resignation with that account’s committee cold key', async () => {
-    const bg = bootWallet({ publicKey: accountXpub(1), accountIndex: 1 });
-    const keys = bg.resolvePathsForMissingAddresses([]);
+  /** A transaction spending the account's first payment UTxO and carrying `certificate`. */
+  function withCertificate(keys: Keys, certificate: Cardano.Certificate): { txCbor: string; utxos: Cardano.Utxo[] } {
     const address = keys.payment[0].address as Cardano.PaymentAddress;
     const { utxos } = spendFrom(address);
     const txCbor = Serialization.Transaction.fromCore({
@@ -130,20 +129,45 @@ describe('WalletBg on account #1', () => {
         inputs: [{ txId: utxos[0][0].txId, index: 0 }],
         outputs: [{ address, value: { coins: 2_000_000n } }],
         fee: 200_000n,
-        certificates: [{
-          __typename: Cardano.CertificateType.ResignCommitteeCold,
-          coldCredential: { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(keys.ccCold[0].cred) },
-          anchor: null,
-        }],
+        certificates: [certificate],
       },
       witness: { signatures: new Map() },
     }).toCbor();
+    return { txCbor, utxos };
+  }
+
+  it('signs its own committee resignation with that account’s committee cold key', async () => {
+    const bg = bootWallet({ publicKey: accountXpub(1), accountIndex: 1 });
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const { txCbor, utxos } = withCertificate(keys, {
+      __typename: Cardano.CertificateType.ResignCommitteeCold,
+      coldCredential: { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(keys.ccCold[0].cred) },
+      anchor: null,
+    });
 
     const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
 
     expect(signingKeys(witnesses).sort()).toEqual([
       getPaymentKeyExternal(accountXpub(1), 0).hex(),
       getCcColdKey(accountXpub(1), 0).hex(),
+    ].sort());
+  });
+
+  it('signs its own DRep registration with that account’s DRep key', async () => {
+    const bg = bootWallet({ publicKey: accountXpub(1), accountIndex: 1 });
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const { txCbor, utxos } = withCertificate(keys, {
+      __typename: Cardano.CertificateType.RegisterDelegateRepresentative,
+      dRepCredential: { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(keys.drep129[0].cred) },
+      deposit: 500_000_000n,
+      anchor: null,
+    });
+
+    const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
+
+    expect(signingKeys(witnesses).sort()).toEqual([
+      getPaymentKeyExternal(accountXpub(1), 0).hex(),
+      getDrepKey(accountXpub(1), 0).hex(),
     ].sort());
   });
 

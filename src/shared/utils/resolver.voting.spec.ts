@@ -113,6 +113,47 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
     expect(analyzeTransactionForSignatures(cert(FOREIGN), [], own, '').some(s => s.type === 'stake')).toBe(false);
   });
 
+  describe('DRep certificates', () => {
+    const credential = (hash: string, type = Cardano.CredentialType.KeyHash) => ({ type, hash });
+    const registration = (dRepCredential: { type: Cardano.CredentialType; hash: string }) => ({
+      __typename: Cardano.CertificateType.RegisterDelegateRepresentative, dRepCredential, deposit: 500_000_000n, anchor: null,
+    });
+    const update = (dRepCredential: { type: Cardano.CredentialType; hash: string }) => ({
+      __typename: Cardano.CertificateType.UpdateDelegateRepresentative, dRepCredential, anchor: null,
+    });
+    const retirement = (dRepCredential: { type: Cardano.CredentialType; hash: string }) => ({
+      __typename: Cardano.CertificateType.UnregisterDelegateRepresentative, dRepCredential, deposit: 500_000_000n,
+    });
+    const withCertificates = (...certificates: unknown[]) => ({ body: { inputs: [], outputs: [], certificates } }) as never;
+    const own = keys({ drep105: [{ cred: CRED, path: '' }], drep129: [{ cred: CRED, path: '' }] });
+    const drepSigner = { derivationPath: [ChainDerivations.DREP, 0], type: 'drep' };
+
+    it('adds the DRep-key witness for our own registration, update and retirement', () => {
+      for (const certificate of [registration, update, retirement]) {
+        expect(analyzeTransactionForSignatures(withCertificates(certificate(credential(CRED))), [], own, '')).toEqual([drepSigner]);
+      }
+    });
+
+    it('adds it once for a registration and a vote by our own DRep', () => {
+      const tx = { body: { inputs: [], outputs: [], certificates: [registration(credential(CRED))], votingProcedures: [{
+        voter: { __typename: Cardano.VoterType.dRepKeyHash, credential: credential(CRED) },
+        votes: [{ actionId: { id: 'a'.repeat(64), actionIndex: 0 }, votingProcedure: { vote: Cardano.Vote.yes, anchor: null } }],
+      }] } } as never;
+      expect(analyzeTransactionForSignatures(tx, [], own, '')).toEqual([drepSigner]);
+    });
+
+    it('adds nothing for another DRep', () => {
+      expect(analyzeTransactionForSignatures(withCertificates(registration(credential(FOREIGN)), retirement(credential(FOREIGN))), [], own, ''))
+        .toHaveLength(0);
+    });
+
+    it('adds nothing for a script DRep, even with no DRep cred to compare against', () => {
+      const script = credential(CRED, Cardano.CredentialType.ScriptHash);
+      expect(analyzeTransactionForSignatures(withCertificates(registration(script), update(script)), [], own, '')).toHaveLength(0);
+      expect(analyzeTransactionForSignatures(withCertificates(retirement(script)), [], keys({}), '')).toHaveLength(0);
+    });
+  });
+
   describe('committee certificates', () => {
     const HOT = 'e'.repeat(56);
     const credential = (hash: string, type = Cardano.CredentialType.KeyHash) => ({ type, hash });

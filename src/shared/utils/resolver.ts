@@ -758,6 +758,20 @@ export function analyzeTransactionForSignatures(
         (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
       }
 
+      // A DRep registration, update or retirement is witnessed by its DRep credential, so
+      // only OUR DRep key signs it. A script DRep is witnessed by its script.
+      if (certificate.__typename === Cardano.CertificateType.RegisterDelegateRepresentative ||
+          certificate.__typename === Cardano.CertificateType.UpdateDelegateRepresentative ||
+          certificate.__typename === Cardano.CertificateType.UnregisterDelegateRepresentative) {
+        const { dRepCredential } = certificate;
+        if (dRepCredential?.type === Cardano.CredentialType.KeyHash && ownedOrUnknown(ownDrepCreds, dRepCredential.hash)) {
+          requiredSigners.push({
+            derivationPath: [ChainDerivations.DREP, 0],
+            type: 'drep'
+          });
+        }
+      }
+
       // A committee hot-key authorization or cold resignation is witnessed by its cold
       // credential, so only OUR committee cold key signs it. A script cold credential is
       // witnessed by its script, and the hot credential an authorization names signs nothing.
