@@ -13,6 +13,7 @@ import {
 import { fromAxiosSubmit, isRoutedSubmitError, routedSubmitError, submitCardanoTx } from '@/chrome/submitRouter';
 import networks from '@/utils/networks';
 import { readCip113Registry } from '@/chrome/cip113Registry';
+import { consumeCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { getBlockchainDb } from '@/db';
 import {
   Blockchain,
@@ -783,10 +784,16 @@ export class WalletBg {
     return this.programmableInputRefs.size > 0;
   }
 
+  /** This wallet's programmable UTxOs, for Gero's own Send to choose from. Background only. */
+  cip113TransferCandidates(): Cardano.Utxo[] {
+    return [...this.programmableUtxos];
+  }
+
   /**
    * Inputs spending one of this wallet's programmable UTxOs. Non-empty means the
-   * transaction must not be witnessed — Gero cannot build a valid CIP-113 transfer,
-   * so such a transaction was necessarily built elsewhere.
+   * transaction must not be witnessed unless it is the transfer Gero's own Send prepared
+   * and verified, which signTx checks against the one-shot allowance (cip113Allowance.ts).
+   * Every other caller treats a hit as a refusal.
    */
   findProgrammableInputs(transaction: Cardano.Tx): string[] {
     if (this.programmableInputRefs.size === 0) return [];
@@ -2387,9 +2394,11 @@ export class WalletBg {
 
     // CIP-113 defence in depth. The dApp-facing handlers refuse these before the
     // approval UI opens; this catches any caller that reaches the signer directly.
-    // Checked before the root key is decrypted.
+    // Checked before the root key is decrypted. The one exception is a transfer Gero's own
+    // Send built and verified (CIP113_PREPARE_TRANSFER): its exact id holds a one-shot
+    // allowance, used up below just before the signature.
     const programmableInputs = this.findProgrammableInputs(transaction);
-    if (programmableInputs.length > 0) {
+    if (programmableInputs.length > 0 && !hasCip113SignAllowance(this.id, transaction.id, programmableInputs)) {
       debugLog('CIP-113: refusing to sign, programmable inputs:', programmableInputs);
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
@@ -2407,6 +2416,9 @@ export class WalletBg {
     password = null; // Clear password from memory
 
     assertAuthorized?.();
+    if (programmableInputs.length > 0 && !consumeCip113SignAllowance(this.id, transaction.id, programmableInputs)) {
+      throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+    }
     const accountPrivateKey: Bip32PrivateKey = deriveSigningAccountKey(rootPrivateKey, this.accountIndex, this.publicKey);
 
     // Create a signature map for the witness

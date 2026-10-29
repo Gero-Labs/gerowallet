@@ -139,6 +139,57 @@ export const CIP113_REGISTRY_PREVIEW: readonly string[] = [
   'e5b339ef5b16d6c460759aca1d60e5e045a6f01da4a11b4ee0fec09a',
 ];
 
+// CIP-113 `programmable_logic_global` (PLG) stake-script hashes, per network. Every CIP-113
+// transfer withdraws 0 from this script, whoever builds it. Two uses:
+//  - the dApp-facing signing guard refuses a transaction that withdraws one of these while
+//    needing one of the wallet's keys, which covers a programmable UTxO not yet synced into
+//    the refusal index. A wrong value here can only cause extra refusals.
+//  - Gero's own Send checks the withdrawal set of the transfer Nexus built.
+//
+// Provenance: the first credential of each deployment's protocol-params datum (the UTxO
+// holding the params NFT, at the bootstrap tx recorded above, output 0), and the reference
+// script at the deployment's reference-script output 1. Checked on chain through Koios on
+// 2026-10-29. Same review bar as the PLB hashes.
+
+/** Mainnet PLG. Params datum at `bfefbd22…cdb72#0`; script created in tx `a488bac5…`. */
+export const CIP113_GLOBAL_MAINNET: readonly string[] = [
+  '46b61f0584f21481b22ea18f945e48ac4148f50fc3ade494a7762440',
+];
+
+/** Preprod PLG. Params datum at `f4118e53…5c896#0`; reference script `e24679be…6b59#1`. */
+export const CIP113_GLOBAL_PREPROD: readonly string[] = [
+  'b4e81fa9a3291025cd279067daf4e43578d4c3f759e5490958f58cf6',
+];
+
+/** Preview PLG. Params datum at `8e9668a6…d00f9#0`; reference script `f543e7b8…b6dd#1`. */
+export const CIP113_GLOBAL_PREVIEW: readonly string[] = [
+  '3b212b37b1a1fb334539c42e7473376a7fc15b60c26ae0fd4d06279e',
+];
+
+// The core CIP-113 `transfer` stake-script hashes, per network: the third credential of the
+// same params datum, the reference script at output 2. Only Send reads these, so only the
+// networks Send supports list one. Checked on chain through Koios on 2026-10-29.
+
+/** Mainnet: none, so Send is unsupported there (decision 11). */
+export const CIP113_TRANSFER_MAINNET: readonly string[] = [];
+
+/** Preprod core transfer. Reference script `e24679be…6b59#2`. */
+export const CIP113_TRANSFER_PREPROD: readonly string[] = [
+  '5ff03dd084ec86a164dbf9bfe890605fe9fcba8d6657328eab8bb350',
+];
+
+/** Preview core transfer. Reference script `f543e7b8…b6dd#2`. */
+export const CIP113_TRANSFER_PREVIEW: readonly string[] = [
+  '5fe7c82a32a69e5839e9da77e1e9992c1e55f7d372c3d58d8f744ef7',
+];
+
+/**
+ * Networks where Gero's own Send may build a CIP-113 transfer. A separate allowlist for the
+ * same reason as CIP113_ALLOWED_NETWORKS below: recording a transfer hash must not by itself
+ * bring Send up on a network. Mainnet needs its own review and test send first (decision 11).
+ */
+export const CIP113_SEND_ALLOWED_NETWORKS: readonly string[] = [Network.PREPROD, Network.PREVIEW];
+
 /**
  * Networks where CIP-113 may run at all. Together with the hash lists above this is the
  * whole gate: two build-time constants, both of which must pass.
