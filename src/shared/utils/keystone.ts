@@ -202,7 +202,8 @@ const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: stri
   const hashes: Cardano.Credential['hash'][] = [];
   txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
     // Each owner of a registered pool signs its registration with that owner's stake key.
-    // The pool's cold key signs too, which is not one of the wallet's keys.
+    // The pool's cold key signs too, which is not one of the wallet's keys. Keystone
+    // firmware has parsed and shown pool registrations since 1.5.8.
     if (cert.__typename === Cardano.CertificateType.PoolRegistration) {
       cert.poolParameters.owners.forEach((owner: Cardano.RewardAccount) => {
         if (owner === stakeAddress) hashes.push(rewardAddressCredential(owner).hash);
@@ -227,7 +228,9 @@ const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: stri
 const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Transaction, utxos: Cardano.Utxo[], stakeAddress: string | undefined) => {
   const ownedKeypathList: CryptoKeypath[] = [];
   const ownedAddressList: string[] = [];
-  const addedPaths = new Set<string>(); // Track added paths to avoid duplicates
+  // The firmware signs every listed path with no dedupe of its own, so a repeated path
+  // would add a second witness for the same key.
+  const addedPaths = new Set<string>();
   const addKey = (key: Key) => {
     if (addedPaths.has(key.path)) return;
     ownedKeypathList.push(createCryptoKeypath(key.path, xfp));
@@ -333,8 +336,9 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
     };
 
     // Required signers (used by DEX transactions and other contracts) that are this
-    // wallet's keys, each at its own path. A key that signs an owned input already
-    // witnesses the transaction.
+    // wallet's keys, each at its own path: the firmware signs an extra signer at
+    // whatever path it carries. A key that signs an owned input already witnesses the
+    // transaction.
     const requiredSigners = txCore.body.requiredExtraSignatures ?? [];
     debugLog('[Keystone] Found required signers:', requiredSigners.length);
     const inputPaths = new Set(keystoneUtxos.map((utxo) => utxo.hdPath));
