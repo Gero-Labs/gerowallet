@@ -1,4 +1,4 @@
-import { Keys, purpose } from '@/models/types';
+import { Key, Keys, purpose } from '@/models/types';
 import {
   CardanoSignature, CardanoSignDataSignature,
   Curve,
@@ -168,12 +168,29 @@ export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array, ex
 }
 
 /**
+ * The wallet key a required signer names, matched by key hash as the Trezor mapping
+ * does: payment and change keys, then the stake key. Undefined for any other hash,
+ * which is not this wallet's to sign.
+ */
+const ownRequiredSignerKey = (keys: Keys, keyHash: Ed25519KeyHashHex): Key | undefined => {
+  const hash = keyHash.toLowerCase();
+  return [...keys.payment, ...keys.change, ...keys.stake]
+    .find((key) => !!key.path && String(key.cred).toLowerCase() === hash);
+};
+
+/**
  * Helper function to get owned keypaths and addresses for hash-based signing
  */
 const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Transaction, utxos: Cardano.Utxo[]) => {
   const ownedKeypathList: CryptoKeypath[] = [];
   const ownedAddressList: string[] = [];
   const addedPaths = new Set<string>(); // Track added paths to avoid duplicates
+  const addKey = (key: Key) => {
+    if (addedPaths.has(key.path)) return;
+    ownedKeypathList.push(createCryptoKeypath(key.path, xfp));
+    if (key.address) ownedAddressList.push(key.address);
+    addedPaths.add(key.path);
+  };
 
   const inputs = tx.body().inputs().values();
 
@@ -192,24 +209,22 @@ const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Trans
       const foundKey = keys.payment.find(k => k.address === address)
                     || keys.change.find(k => k.address === address);
 
-      if (foundKey && !addedPaths.has(foundKey.path)) {
-        ownedKeypathList.push(createCryptoKeypath(foundKey.path, xfp));
-        ownedAddressList.push(foundKey.address);
-        addedPaths.add(foundKey.path);
-      }
+      if (foundKey) addKey(foundKey);
     }
   });
 
-  // Also check for stake key if there are certificates or withdrawals
+  // Required signers that are this wallet's keys (DEX and other contract transactions)
   const txCore = tx.toCore();
+  txCore.body.requiredExtraSignatures?.forEach((keyHash: Ed25519KeyHashHex) => {
+    const key = ownRequiredSignerKey(keys, keyHash);
+    if (key) addKey(key);
+  });
+
+  // Also check for stake key if there are certificates or withdrawals
   if ((txCore.body.certificates && txCore.body.certificates.length > 0) ||
       (txCore.body.withdrawals && txCore.body.withdrawals.length > 0)) {
     const stakeKey = keys.stake[0];
-    if (stakeKey && !addedPaths.has(stakeKey.path)) {
-      ownedKeypathList.push(createCryptoKeypath(stakeKey.path, xfp));
-      ownedAddressList.push(stakeKey.address);
-      addedPaths.add(stakeKey.path);
-    }
+    if (stakeKey) addKey(stakeKey);
   }
 
   return { ownedKeypathList, ownedAddressList };
@@ -278,57 +293,45 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
     // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
     const txCore = tx.toCore();
 
-    // Check for required signers (used by DEX transactions and other contracts)
-    const requiredSigners = txCore.body.requiredExtraSignatures;
-    if (requiredSigners && requiredSigners.length > 0) {
-      debugLog('[Keystone] Found required signers:', requiredSigners.length);
+    // One extra signer per key hash: a key that a required signer, a certificate and
+    // a withdrawal all name signs once. Credentials are compared by hash, since each
+    // certificate and withdrawal carries its own Credential object.
+    const signerHashes = new Set<string>();
+    const addSigner = (keyHash: string, keyPath: string) => {
+      if (signerHashes.has(keyHash)) return;
+      signerHashes.add(keyHash);
+      extraSigners.push({ keyHash, xfp, keyPath });
+    };
 
-      // For each required signer, check if it's our stake key
-      requiredSigners.forEach((keyHash: Ed25519KeyHashHex) => {
-        debugLog('[Keystone] Required signer key hash:', keyHash);
-
-        // Check if this matches our stake key hash
-        const stakeKey = keys.stake[0];
-        if (stakeKey) {
-          // We need to compare the key hash from the transaction with our stake key hash
-          // The stake key path is m/1852'/1815'/<account>'/2/0, the account the wallet record holds
-          extraSigners.push({
-            keyHash: keyHash,
-            xfp,
-            keyPath: stakeKey.path
-          });
-          debugLog('[Keystone] Added stake key to extraSigners:', stakeKey.path);
-        }
-      });
-    }
+    // Required signers (used by DEX transactions and other contracts) that are this
+    // wallet's keys, each at its own path. A key that signs an owned input already
+    // witnesses the transaction.
+    const requiredSigners = txCore.body.requiredExtraSignatures ?? [];
+    debugLog('[Keystone] Found required signers:', requiredSigners.length);
+    const inputPaths = new Set(keystoneUtxos.map((utxo) => utxo.hdPath));
+    requiredSigners.forEach((keyHash: Ed25519KeyHashHex) => {
+      const key = ownRequiredSignerKey(keys, keyHash);
+      if (key && !inputPaths.has(key.path)) addSigner(keyHash, key.path);
+    });
 
     // Also check for certificates and withdrawals (for staking operations)
     if ((txCore.body.certificates && txCore.body.certificates.length > 0) || (txCore.body.withdrawals && txCore.body.withdrawals.length > 0)) {
-      // By hash: a certificate and a withdrawal for the same stake key carry two
-      // distinct Credential objects, and the key signs once.
-      const credsNeeded = new Set<Cardano.Credential['hash']>();
+      const stakePath = keys.stake[0]?.path || '';
       if (txCore.body.certificates) {
         txCore.body.certificates.forEach((cert: Cardano.Certificate) => {
           // Check if certificate has stakeCredential property (all stake-related certs do)
           if ('stakeCredential' in cert && cert.stakeCredential) {
-            credsNeeded.add(cert.stakeCredential.hash);
+            addSigner(cert.stakeCredential.hash, stakePath);
           }
         })
       }
       if (txCore.body.withdrawals && txCore.body.withdrawals.length > 0) {
         txCore.body.withdrawals.forEach((withdrawal: Cardano.Withdrawal) => {
           if (withdrawal.stakeAddress === walletData.stakeAddress) {
-            credsNeeded.add(rewardAddressCredential(withdrawal.stakeAddress).hash);
+            addSigner(rewardAddressCredential(withdrawal.stakeAddress).hash, stakePath);
           }
         })
       }
-      credsNeeded.forEach((keyHash) => {
-        extraSigners.push({
-          keyHash,
-          xfp,
-          keyPath: keys.stake[0]?.path || ''
-        });
-      })
     }
     return {keystoneUtxos, extraSigners}
   }

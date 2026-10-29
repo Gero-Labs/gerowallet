@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
-import { CardanoSignature, CardanoSignDataSignature, CardanoSignRequest } from '@keystonehq/bc-ur-registry-cardano';
-import { CryptoHDKey, CryptoKeypath, CryptoMultiAccounts, PathComponent, QRHardwareCall } from '@keystonehq/bc-ur-registry';
+import {
+  CardanoSignature, CardanoSignDataSignature, CardanoSignRequest, CardanoSignTxHashRequest,
+} from '@keystonehq/bc-ur-registry-cardano';
+import { CryptoHDKey, CryptoKeypath, CryptoMultiAccounts, DataItem, PathComponent, QRHardwareCall } from '@keystonehq/bc-ur-registry';
 import { KeystoneSDK, UR, URDecoder } from '@keystonehq/keystone-sdk';
 import { HDKey } from '@scure/bip32';
 import { mnemonicToSeedSync } from 'bip39';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import type { Keys } from '@/models/types';
 import {
   createKeystoneSignRequest, generateBitcoinPSBTQR, generateBitcoinSyncQR, getKeystoneAccountsUR, parseBitcoinSignature,
@@ -180,44 +182,91 @@ describe('Keystone multi-account pairing', () => {
 });
 
 // A withdrawal names a reward address, which is not a base address: reading its
-// credential as one threw and failed every Keystone reward withdrawal.
-describe('Keystone Cardano sign request: stake key signers', () => {
+// credential as one threw and failed every Keystone reward withdrawal. Required
+// signers were all sent at the stake key path, whoever's key they named.
+describe('Keystone Cardano sign request: extra signers', () => {
   // Synthetic hashes, never a real wallet's keys.
   const keyHash = (fill: string) => ({ type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(fill.repeat(28)) });
   const stakeCred = keyHash('aa');
   const paymentCred = keyHash('bb');
+  const otherPaymentCred = keyHash('dd');
+  const changeCred = keyHash('ee');
+  const foreignHash = Ed25519KeyHashHex('cc'.repeat(28));
+  const signerHash = (cred: Cardano.Credential) => Ed25519KeyHashHex(cred.hash);
   const rewardAccount = (cred: Cardano.Credential) => Cardano.RewardAccount(
     Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Mainnet, cred).toAddress().toBech32(),
   );
-  const stakeAddress = rewardAccount(stakeCred);
-  const paymentAddress = Cardano.PaymentAddress(
-    Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Mainnet, paymentCred, stakeCred).toAddress().toBech32(),
+  const baseAddress = (payment: Cardano.Credential) => Cardano.PaymentAddress(
+    Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Mainnet, payment, stakeCred).toAddress().toBech32(),
   );
+  const stakeAddress = rewardAccount(stakeCred);
+  const paymentAddress = baseAddress(paymentCred);
   // An added account (#1), so a path hardcoded to account 0' would show.
+  const PAYMENT_PATH = "m/1852'/1815'/1'/0/0";
+  const OTHER_PAYMENT_PATH = "m/1852'/1815'/1'/0/1";
+  const CHANGE_PATH = "m/1852'/1815'/1'/1/0";
   const STAKE_PATH = "m/1852'/1815'/1'/2/0";
   const keys: Keys = {
-    ccCold: [], ccHot: [], change: [], drep105: [], drep129: [], script: [],
-    payment: [{ address: paymentAddress, cred: paymentCred.hash, path: "m/1852'/1815'/1'/0/0" }],
+    ccCold: [], ccHot: [], drep105: [], drep129: [], script: [],
+    payment: [
+      { address: paymentAddress, cred: paymentCred.hash, path: PAYMENT_PATH },
+      { address: baseAddress(otherPaymentCred), cred: otherPaymentCred.hash, path: OTHER_PAYMENT_PATH },
+    ],
+    change: [{ address: baseAddress(changeCred), cred: changeCred.hash, path: CHANGE_PATH }],
     stake: [{ address: stakeAddress, cred: stakeCred.hash, path: STAKE_PATH }],
   };
+  // Only the first payment key holds an input.
   const txIn = { txId: Cardano.TransactionId('11'.repeat(32)), index: 0 };
   const utxos: Cardano.Utxo[] = [[{ ...txIn, address: paymentAddress }, { address: paymentAddress, value: { coins: 5_000_000n } }]];
   const voteDelegation: Cardano.Certificate = {
     __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: stakeCred, dRep: { __typename: 'AlwaysAbstain' },
   };
 
-  const tx = (body: Partial<Cardano.TxBody>) => Serialization.Transaction.fromCore({
+  const tx = (body: Partial<Cardano.TxBody>, outputCount = 1) => Serialization.Transaction.fromCore({
     id: Cardano.TransactionId('00'.repeat(32)),
-    body: { inputs: [txIn], outputs: [{ address: paymentAddress, value: { coins: 4_800_000n } }], fee: 200_000n, ...body },
+    body: {
+      inputs: [txIn], fee: 200_000n, ...body,
+      outputs: Array.from({ length: outputCount }, () => ({ address: paymentAddress, value: { coins: 1_000_000n } })),
+    },
     witness: { signatures: new Map() },
   });
+  const request = (body: Partial<Cardano.TxBody>, outputCount?: number) =>
+    createKeystoneSignRequest(tx(body, outputCount), { xfp: '0a1b2c3d', stakeAddress }, utxos, keys);
   /** The extra signers the Keystone is asked for, as it decodes the request. */
   const signersOf = (body: Partial<Cardano.TxBody>) => {
-    const response = createKeystoneSignRequest(tx(body), { xfp: '0a1b2c3d', stakeAddress }, utxos, keys);
+    const response = request(body);
     expect(response.useHash).toBe(false);
     return CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()
       .map((signer) => ({ keyHash: signer.getKeyHash().toString('hex'), keyPath: `m/${signer.getKeyPath()}` }));
   };
+
+  it('asks for each required signer that is one of the wallet\'s keys, at that key\'s path', () => {
+    expect(signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(changeCred), signerHash(stakeCred)] }))
+      .toEqual([
+        { keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH },
+        { keyHash: changeCred.hash, keyPath: CHANGE_PATH },
+        { keyHash: stakeCred.hash, keyPath: STAKE_PATH },
+      ]);
+  });
+
+  it('does not ask again for a required signer whose key already signs an input', () => {
+    expect(signersOf({ requiredExtraSignatures: [signerHash(paymentCred)] })).toEqual([]);
+  });
+
+  it('lists the stake key once when a required signer and a withdrawal both name it', () => {
+    expect(signersOf({ requiredExtraSignatures: [signerHash(stakeCred)], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
+      .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
+  });
+
+  // A transaction of 2048 bytes or more is signed by hash, with the key paths listed.
+  it('asks for the wallet\'s required signers in a hash-signing request', () => {
+    const response = request({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(stakeCred)] }, 40);
+    expect(response.useHash).toBe(true);
+    // Registry 0.5.0's decoder leaves each path as its raw data item, despite the type.
+    const paths = CardanoSignTxHashRequest.fromCBOR(response.ur.cbor).getPaths() as unknown as DataItem[];
+    expect(paths.map((path) => `m/${CryptoKeypath.fromDataItem(path).getPath()}`))
+      .toEqual([PAYMENT_PATH, OTHER_PAYMENT_PATH, STAKE_PATH]);
+  });
 
   it('asks the stake key to sign a withdrawal from the wallet\'s own reward address', () => {
     expect(signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
