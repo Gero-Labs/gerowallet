@@ -243,10 +243,16 @@ describe('Keystone Cardano sign request: extra signers', () => {
   const CHANGE_PATH = "m/1852'/1815'/1'/1/0";
   const STAKE_PATH = "m/1852'/1815'/1'/2/0";
   const DREP_PATH = "m/1852'/1815'/1'/3/0";
+  const CC_COLD_PATH = "m/1852'/1815'/1'/4/0";
+  const CC_HOT_PATH = "m/1852'/1815'/1'/5/0";
   const drepCred = keyHash('9a');
+  const ccColdCred = keyHash('4c');
+  const ccHotCred = keyHash('5d');
   // Synthetic DRep IDs: a DRep ID is not an address, so no request may list it as one.
   const keys: Keys = {
-    ccCold: [], ccHot: [], script: [],
+    ccCold: [{ cred: ccColdCred.hash, path: CC_COLD_PATH }],
+    ccHot: [{ cred: ccHotCred.hash, path: CC_HOT_PATH }],
+    script: [],
     drep105: [{ address: 'drep1synthetic105', cred: drepCred.hash, path: DREP_PATH }],
     drep129: [{ address: 'drep1synthetic129', cred: drepCred.hash, path: DREP_PATH }],
     payment: [
@@ -306,6 +312,15 @@ describe('Keystone Cardano sign request: extra signers', () => {
   }];
   const drepVoter = (cred: Cardano.Credential): Cardano.Voter => ({
     __typename: Cardano.VoterType.dRepKeyHash, credential: { type: Cardano.CredentialType.KeyHash, hash: cred.hash },
+  });
+  const committeeVoter = (cred: Cardano.Credential): Cardano.Voter => ({
+    __typename: Cardano.VoterType.ccHotKeyHash, credential: { type: Cardano.CredentialType.KeyHash, hash: cred.hash },
+  });
+  const committeeHotAuthorization = (coldCredential: Cardano.Credential, hotCredential: Cardano.Credential): Cardano.Certificate => ({
+    __typename: Cardano.CertificateType.AuthorizeCommitteeHot, coldCredential, hotCredential,
+  });
+  const committeeResignation = (coldCredential: Cardano.Credential): Cardano.Certificate => ({
+    __typename: Cardano.CertificateType.ResignCommitteeCold, coldCredential, anchor: null,
   });
   const voteDelegationOf = (stakeCredential: Cardano.Credential): Cardano.Certificate => ({
     __typename: Cardano.CertificateType.VoteDelegation, stakeCredential, dRep: { __typename: 'AlwaysAbstain' },
@@ -424,6 +439,41 @@ describe('Keystone Cardano sign request: extra signers', () => {
     it('asks for the DRep path in a hash-signing request, without listing the DRep ID as an address', async () => {
       const body = { certificates: [drepRegistrationOf(drepCred)] };
       expect(await hashPathsOf(body)).toEqual([PAYMENT_PATH, DREP_PATH]);
+      expect((await hashRequestOf(body)).getAddressList()).toEqual([paymentAddress]);
+    });
+  });
+
+  describe('constitutional committee keys', () => {
+    it('asks the cold key to sign the wallet\'s own hot-key authorization and resignation', async () => {
+      expect(await signersOf({ certificates: [committeeHotAuthorization(ccColdCred, ccHotCred)] }))
+        .toEqual([{ keyHash: ccColdCred.hash, keyPath: CC_COLD_PATH }]);
+      expect(await signersOf({ certificates: [committeeResignation(ccColdCred)] }))
+        .toEqual([{ keyHash: ccColdCred.hash, keyPath: CC_COLD_PATH }]);
+    });
+
+    it('signs nothing for another cold credential or a script, even when the authorized hot key is the wallet\'s', async () => {
+      expect(await signersOf({
+        certificates: [committeeHotAuthorization(foreignStakeCred, ccHotCred), committeeResignation(scriptStakeCred)],
+      })).toEqual([]);
+    });
+
+    it('asks the hot key to sign a vote cast as the wallet\'s committee member, and nothing for another member', async () => {
+      expect(await signersOf({ votingProcedures: voteAs(committeeVoter(ccHotCred)) })).toEqual([{ keyHash: ccHotCred.hash, keyPath: CC_HOT_PATH }]);
+      expect(await signersOf({ votingProcedures: voteAs(committeeVoter(foreignStakeCred)) })).toEqual([]);
+    });
+
+    it('asks for a required signer naming a committee key at that key\'s path, once', async () => {
+      expect(await signersOf({
+        certificates: [committeeResignation(ccColdCred)], requiredExtraSignatures: [signerHash(ccColdCred), signerHash(ccHotCred)],
+      })).toEqual([
+        { keyHash: ccColdCred.hash, keyPath: CC_COLD_PATH },
+        { keyHash: ccHotCred.hash, keyPath: CC_HOT_PATH },
+      ]);
+    });
+
+    it('asks for the committee paths in a hash-signing request, without listing an address for them', async () => {
+      const body = { certificates: [committeeResignation(ccColdCred)], votingProcedures: voteAs(committeeVoter(ccHotCred)) };
+      expect(await hashPathsOf(body)).toEqual([PAYMENT_PATH, CC_COLD_PATH, CC_HOT_PATH]);
       expect((await hashRequestOf(body)).getAddressList()).toEqual([paymentAddress]);
     });
   });

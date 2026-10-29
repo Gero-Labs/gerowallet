@@ -100,7 +100,11 @@ const isOlderFirmware = (version: FirmwareVersion, than: FirmwareVersion): boole
 
 /** The first firmware that answers pairing with its own version; older firmware sends a fixed 1.1.0. */
 const FIRST_FIRMWARE_REPORTING_VERSION: FirmwareVersion = [1, 7, 2];
-/** The first firmware that parses and shows a pool registration certificate. */
+/**
+ * The first firmware that parses and shows a pool registration certificate. Committee
+ * certificates (with their cold and hot credentials) and votes are shown from 1.6.6,
+ * below the first version a Keystone reports, so no recorded firmware is refused them.
+ */
 const POOL_REGISTRATION_FIRMWARE: FirmwareVersion = [1, 5, 8];
 
 /**
@@ -229,7 +233,8 @@ const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | und
 
 /**
  * The wallet's keys by lowercase key hash, as a required signer names them: payment and
- * change keys, then the stake key (the Trezor mapping's order), then the DRep key.
+ * change keys, then the stake key (the Trezor mapping's order), then the DRep key and
+ * the constitutional committee cold and hot keys.
  */
 const ownKeysByHash = (keys: Keys): Map<string, SigningKey> => {
   const byHash = new Map<string, SigningKey>();
@@ -243,8 +248,18 @@ const ownKeysByHash = (keys: Keys): Map<string, SigningKey> => {
   add(keys.stake);
   add(keys.drep105, false);
   add(keys.drep129, false);
+  add(keys.ccCold, false);
+  add(keys.ccHot, false);
   return byHash;
 };
+
+/**
+ * Whether a credential is a key hash the given creds own. With no cred of that kind in
+ * the key set (not expected), any key hash is, as the software signer's resolver does.
+ */
+const isOwnKeyHash = (owned: Set<string>, credential: { type: Cardano.CredentialType; hash: string }) =>
+  credential.type === Cardano.CredentialType.KeyHash
+  && (owned.size === 0 || owned.has(credential.hash.toLowerCase()));
 
 /**
  * The stake credential hashes this wallet's stake key signs for: certificates whose
@@ -285,22 +300,40 @@ const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: stri
 
 /**
  * The DRep credential hashes this wallet's DRep key signs for: its DRep registration,
- * update and retirement certificates, and the votes it casts as that DRep. A key set
- * with no DRep cred (not expected) keeps every key-hash one, as for the stake key.
+ * update and retirement certificates, and the votes it casts as that DRep.
  */
 const ownDrepSignerHashes = (txCore: Cardano.Tx, keys: Keys): string[] => {
   const ownDrepCreds = credsOf(keys.drep105, keys.drep129);
-  const isOwn = (credential: { type: Cardano.CredentialType; hash: string }) =>
-    credential.type === Cardano.CredentialType.KeyHash
-    && (ownDrepCreds.size === 0 || ownDrepCreds.has(credential.hash.toLowerCase()));
   const hashes: string[] = [];
   txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
-    if ('dRepCredential' in cert && cert.dRepCredential && isOwn(cert.dRepCredential)) hashes.push(cert.dRepCredential.hash);
+    if ('dRepCredential' in cert && cert.dRepCredential && isOwnKeyHash(ownDrepCreds, cert.dRepCredential)) hashes.push(cert.dRepCredential.hash);
   });
   txCore.body.votingProcedures?.forEach(({ voter }) => {
-    if (voter.__typename === Cardano.VoterType.dRepKeyHash && isOwn(voter.credential)) hashes.push(voter.credential.hash);
+    if (voter.__typename === Cardano.VoterType.dRepKeyHash && isOwnKeyHash(ownDrepCreds, voter.credential)) hashes.push(voter.credential.hash);
   });
   return hashes;
+};
+
+/**
+ * The constitutional committee credential hashes this wallet signs for: the cold key
+ * for the committee certificates of its cold credential (authorizing a hot credential,
+ * resigning), the hot key for the votes it casts as a committee member. The hot
+ * credential an authorization names does not sign it.
+ */
+const ownCommitteeSignerHashes = (txCore: Cardano.Tx, keys: Keys): { cold: string[]; hot: string[] } => {
+  const ownColdCreds = credsOf(keys.ccCold);
+  const ownHotCreds = credsOf(keys.ccHot);
+  const cold: string[] = [];
+  const hot: string[] = [];
+  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
+    if ((cert.__typename === Cardano.CertificateType.AuthorizeCommitteeHot
+      || cert.__typename === Cardano.CertificateType.ResignCommitteeCold)
+      && isOwnKeyHash(ownColdCreds, cert.coldCredential)) cold.push(cert.coldCredential.hash);
+  });
+  txCore.body.votingProcedures?.forEach(({ voter }) => {
+    if (voter.__typename === Cardano.VoterType.ccHotKeyHash && isOwnKeyHash(ownHotCreds, voter.credential)) hot.push(voter.credential.hash);
+  });
+  return { cold, hot };
 };
 
 /**
@@ -311,8 +344,9 @@ const ownDrepSignerHashes = (txCore: Cardano.Tx, keys: Keys): string[] => {
  * - `extra`: the other witnesses, one per key hash: collateral (the key at the collateral
  *   UTxO's address, as Trezor maps it, unless that key already signs an input), required
  *   signers (DEX orders, a CIP-113 transfer's owner), the stake key for its certificates,
- *   pool ownerships and withdrawals, and the DRep key for its certificates and votes. Any
- *   other hash is not this wallet's to sign: another party signs for it (a multisig).
+ *   pool ownerships and withdrawals, the DRep key for its certificates and votes, and the
+ *   committee cold key for its certificates and hot key for its votes. Any other hash is
+ *   not this wallet's to sign: another party signs for it (a multisig).
  * The firmware signs each extra signer at whatever path it carries, and a key it also
  * signs an input with only once (sign_tx dedupes by public key), so a required signer is
  * listed even when an input's key is the one it names.
@@ -350,6 +384,11 @@ const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], st
   ownStakeSignerHashes(txCore, keys, stakeAddress).forEach((keyHash) => add(keyHash, stakeKey));
   const drepKey = signingKey(keyList(keys.drep105)[0] ?? keyList(keys.drep129)[0], false);
   ownDrepSignerHashes(txCore, keys).forEach((keyHash) => add(keyHash, drepKey));
+  const committee = ownCommitteeSignerHashes(txCore, keys);
+  const ccColdKey = signingKey(keyList(keys.ccCold)[0], false);
+  committee.cold.forEach((keyHash) => add(keyHash, ccColdKey));
+  const ccHotKey = signingKey(keyList(keys.ccHot)[0], false);
+  committee.hot.forEach((keyHash) => add(keyHash, ccHotKey));
 
   return { inputs, extra: [...extra.values()] };
 };
