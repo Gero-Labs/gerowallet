@@ -26,10 +26,10 @@ function txWithVote(voterType: Cardano.VoterType) {
 }
 
 // analyzeTransactionForSignatures(transaction, utxos, addresses, stakeAddress)
-// returns the signer array directly. Empty utxos/addresses are fine here: the
-// voting branch does not consult them.
+// returns the signer array directly. The key set carries the voter's credential as the
+// wallet's own DRep and committee hot key; the voting branch consults nothing else.
 function analyze(tx: never) {
-  return analyzeTransactionForSignatures(tx, [], {} as never, '');
+  return analyzeTransactionForSignatures(tx, [], { drep129: [{ cred: CRED, path: '' }], ccHot: [{ cred: CRED, path: '' }] } as never, '');
 }
 
 describe('analyzeTransactionForSignatures — voting procedures', () => {
@@ -100,6 +100,30 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
   it('adds the CC-hot witness only for our own CC-hot voter', () => {
     const own = keys({ ccHot: [{ cred: CRED, path: '' }] });
     expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.ccHotKeyHash, FOREIGN), [], own, '')).toHaveLength(0);
+  });
+
+  it('signs no certificate or vote when the key set carries no cred of that kind, as the Keystone signer', () => {
+    const stakeCert = { body: { inputs: [], outputs: [], certificates: [{
+      __typename: Cardano.CertificateType.VoteDelegation,
+      stakeCredential: { type: Cardano.CredentialType.KeyHash, hash: CRED },
+      dRep: { __typename: 'AlwaysAbstain' },
+    }] } } as never;
+    expect(analyzeTransactionForSignatures(stakeCert, [], keys({}), '')).toHaveLength(0);
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, CRED), [], keys({}), '')).toHaveLength(0);
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.ccHotKeyHash, CRED), [], keys({}), '')).toHaveLength(0);
+  });
+
+  it('signs a certificate, a vote and a required signer for one key at that key\'s own path, once', () => {
+    const own = keys({ drep129: [{ cred: CRED, path: "m/1852'/1815'/1'/3/2" }] });
+    const tx = { body: {
+      inputs: [], outputs: [], requiredExtraSignatures: [CRED],
+      certificates: [{ __typename: Cardano.CertificateType.RegisterDelegateRepresentative, dRepCredential: { type: Cardano.CredentialType.KeyHash, hash: CRED }, deposit: 500_000_000n, anchor: null }],
+      votingProcedures: [{
+        voter: { __typename: Cardano.VoterType.dRepKeyHash, credential: { type: Cardano.CredentialType.KeyHash, hash: CRED } },
+        votes: [{ actionId: { id: 'a'.repeat(64), actionIndex: 0 }, votingProcedure: { vote: Cardano.Vote.yes, anchor: null } }],
+      }],
+    } } as never;
+    expect(analyzeTransactionForSignatures(tx, [], own, '')).toEqual([{ derivationPath: [ChainDerivations.DREP, 2], type: 'drep' }]);
   });
 
   it('adds the stake witness only for a certificate on our own stake credential', () => {

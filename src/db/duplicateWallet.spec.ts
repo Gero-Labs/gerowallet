@@ -4,11 +4,11 @@
 // createNewWallet, getAllWallets and findExistingWallet all live in that same
 // module — a vi.mock() of it cannot intercept those same-file calls.
 import 'fake-indexeddb/auto';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { bech32 } from 'bech32';
 import { Blockchain, Network, Theme, WalletType } from '@/models/types';
 import type { Wallet } from '@/models/types';
-import { createMpcGoogleWallet, createNewHardwareWallet, createNewWallet, findExistingWallet, getAllWallets, DuplicateWalletError } from '@/db/gero-db';
+import { createMpcGoogleWallet, createNewHardwareWallet, createNewWallet, findExistingWallet, getAllWallets, getDb, DuplicateWalletError } from '@/db/gero-db';
 
 // Fixed test vector — never used to hold funds.
 const MNEMONIC = 'test walk nut penalty hip pave soap entry language right filter choice';
@@ -82,6 +82,46 @@ describe('duplicate hardware pairing', () => {
     // A pairing answer that reports no version leaves the recorded one alone.
     await expect(pair('Keystone again', deviceXpub('c3'))).rejects.toBeInstanceOf(DuplicateWalletError);
     expect((await storedWallets())[firstId].firmwareVersion).toBe('3.2.0');
+  });
+
+  describe('firmware version across the accounts of one device', () => {
+    const XFP = { xfp: 'aabbccdd' };
+    const keystone = (version: string) => ({ ...XFP, firmwareVersion: version });
+
+    it('refreshes the added accounts too when account #0 is paired again', async () => {
+      const head = await pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone('1.7.2'));
+      const added = await pair('Device #1', deviceXpub('e5'), Network.MAINNET, WalletType.Keystone, { ...keystone('1.7.2'), accountIndex: 1, parentWalletId: head });
+
+      await expect(pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone('3.2.0')))
+        .rejects.toBeInstanceOf(DuplicateWalletError);
+
+      const wallets = await storedWallets();
+      expect([wallets[head].firmwareVersion, wallets[added].firmwareVersion]).toEqual(['3.2.0', '3.2.0']);
+    });
+
+    it('refreshes account #0 when a new account joins it', async () => {
+      const head = Object.values(await storedWallets()).find((w) => w.publicKey === deviceXpub('d4'))!.id;
+      await pair('Device #2', deviceXpub('f6'), Network.MAINNET, WalletType.Keystone, { ...keystone('3.4.0'), accountIndex: 2, parentWalletId: head });
+      expect((await storedWallets())[head].firmwareVersion).toBe('3.4.0');
+    });
+
+    it('writes no version onto another kind of wallet with the same key', async () => {
+      const ledger = await pair('Ledger', deviceXpub('a7'), Network.MAINNET, WalletType.Ledger, XFP);
+      await expect(pair('Keystone', deviceXpub('a7'), Network.MAINNET, WalletType.Keystone, keystone('3.4.0')))
+        .rejects.toBeInstanceOf(DuplicateWalletError);
+      expect((await storedWallets())[ledger].firmwareVersion).toBeUndefined();
+    });
+
+    it('still reports the duplicate when the version cannot be written', async () => {
+      const db = await getDb();
+      const update = vi.spyOn(Object.getPrototypeOf(db['wallets']), 'update').mockRejectedValueOnce(new Error('QuotaExceededError'));
+      try {
+        await expect(pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone('3.6.0')))
+          .rejects.toBeInstanceOf(DuplicateWalletError);
+      } finally {
+        update.mockRestore();
+      }
+    });
   });
 
   it('rejects pairing the same device account twice, and stores no second copy', async () => {

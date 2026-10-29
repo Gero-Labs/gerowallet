@@ -509,6 +509,20 @@ describe('Keystone Cardano sign request: extra signers', () => {
       expect(signers).toEqual([STAKE_PATH]);
     });
 
+    it('signs each stake hash with the stake key that has it, not the first one', async () => {
+      const second = keyHash('5e');
+      const SECOND_STAKE_PATH = "m/1852'/1815'/1'/2/1";
+      const twoStakeKeys: Keys = { ...keys, stake: [...keys.stake, { address: rewardAccount(second), cred: second.hash, path: SECOND_STAKE_PATH }] };
+      expect(await signersOf({ certificates: [voteDelegationOf(second)] }, twoStakeKeys))
+        .toEqual([{ keyHash: second.hash, keyPath: SECOND_STAKE_PATH }]);
+    });
+
+    it('adds nothing for a withdrawal matched only by the stake address when no key carries its hash', async () => {
+      const otherStake = keyHash('6f');
+      const elsewhere: Keys = { ...keys, stake: [{ address: rewardAccount(otherStake), cred: otherStake.hash, path: STAKE_PATH }] };
+      expect(await signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }, elsewhere)).toEqual([]);
+    });
+
     it('lists a key once when two of its signers spell its hash in different case', async () => {
       const upperCase = stakeCred.hash.toUpperCase() as unknown as Ed25519KeyHashHex;
       expect(await signersOf({ requiredExtraSignatures: [upperCase], certificates: [voteDelegation] }))
@@ -516,7 +530,7 @@ describe('Keystone Cardano sign request: extra signers', () => {
     });
   });
 
-  // As the software signer's resolver does: a key set that cannot tell, signs.
+  // Neither signer signs for a credential the key set carries no cred for.
   it('pairs no other key\'s hash with the wallet\'s path when the key set carries no cred of that kind', async () => {
     const withoutStakeCred: Keys = { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] };
     expect(await signersOf({ certificates: [voteDelegationOf(foreignStakeCred)] }, withoutStakeCred)).toEqual([]);

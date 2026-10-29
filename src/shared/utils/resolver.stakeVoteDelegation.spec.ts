@@ -23,10 +23,10 @@ function txWithCert(certType: Cardano.CertificateType) {
 }
 
 // analyzeTransactionForSignatures(transaction, utxos, addresses, stakeAddress)
-// returns the signer array directly. Empty utxos/addresses are fine here: the
-// certificate branch does not consult them.
+// returns the signer array directly. The key set carries the certificate's stake
+// credential (the wallet's own); the certificate branch consults nothing else.
 function requiredPaths(certType: Cardano.CertificateType): string[] {
-  const result = analyzeTransactionForSignatures(txWithCert(certType), [], {} as never, '');
+  const result = analyzeTransactionForSignatures(txWithCert(certType), [], { stake: [{ cred: 'a'.repeat(56), path: '' }] } as never, '');
   return result.map(s => JSON.stringify(s.derivationPath));
 }
 

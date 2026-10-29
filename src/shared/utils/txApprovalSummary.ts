@@ -228,7 +228,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
       stakeCredentialIsOwn: null,
     };
     const stakeHash = stakeCredentialHash(cert);
-    if (stakeHash !== null) row.stakeCredentialIsOwn = ctx.ownStakeKeyHashes.has(stakeHash);
+    if (stakeHash !== null) row.stakeCredentialIsOwn = ctx.ownStakeKeyHashes.has(stakeHash.toLowerCase());
     if ('poolId' in cert && cert.poolId) row.poolId = String(cert.poolId);
     if ('deposit' in cert && cert.deposit != null) row.depositAda = formatLovelace(BigInt(cert.deposit as unknown as bigint));
     if ('dRep' in cert && cert.dRep) {
@@ -256,8 +256,8 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
   const votes: ApprovalVote[] = (body.votingProcedures ?? []).map(({ voter, votes: voterVotes }) => {
     const voterHash = String(voter.credential.hash);
     const isOwnVoter =
-      (voter.__typename === Cardano.VoterType.dRepKeyHash && ctx.ownDrepKeyHashes.has(voterHash)) ||
-      (voter.__typename === Cardano.VoterType.ccHotKeyHash && ctx.ownCcHotKeyHashes.has(voterHash));
+      (voter.__typename === Cardano.VoterType.dRepKeyHash && ctx.ownDrepKeyHashes.has(voterHash.toLowerCase())) ||
+      (voter.__typename === Cardano.VoterType.ccHotKeyHash && ctx.ownCcHotKeyHashes.has(voterHash.toLowerCase()));
     return {
       voterType: voter.__typename,
       voterHash,

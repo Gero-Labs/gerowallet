@@ -664,6 +664,28 @@ export async function createNewWallet(
   }
 }
 
+/**
+ * A Keystone reports its firmware version only in its pairing answer. Store it on every
+ * Keystone record of that device (same master fingerprint), the accounts already paired
+ * included, whether this pairing adds a record or is refused as a duplicate, so none keeps a
+ * version from before an update. Only Keystone records are written. Best effort: a failed
+ * write never stops a pairing or hides why one was refused. Takes effect from the next login.
+ */
+async function refreshKeystoneFirmware(wallet: { type?: string; xfp?: string; firmwareVersion?: unknown }): Promise<void> {
+  if (wallet.type !== WalletType.Keystone || !wallet.xfp || typeof wallet.firmwareVersion !== 'string') return;
+  const version = wallet.firmwareVersion;
+  const xfp = wallet.xfp.toLowerCase();
+  try {
+    const stale = Object.values((await getAllWallets()) as Record<string, Wallet & { xfp?: string }>)
+      .filter((w) => w?.type === WalletType.Keystone && String(w.xfp ?? '').toLowerCase() === xfp && w.firmwareVersion !== version);
+    if (stale.length === 0) return;
+    const db: Dexie = await getDb();
+    await Promise.all(stale.map((w) => db['wallets'].update(w.id, { firmwareVersion: version })));
+  } catch (error) {
+    debugLog('[gero-db] Could not refresh the Keystone firmware version:', error);
+  }
+}
+
 export async function createNewHardwareWallet(wallet) {
   // Validate xfp format before creating wallet (for Keystone wallets)
   if (wallet.xfp) {
@@ -672,17 +694,12 @@ export async function createNewHardwareWallet(wallet) {
     }
   }
 
+  await refreshKeystoneFirmware(wallet);
+
   // Pairing the same device again would otherwise store a second copy of the
   // account it already has. A watch wallet has no public key, so never matches.
   const duplicate = await findExistingWallet(wallet);
   if (duplicate) {
-    // Still refused, but a Keystone updated since it was paired reports its new firmware
-    // version here, the one place it reports one: keep the stored record's current, so a
-    // check on it never reads a stale version. It takes effect from the next login.
-    if (typeof wallet.firmwareVersion === 'string' && wallet.firmwareVersion !== duplicate.firmwareVersion) {
-      const db: Dexie = await getDb();
-      await db['wallets'].update(duplicate.id, { firmwareVersion: wallet.firmwareVersion });
-    }
     throw new DuplicateWalletError(duplicate);
   }
 

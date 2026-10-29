@@ -130,6 +130,18 @@ describe('buildTxApprovalSummary', () => {
     expect(s.requiredSigners.map((signer) => signer.isOwn)).toEqual([true, true, true, true, false]);
   });
 
+  it('marks the wallet\'s own certificate and vote whatever case the transaction spells their hash in', () => {
+    const s = buildTxApprovalSummary(tx({
+      certificates: [{ __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: keyCred(OWN_STAKE_HASH.toUpperCase()), dRep: { __typename: 'AlwaysAbstain' } }],
+      votingProcedures: [{
+        voter: { __typename: Cardano.VoterType.dRepKeyHash, credential: keyCred(OWN_DREP_HASH.toUpperCase()) },
+        votes: [{ actionId: { id: TX_ID, actionIndex: 0 }, votingProcedure: { vote: Cardano.Vote.yes, anchor: null } }],
+      }],
+    }), ctx());
+    expect(s.certificates[0].stakeCredentialIsOwn).toBe(true);
+    expect(s.votes[0].isOwnVoter).toBe(true);
+  });
+
   it('flags a body network id or any output (own included) on another network', () => {
     expect(buildTxApprovalSummary(tx({ networkId: Cardano.NetworkId.Mainnet }), ctx()).bodyNetworkMismatch).toBe(true);
     expect(buildTxApprovalSummary(tx({ networkId: Cardano.NetworkId.Testnet }), ctx()).bodyNetworkMismatch).toBe(false);

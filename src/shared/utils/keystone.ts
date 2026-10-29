@@ -379,16 +379,15 @@ const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], st
   const byHash = ownKeysByHash(keys);
   const requiredSigners = txCore.body.requiredExtraSignatures ?? [];
   debugLog('[Keystone] Found required signers:', requiredSigners.length);
-  requiredSigners.forEach((keyHash) => add(keyHash, byHash.get(keyHash.toLowerCase())));
-  const stakeKey = signingKey(keyList(keys.stake)[0]);
-  ownStakeSignerHashes(txCore, keys, stakeAddress).forEach((keyHash) => add(keyHash, stakeKey));
-  const drepKey = signingKey(keyList(keys.drep105)[0] ?? keyList(keys.drep129)[0], false);
-  ownDrepSignerHashes(txCore, keys).forEach((keyHash) => add(keyHash, drepKey));
+  // Each hash is signed by the key that has it, never by the first key of its kind: an extra
+  // signer pairs no hash with another key's path, and a hash the key set doesn't carry (a
+  // withdrawal matched only by the stake address) adds nothing.
+  const signerFor = (keyHash: string) => add(keyHash, byHash.get(keyHash.toLowerCase()));
+  requiredSigners.forEach(signerFor);
+  ownStakeSignerHashes(txCore, keys, stakeAddress).forEach(signerFor);
+  ownDrepSignerHashes(txCore, keys).forEach(signerFor);
   const committee = ownCommitteeSignerHashes(txCore, keys);
-  const ccColdKey = signingKey(keyList(keys.ccCold)[0], false);
-  committee.cold.forEach((keyHash) => add(keyHash, ccColdKey));
-  const ccHotKey = signingKey(keyList(keys.ccHot)[0], false);
-  committee.hot.forEach((keyHash) => add(keyHash, ccHotKey));
+  [...committee.cold, ...committee.hot].forEach(signerFor);
 
   return { inputs, extra: [...extra.values()] };
 };

@@ -656,27 +656,35 @@ export function analyzeTransactionForSignatures(
 
   // Only sign for credentials this wallet owns. A stake/DRep/CC witness for a
   // credential that isn't ours authorises nothing, and adding it hides what the
-  // tx really does. If the key set carries no creds of a kind (not expected
-  // for a normal wallet), fall back to the old behaviour rather than drop a
-  // witness the wallet's own action needs.
+  // tx really does. A key set with no cred of a kind owns none of that kind, as
+  // the Keystone signer judges it, so both signers ask for the same keys.
   const keySet = (addresses ?? {}) as Partial<Keys>;
   const ownStakeCreds = credSet(keySet.stake);
   const ownDrepCreds = credSet(keySet.drep105, keySet.drep129);
   const ownCcHotCreds = credSet(keySet.ccHot);
   const ownCcColdCreds = credSet(keySet.ccCold);
-  const ownedOrUnknown = (owned: Set<string>, hash: unknown) =>
-    owned.size === 0 || (typeof hash === 'string' && owned.has(hash.toLowerCase()));
+  const isOwnCred = (owned: Set<string>, hash: unknown) => typeof hash === 'string' && owned.has(hash.toLowerCase());
+  // The path a role's key signs at: the key set's own path for the key with that hash, as the
+  // required-signer search below signs it, else index 0 of the role. So a key named by a
+  // certificate and by a required signer is one signer, at one path.
+  const rolePath = (lists: Array<Array<{ cred?: string; path?: string }> | undefined>, role: number, hash: unknown): number[] => {
+    const wanted = String(hash ?? '').toLowerCase();
+    const key = lists.flatMap((list) => (Array.isArray(list) ? list : [])).find((k) => String(k?.cred ?? '').toLowerCase() === wanted);
+    return key?.path ? parseDerivationPath(key.path) : [role, 0];
+  };
+  const drepKeys = [keySet.drep105, keySet.drep129];
+  const rewardAccountHash = (account: Cardano.RewardAccount): string | undefined => {
+    try {
+      return Cardano.RewardAccount.toHash(account);
+    } catch {
+      return undefined;
+    }
+  };
   // A reward account is the wallet's when it is its stake address or carries one of its stake
   // key hashes, as the Keystone signer matches it, so a caller without the stake address
   // (a fee estimate, say) still counts the witness.
-  const isOwnRewardAccount = (account: Cardano.RewardAccount) => {
-    if (stakeAddress && account === stakeAddress) return true;
-    try {
-      return ownStakeCreds.has(Cardano.RewardAccount.toHash(account).toLowerCase());
-    } catch {
-      return false;
-    }
-  };
+  const isOwnRewardAccount = (account: Cardano.RewardAccount) =>
+    (!!stakeAddress && account === stakeAddress) || isOwnCred(ownStakeCreds, rewardAccountHash(account));
 
   // Check transaction inputs
   for (const input of transaction.body.inputs) {
@@ -751,9 +759,9 @@ export function analyzeTransactionForSignatures(
         // Need stake key signature for both staking and governance operations
         // (including Conway-era certificates), but only for OUR stake credential.
         const certStakeHash = (certificate as { stakeCredential?: { hash?: unknown } }).stakeCredential?.hash;
-        if (certStakeHash === undefined || ownedOrUnknown(ownStakeCreds, certStakeHash)) {
+        if (certStakeHash === undefined || isOwnCred(ownStakeCreds, certStakeHash)) {
           requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+            derivationPath: rolePath([keySet.stake], ChainDerivations.CHIMERIC_ACCOUNT, certStakeHash),
             type: 'stake'
           });
         }
@@ -769,7 +777,7 @@ export function analyzeTransactionForSignatures(
             // If this wallet is an owner (its stake address or stake key hash), require stake key signature
             if (isOwnRewardAccount(owner)) {
               requiredSigners.push({
-                derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+                derivationPath: rolePath([keySet.stake], ChainDerivations.CHIMERIC_ACCOUNT, rewardAccountHash(owner)),
                 type: 'stake'
               });
             }
@@ -790,9 +798,9 @@ export function analyzeTransactionForSignatures(
           certificate.__typename === Cardano.CertificateType.UpdateDelegateRepresentative ||
           certificate.__typename === Cardano.CertificateType.UnregisterDelegateRepresentative) {
         const { dRepCredential } = certificate;
-        if (dRepCredential?.type === Cardano.CredentialType.KeyHash && ownedOrUnknown(ownDrepCreds, dRepCredential.hash)) {
+        if (dRepCredential?.type === Cardano.CredentialType.KeyHash && isOwnCred(ownDrepCreds, dRepCredential.hash)) {
           requiredSigners.push({
-            derivationPath: [ChainDerivations.DREP, 0],
+            derivationPath: rolePath(drepKeys, ChainDerivations.DREP, dRepCredential.hash),
             type: 'drep'
           });
         }
@@ -804,9 +812,9 @@ export function analyzeTransactionForSignatures(
       if (certificate.__typename === Cardano.CertificateType.AuthorizeCommitteeHot ||
           certificate.__typename === Cardano.CertificateType.ResignCommitteeCold) {
         const { coldCredential } = certificate;
-        if (coldCredential?.type === Cardano.CredentialType.KeyHash && ownedOrUnknown(ownCcColdCreds, coldCredential.hash)) {
+        if (coldCredential?.type === Cardano.CredentialType.KeyHash && isOwnCred(ownCcColdCreds, coldCredential.hash)) {
           requiredSigners.push({
-            derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 0],
+            derivationPath: rolePath([keySet.ccCold], ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, coldCredential.hash),
             type: 'ccCold'
           });
         }
@@ -827,9 +835,9 @@ export function analyzeTransactionForSignatures(
       switch (group.voter?.__typename) {
         case Cardano.VoterType.dRepKeyHash:
           // Only when the voter is this wallet's own DRep key.
-          if (ownedOrUnknown(ownDrepCreds, group.voter.credential?.hash)) {
+          if (isOwnCred(ownDrepCreds, group.voter.credential?.hash)) {
             requiredSigners.push({
-              derivationPath: [ChainDerivations.DREP, 0],
+              derivationPath: rolePath(drepKeys, ChainDerivations.DREP, group.voter.credential?.hash),
               type: 'drep'
             });
           }
@@ -841,9 +849,9 @@ export function analyzeTransactionForSignatures(
           (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
           break;
         case Cardano.VoterType.ccHotKeyHash:
-          if (ownedOrUnknown(ownCcHotCreds, group.voter.credential?.hash)) {
+          if (isOwnCred(ownCcHotCreds, group.voter.credential?.hash)) {
             requiredSigners.push({
-              derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
+              derivationPath: rolePath([keySet.ccHot], ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, group.voter.credential?.hash),
               type: 'ccHot'
             });
           }
@@ -862,7 +870,7 @@ export function analyzeTransactionForSignatures(
       if (isOwnRewardAccount(rewardAddress.stakeAddress)) {
         // Need stake key signature for withdrawal
         requiredSigners.push({
-          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+          derivationPath: rolePath([keySet.stake], ChainDerivations.CHIMERIC_ACCOUNT, rewardAccountHash(rewardAddress.stakeAddress)),
           type: 'stake'
         });
       }
@@ -913,17 +921,12 @@ export function analyzeTransactionForSignatures(
       // (index 0 of its role when the key set carries none, as the certificate and vote branches
       // above sign them). Only a hash the key set carries counts: a required signer is often
       // another party's key (a multisig).
-      const governanceKeys: Array<[Array<{ cred?: string; path?: string }> | undefined, number, string]> = [
-        [keySet.drep105, ChainDerivations.DREP, 'drep'],
-        [keySet.drep129, ChainDerivations.DREP, 'drep'],
-        [keySet.ccCold, ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 'ccCold'],
-        [keySet.ccHot, ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 'ccHot'],
-      ];
-      for (const [list, role, type] of foundMatch ? [] : governanceKeys) {
-        const key = (Array.isArray(list) ? list : []).find((k) => String(k?.cred ?? '').toLowerCase() === hash);
-        if (!key) continue;
-        requiredSigners.push({ derivationPath: key.path ? parseDerivationPath(key.path) : [role, 0], type });
-        break;
+      if (!foundMatch) {
+        const roleKey = ownDrepCreds.has(hash) ? { lists: drepKeys, role: ChainDerivations.DREP, type: 'drep' }
+          : ownCcColdCreds.has(hash) ? { lists: [keySet.ccCold], role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, type: 'ccCold' }
+            : ownCcHotCreds.has(hash) ? { lists: [keySet.ccHot], role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, type: 'ccHot' }
+              : undefined;
+        if (roleKey) requiredSigners.push({ derivationPath: rolePath(roleKey.lists, roleKey.role, hash), type: roleKey.type });
       }
     }
   }
