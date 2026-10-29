@@ -370,6 +370,7 @@ describe('worker patches', () => {
       expect(__geroCashbackPage('/index.html#/cashback?tab=deals', configured)).toBe(`chrome-extension://${EXT_ID}/index.html#/cashback?tab=deals`);
       for (const url of ['chrome://settings', 'https://evil.example/', 'http://portal.bringweb3.io/',
         `chrome-extension://${EXT_ID}/index.html#/settings`, `chrome-extension://${EXT_ID}/index.html#/cashbackx`,
+        `chrome-extension://${EXT_ID}/index.html?mode=privateKey#/cashback`, `chrome-extension://${EXT_ID}/index.html?tabId=1#/cashback`,
         'chrome-extension://another-extension-id/index.html#/cashback', 'javascript:alert(1)', '', undefined]) {
         expect(__geroCashbackPage(url, configured)).toBe(configured);
       }

@@ -20,13 +20,6 @@ export const ORDER_LEG_FLOOR_LOVELACE = 12_000_000n;
  */
 export const NO_ORDER_LOVELACE = 2_000_000n;
 
-/**
- * Room on top of the quote's `estimatedTxFeeLovelace`: the network fee is
- * estimated before the order is built, and the built transaction may cost a
- * little more.
- */
-export const NETWORK_FEE_MARGIN_LOVELACE = 1_000_000n;
-
 /** The budget when nothing more specific is known: no tokens, a little ADA. */
 export const DEFAULT_ORDER_SPEND_BOUND: SpendBound = {
   maxOutflow: new Map([['lovelace', NO_ORDER_LOVELACE]]),
@@ -41,7 +34,6 @@ export interface SwapRouteLike {
   aggregatorFeeLovelace?: string | number | null;
   batcherFeeLovelace?: string | number | null;
   partnerFeeLovelace?: string | number | null;
-  estimatedTxFeeLovelace?: string | number | null;
   orderDepositLovelace?: string | number | null;
   executionBudgetLovelace?: string | number | null;
 }
@@ -87,13 +79,15 @@ function orderReserve(route: SwapRouteLike): bigint {
 /**
  * What a swap may take: the quoted amount of the sold token, plus the order's
  * ADA leg as the widget itself counts it (deposit, execution budget, aggregator,
- * batcher, partner and network fees; its change reserve comes back, so it is not
- * counted), with a margin on the estimated network fee. Never below the floor.
+ * batcher and partner fees; its change reserve comes back, so it is not
+ * counted). Never below the floor. The network fee is not part of it:
+ * verifySpendBound allows the transaction's own fee on top, and refuses a fee
+ * over MAX_BUILT_TX_FEE_LOVELACE, so the quote's estimate must not widen the budget.
  */
 export function swapSpendBound(route: SwapRouteLike): SpendBound {
   const amountIn = BigInt(route.amountIn);
   const leg = orderReserve(route) + lovelace(route.aggregatorFeeLovelace) + lovelace(route.batcherFeeLovelace)
-    + lovelace(route.partnerFeeLovelace) + lovelace(route.estimatedTxFeeLovelace) + NETWORK_FEE_MARGIN_LOVELACE;
+    + lovelace(route.partnerFeeLovelace);
   const adaLeg = leg > ORDER_LEG_FLOOR_LOVELACE ? leg : ORDER_LEG_FLOOR_LOVELACE;
   const tokenIn = route.tokenIn.toLowerCase();
   const maxOutflow = new Map<string, bigint>();

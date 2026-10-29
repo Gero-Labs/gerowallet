@@ -67,10 +67,16 @@ export const TOKEN_OUTPUT_LOVELACE_SLACK = 2_000_000n;
  */
 export const DEFAULT_COINS_PER_UTXO_BYTE = 4_310n;
 
-/** The output holds at most the ledger's minimum for it (10% leeway for the builder's rounding). */
+/**
+ * The output holds at most the ledger's minimum for it (10% leeway for the
+ * builder's rounding), counted as the wallet would build it: address and value
+ * only. A datum or reference script the builder attached would raise that
+ * minimum, and with it how much could be sent.
+ */
 function isMinUtxoTopUp(output: Cardano.TxOut, coins: bigint, coinsPerUtxoByte: bigint): boolean {
   try {
-    return coins * 10n <= minAdaRequired(output, coinsPerUtxoByte) * 11n;
+    const bare: Cardano.TxOut = { address: output.address, value: output.value };
+    return coins * 10n <= minAdaRequired(bare, coinsPerUtxoByte) * 11n;
   } catch {
     return false;
   }

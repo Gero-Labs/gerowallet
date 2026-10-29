@@ -80,8 +80,10 @@ export function __geroBringEvent(event, frame) {
 
 /**
  * The page OPEN_CASHBACK_PAGE may open: a deep link into Gero's own cashback page
- * (same extension, same page, a route under it), or one of Bring's own https
- * pages. Anything else opens the configured cashback page.
+ * (same extension, same page and query, a route under it), or one of Bring's own
+ * https pages. Anything else opens the configured cashback page. The query before
+ * the hash is held to the configured one because some pages read it (`?mode=`,
+ * `?tabId=`).
  */
 export function __geroCashbackPage(url, configured) {
   if (typeof url !== 'string' || !url) return configured;
@@ -92,7 +94,8 @@ export function __geroCashbackPage(url, configured) {
       const own = new URL(configured, root);
       const sameRoute = page.hash === own.hash || page.hash.startsWith(`${own.hash}/`) || page.hash.startsWith(`${own.hash}?`);
       // protocol + host, not origin: a chrome-extension: URL's origin can read "null".
-      const samePage = page.protocol === own.protocol && page.host === own.host && page.pathname === own.pathname;
+      const samePage = page.protocol === own.protocol && page.host === own.host && page.pathname === own.pathname
+        && page.search === own.search;
       if (samePage && sameRoute) return page.href;
     }
     if (page.protocol === 'https:' && __geroIsBringOrigin(page.origin)) return page.href;

@@ -82,6 +82,19 @@ describe('verifyTxIntent', () => {
     expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, required * 3n / 2n, bundle)] }), higher)).toEqual([]);
   });
 
+  it('does not let an attached reference script or datum raise the allowed top-up', () => {
+    const bundle: [string, bigint][] = Array.from({ length: 60 }, (_, i) => [`${i.toString(16).padStart(56, '0')}4e4654`, 1n]);
+    const want = intent({ outputs: [send(1_000_000n, bundle)] });
+    const required = minAdaRequired(out(RECIPIENT, 10_000_000n, bundle) as unknown as Cardano.TxOut, DEFAULT_COINS_PER_UTXO_BYTE);
+    const scriptReference = { __type: Cardano.ScriptType.Plutus, bytes: 'ab'.repeat(4000), version: Cardano.PlutusLanguageVersion.V2 };
+    const bloated = { ...out(RECIPIENT, 10_000_000n, bundle), scriptReference } as unknown as Cardano.TxOut;
+    const bloatedRequired = minAdaRequired(bloated, DEFAULT_COINS_PER_UTXO_BYTE);
+    expect(bloatedRequired).toBeGreaterThan(required * 2n);
+    expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, bloatedRequired, bundle), scriptReference }] }), want))
+      .toContain('missingOutput');
+    expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, required, bundle), scriptReference }] }), want)).toEqual([]);
+  });
+
   it('accepts any amount in a send-max output', () => {
     expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, 77_000_000n)] }), intent({ outputs: [send('max')] }))).toEqual([]);
   });
