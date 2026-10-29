@@ -164,7 +164,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
-import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { restoreChainAccent } from '@/shared/composables/restoreChainAccent';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import { Blockchain, type Wallet, type WalletTypeValue } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -501,10 +501,10 @@ onMounted(() => {
 });
 
 // The network step previews its accent by mutating the global Vuetify theme.
-// If onboarding is abandoned (e.g. back to the wallet list), restore the
-// default theme so a not-yet-created wallet never leaves the app re-themed.
+// On the way out, restore the signed-in wallet's accent, or the default theme
+// when there is none, so a not-yet-created wallet never leaves the app re-themed.
 onUnmounted(() => {
-  updateVuetifyTheme(networks.networks[0].blockchain);
+  restoreChainAccent(networks.networks[0].blockchain);
 });
 </script>
 <style scoped>

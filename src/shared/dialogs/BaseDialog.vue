@@ -21,7 +21,10 @@
         </div>
       </div>
       <v-card-title class="pa-0 pb-0">
-        <v-list-item class="px-0" :lines="subtitle ? 'two' : 'one'" style="z-index: 1;">
+        <!-- Fills the title row: v-card-title is a flex row, and a shrink-wrapped item
+             gave the title's 90% max-width too little room, so a title with no longer
+             subtitle beside it wrapped and was clamped to "Transaction…". -->
+        <v-list-item class="px-0" :lines="subtitle ? 'two' : 'one'" style="z-index: 1; flex: 1 1 auto; min-width: 0;">
           <v-avatar class="ml-5 mr-3 my-4" v-if="img" :size="imgSize" rounded="0">
             <!-- imgColor paints the icon in an exact token via mask (crisp,
                  chain-aware); imgStyle is the legacy filter path. -->
