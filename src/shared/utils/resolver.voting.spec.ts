@@ -113,6 +113,39 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
     expect(analyzeTransactionForSignatures(cert(FOREIGN), [], own, '').some(s => s.type === 'stake')).toBe(false);
   });
 
+  describe('required signers', () => {
+    const COLD = 'c'.repeat(56);
+    const HOT = 'e'.repeat(56);
+    const requiring = (...hashes: string[]) => ({ body: { inputs: [], outputs: [], requiredExtraSignatures: hashes } }) as never;
+    const own = keys({ drep129: [{ cred: CRED, path: '' }], ccCold: [{ cred: COLD, path: '' }], ccHot: [{ cred: HOT, path: '' }] });
+
+    it('signs a required signer naming our DRep key or a committee key, at that key\'s role', () => {
+      expect(analyzeTransactionForSignatures(requiring(CRED, COLD, HOT), [], own, '')).toEqual([
+        { derivationPath: [ChainDerivations.DREP, 0], type: 'drep' },
+        { derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 0], type: 'ccCold' },
+        { derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0], type: 'ccHot' },
+      ]);
+    });
+
+    it('matches the hash whatever its case', () => {
+      expect(analyzeTransactionForSignatures(requiring(CRED.toUpperCase()), [], own, ''))
+        .toEqual([{ derivationPath: [ChainDerivations.DREP, 0], type: 'drep' }]);
+    });
+
+    it('signs once when a required signer and our own vote both name the DRep key', () => {
+      const tx = { body: { inputs: [], outputs: [], requiredExtraSignatures: [CRED], votingProcedures: [{
+        voter: { __typename: Cardano.VoterType.dRepKeyHash, credential: { type: Cardano.CredentialType.KeyHash, hash: CRED } },
+        votes: [{ actionId: { id: 'a'.repeat(64), actionIndex: 0 }, votingProcedure: { vote: Cardano.Vote.yes, anchor: null } }],
+      }] } } as never;
+      expect(analyzeTransactionForSignatures(tx, [], own, '')).toEqual([{ derivationPath: [ChainDerivations.DREP, 0], type: 'drep' }]);
+    });
+
+    it('signs nothing for a hash that is not one of our keys, even with no key of that kind to compare against', () => {
+      expect(analyzeTransactionForSignatures(requiring(FOREIGN), [], own, '')).toHaveLength(0);
+      expect(analyzeTransactionForSignatures(requiring(CRED, COLD, HOT), [], keys({}), '')).toHaveLength(0);
+    });
+  });
+
   describe('DRep certificates', () => {
     const credential = (hash: string, type = Cardano.CredentialType.KeyHash) => ({ type, hash });
     const registration = (dRepCredential: { type: Cardano.CredentialType; hash: string }) => ({

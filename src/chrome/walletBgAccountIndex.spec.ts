@@ -9,7 +9,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bech32 } from 'bech32';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Hash28ByteBase16, type Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { Ed25519KeyHashHex, Hash28ByteBase16, type Bip32PrivateKey } from '@cardano-sdk/crypto';
 
 vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: vi.fn() } }));
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
@@ -17,7 +17,7 @@ vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconne
 
 import { WalletBg } from './walletBg';
 import WalletStore from '@/stores/walletStore';
-import { getAddress, getCcColdKey, getDrepKey, getPaymentKeyExternal, getStakeKey } from './serialization';
+import { getAddress, getCcColdKey, getCcHotKey, getDrepKey, getPaymentKeyExternal, getStakeKey } from './serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { InvalidAccountIndexError, withGroupSecrets } from '@/shared/utils/walletAccount';
 import { encryptWithPassword } from '@/shared/utils/crypto';
@@ -168,6 +168,31 @@ describe('WalletBg on account #1', () => {
     expect(signingKeys(witnesses).sort()).toEqual([
       getPaymentKeyExternal(accountXpub(1), 0).hex(),
       getDrepKey(accountXpub(1), 0).hex(),
+    ].sort());
+  });
+
+  it('signs required signers naming its DRep and committee hot keys with that account’s keys', async () => {
+    const bg = bootWallet({ publicKey: accountXpub(1), accountIndex: 1 });
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const address = keys.payment[0].address as Cardano.PaymentAddress;
+    const { utxos } = spendFrom(address);
+    const txCbor = Serialization.Transaction.fromCore({
+      id: Cardano.TransactionId('00'.repeat(32)),
+      body: {
+        inputs: [{ txId: utxos[0][0].txId, index: 0 }],
+        outputs: [{ address, value: { coins: 2_000_000n } }],
+        fee: 200_000n,
+        requiredExtraSignatures: [keys.drep129[0].cred, keys.ccHot[0].cred].map((cred) => Ed25519KeyHashHex(cred)),
+      },
+      witness: { signatures: new Map() },
+    }).toCbor();
+
+    const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
+
+    expect(signingKeys(witnesses).sort()).toEqual([
+      getPaymentKeyExternal(accountXpub(1), 0).hex(),
+      getDrepKey(accountXpub(1), 0).hex(),
+      getCcHotKey(accountXpub(1), 0).hex(),
     ].sort());
   });
 

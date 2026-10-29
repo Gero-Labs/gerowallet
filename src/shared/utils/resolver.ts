@@ -880,6 +880,18 @@ export function analyzeTransactionForSignatures(
           }
         }
       }
+
+      // Else it may name the wallet's DRep key or a committee key, each derived at index 0
+      // of its role, as the certificate and vote branches above sign them. Only a hash the
+      // key set carries counts: a required signer is often another party's key (a multisig).
+      if (!foundMatch) {
+        const hash = String(keyHash).toLowerCase();
+        const roleKey = ownDrepCreds.has(hash) ? { role: ChainDerivations.DREP, type: 'drep' }
+          : ownCcColdCreds.has(hash) ? { role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, type: 'ccCold' }
+            : ownCcHotCreds.has(hash) ? { role: ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, type: 'ccHot' }
+              : undefined;
+        if (roleKey) requiredSigners.push({ derivationPath: [roleKey.role, 0], type: roleKey.type });
+      }
     }
   }
 
