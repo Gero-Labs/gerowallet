@@ -8,8 +8,8 @@
 #    shards, plus legacy) run against that ZIP, extracted. Any failure, or a test that
 #    passed only on retry, stops the release.
 # 4. With dry_run=false, the upload job runs in the chrome-web-store-<channel> environment.
-#    Its required reviewers are the release authorization, and its secrets exist only
-#    there. It tags the commit v<version>, then uploads the same ZIP and submits it.
+#    Its required reviewers are the release authorization, and its store credentials exist
+#    only there. It tags the commit v<version>, then uploads the same ZIP and submits it.
 #
 # Nothing is rebuilt, edited or repacked after step 1.
 # Setup and recovery: .github/runbooks/chrome-web-store.md
@@ -284,6 +284,7 @@ jobs:
     environment: chrome-web-store-${{ inputs.channel }}
     permissions:
       contents: write # the v<version> tag only; see "Tag the release"
+      id-token: write # GitHub's OIDC token for "Get a store access token"; no other step uses it
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       SUBMISSION: ${{ inputs.submission }}
@@ -333,11 +334,30 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${tag}" -f sha="$tag_object" > /dev/null
           echo "Tagged ${GITHUB_SHA} as ${tag}"
 
+      # Keyless store credentials (Workload Identity Federation): Google trades this job's
+      # OIDC token for a one-hour access token of the release service account. Google's
+      # provider admits only this repository's jobs in the chrome-web-store-production
+      # environment. Without CWS_WIF_PROVIDER the step is skipped, and "Upload and submit"
+      # falls back to the CWS_SERVICE_ACCOUNT_JSON or refresh-token secrets. No credentials
+      # file is written, so nothing lands in the workspace for a later step to upload.
+      - name: Get a store access token
+        id: wif
+        if: ${{ vars.CWS_WIF_PROVIDER != '' }}
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.CWS_WIF_PROVIDER }}
+          service_account: ${{ vars.CWS_WIF_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+          export_environment_variables: false
+
       - name: Upload and submit
         env:
           EXTENSION_ID: ${{ needs.verify.outputs.extension_id }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
           CWS_ITEM_ID: ${{ vars.CWS_ITEM_ID }}
+          CWS_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token }}
           CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
           CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
           CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}

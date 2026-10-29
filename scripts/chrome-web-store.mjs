@@ -100,8 +100,14 @@ export function checkE2eQualification(report, { walletSha, archiveSha256 }) {
   return problems;
 }
 
-/** An OAuth access token for the store API: from a service account if one is set, else a refresh token. */
+/**
+ * An OAuth access token for the store API. In order: one the workflow already holds (from
+ * Workload Identity Federation, keyless), a token signed for a service account JSON key,
+ * or one from an OAuth refresh token.
+ */
 export async function accessToken(credentials, { fetch = globalThis.fetch, now = Date.now } = {}) {
+  // google-github-actions/auth asked Google for it, with the store scope, earlier in the job.
+  if (credentials.accessToken) return credentials.accessToken;
   let body;
   if (credentials.serviceAccountJson) {
     const account = JSON.parse(credentials.serviceAccountJson);
@@ -114,7 +120,8 @@ export async function accessToken(credentials, { fetch = globalThis.fetch, now =
   } else {
     const { clientId, clientSecret, refreshToken } = credentials;
     if (!clientId || !clientSecret || !refreshToken) {
-      throw new Error('Set CWS_SERVICE_ACCOUNT_JSON, or all of CWS_CLIENT_ID, CWS_CLIENT_SECRET and CWS_REFRESH_TOKEN');
+      throw new Error('No store credentials. Set the CWS_WIF_PROVIDER and CWS_WIF_SERVICE_ACCOUNT variables (Workload Identity Federation), '
+        + 'or the CWS_SERVICE_ACCOUNT_JSON secret, or all of the CWS_CLIENT_ID, CWS_CLIENT_SECRET and CWS_REFRESH_TOKEN secrets');
     }
     body = new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken });
   }
@@ -277,6 +284,7 @@ async function main({ command, options }, env) {
   if (deployPercentage && options.submission === 'upload-only') throw new Error('A rollout percentage needs a submission');
   const zip = readFileSync(options.zip);
   const token = await accessToken({
+    accessToken: env.CWS_ACCESS_TOKEN,
     serviceAccountJson: env.CWS_SERVICE_ACCOUNT_JSON,
     clientId: env.CWS_CLIENT_ID,
     clientSecret: env.CWS_CLIENT_SECRET,
