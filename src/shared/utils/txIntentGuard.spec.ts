@@ -82,17 +82,27 @@ describe('verifyTxIntent', () => {
     expect(verifyTxIntent(tx({ outputs: [out(RECIPIENT, required * 3n / 2n, bundle)] }), higher)).toEqual([]);
   });
 
-  it('does not let an attached reference script or datum raise the allowed top-up', () => {
-    const bundle: [string, bigint][] = Array.from({ length: 60 }, (_, i) => [`${i.toString(16).padStart(56, '0')}4e4654`, 1n]);
-    const want = intent({ outputs: [send(1_000_000n, bundle)] });
-    const required = minAdaRequired(out(RECIPIENT, 10_000_000n, bundle) as unknown as Cardano.TxOut, DEFAULT_COINS_PER_UTXO_BYTE);
+  it('refuses a requested output that carries a datum, a datum hash or a reference script', () => {
     const scriptReference = { __type: Cardano.ScriptType.Plutus, bytes: 'ab'.repeat(4000), version: Cardano.PlutusLanguageVersion.V2 };
-    const bloated = { ...out(RECIPIENT, 10_000_000n, bundle), scriptReference } as unknown as Cardano.TxOut;
-    const bloatedRequired = minAdaRequired(bloated, DEFAULT_COINS_PER_UTXO_BYTE);
-    expect(bloatedRequired).toBeGreaterThan(required * 2n);
-    expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, bloatedRequired, bundle), scriptReference }] }), want))
-      .toContain('missingOutput');
-    expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, required, bundle), scriptReference }] }), want)).toEqual([]);
+    const extras: Record<string, unknown>[] = [
+      { datum: 0n }, // falsy, still a datum
+      { datum: 42n },
+      { datumHash: 'c'.repeat(64) },
+      { scriptReference },
+    ];
+    const bundle: [string, bigint][] = Array.from({ length: 60 }, (_, i) => [`${i.toString(16).padStart(56, '0')}4e4654`, 1n]);
+    const required = minAdaRequired(out(RECIPIENT, 10_000_000n, bundle) as unknown as Cardano.TxOut, DEFAULT_COINS_PER_UTXO_BYTE);
+    for (const extra of extras) {
+      // At the exact amount asked, and as a send-max output, which accepts any lovelace.
+      expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, 5_000_000n), ...extra }] }), intent())).toContain('missingOutput');
+      expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, 77_000_000n), ...extra }] }), intent({ outputs: [send('max')] })))
+        .toContain('missingOutput');
+      // Nor can one raise the allowed top-up on a token bundle.
+      expect(verifyTxIntent(tx({ outputs: [{ ...out(RECIPIENT, required, bundle), ...extra }] }), intent({ outputs: [send(1_000_000n, bundle)] })))
+        .toContain('missingOutput');
+    }
+    expect(matchIntendedOutputs(tx({ outputs: [{ ...out(RECIPIENT, 5_000_000n), datum: 0n }, out(RECIPIENT, 5_000_000n)] }), [send()]))
+      .toEqual([1]);
   });
 
   it('accepts any amount in a send-max output', () => {
