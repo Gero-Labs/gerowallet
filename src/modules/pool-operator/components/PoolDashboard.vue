@@ -404,6 +404,7 @@
 
 <script setup lang="ts">
 import { ref, toRefs, computed, onMounted, watch } from 'vue';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
@@ -740,8 +741,9 @@ function parsePoolExtendedInfo(data: PoolInfo) {
   try {
     if (data?.pool_extended_info) {
       const parsed = JSON.parse(data.pool_extended_info);
-      const icon = parsed?.info?.url_png_icon_64x64;
-      if (icon && typeof icon === 'string' && icon.startsWith('http')) {
+      // Through Gero's proxies, like every pool icon (thirdPartyImageUrl).
+      const icon = thirdPartyImageUrl(parsed?.info?.url_png_icon_64x64);
+      if (icon) {
         poolIcon.value = icon;
       }
     }

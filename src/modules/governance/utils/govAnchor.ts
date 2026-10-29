@@ -23,6 +23,7 @@
 
 import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared/utils/ipfs';
 import { safeExternalHref } from '@/shared/utils/externalLink';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 
 /**
  * The public gateway an `ipfs://` link is opened through OUTSIDE the extension.
@@ -79,11 +80,23 @@ export function toInAppUrl(raw: unknown): string | null {
 }
 
 /**
+ * An IMAGE the extension page may load, or null: IPFS through the IPFS proxy,
+ * https through Gero's image proxy (so the DRep's host never sees who looks at
+ * the avatar), nothing else. Documents keep using {@link toInAppUrl}: the image
+ * proxy serves images only.
+ */
+export function toInAppImageUrl(raw: unknown): string | null {
+  const path = ipfsPathOf(raw);
+  if (path) return ipfsProxyUrl(path);
+  return thirdPartyImageUrl(safeExternalHref(raw));
+}
+
+/**
  * The avatar URI a DRep published, kept in the form they wrote it.
  *
  * The single source for every DRep face in the app. It deliberately does NOT
- * resolve the URI: `DRepAvatar` runs it through `toInAppUrl`, and it must stay
- * the only place that maps one.
+ * resolve the URI: `DRepAvatar` runs it through `toInAppImageUrl`, and it must
+ * stay the only place that maps one.
  *
  * The bug this replaced: the directory and the profile both read the avatar
  * through `drepImageUrl()`, which resolved via `safeExternalHref` — http(s)
@@ -92,7 +105,7 @@ export function toInAppUrl(raw: unknown): string | null {
  * rendered as one who had not. Nothing errored; the face was simply absent.
  *
  * The value is still scheme-checked, by the SAME mapping the avatar will use: a
- * URI `toInAppUrl` cannot turn into something loadable is not returned at all.
+ * URI `toInAppImageUrl` cannot turn into something loadable is not returned at all.
  */
 export function drepImageSource(record: unknown): string | undefined {
   if (!record || typeof record !== 'object') return undefined;
@@ -103,7 +116,7 @@ export function drepImageSource(record: unknown): string | undefined {
   const raw = (image as Record<string, unknown>)['contentUrl'];
   if (typeof raw !== 'string') return undefined;
   const uri = raw.trim();
-  return uri && toInAppUrl(uri) ? uri : undefined;
+  return uri && toInAppImageUrl(uri) ? uri : undefined;
 }
 
 /**

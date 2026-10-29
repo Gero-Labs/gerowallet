@@ -26,6 +26,25 @@ export function proxiedImageUrl(url: string): string {
 }
 
 /**
+ * An image a third party published for something the wallet shows (a stake
+ * pool's icon from its extended metadata, a DRep's CIP-119 avatar), as the page
+ * may load it: IPFS through the IPFS proxy, https through the image proxy
+ * (proxiedImageUrl), so the host never sees the user's IP next to the pool or
+ * DRep they are looking at. Null for anything else, plain http included.
+ */
+export function thirdPartyImageUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  const gatewayPath = ipfsPathFromGatewayUrl(value);
+  if (gatewayPath) return ipfsProxyUrl(gatewayPath);
+  const ipfs = /^ipfs:\/\/(?:ipfs\/)?(.+)$/i.exec(value);
+  if (ipfs) return detectCIDVersion(ipfs[1].split('/')[0]) != null ? ipfsProxyUrl(ipfs[1]) : null;
+  if (!/^https:\/\/\S+$/i.test(value)) return null;
+  return proxiedImageUrl(value);
+}
+
+/**
  * Placeholder images the icon resolver falls back to for color keywords and
  * unrecognized input. Injected by the caller because the two call sites source
  * them differently: `utils/assets.ts` uses its static imports directly, while

@@ -45,3 +45,31 @@ describe('metadata images', () => {
     expect(without.proxiedImageUrl('https://tracker.example/p.png')).toBe('https://tracker.example/p.png');
   });
 });
+
+describe('third-party images (pool icons, DRep avatars)', () => {
+  it('fetches an https image through the image proxy and Gero\'s own hosts directly', async () => {
+    const { thirdPartyImageUrl } = await load(BACKEND);
+    const icon = 'https://pool.example/icon.png';
+    expect(thirdPartyImageUrl(icon)).toBe(`${BACKEND}/api/img?url=${encodeURIComponent(icon)}`);
+    expect(thirdPartyImageUrl(' https://pool.example/icon.png ')).toBe(`${BACKEND}/api/img?url=${encodeURIComponent(icon)}`);
+    expect(thirdPartyImageUrl('https://assets.gerowallet.io/a.png')).toBe('https://assets.gerowallet.io/a.png');
+  });
+
+  it('maps IPFS onto the IPFS proxy', async () => {
+    const { thirdPartyImageUrl } = await load(BACKEND);
+    const cid = 'QmV7xw3QtGgqWR3PXtJSJdFKkW4ZhELmBwJS6edhVyKFVL';
+    expect(thirdPartyImageUrl(`ipfs://${cid}`)).toContain('/api/ipfs?path=');
+    expect(thirdPartyImageUrl(`ipfs://ipfs/${cid}/a.png`)).toContain('/api/ipfs?path=');
+    expect(thirdPartyImageUrl(`https://ipfs.io/ipfs/${cid}`)).toContain('/api/ipfs?path=');
+    expect(thirdPartyImageUrl('ipfs://not-a-cid')).toBeNull();
+  });
+
+  it('drops everything else: plain http, placeholders, other schemes, nothing', async () => {
+    const { thirdPartyImageUrl } = await load(BACKEND);
+    for (const bad of ['http://pool.example/icon.png', 'http(s) url to pool icon; ...', 'javascript:alert(1)',
+      'data:image/png;base64,AAAA', 'ftp://x/a.png', 'https://two words.example/a.png', '', '   ', undefined, null, 42]) {
+      expect(thirdPartyImageUrl(bad)).toBeNull();
+    }
+  });
+});
+

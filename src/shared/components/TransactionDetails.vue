@@ -250,8 +250,8 @@
                 <template v-if="'poolId' in certificate && certificate.poolId">
                   <dt>{{ $t('swap.pool') }}</dt>
                   <dd>
-                    <v-avatar v-if="currentPoolMeta?.url_png_icon_64x64" size="20">
-                      <v-img :src="currentPoolMeta.url_png_icon_64x64"  />
+                    <v-avatar v-if="currentPoolIcon" size="20">
+                      <v-img :src="currentPoolIcon"  />
                     </v-avatar>
                     <span v-if="txPoolTicker" class="tx-kv__strong">{{ txPoolTicker }}</span>
                     <span class="g-mono">{{ filters.truncate(certificate.poolId) }}</span>
@@ -263,8 +263,8 @@
                   <dt>{{ $t('governance.dRep') }}</dt>
                   <dd class="tx-kv__stack">
                     <span class="tx-kv__row">
-                      <v-avatar v-if="txDRep?.metadata?.meta_json?.body?.image?.contentUrl" size="20">
-                        <v-img :src="txDRep.metadata.meta_json.body.image.contentUrl"  />
+                      <v-avatar v-if="txDRepImage" size="20">
+                        <v-img :src="txDRepImage"  />
                       </v-avatar>
                       <span class="tx-kv__strong">
                         {{ txDRep?.metadata?.meta_json?.body?.givenName || txDRep?.drep_id || drepIds[index].cip129 }}
@@ -433,6 +433,8 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
+import { drepImageSource, toInAppImageUrl } from '@/modules/governance/utils/govAnchor';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -533,9 +535,13 @@ const LEDGER_LIMIT = 6;
 
 const isReportDialogOpen = ref<boolean>(false);
 const currentPoolMeta = ref<{ url_png_icon_64x64?: string } | null>(null);
+// The pool's icon through Gero's proxies, so the operator's host never sees who looks.
+const currentPoolIcon = computed(() => thirdPartyImageUrl(currentPoolMeta.value?.url_png_icon_64x64));
 const txPoolTicker = ref<string | null>(null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const txDRep = ref<any>(null);
+// The DRep's CIP-119 avatar, the same way DRepAvatar loads one (IPFS or https, through Gero's proxies).
+const txDRepImage = computed(() => toInAppImageUrl(drepImageSource(txDRep.value)));
 
 const openSections = ref<Record<string, boolean>>({});
 const showAllInputs = ref(false);

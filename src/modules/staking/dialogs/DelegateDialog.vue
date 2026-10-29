@@ -245,6 +245,7 @@
 </template>
 <script setup lang="ts">
 import { ref, toRefs, watch, computed } from 'vue';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
@@ -372,8 +373,9 @@ const signDelegationTx = async () => {
 const poolExtendedInfo = (pool: DelegationPool | undefined): ExtendedPoolInfo | undefined => {
   if (pool && pool.pool_extended_info) {
     const parsed: ExtendedPoolInfo = JSON.parse(pool.pool_extended_info);
-    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
-      parsed.info.url_png_icon_64x64 = '';
+    // The operator's icon through Gero's proxies, so their host never sees who looks.
+    if (parsed?.info?.url_png_icon_64x64) {
+      parsed.info.url_png_icon_64x64 = thirdPartyImageUrl(parsed.info.url_png_icon_64x64) ?? '';
     }
     return parsed;
   }

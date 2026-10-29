@@ -6,7 +6,7 @@
 // backend proxy — so a DRep with a picture rendered as one without, silently.
 // The two properties below are the ones that must both hold: `ipfs://` survives,
 // and a hostile scheme still does not.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { drepImageSource, drepPayoutAddress } from './govAnchor';
 
 const CID = 'bafybeickzy3mupolsvukd2pt7huyba7a3wkln7vcfr47wnjkna7no6g72u';
@@ -18,13 +18,17 @@ const withImage = (contentUrl: unknown) => ({
 
 describe('drepImageSource', () => {
   it('keeps an ipfs uri exactly as published, unmapped', () => {
-    // Unmapped on purpose: `DRepAvatar` runs it through `toInAppUrl` and must
+    // Unmapped on purpose: `DRepAvatar` runs it through `toInAppImageUrl` and must
     // stay the single place that turns one into something loadable.
     expect(drepImageSource(withImage(`ipfs://${CID}`))).toBe(`ipfs://${CID}`);
   });
 
-  it('keeps an http(s) url', () => {
+  it('keeps an https url', () => {
     expect(drepImageSource(withImage('https://example.org/a.png'))).toBe('https://example.org/a.png');
+  });
+
+  it('drops a plain http url, which could only be fetched in the clear and direct', () => {
+    expect(drepImageSource(withImage('http://example.org/a.png'))).toBeUndefined();
   });
 
   it('drops a scheme the avatar could never load', () => {
@@ -84,3 +88,33 @@ describe('drepPayoutAddress', () => {
     expect(drepPayoutAddress(withPayout('  addr1qxyz  '))).toBe('addr1qxyz');
   });
 });
+
+describe('toInAppImageUrl', () => {
+  const BACKEND = 'https://api.gerowallet.io';
+  afterEach(() => vi.unstubAllEnvs());
+  async function load() {
+    vi.resetModules();
+    vi.stubEnv('VITE_BACKEND_URL', BACKEND);
+    return import('./govAnchor');
+  }
+
+  it('sends an https avatar through the image proxy, so the DRep\'s host never sees who looks', async () => {
+    const { toInAppImageUrl } = await load();
+    const avatar = 'https://drep.example/me.png';
+    expect(toInAppImageUrl(avatar)).toBe(`${BACKEND}/api/img?url=${encodeURIComponent(avatar)}`);
+  });
+
+  it('sends IPFS through the IPFS proxy and drops everything else', async () => {
+    const { toInAppImageUrl } = await load();
+    expect(toInAppImageUrl(`ipfs://${CID}`)).toContain('/api/ipfs?path=');
+    for (const bad of ['http://drep.example/me.png', 'javascript:alert(1)', 'data:image/png;base64,AAAA', '', null]) {
+      expect(toInAppImageUrl(bad)).toBeNull();
+    }
+  });
+
+  it('leaves documents to toInAppUrl, which the image proxy could not serve', async () => {
+    const { toInAppUrl } = await load();
+    expect(toInAppUrl('https://drep.example/rationale.jsonld')).toBe('https://drep.example/rationale.jsonld');
+  });
+});
+
