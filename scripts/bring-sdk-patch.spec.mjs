@@ -114,7 +114,7 @@ async function injectBringPopup(listeners) {
     listener({ from: 'bringweb3', action: 'INJECT', domain: location.href, page: '', iframeUrl: `${BRING_FRAME}/popup`, token: 'tok' }, {}, reply);
   }
   const frame = document.getElementById(`bringweb3-iframe-${EXT_ID}`);
-  expect(frame?.src.startsWith(BRING_FRAME)).toBe(true);
+  expect(new URL(frame?.src ?? 'about:blank').origin).toBe(BRING_FRAME);
   return withWindow(frame);
 }
 

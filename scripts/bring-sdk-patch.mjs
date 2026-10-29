@@ -199,6 +199,11 @@ function countMatches(code, pattern) {
   return [...code.matchAll(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`))].length;
 }
 
+/** `text` as a literal inside a RegExp: every metacharacter escaped, backslash included. */
+function regExpLiteral(text) {
+  return text.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
+}
+
 /**
  * Patch one Bring SDK dist file. Throws, naming every failed pattern, unless
  * every invariant and every patch matches exactly once.
@@ -211,7 +216,7 @@ export function patchBringSdk(code, id = '@bringweb3/chrome-extension-kit') {
   }
   const frameVar = MESSAGE_LISTENER.exec(code)?.[3];
   const optedOut = OPT_OUT_READ.exec(code)?.[4];
-  if (frameVar && !new RegExp(`var ${frameVar.replace(/\$/g, '\\$')}=null`).test(code)) {
+  if (frameVar && !new RegExp(`var ${regExpLiteral(frameVar)}=null`).test(code)) {
     problems.push(`iframe variable ${frameVar} is not a module-level "var ${frameVar}=null"`);
   }
   if (problems.length || !frameVar || !optedOut) {
