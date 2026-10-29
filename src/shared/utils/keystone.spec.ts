@@ -237,8 +237,13 @@ describe('Keystone Cardano sign request: extra signers', () => {
   const OTHER_PAYMENT_PATH = "m/1852'/1815'/1'/0/1";
   const CHANGE_PATH = "m/1852'/1815'/1'/1/0";
   const STAKE_PATH = "m/1852'/1815'/1'/2/0";
+  const DREP_PATH = "m/1852'/1815'/1'/3/0";
+  const drepCred = keyHash('9a');
+  // Synthetic DRep IDs: a DRep ID is not an address, so no request may list it as one.
   const keys: Keys = {
-    ccCold: [], ccHot: [], drep105: [], drep129: [], script: [],
+    ccCold: [], ccHot: [], script: [],
+    drep105: [{ address: 'drep1synthetic105', cred: drepCred.hash, path: DREP_PATH }],
+    drep129: [{ address: 'drep1synthetic129', cred: drepCred.hash, path: DREP_PATH }],
     payment: [
       { address: paymentAddress, cred: paymentCred.hash, path: PAYMENT_PATH },
       { address: baseAddress(otherPaymentCred), cred: otherPaymentCred.hash, path: OTHER_PAYMENT_PATH },
@@ -246,9 +251,14 @@ describe('Keystone Cardano sign request: extra signers', () => {
     change: [{ address: baseAddress(changeCred), cred: changeCred.hash, path: CHANGE_PATH }],
     stake: [{ address: stakeAddress, cred: stakeCred.hash, path: STAKE_PATH }],
   };
-  // Only the first payment key holds an input.
+  // Only the first payment key holds an input; the second holds a UTxO a dApp can take as collateral.
   const txIn = { txId: Cardano.TransactionId('11'.repeat(32)), index: 0 };
-  const utxos: Cardano.Utxo[] = [[{ ...txIn, address: paymentAddress }, { address: paymentAddress, value: { coins: 5_000_000n } }]];
+  const otherIn = { txId: Cardano.TransactionId('22'.repeat(32)), index: 1 };
+  const unknownIn = { txId: Cardano.TransactionId('33'.repeat(32)), index: 0 };
+  const utxos: Cardano.Utxo[] = [
+    [{ ...txIn, address: paymentAddress }, { address: paymentAddress, value: { coins: 5_000_000n } }],
+    [{ ...otherIn, address: baseAddress(otherPaymentCred) }, { address: baseAddress(otherPaymentCred), value: { coins: 5_000_000n } }],
+  ];
   const voteDelegation: Cardano.Certificate = {
     __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: stakeCred, dRep: { __typename: 'AlwaysAbstain' },
   };
@@ -270,14 +280,28 @@ describe('Keystone Cardano sign request: extra signers', () => {
     return CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()
       .map((signer) => ({ keyHash: signer.getKeyHash().toString('hex'), keyPath: `m/${signer.getKeyPath()}` }));
   };
-  /** The key paths a hash-signing request (2048 bytes or more) asks the Keystone for. */
-  const hashPathsOf = (body: Partial<Cardano.TxBody>) => {
+  /** The hash-signing request (2048 bytes or more) the Keystone is sent, as it decodes it. */
+  const hashRequestOf = (body: Partial<Cardano.TxBody>) => {
     const response = request(body, 40);
     expect(response.useHash).toBe(true);
+    return CardanoSignTxHashRequest.fromCBOR(response.ur.cbor);
+  };
+  /** The key paths a hash-signing request asks the Keystone for. */
+  const hashPathsOf = (body: Partial<Cardano.TxBody>) => {
     // Registry 0.5.0's decoder leaves each path as its raw data item, despite the type.
-    const paths = CardanoSignTxHashRequest.fromCBOR(response.ur.cbor).getPaths() as unknown as DataItem[];
+    const paths = hashRequestOf(body).getPaths() as unknown as DataItem[];
     return paths.map((path) => `m/${CryptoKeypath.fromDataItem(path).getPath()}`);
   };
+  const drepRegistrationOf = (dRepCredential: Cardano.Credential): Cardano.Certificate => ({
+    __typename: Cardano.CertificateType.RegisterDelegateRepresentative, dRepCredential, deposit: 500_000_000n, anchor: null,
+  });
+  const voteAs = (voter: Cardano.Voter): Cardano.VotingProcedures => [{
+    voter,
+    votes: [{ actionId: { id: Cardano.TransactionId('44'.repeat(32)), actionIndex: 0 }, votingProcedure: { vote: Cardano.Vote.yes, anchor: null } }],
+  }];
+  const drepVoter = (cred: Cardano.Credential): Cardano.Voter => ({
+    __typename: Cardano.VoterType.dRepKeyHash, credential: { type: Cardano.CredentialType.KeyHash, hash: cred.hash },
+  });
   const voteDelegationOf = (stakeCredential: Cardano.Credential): Cardano.Certificate => ({
     __typename: Cardano.CertificateType.VoteDelegation, stakeCredential, dRep: { __typename: 'AlwaysAbstain' },
   });
@@ -368,6 +392,64 @@ describe('Keystone Cardano sign request: extra signers', () => {
 
     it('lets old firmware sign a transaction without a pool registration', () => {
       expect(onFirmware('1.5.6', { certificates: [voteDelegation] })).not.toThrow();
+    });
+  });
+
+  describe('DRep key', () => {
+    it('asks the DRep key to sign the wallet\'s own DRep registration, and nothing for another DRep', () => {
+      expect(signersOf({ certificates: [drepRegistrationOf(drepCred)] })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
+      expect(signersOf({ certificates: [drepRegistrationOf(foreignStakeCred)] })).toEqual([]);
+    });
+
+    it('asks the DRep key to sign a vote cast as the wallet\'s DRep, and nothing for another voter', () => {
+      expect(signersOf({ votingProcedures: voteAs(drepVoter(drepCred)) })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
+      expect(signersOf({ votingProcedures: voteAs(drepVoter(foreignStakeCred)) })).toEqual([]);
+    });
+
+    it('lists the DRep key once for a DRep registration, a vote and a required signer naming it', () => {
+      expect(signersOf({
+        certificates: [drepRegistrationOf(drepCred)], votingProcedures: voteAs(drepVoter(drepCred)), requiredExtraSignatures: [signerHash(drepCred)],
+      })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
+    });
+
+    it('asks for the DRep path in a hash-signing request, without listing the DRep ID as an address', () => {
+      const body = { certificates: [drepRegistrationOf(drepCred)] };
+      expect(hashPathsOf(body)).toEqual([PAYMENT_PATH, DREP_PATH]);
+      expect(hashRequestOf(body).getAddressList()).toEqual([paymentAddress]);
+    });
+  });
+
+  describe('collateral', () => {
+    it('asks the key holding a collateral UTxO to sign when no input of that key does', () => {
+      expect(signersOf({ collaterals: [otherIn] })).toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
+      expect(hashPathsOf({ collaterals: [otherIn] })).toEqual([PAYMENT_PATH, OTHER_PAYMENT_PATH]);
+    });
+
+    it('does not ask again when an input of the same key signs, nor for a collateral UTxO it does not know', () => {
+      expect(signersOf({ collaterals: [txIn] })).toEqual([]);
+      expect(signersOf({ collaterals: [unknownIn] })).toEqual([]);
+    });
+  });
+
+  describe('key sets and wallet data', () => {
+    it('builds a request from a key set with no stake list', () => {
+      const withoutStake = { ...keys, stake: undefined } as unknown as Keys;
+      expect(signersOf({}, withoutStake)).toEqual([]);
+      expect(signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred)] }, withoutStake))
+        .toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
+    });
+
+    it('asks the stake key to sign a withdrawal by its key hash when the wallet data carries no stake address', () => {
+      const response = createKeystoneSignRequest(tx({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }), { xfp: '0a1b2c3d' }, utxos, keys);
+      const signers = CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()
+        .map((signer) => `m/${signer.getKeyPath()}`);
+      expect(signers).toEqual([STAKE_PATH]);
+    });
+
+    it('lists a key once when two of its signers spell its hash in different case', () => {
+      const upperCase = stakeCred.hash.toUpperCase() as unknown as Ed25519KeyHashHex;
+      expect(signersOf({ requiredExtraSignatures: [upperCase], certificates: [voteDelegation] }))
+        .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
     });
   });
 

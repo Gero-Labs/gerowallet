@@ -24,9 +24,9 @@ export interface VotingCapability {
  *   the multi-vote path is verified on the installed Cardano app version.
  * - Trezor's certificate mapper ends in a terminal throw for governance
  *   certs (trezor.ts:470) and GovTool lists Trezor as delegation-only.
- * - Keystone's extra-signer scan only keys on certificates/withdrawals and
- *   hardcodes the stake key path (keystone.ts:163-181, 253-278), so the DRep
- *   witness path never reaches the device.
+ * - Keystone: the sign request asks for the DRep key on the wallet's own DRep
+ *   votes (`walletSigners` in keystone.ts), and the firmware parses votes, but
+ *   no vote has been signed on a device yet, so voting stays off until one is.
  * - Watch wallets have no keys at all.
  */
 export function votingCapability(
