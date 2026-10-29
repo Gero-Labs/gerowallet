@@ -56,7 +56,10 @@ import { walletManager } from '@/services/walletManager.service';
 import { getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
-import { toNexusNetwork } from '@/api/nexus-tx-api';
+import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
+import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
+import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
+import { cip113TransferNeedsOwnKey } from '@/chrome/cip113Guard';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import type { Cip45Session } from '@/services/cip45/types';
@@ -1599,20 +1602,31 @@ app.add(METHOD.signData, (request, sendResponse) => {
  * CIP113_SIGN_PREFLIGHT for WebUSB), but not by Ledger or Keystone, which sign in
  * document context.
  *
+ * Also refuses a CIP-113 transfer needing one of this wallet's keys (cip113Guard.ts), which
+ * covers a programmable UTxO created since the last sync. Never reads the Send allowance
+ * (cip113Allowance.ts): every dApp path stays refused.
+ *
  * Returns a reason string when the transaction must be refused, else null.
  */
 function refusalForProgrammableInputs(txCbor: unknown): string | null {
   if (typeof txCbor !== 'string' || !txCbor) return null;
   const wallet = walletManager.getWallet();
   if (!wallet?.findProgrammableInputs) return null;
-  // Before the parse, not after: an empty index cannot produce a refusal, and every
-  // signTx with CIP-113 off, or from a wallet holding no programmable tokens, takes this
-  // branch. deserializeCardanoJsSdkTx() on the request path is not free.
-  if (wallet.hasProgrammableInputs && !wallet.hasProgrammableInputs()) return null;
+  const globalScripts = new Set(networks.resolveCip113GlobalScriptHashes(wallet.chain, wallet.network));
+  // Before the parse, not after: with CIP-113 off there is nothing to refuse, and every
+  // signTx on such a network takes this branch. deserializeCardanoJsSdkTx() on the request
+  // path is not free.
+  if (globalScripts.size === 0 && wallet.hasProgrammableInputs && !wallet.hasProgrammableInputs()) return null;
   try {
-    const hits = wallet.findProgrammableInputs(deserializeCardanoJsSdkTx(txCbor));
-    if (hits.length === 0) return null;
-    return `CIP-113: refusing to sign, transaction spends programmable-token UTxOs ${hits.join(', ')}`;
+    const tx = deserializeCardanoJsSdkTx(txCbor);
+    const hits = wallet.findProgrammableInputs(tx);
+    if (hits.length > 0) return `CIP-113: refusing to sign, transaction spends programmable-token UTxOs ${hits.join(', ')}`;
+    // A programmable UTxO not synced yet is missing from the index; a transfer that needs
+    // one of this wallet's keys is moving it all the same (cip113Guard.ts).
+    if (cip113TransferNeedsOwnKey(tx, globalScripts, ownKeys(WalletStore.state.keys).keyHashes)) {
+      return "CIP-113: refusing to sign, transaction runs a programmable-token transfer that needs this wallet's key";
+    }
+    return null;
   } catch (e) {
     // Unparseable here means the signer would fail anyway — don't refuse spuriously.
     debugLog('CIP-113 preflight could not parse transaction:', e);
@@ -1621,14 +1635,67 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
 }
 
 // The same refusal for a signer outside the worker: Trezor over WebUSB signs in a document
-// (trezorDispatch.ts), which cannot read the refusal index, so it asks here first.
+// (trezorDispatch.ts), which cannot read the refusal index, so it asks here first. The one
+// transfer CIP113_PREPARE_TRANSFER verified passes; this does not use its allowance up.
 app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendResponse) => {
   // A worker this message woke may not have restored the wallet yet, and without it the
   // check would pass everything.
   await booted();
-  const refusal = refusalForProgrammableInputs(request.data?.txCbor);
+  let refusal = refusalForProgrammableInputs(request.data?.txCbor);
+  if (refusal) {
+    const wallet = walletManager.getWallet();
+    try {
+      const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
+      if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) refusal = null;
+    } catch {
+      // Unparseable: keep the refusal.
+    }
+  }
   if (refusal) debugLog(refusal);
   sendResponse({ id: request.id, data: { success: true, refused: refusal !== null }, target: TARGET, sender: SENDER.extension });
+});
+
+// Gero's own Send of a CIP-113 token. The page sends only what the user asked for; the
+// worker chooses the inputs, has Nexus build, verifies the result, and only then allows
+// that exact transaction to be signed once (WalletBg.signTx). The CBOR goes back untouched:
+// the page signs and submits these bytes, never a re-encoding.
+app.addToOptions(MessageTypes.CIP113_PREPARE_TRANSFER, async (request, sendResponse) => {
+  const reply = (data: unknown) => sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+  try {
+    await booted();
+    const wallet = walletManager.getWallet();
+    if (!wallet) throw new Cip113PrepareError('WALLET_UNSUPPORTED', 'Wallet instance not available');
+    const prepared = await prepareCip113Transfer(request.data, {
+      walletId: wallet.id,
+      chain: wallet.chain,
+      network: wallet.network,
+      walletType: wallet.type,
+      programmableUtxos: wallet.cip113TransferCandidates(),
+      // Cardano only: prepareCip113Transfer refuses any other chain.
+      ownUtxos: (WalletStore.state.utxos ?? []) as Cardano.Utxo[],
+      keys: WalletStore.state.keys,
+      reservedCollateral: WalletStore.state.collateral,
+      changeAddress: wallet.baseAddress,
+      build: (buildRequest, network) => nexusTxApi.buildCip113Transfer(buildRequest, network),
+    });
+    // Checked again here: the wallet may have switched while Nexus was building.
+    if (walletManager.getWallet()?.id !== wallet.id) {
+      throw new Cip113PrepareError('WALLET_UNSUPPORTED', 'The wallet changed while the transfer was being built');
+    }
+    grantCip113SignAllowance(wallet.id, prepared.txId, prepared.programmableRefs);
+    // A failed co-signature of Nexus pool collateral is then fatal in SIGN_TX, as for DUST.
+    if (prepared.sponsoredCollateralRef) markNexusLent(prepared.sponsoredCollateralRef);
+    reply({ success: true, result: { txCbor: prepared.txCbor, txId: prepared.txId, summary: prepared.summary } });
+  } catch (error) {
+    const prepareError = error instanceof Cip113PrepareError ? error : null;
+    debugLog('CIP-113 prepare refused:', prepareError?.code ?? 'UNEXPECTED');
+    reply({
+      success: false,
+      error: getErrorMessage(error),
+      errorCode: prepareError?.code ?? 'BUILD_FAILED',
+      ...(prepareError?.maxSingleTransfer ? { maxSingleTransfer: prepareError.maxSingleTransfer } : {}),
+    });
+  }
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
@@ -5378,6 +5445,13 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'signTx': {
+        // The same entry refusal as CIP-30 signTx, before the approval UI opens.
+        const programmableRefusal = refusalForProgrammableInputs(params.tx);
+        if (programmableRefusal) {
+          debugLog(programmableRefusal);
+          fail(APIError.Refused.code, CIP113_SIGN_REFUSAL_MESSAGE);
+          break;
+        }
         try {
           const result = await routeCip45SigningRequest(
             'signTx',

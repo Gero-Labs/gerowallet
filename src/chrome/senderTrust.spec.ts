@@ -56,6 +56,10 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_SIGN_PREFLIGHT')).toBe(true);
   });
 
+  it('gates the CIP-113 transfer prepare (it grants the one signing allowance)', () => {
+    expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_PREPARE_TRANSFER')).toBe(true);
+  });
+
   it('gates the Submit API settings (they choose where signed transactions go and hold the auth header)', () => {
     for (const method of ['SET_SUBMIT_API', 'TEST_SUBMIT_API', 'CLEAR_SUBMIT_API']) {
       expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);
