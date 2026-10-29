@@ -251,12 +251,12 @@ const ownKeysByHash = (keys: Keys): Map<string, SigningKey> => {
 };
 
 /**
- * Whether a credential is a key hash the given creds own. With no cred of that kind in
- * the key set (not expected), any key hash is, as the software signer's resolver does.
+ * Whether a credential is a key hash the given creds own. A key set with no cred of that
+ * kind owns none: an extra signer always pairs a key hash with the key that has it, never
+ * someone else's hash with one of the wallet's paths.
  */
 const isOwnKeyHash = (owned: Set<string>, credential: { type: Cardano.CredentialType; hash: string }) =>
-  credential.type === Cardano.CredentialType.KeyHash
-  && (owned.size === 0 || owned.has(credential.hash.toLowerCase()));
+  credential.type === Cardano.CredentialType.KeyHash && owned.has(credential.hash.toLowerCase());
 
 /**
  * The stake credential hashes this wallet's stake key signs for: certificates whose
@@ -264,9 +264,7 @@ const isOwnKeyHash = (owned: Set<string>, credential: { type: Cardano.Credential
  * address as an owner, and withdrawals from that address. A reward address is the
  * wallet's when its key hash is a stake cred of the key set or it is the wallet's own
  * stake address. Another credential (someone else's key, a script) is not this wallet's
- * to sign. A key set with no stake cred (not expected) keeps every key-hash certificate,
- * as the software signer's resolver does, rather than drop a witness the wallet's own
- * action needs.
+ * to sign, and neither is any certificate when the key set carries no stake cred.
  */
 const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: string | undefined): string[] => {
   const ownStakeCreds = credSet(keys.stake);
@@ -284,8 +282,7 @@ const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: stri
       return;
     }
     // Check if certificate has stakeCredential property (all stake-related certs do)
-    if (!('stakeCredential' in cert) || cert.stakeCredential?.type !== Cardano.CredentialType.KeyHash) return;
-    if (ownStakeCreds.size === 0 || ownStakeCreds.has(cert.stakeCredential.hash.toLowerCase())) {
+    if ('stakeCredential' in cert && cert.stakeCredential && isOwnKeyHash(ownStakeCreds, cert.stakeCredential)) {
       hashes.push(cert.stakeCredential.hash);
     }
   });
@@ -434,6 +431,14 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
     // Hash-based signing (for transactions with existing witnesses/scripts)
     const txHash = txCore.id; // Transaction ID is the hash
     debugLog('[Keystone] Using hash-based signing for transaction:', txHash);
+
+    // The device shows a hash request as the hash alone, so the DRep and committee keys never
+    // sign one: they sign only a transaction the Keystone's screen shows in full.
+    const governancePaths = new Set([keys.drep105, keys.drep129, keys.ccCold, keys.ccHot]
+      .flatMap(keyList).map((key) => key.path).filter(Boolean));
+    if (extra.some(({ path }) => governancePaths.has(path))) {
+      throw new Error(i18n.t('wallet.keystoneHashGovernanceKey') as string);
+    }
 
     // The firmware signs every listed path with no dedupe of its own, so a repeated path
     // would add a second witness for the same key.

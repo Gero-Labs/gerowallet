@@ -676,6 +676,13 @@ export async function createNewHardwareWallet(wallet) {
   // account it already has. A watch wallet has no public key, so never matches.
   const duplicate = await findExistingWallet(wallet);
   if (duplicate) {
+    // Still refused, but a Keystone updated since it was paired reports its new firmware
+    // version here, the one place it reports one: keep the stored record's current, so a
+    // check on it never reads a stale version. It takes effect from the next login.
+    if (typeof wallet.firmwareVersion === 'string' && wallet.firmwareVersion !== duplicate.firmwareVersion) {
+      const db: Dexie = await getDb();
+      await db['wallets'].update(duplicate.id, { firmwareVersion: wallet.firmwareVersion });
+    }
     throw new DuplicateWalletError(duplicate);
   }
 

@@ -3494,6 +3494,7 @@ export default {
   'wallet.keystoneSign': 'Firmar con Keystone',
   'wallet.keystoneSigningFailed': 'Falló la firma con Keystone',
   'wallet.keystoneFirmwareNoPoolRegistration': 'Este firmware de Keystone no puede mostrar registros de pool. Actualízalo a la versión {version} o posterior e inténtalo de nuevo.',
+  'wallet.keystoneHashGovernanceKey': 'Esta transacción es demasiado grande para que tu Keystone la muestre, así que no se puede firmar con tu clave de DRep o de comité.',
   'wallet.keystoneSupport': '3 Pro',
   'wallet.ledger': 'Ledger',
   'wallet.ledgerAppClosed': 'La app de Cardano está cerrada',

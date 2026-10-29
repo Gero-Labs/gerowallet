@@ -436,10 +436,13 @@ describe('Keystone Cardano sign request: extra signers', () => {
       })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
     });
 
-    it('asks for the DRep path in a hash-signing request, without listing the DRep ID as an address', async () => {
-      const body = { certificates: [drepRegistrationOf(drepCred)] };
-      expect(await hashPathsOf(body)).toEqual([PAYMENT_PATH, DREP_PATH]);
-      expect((await hashRequestOf(body)).getAddressList()).toEqual([paymentAddress]);
+    // A hash request shows the device only the hash; the DRep key signs only what it shows.
+    it('refuses a hash-signing request that needs the DRep key, and builds one that does not', async () => {
+      await expect(request({ certificates: [drepRegistrationOf(drepCred)] }, 40))
+        .rejects.toThrow('This transaction is too large for your Keystone to show');
+      await expect(request({ requiredExtraSignatures: [signerHash(drepCred)] }, 40))
+        .rejects.toThrow('This transaction is too large for your Keystone to show');
+      expect(await hashPathsOf({ certificates: [drepRegistrationOf(foreignStakeCred)] })).toEqual([PAYMENT_PATH]);
     });
   });
 
@@ -471,10 +474,11 @@ describe('Keystone Cardano sign request: extra signers', () => {
       ]);
     });
 
-    it('asks for the committee paths in a hash-signing request, without listing an address for them', async () => {
-      const body = { certificates: [committeeResignation(ccColdCred)], votingProcedures: voteAs(committeeVoter(ccHotCred)) };
-      expect(await hashPathsOf(body)).toEqual([PAYMENT_PATH, CC_COLD_PATH, CC_HOT_PATH]);
-      expect((await hashRequestOf(body)).getAddressList()).toEqual([paymentAddress]);
+    it('refuses a hash-signing request that needs a committee key', async () => {
+      await expect(request({ certificates: [committeeResignation(ccColdCred)] }, 40))
+        .rejects.toThrow('This transaction is too large for your Keystone to show');
+      await expect(request({ votingProcedures: voteAs(committeeVoter(ccHotCred)) }, 40))
+        .rejects.toThrow('This transaction is too large for your Keystone to show');
     });
   });
 
@@ -513,10 +517,11 @@ describe('Keystone Cardano sign request: extra signers', () => {
   });
 
   // As the software signer's resolver does: a key set that cannot tell, signs.
-  it('keeps signing certificates with the stake key when the key set has no stake cred', async () => {
+  it('pairs no other key\'s hash with the wallet\'s path when the key set carries no cred of that kind', async () => {
     const withoutStakeCred: Keys = { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] };
-    expect(await signersOf({ certificates: [voteDelegationOf(foreignStakeCred)] }, withoutStakeCred))
-      .toEqual([{ keyHash: foreignStakeCred.hash, keyPath: STAKE_PATH }]);
+    expect(await signersOf({ certificates: [voteDelegationOf(foreignStakeCred)] }, withoutStakeCred)).toEqual([]);
+    const withoutDrepCred: Keys = { ...keys, drep105: [{ cred: '', path: DREP_PATH }], drep129: [] };
+    expect(await signersOf({ certificates: [drepRegistrationOf(foreignStakeCred)] }, withoutDrepCred)).toEqual([]);
   });
 
   it('asks the stake key to sign a withdrawal from the wallet\'s own reward address', async () => {
