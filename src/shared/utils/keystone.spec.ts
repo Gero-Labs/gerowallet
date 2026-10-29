@@ -252,6 +252,15 @@ describe('Keystone Cardano sign request: extra signers', () => {
   });
   const foreignStakeCred = keyHash('cc');
   const scriptStakeCred = { type: Cardano.CredentialType.ScriptHash, hash: Hash28ByteBase16('ff'.repeat(28)) };
+  const poolRegistrationOwnedBy = (...owners: Cardano.RewardAccount[]): Cardano.Certificate => ({
+    __typename: Cardano.CertificateType.PoolRegistration,
+    poolParameters: {
+      id: Cardano.PoolId.fromKeyHash(Ed25519KeyHashHex('12'.repeat(28))),
+      vrf: Cardano.VrfVkHex('34'.repeat(32)),
+      pledge: 0n, cost: 340_000_000n, margin: { numerator: 1, denominator: 100 },
+      rewardAccount: rewardAccount(foreignStakeCred), owners, relays: [],
+    },
+  });
 
   it('asks for each required signer that is one of the wallet\'s keys, at that key\'s path', () => {
     expect(signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(changeCred), signerHash(stakeCred)] }))
@@ -292,6 +301,25 @@ describe('Keystone Cardano sign request: extra signers', () => {
     })).toEqual([PAYMENT_PATH]);
     expect(hashPathsOf({ certificates: [voteDelegation] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
     expect(hashPathsOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+  });
+
+  it('asks the stake key to sign a pool registration that lists the wallet as an owner', () => {
+    expect(signersOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred), stakeAddress)] }))
+      .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
+  });
+
+  it('does not sign a pool registration the wallet does not own', () => {
+    expect(signersOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([]);
+  });
+
+  it('lists the stake key once for a pool ownership and a withdrawal of the same key', () => {
+    expect(signersOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
+      .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
+  });
+
+  it('asks for the stake key in a hash-signing request only for a pool the wallet owns', () => {
+    expect(hashPathsOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+    expect(hashPathsOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([PAYMENT_PATH]);
   });
 
   // As the software signer's resolver does: a key set that cannot tell, signs.

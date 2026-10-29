@@ -185,21 +185,30 @@ const ownRequiredSignerKey = (keys: Keys, keyHash: Ed25519KeyHashHex): Key | und
  */
 const rewardAddressCredential = (stakeAddress: string): Cardano.Credential => {
   const rewardAddress = Cardano.RewardAddress.fromAddress(Cardano.Address.fromBech32(stakeAddress));
-  if (!rewardAddress) throw new Error('The withdrawal is not from a reward address');
+  if (!rewardAddress) throw new Error('The stake address is not a reward address');
   return rewardAddress.getPaymentCredential();
 };
 
 /**
  * The stake credential hashes this wallet's stake key signs for: certificates whose
- * stake credential is the wallet's stake key, and withdrawals from its reward address.
- * Another credential (someone else's key, a script) is not this wallet's to sign. A
- * key set with no stake cred (not expected) keeps every certificate, as the software
- * signer's resolver does, rather than drop a witness the wallet's own action needs.
+ * stake credential is the wallet's stake key, pool registrations that list its reward
+ * address as an owner, and withdrawals from that address. Another credential (someone
+ * else's key, a script) is not this wallet's to sign. A key set with no stake cred (not
+ * expected) keeps every stake-credential certificate, as the software signer's
+ * resolver does, rather than drop a witness the wallet's own action needs.
  */
 const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: string | undefined): Cardano.Credential['hash'][] => {
   const ownStakeCreds = new Set(keys.stake.map((key) => String(key.cred ?? '').toLowerCase()).filter(Boolean));
   const hashes: Cardano.Credential['hash'][] = [];
   txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
+    // Each owner of a registered pool signs its registration with that owner's stake key.
+    // The pool's cold key signs too, which is not one of the wallet's keys.
+    if (cert.__typename === Cardano.CertificateType.PoolRegistration) {
+      cert.poolParameters.owners.forEach((owner: Cardano.RewardAccount) => {
+        if (owner === stakeAddress) hashes.push(rewardAddressCredential(owner).hash);
+      });
+      return;
+    }
     // Check if certificate has stakeCredential property (all stake-related certs do)
     if (!('stakeCredential' in cert) || !cert.stakeCredential) return;
     if (ownStakeCreds.size === 0 || ownStakeCreds.has(cert.stakeCredential.hash.toLowerCase())) {
@@ -254,7 +263,7 @@ const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Trans
     if (key) addKey(key);
   });
 
-  // The stake key, when a certificate or withdrawal is the wallet's own
+  // The stake key, when a certificate, pool ownership or withdrawal is the wallet's own
   const stakeKey = keys.stake[0];
   if (stakeKey && ownStakeSignerHashes(txCore, keys, stakeAddress).length > 0) addKey(stakeKey);
 
