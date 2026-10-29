@@ -129,9 +129,32 @@ describe('loadRationale', () => {
     expect(result).toEqual({ status: 'failed', reason: 'network' });
   });
 
-  it('refuses a URL it cannot safely load at all', async () => {
+  it('fetches through gero-backend\'s anchor proxy, never from the author\'s host', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_BACKEND_URL', 'https://api.gerowallet.io');
+    try {
+      const { loadRationale: load } = await import('./rationaleDoc');
+      const bytes = bytesOf('{"body":{"summary":"Why"}}');
+      const fetchImpl = fetching(bytes);
+      await load({ url: 'https://author.example/why.jsonld', hash: hashOf(bytes), fetchImpl });
+      expect(vi.mocked(fetchImpl).mock.calls[0][0])
+        .toBe(`https://api.gerowallet.io/api/anchor?url=${encodeURIComponent('https://author.example/why.jsonld')}`);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('reports the anchor proxy\'s size refusal as too large', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ...response(bytesOf('')), ok: false, status: 413 }) as unknown as typeof fetch;
+    expect(await loadRationale({ url: 'https://a.test/r.json', hash: 'a'.repeat(64), fetchImpl })).toEqual({
+      status: 'failed',
+      reason: 'oversize',
+    });
+  });
+
+  it('refuses a URL it cannot safely load at all, plain http included', async () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
-    for (const url of ['javascript:alert(1)', 'data:text/html,<script>', '']) {
+    for (const url of ['javascript:alert(1)', 'data:text/html,<script>', '', 'http://a.test/r.json']) {
       expect(await loadRationale({ url, hash: 'a'.repeat(64), fetchImpl })).toEqual({
         status: 'failed',
         reason: 'network',

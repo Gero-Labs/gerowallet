@@ -89,7 +89,7 @@ describe('toPositionRows', () => {
   it('carries the anchor through untouched, whatever its scheme', () => {
     // Rationale anchors are author-controlled, so the scheme is theirs to pick.
     // The row does not judge it: the dialog's loader decides what can be
-    // fetched (ipfs through the proxy) and `toInAppUrl` refuses the rest.
+    // fetched (through gero-backend) and `toInAppDocumentUrl` refuses the rest.
     const rows = toPositionRows([
       vote({ rationaleUrl: 'javascript:alert(1)' }),
       vote({ rationaleUrl: 'ipfs://QmSomething' }),

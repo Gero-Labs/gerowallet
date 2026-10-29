@@ -3,13 +3,11 @@ import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 /**
- * An https image named by token or NFT metadata, fetched through Gero's image
- * proxy (`/api/img`, gero-backend) so the issuer's server never sees the user's
- * IP next to the wallet that holds the token: anyone can mint a token pointing at
- * their own server and airdrop it. Gero's own hosts are fetched directly, and
- * without a backend URL (tests, a misconfigured build) the URL is left as is.
+ * An https URL through one of gero-backend's proxies (`route`). Gero's own hosts
+ * are fetched directly, and without a backend URL (tests, a misconfigured build)
+ * the URL is left as is.
  */
-export function proxiedImageUrl(url: string): string {
+function viaBackendProxy(route: string, url: string): string {
   if (!baseUrl) return url;
   let parsed: URL;
   try {
@@ -22,7 +20,27 @@ export function proxiedImageUrl(url: string): string {
   let backendHost = '';
   try { backendHost = new URL(baseUrl).hostname.toLowerCase(); } catch { /* compare by brand only */ }
   if (host === backendHost || host === 'gerowallet.io' || host.endsWith('.gerowallet.io')) return url;
-  return `${baseUrl}/api/img?url=${encodeURIComponent(url)}`;
+  return `${baseUrl}${route}?url=${encodeURIComponent(url)}`;
+}
+
+/**
+ * An https image named by token or NFT metadata, fetched through Gero's image
+ * proxy (`/api/img`, gero-backend) so the issuer's server never sees the user's
+ * IP next to the wallet that holds the token: anyone can mint a token pointing at
+ * their own server and airdrop it.
+ */
+export function proxiedImageUrl(url: string): string {
+  return viaBackendProxy('/api/img', url);
+}
+
+/**
+ * A governance anchor document (a CIP-136 vote rationale) at an https URL,
+ * fetched through gero-backend's `/api/anchor` proxy so the author's host never
+ * sees who reads it. The proxy relays the bytes unchanged: the anchor's on-chain
+ * hash is over them.
+ */
+export function proxiedAnchorUrl(url: string): string {
+  return viaBackendProxy('/api/anchor', url);
 }
 
 /**

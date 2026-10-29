@@ -112,9 +112,18 @@ describe('toInAppImageUrl', () => {
     }
   });
 
-  it('leaves documents to toInAppUrl, which the image proxy could not serve', async () => {
-    const { toInAppUrl } = await load();
-    expect(toInAppUrl('https://drep.example/rationale.jsonld')).toBe('https://drep.example/rationale.jsonld');
+  it('sends a document through the anchor proxy, not the image proxy (images only)', async () => {
+    const { toInAppDocumentUrl } = await load();
+    const doc = 'https://drep.example/rationale.jsonld';
+    expect(toInAppDocumentUrl(doc)).toBe(`${BACKEND}/api/anchor?url=${encodeURIComponent(doc)}`);
+    expect(toInAppDocumentUrl(`ipfs://${CID}`)).toContain('/api/ipfs?path=');
+  });
+
+  it('does not fetch a plain http document at all', async () => {
+    const { toInAppDocumentUrl, toExternalHref } = await load();
+    expect(toInAppDocumentUrl('http://drep.example/rationale.jsonld')).toBeNull();
+    // A new tab can still open it: the browser, not the wallet, contacts the host.
+    expect(toExternalHref('http://drep.example/rationale.jsonld')).toBe('http://drep.example/rationale.jsonld');
   });
 });
 
