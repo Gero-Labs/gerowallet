@@ -87,22 +87,42 @@ function asRecord(value: unknown): ThrottleRecord {
 
 export function createUnlockThrottle(storage: ThrottleStorage = sessionThrottleStorage, now: () => number = Date.now) {
   const keyFor = (walletId: number) => `unlockThrottle:${walletId}`;
+  // The worker's own copy of every record. Storage carries the count across a
+  // worker restart; this copy keeps a storage error (a full session quota, an
+  // unreadable record) from ever loosening the back-off within one worker.
+  const kept = new Map<number, ThrottleRecord>();
+  /** The stricter of the stored record and the worker's copy. Never throws. */
+  async function current(walletId: number): Promise<ThrottleRecord> {
+    const own = kept.get(walletId) ?? { failures: 0, until: 0 };
+    let stored: ThrottleRecord;
+    try {
+      stored = asRecord(await storage.get(keyFor(walletId)));
+    } catch {
+      return own;
+    }
+    return { failures: Math.max(own.failures, stored.failures), until: Math.max(own.until, stored.until) };
+  }
   return {
-    /** Throws `UnlockThrottledError` while `walletId` is in a back-off. */
+    /** Throws `UnlockThrottledError` while `walletId` is in a back-off, and nothing else. */
     async assertAllowed(walletId: number): Promise<void> {
-      const { until } = asRecord(await storage.get(keyFor(walletId)));
+      const { until } = await current(walletId);
       const wait = until - now();
       if (wait > 0) throw new UnlockThrottledError(wait);
     },
-    /** Count a wrong credential. Returns the wait it imposes (0 while attempts are free). */
+    /**
+     * Count a wrong credential. Returns the wait it imposes (0 while attempts are
+     * free). The worker's copy counts it even when storing it fails.
+     */
     async recordFailure(walletId: number): Promise<number> {
-      const record = asRecord(await storage.get(keyFor(walletId)));
-      const failures = record.failures + 1;
+      const failures = (await current(walletId)).failures + 1;
       const wait = unlockDelayAfter(failures);
-      await storage.set(keyFor(walletId), { failures, until: wait > 0 ? now() + wait : 0 });
+      const record = { failures, until: wait > 0 ? now() + wait : 0 };
+      kept.set(walletId, record);
+      await storage.set(keyFor(walletId), record);
       return wait;
     },
     async recordSuccess(walletId: number): Promise<void> {
+      kept.delete(walletId);
       await storage.remove(keyFor(walletId));
     },
   };
@@ -136,11 +156,7 @@ export async function withUnlockThrottle<T>(
   outcome: { rejected: (result: T) => boolean; rejection?: (error: unknown) => boolean },
   throttle: UnlockThrottle = unlockThrottle,
 ): Promise<T> {
-  try {
-    await throttle.assertAllowed(walletId);
-  } catch (e) {
-    if (e instanceof UnlockThrottledError) throw e;
-  }
+  await throttle.assertAllowed(walletId);
   let result: T;
   try {
     result = await attempt();

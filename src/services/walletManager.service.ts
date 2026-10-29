@@ -1114,12 +1114,9 @@ export class WalletManager {
     const settingsWalletId = walletsMap[walletId] ? secretsWallet(walletsMap[walletId], walletsMap).id : walletId;
 
     // Back-off after repeated wrong credentials, enforced here rather than in the
-    // UI. A storage error reading the counter must not lock the user out.
-    try {
-      await unlockThrottle.assertAllowed(settingsWalletId);
-    } catch (e) {
-      if (e instanceof UnlockThrottledError) throw e;
-    }
+    // UI. A storage error reading the counter neither locks the user out nor lifts
+    // a back-off the worker has already counted.
+    await unlockThrottle.assertAllowed(settingsWalletId);
 
     const valid = await this.checkUnlockCredentials(
       walletId, settingsWalletId, walletsMap, unlockCredential, totpCode, password, providedUnlockMethod, useWalletBg, passKeyPrf,

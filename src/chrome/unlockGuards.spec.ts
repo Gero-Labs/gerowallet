@@ -82,6 +82,34 @@ describe('unlock back-off', () => {
     expect(await throttle.recordFailure(1)).toBe(0);
   });
 
+  it('keeps counting, and keeps refusing, when storage cannot be written (a full session quota)', async () => {
+    const storage = memoryStorage();
+    storage.set = async () => { throw new Error('QUOTA_BYTES quota exceeded'); };
+    const throttle = createUnlockThrottle(storage, clock().now);
+    let lastWait = 0;
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS; n++) lastWait = await throttle.recordFailure(4).catch(() => -1);
+    expect(lastWait).toBe(-1); // the write failed, as the caller sees it
+    await expect(throttle.assertAllowed(4)).rejects.toBeInstanceOf(UnlockThrottledError);
+  });
+
+  it('keeps refusing when the stored record cannot be read, and never throws a storage error', async () => {
+    const storage = memoryStorage();
+    const throttle = createUnlockThrottle(storage, clock().now);
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS; n++) await throttle.recordFailure(5);
+    storage.get = async () => { throw new Error('storage unavailable'); };
+    await expect(throttle.assertAllowed(5)).rejects.toBeInstanceOf(UnlockThrottledError);
+    await expect(throttle.assertAllowed(6)).resolves.toBeUndefined();
+  });
+
+  it('a wrong secret still starts the back-off through withUnlockThrottle when storage fails', async () => {
+    const storage = memoryStorage();
+    storage.set = async () => { throw new Error('QUOTA_BYTES quota exceeded'); };
+    const throttle = createUnlockThrottle(storage, clock().now);
+    const wrong = () => withUnlockThrottle(8, async () => false, { rejected: ok => !ok }, throttle);
+    for (let n = 0; n < UNLOCK_FREE_ATTEMPTS; n++) expect(await wrong()).toBe(false);
+    await expect(wrong()).rejects.toBeInstanceOf(UnlockThrottledError);
+  });
+
   it('treats a corrupt stored record as no failures', async () => {
     const storage = memoryStorage();
     storage.data.set('unlockThrottle:9', { failures: 'many', until: 'later' });
