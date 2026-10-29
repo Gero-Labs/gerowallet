@@ -9,6 +9,7 @@ import {
   STORAGE_GETTER,
   __geroBringFrameOrigin,
   __geroBringEvent,
+  __geroCashbackPage,
   __geroIsBringOrigin,
   __geroIsWebUrl,
   bringSdkPatch,
@@ -162,7 +163,7 @@ describe('patchBringSdk on the installed SDK', () => {
     const out = patchBringSdk(code);
     expect(out).not.toContain('document.querySelector(`#${F}-${chrome.runtime.id}`)');
     expect(out).not.toMatch(/walletAddress:[\w$]+\},"\*"\)/);
-    expect(out).not.toMatch(/case"OPEN_CASHBACK_PAGE":let\{url/);
+    expect(out).toContain('__geroCashbackPage(');
     expect(out).toContain('__geroBringEvent(');
     expect(out).toContain('__geroIsWebUrl(');
   });
@@ -356,8 +357,25 @@ describe('stored wallet address while cashback is turned off', () => {
 });
 
 describe('worker patches', () => {
-  it('OPEN_CASHBACK_PAGE ignores the message URL', () => {
-    expect(PATCHED).toMatch(/case"OPEN_CASHBACK_PAGE":return [\w$]+\([\w$]+\),/);
+  it('OPEN_CASHBACK_PAGE opens Gero\'s cashback page or Bring\'s own pages, nothing else', () => {
+    expect(PATCHED).toMatch(/case"OPEN_CASHBACK_PAGE":let\{url:[\w$]+\}=[\w$]+;return [\w$]+\(__geroCashbackPage\(/);
+    const hadChrome = 'chrome' in globalThis;
+    const saved = globalThis.chrome;
+    globalThis.chrome = { runtime: { id: EXT_ID, getURL: (p) => `chrome-extension://${EXT_ID}${p}` } };
+    try {
+      const configured = '/index.html#/cashback';
+      expect(__geroCashbackPage('https://portal.bringweb3.io/offers/42', configured)).toBe('https://portal.bringweb3.io/offers/42');
+      expect(__geroCashbackPage(`chrome-extension://${EXT_ID}/index.html#/cashback/claims`, configured))
+        .toBe(`chrome-extension://${EXT_ID}/index.html#/cashback/claims`);
+      expect(__geroCashbackPage('/index.html#/cashback?tab=deals', configured)).toBe(`chrome-extension://${EXT_ID}/index.html#/cashback?tab=deals`);
+      for (const url of ['chrome://settings', 'https://evil.example/', 'http://portal.bringweb3.io/',
+        `chrome-extension://${EXT_ID}/index.html#/settings`, `chrome-extension://${EXT_ID}/index.html#/cashbackx`,
+        'chrome-extension://another-extension-id/index.html#/cashback', 'javascript:alert(1)', '', undefined]) {
+        expect(__geroCashbackPage(url, configured)).toBe(configured);
+      }
+    } finally {
+      if (hadChrome) globalThis.chrome = saved; else delete globalThis.chrome;
+    }
   });
 
   it('an activation redirect must be http(s)', () => {

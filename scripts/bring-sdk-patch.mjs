@@ -18,7 +18,8 @@
  * iframe's https *.bringweb3.io origin as targetOrigin. It acts only on window
  * messages from an https *.bringweb3.io origin (Bring's iframe, or another
  * wallet's Bring popup announcing an activation). OPEN_CASHBACK_PAGE opens only
- * the configured cashback page, and a redirect must be http(s).
+ * Gero's own cashback page (deep links included) or one of Bring's own https
+ * pages, and a redirect must be http(s).
  *
  * The SDK attaches its stored wallet address to every request it makes to
  * Bring's API. While the user has cashback turned off ("Shop & Earn popups"),
@@ -77,6 +78,30 @@ export function __geroBringEvent(event, frame) {
   return { data: { ...data, redirectUrl: undefined, followups: undefined }, origin: event.origin, source: event.source };
 }
 
+/**
+ * The page OPEN_CASHBACK_PAGE may open: a deep link into Gero's own cashback page
+ * (same extension, same page, a route under it), or one of Bring's own https
+ * pages. Anything else opens the configured cashback page.
+ */
+export function __geroCashbackPage(url, configured) {
+  if (typeof url !== 'string' || !url) return configured;
+  try {
+    const root = chrome.runtime.getURL('/');
+    const page = new URL(url, root);
+    if (typeof configured === 'string' && configured) {
+      const own = new URL(configured, root);
+      const sameRoute = page.hash === own.hash || page.hash.startsWith(`${own.hash}/`) || page.hash.startsWith(`${own.hash}?`);
+      // protocol + host, not origin: a chrome-extension: URL's origin can read "null".
+      const samePage = page.protocol === own.protocol && page.host === own.host && page.pathname === own.pathname;
+      if (samePage && sameRoute) return page.href;
+    }
+    if (page.protocol === 'https:' && __geroIsBringOrigin(page.origin)) return page.href;
+  } catch {
+    // fall back to the configured page
+  }
+  return configured;
+}
+
 export function __geroIsWebUrl(url) {
   if (typeof url !== 'string') return false;
   try {
@@ -87,7 +112,7 @@ export function __geroIsWebUrl(url) {
   }
 }
 
-const HELPERS = [__geroIsBringOrigin, __geroBringFrameOrigin, __geroBringEvent, __geroIsWebUrl];
+const HELPERS = [__geroIsBringOrigin, __geroBringFrameOrigin, __geroBringEvent, __geroCashbackPage, __geroIsWebUrl];
 
 const ID = '([\\w$]+)';
 
@@ -154,9 +179,10 @@ export const BRING_SDK_PATCHES = [
       `window.addEventListener("message",${ev}=>{if(!__geroIsBringOrigin(${ev}.origin)||!${ev}.data||${ev}.data.from!=="bringweb3"||${ev}.data.action!=="PORTAL_ACTIVATE")return;`,
   },
   {
-    name: 'OPEN_CASHBACK_PAGE opens only the configured cashback page',
+    name: 'OPEN_CASHBACK_PAGE opens only Gero\'s cashback page or one of Bring\'s own pages',
     pattern: new RegExp(`case"OPEN_CASHBACK_PAGE":let\\{url:${ID}\\}=${ID};return ${ID}\\(\\1\\|\\|${ID}\\)`),
-    replace: () => (_m, _url, _msg, open, configured) => `case"OPEN_CASHBACK_PAGE":return ${open}(${configured})`,
+    replace: () => (_m, url, msg, open, configured) =>
+      `case"OPEN_CASHBACK_PAGE":let{url:${url}}=${msg};return ${open}(__geroCashbackPage(${url},${configured}))`,
   },
   {
     name: 'activation redirects only to http(s) URLs',
