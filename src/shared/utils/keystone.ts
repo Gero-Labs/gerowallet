@@ -12,9 +12,9 @@ import { Options } from 'qr-code-styling/lib/types';
 import logo128Url from '@/assets/img/bkp/logo128.png';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
-import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
+import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   InvalidAccountIndexError,
@@ -308,12 +308,14 @@ const ownDrepSignerHashes = (txCore: Cardano.Tx, keys: Keys): string[] => {
  * request types:
  * - `inputs`: each input whose UTxO is known, with the payment or change key at its
  *   address (none for an input the wallet does not own).
- * - `extra`: the other witnesses, one per key hash, never a key that already signs an
- *   input: collateral (the key at the collateral UTxO's address, as Trezor maps it),
- *   required signers (DEX and other contract transactions), the stake key for its
- *   certificates, pool ownerships and withdrawals, and the DRep key for its certificates
- *   and votes. Any other hash is not this wallet's to sign.
- * The firmware signs each extra signer at whatever path it carries.
+ * - `extra`: the other witnesses, one per key hash: collateral (the key at the collateral
+ *   UTxO's address, as Trezor maps it, unless that key already signs an input), required
+ *   signers (DEX orders, a CIP-113 transfer's owner), the stake key for its certificates,
+ *   pool ownerships and withdrawals, and the DRep key for its certificates and votes. Any
+ *   other hash is not this wallet's to sign: another party signs for it (a multisig).
+ * The firmware signs each extra signer at whatever path it carries, and a key it also
+ * signs an input with only once (sign_tx dedupes by public key), so a required signer is
+ * listed even when an input's key is the one it names.
  */
 const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], stakeAddress: string | undefined) => {
   const utxoOf = (txIn: Cardano.TxIn) => utxos.find(([known]) => known.txId === txIn.txId && known.index === txIn.index);
@@ -330,19 +332,20 @@ const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], st
   const extra = new Map<string, ExtraSigner>();
   const add = (keyHash: string | undefined, key: SigningKey | undefined) => {
     const hash = String(keyHash ?? '').toLowerCase();
-    if (!hash || !key || inputPaths.has(key.path) || extra.has(hash)) return;
+    if (!hash || !key || extra.has(hash)) return;
     extra.set(hash, { keyHash: hash, ...key });
   };
 
   txCore.body.collaterals?.forEach((txIn) => {
     const utxo = utxoOf(txIn);
     const key = utxo && keyAt(addressOf(utxo));
-    add(key?.cred, signingKey(key));
+    const signer = signingKey(key);
+    if (signer && !inputPaths.has(signer.path)) add(key?.cred, signer);
   });
   const byHash = ownKeysByHash(keys);
   const requiredSigners = txCore.body.requiredExtraSignatures ?? [];
   debugLog('[Keystone] Found required signers:', requiredSigners.length);
-  requiredSigners.forEach((keyHash: Ed25519KeyHashHex) => add(keyHash, byHash.get(keyHash.toLowerCase())));
+  requiredSigners.forEach((keyHash) => add(keyHash, byHash.get(keyHash.toLowerCase())));
   const stakeKey = signingKey(keyList(keys.stake)[0]);
   ownStakeSignerHashes(txCore, keys, stakeAddress).forEach((keyHash) => add(keyHash, stakeKey));
   const drepKey = signingKey(keyList(keys.drep105)[0] ?? keyList(keys.drep129)[0], false);
@@ -366,7 +369,11 @@ export interface KeystoneSignRequestResponse {
  * @param keys - keys mapping for derivation paths
  * @returns UR object with type and cbor properties for QR code generation
  */
-export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletData, utxos: Cardano.Utxo[], keys: Keys): KeystoneSignRequestResponse => {
+export const createKeystoneSignRequest = async (tx: Serialization.Transaction, walletData, utxos: Cardano.Utxo[], keys: Keys): Promise<KeystoneSignRequestResponse> => {
+  // Keystone signs whatever QR it is shown, and the page cannot read the CIP-113 refusal
+  // index; every caller, the dApp approvals included, passes through here.
+  await assertCip113SignAllowed(tx.toCbor(), i18n.t('wallet.keystoneSigningFailed') as string);
+
   // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
   const txCore = tx.toCore();
   assertFirmwareShowsCertificates(txCore, walletData.firmwareVersion);

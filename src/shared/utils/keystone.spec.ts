@@ -16,7 +16,12 @@ import {
 } from './keystone';
 import { InvalidAccountIndexError } from './walletAccount';
 
-const mocks = vi.hoisted(() => ({ build: vi.fn(() => 'cose-signature'), key: vi.fn(() => 'cose-key') }));
+const mocks = vi.hoisted(() => ({
+  build: vi.fn(() => 'cose-signature'), key: vi.fn(() => 'cose-key'),
+  // createKeystoneSignRequest asks the worker first (CIP113_SIGN_PREFLIGHT); it allows here.
+  preflight: vi.fn(async () => ({ data: { success: true } })),
+}));
+vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.preflight } }));
 vi.mock('@/shared/utils/converter', () => ({
   createBuilderWithSigStructure: vi.fn(), createCoseKeyHex: mocks.key,
   toHexArray: (hex: string) => new Uint8Array(Buffer.from(hex, 'hex')), buildAndSignData: mocks.build,
@@ -274,22 +279,22 @@ describe('Keystone Cardano sign request: extra signers', () => {
   const request = (body: Partial<Cardano.TxBody>, outputCount?: number, keySet: Keys = keys) =>
     createKeystoneSignRequest(tx(body, outputCount), { xfp: '0a1b2c3d', stakeAddress }, utxos, keySet);
   /** The extra signers the Keystone is asked for, as it decodes the request. */
-  const signersOf = (body: Partial<Cardano.TxBody>, keySet?: Keys) => {
-    const response = request(body, 1, keySet);
+  const signersOf = async (body: Partial<Cardano.TxBody>, keySet?: Keys) => {
+    const response = await request(body, 1, keySet);
     expect(response.useHash).toBe(false);
     return CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()
       .map((signer) => ({ keyHash: signer.getKeyHash().toString('hex'), keyPath: `m/${signer.getKeyPath()}` }));
   };
   /** The hash-signing request (2048 bytes or more) the Keystone is sent, as it decodes it. */
-  const hashRequestOf = (body: Partial<Cardano.TxBody>) => {
-    const response = request(body, 40);
+  const hashRequestOf = async (body: Partial<Cardano.TxBody>) => {
+    const response = await request(body, 40);
     expect(response.useHash).toBe(true);
     return CardanoSignTxHashRequest.fromCBOR(response.ur.cbor);
   };
   /** The key paths a hash-signing request asks the Keystone for. */
-  const hashPathsOf = (body: Partial<Cardano.TxBody>) => {
+  const hashPathsOf = async (body: Partial<Cardano.TxBody>) => {
     // Registry 0.5.0's decoder leaves each path as its raw data item, despite the type.
-    const paths = hashRequestOf(body).getPaths() as unknown as DataItem[];
+    const paths = (await hashRequestOf(body)).getPaths() as unknown as DataItem[];
     return paths.map((path) => `m/${CryptoKeypath.fromDataItem(path).getPath()}`);
   };
   const drepRegistrationOf = (dRepCredential: Cardano.Credential): Cardano.Certificate => ({
@@ -317,8 +322,8 @@ describe('Keystone Cardano sign request: extra signers', () => {
     },
   });
 
-  it('asks for each required signer that is one of the wallet\'s keys, at that key\'s path', () => {
-    expect(signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(changeCred), signerHash(stakeCred)] }))
+  it('asks for each required signer that is one of the wallet\'s keys, at that key\'s path', async () => {
+    expect(await signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(changeCred), signerHash(stakeCred)] }))
       .toEqual([
         { keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH },
         { keyHash: changeCred.hash, keyPath: CHANGE_PATH },
@@ -326,151 +331,155 @@ describe('Keystone Cardano sign request: extra signers', () => {
       ]);
   });
 
-  it('does not ask again for a required signer whose key already signs an input', () => {
-    expect(signersOf({ requiredExtraSignatures: [signerHash(paymentCred)] })).toEqual([]);
+  // The firmware signs a key once however many times it is named (sign_tx dedupes by public
+  // key), and listing it shows the device every signer the transaction names.
+  it('lists a required signer even when its key also signs an input', async () => {
+    expect(await signersOf({ requiredExtraSignatures: [signerHash(paymentCred)] }))
+      .toEqual([{ keyHash: paymentCred.hash, keyPath: PAYMENT_PATH }]);
+    expect(await hashPathsOf({ requiredExtraSignatures: [signerHash(paymentCred)] })).toEqual([PAYMENT_PATH]);
   });
 
-  it('lists the stake key once when a required signer and a withdrawal both name it', () => {
-    expect(signersOf({ requiredExtraSignatures: [signerHash(stakeCred)], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
+  it('lists the stake key once when a required signer and a withdrawal both name it', async () => {
+    expect(await signersOf({ requiredExtraSignatures: [signerHash(stakeCred)], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('asks for the wallet\'s required signers in a hash-signing request', () => {
-    expect(hashPathsOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(stakeCred)] }))
+  it('asks for the wallet\'s required signers in a hash-signing request', async () => {
+    expect(await hashPathsOf({ requiredExtraSignatures: [signerHash(otherPaymentCred), foreignHash, signerHash(stakeCred)] }))
       .toEqual([PAYMENT_PATH, OTHER_PAYMENT_PATH, STAKE_PATH]);
   });
 
-  it('does not sign a certificate for another key or a script with the stake key', () => {
-    expect(signersOf({ certificates: [voteDelegationOf(foreignStakeCred), voteDelegationOf(scriptStakeCred)] })).toEqual([]);
+  it('does not sign a certificate for another key or a script with the stake key', async () => {
+    expect(await signersOf({ certificates: [voteDelegationOf(foreignStakeCred), voteDelegationOf(scriptStakeCred)] })).toEqual([]);
   });
 
-  it('signs only the wallet\'s own certificate when the transaction carries others too', () => {
-    expect(signersOf({ certificates: [voteDelegationOf(foreignStakeCred), voteDelegation] }))
+  it('signs only the wallet\'s own certificate when the transaction carries others too', async () => {
+    expect(await signersOf({ certificates: [voteDelegationOf(foreignStakeCred), voteDelegation] }))
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('asks for the stake key in a hash-signing request only for the wallet\'s own certificate or withdrawal', () => {
-    expect(hashPathsOf({
+  it('asks for the stake key in a hash-signing request only for the wallet\'s own certificate or withdrawal', async () => {
+    expect(await hashPathsOf({
       certificates: [voteDelegationOf(foreignStakeCred), voteDelegationOf(scriptStakeCred)],
       withdrawals: [{ stakeAddress: rewardAccount(scriptStakeCred), quantity: 0n }],
     })).toEqual([PAYMENT_PATH]);
-    expect(hashPathsOf({ certificates: [voteDelegation] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
-    expect(hashPathsOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+    expect(await hashPathsOf({ certificates: [voteDelegation] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+    expect(await hashPathsOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
   });
 
-  it('asks the stake key to sign a pool registration that lists the wallet as an owner', () => {
-    expect(signersOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred), stakeAddress)] }))
+  it('asks the stake key to sign a pool registration that lists the wallet as an owner', async () => {
+    expect(await signersOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred), stakeAddress)] }))
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('does not sign a pool registration the wallet does not own', () => {
-    expect(signersOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([]);
+  it('does not sign a pool registration the wallet does not own', async () => {
+    expect(await signersOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([]);
   });
 
-  it('lists the stake key once for a pool ownership and a withdrawal of the same key', () => {
-    expect(signersOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
+  it('lists the stake key once for a pool ownership and a withdrawal of the same key', async () => {
+    expect(await signersOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('asks for the stake key in a hash-signing request only for a pool the wallet owns', () => {
-    expect(hashPathsOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
-    expect(hashPathsOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([PAYMENT_PATH]);
+  it('asks for the stake key in a hash-signing request only for a pool the wallet owns', async () => {
+    expect(await hashPathsOf({ certificates: [poolRegistrationOwnedBy(stakeAddress)] })).toEqual([PAYMENT_PATH, STAKE_PATH]);
+    expect(await hashPathsOf({ certificates: [poolRegistrationOwnedBy(rewardAccount(foreignStakeCred))] })).toEqual([PAYMENT_PATH]);
   });
 
   describe('firmware too old to show a pool registration (before 1.5.8)', () => {
-    const onFirmware = (firmwareVersion: string | undefined, body: Partial<Cardano.TxBody>) => () =>
+    const onFirmware = (firmwareVersion: string | undefined, body: Partial<Cardano.TxBody>) =>
       createKeystoneSignRequest(tx(body), { xfp: '0a1b2c3d', stakeAddress, firmwareVersion }, utxos, keys);
     const poolRegistration = { certificates: [poolRegistrationOwnedBy(stakeAddress)] };
 
-    it('refuses a pool registration before asking the device', () => {
-      expect(onFirmware('1.5.6', poolRegistration)).toThrow('This Keystone firmware cannot show pool registrations. Update it to 1.5.8 or later');
+    it('refuses a pool registration before asking the device', async () => {
+      await expect(onFirmware('1.5.6', poolRegistration)).rejects.toThrow('This Keystone firmware cannot show pool registrations. Update it to 1.5.8 or later');
     });
 
-    it.each(['1.5.8', '3.2.0', undefined])('lets firmware %s sign it', (firmwareVersion) => {
-      expect(onFirmware(firmwareVersion, poolRegistration)).not.toThrow();
+    it.each(['1.5.8', '3.2.0', undefined])('lets firmware %s sign it', async (firmwareVersion) => {
+      await expect(onFirmware(firmwareVersion, poolRegistration)).resolves.toBeDefined();
     });
 
-    it('lets old firmware sign a transaction without a pool registration', () => {
-      expect(onFirmware('1.5.6', { certificates: [voteDelegation] })).not.toThrow();
+    it('lets old firmware sign a transaction without a pool registration', async () => {
+      await expect(onFirmware('1.5.6', { certificates: [voteDelegation] })).resolves.toBeDefined();
     });
   });
 
   describe('DRep key', () => {
-    it('asks the DRep key to sign the wallet\'s own DRep registration, and nothing for another DRep', () => {
-      expect(signersOf({ certificates: [drepRegistrationOf(drepCred)] })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
-      expect(signersOf({ certificates: [drepRegistrationOf(foreignStakeCred)] })).toEqual([]);
+    it('asks the DRep key to sign the wallet\'s own DRep registration, and nothing for another DRep', async () => {
+      expect(await signersOf({ certificates: [drepRegistrationOf(drepCred)] })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
+      expect(await signersOf({ certificates: [drepRegistrationOf(foreignStakeCred)] })).toEqual([]);
     });
 
-    it('asks the DRep key to sign a vote cast as the wallet\'s DRep, and nothing for another voter', () => {
-      expect(signersOf({ votingProcedures: voteAs(drepVoter(drepCred)) })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
-      expect(signersOf({ votingProcedures: voteAs(drepVoter(foreignStakeCred)) })).toEqual([]);
+    it('asks the DRep key to sign a vote cast as the wallet\'s DRep, and nothing for another voter', async () => {
+      expect(await signersOf({ votingProcedures: voteAs(drepVoter(drepCred)) })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
+      expect(await signersOf({ votingProcedures: voteAs(drepVoter(foreignStakeCred)) })).toEqual([]);
     });
 
-    it('lists the DRep key once for a DRep registration, a vote and a required signer naming it', () => {
-      expect(signersOf({
+    it('lists the DRep key once for a DRep registration, a vote and a required signer naming it', async () => {
+      expect(await signersOf({
         certificates: [drepRegistrationOf(drepCred)], votingProcedures: voteAs(drepVoter(drepCred)), requiredExtraSignatures: [signerHash(drepCred)],
       })).toEqual([{ keyHash: drepCred.hash, keyPath: DREP_PATH }]);
     });
 
-    it('asks for the DRep path in a hash-signing request, without listing the DRep ID as an address', () => {
+    it('asks for the DRep path in a hash-signing request, without listing the DRep ID as an address', async () => {
       const body = { certificates: [drepRegistrationOf(drepCred)] };
-      expect(hashPathsOf(body)).toEqual([PAYMENT_PATH, DREP_PATH]);
-      expect(hashRequestOf(body).getAddressList()).toEqual([paymentAddress]);
+      expect(await hashPathsOf(body)).toEqual([PAYMENT_PATH, DREP_PATH]);
+      expect((await hashRequestOf(body)).getAddressList()).toEqual([paymentAddress]);
     });
   });
 
   describe('collateral', () => {
-    it('asks the key holding a collateral UTxO to sign when no input of that key does', () => {
-      expect(signersOf({ collaterals: [otherIn] })).toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
-      expect(hashPathsOf({ collaterals: [otherIn] })).toEqual([PAYMENT_PATH, OTHER_PAYMENT_PATH]);
+    it('asks the key holding a collateral UTxO to sign when no input of that key does', async () => {
+      expect(await signersOf({ collaterals: [otherIn] })).toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
+      expect(await hashPathsOf({ collaterals: [otherIn] })).toEqual([PAYMENT_PATH, OTHER_PAYMENT_PATH]);
     });
 
-    it('does not ask again when an input of the same key signs, nor for a collateral UTxO it does not know', () => {
-      expect(signersOf({ collaterals: [txIn] })).toEqual([]);
-      expect(signersOf({ collaterals: [unknownIn] })).toEqual([]);
+    it('does not ask again when an input of the same key signs, nor for a collateral UTxO it does not know', async () => {
+      expect(await signersOf({ collaterals: [txIn] })).toEqual([]);
+      expect(await signersOf({ collaterals: [unknownIn] })).toEqual([]);
     });
   });
 
   describe('key sets and wallet data', () => {
-    it('builds a request from a key set with no stake list', () => {
+    it('builds a request from a key set with no stake list', async () => {
       const withoutStake = { ...keys, stake: undefined } as unknown as Keys;
-      expect(signersOf({}, withoutStake)).toEqual([]);
-      expect(signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred)] }, withoutStake))
+      expect(await signersOf({}, withoutStake)).toEqual([]);
+      expect(await signersOf({ requiredExtraSignatures: [signerHash(otherPaymentCred)] }, withoutStake))
         .toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
     });
 
-    it('asks the stake key to sign a withdrawal by its key hash when the wallet data carries no stake address', () => {
-      const response = createKeystoneSignRequest(tx({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }), { xfp: '0a1b2c3d' }, utxos, keys);
+    it('asks the stake key to sign a withdrawal by its key hash when the wallet data carries no stake address', async () => {
+      const response = await createKeystoneSignRequest(tx({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }), { xfp: '0a1b2c3d' }, utxos, keys);
       const signers = CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()
         .map((signer) => `m/${signer.getKeyPath()}`);
       expect(signers).toEqual([STAKE_PATH]);
     });
 
-    it('lists a key once when two of its signers spell its hash in different case', () => {
+    it('lists a key once when two of its signers spell its hash in different case', async () => {
       const upperCase = stakeCred.hash.toUpperCase() as unknown as Ed25519KeyHashHex;
-      expect(signersOf({ requiredExtraSignatures: [upperCase], certificates: [voteDelegation] }))
+      expect(await signersOf({ requiredExtraSignatures: [upperCase], certificates: [voteDelegation] }))
         .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
     });
   });
 
   // As the software signer's resolver does: a key set that cannot tell, signs.
-  it('keeps signing certificates with the stake key when the key set has no stake cred', () => {
+  it('keeps signing certificates with the stake key when the key set has no stake cred', async () => {
     const withoutStakeCred: Keys = { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] };
-    expect(signersOf({ certificates: [voteDelegationOf(foreignStakeCred)] }, withoutStakeCred))
+    expect(await signersOf({ certificates: [voteDelegationOf(foreignStakeCred)] }, withoutStakeCred))
       .toEqual([{ keyHash: foreignStakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('asks the stake key to sign a withdrawal from the wallet\'s own reward address', () => {
-    expect(signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
+  it('asks the stake key to sign a withdrawal from the wallet\'s own reward address', async () => {
+    expect(await signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('lists the stake key once for a certificate and a withdrawal of the same key', () => {
-    expect(signersOf({ certificates: [voteDelegation], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
+  it('lists the stake key once for a certificate and a withdrawal of the same key', async () => {
+    expect(await signersOf({ certificates: [voteDelegation], withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }))
       .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
   });
 
-  it('does not sign a withdrawal from another reward address', () => {
-    expect(signersOf({ withdrawals: [{ stakeAddress: rewardAccount(foreignStakeCred), quantity: 1_000_000n }] })).toEqual([]);
+  it('does not sign a withdrawal from another reward address', async () => {
+    expect(await signersOf({ withdrawals: [{ stakeAddress: rewardAccount(foreignStakeCred), quantity: 1_000_000n }] })).toEqual([]);
   });
 });

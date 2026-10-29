@@ -38,8 +38,10 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'NOTIFY_INBOX_CLEAR',
   'NOTIFY_WATCH_ORDERS',
   'NOTIFY_INTRO_ANSWER',
-  // Part of signing: only the wallet's own pages sign (Trezor over WebUSB, trezorDispatch.ts).
+  // Part of signing: only the wallet's own pages sign (Ledger, Keystone, Trezor over WebUSB).
   'CIP113_SIGN_PREFLIGHT',
+  // Trezor signing in the worker; like the preflight, it honours the CIP-113 Send allowance.
+  'TREZOR',
   // Builds the one CIP-113 transfer the worker will sign (Gero's own Send).
   'CIP113_PREPARE_TRANSFER',
   // Submit API (Settings > Advanced): where the wallet sends its signed transactions, and the auth header value.
