@@ -9,8 +9,11 @@ const UNIT = 'cd'.repeat(28) + '4d69636b79';
 const TX_CBOR = '84a400';
 const TX_ID = 'ab'.repeat(32);
 
-const { send, walletState } = vi.hoisted(() => ({
+const { send, walletState, deviceSign, device } = vi.hoisted(() => ({
   send: vi.fn(),
+  deviceSign: vi.fn(),
+  // What the page handed the device signer, and the Keystone dialog's switch.
+  device: { options: undefined as { getIsBT?: () => boolean } | undefined, keystoneShow: undefined as { value: boolean } | undefined },
   walletState: {
     loggedWallet: { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Normal' } as Record<string, unknown>,
     programmableTokens: {} as Record<string, unknown>,
@@ -38,6 +41,32 @@ vi.mock('@/shared/components/PassKeyPasswordField.vue', () => ({
   },
 }));
 vi.mock('@/shared/components/PassKeyAuthButton.vue', () => ({ default: { template: '<button data-test="passkey" />' } }));
+// The device is out of scope (cip113HardwareSigners.spec.ts); signsOnDevice stays real.
+vi.mock('@/shared/composables/useHardwareTxSigner', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/composables/useHardwareTxSigner')>();
+  const { ref } = await import('vue');
+  device.keystoneShow = ref(false);
+  return {
+    ...actual,
+    useHardwareTxSigner: (options: { getIsBT?: () => boolean }) => {
+      device.options = options;
+      return {
+        sign: (cbor: string) => deviceSign(cbor),
+        keystone: {
+          keystoneShow: device.keystoneShow,
+          keystoneType: ref('crypto-psbt'),
+          keystoneCbor: ref('aa'),
+          onKeystoneScan: vi.fn(),
+          cancelKeystone: vi.fn(),
+          failKeystone: vi.fn(),
+        },
+      };
+    },
+  };
+});
+vi.mock('@/shared/dialogs/KeystoneSignDialog.vue', () => ({
+  default: { props: ['isOpen', 'keystoneType', 'keystoneCbor'], template: '<div data-test="keystone-dialog" />' },
+}));
 
 import ProgrammableSendFlow from './ProgrammableSendFlow.vue';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -201,6 +230,88 @@ describe('ProgrammableSendFlow', () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="programmable-send-review"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="programmable-send-amount"]').exists()).toBe(true);
+  });
+
+  describe('on a hardware wallet', () => {
+    const toReview = async (wrapper: ReturnType<typeof render>) => {
+      await fillForm(wrapper, '1');
+      await wrapper.get('[data-testid="programmable-send-continue"]').trigger('click');
+      await flushPromises();
+    };
+
+    beforeEach(() => {
+      deviceSign.mockReset();
+      device.keystoneShow!.value = false;
+      respond({
+        [MessageTypes.CIP113_PREPARE_TRANSFER]: () => ({ success: true, result: { txCbor: TX_CBOR, txId: TX_ID, summary: SUMMARY } }),
+        [MessageTypes.SUBMIT_TX]: () => ({ txId: TX_ID }),
+      });
+    });
+
+    it('asks the Ledger, with no password, and submits its signature', async () => {
+      store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Ledger' };
+      deviceSign.mockResolvedValue('DEVICE_WITNESSES');
+      const wrapper = render();
+      await toReview(wrapper);
+
+      expect(wrapper.get('[data-testid="programmable-send-device"]').text()).toContain('miniGero.connectLedger');
+      expect(wrapper.find('[data-test="password"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="programmable-send-keystone-hash"]').exists()).toBe(false);
+
+      await wrapper.get('[data-testid="programmable-send-confirm"]').trigger('click');
+      await flushPromises();
+
+      expect(deviceSign).toHaveBeenCalledWith(TX_CBOR);
+      expect(methods()).toEqual([MessageTypes.CIP113_PREPARE_TRANSFER, MessageTypes.SUBMIT_TX]);
+      expect((send.mock.calls[1][0] as { data: unknown }).data).toEqual({ txCbor: TX_CBOR, witnessHex: 'DEVICE_WITNESSES' });
+      expect(wrapper.find('[data-testid="programmable-send-done"]').exists()).toBe(true);
+    });
+
+    it('offers Bluetooth only for a Ledger that supports it, and USB until the user picks it', async () => {
+      store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Ledger' };
+      let wrapper = render();
+      await toReview(wrapper);
+      expect(wrapper.get('[data-testid="programmable-send-device"]').text()).not.toContain('wallet.bluetooth');
+      wrapper.unmount();
+
+      store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Ledger', btSupported: true };
+      wrapper = render();
+      await toReview(wrapper);
+      expect(wrapper.get('[data-testid="programmable-send-device"]').text()).toContain('wallet.bluetooth');
+      expect(device.options?.getIsBT?.()).toBe(false);
+      await wrapper.get('[data-testid="programmable-send-device"] input[type="checkbox"]').setValue(true);
+      await flushPromises();
+      expect(device.options?.getIsBT?.()).toBe(true);
+    });
+
+    it('asks the Trezor, with no Bluetooth choice', async () => {
+      store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Trezor', btSupported: true };
+      const wrapper = render();
+      await toReview(wrapper);
+
+      const notice = wrapper.get('[data-testid="programmable-send-device"]').text();
+      expect(notice).toContain('miniGero.connectTrezor');
+      expect(notice).not.toContain('wallet.bluetooth');
+    });
+
+    it('warns that a Keystone may show only a hash, and opens its QR dialog to sign', async () => {
+      store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Keystone' };
+      deviceSign.mockImplementation(() => {
+        device.keystoneShow!.value = true;
+        return new Promise(() => undefined);
+      });
+      const wrapper = render();
+      await toReview(wrapper);
+
+      expect(wrapper.get('[data-testid="programmable-send-device"]').text()).toContain('miniGero.keystoneSign');
+      // The hash the device may show instead of the transfer, to compare against.
+      expect(wrapper.get('[data-testid="programmable-send-keystone-hash"]').text()).toContain(TX_ID);
+      expect(wrapper.find('[data-test="keystone-dialog"]').exists()).toBe(false);
+
+      await wrapper.get('[data-testid="programmable-send-confirm"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-test="keystone-dialog"]').exists()).toBe(true);
+    });
   });
 
   it('starts over once the request settles when the wallet changed while it was signing', async () => {

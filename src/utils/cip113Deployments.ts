@@ -191,6 +191,26 @@ export const CIP113_TRANSFER_PREVIEW: readonly string[] = [
 export const CIP113_SEND_ALLOWED_NETWORKS: readonly string[] = [Network.PREPROD, Network.PREVIEW];
 
 /**
+ * Hardware wallets (`WalletType` values: 'Ledger', 'Trezor', 'Keystone') that Gero's own Send
+ * may ask to sign a CIP-113 transfer. EMPTY until each device has signed a real transfer on
+ * preprod: the signers map required signers by key hash and ask for the stake key only for
+ * the wallet's own withdrawals and certificates, but a passing spec is not a device run.
+ * The worker's prepare and the Send button both read this list, so empty is exactly the
+ * software-only behaviour. Any other value in it is ignored.
+ */
+export const CIP113_SEND_HARDWARE_WALLET_TYPES: readonly string[] = [];
+
+const HARDWARE_WALLET_TYPES: readonly string[] = ['Ledger', 'Trezor', 'Keystone'];
+
+/** Whether Send may ask this hardware wallet type to sign. False for every software type. */
+export function isCip113SendHardware(
+  walletType: string | null | undefined,
+  allowed: readonly string[] = CIP113_SEND_HARDWARE_WALLET_TYPES,
+): boolean {
+  return typeof walletType === 'string' && HARDWARE_WALLET_TYPES.includes(walletType) && allowed.includes(walletType);
+}
+
+/**
  * Networks where CIP-113 may run at all. Together with the hash lists above this is the
  * whole gate: two build-time constants, both of which must pass.
  *

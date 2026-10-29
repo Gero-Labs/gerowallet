@@ -112,6 +112,36 @@
         {{ failureText }}
       </v-alert>
 
+      <!-- Hardware wallets sign on the device, in the page. -->
+      <div v-if="deviceType" class="programmable-send__device glass-tier mt-4" data-testid="programmable-send-device">
+        <v-icon size="20" color="var(--g-accent)">{{ deviceIcon }}</v-icon>
+        <p class="t-body-sm">{{ t(deviceHintKey) }}</p>
+        <!-- `btSupported` says the Ledger CAN use Bluetooth, not that it is connected that
+             way, so USB stays the default and the user picks. -->
+        <ToggleSwitch
+          v-if="deviceType === WalletType.Ledger && wallet?.btSupported"
+          class="programmable-send__transport"
+          :text-left="t('wallet.usb')"
+          icon-left="mdi-usb"
+          :text-right="t('wallet.bluetooth')"
+          icon-right="mdi-bluetooth"
+          :model-value="isBT"
+          :disabled="busy"
+          @update:model-value="isBT = $event"
+        />
+      </div>
+      <v-alert
+        v-if="deviceType === WalletType.Keystone"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mt-3"
+        data-testid="programmable-send-keystone-hash"
+      >
+        {{ t('programmableTokens.send.keystoneHashOnly') }}
+        <span class="d-block t-caption g-mono programmable-send__wrap mt-1">{{ summary.txId }}</span>
+      </v-alert>
+
       <div class="mt-4">
         <PassKeyPasswordField
           v-if="usesPassword"
@@ -176,6 +206,17 @@
         <v-btn class="geroButton" block @click="emit('done', flow.submittedTxId.value ?? '')">{{ t('common.done') }}</v-btn>
       </div>
     </template>
+
+    <!-- Keystone signs by QR: this transfer's request out, the device's signature back in. -->
+    <KeystoneSignDialog
+      v-if="flow.keystone.keystoneShow.value"
+      :is-open="flow.keystone.keystoneShow.value"
+      :keystone-type="flow.keystone.keystoneType.value"
+      :keystone-cbor="flow.keystone.keystoneCbor.value"
+      @scan="flow.keystone.onKeystoneScan"
+      @error="flow.keystone.failKeystone"
+      @close="flow.keystone.cancelKeystone"
+    />
   </div>
 </template>
 
@@ -184,11 +225,14 @@ import { computed, onScopeDispose, provide, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 import { CIP113_SEND_SIGN_FAILED, cip113SendErrorKey, useCip113Send } from '@/shared/composables/useCip113Send';
+import { signsOnDevice } from '@/shared/composables/useHardwareTxSigner';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
@@ -214,7 +258,9 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useTranslation();
-const flow = useCip113Send();
+// Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
+const isBT = ref(false);
+const flow = useCip113Send({ getIsBT: () => isBT.value });
 const { explorerUrl } = useExplorer();
 
 const amountInput = ref('');
@@ -285,6 +331,19 @@ const isPrfWallet = computed(() =>
   ),
 );
 const usesPassword = computed(() => wallet.value?.type === WalletType.Normal && !isPrfWallet.value);
+/** The device that signs, for a hardware wallet; null otherwise. */
+const deviceType = computed(() => (signsOnDevice(wallet.value?.type) ? wallet.value?.type ?? null : null));
+const deviceIcon = computed(() => {
+  if (deviceType.value === WalletType.Keystone) return 'mdi-qrcode-scan';
+  return deviceType.value === WalletType.Ledger && isBT.value ? 'mdi-bluetooth' : 'mdi-usb';
+});
+const deviceHintKey = computed(() => {
+  switch (deviceType.value) {
+    case WalletType.Ledger: return 'miniGero.connectLedger';
+    case WalletType.Trezor: return 'miniGero.connectTrezor';
+    default: return 'miniGero.keystoneSign';
+  }
+});
 const adaTicker = computed(() => networks.resolveNetwork(wallet.value?.chain ?? '', wallet.value?.network ?? '')?.currencyTicker ?? 'ADA');
 const txExplorerUrl = computed(() => explorerUrl('tx', flow.submittedTxId.value));
 
@@ -349,7 +408,8 @@ async function send(): Promise<void> {
     await flow.signAndSubmit({ password: typed });
     return;
   }
-  // Google wallets sign with the unlocked session; nothing to ask for.
+  // Google wallets sign with the unlocked session and hardware wallets on the device:
+  // nothing to type.
   await flow.signAndSubmit();
 }
 
@@ -393,6 +453,27 @@ function onPassKeyError(): void {
 
 .programmable-send__wrap {
   word-break: break-all;
+}
+
+.programmable-send__device {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3);
+  border-radius: var(--g-r-card);
+  text-align: center;
+
+  p {
+    margin: 0;
+    color: var(--g-text-2);
+  }
+}
+
+.programmable-send__transport {
+  width: 100%;
+  padding-top: var(--g-s-2);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .programmable-send__chip {
