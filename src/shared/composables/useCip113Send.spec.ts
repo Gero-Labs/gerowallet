@@ -167,6 +167,34 @@ describe('useCip113Send', () => {
     expect(flow.prepared.value).toBeNull();
   });
 
+  it('treats a submit that throws after signing as unconfirmed, never as "nothing was sent"', async () => {
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared,
+      [MessageTypes.SIGN_TX]: () => ({ witnesses: 'WITNESSES' }),
+      [MessageTypes.SUBMIT_TX]: () => { throw new Error('port closed'); },
+    });
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('SUBMIT_FAILED');
+    expect(flow.prepared.value).toBeNull();
+    expect(flow.stage.value).toBe('idle');
+  });
+
+  it('reports a signing exception as a failed signature, keeping the review', async () => {
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared,
+      [MessageTypes.SIGN_TX]: () => { throw new Error('port closed'); },
+    });
+    const flow = useCip113Send();
+    await flow.prepare(INTENT);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('SIGN_FAILED');
+    expect(flow.stage.value).toBe('review');
+  });
+
   it('cannot sign before anything was prepared', async () => {
     const flow = useCip113Send();
     expect(await flow.signAndSubmit()).toBe(false);

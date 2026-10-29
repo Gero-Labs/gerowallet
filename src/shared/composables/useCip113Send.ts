@@ -139,6 +139,14 @@ export function useCip113Send() {
     if (!transfer) return fail(CIP113_SEND_EXPIRED);
     failure.value = null;
     stage.value = 'signing';
+    // Once a signature exists the transfer may reach the network, so no later failure may
+    // read as "nothing was sent", and the spent allowance means a retry builds again.
+    let signedOnce = false;
+    const unconfirmed = (): false => {
+      prepared.value = null;
+      stage.value = 'idle';
+      return fail(CIP113_SEND_SUBMIT_FAILED);
+    };
     try {
       if (credentials.password !== undefined) {
         const verify = (await Messaging.sendToBackgroundFromOptions({
@@ -174,21 +182,18 @@ export function useCip113Send() {
         return fail(CIP113_SEND_SIGN_FAILED);
       }
 
+      signedOnce = true;
       stage.value = 'submitting';
       const submitted = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SUBMIT_TX,
         data: { txCbor: transfer.txCbor, witnessHex: signed.data.witnesses },
       })) as Reply<{ txId?: string; error?: string }>;
-      if (!submitted?.data?.txId) {
-        // Signed once already: the allowance is spent, so a retry builds again.
-        prepared.value = null;
-        stage.value = 'idle';
-        return fail(CIP113_SEND_SUBMIT_FAILED);
-      }
+      if (!submitted?.data?.txId) return unconfirmed();
       submittedTxId.value = submitted.data.txId;
       stage.value = 'done';
       return true;
     } catch {
+      if (signedOnce) return unconfirmed();
       stage.value = 'review';
       return fail(CIP113_SEND_SIGN_FAILED);
     } finally {
