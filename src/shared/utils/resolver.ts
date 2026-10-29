@@ -696,9 +696,10 @@ export function analyzeTransactionForSignatures(
           derivationPath: pathArray,
           type: 'payment'
         });
-      } else {
+      } else if (!isScriptLocked(String(outputAddress))) {
         // This should not happen if the wallet store is properly populated
-        // But fallback to external 0 as a last resort
+        // But fallback to external 0 as a last resort. Never for a script-locked input
+        // (a CIP-113 programmable UTxO, say): its script and any required signer witness it.
         requiredSigners.push({
           derivationPath: [ChainDerivations.EXTERNAL, 0],
           type: 'payment'
@@ -866,6 +867,19 @@ export function analyzeTransactionForSignatures(
   }
 
   return result;
+}
+
+/** Whether `address` has a script payment credential. False for anything unparseable. */
+function isScriptLocked(address: string): boolean {
+  try {
+    const parsed = Cardano.Address.fromString(address);
+    const credential = parsed?.asBase()?.getPaymentCredential()
+      ?? parsed?.asEnterprise()?.getPaymentCredential()
+      ?? parsed?.asPointer()?.getPaymentCredential();
+    return credential?.type === Cardano.CredentialType.ScriptHash;
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -40,6 +40,8 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'NOTIFY_INTRO_ANSWER',
   // Part of signing: only the wallet's own pages sign (Trezor over WebUSB, trezorDispatch.ts).
   'CIP113_SIGN_PREFLIGHT',
+  // Builds the one CIP-113 transfer the worker will sign (Gero's own Send).
+  'CIP113_PREPARE_TRANSFER',
   // Submit API (Settings > Advanced): where the wallet sends its signed transactions, and the auth header value.
   'SET_SUBMIT_API',
   'TEST_SUBMIT_API',

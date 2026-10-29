@@ -16,6 +16,9 @@ async function loadNetworks(deployments: {
   preview?: readonly string[];
   allowed?: readonly string[];
   registryPreprod?: readonly string[];
+  globalPreprod?: readonly string[];
+  transferPreprod?: readonly string[];
+  sendAllowed?: readonly string[];
 } = {}) {
   vi.doMock('@/utils/cip113Deployments', () => ({
     CIP113_BASE_MAINNET: deployments.mainnet ?? [],
@@ -24,6 +27,13 @@ async function loadNetworks(deployments: {
     CIP113_REGISTRY_MAINNET: [],
     CIP113_REGISTRY_PREPROD: deployments.registryPreprod ?? [],
     CIP113_REGISTRY_PREVIEW: [],
+    CIP113_GLOBAL_MAINNET: [],
+    CIP113_GLOBAL_PREPROD: deployments.globalPreprod ?? [],
+    CIP113_GLOBAL_PREVIEW: [],
+    CIP113_TRANSFER_MAINNET: [],
+    CIP113_TRANSFER_PREPROD: deployments.transferPreprod ?? [],
+    CIP113_TRANSFER_PREVIEW: [],
+    CIP113_SEND_ALLOWED_NETWORKS: deployments.sendAllowed ?? [Network.PREPROD, Network.PREVIEW],
     // Defaulted WIDE on purpose: the hash parsing/normalization cases below run through
     // preprod and are not about the allowlist. The value actually shipped is pinned by
     // its own test against the real module.
@@ -142,6 +152,35 @@ describe('CIP-113 shipped deployment lists', () => {
       .toEqual(['35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16']);
   });
 
+  // The PLG and core transfer stake scripts: the first and third credential of each
+  // deployment's protocol-params datum, checked on chain 2026-10-29.
+  it('ships the PLG of each deployment, and a core transfer script only where Send runs', async () => {
+    const deployments = await import('@/utils/cip113Deployments');
+
+    expect([...deployments.CIP113_GLOBAL_MAINNET]).toEqual(['46b61f0584f21481b22ea18f945e48ac4148f50fc3ade494a7762440']);
+    expect([...deployments.CIP113_GLOBAL_PREPROD]).toEqual(['b4e81fa9a3291025cd279067daf4e43578d4c3f759e5490958f58cf6']);
+    expect([...deployments.CIP113_GLOBAL_PREVIEW]).toEqual(['3b212b37b1a1fb334539c42e7473376a7fc15b60c26ae0fd4d06279e']);
+    expect([...deployments.CIP113_TRANSFER_MAINNET]).toEqual([]);
+    expect([...deployments.CIP113_TRANSFER_PREPROD]).toEqual(['5ff03dd084ec86a164dbf9bfe890605fe9fcba8d6657328eab8bb350']);
+    expect([...deployments.CIP113_TRANSFER_PREVIEW]).toEqual(['5fe7c82a32a69e5839e9da77e1e9992c1e55f7d372c3d58d8f744ef7']);
+    expect([...deployments.CIP113_SEND_ALLOWED_NETWORKS]).toEqual([Network.PREPROD, Network.PREVIEW]);
+  });
+
+  it('resolves Send on preprod and preview only', async () => {
+    const networks = (await import('./networks')).default;
+
+    expect(networks.resolveCip113TransferScripts(Blockchain.CARDANO, Network.PREPROD)).toEqual({
+      base: ['be59f7750a5d947bb649e70d574d066791ec34a1dfee2a087c8511e3'],
+      global: ['b4e81fa9a3291025cd279067daf4e43578d4c3f759e5490958f58cf6'],
+      transfer: ['5ff03dd084ec86a164dbf9bfe890605fe9fcba8d6657328eab8bb350'],
+    });
+    expect(networks.resolveCip113TransferScripts(Blockchain.CARDANO, Network.PREVIEW)?.transfer)
+      .toEqual(['5fe7c82a32a69e5839e9da77e1e9992c1e55f7d372c3d58d8f744ef7']);
+    expect(networks.resolveCip113TransferScripts(Blockchain.CARDANO, Network.MAINNET)).toBeNull();
+    expect(networks.resolveCip113GlobalScriptHashes(Blockchain.CARDANO, Network.MAINNET))
+      .toEqual(['46b61f0584f21481b22ea18f945e48ac4148f50fc3ade494a7762440']);
+  });
+
   // Superseded testnet deployments are removed, not retained — see cip113Deployments.ts.
   it.each([
     [Network.PREPROD, 'a48744c1584c58c2995cba1fa26b37f3999ee8cedac0ef241662f53d'],
@@ -205,6 +244,28 @@ describe('networks — CIP-113 network allowlist', () => {
     const on = await loadNetworks({ preprod: [VALID_PREPROD], registryPreprod: [REGISTRY.toUpperCase()] });
     expect(on.resolveCip113RegistryPolicyIds(Blockchain.CARDANO, Network.PREPROD)).toEqual([REGISTRY]);
     expect(on.resolveCip113RegistryPolicyIds(Blockchain.CARDANO, Network.MAINNET)).toEqual([]);
+  });
+
+  it('needs every gate for Send: both CIP-113 gates, the Send allowlist, and a PLG and transfer hash', async () => {
+    const GLOBAL = 'b4e81fa9a3291025cd279067daf4e43578d4c3f759e5490958f58cf6';
+    const TRANSFER = '5ff03dd084ec86a164dbf9bfe890605fe9fcba8d6657328eab8bb350';
+    const full = { preprod: [VALID_PREPROD], globalPreprod: [GLOBAL], transferPreprod: [TRANSFER] };
+
+    expect((await loadNetworks(full)).resolveCip113TransferScripts(Blockchain.CARDANO, Network.PREPROD))
+      .toEqual({ base: [VALID_PREPROD], global: [GLOBAL], transfer: [TRANSFER] });
+    for (const gap of [
+      { ...full, allowed: [Network.PREVIEW] },
+      { ...full, sendAllowed: [Network.PREVIEW] },
+      { ...full, preprod: [] },
+      { ...full, globalPreprod: [] },
+      { ...full, transferPreprod: [] },
+    ]) {
+      vi.resetModules();
+      expect((await loadNetworks(gap)).resolveCip113TransferScripts(Blockchain.CARDANO, Network.PREPROD)).toBeNull();
+    }
+    vi.resetModules();
+    expect((await loadNetworks({ ...full, allowed: [Network.PREVIEW] })).resolveCip113GlobalScriptHashes(Blockchain.CARDANO, Network.PREPROD))
+      .toEqual([]);
   });
 
   // Pins what actually ships. Changing this is the deliberate act of enabling (or
