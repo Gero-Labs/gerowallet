@@ -21,6 +21,9 @@ import {
 } from '@/shared/utils/__fixtures__/handAssembledTxs';
 import ledgerUtils from './ledger';
 
+// The worker's CIP-113 answer (cip113SignPreflight.spec.ts): nothing here is refused.
+vi.mock('@/shared/utils/cip113SignPreflight', () => ({ assertCip113SignAllowed: vi.fn(async () => undefined) }));
+
 const walletKeys = (address: string, stakeAddress: string): Keys => ({
   payment: [{ address, cred: '11'.repeat(28), path: "m/1852'/1815'/0'/0/0" }],
   change: [],

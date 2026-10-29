@@ -1323,16 +1323,16 @@ async function signTrezor() {
   });
 }
 
-function signKeystone() {
+async function signKeystone() {
   if (submitting.value) return;
   const attempt = captureSend();
   if (!attempt) return;
   passwordError.value = '';
   try {
-    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
+    const signRequestResponse: KeystoneSignRequestResponse = await awaitFreshApproval(() => createKeystoneSignRequest(
       Serialization.Transaction.fromCbor(HexBlob(attempt.cbor)), attempt.wallet,
       attempt.inputs as Cardano.Utxo[], attempt.addresses,
-    );
+    ), attempt.current);
     authorizedSend = attempt;
     keystoneApproval = { attempt, requestId: signRequestResponse.requestId };
     txCbor.value = attempt.cbor;

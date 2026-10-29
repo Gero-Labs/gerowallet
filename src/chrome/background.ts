@@ -1598,9 +1598,9 @@ app.add(METHOD.signData, (request, sendResponse) => {
  * Runs at REQUEST ENTRY, before the approval UI, so it covers every downstream signer
  * for anything already known to be programmable. It is NOT a signature-time check: a
  * UTxO first learned while the prompt is open is re-checked right before signing by
- * WalletBg.signTx on the software path and by both Trezor paths (the TREZOR handler, and
- * CIP113_SIGN_PREFLIGHT for WebUSB), but not by Ledger or Keystone, which sign in
- * document context.
+ * WalletBg.signTx on the software path, by the TREZOR handler, and through
+ * CIP113_SIGN_PREFLIGHT by the signers that run in a document (Ledger, Keystone, Trezor
+ * over WebUSB).
  *
  * Also refuses a CIP-113 transfer needing one of this wallet's keys (cip113Guard.ts), which
  * covers a programmable UTxO created since the last sync. Never reads the Send allowance
@@ -1634,23 +1634,32 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
   }
 }
 
-// The same refusal for a signer outside the worker: Trezor over WebUSB signs in a document
-// (trezorDispatch.ts), which cannot read the refusal index, so it asks here first. The one
-// transfer CIP113_PREPARE_TRANSFER verified passes; this does not use its allowance up.
+/**
+ * refusalForProgrammableInputs for a hardware signer, which Gero's own Send reaches through an
+ * extension page only: the one transfer CIP113_PREPARE_TRANSFER verified passes. Its allowance
+ * is not used up (the device may still be declined); it expires on its own.
+ */
+function hardwareSignRefusal(txCbor: unknown): string | null {
+  const refusal = refusalForProgrammableInputs(txCbor);
+  if (!refusal) return null;
+  const wallet = walletManager.getWallet();
+  try {
+    const tx = deserializeCardanoJsSdkTx(txCbor as string);
+    if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) return null;
+  } catch {
+    // Unparseable: keep the refusal.
+  }
+  return refusal;
+}
+
+// The same refusal for a signer outside the worker: Ledger, Keystone and Trezor over WebUSB
+// sign in a document (ledger.ts, keystone.ts, trezorDispatch.ts), which cannot read the
+// refusal index, so they ask here first.
 app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendResponse) => {
   // A worker this message woke may not have restored the wallet yet, and without it the
   // check would pass everything.
   await booted();
-  let refusal = refusalForProgrammableInputs(request.data?.txCbor);
-  if (refusal) {
-    const wallet = walletManager.getWallet();
-    try {
-      const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
-      if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) refusal = null;
-    } catch {
-      // Unparseable: keep the refusal.
-    }
-  }
+  const refusal = hardwareSignRefusal(request.data?.txCbor);
   if (refusal) debugLog(refusal);
   sendResponse({ id: request.id, data: { success: true, refused: refusal !== null }, target: TARGET, sender: SENDER.extension });
 });
@@ -4296,7 +4305,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       const { txCbor } = request.data;
 
       // Trezor signs here rather than through WalletBg.signTx, so it needs its own check.
-      const trezorRefusal = refusalForProgrammableInputs(txCbor);
+      const trezorRefusal = hardwareSignRefusal(txCbor);
       if (trezorRefusal) {
         debugLog(trezorRefusal);
         throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);

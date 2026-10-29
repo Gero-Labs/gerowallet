@@ -705,7 +705,8 @@ const sign = () => approval.run(async () => {
             stakeAddress: loggedWallet.value.stakeAddress
           };
 
-          const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(fullTx, walletData, utxos.value, keys.value);
+          const signRequestResponse: KeystoneSignRequestResponse = await awaitFreshApproval(
+            () => createKeystoneSignRequest(fullTx, walletData, utxos.value, keys.value), approvalCurrent);
 
           // Store UR data for QR code and signing mode
           keystoneType.value = signRequestResponse.ur.type;
