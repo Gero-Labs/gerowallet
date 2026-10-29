@@ -8,8 +8,9 @@
 #    shards, plus legacy) run against that ZIP, extracted. Any failure, or a test that
 #    passed only on retry, stops the release.
 # 4. With dry_run=false, the upload job runs in the chrome-web-store-<channel> environment.
-#    Its required reviewers are the release authorization, and its store credentials exist
-#    only there. It tags the commit v<version>, then uploads the same ZIP and submits it.
+#    Its required reviewers are the release authorization, only the people in its
+#    CWS_RELEASERS variable may start a release, and its store credentials exist only
+#    there. It tags the commit v<version>, then uploads the same ZIP and submits it.
 #
 # Nothing is rebuilt, edited or repacked after step 1.
 # Setup and recovery: .github/runbooks/chrome-web-store.md
@@ -290,6 +291,27 @@ jobs:
       SUBMISSION: ${{ inputs.submission }}
       DEPLOY_PERCENTAGE: ${{ inputs.deploy_percentage }}
     steps:
+      # Only the people named in this environment's CWS_RELEASERS variable may release,
+      # whoever approves. GitHub sends a re-run's own starter as the triggering actor, so
+      # a re-run is checked too. An unset list releases nothing.
+      - name: Check who started the release
+        env:
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          CWS_RELEASERS: ${{ vars.CWS_RELEASERS }}
+        run: |
+          set -f
+          actor="$(printf '%s' "$TRIGGERING_ACTOR" | tr '[:upper:]' '[:lower:]')"
+          releasers="$(printf '%s' "$CWS_RELEASERS" | tr ',' ' ' | tr '[:upper:]' '[:lower:]')"
+          for login in $releasers; do
+            if [ "$login" = "$actor" ]; then echo "${TRIGGERING_ACTOR} may release"; exit 0; fi
+          done
+          if [ -z "${releasers// /}" ]; then
+            echo "::error::The CWS_RELEASERS variable of this environment is not set, so nobody may release" >&2
+          else
+            echo "::error::${TRIGGERING_ACTOR} is not in this environment's CWS_RELEASERS and may not release" >&2
+          fi
+          exit 1
+
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
