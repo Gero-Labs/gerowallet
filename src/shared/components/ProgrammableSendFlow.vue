@@ -302,12 +302,14 @@ watch(() => [flow.prepared.value?.txId, step.value, wallet.value?.id] as const, 
 onScopeDispose(() => { disposed = true; epoch++; });
 
 // A transfer belongs to the wallet it was built for: another wallet starts from the form
-// (the worker would refuse to sign it anyway).
-watch(() => wallet.value?.id, (id, previous) => {
-  if (id !== previous && !busy.value) {
-    password.value = '';
-    flow.reset();
-  }
+// (the worker would refuse to sign it anyway). Checked again when a request settles, since a
+// switch while one is in flight cannot reset it then.
+let builtForWalletId: number | undefined;
+watch(() => [wallet.value?.id, busy.value] as const, ([id, isBusy]) => {
+  if (isBusy || builtForWalletId === undefined || id === builtForWalletId) return;
+  builtForWalletId = undefined;
+  password.value = '';
+  flow.reset();
 });
 
 function formatToken(baseUnits: string): string {
@@ -325,6 +327,7 @@ function setMax(): void {
 async function review(): Promise<void> {
   if (!formReady.value || busy.value) return;
   password.value = '';
+  builtForWalletId = wallet.value?.id;
   await flow.prepare({
     unit: props.unit,
     quantity: quantity.value.toString(),

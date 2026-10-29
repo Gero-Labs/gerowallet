@@ -68,7 +68,7 @@ function respond(handlers: Partial<Record<string, Handler>>) {
   send.mockImplementation(async ({ method, data }: { method: string; data: Record<string, unknown> }) => {
     const handler = handlers[method];
     if (!handler) throw new Error(`unexpected ${method}`);
-    return { data: handler(data) };
+    return { data: await handler(data) };
   });
 }
 
@@ -198,6 +198,33 @@ describe('ProgrammableSendFlow', () => {
     expect(wrapper.find('[data-testid="programmable-send-review"]').exists()).toBe(true);
 
     store.loggedWallet = { id: 2, chain: 'Cardano', network: 'Preprod', type: 'Normal' };
+    await flushPromises();
+    expect(wrapper.find('[data-testid="programmable-send-review"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="programmable-send-amount"]').exists()).toBe(true);
+  });
+
+  it('starts over once the request settles when the wallet changed while it was signing', async () => {
+    let finishSigning: (reply: unknown) => void = () => undefined;
+    respond({
+      [MessageTypes.CIP113_PREPARE_TRANSFER]: () => ({ success: true, result: { txCbor: TX_CBOR, txId: TX_ID, summary: SUMMARY } }),
+      [MessageTypes.VERIFY_SPENDING_PASSWORD]: () => ({ success: true }),
+      [MessageTypes.SIGN_TX]: () => new Promise((resolve) => { finishSigning = resolve; }),
+    });
+    const wrapper = render();
+    await fillForm(wrapper, '1');
+    await wrapper.get('[data-testid="programmable-send-continue"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-test="password"]').setValue('secret');
+    await wrapper.get('[data-testid="programmable-send-confirm"]').trigger('click');
+    await flushPromises();
+
+    // Mid-signature: the review stays while the request is in flight.
+    store.loggedWallet = { id: 2, chain: 'Cardano', network: 'Preprod', type: 'Normal' };
+    await flushPromises();
+    expect(wrapper.find('[data-testid="programmable-send-review"]').exists()).toBe(true);
+
+    // The worker refuses (another wallet) and the screen returns to the form, not the old transfer.
+    finishSigning({ error: 'Signing failed' });
     await flushPromises();
     expect(wrapper.find('[data-testid="programmable-send-review"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="programmable-send-amount"]').exists()).toBe(true);
