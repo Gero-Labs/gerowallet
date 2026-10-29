@@ -86,9 +86,12 @@ Under happy-dom, `getContextType()` returns `'content'` (a `window` exists, prot
 | Store unit test | `src/stores/controlledAmount.spec.ts` - mock `@/chrome/storeMessagingBg` and `@/services/storeMessaging.service` before importing the store |
 | IndexedDB test | `src/db/wallet-db.spec.ts` - `import 'fake-indexeddb/auto'` as line 1 |
 | Mocking Chrome-dependent stores | `test/sidepanel/useChainContext.test.ts` - `vi.hoisted` + `vi.mock('@/stores/walletStore')` |
+| `walletStore` mock for a mounted tree | `src/sidepanel/components/DAppOverlay.spec.ts` - return one reactive object as both `default.state` and the named `walletStore`, as the real module does. Components import either form, so a default-only mock breaks the moment a child adds `import { walletStore }` |
 | A component with many deps | `src/modules/dashboard/components/TransactionsCard.pending.spec.ts` - note its mount helper hand-lists every `vi.mock` and Vuetify stub, so **importing a new component into a covered component can break a spec your PR never touched** |
 
 **Blast radius worth knowing**: `src/stores/governanceAlertsStore.spec.ts` builds a wallet `config` fixture, so any change to the config shape or to `setConfig` fails a spec with no visible relationship to your diff.
+
+**Two green PRs can merge into a red suite.** PR checks run selected paths, so one PR's new spec and another PR's new child component can each pass alone and fail together (PR 1388's PassKey PSBT test + PR 1385's `BitcoinPsbtReview.vue`, fixed in PR 1403). PR 1388 was even up to date with `development` after 1385 merged; its checks just never ran that spec against the new component. Only `ci-cd.yml`'s full `npm test` catches it, on `main` or at release. Before merging a PR that adds a spec or a component, run `npm test -- --maxWorkers=2` on its branch, brought up to date with `development` (about 10 minutes locally; a fresh cloud container needs `npm ci` first).
 
 ## Limits of the tooling
 
