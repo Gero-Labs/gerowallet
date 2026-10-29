@@ -95,6 +95,14 @@
           <span class="text-body-2 white--text">{{ formatDetailValue(selectedToken) }}</span>
         </div>
 
+        <!-- Gero's own Send (CIP-113): only on the locked row of a registered token. -->
+        <div v-if="canSendSelected" class="mt-4">
+          <p class="t-caption grey--text mb-2">{{ $t('programmableTokens.noSwapCanSend') }}</p>
+          <v-btn class="geroButton" block data-testid="home-programmable-send" @click="openProgrammableSend()">
+            {{ $t('common.send') }}
+          </v-btn>
+        </div>
+
         <!-- Market data (from useMarketData) -->
         <template v-if="marketDetail">
           <div class="detail-row" v-if="marketDetail.mcap">
@@ -120,6 +128,14 @@
         </template>
       </div>
     </BottomSheet>
+    <ProgrammableSendSheet
+      v-if="programmableSendToken?.unit"
+      v-model="showProgrammableSend"
+      :unit="programmableSendToken.unit"
+      :ticker="programmableSendToken.ticker"
+      :name="programmableSendToken.name"
+      :decimals="programmableSendToken.decimals"
+    />
   </div>
 </template>
 
@@ -149,6 +165,8 @@ import MidnightSendSheet from '../components/flows/MidnightSendSheet.vue';
 import ReceiveSheet from '../components/flows/ReceiveSheet.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
 import BuySellSheet from '../components/flows/BuySellSheet.vue';
+import ProgrammableSendSheet from '../components/flows/ProgrammableSendSheet.vue';
+import { canSendProgrammable } from '@/shared/utils/programmableTokenDisplay';
 const router = useRouter();
 const { getTokenByUnit } = useMarketData();
 const { adaLovelace } = useAdaLovelace();
@@ -169,9 +187,24 @@ interface HomeTokenRow {
   change?: number | null;
   quantity?: number | string | bigint;
   decimals?: number;
+  /** The locked (CIP-113) row of a token, which TokenList lists apart from an ordinary holding. */
+  isProgrammable?: boolean;
+  cip113Registered?: boolean;
 }
 
 const selectedToken = ref<HomeTokenRow | null>(null);
+
+// Only the locked row: a token also held normally has a second, ordinary row.
+const canSendSelected = computed(() =>
+  selectedToken.value?.isProgrammable === true && canSendProgrammable(selectedToken.value));
+const showProgrammableSend = ref(false);
+const programmableSendToken = ref<HomeTokenRow | null>(null);
+
+function openProgrammableSend() {
+  programmableSendToken.value = selectedToken.value;
+  showTokenDetail.value = false;
+  showProgrammableSend.value = true;
+}
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 
