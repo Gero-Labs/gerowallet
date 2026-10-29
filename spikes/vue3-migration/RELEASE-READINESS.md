@@ -169,27 +169,25 @@ gate, and background TDZ guard before uploading the extension and evidence.
 The ZIP is outside the extension directory. A checksum file accompanies it.
 
 For a manual run, you must supply `expected_version` matching the reviewed
-package and lockfile. `dry_run` defaults to `true`. The repository must provide
-`MANIFEST_KEY` as a variable or secret and `CHROME_EXTENSION_ID` as a variable.
-These must identify the intended store channel. The build report records the
-source SHA, workflow run, and beta/production channel from configuration.
+package and lockfile. The repository must provide `MANIFEST_KEY` as a variable
+or secret and `CHROME_EXTENSION_ID` as a variable. These must identify the
+intended store channel. The build report records the source SHA, workflow run,
+and beta/production channel from configuration. The CI workflow itself never
+tags or releases anything.
 
-With `dry_run=false`, the tag job downloads that run's tested artifact. It
-checks the source SHA, version, identity, lockfile hash, directory hashes, and
-ZIP checksum again, then creates only `v<version>` on that exact SHA. It refuses
-an existing tag. It neither bumps versions after testing nor commits to `main`,
-rebuilds the artifact, or submits anything to the Chrome Web Store.
-
-Store submission is a separate workflow,
-[Chrome Web Store release](../../.github/workflows/chrome-web-store.yml). It finds
-the tagged run through the tag message and downloads that run's package. It
-re-checks provenance, channel, identity and every file hash, including the ZIP's
-extracted contents. It then runs the full isolated gerowallet-e2e-tests suites
-(post-v2.7 and legacy) against that extracted ZIP. Any failure, or a pass on
-retry, blocks the upload. Only after a reviewer approves the
-`chrome-web-store-<channel>` environment does it upload that ZIP through the
-store API v2 and submit it (staged by default). Setup and recovery are in the
-[store runbook](../../.github/runbooks/chrome-web-store.md).
+Releases run through
+[Chrome Web Store release](../../.github/workflows/chrome-web-store.yml), whose
+first job calls the CI workflow on the commit being released. Later jobs in the
+same run download that package and re-check provenance, channel, identity and
+every file hash, including the ZIP's extracted contents. The run then executes
+the full isolated gerowallet-e2e-tests suites (post-v2.7 and legacy) against
+that extracted ZIP. Any failure, or a pass on retry, blocks the release. Only
+after a reviewer approves the `chrome-web-store-<channel>` environment does it
+create `v<version>` on that exact SHA, then upload that ZIP through the store
+API v2 and submit it (staged by default). It refuses a `v<version>` tag on any
+other commit. It neither bumps versions after testing nor commits to `main`,
+and it never rebuilds the package after the first job. Setup and recovery are
+in the [store runbook](../../.github/runbooks/chrome-web-store.md).
 
 The authorized `dry_run=true`, `expected_version=2.7.3` hosted invocation passes.
 Its run URL, tested commit, outcome, and measured runner resources are in the

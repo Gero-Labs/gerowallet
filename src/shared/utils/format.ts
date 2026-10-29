@@ -45,6 +45,19 @@ export function formatBalance(value: number): string {
   return value.toFixed(2);
 }
 
+/**
+ * A token quantity in a holdings list, already divided by the token's decimals. Under 1,000 it
+ * keeps the token's own decimals (at most 6), so 2.00457 stays "2.00457" instead of rounding to
+ * "2"; from 1,000 up two decimals are plenty. Trailing zeros are dropped, and anything below
+ * 0.001 reads "<0.001".
+ */
+export function formatTokenQuantity(amount: number, decimals: number): string {
+  if (!Number.isFinite(amount) || amount === 0) return '0';
+  if (amount < 0.001) return '<0.001';
+  const digits = amount < 1e3 ? Math.min(Math.max(Math.trunc(decimals) || 0, 0), 6) : 2;
+  return amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+
 /** Unicode subscript digits for micro-price leading-zero notation */
 const SUBSCRIPT_DIGITS = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
 

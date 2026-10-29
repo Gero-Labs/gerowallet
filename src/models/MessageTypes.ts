@@ -192,6 +192,11 @@ export enum MessageTypes {
   // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.
   // Answers { success, refused }. Extension-page-only (senderTrust).
   CIP113_SIGN_PREFLIGHT = 'CIP113_SIGN_PREFLIGHT',
+  // Gero's own Send of a CIP-113 token: { unit, quantity, recipientAddress } → the worker
+  // chooses the inputs, has Nexus build, verifies, and allows that one transaction id to be
+  // signed once. Answers { success, result: { txCbor, txId, summary } } or { success: false,
+  // error, errorCode }. Extension-page-only (senderTrust).
+  CIP113_PREPARE_TRANSFER = 'CIP113_PREPARE_TRANSFER',
   // Submit API (Settings → Advanced): the per-wallet custom Cardano submit endpoint.
   // Extension-page-only (addToOptions, default-deny for content scripts); each acts on
   // the logged-in wallet and refuses a request naming another wallet id.

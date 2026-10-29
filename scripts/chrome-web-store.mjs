@@ -1,8 +1,8 @@
 /**
  * Chrome Web Store release steps for .github/workflows/chrome-web-store.yml.
  *
- *   verify   re-checks the package "Chrome Extension CI/CD" tested and tagged, and that
- *            its ZIP holds exactly the files that were tested.
+ *   verify   re-checks the package that "Chrome Extension CI/CD" built and tested earlier
+ *            in the same run, and that its ZIP holds exactly the files that were tested.
  *   e2e-gate checks a gerowallet-e2e-tests qualification report for that ZIP.
  *   release  uploads that ZIP through the Chrome Web Store API v2 and, if asked, submits
  *            it for review. (v1.1 stopped being supported on October 15, 2026.)
@@ -66,8 +66,8 @@ export function verifyStoreCandidate({ candidateDir, unzippedDir, version, chann
   if (recorded.identityVerified !== true || !/^[a-p]{32}$/.test(recorded.extensionId ?? '')) problems.push('The release run did not verify the extension identity');
   if (recorded.version !== version) problems.push(`The tested package is ${recorded.version}, not ${version}`);
   if (recorded.channel !== channel) problems.push(`The tested package was built for the ${recorded.channel} channel, not ${channel}`);
-  if (recorded.sourceSha !== sourceSha) problems.push('The tested package was not built from the commit the release tag points to');
-  if (recorded.packageLockSha256 !== packageLockSha256) problems.push('The tested package was built from a different package-lock.json than the tagged commit');
+  if (recorded.sourceSha !== sourceSha) problems.push('The tested package was not built from the commit being released');
+  if (recorded.packageLockSha256 !== packageLockSha256) problems.push('The tested package was built from a different package-lock.json than the commit being released');
   const options = { expectedVersion: version, expectedId: recorded.extensionId };
   const checksums = JSON.stringify(recorded.checksums ?? {});
   for (const [label, directory] of [['extension directory', join(candidateDir, 'extension')], ['ZIP', unzippedDir]]) {
@@ -100,8 +100,14 @@ export function checkE2eQualification(report, { walletSha, archiveSha256 }) {
   return problems;
 }
 
-/** An OAuth access token for the store API: from a service account if one is set, else a refresh token. */
+/**
+ * An OAuth access token for the store API. In order: one the workflow already holds (from
+ * Workload Identity Federation, keyless), a token signed for a service account JSON key,
+ * or one from an OAuth refresh token.
+ */
 export async function accessToken(credentials, { fetch = globalThis.fetch, now = Date.now } = {}) {
+  // google-github-actions/auth asked Google for it, with the store scope, earlier in the job.
+  if (credentials.accessToken) return credentials.accessToken;
   let body;
   if (credentials.serviceAccountJson) {
     const account = JSON.parse(credentials.serviceAccountJson);
@@ -114,7 +120,8 @@ export async function accessToken(credentials, { fetch = globalThis.fetch, now =
   } else {
     const { clientId, clientSecret, refreshToken } = credentials;
     if (!clientId || !clientSecret || !refreshToken) {
-      throw new Error('Set CWS_SERVICE_ACCOUNT_JSON, or all of CWS_CLIENT_ID, CWS_CLIENT_SECRET and CWS_REFRESH_TOKEN');
+      throw new Error('No store credentials. Set the CWS_WIF_PROVIDER and CWS_WIF_SERVICE_ACCOUNT variables (Workload Identity Federation), '
+        + 'or the CWS_SERVICE_ACCOUNT_JSON secret, or all of the CWS_CLIENT_ID, CWS_CLIENT_SECRET and CWS_REFRESH_TOKEN secrets');
     }
     body = new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken });
   }
@@ -277,6 +284,7 @@ async function main({ command, options }, env) {
   if (deployPercentage && options.submission === 'upload-only') throw new Error('A rollout percentage needs a submission');
   const zip = readFileSync(options.zip);
   const token = await accessToken({
+    accessToken: env.CWS_ACCESS_TOKEN,
     serviceAccountJson: env.CWS_SERVICE_ACCOUNT_JSON,
     clientId: env.CWS_CLIENT_ID,
     clientSecret: env.CWS_CLIENT_SECRET,

@@ -89,16 +89,18 @@ a PR that edits its own workflow file.
 
 ## Release packaging
 
-`ci-cd.yml` is separate from the PR checks. It runs on `main` pushes or manual
-dispatch with Node 24.19.0, npm 11.1.0, and `npm ci`. Before archiving it runs the
-full deterministic suite, the secret-reader guard, sequential production
-builds, artifact version/identity/CSP/hash checks, and the background TDZ guard.
-Manual runs require the reviewed package version and channel identity settings.
+`ci-cd.yml` is separate from the PR checks. It runs on `main` pushes, manual
+dispatch, or as the first job of `chrome-web-store.yml`, with Node 24.19.0, npm
+11.1.0, and `npm ci`. Before archiving it runs the full deterministic suite, the
+secret-reader guard, sequential production builds, artifact
+version/identity/CSP/hash checks, and the background TDZ guard. Manual runs
+require the reviewed package version and channel identity settings. It never
+tags or publishes.
 
-`dry_run=true` is the default and does not tag or publish. With separately
-authorized `dry_run=false`, the tag job rechecks that same run's retained
-artifact and tags its tested source SHA without rebuilding it. Chrome Web Store
-submission remains a separate authorized operation. Follow
+Releases are one run of `chrome-web-store.yml`: that build, a re-check of its
+package, the full gerowallet-e2e-tests isolated suites against its ZIP, then,
+with `dry_run=false` and the environment's approval, the `v<version>` tag and the
+store upload of that same ZIP. Follow
 [release and recovery readiness](../../../../spikes/vue3-migration/RELEASE-READINESS.md);
 green packaging does not close physical-device, profile-upgrade, recovery,
 provider, beta, or production-verification gates.

@@ -27,6 +27,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
+import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 import type { BitcoinHardwareAccount } from '@/chains/bitcoin/bitcoinKeyManager';
 import { ACCOUNT_XPUB_VERSION, bitcoinAccountPath, bitcoinAddressPath } from '@/chains/bitcoin/bitcoinPaths';
@@ -223,6 +224,9 @@ export default {
     const deserializedTx: Serialization.Transaction = originalTxCbor
       ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
       : Serialization.Transaction.fromCore(tx);
+    // Ledger signs in the page, which cannot read the CIP-113 refusal index; every caller,
+    // the dApp approvals included, passes through here, so the worker is asked here.
+    await assertCip113SignAllowed(deserializedTx.toCbor(), i18n.t('wallet.ledgerSigningFailed') as string);
     const txBody: Cardano.TxBody = tx.body;
     const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
     const inputResolver: Cardano.InputResolver = this.createInputResolver(utxos);
