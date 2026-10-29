@@ -132,6 +132,11 @@ jobs:
       - name: Bundle TDZ and remote-code guard logic
         run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs scripts/precommit-lint.spec.mjs
 
+      # The release gate and the Chrome Web Store step run only when a release is
+      # cut, so a regression in either would otherwise surface on release day.
+      - name: Release artifact and Chrome Web Store logic
+        run: npx vitest run scripts/check-release-artifact.spec.mjs scripts/chrome-web-store.spec.mjs
+
       # The background bundle is built here but never run, and unit tests use
       # Node's own `assert`, so a CommonJS interop mistake in the worker build
       # ships unseen. One did: `require('assert')` handed @subsquid/scale-codec

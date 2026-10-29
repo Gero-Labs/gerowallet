@@ -16,7 +16,7 @@
  */
 import { computed, toRefs } from 'vue';
 import { tokenRowKey } from '@/shared/utils/tokenRowKey';
-import { walletStore } from '@/stores/walletStore';
+import { walletStore, totalProgrammableLockedLovelace } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
@@ -29,7 +29,7 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 import { isRealFiAsset } from '@/modules/realfi/assets';
 
 export function useHoldingsValuation() {
-  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens, programmableLockedLovelace } = toRefs(walletStore);
+  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
@@ -82,8 +82,9 @@ export function useHoldingsValuation() {
     // ADA riding along in the programmable UTxOs. It is the user's, but Gero cannot
     // spend it, so it gets its own locked row instead of joining adaBalance, keyed apart
     // from the spendable row via tokenRowKey() ('lovelace#locked'). Unlike locked CIP-113
-    // tokens, this row keeps its real price and counts toward totals — see below.
-    const lockedLovelace = Number(programmableLockedLovelace.value || '0');
+    // tokens, this row keeps its real price and counts toward totals — see below. Both
+    // owner conventions (stake key and payment key) land in this one row.
+    const lockedLovelace = Number(totalProgrammableLockedLovelace());
     if (lockedLovelace > 0) {
       entries.push(['lovelace', {
         quantity: lockedLovelace,
@@ -117,6 +118,7 @@ export function useHoldingsValuation() {
       let priceAda = marketToken?.priceAda || 0;
 
       const isNativeToken = unit === 'lovelace' || token.policy_id === '';
+      const cip113Registered = isProgrammable && !isNativeToken && (token as { cip113Registered?: boolean }).cip113Registered === true;
       if (isNativeToken) {
         priceUsd = adaPriceUsd;
         priceAda = 1;
@@ -156,13 +158,18 @@ export function useHoldingsValuation() {
         // RealFi's USDrf/sUSDrf are canonical but new, so neither the market API nor
         // DexHunter vouches for them yet — without this, verified-only (the mainnet
         // default) hides a user's staked balance from their own portfolio.
-        verified: (marketToken?.verified ?? dhToken?.verified ?? isNativeToken) || isRealFiAsset(unit),
+        // A token locked at the PLB address under a policy the CIP-113 registry doesn't list is
+        // shown as unverified whatever its metadata says (issue 1267).
+        verified: isProgrammable && !isNativeToken && !cip113Registered
+          ? false
+          : (marketToken?.verified ?? dhToken?.verified ?? isNativeToken) || isRealFiAsset(unit),
         // Graduated snek.fun tokens are unverified but legit — carry the market
         // flag through so the verified-only filter exempts them and the snek
         // badge renders (mirrors the market list). Missing here = held snek
         // tokens silently stripped by verified-only.
         isSnekFun: marketToken?.isSnekFun ?? false,
         isProgrammable,
+        cip113Registered,
         rowKey: tokenRowKey(unit, isProgrammable),
         isScam: (token as { isScam?: boolean }).isScam ?? false,
         price: priceUsd,

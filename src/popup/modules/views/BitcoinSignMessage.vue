@@ -3,21 +3,14 @@
     <PopupHeader :title="$t('bitcoin.signMessage')" :show-website="hasWebsite" :disabled="loading">
       <v-card-text class="d-flex flex-column pa-0 fill-height">
         <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
-        <v-card-title class="pa-0 mb-2" style="color: white; font-size: 14px">
-          {{ $t('bitcoin.signMessageRequest') }}
-        </v-card-title>
-
-        <!-- Signing type badge -->
-        <div class="mb-2">
-          <v-chip size="x-small" color="orange darken-2" text-color="white">
-            {{ signingType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}
-          </v-chip>
+        <div class="btc-message__head">
+          <p class="t-body-lg btc-message__title">{{ $t('bitcoin.signMessageRequest') }}</p>
+          <!-- The signature scheme, named like a transaction tag (neutral, not painted) -->
+          <span class="btc-message__scheme">{{ signingType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}</span>
         </div>
 
-        <!-- Message content -->
-        <v-card flat variant="outlined" style="background-color: #141414!important; flex: 1 1 auto; overflow-y: auto; max-height: 120px;" class="pa-2 mb-3">
-          <v-card-text class="btc-message-text pa-0">{{ messageText }}</v-card-text>
-        </v-card>
+        <!-- The message is a read-only control: solid raised fill so long text stays legible -->
+        <div class="btc-message__text">{{ messageText }}</div>
       </v-card-text>
 
       <v-card-actions class="justify-center pb-0 pt-2 px-0">
@@ -43,6 +36,7 @@
               <PassKeyAuthButton
                 v-if="!signed"
                 :disabled="loading"
+                @prf-output="handlePrfOutput"
                 @success="handlePassKeyAuthSuccess"
                 @error="handlePassKeyAuthError"
                 block class="mb-2"
@@ -109,7 +103,12 @@ const form = ref(null);
 const valid = ref(false);
 const loading = ref(false);
 const spendingPassword = ref('');
-const privateKeyBytes = ref<Uint8Array | null>(null);
+/**
+ * The PassKey's raw PRF output: the Bitcoin signer decrypts the recovery phrase with it
+ * (WalletBg.signBitcoinDappMessage). PassKeyAuthButton emits it as `prf-output` just before `success`,
+ * whose PRF-decrypted private key cannot open the phrase and is wiped on arrival.
+ */
+const prfOutput = ref<Uint8Array | null>(null);
 const controller = ref(null);
 const request = ref<BtcSignMessageRequest | null>(null);
 const messageText = ref('');
@@ -131,17 +130,28 @@ const isPrfWallet = computed(() =>
 const approval = useApprovalFreshness(
   () => [request.value, loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId, loggedWallet.value?.encryptionMethod],
   () => !!request.value && !!loggedWallet.value && !walletStore.isLocked,
-  () => { privateKeyBytes.value?.fill(0); privateKeyBytes.value = null; signed.value = false; },
+  () => { prfOutput.value?.fill(0); prfOutput.value = null; signed.value = false; },
 );
-const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+// A copy: the button's array is a view over the buffer it goes on to decrypt with.
+const handlePrfOutput = (bytes: Uint8Array) => {
+  prfOutput.value?.fill(0);
+  prfOutput.value = new Uint8Array(bytes);
+};
+
+const handlePassKeyAuthSuccess = (decryptedKey: Uint8Array) => {
+  decryptedKey.fill(0);
+  if (!prfOutput.value) {
+    snackbar.setError(t('security.passKeyAuthFailed'));
+    return;
+  }
   const approvalCurrent = approval.capture();
-  privateKeyBytes.value = pkBytes;
   setTimeout(() => approvalCurrent() && sign(), 300);
 };
 
 const handlePassKeyAuthError = (error: Error) => {
   snackbar.setError(error.message || t('security.passKeyAuthFailed'));
-  privateKeyBytes.value = null;
+  prfOutput.value?.fill(0);
+  prfOutput.value = null;
 };
 
 const decline = async () => {
@@ -165,8 +175,9 @@ const sign = () => approval.run(async () => {
       type: signingType.value,
     };
 
-    if (isPrfWallet.value && privateKeyBytes.value) {
-      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+    // `privateKeyBytes` is the wire name the background reads the raw PRF output under.
+    if (isPrfWallet.value && prfOutput.value) {
+      signingData.privateKeyBytes = Array.from(prfOutput.value);
     } else {
       if (!(await awaitFreshApproval(async () => (form.value?.validate()), approvalCurrent))?.valid) { loading.value = false; return; }
       signingData.password = spendingPassword.value;
@@ -211,13 +222,45 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.btc-message-text {
+.btc-message__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+  margin-bottom: var(--g-s-2);
+}
+
+.btc-message__title {
+  margin: 0;
+}
+
+.btc-message__scheme {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-chip);
+  color: var(--g-text-2);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.btc-message__text {
+  flex: 1 1 auto;
+  max-height: 120px;
+  margin-bottom: var(--g-s-3);
+  overflow-y: auto;
+  padding: var(--g-s-2) var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  color: var(--g-text-1);
   font-size: 14px;
-  font-weight: 400;
-  text-align: left;
   line-height: 1.5;
-  word-wrap: break-word;
+  text-align: left;
   white-space: pre-wrap;
-  color: white !important;
+  overflow-wrap: anywhere;
 }
 </style>

@@ -27,6 +27,7 @@ vi.mock('@/stores/coinGeckoStore', () => ({ coinGeckoStore: { cache: {} } }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ tokenMetadataStore: { tokens: {} } }));
 
 import { walletStore } from '@/stores/walletStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { useHoldingsValuation } from './useHoldingsValuation';
 import { REALFI_ASSETS } from '@/modules/realfi/assets';
 
@@ -40,6 +41,7 @@ function resetStore() {
   walletStore.tokens = {};
   walletStore.programmableTokens = {};
   walletStore.programmableLockedLovelace = '0';
+  tokenMetadataStore.tokens = {};
 }
 
 describe('useHoldingsValuation — CIP-113 holdings', () => {
@@ -164,6 +166,49 @@ describe('useHoldingsValuation — CIP-113 holdings', () => {
 // RealFi's USDrf/sUSDrf are canonical but new at launch, so neither the market API nor
 // DexHunter vouches for them. The portfolio's verified-only filter (the mainnet
 // default) would otherwise hide a user's staked balance from their own holdings.
+// Issue 1267: a token at the PLB address counts as CIP-113 only when the registry lists its
+// policy. Anything else is shown as an ordinary unverified token, still locked.
+describe('useHoldingsValuation — CIP-113 registry', () => {
+  beforeEach(resetStore);
+
+  const UNREGISTERED_UNIT = 'd'.repeat(56) + '41495244524f50';
+  const held = (unit: string, cip113Registered?: boolean) => ({
+    unit, name: unit.slice(56), quantity: '10', policy_id: unit.slice(0, 56), isProgrammable: true,
+    ...(cip113Registered === undefined ? {} : { cip113Registered }),
+  });
+
+  it('marks the token the registry lists, and only that one', () => {
+    walletStore.programmableTokens = {
+      [PROGRAMMABLE_UNIT]: held(PROGRAMMABLE_UNIT, true),
+      [UNREGISTERED_UNIT]: held(UNREGISTERED_UNIT, false),
+    };
+
+    const { holdings } = useHoldingsValuation();
+    expect(holdings.value.find(r => r.unit === PROGRAMMABLE_UNIT)?.cip113Registered).toBe(true);
+    const spam = holdings.value.find(r => r.unit === UNREGISTERED_UNIT);
+    expect(spam?.cip113Registered).toBe(false);
+    expect(spam?.isProgrammable).toBe(true);
+  });
+
+  it('shows an unregistered locked token as unverified whatever its metadata says', () => {
+    tokenMetadataStore.tokens = { [UNREGISTERED_UNIT]: { verified: true } };
+    walletStore.programmableTokens = { [UNREGISTERED_UNIT]: held(UNREGISTERED_UNIT) };
+
+    const { holdings } = useHoldingsValuation();
+    expect(holdings.value.find(r => r.unit === UNREGISTERED_UNIT)?.verified).toBe(false);
+  });
+
+  it('leaves the same token spendable elsewhere as verified as its metadata says', () => {
+    tokenMetadataStore.tokens = { [UNREGISTERED_UNIT]: { verified: true } };
+    walletStore.tokens = { [UNREGISTERED_UNIT]: { quantity: '3', policy_id: 'd'.repeat(56) } };
+
+    const { holdings } = useHoldingsValuation();
+    const row = holdings.value.find(r => r.unit === UNREGISTERED_UNIT);
+    expect(row?.verified).toBe(true);
+    expect(row?.cip113Registered).toBe(false);
+  });
+});
+
 describe('useHoldingsValuation — RealFi assets', () => {
   beforeEach(resetStore);
 

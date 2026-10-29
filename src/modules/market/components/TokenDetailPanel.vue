@@ -35,7 +35,7 @@
         <div class="d-flex align-center">
           <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
           <v-icon v-if="token.verified" size="small" color="primary" class="mr-1">mdi-check-decagram</v-icon>
-          <v-tooltip location="top" v-if="isProgrammableRow(token)"  :open-delay="300" content-class="custom-tooltip">
+          <v-tooltip location="top" v-if="isCip113BadgeRow(token)"  :open-delay="300" content-class="custom-tooltip">
             <template v-slot:activator="{ props: activatorProps }">
               <v-chip
                 size="x-small" label
@@ -220,7 +220,13 @@
             />
           </div>
           <div v-else-if="isProgrammableRow(token)" class="text-center py-4 text--secondary text-caption">
-            {{ $t(programmableTooltipKey(token.unit)) }}
+            {{ $t(lockedRowMessageKey(token)) }}
+            <!-- Gero's own Send (CIP-113): the one way to move these tokens from the wallet. -->
+            <div v-if="canSendProgrammable(token)" class="mt-3">
+              <v-btn class="geroButton" size="small" data-testid="token-detail-programmable-send" @click="showProgrammableSend = true">
+                {{ $t('common.send') }}
+              </v-btn>
+            </div>
           </div>
           <div v-else class="text-center py-4 text--secondary text-caption">
             {{ $t('market.na') }}
@@ -312,13 +318,22 @@
         </transition>
       </div>
     </div>
+    <ProgrammableSendDialog
+      :is-open="showProgrammableSend"
+      :unit="token.unit"
+      :ticker="token.ticker"
+      :name="token.name"
+      :decimals="token.decimalsUnknown ? 0 : token.decimals"
+      @close="showProgrammableSend = false"
+    />
   </v-card>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, type Ref } from 'vue';
 import type { Time } from 'lightweight-charts';
-import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
+import { programmableTooltipKey, isProgrammableRow, isCip113BadgeRow, lockedRowMessageKey, canSendProgrammable } from '@/shared/utils/programmableTokenDisplay';
+import ProgrammableSendDialog from './ProgrammableSendDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
@@ -370,6 +385,10 @@ defineEmits<{
 // Reset per token, or the next token selected inherits this one's failure.
 const imgFailed = ref(false);
 watch(() => props.token?.img, () => { imgFailed.value = false; });
+
+// Gero's own Send of a CIP-113 token; closes when another token is selected.
+const showProgrammableSend = ref(false);
+watch(() => props.token?.unit, () => { showProgrammableSend.value = false; });
 
 /** Whether this drawer's token is the current network's cNIGHT/NIGHT on a
  *  Cardano wallet — the only token that can generate DUST. */

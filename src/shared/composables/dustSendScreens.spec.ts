@@ -5,7 +5,7 @@ import { nextTick,  type Ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** The live DUST reading both screens consume, driven directly by each test. */
-interface LiveDust { dustBalance: Ref<bigint>; settled: Ref<boolean> }
+interface LiveDust { dustBalance: Ref<bigint>; dustCap: Ref<bigint>; settled: Ref<boolean> }
 /** The `<script setup>` bindings these tests read or drive, reached through the instance. */
 interface SetupState {
   recipient: unknown;
@@ -16,6 +16,8 @@ interface SetupState {
   currentStep: unknown;
   sponsorWalletId: unknown;
   blockedByFee: unknown;
+  dustBattery: { percent: number } | null;
+  isDustEmpty: boolean;
 }
 
 const review = vi.hoisted(() => ({ live: {} as LiveDust, sponsorId: null as number | null }));
@@ -38,7 +40,7 @@ vi.mock('@/modules/dashboard/dialogs/MidnightSponsorPicker.vue', () => ({ defaul
 } }));
 vi.mock('@/shared/composables/useMidnightDustLive', async () => {
   const { ref } = await import('vue');
-  review.live = { dustBalance: ref(0n), settled: ref(true) };
+  review.live = { dustBalance: ref(0n), dustCap: ref(0n), settled: ref(true) };
   return { useMidnightDustLive: () => review.live };
 });
 vi.mock('@/stores/walletStore', async () => {
@@ -97,7 +99,9 @@ function button(wrapper: VueWrapper, text: string) {
   if (!found) throw new Error(`Missing button ${text}`);
   return found;
 }
-beforeEach(() => { review.live.dustBalance.value = 0n; review.live.settled.value = true; review.sponsorId = null; });
+beforeEach(() => {
+  review.live.dustBalance.value = 0n; review.live.dustCap.value = 0n; review.live.settled.value = true; review.sponsorId = null;
+});
 afterEach(() => { views.splice(0).forEach((wrapper) => wrapper.unmount()); });
 
 describe.each([['dashboard', Dialog], ['side panel', Sheet]] as const)('%s send wiring', (surface, component) => {
@@ -141,5 +145,28 @@ describe.each([['dashboard', Dialog], ['side panel', Sheet]] as const)('%s send 
     await settle();
     expect(wrapper.text()).not.toContain('midnight.send.noDustFee');
     expect(wrapper.find('[data-sponsor-picker]').exists()).toBe(false);
+  });
+
+  // Issue 1118: the store's Path-A dustState (null in this mock) has no capacity
+  // for a wallet whose DUST comes from a Cardano cNIGHT registration, which hid the bar.
+  it('shows the DUST battery from the merged live balance, not the store\'s Path-A figure', async () => {
+    review.live.dustBalance.value = 3_381n;
+    review.live.dustCap.value = 5_000n;
+    const wrapper = mountScreen(component);
+    await settle();
+    expect(state(wrapper).dustBattery).toEqual({ percent: 68 });
+    expect(state(wrapper).isDustEmpty).toBe(false);
+  });
+
+  it('calls DUST empty only once both paths have reported a zero', async () => {
+    review.live.dustCap.value = 5_000n;
+    review.live.settled.value = false;
+    const wrapper = mountScreen(component);
+    await settle();
+    expect(state(wrapper).isDustEmpty).toBe(false);
+    review.live.settled.value = true;
+    await settle();
+    expect(state(wrapper).isDustEmpty).toBe(true);
+    expect(state(wrapper).dustBattery).toEqual({ percent: 0 });
   });
 });

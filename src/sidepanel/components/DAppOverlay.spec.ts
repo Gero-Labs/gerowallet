@@ -5,6 +5,7 @@ import { nextTick } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
+import { Psbt } from 'bitcoinjs-lib';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
 
 const mocks = vi.hoisted(() => ({
@@ -30,9 +31,13 @@ vi.mock('../composables/useChainContext', async () => {
   const { ref } = await import('vue');
   return { useChainContext: () => ({ themeColors: ref({ primary: '#fff' }) }) };
 });
-vi.mock('@/stores/walletStore', async () => ({ default: { state: (await import('vue')).reactive({
-  loggedWallet: {}, isLocked: false, keys: { payment: [], change: [], stake: [] }, utxos: [],
-}) } }));
+// As in the real module, the default export's state is the named walletStore.
+vi.mock('@/stores/walletStore', async () => {
+  const state = (await import('vue')).reactive({
+    loggedWallet: {}, isLocked: false, keys: { payment: [], change: [], stake: [] }, utxos: [],
+  });
+  return { default: { state }, walletStore: state };
+});
 vi.mock('@/stores/networkStore', () => ({ networkStore: { tip: null }, isBitcoinTip: () => false }));
 vi.mock('@/stores/priceStore', () => ({ priceStore: {} }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: { privateSyncStatus: 'idle', proofServer: { mode: 'local' } } }));
@@ -420,7 +425,7 @@ describe('dApp Bitcoin PSBT: signing waits on the review', () => {
   it('shows where the coins go and signs the PSBT it showed', async () => {
     overlay.currentRequest.value = signPsbt() as never;
     const wrapper = render();
-    await vi.waitFor(() => expect(wrapper.find('[data-testid="bitcoin-psbt-net"]').exists()).toBe(true));
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="bitcoin-psbt-output"]').exists()).toBe(true));
 
     expect(wrapper.find('[data-testid="bitcoin-psbt-output"]').text()).toContain(attacker);
     await signPassword(wrapper);
@@ -442,5 +447,56 @@ describe('dApp Bitcoin PSBT: signing waits on the review', () => {
     await button(wrapper, 'sign').trigger('click');
     await flushPromises();
     expect(mocks.send).not.toHaveBeenCalled();
+  });
+});
+
+// The Bitcoin signer decrypts a PassKey wallet's recovery phrase with the raw PRF output
+// (WalletBg.signBitcoinDappPsbt / signBitcoinDappMessage). The popup's `privateKey` mode
+// answers with the PRF-decrypted private key instead, which cannot open the phrase.
+describe('Bitcoin dApp signing with a PassKey', () => {
+  // The PSBT spends the wallet's own coin, with its amount: the review lets nothing else be signed.
+  const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
+  const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow'; // test vector, no funds
+  const ownScript = bitcoin.payments.p2wpkh({
+    pubkey: NodeBuffer.from(deriveBitcoinRootKey(PHRASE).derive("m/84'/0'/0'/0/0").publicKey!),
+  }).output!;
+  const psbtHex = new Psbt().addInput({ hash: '01'.repeat(32), index: 0, witnessUtxo: { script: ownScript, value: 2000 } })
+    .addOutput({ address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', value: 1000 }).toHex();
+  const btcRequests = [
+    ['message', { requestId: 'btc-message', method: 'btcSignMessage', payload: { message: 'hello', type: 'bip322-simple' } },
+      MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, { success: true, signature: 'btc-signature' }, 'btc-signature'],
+    ['PSBT', { requestId: 'btc-psbt', method: 'btcSignPsbt', payload: { psbtHex, options: { autoFinalized: false } } },
+      MessageTypes.BITCOIN_DAPP_SIGN_PSBT, { success: true, signedHex: 'signed-psbt' }, 'signed-psbt'],
+  ] as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    WalletStore.state.loggedWallet = {
+      id: 1, type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.MAINNET, encryptionMethod: 'prf',
+      addressType: 'segwit', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.MAINNET, 'segwit', 0),
+    } as never;
+  });
+
+  function finishRawPrf(prfOutput: number[]) {
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: new URL(chrome.runtime.getURL('')).origin,
+      data: { type: 'PASSKEY_AUTH_RESULT', payload: { success: true, prfOutput } },
+    }));
+  }
+
+  it.each(btcRequests)('signs a %s with the raw PRF output from the PassKey popup', async (_kind, btcRequest, method, reply, approved) => {
+    overlay.currentRequest.value = btcRequest as never;
+    mocks.send.mockResolvedValue({ data: reply });
+    const wrapper = render();
+    // A PSBT's Sign waits on the review of what it signs.
+    await vi.waitFor(() => expect(button(wrapper, 'sign').attributes('disabled')).toBeUndefined());
+
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+    expect(window.open).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('mode=rawPrf'), 'PassKeyAuth', expect.any(String));
+
+    finishRawPrf([9, 8, 7]);
+    await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(approved));
+    expect(mocks.send).toHaveBeenCalledExactlyOnceWith({ method, data: expect.objectContaining({ privateKeyBytes: [9, 8, 7] }) });
   });
 });

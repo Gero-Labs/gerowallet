@@ -849,9 +849,11 @@ function applySearchFilter(tokens: MarketToken[]): MarketToken[] {
 
 // Shared by displayedTokens and hiddenByFilterCount — both must agree on which
 // rows the verified filter keeps, or the hidden count drifts from the table.
-// Programmable tokens are exempt for the same reason snek.fun ones are: legitimate
-// holdings that are inherently unverified.
-const passesVerifiedFilter = (tok: MarketToken): boolean => tok.verified || tok.isSnekFun || tok.isProgrammable;
+// CIP-113 tokens are exempt for the same reason snek.fun ones are: legitimate holdings that
+// are inherently unverified. Only registered ones, though: anything can be sent to the PLB
+// address, and an unregistered token there is an ordinary unverified one (issue 1267).
+const passesVerifiedFilter = (tok: MarketToken): boolean =>
+  tok.verified || tok.isSnekFun || (!!tok.isProgrammable && tok.cip113Registered === true);
 
 // Rows the verified filter removed from the holdings view — surfaced under the
 // table so a real balance never silently disappears (issue 1003).

@@ -19,7 +19,9 @@ vi.mock('@/modules/market/composables/useNativeCurrency', async () => {
   const { ref } = await import('vue');
   return { useNativeCurrency: () => ({ currencySymbol: ref('ADA'), currencyTicker: ref('ADA') }) };
 });
-vi.mock('@/utils/networks', () => ({ default: { resolveCurrencyImage: () => '' } }));
+vi.mock('@/utils/networks', () => ({
+  default: { resolveCurrencyImage: () => '', resolveCip113TransferScripts: () => ({ base: ['b'], global: ['g'], transfer: ['t'] }) },
+}));
 vi.mock('@/plugins/snackbar', () => ({ default: { fireSuccess: vi.fn(), setError: vi.fn() } }));
 vi.mock('@/shared/composables/useExplorer', () => ({ useExplorer: () => ({ explorerUrl: () => '' }) }));
 vi.mock('@/shared/composables/useDustPending', () => ({ getDustPending: () => undefined }));
@@ -41,8 +43,13 @@ vi.mock('./TechnicalAnalysisChart.vue', () => ({ default: { template: '<div />' 
 vi.mock('./RecentTrades.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./BuySellVolume.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/modules/dashboard/components/DustGenerationLine.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./ProgrammableSendDialog.vue', () => ({
+  default: { props: ['isOpen', 'unit'], template: '<div v-if="isOpen" data-test="programmable-send-dialog">{{ unit }}</div>' },
+}));
 
 import TokenDetailPanel from './TokenDetailPanel.vue';
+import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 enableAutoUnmount(afterEach);
 beforeEach(() => { mocks.candles.mockReset().mockResolvedValue([]); });
@@ -135,5 +142,43 @@ describe('TokenDetailPanel with real Vuetify tabs', () => {
     await flushPromises();
     expect(reopened.get('[data-test="swap-widget"]').isVisible()).toBe(true);
     expect(tab(reopened, 'swap').attributes('aria-selected')).toBe('true');
+  });
+});
+
+// Gero's own Send (CIP-113): the swap widget never shows for a programmable token; with
+// isCip113Enabled on, a registered one offers Send in its place.
+describe('TokenDetailPanel for a CIP-113 token', () => {
+  const unit = 'c'.repeat(56) + '01';
+  const store = walletStore as unknown as Record<string, unknown>;
+
+  beforeEach(() => {
+    store['programmableTokens'] = { [unit]: { unit, quantity: 5, isProgrammable: true, cip113Registered: true } };
+    store['loggedWallet'] = { chain: 'Cardano', network: 'Preprod', type: 'Normal' };
+  });
+  afterEach(() => {
+    store['programmableTokens'] = {};
+    store['loggedWallet'] = { chain: 'Cardano', network: 'Preprod' };
+    featureFlagsStore.state.flags.isCip113Enabled = false;
+  });
+
+  it('offers Send instead of the swap widget once isCip113Enabled is on', async () => {
+    featureFlagsStore.state.flags.isCip113Enabled = true;
+    const wrapper = render(token('', { unit }));
+    await flushPromises();
+
+    expect(wrapper.find('[data-test="swap-widget"]').exists()).toBe(false);
+    expect(wrapper.get('.right-col').text()).toContain('programmableTokens.noSwapCanSend');
+    expect(wrapper.find('[data-test="programmable-send-dialog"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="token-detail-programmable-send"]').trigger('click');
+    expect(wrapper.get('[data-test="programmable-send-dialog"]').text()).toBe(unit);
+  });
+
+  it('keeps the locked message and offers no Send with the flag off', async () => {
+    const wrapper = render(token('', { unit }));
+    await flushPromises();
+
+    expect(wrapper.find('[data-test="swap-widget"]').exists()).toBe(false);
+    expect(wrapper.get('.right-col').text()).toContain('programmableTokens.badgeTooltip');
+    expect(wrapper.find('[data-testid="token-detail-programmable-send"]').exists()).toBe(false);
   });
 });

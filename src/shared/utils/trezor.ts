@@ -625,19 +625,22 @@ const mapRequiredSigners = (requiredSigners?: Ed25519KeyHashHex[], context?: Tre
  * NOTE: Payment key paths should NOT be included here because they are already in the inputs!
  * Including them here causes invalid signatures.
  *
- * Stake key signature is only required for transactions with certificates or withdrawals
+ * Stake key signature is only required for the wallet's own certificates or reward withdrawals.
+ * mapCerts maps every certificate to the wallet's stake key, so any certificate counts. A
+ * withdrawal counts only when it draws the wallet's own rewards: a script withdrawal (a
+ * CIP-113 transfer runs three) or another key's needs no stake witness, and an unrequested
+ * one adds bytes the fee was not computed for.
  */
 const mapAdditionalWitnessRequests = (body: Cardano.TxBody, context: TrezorTxTransformerContext): string[] | undefined => {
   if (!context || !context.knownAddresses || context.knownAddresses.length === 0) {
     return undefined;
   }
 
-  // Only add stake key path if transaction has certificates or withdrawals
-  // These are the only cases where stake key signature is required as an ADDITIONAL witness
   const hasCertificates = body.certificates && body.certificates.length > 0;
-  const hasWithdrawals = body.withdrawals && body.withdrawals.length > 0;
+  const ownRewardAccounts = new Set<string>(context.knownAddresses.map((address) => address.rewardAccount));
+  const hasOwnWithdrawal = body.withdrawals?.some((withdrawal) => ownRewardAccounts.has(withdrawal.stakeAddress));
 
-  if (hasCertificates || hasWithdrawals) {
+  if (hasCertificates || hasOwnWithdrawal) {
     // util.stakeKeyPathFromGroupedAddress sometimes returns a BIP32Path array instead of AccountKeyDerivationPath,
     // so we manually construct the stake key path for reliability
     const stakeKeyPath = util.accountKeyDerivationPathToBip32Path(

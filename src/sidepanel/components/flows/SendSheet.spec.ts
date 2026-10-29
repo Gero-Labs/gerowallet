@@ -52,7 +52,7 @@ interface View {
   extraTokens: { unit: string; sendAmount: string; decimals?: number; balance?: string }[]; selectedNfts: { unit: string; toSendQuantity: number }[];
   signAndSubmit(): Promise<void>; signLedger(): Promise<void>; signTrezor(): Promise<void>;
   signOnAnotherDevice(): Promise<void>; onPassKeySuccess(key: Uint8Array): Promise<void>;
-  signKeystone(): void; onKeystoneScan(ur: UR): Promise<void>; onClose(open: boolean): void;
+  signKeystone(): Promise<void>; onKeystoneScan(ur: UR): Promise<void>; onClose(open: boolean): void;
   goToStep(step: number): Promise<void>;
   setAdaMax(): void; setTokenMax(index: number): void; fillMinAda(): void;
 }
@@ -415,13 +415,13 @@ describe('side-panel Cardano approval', () => {
   });
   it('rejects old Keystone responses after a new QR approval and accepts the matching response once', async () => {
     const { view } = render();
-    mocks.qr.mockReturnValueOnce({ requestId: 'first', ur: { type: 'cardano', cbor: Buffer.from('aa', 'hex') } })
-      .mockReturnValueOnce({ requestId: 'second', ur: { type: 'cardano', cbor: Buffer.from('bb', 'hex') } });
-    view.signKeystone();
+    mocks.qr.mockResolvedValueOnce({ requestId: 'first', ur: { type: 'cardano', cbor: Buffer.from('aa', 'hex') } })
+      .mockResolvedValueOnce({ requestId: 'second', ur: { type: 'cardano', cbor: Buffer.from('bb', 'hex') } });
+    await view.signKeystone();
     view.tx = transaction('replacement');
     await view.onKeystoneScan({} as UR);
     expect(mocks.parseQr).not.toHaveBeenCalled();
-    view.signKeystone();
+    await view.signKeystone();
     mocks.parseQr.mockReturnValueOnce({ requestId: 'first', witnessSet: 'old' });
     await view.onKeystoneScan({} as UR);
     expect(methods()).not.toContain(MessageTypes.SUBMIT_TX);

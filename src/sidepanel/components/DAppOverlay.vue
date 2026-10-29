@@ -414,7 +414,8 @@
           </div>
         </div>
 
-        <BitcoinPsbtReview :review="btcPsbtReview" />
+        <!-- Every output, the fee, the total and the inputs this wallet signs (same card as the popup) -->
+        <BitcoinPsbtReview :review="btcPsbtReview" class="mb-3" />
 
         <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
@@ -454,9 +455,10 @@
           </div>
         </div>
 
-        <v-chip size="x-small" color="orange darken-2" text-color="white" class="mb-2">
+        <!-- The signature scheme, named like a transaction tag (neutral, not painted) -->
+        <span class="btc-scheme-tag mb-2">
           {{ btcMessageSigningType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}
-        </v-chip>
+        </span>
         <div class="sign-data-message">
           <p class="white--text text-caption" style="word-break: break-all;">{{ btcMessageText }}</p>
         </div>
@@ -1455,8 +1457,8 @@ const signDataMessage = computed(() => {
 
 // ── Bitcoin: PSBT + message signing ────────────────────────────────────────
 // Password/PRF paths mirror the popup's BitcoinSignPsbt.vue/BitcoinSignMessage.vue
-// exactly (same MessageTypes.BITCOIN_DAPP_SIGN_PSBT/MESSAGE handler, proven
-// correct). Hardware wallets (Ledger/Trezor/Keystone) are NOT ported here:
+// (same MessageTypes.BITCOIN_DAPP_SIGN_PSBT/MESSAGE handler; a PassKey sends the
+// raw PRF output, see runBtcPrf). Hardware wallets (Ledger/Trezor/Keystone) are NOT ported here:
 // the popup's own Ledger/Trezor calls pass arguments and read a
 // `signedPsbtHex` field that no longer exist on the current
 // bitcoinHardwareSigner.ts API (it now returns {signedPsbt, txHex, txId} from
@@ -1513,7 +1515,7 @@ async function signBtcPsbtNormal() {
   });
 }
 
-async function signBtcPsbtPrf(pkBytes: Uint8Array) {
+async function signBtcPsbtPrf(prfBytes: Uint8Array) {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value || btcPsbtBlocked.value) return;
@@ -1523,7 +1525,7 @@ async function signBtcPsbtPrf(pkBytes: Uint8Array) {
     const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
     const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
-      data: { psbtHex, options, privateKeyBytes: Array.from(pkBytes) },
+      data: { psbtHex, options, privateKeyBytes: Array.from(prfBytes) },
     })), approvalCurrent) as { data: { success: boolean; signedHex?: string; error?: string } };
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
     approve(response.data.signedHex);
@@ -1562,7 +1564,7 @@ async function signBtcMessageNormal() {
   });
 }
 
-async function signBtcMessagePrf(pkBytes: Uint8Array) {
+async function signBtcMessagePrf(prfBytes: Uint8Array) {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
   if (!currentRequest.value) return;
@@ -1571,7 +1573,7 @@ async function signBtcMessagePrf(pkBytes: Uint8Array) {
   try {
     const response = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
-      data: { message: btcMessageText.value, type: btcMessageSigningType.value, privateKeyBytes: Array.from(pkBytes) },
+      data: { message: btcMessageText.value, type: btcMessageSigningType.value, privateKeyBytes: Array.from(prfBytes) },
     })), approvalCurrent) as { data: { success: boolean; signature?: unknown; error?: string } };
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
     approve(response.data.signature);
@@ -1585,8 +1587,12 @@ async function signBtcMessagePrf(pkBytes: Uint8Array) {
 }
 
 // PRF wallets need the WebAuthn ceremony (same cross-window pattern as
-// signPrf/signDataPrf above) before either Bitcoin signer can run.
-async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
+// signPrf/signDataPrf above) before either Bitcoin signer can run. It asks for
+// the RAW PRF output (mode=rawPrf), as the Midnight paths below do: the Bitcoin
+// signer decrypts the recovery phrase with it (walletBg.signBitcoinDappPsbt /
+// signBitcoinDappMessage), and mode=privateKey's PRF-decrypted key cannot open it.
+// `privateKeyBytes` is only the wire name the background reads it under.
+async function runBtcPrf(onSuccess: (prfBytes: Uint8Array) => Promise<void>) {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -1594,16 +1600,16 @@ async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
   signing.value = true;
   signError.value = '';
   try {
-    const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
-    const pkBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const prfBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
       const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       const handler = (event: MessageEvent) => {
         if (event.origin !== extensionOrigin) return;
         if (event.data.type === 'PASSKEY_AUTH_RESULT') {
           window.removeEventListener('message', handler);
-          const { success, privateKeyBytes: bytes, error } = event.data.payload;
-          if (success && bytes) resolve(new Uint8Array(bytes));
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
           else rejectPromise(new Error(error || 'PassKey authentication failed'));
         }
       };
@@ -1613,7 +1619,11 @@ async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
         rejectPromise(new Error('PassKey authentication timed out'));
       }, 60000);
     })), approvalCurrent);
-    await awaitFreshApproval(async () => (onSuccess(pkBytes)), approvalCurrent);
+    try {
+      await awaitFreshApproval(async () => (onSuccess(prfBytes)), approvalCurrent);
+    } finally {
+      prfBytes.fill(0);
+    }
   } catch (e) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Bitcoin PRF auth error:', e);
@@ -2497,9 +2507,9 @@ async function signKeystone() {
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     const txCbor = signingRequest.payload.tx;
     const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
-    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
+    const signRequestResponse: KeystoneSignRequestResponse = await awaitFreshApproval(() => createKeystoneSignRequest(
       txSerialized, loggedWallet.value, utxos.value, keys.value
-    );
+    ), approvalCurrent);
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
@@ -3859,6 +3869,18 @@ function approveWcSession() {
 .dapp-sign-data {
   display: flex;
   flex-direction: column;
+}
+
+.btc-scheme-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-chip);
+  color: var(--g-text-2);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .sign-data-message {

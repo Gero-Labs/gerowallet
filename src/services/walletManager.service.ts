@@ -669,8 +669,11 @@ export class WalletManager {
       }
 
       // See subscriptionCredentials(): empty where CIP-113 is configured, so gero-sync
-      // resolves by stake address and returns the programmable-token UTxOs too.
+      // resolves by stake address and returns the stake-key-owned programmable-token UTxOs
+      // too. The payment-key-owned ones sit under other reward addresses and are named
+      // explicitly (empty where CIP-113 is off).
       const credentials = walletBg.subscriptionCredentials();
+      const programmableAddresses = walletBg.programmableSubscriptionAddresses();
 
       // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
       // Returns null and does nothing when the flag is off, so the handlers below
@@ -766,7 +769,7 @@ export class WalletManager {
           }
           debugLog('Force resync complete');
         },
-      }, credentials);
+      }, credentials, undefined, undefined, programmableAddresses);
     } else if (btcWsEnabled) {
       // ── Bitcoin via gero-sync (Phase 5: default path) ────────────────────────
       // BTC rides the SAME WS state machine Cardano uses, subscribing with the

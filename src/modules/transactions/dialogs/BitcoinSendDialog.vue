@@ -1,278 +1,237 @@
 <template>
   <BaseDialog
+    size="sm"
     :isOpen="props.modelValue"
-    icon="mdi-bitcoin"
-    :imgSize="40"
     :title="t('send.sendBitcoin')"
-    :width="500"
-    :height="640"
-    :minHeight="440"
+    :subtitle="t('bitcoin.sendSubtitle', { currency: ticker })"
+    :img="assts.sendSvg"
+    img-color="var(--g-accent)"
+    :min-height="0"
     :scrollable="true"
     :loading="loading"
     :persistent="true"
     @close="closeDialog"
   >
-    <v-card-text class="px-5 pt-1 pb-5">
+    <v-card-text class="px-5 pt-1 pb-5 btc-send">
 
-      <!-- ── Step Progress ── -->
-      <div class="step-track">
-        <div
-          v-for="i in 3"
-          :key="i"
-          class="step-bar"
-          :class="{ 'is-active': currentStep === i, 'is-done': currentStep > i }"
-        />
-      </div>
-      <div class="step-labels">
-        <span v-for="(label, i) in stepLabels" :key="i"
-          :class="['step-label', { 'is-active': currentStep === i + 1, 'is-done': currentStep > i + 1 }]">
-          {{ label }}
-        </span>
-      </div>
+      <!-- ── Step progress ── -->
+      <ol class="btc-send__steps">
+        <li
+          v-for="(label, i) in stepLabels"
+          :key="label"
+          :class="['btc-send__step', { 'btc-send__step--active': currentStep === i + 1, 'btc-send__step--done': currentStep > i + 1 }]"
+          :aria-current="currentStep === i + 1 ? 'step' : undefined"
+        >
+          <span class="btc-send__step-bar" />
+          <span class="btc-send__step-label">{{ label }}</span>
+        </li>
+      </ol>
 
-      <!-- ════════════════════════════════════════
-           STEP 1 — Recipient + Amount
-      ════════════════════════════════════════ -->
-      <transition name="step-fade" mode="out-in">
-        <div v-if="currentStep === 1" key="step1" class="step-body">
-
-          <!-- Recipient address -->
-          <div class="field-block">
-            <label class="field-label">{{ $t('send.recipientAddress') }}</label>
-            <div class="glass-input-wrap" :class="{ 'is-error': !!addressError, 'is-valid': recipientAddress && !addressError }">
+      <transition name="btc-step" mode="out-in">
+        <!-- ════ Step 1: recipient and amount ════ -->
+        <div v-if="currentStep === 1" key="step1" class="btc-send__body">
+          <label class="btc-field">
+            <span class="t-label">{{ $t('send.recipientAddress') }}</span>
+            <span :class="['btc-input', { 'btc-input--error': !!addressError, 'btc-input--valid': recipientAddress && !addressError }]">
               <input
                 v-model="recipientAddress"
-                class="glass-input monospace-input"
+                class="btc-input__control g-mono"
                 :placeholder="t('bitcoin.addressPlaceholder')"
-                @input="validateAddress"
                 autocomplete="off"
                 spellcheck="false"
+                @input="validateAddress"
               />
-              <button class="input-icon-btn" @click="pasteAddress" type="button" :title="t('common.paste') || 'Paste'">
-                <v-icon size="15" color="var(--g-text-3)">mdi-content-paste</v-icon>
-              </button>
-            </div>
-            <span v-if="addressError" class="field-error-msg">{{ addressError }}</span>
-          </div>
+              <v-btn
+                icon
+                variant="text"
+                size="small"
+                :aria-label="t('common.paste')"
+                :title="t('common.paste')"
+                @click="pasteAddress()"
+              >
+                <v-icon size="small">mdi-content-paste</v-icon>
+              </v-btn>
+            </span>
+            <span v-if="addressError" class="btc-field__error">{{ addressError }}</span>
+          </label>
 
-          <!-- Amount -->
-          <div class="field-block mt-4">
-            <label class="field-label">{{ $t('send.amount') }}</label>
-            <div class="amount-wrap" :class="{ 'is-error': !!amountError }">
-              <span class="btc-badge">₿</span>
+          <label class="btc-field">
+            <span class="t-label">{{ $t('send.amount') }}</span>
+            <span :class="['btc-input', { 'btc-input--error': !!amountError }]">
+              <span class="btc-input__unit g-mono">{{ ticker }}</span>
               <input
                 v-model="amountBtc"
-                class="amount-input"
+                class="btc-input__control btc-input__control--amount g-num"
                 type="number"
                 step="0.00000001"
                 min="0"
                 placeholder="0.00000000"
                 @input="validateAmount"
               />
-              <button class="max-pill" @click="setMaxAmount" type="button">{{ $t('common.max') }}</button>
-            </div>
-            <div class="amount-meta">
-              <span v-if="amountError" class="field-error-msg">{{ amountError }}</span>
-              <template v-else>
-                <span v-if="amountInSats > 0" class="sats-hint">
-                  {{ amountInSats.toLocaleString() }} sats
-                  <span v-if="btcPrice > 0" class="usd-hint">
-                    ≈&nbsp;${{ (amountInSats / 1e8 * btcPrice).toLocaleString('en-US', { maximumFractionDigits: 2 }) }}
-                  </span>
-                </span>
-              </template>
-            </div>
-          </div>
+              <GButton tier="tertiary" compact @click="setMaxAmount()">{{ $t('common.max') }}</GButton>
+            </span>
+            <span v-if="amountError" class="btc-field__error">{{ amountError }}</span>
+            <span v-else-if="amountInSats > 0" class="t-caption g-num">{{ amountLine(amountInSats) }}</span>
+          </label>
 
-          <!-- Balance pill -->
-          <div class="balance-strip mt-4">
-            <v-icon size="12" color="#F7931A" class="mr-1">mdi-bitcoin</v-icon>
-            <span class="balance-key">{{ $t('send.availableBalance') }}:</span>
-            <span class="balance-val">{{ formatBtc(availableBalance) }} BTC</span>
-            <span class="balance-sats">({{ Number(availableBalance).toLocaleString() }} sats)</span>
+          <div class="btc-send__balance t-caption">
+            <span>{{ $t('send.availableBalance') }}</span>
+            <span class="g-num btc-send__balance-value">{{ formatBtc(availableBalance) }} {{ ticker }}</span>
+            <span class="g-num">({{ $t('bitcoin.satsValue', { value: formatSats(availableBalance) }) }})</span>
           </div>
         </div>
 
-        <!-- ════════════════════════════════════════
-             STEP 2 — Fee Selection
-        ════════════════════════════════════════ -->
-        <div v-else-if="currentStep === 2" key="step2" class="step-body">
-
-          <div class="fee-tier-grid">
-            <div
+        <!-- ════ Step 2: fee ════ -->
+        <div v-else-if="currentStep === 2" key="step2" class="btc-send__body">
+          <div class="btc-fees" role="radiogroup" :aria-label="t('bitcoin.feeSpeed')">
+            <button
               v-for="tier in feeTiers"
               :key="tier.key"
-              class="fee-card"
-              :class="{ 'is-selected': selectedFeePriority === tier.key }"
+              type="button"
+              role="radio"
+              :aria-checked="selectedFeePriority === tier.key ? 'true' : 'false'"
+              :class="['glass-tier', 'btc-fee', { 'btc-fee--selected': selectedFeePriority === tier.key }]"
               @click="selectedFeePriority = tier.key"
             >
-              <div class="fee-card-top">
-                <span class="fee-tier-name">{{ tier.label }}</span>
-                <div class="speed-dots">
-                  <span v-for="d in 3" :key="d" class="speed-dot" :class="{ lit: d <= tier.dots }" />
-                </div>
-              </div>
-              <div class="fee-rate-val">{{ feeEstimates[tier.key] }}<span class="fee-rate-unit"> sat/vB</span></div>
-              <div class="fee-time-hint">{{ tier.time }}</div>
-              <div class="fee-cost-line">≈ {{ formatBtc(estimatedFeeSatsFor(tier.key)) }} BTC</div>
-            </div>
+              <span class="btc-fee__top">
+                <span class="btc-fee__name">{{ tier.label }}</span>
+                <span class="btc-fee__dots" aria-hidden="true">
+                  <span v-for="d in 3" :key="d" :class="['btc-fee__dot', { 'btc-fee__dot--lit': d <= tier.dots }]" />
+                </span>
+              </span>
+              <span class="btc-fee__rate g-num">{{ $t('bitcoin.feeRateValue', { value: feeEstimates[tier.key] }) }}</span>
+              <span class="t-caption">{{ tier.time }}</span>
+              <span class="t-caption g-num">≈ {{ formatBtc(estimatedFeeSatsFor(tier.key)) }}</span>
+            </button>
           </div>
 
-          <div class="tx-summary mt-5">
-            <div class="summary-row">
-              <span>{{ $t('send.amount') }}</span>
-              <span class="mono">{{ formatBtc(amountInSats) }} BTC</span>
+          <dl class="btc-summary">
+            <div class="btc-summary__row">
+              <dt>{{ $t('send.amount') }}</dt>
+              <dd class="g-num">{{ formatBtc(amountInSats) }} {{ ticker }}</dd>
             </div>
-            <div class="summary-row">
-              <span>{{ $t('send.estimatedFee') }}</span>
-              <span class="mono">{{ formatBtc(estimatedFeeSats) }} BTC <small class="muted">({{ estimatedFeeSats }} sats)</small></span>
+            <div class="btc-summary__row">
+              <dt>{{ $t('send.estimatedFee') }}</dt>
+              <dd class="g-num">
+                {{ formatBtc(estimatedFeeSats) }} {{ ticker }}
+                <span class="btc-summary__sub">{{ $t('bitcoin.satsValue', { value: formatSats(estimatedFeeSats) }) }}</span>
+              </dd>
             </div>
-            <div class="summary-divider" />
-            <div class="summary-row summary-total">
-              <span>{{ $t('send.total') }}</span>
-              <span class="mono">{{ formatBtc(totalAmount) }} BTC</span>
+            <div class="btc-summary__row btc-summary__row--total">
+              <dt>{{ $t('send.total') }}</dt>
+              <dd class="g-num">{{ formatBtc(totalAmount) }} {{ ticker }}</dd>
             </div>
-          </div>
+          </dl>
 
-          <div v-if="totalAmount > availableBalance" class="inline-error mt-3">
-            <v-icon size="14" color="error" class="mr-1">mdi-alert-circle</v-icon>
+          <div v-if="totalAmount > availableBalance" class="btc-notice btc-notice--error">
+            <v-icon size="small">mdi-alert-circle-outline</v-icon>
             {{ $t('send.insufficientBalance') }}
           </div>
         </div>
 
-        <!-- ════════════════════════════════════════
-             STEP 3 — Confirm + Send
-        ════════════════════════════════════════ -->
-        <div v-else-if="currentStep === 3" key="step3" class="step-body">
+        <!-- ════ Step 3: review and send ════ -->
+        <div v-else-if="currentStep === 3" key="step3" class="btc-send__body">
+          <div class="glass-tier btc-review">
+            <span class="t-label">{{ $t('perpetuals.deposit.youSend') }}</span>
+            <span class="btc-review__amount">
+              <span class="t-display g-num">{{ formatBtc(amountInSats) }}</span>
+              <span class="btc-review__unit g-mono">{{ ticker }}</span>
+            </span>
+            <span v-if="fiatOf(amountInSats)" class="t-caption g-num">≈ {{ fiatOf(amountInSats) }}</span>
 
-          <div class="confirm-panel">
-            <!-- Amount hero -->
-            <div class="confirm-amount-row">
-              <span class="confirm-btc-sign">₿</span>
-              <span class="confirm-amount-val">{{ formatBtc(amountInSats) }}</span>
-            </div>
-            <div v-if="btcPrice > 0" class="confirm-usd-equiv">
-              ≈ ${{ (amountInSats / 1e8 * btcPrice).toLocaleString('en-US', { maximumFractionDigits: 2 }) }} USD
-            </div>
+            <span class="t-label btc-review__to">{{ $t('send.to') }}</span>
+            <!-- The whole address, so it can be checked character by character before signing -->
+            <span class="g-mono btc-review__address">{{ recipientAddress }}</span>
 
-            <div class="confirm-flow-icon">
-              <v-icon size="16" color="var(--g-text-3)">mdi-arrow-down-thin</v-icon>
-            </div>
-
-            <div class="confirm-to-label">{{ $t('send.to') }}</div>
-            <div class="confirm-address mono">{{ truncateAddress(recipientAddress) }}</div>
-
-            <div class="confirm-meta-grid mt-4">
-              <div class="confirm-meta-item">
-                <span class="confirm-meta-key">{{ $t('send.fee') }}</span>
-                <span class="confirm-meta-val">{{ formatBtc(estimatedFeeSats) }} BTC</span>
+            <dl class="btc-summary btc-review__meta">
+              <div class="btc-summary__row">
+                <dt>{{ $t('send.fee') }}</dt>
+                <dd class="g-num">{{ formatBtc(estimatedFeeSats) }} {{ ticker }}</dd>
               </div>
-              <div class="confirm-meta-sep" />
-              <div class="confirm-meta-item">
-                <span class="confirm-meta-key">{{ $t('send.total') }}</span>
-                <span class="confirm-meta-val strong">{{ formatBtc(totalAmount) }} BTC</span>
+              <div class="btc-summary__row btc-summary__row--total">
+                <dt>{{ $t('send.total') }}</dt>
+                <dd class="g-num">{{ formatBtc(totalAmount) }} {{ ticker }}</dd>
               </div>
-            </div>
+            </dl>
           </div>
 
-          <!-- PRF (PassKey) wallet -->
-          <div v-if="isPrfWallet" class="mt-4">
-            <transition name="fade" mode="out-in">
-              <!-- Not yet authenticated -->
-              <div v-if="!privateKeyBytes" key="prf-auth" class="prf-auth-block">
-                <div class="prf-hint">
-                  <v-icon size="13" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
-                  {{ $t('security.passKeyAuthRequired') || 'Authenticate with your PassKey to sign' }}
-                </div>
-                <button class="prf-auth-btn" @click="authenticateWithPassKey" type="button">
-                  <v-icon size="16" class="mr-2">mdi-fingerprint</v-icon>
-                  {{ $t('security.authenticateWithPassKey') || 'Authenticate with PassKey' }}
-                </button>
-              </div>
-              <!-- Authenticated -->
-              <div v-else key="prf-done" class="prf-authed-strip">
-                <v-icon size="14" color="success" class="mr-2">mdi-check-circle</v-icon>
-                <span>{{ $t('security.passKeyAuthenticated') || 'PassKey authenticated' }}</span>
-                <button class="prf-reauth-btn" @click="privateKeyBytes = null" type="button">
-                  <v-icon size="12">mdi-refresh</v-icon>
-                </button>
-              </div>
-            </transition>
-          </div>
+          <!-- PassKey (PRF) wallet -->
+          <template v-if="isPrfWallet">
+            <div v-if="!privateKeyBytes" class="btc-auth">
+              <span class="t-caption">{{ $t('security.passKeyAuthRequired') }}</span>
+              <GButton tier="secondary" block @click="authenticateWithPassKey()">
+                <v-icon size="small" start>mdi-fingerprint</v-icon>
+                {{ $t('security.authenticateWithPassKey') }}
+              </GButton>
+            </div>
+            <div v-else class="btc-notice btc-notice--success">
+              <v-icon size="small">mdi-check-circle-outline</v-icon>
+              <span class="btc-notice__text">{{ $t('security.passKeyAuthenticated') }}</span>
+              <v-btn
+                icon
+                variant="text"
+                size="x-small"
+                :aria-label="t('security.authenticateWithPassKey')"
+                :title="t('security.authenticateWithPassKey')"
+                @click="privateKeyBytes = null"
+              >
+                <v-icon size="small">mdi-refresh</v-icon>
+              </v-btn>
+            </div>
+          </template>
 
-          <!-- Normal wallet: password -->
-          <div v-else-if="!isHardwareWallet" class="field-block mt-4">
-            <label class="field-label">{{ $t('send.spendingPassword') }}</label>
-            <div class="glass-input-wrap">
+          <!-- Password wallet -->
+          <label v-else-if="!isHardwareWallet" class="btc-field">
+            <span class="t-label">{{ $t('send.spendingPassword') }}</span>
+            <span class="btc-input">
               <input
                 v-model="password"
-                class="glass-input"
+                class="btc-input__control"
                 :type="showPassword ? 'text' : 'password'"
-                :placeholder="t('send.enterPassword') || 'Spending password'"
+                autocomplete="current-password"
                 @keyup.enter="confirmSend"
               />
-              <button class="input-icon-btn" @click="showPassword = !showPassword" type="button">
-                <v-icon size="15" color="var(--g-text-3)">
-                  {{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}
-                </v-icon>
-              </button>
-            </div>
-          </div>
+              <v-btn
+                icon
+                variant="text"
+                size="small"
+                :aria-label="showPassword ? t('common.hidePassword') : t('common.showPassword')"
+                @click="showPassword = !showPassword"
+              >
+                <v-icon size="small">{{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+              </v-btn>
+            </span>
+          </label>
 
           <!-- Hardware wallet -->
-          <div v-else class="hw-notice mt-4">
-            <v-icon size="14" color="var(--g-accent)" class="mr-1">mdi-usb-flash-drive</v-icon>
+          <div v-else class="btc-notice">
+            <v-icon size="small">mdi-usb-flash-drive</v-icon>
             {{ $t('send.hardwareWalletInstructions') }}
           </div>
 
-          <!-- Tx Status -->
-          <transition name="fade">
-            <div v-if="txStatus.message" class="tx-status mt-3" :class="txStatus.type">
-              <v-icon size="14" class="mr-1">
-                {{ txStatus.type === 'success' ? 'mdi-check-circle' : txStatus.type === 'error' ? 'mdi-alert-circle' : 'mdi-information' }}
-              </v-icon>
-              {{ txStatus.message }}
-            </div>
-          </transition>
+          <div v-if="txStatus.message" :class="['btc-notice', `btc-notice--${txStatus.type}`]" role="status">
+            <v-icon size="small">{{ STATUS_ICONS[txStatus.type] }}</v-icon>
+            <span class="btc-notice__text">{{ txStatus.message }}</span>
+          </div>
         </div>
       </transition>
 
       <!-- ── Navigation ── -->
-      <div class="nav-row">
-        <button
-          v-if="currentStep > 1 && !loading"
-          class="back-btn"
-          @click="prevStep"
-          type="button"
-        >
-          <v-icon size="14" class="mr-1">mdi-arrow-left</v-icon>
+      <div class="btc-send__nav">
+        <GButton v-if="currentStep > 1 && !loading" tier="secondary" @click="prevStep()">
+          <v-icon size="small" start>mdi-arrow-left</v-icon>
           {{ $t('common.back') }}
-        </button>
-        <div v-else />
+        </GButton>
+        <span v-else />
 
-        <button
-          v-if="currentStep < 3"
-          class="next-btn"
-          :class="{ 'is-disabled': !isStepValid }"
-          :disabled="!isStepValid"
-          @click="nextStep"
-          type="button"
-        >
+        <GButton v-if="currentStep < 3" tier="primary" :disabled="!isStepValid" @click="nextStep()">
           {{ $t('common.continue') }}
-          <v-icon size="14" class="ml-1">mdi-arrow-right</v-icon>
-        </button>
-        <button
-          v-else
-          class="send-btn"
-          :class="{ 'is-disabled': !isStepValid || loading }"
-          :disabled="!isStepValid || loading"
-          @click="confirmSend"
-          type="button"
-        >
-          <v-progress-circular v-if="loading" indeterminate :size="14" :width="2" color="var(--g-text-1)" class="mr-2" />
-          <v-icon v-else size="14" class="mr-1">mdi-send</v-icon>
+          <v-icon size="small" end>mdi-arrow-right</v-icon>
+        </GButton>
+        <GButton v-else tier="primary" :disabled="!isStepValid" :loading="loading" @click="confirmSend()">
+          <v-icon size="small" start>mdi-send</v-icon>
           {{ $t('send.send') }}
-        </button>
+        </GButton>
       </div>
 
     </v-card-text>
@@ -282,16 +241,23 @@
 <script setup lang="ts">
 import { ref, computed, watch, toRefs } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import assts from '@/utils/assets';
+import networks from '@/utils/networks';
+import filters from '@/shared/utils/filters';
+import { formatBtc, formatSats } from '@/shared/utils/format';
 import { calculateTxSize } from '@/chains/bitcoin/bitcoinCoinSelection';
 import { FeePriority } from '@/chains/bitcoin/bitcoinFeeEstimator';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 
 const { t } = useTranslation();
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const { loggedWallet, utxos } = toRefs(walletStore);
 
 // Props
@@ -303,6 +269,16 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
   (e: 'success', txId: string): void;
 }>();
+
+const ticker = computed(() =>
+  networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
+);
+
+const STATUS_ICONS = {
+  success: 'mdi-check-circle-outline',
+  error: 'mdi-alert-circle-outline',
+  info: 'mdi-information-outline',
+} as const;
 
 // Step state
 const currentStep = ref(1);
@@ -319,9 +295,9 @@ const selectedFeePriority = ref<'fast' | 'medium' | 'slow'>('medium');
 const feeEstimates = ref({ fast: 50, medium: 25, slow: 10 });
 
 const feeTiers = computed(() => [
-  { key: 'fast' as const,   label: t('send.fast')   || 'Fast',     time: '~10 min', dots: 3 },
-  { key: 'medium' as const, label: t('send.medium') || 'Standard', time: '~30 min', dots: 2 },
-  { key: 'slow' as const,   label: t('send.slow')   || 'Economy',  time: '~60 min', dots: 1 },
+  { key: 'fast' as const,   label: t('send.fast'),   time: t('bitcoin.etaMinutes', { minutes: 10 }), dots: 3 },
+  { key: 'medium' as const, label: t('send.medium'), time: t('bitcoin.etaMinutes', { minutes: 30 }), dots: 2 },
+  { key: 'slow' as const,   label: t('send.slow'),   time: t('bitcoin.etaMinutes', { minutes: 60 }), dots: 1 },
 ]);
 
 // Transaction state
@@ -334,6 +310,20 @@ const amountError = ref('');
 
 // BTC/USD price
 const btcPrice = computed(() => priceStore.btcUsd?.lastPrice ?? 0);
+
+// Fiat at the live BTC price, in the wallet's chosen currency ('' without a price)
+function fiatOf(sats: number): string {
+  if (!btcPrice.value || !sats) return '';
+  // Sats × USD price is the value in 1e-8 USD, hence the 8 decimals.
+  return filters.toCurrency(convertFiat(sats * btcPrice.value), false, 0, getCurrencySymbol(), '', false, 8);
+}
+
+// "123,456 sats · ≈ $12.34"
+function amountLine(sats: number): string {
+  const fiat = fiatOf(sats);
+  const satsText = t('bitcoin.satsValue', { value: formatSats(sats) });
+  return fiat ? `${satsText} · ≈ ${fiat}` : satsText;
+}
 
 // Available balance (from UTXOs)
 const availableBalance = computed(() => {
@@ -429,7 +419,9 @@ async function pasteAddress() {
     const text = await navigator.clipboard.readText();
     recipientAddress.value = text.trim();
     validateAddress();
-  } catch {}
+  } catch {
+    // Clipboard read refused or unavailable: the field stays as it was
+  }
 }
 
 function setMaxAmount() {
@@ -463,16 +455,6 @@ function nextStep() {
 
 function prevStep() {
   if (currentStep.value > 1) currentStep.value--;
-}
-
-function formatBtc(satoshis: number | bigint): string {
-  const value = typeof satoshis === 'bigint' ? Number(satoshis) : satoshis;
-  return (value / 100000000).toFixed(8);
-}
-
-function truncateAddress(address: string): string {
-  if (!address) return '';
-  return `${address.substring(0, 14)}...${address.substring(address.length - 10)}`;
 }
 
 async function authenticateWithPassKey() {
@@ -544,631 +526,345 @@ function closeDialog() {
 watch(() => props.modelValue, (val) => { if (val) updateFeeEstimate(); });
 </script>
 
-<style scoped>
-/* ── Step Progress ─────────────────────────────────────── */
-.step-track {
+<style scoped lang="scss">
+.btc-send {
   display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: var(--g-s-4);
 }
 
-.step-bar {
+/* ── Step progress ──────────────────────────────────────── */
+.btc-send__steps {
+  display: flex;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.btc-send__step {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--g-text-3);
+}
+
+.btc-send__step-bar {
   height: 3px;
   border-radius: var(--g-r-chip);
   background: var(--g-hairline-2);
-  transition: background 0.3s ease;
+  transition: background-color var(--g-dur-base) var(--g-ease);
 }
 
-.step-bar.is-active {
+.btc-send__step-label {
+  font-size: 12px;
+  font-weight: 500;
+  transition: color var(--g-dur-base) var(--g-ease);
+}
+
+.btc-send__step--active .btc-send__step-bar,
+.btc-send__step--done .btc-send__step-bar {
   background: var(--g-accent);
 }
 
-.step-bar.is-done {
-  background: rgba(247, 147, 26, 0.45);
+.btc-send__step--done .btc-send__step-bar {
+  opacity: 0.45;
 }
 
-.step-labels {
+.btc-send__step--active .btc-send__step-label {
+  color: var(--g-accent);
+}
+
+.btc-send__step--done .btc-send__step-label {
+  color: var(--g-text-2);
+}
+
+.btc-send__body {
   display: flex;
-  margin-bottom: 20px;
-}
-
-.step-label {
-  flex: 1;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-  transition: color 0.3s ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.step-label.is-active { color: var(--g-accent); }
-.step-label.is-done   { color: rgba(247, 147, 26, 0.55); }
-
-/* ── Step body transition ──────────────────────────────── */
-.step-body {
+  flex-direction: column;
+  gap: var(--g-s-4);
   min-height: 200px;
 }
 
-.step-fade-enter-active,
-.step-fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
-.step-fade-enter-from        { opacity: 0; transform: translateX(12px); }
-.step-fade-leave-to     { opacity: 0; transform: translateX(-12px); }
-
-/* ── Field blocks ──────────────────────────────────────── */
-.field-block { display: flex; flex-direction: column; gap: 6px; }
-
-.field-label {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+.btc-step-enter-active,
+.btc-step-leave-active {
+  transition: opacity var(--g-dur-fast) var(--g-ease);
 }
 
-/* ── Glass input ───────────────────────────────────────── */
-.glass-input-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+.btc-step-enter-from,
+.btc-step-leave-to {
+  opacity: 0;
 }
 
-.glass-input-wrap:focus-within {
-  border-color: var(--g-accent);
-  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
-}
-
-.glass-input-wrap.is-error { border-color: var(--g-error); }
-.glass-input-wrap.is-valid { border-color: var(--g-success); }
-
-.glass-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  padding: 11px 14px;
-  font-size: 13px;
-  color: var(--g-text-1);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  min-width: 0;
-}
-
-.glass-input::placeholder { color: var(--g-text-3); }
-
-.monospace-input {
-  font-family: var(--g-font-mono) !important;
-  font-size: 12px !important;
-}
-
-.input-icon-btn {
-  flex-shrink: 0;
-  padding: 0 12px;
-  height: 42px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  border-left: 1px solid var(--g-hairline-1);
-  transition: background 0.15s ease;
-}
-
-.input-icon-btn:hover { background: var(--g-hairline-1); }
-
-/* ── Amount input ──────────────────────────────────────── */
-.amount-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.amount-wrap:focus-within {
-  border-color: var(--g-accent);
-  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
-}
-
-.amount-wrap.is-error { border-color: var(--g-error); }
-
-.btc-badge {
-  padding: 0 14px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #F7931A;
-  border-right: 1px solid var(--g-hairline-1);
-  height: 48px;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-}
-
-.amount-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  padding: 0 14px;
-  height: 48px;
-  font-size: 20px;
-  font-weight: 300;
-  color: var(--g-text-1);
-  letter-spacing: -0.02em;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  min-width: 0;
-}
-
-.amount-input::placeholder { color: var(--g-text-3); }
-
-/* hide number arrows */
-.amount-input::-webkit-outer-spin-button,
-.amount-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.amount-input[type=number] { -moz-appearance: textfield; }
-
-.max-pill {
-  margin-right: 10px;
-  padding: 3px 10px;
-  background: rgba(247, 147, 26, 0.15);
-  border: 1px solid rgba(247, 147, 26, 0.3);
-  border-radius: var(--g-r-pill);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--g-accent);
-  cursor: pointer;
-  transition: background 0.15s ease;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  flex-shrink: 0;
-}
-
-.max-pill:hover { background: rgba(247, 147, 26, 0.25); }
-
-.amount-meta {
-  min-height: 18px;
-  margin-top: 4px;
-}
-
-.sats-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.usd-hint {
-  margin-left: 8px;
-  font-size: 11px;
-  color: rgba(247, 147, 26, 0.75);
-}
-
-/* ── Balance strip ─────────────────────────────────────── */
-.balance-strip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 12px;
-  background: rgba(247, 147, 26, 0.06);
-  border: 1px solid rgba(247, 147, 26, 0.14);
-  border-radius: var(--g-r-control);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.balance-key { font-size: 11px; color: var(--g-text-3); }
-.balance-val { font-size: 12px; font-weight: 600; color: var(--g-text-2); margin-left: 2px; }
-.balance-sats { font-size: 11px; color: var(--g-text-3); }
-
-/* ── Errors ────────────────────────────────────────────── */
-.field-error-msg {
-  font-size: 11px;
-  color: var(--g-error);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-/* ── Fee tier cards ────────────────────────────────────── */
-.fee-tier-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.fee-card {
-  position: relative;
-  padding: 14px 12px;
-  background: var(--g-hairline-1);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.fee-card:hover {
-  background: var(--g-hairline-2);
-  transform: translateY(-1px);
-}
-
-.fee-card.is-selected {
-  background: rgba(247, 147, 26, 0.08);
-  border-color: var(--g-accent);
-  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.07), inset 0 1px 0 rgba(247, 147, 26, 0.15);
-}
-
-.fee-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.fee-tier-name {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--g-text-2);
-}
-
-.fee-card.is-selected .fee-tier-name { color: var(--g-accent); }
-
-.speed-dots { display: flex; gap: 3px; align-items: center; }
-
-.speed-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--g-hairline-3);
-  transition: background 0.2s ease;
-}
-
-.speed-dot.lit { background: var(--g-text-3); }
-.fee-card.is-selected .speed-dot.lit { background: var(--g-accent); }
-
-.fee-rate-val {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--g-text-1);
-  letter-spacing: -0.02em;
-  line-height: 1;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-}
-
-.fee-rate-unit { font-size: 11px; font-weight: 400; color: var(--g-text-3); }
-
-.fee-time-hint {
-  font-size: 11px;
-  color: var(--g-text-3);
-  margin-top: 3px;
-}
-
-.fee-cost-line {
-  font-size: 11px;
-  color: var(--g-text-3);
-  margin-top: 6px;
-  font-family: var(--g-font-mono);
-}
-
-/* ── Transaction summary ───────────────────────────────── */
-.tx-summary {
-  background: var(--g-hairline-1);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
-  padding: 14px 16px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--g-text-3);
-  padding: 4px 0;
-}
-
-.summary-divider {
-  height: 1px;
-  background: var(--g-hairline-1);
-  margin: 6px 0;
-}
-
-.summary-total {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--g-text-1);
-}
-
-.summary-total .mono { color: #F7931A; }
-
-.mono { font-family: var(--g-font-mono); }
-.muted { color: var(--g-text-3); }
-
-.inline-error {
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  color: var(--g-error);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-/* ── Confirm panel ─────────────────────────────────────── */
-.confirm-panel {
-  background: var(--g-hairline-1);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
-  padding: 20px 20px 16px;
-  text-align: center;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-}
-
-.confirm-amount-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-  line-height: 1;
-}
-
-.confirm-btc-sign {
-  font-size: 24px;
-  font-weight: 700;
-  color: #F7931A;
-}
-
-.confirm-amount-val {
-  font-size: 32px;
-  font-weight: 300;
-  color: var(--g-text-1);
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--g-font-mono);
-}
-
-.confirm-usd-equiv {
-  font-size: 13px;
-  color: var(--g-text-3);
-  margin-top: 4px;
-}
-
-.confirm-flow-icon {
-  margin: 10px auto 6px;
-  opacity: 0.5;
-}
-
-.confirm-to-label {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-  margin-bottom: 4px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.confirm-address {
-  font-size: 12px;
-  color: var(--g-text-2);
-  word-break: break-all;
-  font-family: var(--g-font-mono);
-}
-
-.confirm-meta-grid {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 10px 0 0;
-}
-
-.confirm-meta-item {
-  flex: 1;
+/* ── Fields ─────────────────────────────────────────────── */
+.btc-field {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.btc-field__error {
+  color: var(--g-error);
+  font-size: 12px;
+}
+
+/* Inputs are controls, not surfaces: solid raised fill. The focus ring lives on the
+   wrapper, so the bare input inside needs none of its own. */
+.btc-input {
+  display: flex;
   align-items: center;
+  gap: var(--g-s-1);
+  min-height: var(--g-btn-h);
+  padding: 0 var(--g-s-1) 0 var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.btc-input:focus-within {
+  border-color: var(--g-accent);
+}
+
+.btc-input--valid {
+  border-color: var(--g-success-line);
+}
+
+.btc-input--error,
+.btc-input--error:focus-within {
+  border-color: var(--g-error);
+}
+
+.btc-input__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--g-btn-h);
+  border: 0;
+  background: transparent;
+  color: var(--g-text-1);
+  font-size: 13px;
+  outline: none;
+}
+
+.btc-input__control::placeholder {
+  color: var(--g-text-3);
+}
+
+.btc-input__control--amount {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* A number field without the browser's spin buttons */
+.btc-input__control--amount::-webkit-outer-spin-button,
+.btc-input__control--amount::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.btc-input__control--amount[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.btc-input__unit {
+  color: var(--g-text-3);
+  font-size: 12px;
+}
+
+.btc-send__balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.btc-send__balance-value {
+  color: var(--g-text-1);
+}
+
+/* ── Fee tiers ──────────────────────────────────────────── */
+.btc-fees {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--g-s-2);
+}
+
+.btc-fee {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--g-s-3);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.btc-fee:hover {
+  @include g-glass-tier-hover;
+}
+
+.btc-fee--selected,
+.btc-fee--selected:hover {
+  @include g-glass-tier-active;
+}
+
+.btc-fee__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: var(--g-s-1);
+}
+
+.btc-fee__name {
+  color: var(--g-text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btc-fee__dots {
+  display: inline-flex;
   gap: 3px;
 }
 
-.confirm-meta-sep {
-  width: 1px;
-  height: 28px;
-  background: var(--g-hairline-1);
+.btc-fee__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-3);
 }
 
-.confirm-meta-key {
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--g-text-3);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+.btc-fee__dot--lit {
+  background: var(--g-accent);
 }
 
-.confirm-meta-val {
-  font-size: 12px;
-  color: var(--g-text-2);
-  font-family: var(--g-font-mono);
-}
-
-.confirm-meta-val.strong {
+.btc-fee__rate {
   color: var(--g-text-1);
+  font-size: 14px;
   font-weight: 600;
 }
 
-/* ── PRF (PassKey) auth ────────────────────────────────── */
-.prf-auth-block {
+/* ── Summary ────────────────────────────────────────────── */
+.btc-summary {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  margin: 0;
 }
 
-.prf-hint {
+.btc-summary__row {
   display: flex;
-  align-items: center;
-  font-size: 11px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  padding: var(--g-s-2) 0;
+  border-top: 1px solid var(--g-hairline-1);
+  font-size: 13px;
+}
+
+.btc-summary__row dt {
   color: var(--g-text-3);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
-.prf-authed-strip {
+.btc-summary__row dd {
+  margin: 0;
+  color: var(--g-text-1);
+  text-align: right;
+}
+
+.btc-summary__row--total dd {
+  font-weight: 600;
+}
+
+.btc-summary__sub {
+  display: block;
+  color: var(--g-text-3);
+  font-size: 12px;
+}
+
+/* ── Review ─────────────────────────────────────────────── */
+.btc-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  padding: var(--g-s-4);
+}
+
+.btc-review__amount {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-s-2);
+  line-height: 1.1;
+}
+
+.btc-review__unit {
+  color: var(--g-text-3);
+  font-size: 14px;
+}
+
+.btc-review__to {
+  margin-top: var(--g-s-3);
+}
+
+.btc-review__address {
+  color: var(--g-text-1);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.btc-review__meta {
+  margin-top: var(--g-s-3);
+}
+
+/* ── Auth and notices ───────────────────────────────────── */
+.btc-auth {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+}
+
+.btc-notice {
   display: flex;
   align-items: center;
-  padding: 10px 14px;
-  background: var(--g-success-fill);
-  border: 1px solid var(--g-success-line);
-  border-radius: var(--g-r-control);
-  font-size: 12px;
-  color: var(--g-success);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  gap: 4px;
-}
-
-.prf-reauth-btn {
-  margin-left: auto;
-  padding: 2px 6px;
-  background: transparent;
+  gap: var(--g-s-2);
+  padding: var(--g-s-2) var(--g-s-3);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
-  cursor: pointer;
-  color: var(--g-text-3);
-  transition: color 0.15s ease, border-color 0.15s ease;
-  display: flex;
-  align-items: center;
-}
-
-.prf-reauth-btn:hover {
   color: var(--g-text-2);
-  border-color: var(--g-hairline-3);
-}
-
-.prf-auth-btn {
-  width: 100%;
-  padding: 11px 16px;
-  background: rgba(247, 147, 26, 0.12);
-  border: 1px solid rgba(247, 147, 26, 0.30);
-  border-radius: var(--g-r-control);
-  cursor: pointer;
-  color: var(--g-accent);
   font-size: 13px;
-  font-weight: 500;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.prf-auth-btn:hover {
-  background: rgba(247, 147, 26, 0.20);
-  border-color: rgba(247, 147, 26, 0.50);
+.btc-notice .v-icon {
+  color: inherit;
 }
 
-/* ── Hardware wallet notice ────────────────────────────── */
-.hw-notice {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  background: rgba(247, 147, 26, 0.06);
-  border: 1px solid rgba(247, 147, 26, 0.18);
-  border-radius: var(--g-r-control);
-  font-size: 12px;
-  color: var(--g-text-2);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+.btc-notice__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-/* ── Transaction status ────────────────────────────────── */
-.tx-status {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  border-radius: var(--g-r-control);
-  font-size: 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.tx-status.success {
+.btc-notice--success {
+  border-color: var(--g-success-line);
   background: var(--g-success-fill);
-  border: 1px solid var(--g-success-line);
   color: var(--g-success);
 }
 
-.tx-status.error {
+.btc-notice--error {
+  border-color: var(--g-error-line);
   background: var(--g-error-fill);
-  border: 1px solid var(--g-error-line);
   color: var(--g-error);
 }
 
-.tx-status.info {
-  background: rgba(96, 165, 250, 0.08);
-  border: 1px solid rgba(96, 165, 250, 0.20);
-  color: var(--g-info);
-}
-
-/* ── Navigation row ────────────────────────────────────── */
-.nav-row {
+/* ── Navigation ─────────────────────────────────────────── */
+.btc-send__nav {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  margin-top: 20px;
+  gap: var(--g-s-3);
 }
-
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-pill);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--g-text-3);
-  cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.back-btn:hover {
-  border-color: var(--g-hairline-3);
-  color: var(--g-text-2);
-  background: var(--g-hairline-1);
-}
-
-.next-btn,
-.send-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 9px 22px;
-  background: var(--g-grad);
-  border: none;
-  border-radius: var(--g-r-pill);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--g-on-grad);
-  cursor: pointer;
-  transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-}
-
-.next-btn:hover:not(:disabled),
-.send-btn:hover:not(:disabled) {
-  opacity: 0.92;
-  transform: translateY(-1px);
-}
-
-.next-btn.is-disabled,
-.send-btn.is-disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
-/* ── Fade transition ───────────────────────────────────── */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

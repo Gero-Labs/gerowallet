@@ -12,6 +12,8 @@ import {
 } from '@/chrome/submitErrors';
 import { fromAxiosSubmit, isRoutedSubmitError, routedSubmitError, submitCardanoTx } from '@/chrome/submitRouter';
 import networks from '@/utils/networks';
+import { readCip113Registry } from '@/chrome/cip113Registry';
+import { consumeCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { getBlockchainDb } from '@/db';
 import {
   Blockchain,
@@ -118,6 +120,21 @@ import {
  * partial) form of the store's Account record.
  */
 export type AccountInfoRow = Partial<Account>;
+
+/**
+ * Most `programmableAddresses` one SUBSCRIBE sends. gero-sync keeps the first this many and
+ * drops the rest, so the two caps match.
+ */
+export const PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP = 100;
+
+/** The credential in a CIP-113 address's stake (owner) slot, or null for any other shape. */
+function programmableOwner(address: string): string | null {
+  try {
+    return Cardano.Address.fromString(address)?.asBase()?.getStakeCredential().hash ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export class WalletBg {
   api: Api;
@@ -278,6 +295,7 @@ export class WalletBg {
       baseAddress: this.baseAddress,
       stakeAddress: this.stakeAddress,
       isEnterpriseAddress: this.isEnterpriseAddress.bind(this),
+      ownProgrammableAddressMatcher: this.ownProgrammableAddressMatcher.bind(this),
       networkId: this.networkId.bind(this),
       getDb: this.getDb.bind(this),
       getBlockchainDb: this.getBlockchainDb.bind(this),
@@ -500,25 +518,87 @@ export class WalletBg {
     return new Set(networks.resolveProgrammableLogicBaseScriptHashes(this.chain, this.network));
   }
 
-  /**
-   * CIP-113 puts the owner in the address's stake slot. Which key goes there is a
-   * per-deployment convention — stake key for ordinary wallets, payment key for
-   * enterprise ones — so accept either.
-   */
-  private programmableOwnerCredentials(paymentCredentials: Set<string>): Set<string> {
-    const owners = new Set<string>(paymentCredentials);
+  /** This wallet's stake key hash, or null when it cannot be derived. */
+  private ownStakeCredential(): string | null {
     try {
       if (this.type === WalletType.Watch) {
         // No xpub to derive from: the watched address's stake part is the owner.
         const stakeCred = this.stakeAddress ? keyHashFromAddress(this.stakeAddress) : null;
-        if (stakeCred) owners.add(stakeCred as unknown as string);
-      } else {
-        owners.add(getStakeKey(this.publicKey, 0).hash().hex());
+        return stakeCred ? (stakeCred as unknown as string) : null;
       }
+      return getStakeKey(this.publicKey, 0).hash().hex();
     } catch (e) {
       debugLog('CIP-113: could not derive stake credential', e);
+      return null;
     }
+  }
+
+  /**
+   * CIP-113 puts the owner in the address's stake slot. Which key goes there is the
+   * paying dApp's choice — the CIP-113 reference platform uses the stake key, Minswap V3
+   * one of the wallet's payment keys — so accept either.
+   */
+  private programmableOwnerCredentials(paymentCredentials: Set<string>): Set<string> {
+    const owners = new Set<string>(paymentCredentials);
+    const stakeCred = this.ownStakeCredential();
+    if (stakeCred) owners.add(stakeCred);
     return owners;
+  }
+
+  /**
+   * A matcher for the CIP-113 addresses this wallet owns, under either owner convention, or
+   * null where CIP-113 is off. What sits there is the user's (locked), so transaction history
+   * counts what moves in and out of them, unlike any other script address carrying one of the
+   * wallet's keys. Built once per call: a history pass derives the keys once, not per output.
+   */
+  ownProgrammableAddressMatcher(): ((address: string) => boolean) | null {
+    const bases = this.programmableBaseScriptHashes();
+    if (bases.size === 0) return null;
+    const payment = new Set(this.derivePaymentCredentials());
+    const owners = this.programmableOwnerCredentials(payment);
+    return (address: string) => classifyUtxoAddress(address, payment, bases, owners) === 'programmable';
+  }
+
+  /**
+   * The CIP-113 addresses owned by this wallet's PAYMENT keys, for the gero-sync SUBSCRIBE's
+   * `programmableAddresses`: one per programmable-logic-base script hash and payment key,
+   * external and internal keys interleaved by index so the cap trims the highest indices.
+   *
+   * The SUBSCRIBE anchor is the stake address, so gero-sync already returns the stake-key
+   * convention. These sit under a different reward address each (the payment key in the
+   * stake slot) and are only returned when named here. Empty where CIP-113 is off.
+   */
+  programmableSubscriptionAddresses(): string[] {
+    const bases = [...this.programmableBaseScriptHashes()];
+    if (bases.length === 0) return [];
+    let owners: string[];
+    if (this.type === WalletType.Watch) {
+      owners = this.derivePaymentCredentials();
+    } else {
+      owners = [];
+      const needed = Math.ceil(PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP / bases.length);
+      for (let i = 0; i < this.credentialRange && owners.length < needed; i++) {
+        owners.push(getPaymentKeyExternal(this.publicKey, i).hash().hex());
+        owners.push(getPaymentKeyInternal(this.publicKey, i).hash().hex());
+      }
+    }
+    const networkId = networks.resolveNetworkId(this.chain, this.network) as Cardano.NetworkId;
+    const addresses: string[] = [];
+    for (const owner of owners) {
+      for (const base of bases) {
+        if (addresses.length >= PROGRAMMABLE_SUBSCRIPTION_ADDRESS_CAP) return addresses;
+        try {
+          addresses.push(Cardano.BaseAddress.fromCredentials(
+            networkId,
+            { hash: Hash28ByteBase16(base), type: Cardano.CredentialType.ScriptHash },
+            { hash: Hash28ByteBase16(owner), type: Cardano.CredentialType.KeyHash },
+          ).toAddress().toBech32());
+        } catch (e) {
+          debugLog('CIP-113: could not build a programmable subscription address', e);
+        }
+      }
+    }
+    return addresses;
   }
 
   /**
@@ -529,17 +609,31 @@ export class WalletBg {
    * The lovelace riding along in these UTxOs is summed separately: it is real ADA the
    * user owns and cannot spend through Gero, so it is shown as a locked row rather than
    * folded into the spendable balance (which would overstate it) or dropped (which
-   * would make it vanish from the wallet entirely).
+   * would make it vanish from the wallet entirely). It is split by owner: only what the
+   * stake key owns is inside the provider's stake-level `controlled_amount` and has to come
+   * off it (see spendableControlledAmount).
    */
   private setProgrammableAssets(utxos: Cardano.Utxo[]) {
     this.programmableUtxos = utxos ?? [];
     void this.persistProgrammableRefs();
 
     const assets = {};
+    const policies = new Set<string>();
+    const ownStake = this.ownStakeCredential();
     let lockedLovelace = 0n;
+    let lockedLovelaceOutsideStake = 0n;
     for (const utxo of this.programmableUtxos) {
       // Before the assets guard: a pure-ADA programmable UTxO still locks its coins.
-      lockedLovelace += utxo[1].value.coins ?? 0n;
+      const coins = utxo[1].value.coins ?? 0n;
+      // Unknown owner or unknown stake key counts as inside the stake total: subtracting
+      // too much understates the balance, subtracting too little lets max-send and swap
+      // sizing build transactions that fail.
+      const owner = programmableOwner(utxo[1].address as string);
+      if (ownStake && owner && owner !== ownStake) {
+        lockedLovelaceOutsideStake += coins;
+      } else {
+        lockedLovelace += coins;
+      }
       if (!utxo[1].value.assets) continue;
       for (const [key, quantity] of utxo[1].value.assets) {
         const assetName: Cardano.AssetName = Cardano.AssetId.getAssetName(key);
@@ -548,6 +642,7 @@ export class WalletBg {
         if (cip68Label(assetName) === 100) continue;
         if (!assets[key]) {
           const policyId: Cardano.PolicyId = Cardano.AssetId.getPolicyId(key);
+          policies.add(policyId);
           assets[key] = {
             quantity: 0n,
             unit: key,
@@ -561,11 +656,62 @@ export class WalletBg {
     }
 
     // resolveAsset() handles CIP-68 labels 222/333, so metadata resolves for free.
+    // Every token here stays locked (isProgrammable), but only a policy the CIP-113 registry
+    // lists is shown as a CIP-113 token. Anything else was merely sent to the PLB address,
+    // which runs no validator, so it is shown as an unverified token (issue 1267).
+    const registered = this.cip113RegisteredPolicies;
     const tokens = Object.fromEntries(
-      Object.entries(assets).map(([key, asset]) => [key, { ...resolveAsset(asset), isProgrammable: true }])
+      Object.entries(assets).map(([key, asset]) => {
+        const cip113Registered = registered?.has((asset as { policy_id: string }).policy_id) === true;
+        return [key, {
+          ...resolveAsset(asset),
+          isProgrammable: true,
+          cip113Registered,
+          ...(cip113Registered ? {} : { verified: false }),
+        }];
+      })
     );
 
-    WalletStore.setProgrammableTokens(tokens, lockedLovelace.toString());
+    WalletStore.setProgrammableTokens(tokens, lockedLovelace.toString(), lockedLovelaceOutsideStake.toString());
+    void this.refreshCip113Registry(policies);
+  }
+
+  /** Policies the CIP-113 registry lists on this network; null until it has been read. */
+  private cip113RegisteredPolicies: ReadonlySet<string> | null = null;
+  private cip113RegistryRead: Promise<void> | null = null;
+  /** Policies held when a refresh was asked for during a read; checked once it ends. */
+  private cip113RegistryNext: ReadonlySet<string> | null = null;
+
+  /**
+   * Read the registry for the policies held at the PLB address, and re-aggregate if what it
+   * says changed. One read at a time: a refresh asked for during a read runs after it, for
+   * the policies held by then. readCip113Registry() decides from its cached copy whether
+   * Nexus needs asking at all.
+   */
+  private refreshCip113Registry(policies: ReadonlySet<string>): Promise<void> {
+    if (policies.size === 0) return this.cip113RegistryRead ?? Promise.resolve();
+    if (this.cip113RegistryRead) {
+      this.cip113RegistryNext = policies;
+      return this.cip113RegistryRead;
+    }
+    const registryIds = networks.resolveCip113RegistryPolicyIds(this.chain, this.network);
+    if (registryIds.length === 0) return Promise.resolve();
+    this.cip113RegistryRead = (async () => {
+      const next = await readCip113Registry(this.network, registryIds, [...policies]);
+      if (!next) return;
+      const previous = this.cip113RegisteredPolicies;
+      this.cip113RegisteredPolicies = next;
+      const changed = !previous || previous.size !== next.size || [...next].some((policy) => !previous.has(policy));
+      if (changed) this.setProgrammableAssets(this.programmableUtxos);
+    })().catch((e) => {
+      debugLog('CIP-113: registry refresh failed', e);
+    }).finally(() => {
+      this.cip113RegistryRead = null;
+      const queued = this.cip113RegistryNext;
+      this.cip113RegistryNext = null;
+      if (queued) void this.refreshCip113Registry(queued);
+    });
+    return this.cip113RegistryRead;
   }
 
   /**
@@ -639,10 +785,16 @@ export class WalletBg {
     return this.programmableInputRefs.size > 0;
   }
 
+  /** This wallet's programmable UTxOs, for Gero's own Send to choose from. Background only. */
+  cip113TransferCandidates(): Cardano.Utxo[] {
+    return [...this.programmableUtxos];
+  }
+
   /**
    * Inputs spending one of this wallet's programmable UTxOs. Non-empty means the
-   * transaction must not be witnessed — Gero cannot build a valid CIP-113 transfer,
-   * so such a transaction was necessarily built elsewhere.
+   * transaction must not be witnessed unless it is the transfer Gero's own Send prepared
+   * and verified, which signTx checks against the one-shot allowance (cip113Allowance.ts).
+   * Every other caller treats a hit as a refusal.
    */
   findProgrammableInputs(transaction: Cardano.Tx): string[] {
     if (this.programmableInputRefs.size === 0) return [];
@@ -1332,7 +1484,9 @@ export class WalletBg {
           continue;
         }
       }
-      return added ? this.subscriptionCredentials() : null;
+      if (!added) return null;
+      this.reaccountProgrammableHistory();
+      return this.subscriptionCredentials();
     }
 
     const currentCreds = new Set(this.derivePaymentCredentials());
@@ -1367,7 +1521,24 @@ export class WalletBg {
     }
     this.credentialRange = grown;
     debugLog(`🔑 Expanding credential range to ${this.credentialRange} per chain`);
+    this.reaccountProgrammableHistory();
     return this.subscriptionCredentials();
+  }
+
+  /**
+   * Re-run history accounting after this wallet's keys grew. Which CIP-113 addresses count as
+   * its own (ownProgrammableAddressMatcher) depends on them, and the loader only recalculates
+   * when the transactions table changes: a receipt cached at login under a key past the
+   * initial range would otherwise stay an empty row, because the resubscribe that follows
+   * repeats the same confirmed transactions and writes nothing.
+   */
+  private reaccountProgrammableHistory(): void {
+    if (this.programmableBaseScriptHashes().size === 0) return;
+    // Only a running history: one not loaded yet will read with the grown keys when it starts.
+    const loader = this.loaderFactory?.getLoader('transactions');
+    if (!loader?.isSubscribed()) return;
+    loader.unsubscribe();
+    this.loadTransactions().catch((e) => debugLog('CIP-113: could not re-account transaction history', e));
   }
 
   /**
@@ -1394,13 +1565,12 @@ export class WalletBg {
    * which for a never-used wallet is none (verified on preprod and mainnet, 2026-10-13).
    * loadCachedKeys() derives that wallet's keys itself.
    *
-   * LIMITATION — only the stake-key CIP-113 convention is discoverable this way. The
-   * SUBSCRIBE is anchored on this wallet's stake address, so gero-sync only ever fans out
-   * over addresses sharing that stake credential. An address built the other way round
-   * (delegation slot holding a PAYMENT key hash) resolves to a different reward account
-   * and is never returned. classifyUtxoAddress still recognises that convention if handed
-   * such a UTxO, but nothing on this path supplies one — closing it needs a second
-   * subscription or a gero-sync change.
+   * This covers only the stake-key CIP-113 convention: the SUBSCRIBE is anchored on this
+   * wallet's stake address, so gero-sync fans out over addresses sharing that stake
+   * credential. An address built the other way round (delegation slot holding a PAYMENT key
+   * hash, as Minswap V3 pays) resolves to a different reward account. Those are named
+   * explicitly in the SUBSCRIBE's `programmableAddresses` (programmableSubscriptionAddresses())
+   * and gero-sync merges their UTxOs into the same full set.
    */
   subscriptionCredentials(): string[] {
     if (this.programmableBaseScriptHashes().size > 0) return [];
@@ -2256,9 +2426,11 @@ export class WalletBg {
 
     // CIP-113 defence in depth. The dApp-facing handlers refuse these before the
     // approval UI opens; this catches any caller that reaches the signer directly.
-    // Checked before the root key is decrypted.
+    // Checked before the root key is decrypted. The one exception is a transfer Gero's own
+    // Send built and verified (CIP113_PREPARE_TRANSFER): its exact id holds a one-shot
+    // allowance, used up below just before the signature.
     const programmableInputs = this.findProgrammableInputs(transaction);
-    if (programmableInputs.length > 0) {
+    if (programmableInputs.length > 0 && !hasCip113SignAllowance(this.id, transaction.id, programmableInputs)) {
       debugLog('CIP-113: refusing to sign, programmable inputs:', programmableInputs);
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
@@ -2276,6 +2448,9 @@ export class WalletBg {
     password = null; // Clear password from memory
 
     assertAuthorized?.();
+    if (programmableInputs.length > 0 && !consumeCip113SignAllowance(this.id, transaction.id, programmableInputs)) {
+      throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+    }
     const accountPrivateKey: Bip32PrivateKey = deriveSigningAccountKey(rootPrivateKey, this.accountIndex, this.publicKey);
 
     // Create a signature map for the witness

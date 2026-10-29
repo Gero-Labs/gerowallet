@@ -1,22 +1,15 @@
-import { ref } from 'vue';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import { UR } from '@keystonehq/keystone-sdk';
+import { Serialization, type Cardano } from '@cardano-sdk/core';
 import { Messaging } from '@/chrome/messaging';
 import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { MessageTypes } from '@/models/MessageTypes';
-import { WalletType } from '@/models/types';
 import type { Wallet, Key } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import ledgerUtils from '@/shared/utils/ledger';
-import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
-import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
-import networks from '@/utils/networks';
 import i18n from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
 import { TxIntentMismatchError, canonicalAddress, scriptSpentInputRefs, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
 import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
 import { historySource, koiosSource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
+import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHardwareTxSigner';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
 import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
 import { DEFAULT_ORDER_SPEND_BOUND } from './orderSpendBound';
@@ -24,8 +17,8 @@ import { DEFAULT_ORDER_SPEND_BOUND } from './orderSpendBound';
 /**
  * Native `Signer` for the embedded `<gero-swap>` widget — dispatches signing across
  * all 5 wallet types, mirroring the exact branches in the (now-retired) SwapSheet.vue:
- * password (SwapSheet.vue:1043-1102), PRF/PassKey (:1117-1160), Ledger (:1176-1219),
- * Trezor (:1230-1270), Keystone (:1284-1335).
+ * password (SwapSheet.vue:1043-1102) and PRF/PassKey (:1117-1160) here, and Ledger,
+ * Trezor and Keystone through useHardwareTxSigner.
  *
  * OPAQUE CBOR INVARIANT: `unsignedTxCbor` is exactly what the widget will submit
  * (cbor + witness-set hex, aggregator co-signs). HW branches that need a Cardano.Tx
@@ -74,13 +67,8 @@ interface SignTxData {
 }
 
 export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
-  // Keystone QR state — the host wrapper renders KeystoneSignDialog off these refs,
-  // exactly like SwapSheet.vue does with its own keystoneType/keystoneCbor/showKeystoneDialog.
-  const keystoneType = ref('');
-  const keystoneCbor = ref('');
-  const keystoneShow = ref(false);
-  let keystoneResolve: ((witnessHex: string) => void) | null = null;
-  let keystoneReject: ((e: Error) => void) | null = null;
+  // Ledger, Trezor and Keystone. The host renders KeystoneSignDialog off `keystone`'s refs.
+  const hardware = useHardwareTxSigner({ getIsBT: opts.getIsBT });
 
   async function getAddresses() {
     const keys = walletStore.keys;
@@ -149,94 +137,6 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
     return res.data.witnesses;
   }
 
-  // ── Ledger (client-side) — SwapSheet.vue:1176-1219 ──
-  async function signLedger(cbor: string): Promise<string> {
-    const w = walletStore.loggedWallet;
-    // Derive the Tx CORE from the SAME opaque cbor the widget will submit — signing input
-    // only, never a re-encoded body (mirrors SwapSheet's txSerialized.toCore() exactly).
-    const txSerialized = Serialization.Transaction.fromCbor(cbor as never);
-    const txCore = txSerialized.toCore();
-
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
-      txCore,
-      walletStore.keys,
-      cardanoUtxos(),
-      !(opts.getIsBT?.() ?? false),
-      networks.resolveNetwork(w?.chain, w?.network),
-      cbor,
-    );
-    const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
-    return transactionWitnessSet.toCbor() as unknown as string;
-  }
-
-  // ── Trezor (client-side, via background message) — SwapSheet.vue:1230-1270 ──
-  async function signTrezor(cbor: string): Promise<string> {
-    const data = { method: 'signTx', txCbor: cbor };
-    const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
-      ? await dispatchTrezor(data)
-      : await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.TREZOR,
-        data,
-      })) as { data?: { success?: boolean; error?: string; signatures?: Array<[string, string]> } };
-
-    if (!response?.data?.success) throw new Error(response?.data?.error || 'Trezor signing failed');
-
-    const signatures: Cardano.Signatures = new Map(response.data.signatures || []);
-    const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
-    return transactionWitnessSet.toCbor() as unknown as string;
-  }
-
-  // ── Keystone (QR round-trip) — SwapSheet.vue:1284-1335 ──
-  async function signKeystone(cbor: string): Promise<string> {
-    // Same opaque cbor, parsed (not re-encoded) for the QR sign request.
-    const txSerialized = Serialization.Transaction.fromCbor(cbor as never);
-    const signRequestResponse = createKeystoneSignRequest(
-      txSerialized,
-      walletStore.loggedWallet,
-      cardanoUtxos(),
-      walletStore.keys,
-    );
-    keystoneType.value = signRequestResponse.ur.type;
-    keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
-    keystoneShow.value = true;
-
-    return new Promise<string>((resolve, reject) => {
-      keystoneResolve = resolve;
-      keystoneReject = reject;
-    });
-  }
-
-  function onKeystoneScan(ur: UR) {
-    try {
-      const signature = parseSignature(ur);
-      if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-        throw new Error('Invalid Keystone signature');
-      }
-      keystoneShow.value = false;
-      keystoneResolve?.(signature.witnessSet);
-    } catch (e) {
-      keystoneShow.value = false;
-      keystoneReject?.(e as Error);
-    } finally {
-      keystoneResolve = null;
-      keystoneReject = null;
-    }
-  }
-
-  function cancelKeystone() {
-    keystoneShow.value = false;
-    keystoneReject?.(new Error('Keystone signing cancelled'));
-    keystoneResolve = null;
-    keystoneReject = null;
-  }
-
-  function failKeystone(msg: string) {
-    keystoneShow.value = false;
-    keystoneReject?.(new Error(msg || 'Keystone signing failed'));
-    keystoneResolve = null;
-    keystoneReject = null;
-  }
-
   /**
    * Refuse a transaction that takes more from the wallet than `bound` allows.
    * The aggregator and Nexus build these orders; the wallet decides what it signs.
@@ -292,20 +192,15 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
 
   async function signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string> {
     await assertWithinBound(unsignedTxCbor, bound ?? (await opts.getSpendBound?.()) ?? DEFAULT_ORDER_SPEND_BOUND);
-    const type = walletStore.loggedWallet?.type;
     // Hardware wallets sign in the page, so a collateral input borrowed from the Nexus pool
     // gets its co-signature here; password and PRF wallets get it in the worker's SIGN_TX.
-    const network = walletStore.loggedWallet?.network;
-    if (type === WalletType.Ledger) return cosignLentCollateral(unsignedTxCbor, await signLedger(unsignedTxCbor), network);
-    if (type === WalletType.Trezor) return cosignLentCollateral(unsignedTxCbor, await signTrezor(unsignedTxCbor), network);
-    if (type === WalletType.Keystone) return cosignLentCollateral(unsignedTxCbor, await signKeystone(unsignedTxCbor), network);
+    if (signsOnDevice(walletStore.loggedWallet?.type)) {
+      return cosignLentCollateral(unsignedTxCbor, await hardware.sign(unsignedTxCbor), walletStore.loggedWallet?.network);
+    }
     return signPasswordOrPrf(unsignedTxCbor); // Normal (password) + PRF flag on Normal
   }
 
   const signer = { getAddresses, getUtxos, getCollateral, signTx, meta: { name: 'Gero' } };
 
-  return {
-    signer,
-    keystone: { keystoneType, keystoneCbor, keystoneShow, onKeystoneScan, cancelKeystone, failKeystone },
-  };
+  return { signer, keystone: hardware.keystone };
 }

@@ -38,7 +38,7 @@ export function useBitcoinPsbtReview(
       review.value = null;
       if (!psbtHex || !network) return;
       // Loaded on demand: bitcoinjs-lib stays out of the views' initial chunk.
-      const { bitcoinOwnAddresses, reviewBitcoinPsbt } = await import('@/chains/bitcoin/psbtReview');
+      const { bitcoinDerivedAddresses, bitcoinOwnAddresses, reviewBitcoinPsbt } = await import('@/chains/bitcoin/psbtReview');
       if (mine !== generation) return;
       const ownUtxos = (Array.isArray(utxos) ? utxos as Array<{ txHash?: unknown; index?: unknown; value?: unknown; address?: unknown }> : [])
         .filter((u) => typeof u?.txHash === 'string' && typeof u.index === 'number' && u.value !== undefined && u.value !== null)
@@ -53,6 +53,8 @@ export function useBitcoinPsbtReview(
         ownAddresses: bitcoinOwnAddresses(publicKey, addressType, network, ownUtxos),
         ownUtxos,
         signOptions: ignoreToSignInputs ? undefined : options,
+        // Outputs are the wallet's only by derivation, never by what a sync listed.
+        derived: bitcoinDerivedAddresses(publicKey, addressType, network),
       });
     },
     { immediate: true },

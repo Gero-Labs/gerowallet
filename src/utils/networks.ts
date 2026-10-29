@@ -4,6 +4,16 @@ import {
   CIP113_BASE_MAINNET as CIP113_DEPLOYMENTS_MAINNET,
   CIP113_BASE_PREPROD as CIP113_DEPLOYMENTS_PREPROD,
   CIP113_BASE_PREVIEW as CIP113_DEPLOYMENTS_PREVIEW,
+  CIP113_GLOBAL_MAINNET as CIP113_GLOBAL_DEPLOYMENTS_MAINNET,
+  CIP113_GLOBAL_PREPROD as CIP113_GLOBAL_DEPLOYMENTS_PREPROD,
+  CIP113_GLOBAL_PREVIEW as CIP113_GLOBAL_DEPLOYMENTS_PREVIEW,
+  CIP113_REGISTRY_MAINNET as CIP113_REGISTRY_DEPLOYMENTS_MAINNET,
+  CIP113_REGISTRY_PREPROD as CIP113_REGISTRY_DEPLOYMENTS_PREPROD,
+  CIP113_REGISTRY_PREVIEW as CIP113_REGISTRY_DEPLOYMENTS_PREVIEW,
+  CIP113_SEND_ALLOWED_NETWORKS,
+  CIP113_TRANSFER_MAINNET as CIP113_TRANSFER_DEPLOYMENTS_MAINNET,
+  CIP113_TRANSFER_PREPROD as CIP113_TRANSFER_DEPLOYMENTS_PREPROD,
+  CIP113_TRANSFER_PREVIEW as CIP113_TRANSFER_DEPLOYMENTS_PREVIEW,
 } from '@/utils/cip113Deployments';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
@@ -59,6 +69,13 @@ export interface NetworkInfo {
   // drain (see cip113Deployments.ts). Empty means CIP-113 is
   // unavailable on this network, and it fails closed.
   programmableLogicBaseScriptHashes?: string[];
+  // CIP-113 registry node policies: only a policy minted as a node NFT under one of these is
+  // a CIP-113 token (see cip113Deployments.ts). Empty means nothing is ever registered.
+  cip113RegistryPolicyIds?: string[];
+  // CIP-113 `programmable_logic_global` stake scripts, withdrawn in every transfer.
+  cip113GlobalScriptHashes?: string[];
+  // CIP-113 core `transfer` stake scripts. Empty where Gero's Send is unsupported.
+  cip113TransferScriptHashes?: string[];
   /**
    * RealFi Earn (USDr / sUSDr yield) availability for this network.
    *
@@ -89,6 +106,17 @@ function normalizeCip113BaseScriptHashes(hashes: readonly string[]): string[] {
 const CIP113_BASE_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_MAINNET);
 const CIP113_BASE_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_PREPROD);
 const CIP113_BASE_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_PREVIEW);
+// Same 56-hex shape check for the registry policies.
+const CIP113_REGISTRY_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_REGISTRY_DEPLOYMENTS_MAINNET);
+const CIP113_REGISTRY_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_REGISTRY_DEPLOYMENTS_PREPROD);
+const CIP113_REGISTRY_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_REGISTRY_DEPLOYMENTS_PREVIEW);
+// And for the PLG and core transfer stake scripts.
+const CIP113_GLOBAL_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_GLOBAL_DEPLOYMENTS_MAINNET);
+const CIP113_GLOBAL_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_GLOBAL_DEPLOYMENTS_PREPROD);
+const CIP113_GLOBAL_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_GLOBAL_DEPLOYMENTS_PREVIEW);
+const CIP113_TRANSFER_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_MAINNET);
+const CIP113_TRANSFER_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_PREPROD);
+const CIP113_TRANSFER_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_PREVIEW);
 
 
 export default {
@@ -136,6 +164,9 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_MAINNET,
+      cip113RegistryPolicyIds: CIP113_REGISTRY_MAINNET,
+      cip113GlobalScriptHashes: CIP113_GLOBAL_MAINNET,
+      cip113TransferScriptHashes: CIP113_TRANSFER_MAINNET,
       // RealFi launched on mainnet 2026-10-01. Still behind isRealFiEnabled: this says
       // the network CAN reach RealFi, the flag says whether it is switched on.
       realFiSupport: true,
@@ -185,6 +216,9 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_PREPROD,
+      cip113RegistryPolicyIds: CIP113_REGISTRY_PREPROD,
+      cip113GlobalScriptHashes: CIP113_GLOBAL_PREPROD,
+      cip113TransferScriptHashes: CIP113_TRANSFER_PREPROD,
       // RealFi runs its public testnet on Cardano preprod; this is the only
       // network the Earn surface is reachable from today.
       realFiSupport: true,
@@ -234,6 +268,9 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_PREVIEW,
+      cip113RegistryPolicyIds: CIP113_REGISTRY_PREVIEW,
+      cip113GlobalScriptHashes: CIP113_GLOBAL_PREVIEW,
+      cip113TransferScriptHashes: CIP113_TRANSFER_PREVIEW,
       networkParams: {
         networkMagic: 2
       }
@@ -427,7 +464,9 @@ export default {
       buySupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
-      goMiningSupport: false,
+      // GoMining's sandbox takes order payments in testnet BTC. The page asks
+      // gero-backend which network it serves and refuses any other.
+      goMiningSupport: true,
       babylonSupport: true,
       ordinalsSupport: false,
       thorchainSupport: false,
@@ -709,6 +748,37 @@ export default {
       return []
     }
     return this.resolveNetwork(chain, network)?.programmableLogicBaseScriptHashes || []
+  },
+  // Behind the same two gates as the PLB hashes: with no PLB there is nothing to check.
+  resolveCip113RegistryPolicyIds(chain: string, network: string): string[] {
+    if (this.resolveProgrammableLogicBaseScriptHashes(chain, network).length === 0) {
+      return []
+    }
+    return this.resolveNetwork(chain, network)?.cip113RegistryPolicyIds || []
+  },
+  // Behind the same two gates as the PLB hashes.
+  resolveCip113GlobalScriptHashes(chain: string, network: string): string[] {
+    if (this.resolveProgrammableLogicBaseScriptHashes(chain, network).length === 0) {
+      return []
+    }
+    return this.resolveNetwork(chain, network)?.cip113GlobalScriptHashes || []
+  },
+  /**
+   * The scripts Gero's own Send runs, or null where Send is unsupported. Four gates, all
+   * build-time: the two PLB gates, CIP113_SEND_ALLOWED_NETWORKS, and a listed PLG and core
+   * transfer hash.
+   */
+  resolveCip113TransferScripts(chain: string, network: string): { base: string[]; global: string[]; transfer: string[] } | null {
+    if (!CIP113_SEND_ALLOWED_NETWORKS.includes(network)) {
+      return null
+    }
+    const base = this.resolveProgrammableLogicBaseScriptHashes(chain, network)
+    const global = this.resolveCip113GlobalScriptHashes(chain, network)
+    const transfer = base.length === 0 ? [] : this.resolveNetwork(chain, network)?.cip113TransferScriptHashes || []
+    if (base.length === 0 || global.length === 0 || transfer.length === 0) {
+      return null
+    }
+    return { base, global, transfer }
   },
   resolveProgrammableTokenSupport(chain: string, network: string): boolean {
     return this.resolveProgrammableLogicBaseScriptHashes(chain, network).length > 0

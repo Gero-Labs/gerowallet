@@ -1,4 +1,4 @@
-import { Keys, purpose } from '@/models/types';
+import { Key, Keys, purpose } from '@/models/types';
 import {
   CardanoSignature, CardanoSignDataSignature,
   Curve,
@@ -12,8 +12,9 @@ import { Options } from 'qr-code-styling/lib/types';
 import logo128Url from '@/assets/img/bkp/logo128.png';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
-import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import i18n from '@/plugins/i18n';
+import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   InvalidAccountIndexError,
@@ -168,6 +169,39 @@ export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array, ex
 }
 
 /**
+ * The wallet's keys a transaction needs beyond its inputs, one per key hash: each required
+ * signer that is one of the wallet's payment, change or stake keys, and the stake key for a
+ * certificate or reward withdrawal of the wallet's own stake credential. A CIP-113 transfer
+ * names its owner (a payment or the stake key) as a required signer and withdraws from
+ * scripts, so it needs exactly that key. A required signer that is not the wallet's is
+ * skipped: another party signs for it (a multisig), and the device holds no key for it.
+ */
+const extraOwnKeys = (txCore: Cardano.Tx, keys: Keys): Key[] => {
+  const byHash = new Map<string, Key>();
+  for (const key of [...keys.payment, ...keys.change, ...keys.stake]) {
+    if (key?.cred && key.path && !byHash.has(key.cred)) byHash.set(key.cred, key);
+  }
+  const ownStakeHashes = new Set(keys.stake.map((key) => key?.cred).filter(Boolean));
+  const needed = new Map<string, Key>();
+  const need = (hash: string) => {
+    const key = byHash.get(hash);
+    if (key && !needed.has(hash)) needed.set(hash, key);
+  };
+  const needStake = (credential: Cardano.Credential | undefined) => {
+    if (credential?.type === Cardano.CredentialType.KeyHash && ownStakeHashes.has(credential.hash)) need(credential.hash);
+  };
+
+  txCore.body.requiredExtraSignatures?.forEach((keyHash) => need(keyHash));
+  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
+    if ('stakeCredential' in cert) needStake(cert.stakeCredential);
+  });
+  txCore.body.withdrawals?.forEach((withdrawal: Cardano.Withdrawal) => {
+    needStake(Cardano.Address.fromBech32(withdrawal.stakeAddress).asReward()?.getPaymentCredential());
+  });
+  return [...needed.values()];
+};
+
+/**
  * Helper function to get owned keypaths and addresses for hash-based signing
  */
 const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Transaction, utxos: Cardano.Utxo[]) => {
@@ -200,16 +234,12 @@ const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Trans
     }
   });
 
-  // Also check for stake key if there are certificates or withdrawals
-  const txCore = tx.toCore();
-  if ((txCore.body.certificates && txCore.body.certificates.length > 0) ||
-      (txCore.body.withdrawals && txCore.body.withdrawals.length > 0)) {
-    const stakeKey = keys.stake[0];
-    if (stakeKey && !addedPaths.has(stakeKey.path)) {
-      ownedKeypathList.push(createCryptoKeypath(stakeKey.path, xfp));
-      ownedAddressList.push(stakeKey.address);
-      addedPaths.add(stakeKey.path);
-    }
+  // The keys the inputs do not name: required signers, own certificates and withdrawals.
+  for (const key of extraOwnKeys(tx.toCore(), keys)) {
+    if (addedPaths.has(key.path)) continue;
+    ownedKeypathList.push(createCryptoKeypath(key.path, xfp));
+    ownedAddressList.push(key.address);
+    addedPaths.add(key.path);
   }
 
   return { ownedKeypathList, ownedAddressList };
@@ -225,12 +255,16 @@ export interface KeystoneSignRequestResponse {
 /**
  * Creates a Keystone signing request from a transaction
  * @param tx - The transaction to sign (Serialization.Transaction)
- * @param walletData - Wallet data containing xfp and stakeAddress
+ * @param walletData - Wallet data containing xfp
  * @param utxos - Array of UTXOs for input resolution
  * @param keys - keys mapping for derivation paths
  * @returns UR object with type and cbor properties for QR code generation
  */
-export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletData, utxos: Cardano.Utxo[], keys: Keys): KeystoneSignRequestResponse => {
+export const createKeystoneSignRequest = async (tx: Serialization.Transaction, walletData, utxos: Cardano.Utxo[], keys: Keys): Promise<KeystoneSignRequestResponse> => {
+  // Keystone signs whatever QR it is shown, and the page cannot read the CIP-113 refusal
+  // index; every caller, the dApp approvals included, passes through here.
+  await assertCip113SignAllowed(tx.toCbor(), i18n.t('wallet.keystoneSigningFailed') as string);
+
   const getOwnedUtxos = (txInputs: readonly Serialization.TransactionInput[], xfp: string) => {
     const keystoneUtxos = [];
     const extraSigners = [];
@@ -264,59 +298,11 @@ export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletD
       }
     });
 
-    // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
-    const txCore = tx.toCore();
-
-    // Check for required signers (used by DEX transactions and other contracts)
-    const requiredSigners = txCore.body.requiredExtraSignatures;
-    if (requiredSigners && requiredSigners.length > 0) {
-      debugLog('[Keystone] Found required signers:', requiredSigners.length);
-
-      // For each required signer, check if it's our stake key
-      requiredSigners.forEach((keyHash: Ed25519KeyHashHex) => {
-        debugLog('[Keystone] Required signer key hash:', keyHash);
-
-        // Check if this matches our stake key hash
-        const stakeKey = keys.stake[0];
-        if (stakeKey) {
-          // We need to compare the key hash from the transaction with our stake key hash
-          // The stake key path is m/1852'/1815'/<account>'/2/0, the account the wallet record holds
-          extraSigners.push({
-            keyHash: keyHash,
-            xfp,
-            keyPath: stakeKey.path
-          });
-          debugLog('[Keystone] Added stake key to extraSigners:', stakeKey.path);
-        }
-      });
-    }
-
-    // Also check for certificates and withdrawals (for staking operations)
-    if ((txCore.body.certificates && txCore.body.certificates.length > 0) || (txCore.body.withdrawals && txCore.body.withdrawals.length > 0)) {
-      const credsNeeded = new Set<Cardano.Credential>();
-      if (txCore.body.certificates) {
-        txCore.body.certificates.forEach((cert: Cardano.Certificate) => {
-          // Check if certificate has stakeCredential property (all stake-related certs do)
-          if ('stakeCredential' in cert && cert.stakeCredential) {
-            credsNeeded.add(cert.stakeCredential);
-          }
-        })
-      }
-      if (txCore.body.withdrawals && txCore.body.withdrawals.length > 0) {
-        txCore.body.withdrawals.forEach((withdrawal: Cardano.Withdrawal) => {
-          if (withdrawal.stakeAddress === walletData.stakeAddress) {
-            const keyAddress = Cardano.Address.fromBech32(walletData.stakeAddress);
-            credsNeeded.add(Cardano.BaseAddress.fromAddress(keyAddress).getStakeCredential())
-          }
-        })
-      }
-      credsNeeded.forEach((cred) => {
-        extraSigners.push({
-          keyHash: cred.hash,
-          xfp,
-          keyPath: keys.stake[0]?.path || ''
-        });
-      })
+    // Required signers (DEX orders, a CIP-113 transfer's owner) and the wallet's own
+    // certificates and reward withdrawals, each to the key whose hash it names.
+    for (const key of extraOwnKeys(tx.toCore(), keys)) {
+      extraSigners.push({ keyHash: key.cred, xfp, keyPath: key.path });
+      debugLog('[Keystone] Added extra signer:', key.path);
     }
     return {keystoneUtxos, extraSigners}
   }

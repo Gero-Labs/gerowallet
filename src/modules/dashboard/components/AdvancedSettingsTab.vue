@@ -51,6 +51,15 @@
           <ToggleSwitch text-left="FULL" text-right="MINI" font-size="10px" v-model="openMiniGeroOnClick" style="margin: auto" />
         </v-col>
       </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">{{ $t('settings.walletListBalances') }}</h3>
+          <span class="helper my-0">{{ $t('settings.walletListBalancesHelper') }}</span>
+        </v-col>
+        <v-col cols="3" style="display: flex;">
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="walletListBalances" style="margin: auto" />
+        </v-col>
+      </v-row>
       <!-- Only rendered when the dock could exist at all: with both flags off
            there is nothing for this switch to show or hide. -->
       <v-row no-gutters class="py-2" v-if="isSupportChatAvailable">
@@ -186,6 +195,7 @@ import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import cardStore from '@/stores/modules/card';
+import { clearCachedValues } from '@/services/walletLibrary/walletValues';
 
 // Define emits
 const emit = defineEmits(['loading']);
@@ -257,6 +267,20 @@ watch(openMiniGeroOnClick, (val) => {
 const isSupportChatAvailable = computed(
   () => featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled(),
 );
+
+// Wallet values in the wallet list (issue 1332), shown before any wallet is unlocked.
+// App-wide, so it is stored in gero-db, not in this wallet's config.
+const walletListBalances = computed({
+  get() {
+    return geroStore.config?.walletListBalances !== false;
+  },
+  set(on: boolean) {
+    if (!on) clearCachedValues();
+    GeroStore.setWalletListBalances(on).catch((error: unknown) => {
+      console.error('Failed to save the wallet list balances setting:', error);
+    });
+  },
+});
 
 const supportChatButton = computed({
   get() {

@@ -7,6 +7,11 @@
  * Signing semantics (Unisat `signPsbt`): with `toSignInputs`, only the listed
  * inputs are signed and each one must spend from the wallet; without it, every
  * input that spends from the wallet is signed.
+ *
+ * An OUTPUT is the wallet's only when its address derives from the wallet's own
+ * account xpub (`derived`). Synced data (UTxO addresses, keys a sync named)
+ * never makes one: a sync server that listed an attacker's address would
+ * otherwise turn a payment to it into "your wallet" on the review.
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
@@ -35,6 +40,14 @@ export interface PsbtReviewOutput {
   address: string | null;
   valueSats: bigint;
   own: boolean;
+  /** One of the wallet's own change addresses (the account's internal chain). */
+  change: boolean;
+}
+
+/** The account's own addresses, derived from its xpub: the only addresses that make an output the wallet's. */
+export interface BitcoinDerivedAddresses {
+  receive: ReadonlySet<string>;
+  change: ReadonlySet<string>;
 }
 
 export type PsbtReviewProblem =
@@ -74,6 +87,8 @@ export interface PsbtReviewContext {
   ownUtxos?: ReadonlyArray<{ txHash: string; index: number; value: bigint | number | string }>;
   /** The request's signing options: Unisat `{ toSignInputs }`, or a bare list (WalletConnect `signInputs`). */
   signOptions?: unknown;
+  /** The account's derived addresses (bitcoinDerivedAddresses). Without them no output counts as the wallet's. */
+  derived?: BitcoinDerivedAddresses;
 }
 
 export function parsePsbt(psbt: string, network: string): bitcoin.Psbt {
@@ -84,8 +99,32 @@ export function parsePsbt(psbt: string, network: string): bitcoin.Psbt {
 }
 
 /**
- * Every address the wallet's account owns: the receive and change addresses
- * the signer derives keys for, plus the addresses of its synced UTxOs.
+ * The receive and change addresses the account's xpub derives (the set the
+ * signer has keys for). Empty without a usable xpub.
+ */
+export function bitcoinDerivedAddresses(
+  accountXpub: string | undefined,
+  addressType: string | undefined,
+  network: string,
+): BitcoinDerivedAddresses {
+  const receive = new Set<string>();
+  const change = new Set<string>();
+  if (accountXpub) {
+    try {
+      const type = (addressType || 'segwit').toLowerCase() as BitcoinAddressTypeName;
+      const { derivationMap } = deriveBitcoinAddressSetFromXpubs({ [type]: accountXpub }, network);
+      for (const [address, info] of Object.entries(derivationMap)) (info.chain === 1 ? change : receive).add(address);
+    } catch {
+      // not an account xpub: nothing derives
+    }
+  }
+  return { receive, change };
+}
+
+/**
+ * Every address the wallet's account may spend from: the receive and change
+ * addresses the signer derives keys for, plus the addresses of its synced UTxOs.
+ * For INPUTS only; outputs count as the wallet's through `derived` alone.
  */
 export function bitcoinOwnAddresses(
   accountXpub: string | undefined,
@@ -216,9 +255,11 @@ export function reviewBitcoinPsbt(psbtOrHex: string | bitcoin.Psbt, ctx: PsbtRev
   }
   if (signIndices.length === 0 && !problems.length) problems.push({ code: 'nothingToSign' });
 
+  const derived = ctx.derived ?? { receive: new Set<string>(), change: new Set<string>() };
   const outputs: PsbtReviewOutput[] = psbt.txOutputs.map((out, i) => {
     const address = outputAddress(out.script, network);
-    return { index: i, address, valueSats: BigInt(out.value), own: address !== null && own.has(address) };
+    const change = address !== null && derived.change.has(address);
+    return { index: i, address, valueSats: BigInt(out.value), own: change || (address !== null && derived.receive.has(address)), change };
   });
 
   const spentSats = inputs.filter((input) => input.willSign).reduce((sum, input) => sum + (input.valueSats ?? 0n), 0n);

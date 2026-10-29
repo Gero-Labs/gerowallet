@@ -99,6 +99,117 @@ export const CIP113_BASE_PREVIEW: readonly string[] = [
   '35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16',
 ];
 
+// CIP-113 REGISTRY node policies, per network (issue 1267). A UTxO at the PLB address can
+// hold any token: paying into a script runs no validator, so anyone can send a token to
+// (PLB script, a user's stake key). Only a policy listed in the deployment's registry is a
+// CIP-113 token; the rest are shown as ordinary unverified tokens, never with the CIP-113
+// badge.
+//
+// What the value is: the registry is one script per deployment whose mint and spend share a
+// hash, so its node NFT policy id IS that script hash. Insert mints one node NFT per
+// registered policy, named after the policy id (`tn == node.key`, lib/linked_list.ak), and
+// nodes are never removed (RegistryRedeemer is only RegistryInit and RegistryInsert,
+// lib/types.ak), both in cardano-foundation/cip113-programmable-tokens @
+// `6b75ba3286b4692ca23059ff51285db357fb09c6`. So the assets minted under this policy, read
+// through Nexus, are exactly the registered policies.
+//
+// Same review bar as the PLB hashes above: a wrong value here fails CLOSED (no policy reads as
+// registered, so nothing gets the CIP-113 badge), but a different deployment's registry would
+// vouch for its tokens. List the registry of every deployment the PLB list keeps.
+//
+// Provenance: `registry.scriptHash` of each network's record in
+// cardano-foundation/cip113-programmable-tokens-platform @
+// `ab75bd5d16f4c7d5e5a5ced54ec3bf3d5ff775ce`,
+// src/programmable-tokens-offchain-java/src/main/resources/protocol-bootstraps-<network>.json,
+// whose `txHash` is the bootstrap tx recorded above and whose `programmableLogicBase` is the
+// PLB hash above.
+
+/** Mainnet registry. Record for bootstrap tx `bfefbd22…cdb72` (PLB `d91d08e3…fa838`). */
+export const CIP113_REGISTRY_MAINNET: readonly string[] = [
+  '484e733d122af44e6101988bcc47ed261a7af5c43c797e89d60e3075',
+];
+
+/** Preprod registry. Record for bootstrap tx `f4118e53…5c896` (PLB `be59f775…511e3`). */
+export const CIP113_REGISTRY_PREPROD: readonly string[] = [
+  '3083d387537f9318b6ff5aeab7de5f5629d26495319b8fafd409222a',
+];
+
+/** Preview registry. Record for bootstrap tx `8e9668a6…d00f9` (PLB `35622813…16c16`). */
+export const CIP113_REGISTRY_PREVIEW: readonly string[] = [
+  'e5b339ef5b16d6c460759aca1d60e5e045a6f01da4a11b4ee0fec09a',
+];
+
+// CIP-113 `programmable_logic_global` (PLG) stake-script hashes, per network. Every CIP-113
+// transfer withdraws 0 from this script, whoever builds it. Two uses:
+//  - the dApp-facing signing guard refuses a transaction that withdraws one of these while
+//    needing one of the wallet's keys, which covers a programmable UTxO not yet synced into
+//    the refusal index. A wrong value here can only cause extra refusals.
+//  - Gero's own Send checks the withdrawal set of the transfer Nexus built.
+//
+// Provenance: the first credential of each deployment's protocol-params datum (the UTxO
+// holding the params NFT, at the bootstrap tx recorded above, output 0), and the reference
+// script at the deployment's reference-script output 1. Checked on chain through Koios on
+// 2026-10-29. Same review bar as the PLB hashes.
+
+/** Mainnet PLG. Params datum at `bfefbd22…cdb72#0`; script created in tx `a488bac5…`. */
+export const CIP113_GLOBAL_MAINNET: readonly string[] = [
+  '46b61f0584f21481b22ea18f945e48ac4148f50fc3ade494a7762440',
+];
+
+/** Preprod PLG. Params datum at `f4118e53…5c896#0`; reference script `e24679be…6b59#1`. */
+export const CIP113_GLOBAL_PREPROD: readonly string[] = [
+  'b4e81fa9a3291025cd279067daf4e43578d4c3f759e5490958f58cf6',
+];
+
+/** Preview PLG. Params datum at `8e9668a6…d00f9#0`; reference script `f543e7b8…b6dd#1`. */
+export const CIP113_GLOBAL_PREVIEW: readonly string[] = [
+  '3b212b37b1a1fb334539c42e7473376a7fc15b60c26ae0fd4d06279e',
+];
+
+// The core CIP-113 `transfer` stake-script hashes, per network: the third credential of the
+// same params datum, the reference script at output 2. Only Send reads these, so only the
+// networks Send supports list one. Checked on chain through Koios on 2026-10-29.
+
+/** Mainnet: none, so Send is unsupported there (decision 11). */
+export const CIP113_TRANSFER_MAINNET: readonly string[] = [];
+
+/** Preprod core transfer. Reference script `e24679be…6b59#2`. */
+export const CIP113_TRANSFER_PREPROD: readonly string[] = [
+  '5ff03dd084ec86a164dbf9bfe890605fe9fcba8d6657328eab8bb350',
+];
+
+/** Preview core transfer. Reference script `f543e7b8…b6dd#2`. */
+export const CIP113_TRANSFER_PREVIEW: readonly string[] = [
+  '5fe7c82a32a69e5839e9da77e1e9992c1e55f7d372c3d58d8f744ef7',
+];
+
+/**
+ * Networks where Gero's own Send may build a CIP-113 transfer. A separate allowlist for the
+ * same reason as CIP113_ALLOWED_NETWORKS below: recording a transfer hash must not by itself
+ * bring Send up on a network. Mainnet needs its own review and test send first (decision 11).
+ */
+export const CIP113_SEND_ALLOWED_NETWORKS: readonly string[] = [Network.PREPROD, Network.PREVIEW];
+
+/**
+ * Hardware wallets (`WalletType` values: 'Ledger', 'Trezor', 'Keystone') that Gero's own Send
+ * may ask to sign a CIP-113 transfer. EMPTY until each device has signed a real transfer on
+ * preprod: the signers map required signers by key hash and ask for the stake key only for
+ * the wallet's own withdrawals and certificates, but a passing spec is not a device run.
+ * The worker's prepare and the Send button both read this list, so empty is exactly the
+ * software-only behaviour. Any other value in it is ignored.
+ */
+export const CIP113_SEND_HARDWARE_WALLET_TYPES: readonly string[] = [];
+
+const HARDWARE_WALLET_TYPES: readonly string[] = ['Ledger', 'Trezor', 'Keystone'];
+
+/** Whether Send may ask this hardware wallet type to sign. False for every software type. */
+export function isCip113SendHardware(
+  walletType: string | null | undefined,
+  allowed: readonly string[] = CIP113_SEND_HARDWARE_WALLET_TYPES,
+): boolean {
+  return typeof walletType === 'string' && HARDWARE_WALLET_TYPES.includes(walletType) && allowed.includes(walletType);
+}
+
 /**
  * Networks where CIP-113 may run at all. Together with the hash lists above this is the
  * whole gate: two build-time constants, both of which must pass.

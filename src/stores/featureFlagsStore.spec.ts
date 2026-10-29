@@ -4,8 +4,11 @@ import featureFlagService from '@/services/featureFlag.service';
 
 vi.mock('@/services/featureFlag.service', () => ({
   default: {
+    initialize: vi.fn(async () => undefined),
     getFlag: vi.fn((_key: string, fallback: unknown) => fallback),
     onFlagChange: vi.fn(),
+    isReady: vi.fn(() => true),
+    onReady: vi.fn(),
   },
 }));
 
@@ -98,4 +101,65 @@ test('reflects a remote isMultiAccountEnabled flag once loaded, and follows a li
 test('reset() turns isMultiAccountEnabled back off', () => {
   featureFlagsStore.reset();
   expect(featureFlagsStore.isMultiAccountEnabled()).toBe(false);
+});
+
+test('exposes isCip113Enabled, defaulting to false, following the remote flag and a live flip', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isCip113Enabled()).toBe(false);
+
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isCip113Enabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isCip113Enabled()).toBe(true);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isCip113Enabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isCip113Enabled()).toBe(false);
+
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isCip113Enabled()).toBe(false);
+});
+
+// After a failed first fetch the service retries (issue 1195); the store must
+// pick the real values up then, and must not hand the background all-off
+// fallbacks in the meantime.
+test('does not mirror fallback values to the background before the service has flags', () => {
+  const set = vi.fn(async () => undefined);
+  vi.stubGlobal('chrome', { storage: { local: { set } } });
+  vi.mocked(featureFlagService.isReady).mockReturnValue(false);
+
+  featureFlagsStore.loadFlags();
+  expect(set).not.toHaveBeenCalled();
+
+  vi.mocked(featureFlagService.isReady).mockReturnValue(true);
+  featureFlagsStore.loadFlags();
+  expect(set).toHaveBeenCalledTimes(1);
+  vi.unstubAllGlobals();
+});
+
+test('loads the flags once a retry gets them after a failed first fetch', async () => {
+  const set = vi.fn(async () => undefined);
+  vi.stubGlobal('chrome', { storage: { local: { set } } });
+  featureFlagsStore.reset();
+  vi.mocked(featureFlagService.getFlag).mockImplementation((_key: string, fallback: unknown) => fallback);
+  vi.mocked(featureFlagService.isReady).mockReturnValue(false);
+
+  await featureFlagsStore.initialize('https://flags.test');
+  expect(featureFlagsStore.isGovernanceEnabled()).toBe(false);
+  expect(set).not.toHaveBeenCalled();
+  const onReady = vi.mocked(featureFlagService.onReady).mock.calls.at(-1)?.[0];
+  expect(onReady).toBeTypeOf('function');
+
+  vi.mocked(featureFlagService.isReady).mockReturnValue(true);
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isGovernanceEnabled' ? true : fallback,
+  );
+  onReady?.();
+
+  expect(featureFlagsStore.isGovernanceEnabled()).toBe(true);
+  expect(set).toHaveBeenLastCalledWith({ featureFlags: expect.objectContaining({ isGovernanceEnabled: true }) });
+  featureFlagsStore.reset();
+  vi.unstubAllGlobals();
 });

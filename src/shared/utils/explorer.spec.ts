@@ -141,6 +141,11 @@ describe('getExplorerUrl: other chains', () => {
     expect(getExplorerUrl(Blockchain.BITCOIN, 'bc1q', 'address')).toBe('');
   });
 
+  it('sends Bitcoin testnet links to mempool.space testnet4', () => {
+    expect(getExplorerUrl(Blockchain.BITCOIN, TX, 'tx', Network.TESTNET)).toBe(`https://mempool.space/testnet4/tx/${TX}`);
+    expect(getExplorerUrl(Blockchain.BITCOIN, TX, 'block', Network.TESTNET)).toBe(`https://mempool.space/testnet4/block/${TX}`);
+  });
+
   it('returns nothing for Midnight', () => {
     expect(getExplorerUrl(Blockchain.MIDNIGHT, TX, 'tx')).toBe('');
   });

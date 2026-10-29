@@ -1,0 +1,420 @@
+# Build, test and release GeroWallet to the Chrome Web Store, all in one run.
+#
+# 1. "Chrome Extension CI/CD" (ci-cd.yml, called as the first job) builds the commit this
+#    workflow runs on, runs the unit suite and archives the package with its checksums.
+# 2. That package is re-checked: version, channel, identity and every file hash, for both
+#    the extension directory and its extracted ZIP.
+# 3. The full isolated browser suites of Gero-Labs/gerowallet-e2e-tests (post-v2.7 in three
+#    shards, plus legacy) run against that ZIP, extracted. Any failure, or a test that
+#    passed only on retry, stops the release.
+# 4. With dry_run=false, the upload job runs in the chrome-web-store-<channel> environment.
+#    Its required reviewers are the release authorization, only the people in its
+#    CWS_RELEASERS variable may start a release, and its store credentials exist only
+#    there. It tags the commit v<version>, then uploads the same ZIP and submits it.
+#
+# Nothing is rebuilt, edited or repacked after step 1.
+# Setup and recovery: .github/runbooks/chrome-web-store.md
+name: Chrome Web Store release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version committed in package.json and package-lock.json (for example 2.8.0)'
+        type: string
+        required: true
+      channel:
+        description: 'Store listing to update; must be the channel the repository settings build for'
+        type: choice
+        options: [production, beta]
+        default: production
+      submission:
+        description: 'staged = submit, then publish by hand once approved; publish = goes live as soon as approved; upload-only = draft, no review'
+        type: choice
+        options: [staged, publish, upload-only]
+        default: staged
+      deploy_percentage:
+        description: 'Optional rollout percentage, 1-100 (the store allows it only above 10,000 weekly users). Empty = everyone'
+        type: string
+        required: false
+        default: ''
+      dry_run:
+        description: 'Build, test and e2e-test only; no tag, nothing sent to the Chrome Web Store'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One store operation per listing at a time; never cancel one halfway through.
+concurrency:
+  group: chrome-web-store-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Chrome Extension CI/CD
+    uses: ./.github/workflows/ci-cd.yml
+    with:
+      expected_version: ${{ inputs.version }}
+    secrets:
+      MANIFEST_KEY: ${{ secrets.MANIFEST_KEY }}
+      VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
+      VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
+
+  verify:
+    name: Verify the tested package
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      zip_sha256: ${{ steps.package.outputs.zip_sha256 }}
+      extension_id: ${{ steps.package.outputs.extension_id }}
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      CHANNEL: ${{ inputs.channel }}
+      SUBMISSION: ${{ inputs.submission }}
+      DEPLOY_PERCENTAGE: ${{ inputs.deploy_percentage }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Check the inputs
+        run: |
+          if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::version must look like 2.8.0" >&2; exit 1
+          fi
+          if [ -n "$DEPLOY_PERCENTAGE" ]; then
+            if ! [[ "$DEPLOY_PERCENTAGE" =~ ^[0-9]+$ ]] || [ "$DEPLOY_PERCENTAGE" -lt 1 ] || [ "$DEPLOY_PERCENTAGE" -gt 100 ]; then
+              echo "::error::deploy_percentage must be a whole number from 1 to 100" >&2; exit 1
+            fi
+            if [ "$SUBMISSION" = 'upload-only' ]; then
+              echo "::error::deploy_percentage needs a submission (staged or publish)" >&2; exit 1
+            fi
+          fi
+
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.19.0'
+
+      # Only the upload job creates v<version>, on the commit it releases. A tag on
+      # another commit means this version was already released from there. A dry run
+      # releases nothing, so it only warns and goes on testing.
+      - name: Check the release tag
+        run: |
+          tag="v${RELEASE_VERSION}"
+          if tagged="$(git rev-parse --verify --quiet "refs/tags/${tag}^{commit}")" && [ "$tagged" != "$GITHUB_SHA" ]; then
+            message="${tag} already marks ${tagged}, not ${GITHUB_SHA}. Release a new version."
+            if [ "$DRY_RUN" = 'true' ]; then echo "::warning::${message}"; else echo "::error::${message}" >&2; exit 1; fi
+          fi
+
+      - name: Download the tested package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: gero-extension-${{ github.sha }}
+          path: candidate
+
+      - name: Re-check the package and its ZIP
+        id: package
+        run: |
+          zip="candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip"
+          (cd candidate/release-evidence && sha256sum -c SHA256SUMS)
+          mkdir unzipped
+          unzip -q "$zip" -d unzipped
+          lock_sha256="$(sha256sum package-lock.json | cut -d ' ' -f 1)"
+          node scripts/chrome-web-store.mjs verify --candidate candidate --unzipped unzipped \
+            --version "$RELEASE_VERSION" --channel "$CHANNEL" --source-sha "$GITHUB_SHA" --lock-sha256 "$lock_sha256"
+          echo "zip_sha256=$(sha256sum "$zip" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        env:
+          ZIP_SHA256: ${{ steps.package.outputs.zip_sha256 }}
+          EXTENSION_ID: ${{ steps.package.outputs.extension_id }}
+        run: |
+          {
+            echo "### Gero ${RELEASE_VERSION} (${CHANNEL}) built, tested and verified"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Extension ID | \`${EXTENSION_ID}\` |"
+            echo "| ZIP SHA-256 | \`${ZIP_SHA256}\` |"
+            echo "| Next | E2E suites, then $([ "$DRY_RUN" = 'true' ] && echo 'stop (dry run: no tag, nothing sent to the store)' || echo "approval, tag v${RELEASE_VERSION}, upload, then: ${SUBMISSION}") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The full isolated suites, on the exact bytes the store will receive. The harness is
+  # the e2e repo's own (same commands and settings as its post-v27-e2e.yml); only the
+  # wallet differs: the extracted release ZIP instead of a fresh test build.
+  #
+  # Nothing here runs code from a ref chosen when the workflow is started. This workflow
+  # runs with the default branch's cache scope, which every branch can read, so such
+  # code could poison caches. The harness is the e2e repo's reviewed development branch,
+  # and no wallet source is checked out: the commit and ZIP hash are bound into each
+  # suite's qualification.json instead, and the gate checks both.
+  e2e:
+    name: E2E ${{ matrix.suite }} (${{ matrix.shard }}/${{ matrix.of }})
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: post-v27, shard: 1, of: 3 }
+          - { suite: post-v27, shard: 2, of: 3 }
+          - { suite: post-v27, shard: 3, of: 3 }
+          - { suite: legacy, shard: 1, of: 1 }
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      ZIP_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+      SUITE: ${{ matrix.suite }}
+    steps:
+      # The harness repository is private, and this run's own token reads only this
+      # repository. E2E_HARNESS_TOKEN is a read-only token for that one repository; the
+      # checkout does not keep it, so the harness never sees it.
+      - name: Check the harness token
+        env:
+          E2E_HARNESS_TOKEN: ${{ secrets.E2E_HARNESS_TOKEN }}
+        run: |
+          if [ -z "$E2E_HARNESS_TOKEN" ]; then
+            echo "::error::The E2E_HARNESS_TOKEN secret is not set: a read-only token for Gero-Labs/gerowallet-e2e-tests (see .github/runbooks/chrome-web-store.md)" >&2
+            exit 1
+          fi
+
+      - name: Checkout the e2e harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: Gero-Labs/gerowallet-e2e-tests
+          ref: development
+          token: ${{ secrets.E2E_HARNESS_TOKEN }}
+          persist-credentials: false
+
+      # The wallet's own release scripts, from the commit that runs this workflow.
+      - name: Checkout this workflow's scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: .release-scripts
+          persist-credentials: false
+
+      # No npm cache either: this job saves nothing that a later run restores.
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+
+      - name: Install the harness
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Download the tested package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: gero-extension-${{ github.sha }}
+          path: .candidate
+
+      - name: Put the verified ZIP under test
+        run: |
+          zip=".candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip"
+          echo "${ZIP_SHA256}  ${zip}" | sha256sum -c -
+          # unzip -d creates only the last directory of the path.
+          mkdir -p .wallet-under-test/extension
+          unzip -q "$zip" -d .wallet-under-test/extension
+          echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Run the post-v2.7 suite
+        if: matrix.suite == 'post-v27'
+        run: npm run test:post-v27 -- --shard=${{ matrix.shard }}/${{ matrix.of }}
+        env:
+          POST_V27_EXTENSION_PATH: ${{ github.workspace }}/.wallet-under-test/extension
+          WALLET_CANDIDATE_SHA: ${{ github.sha }}
+          WALLET_RELEASE_ARCHIVE_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+          SUBMIT_API_REQUIRED: 'true'
+          EXPLORER_SETTING_REQUIRED: 'true'
+
+      - name: Run the legacy suite
+        if: matrix.suite == 'legacy'
+        run: npm run test:legacy:isolated -- --shard=${{ matrix.shard }}/${{ matrix.of }}
+        env:
+          EXTENSION_PATH: ${{ github.workspace }}/.wallet-under-test/extension
+          WALLET_CANDIDATE_SHA: ${{ github.sha }}
+          WALLET_RELEASE_ARCHIVE_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+          SUBMIT_API_REQUIRED: 'true'
+          EXPLORER_SETTING_REQUIRED: 'true'
+
+      - name: Check the e2e result for this package
+        run: |
+          dir="test-results/$([ "$SUITE" = legacy ] && echo legacy-isolated || echo post-v27)"
+          node .release-scripts/scripts/chrome-web-store.mjs e2e-gate --qualification "${dir}/qualification.json" \
+            --wallet-sha "$GITHUB_SHA" --archive-sha256 "$ZIP_SHA256"
+
+      # Summaries only. This repository is public, and the suites' screenshots, videos and
+      # traces can show the disposable recovery phrases the tests create.
+      - name: Keep the e2e summary
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p e2e-evidence
+          for file in test-results/post-v27/qualification.json test-results/legacy-isolated/qualification.json; do
+            [ -e "$file" ] && cp "$file" "e2e-evidence/$(basename "$(dirname "$file")")-$(basename "$file")"
+          done
+          printf '{"harnessRepository":"Gero-Labs/gerowallet-e2e-tests","harnessSha":"%s","walletSha":"%s","releaseArchiveSha256":"%s"}\n' \
+            "${harness_sha:-}" "$GITHUB_SHA" "$ZIP_SHA256" > e2e-evidence/e2e-run.json
+      - name: Upload the e2e summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: e2e-${{ inputs.channel }}-${{ inputs.version }}-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_id }}
+          path: e2e-evidence/
+          retention-days: 90
+          if-no-files-found: warn
+
+  submit:
+    name: Tag and upload to the Chrome Web Store
+    needs: [verify, e2e]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Required reviewers on this environment approve the release; its vars and secrets
+    # are the store credentials for this channel's listing.
+    environment: chrome-web-store-${{ inputs.channel }}
+    permissions:
+      contents: write # the v<version> tag only; see "Tag the release"
+      id-token: write # GitHub's OIDC token for "Get a store access token"; no other step uses it
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      SUBMISSION: ${{ inputs.submission }}
+      DEPLOY_PERCENTAGE: ${{ inputs.deploy_percentage }}
+    steps:
+      # Only the people named in this environment's CWS_RELEASERS variable may release,
+      # whoever approves. GitHub sends a re-run's own starter as the triggering actor, so
+      # a re-run is checked too. An unset list releases nothing.
+      - name: Check who started the release
+        env:
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          CWS_RELEASERS: ${{ vars.CWS_RELEASERS }}
+        run: |
+          set -f
+          actor="$(printf '%s' "$TRIGGERING_ACTOR" | tr '[:upper:]' '[:lower:]')"
+          releasers="$(printf '%s' "$CWS_RELEASERS" | tr ',' ' ' | tr '[:upper:]' '[:lower:]')"
+          for login in $releasers; do
+            if [ "$login" = "$actor" ]; then echo "${TRIGGERING_ACTOR} may release"; exit 0; fi
+          done
+          if [ -z "${releasers// /}" ]; then
+            echo "::error::The CWS_RELEASERS variable of this environment is not set, so nobody may release" >&2
+          else
+            echo "::error::${TRIGGERING_ACTOR} is not in this environment's CWS_RELEASERS and may not release" >&2
+          fi
+          exit 1
+
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.19.0'
+
+      - name: Download the tested package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: gero-extension-${{ github.sha }}
+          path: candidate
+
+      - name: Confirm it is the ZIP that was verified
+        env:
+          ZIP_SHA256: ${{ needs.verify.outputs.zip_sha256 }}
+        run: echo "${ZIP_SHA256}  candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip" | sha256sum -c -
+
+      # After approval and before the upload, so an uploaded package always has its tag.
+      # A tag already on this commit (from an earlier attempt that failed to upload) is
+      # kept, so that attempt can simply be run again. The token is used in this step only.
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          if tagged="$(git rev-parse --verify --quiet "refs/tags/${tag}^{commit}")"; then
+            if [ "$tagged" != "$GITHUB_SHA" ]; then
+              echo "::error::${tag} already marks ${tagged}, not ${GITHUB_SHA}" >&2; exit 1
+            fi
+            echo "${tag} already marks this commit; keeping it"
+            exit 0
+          fi
+          tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" -f tag="$tag" -f type=commit -f object="$GITHUB_SHA" \
+            -f message="GeroWallet ${RELEASE_VERSION} (${CHANNEL}), tested and approved for the Chrome Web Store; workflow ${GITHUB_RUN_ID}" \
+            --jq .sha)"
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${tag}" -f sha="$tag_object" > /dev/null
+          echo "Tagged ${GITHUB_SHA} as ${tag}"
+
+      # Keyless store credentials (Workload Identity Federation): Google trades this job's
+      # OIDC token for a one-hour access token of the release service account. Google's
+      # provider admits only this repository's jobs in the chrome-web-store-production
+      # environment. Without CWS_WIF_PROVIDER the step is skipped, and "Upload and submit"
+      # falls back to the CWS_SERVICE_ACCOUNT_JSON or refresh-token secrets. No credentials
+      # file is written, so nothing lands in the workspace for a later step to upload.
+      - name: Get a store access token
+        id: wif
+        if: ${{ vars.CWS_WIF_PROVIDER != '' }}
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.CWS_WIF_PROVIDER }}
+          service_account: ${{ vars.CWS_WIF_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+          export_environment_variables: false
+
+      - name: Upload and submit
+        env:
+          EXTENSION_ID: ${{ needs.verify.outputs.extension_id }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ vars.CWS_ITEM_ID }}
+          CWS_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token }}
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          mkdir -p store-evidence
+          args=(release --zip "candidate/release-evidence/Gero-v${RELEASE_VERSION}.zip" --version "$RELEASE_VERSION"
+            --expected-id "$EXTENSION_ID" --submission "$SUBMISSION" --report store-evidence/submission.json)
+          if [ -n "$DEPLOY_PERCENTAGE" ]; then args+=(--deploy-percentage "$DEPLOY_PERCENTAGE"); fi
+          node scripts/chrome-web-store.mjs "${args[@]}"
+
+      # The report holds store states and versions only: no token or credential.
+      - name: Keep the store's answer
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: chrome-web-store-${{ inputs.channel }}-${{ inputs.version }}-${{ github.run_id }}
+          path: store-evidence/
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import fs from 'node:fs';
+          const file = 'store-evidence/submission.json';
+          if (!fs.existsSync(file)) { console.log('### Nothing reached the Chrome Web Store'); process.exit(0); }
+          const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (!report.ok) { console.log(`### Chrome Web Store step failed\n\n${report.error}`); process.exit(0); }
+          const next = {
+            staged: 'In review. Once approved, publish it from the Developer Dashboard.',
+            publish: 'In review. It goes live as soon as it is approved.',
+            'upload-only': 'Saved as a draft. Nothing was submitted for review.',
+          }[report.submission];
+          console.log(`### Gero ${report.version} uploaded to the Chrome Web Store\n`);
+          console.log(`Item \`${report.itemId}\`, submission state: ${report.submissionState ?? 'none'}.\n\n${next}`);
+          NODE

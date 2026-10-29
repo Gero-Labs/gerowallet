@@ -18,7 +18,7 @@
             <template #activator="{ props: activatorProps }">
               <v-btn icon variant="text" size="small" v-bind="activatorProps"  :disabled="!ready" class="library-sort"
                 :class="{ 'library-sort--active': sort !== 'custom' }"
-                :aria-label="t('common.sortBy') + ': ' + sortLabel(sort)" :title="t('common.sortBy') + ': ' + sortLabel(sort)">
+                :aria-label="sortButtonLabel" :title="sortButtonLabel">
                 <v-icon size="small">mdi-sort</v-icon>
               </v-btn>
             </template>
@@ -98,6 +98,12 @@
                     <span class="wallet-name">{{ wallet.name }} <v-icon v-if="wallet.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
                     <span v-if="loadingWalletId === wallet.id" class="wallet-network" role="status">{{ t('miniGero.unlocking') }}</span>
                     <span v-else class="wallet-network">{{ wallet.chain }} &middot; {{ wallet.network }}<span v-if="walletKind(wallet)"> &middot; {{ walletKind(wallet) }}</span><span v-if="accountsFor(wallet).length"> &middot; {{ tc('accounts.count', accountsFor(wallet).length + 1, { count: accountsFor(wallet).length + 1 }) }}</span></span>
+                    <span v-if="walletValues.get(wallet.id)" class="wallet-value t-body-sm g-num"
+                      :title="t('walletLibrary.valuesUpdated', { time: formatRelativeTime(walletValues.get(wallet.id)!.at) })">
+                      <span class="wallet-value__coins">{{ coinsText(walletValues.get(wallet.id)!) }}</span>
+                      <span class="t-caption">&asymp; {{ fiatText(walletValues.get(wallet.id)!) }}</span>
+                    </span>
+                    <span v-else-if="valuePending(wallet)" class="wallet-network">{{ t('walletLibrary.valueCalculating') }}</span>
                     <span v-if="displayAddress(wallet)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(wallet) }" :title="displayAddress(wallet)">{{ shortAddress(displayAddress(wallet)) }}</span>
                   </span>
                   <img v-if="walletTypeIcon(wallet)" class="wallet-hardware" :src="walletTypeIcon(wallet)"
@@ -123,7 +129,7 @@
                   </v-list>
                 </v-menu>
                 <ul v-if="accountsFor(wallet).length" class="library-accounts" :aria-label="t('accounts.accountsOf', { name: wallet.name })">
-                  <li v-for="account in accountsFor(wallet)" :key="account.id" class="library-account">
+                  <li v-for="account in accountRows(wallet)" :key="account.id" class="library-account">
                     <button type="button" class="account-open glass-tier" :class="{ 'account-open--locked': account.id === lockedWalletId }"
                       :disabled="loadingWalletId != null" :aria-busy="loadingWalletId === account.id" :title="displayAddress(account)"
                       :aria-label="t('walletLibrary.openWallet', { name: walletDisplayName(account, [wallet]) })"
@@ -131,8 +137,12 @@
                       <v-progress-circular v-if="loadingWalletId === account.id" size="16" width="2" indeterminate color="var(--g-accent)" />
                       <v-icon v-else size="small">mdi-subdirectory-arrow-right</v-icon>
                       <span class="account-name t-body-sm">{{ account.name }} <v-icon v-if="account.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
-                      <span v-if="displayAddress(account)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(account) }">{{ shortAddress(displayAddress(account)) }}</span>
+                      <span v-if="breakdown(wallet) && valueOf(account)" class="account-value t-body-sm g-num">{{ coinsText(valueOf(account)!) }}</span>
+                      <span v-else-if="displayAddress(account)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(account) }">{{ shortAddress(displayAddress(account)) }}</span>
                     </button>
+                  </li>
+                  <li v-if="breakdown(wallet) && walletValues.get(wallet.id)" class="library-accounts-note t-caption">
+                    {{ t('walletLibrary.valuesUpdated', { time: formatRelativeTime(walletValues.get(wallet.id)!.at) }) }}
                   </li>
                 </ul>
               </li>
@@ -182,12 +192,40 @@ import { WALLET_SORTS } from '@/services/walletLibrary/model';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { canAddAccounts, walletDisplayName } from '@/shared/utils/walletAccount';
 import type { LibraryWallet, WalletCategory, WalletSort } from '@/services/walletLibrary/model';
+import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
+import { formatUsd } from '@/shared/utils/format';
+import { formatRelativeTime } from '@/shared/utils/relativeTime';
+import { useWalletValues } from '@/shared/composables/useWalletValues';
+import { hasPortfolioValue, type WalletValue } from '@/services/walletLibrary/walletValues';
 
 const props = defineProps<{ availableWallets: Wallet[]; lockedWalletId?: number | null; loadingWalletId?: number | null }>();
 defineEmits<{ (event: 'select', id: number): void; (event: 'focus-wallet', wallet: Wallet): void; (event: 'add-account', id: number): void }>();
 const { t, tc } = useTranslation();
 const { preferences, query, favoritesOnly, sort, ready, saving, error, indexing, wallets, filtered, filtering, reorderable, groups, favoriteCount, run, pendingCount, toggleFavorite, moveWallet, accountsFor } = useWalletLibrary(toRef(props, 'availableWallets'));
 const multiAccountEnabled = computed(() => featureFlagsStore.isMultiAccountEnabled());
+
+// What each wallet is worth, tokens and NFTs included (issue 1332). Off with the
+// "Balances in the wallet list" setting, and while the logged wallet hides its balances.
+const showValues = computed(() => geroStore.config?.walletListBalances !== false && !walletStore.config?.hideBalances);
+const everyWallet = computed(() => wallets.value.flatMap((wallet) => [wallet, ...accountsFor(wallet)]));
+const { valueOf, isPending } = useWalletValues(everyWallet, showValues);
+const valued = (wallet: LibraryWallet) => showValues.value && hasPortfolioValue(wallet, wallet.stakeAddress);
+const members = (wallet: LibraryWallet) => [wallet, ...accountsFor(wallet)];
+/** A wallet's value: with added accounts, the sum of all of them once each one is known. */
+const walletValues = computed(() => new Map(wallets.value.map((wallet): [number, WalletValue | undefined] => {
+  const known = valued(wallet) ? members(wallet).map(valueOf) : [];
+  if (!known.length || known.some((value) => !value)) return [wallet.id, undefined];
+  return [wallet.id, (known as WalletValue[]).reduce((sum, value) => ({
+    ada: sum.ada + value.ada, usd: sum.usd + value.usd, eur: sum.eur + value.eur, at: Math.min(sum.at, value.at),
+  }))];
+})));
+const valuePending = (wallet: LibraryWallet) => valued(wallet) && members(wallet).some(isPending);
+/** With values shown, a wallet's account list is its breakdown, so account #0 leads it. */
+const breakdown = (wallet: LibraryWallet) => valued(wallet) && accountsFor(wallet).length > 0;
+const accountRows = (wallet: LibraryWallet) => (breakdown(wallet) ? members(wallet) : accountsFor(wallet));
+const coinsText = (value: WalletValue) => `${formatUsd(value.ada, { symbol: false })} ADA`;
+const fiatText = (value: WalletValue) => (walletStore.config?.currency === 'eur' ? `€${formatUsd(value.eur, { symbol: false })}` : formatUsd(value.usd));
 // Existing labels with the same wording are reused; only "Custom order" is the library's own.
 const SORT_LABELS: Record<WalletSort, string> = {
   custom: 'walletLibrary.sortCustom',
@@ -198,6 +236,8 @@ const SORT_LABELS: Record<WalletSort, string> = {
   oldest: 'governance.sortOldest',
 };
 const sortLabel = (option: WalletSort) => t(SORT_LABELS[option]);
+// One translatable sentence, so each language picks its own word order and punctuation (issue 1197).
+const sortButtonLabel = computed(() => t('walletLibrary.sortedBy', { sort: sortLabel(sort.value) }));
 const dragging = ref(false);
 type WalletGroup = typeof groups.value[number];
 const announcement = ref('');
@@ -302,6 +342,10 @@ function reordered(event: { added?: { element: LibraryWallet; newIndex: number }
 .account-open .v-icon { color: var(--g-text-3); flex: none; }
 .account-name { flex: none; color: var(--g-text-1); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-open .wallet-address { margin-left: auto; min-width: 0; }
+.account-value { margin-left: auto; flex: none; color: var(--g-text-1); }
+.library-accounts-note { color: var(--g-text-3); padding: var(--g-s-1) var(--g-s-2) 0; }
+.wallet-value { display: flex; align-items: baseline; gap: var(--g-s-2); min-width: 0; overflow: hidden; white-space: nowrap; color: var(--g-text-2); }
+.wallet-value__coins { color: var(--g-text-1); font-weight: 600; }
 .library-wallets--target { min-height: 48px; border-radius: var(--g-r-control); outline: 1px dashed var(--g-accent); }
 .wallet-library--sorting { user-select: none; }
 .wallet-library--sorting .wallet-open { pointer-events: none; }

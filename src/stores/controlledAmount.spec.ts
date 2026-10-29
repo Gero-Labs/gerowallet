@@ -11,7 +11,13 @@ vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: vi.fn(
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
 vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn() } }));
 
-import WalletStore, { walletStore, spendableControlledAmount, type Account } from './walletStore';
+import WalletStore, {
+  walletStore,
+  spendableControlledAmount,
+  hasProgrammableLockedLovelace,
+  totalProgrammableLockedLovelace,
+  type Account,
+} from './walletStore';
 
 const account = (controlled: string) => ({ controlled_amount: controlled } as Account);
 
@@ -72,5 +78,21 @@ describe('spendable controlled_amount', () => {
     WalletStore.setProgrammableTokens({}, '4000000');
 
     expect(spendableControlledAmount('not-a-number')).toBe('not-a-number');
+  });
+
+  // Payment-key-owned CIP-113 UTxOs sit under another reward address: their lovelace was
+  // never in this stake address's total, so taking it off would understate the balance.
+  it('does not subtract lovelace locked under a payment-key owner', () => {
+    WalletStore.setProgrammableTokens({}, '4000000', '2000000');
+    WalletStore.setAccount(account('10000000'));
+
+    expect(walletStore.account?.controlled_amount).toBe('6000000');
+  });
+
+  it('still counts payment-key-owned lovelace as locked holdings', () => {
+    WalletStore.setProgrammableTokens({}, '0', '2000000');
+
+    expect(totalProgrammableLockedLovelace()).toBe(2_000_000n);
+    expect(hasProgrammableLockedLovelace()).toBe(true);
   });
 });

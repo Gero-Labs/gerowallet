@@ -202,6 +202,8 @@ export class TransactionsLoader extends BaseLoader {
       chain: string;
       network: string;
       isEnterpriseAddress: () => boolean;
+      /** WalletBg.ownProgrammableAddressMatcher: this wallet's CIP-113 addresses, or null. */
+      ownProgrammableAddressMatcher?: () => ((address: string) => boolean) | null;
       networkId: () => number;
       setUtxosAndAddresses: (transactions: StoredTransaction[]) => Promise<void>;
       triggerResync?: () => Promise<void>;
@@ -259,6 +261,8 @@ export class TransactionsLoader extends BaseLoader {
             const currentAddress = isEnterpriseAddress ? this.walletContext.baseAddress : '';
             const currentStake = !isEnterpriseAddress ? this.walletContext.stakeAddress : '';
             const networkId = this.walletContext.networkId();
+            // Once per pass: building it derives the wallet's keys.
+            const isOwnProgrammable = this.walletContext.ownProgrammableAddressMatcher?.() ?? null;
             const network = networks.resolveNetwork(this.walletContext.chain, this.walletContext.network);
 
             const nativeAssetMetadata = {
@@ -309,11 +313,11 @@ export class TransactionsLoader extends BaseLoader {
 
               this.processUtxos(resolvedInputs, currentAddress, currentStake, networkId, true, sentAssets, (amount) => {
                 sentAmount += amount;
-              });
+              }, isOwnProgrammable);
 
               this.processUtxos(tx.utxo?.outputs, currentAddress, currentStake, networkId, false, receivedAssets, (amount) => {
                 receivedAmount += amount;
-              });
+              }, isOwnProgrammable);
 
               const totalAmount = receivedAmount - sentAmount;
 
@@ -398,24 +402,30 @@ export class TransactionsLoader extends BaseLoader {
     networkId: number,
     isSent: boolean,
     assetsMap: Map<string, AccountedAsset>,
-    addLovelace: (amount: number) => void
+    addLovelace: (amount: number) => void,
+    isOwnProgrammable: ((address: string) => boolean) | null = null,
   ): void {
     if (!utxos?.length) return;
 
     for (let i = 0; i < utxos.length; i++) {
       const utxo = utxos[i];
       // A stake-credential match means "shares my stake key", not "is mine": a DeFi
-      // deposit (Strike, DEX orders, CIP-113 programmable UTxOs) pays a SCRIPT address
-      // that carries the depositor's own stake credential. Counting those as received
-      // made a send net out to just the fee — mainnet
-      // daf2524d4a30e201e6c678f10f43d8934e0e0709550e6ce3e64e7bafcd2a8dce showed a
-      // 104 ADA deposit as -₳0.22. Script-payment addresses are never spendable here,
-      // so they are foreign to this accounting whatever stake key they carry.
+      // deposit (Strike, DEX orders) pays a SCRIPT address that carries the depositor's
+      // own stake credential. Counting those as received made a send net out to just the
+      // fee — mainnet daf2524d4a30e201e6c678f10f43d8934e0e0709550e6ce3e64e7bafcd2a8dce
+      // showed a 104 ADA deposit as -₳0.22. Script-payment addresses are never spendable
+      // here, so they are foreign to this accounting whatever stake key they carry.
       const isOwnAddress = utxo.address === currentAddress ||
         (toStakeAddress(utxo.address, networkId) === currentStake &&
           !hasScriptPaymentCredential(utxo.address));
+      // The one script exception: this wallet's own CIP-113 addresses (stake key or payment
+      // key in the owner slot). What sits there is the user's, shown as locked holdings, so
+      // history counts it in and out, whatever datum it carries. A Minswap V3 fill pays only
+      // such an address and would otherwise show as an empty row.
+      const isOwnProgrammableAddress = !!utxo.address && !!isOwnProgrammable?.(utxo.address);
 
-      if (!isOwnAddress || (isSent && utxo.data_hash) || (!isSent && utxo.datum_hash)) {
+      if (!isOwnProgrammableAddress &&
+        (!isOwnAddress || (isSent && utxo.data_hash) || (!isSent && utxo.datum_hash))) {
         continue;
       }
 

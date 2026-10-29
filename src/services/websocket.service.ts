@@ -79,6 +79,16 @@ const CROSS_DEVICE_MESSAGE_TYPES: readonly string[] = [
   ...PROVE_MESSAGE_TYPES,
 ];
 
+/**
+ * `programmableAddresses` as the SUBSCRIBE may carry it: Cardano only, and only a list of
+ * strings. connect() takes it in the positional slot that once carried the Midnight shielded
+ * viewing key, so a stale caller passing a key there must never get it onto the wire.
+ */
+function cardanoAddressList(chain: string | null, value: unknown): string[] | null {
+  if (chain !== 'CARDANO' || !Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
 class WebSocketService {
   private ws: WebSocket | null = null;
   private handlers: WsHandlers = {};
@@ -88,6 +98,10 @@ class WebSocketService {
   // (CONTRACT-btc-wire.md). Null for Cardano, so the Cardano SUBSCRIBE payload is
   // unaffected. See openConnection() for the chain-branched SUBSCRIBE.
   private addresses: string[] | null = null;
+  // Cardano-only: CIP-113 addresses owned by this wallet's payment keys, which sit under
+  // other reward addresses than the anchor (WalletBg.programmableSubscriptionAddresses).
+  // Sent only when non-empty, so every other SUBSCRIBE payload is unchanged.
+  private programmableAddresses: string[] | null = null;
   private chain: string | null = null;
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
@@ -139,6 +153,8 @@ class WebSocketService {
      * re-pay replay cost on every dropped WS.
      */
     midnightLastTxId?: number | null,
+    // Cardano-only, see the `programmableAddresses` field.
+    programmableAddresses?: string[],
   ): void {
     this.close();
     this.chain = chain;
@@ -148,6 +164,7 @@ class WebSocketService {
     this.handlers = handlers;
     this.credentials = credentials || null;
     this.addresses = addresses || null;
+    this.programmableAddresses = cardanoAddressList(chain, programmableAddresses);
     this.midnightLastTxId = midnightLastTxId ?? null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
@@ -220,6 +237,7 @@ class WebSocketService {
           address: this.stakeAddress,
           lastSyncedBlock: this.lastSyncedBlock,
           credentials: this.credentials,
+          ...this.programmableAddressesField(),
           platform: 'extension',
           // Midnight-only: included regardless of chain so server can ignore on
           // non-Midnight chains. Null = no persisted cursor (gero-sync full
@@ -553,13 +571,24 @@ class WebSocketService {
     this.reconnectTimer = setTimeout(() => this.openConnection(), delay);
   }
 
+  /** The Cardano SUBSCRIBE's `programmableAddresses`, omitted entirely when there are none. */
+  private programmableAddressesField(): { programmableAddresses?: string[] } {
+    return this.chain === 'CARDANO' && this.programmableAddresses?.length
+      ? { programmableAddresses: this.programmableAddresses }
+      : {};
+  }
+
   /**
    * Re-send SUBSCRIBE with a new lastSyncedBlock.
    * Used for force resync (lastSyncedBlock=0) to trigger full catch-up via gero-sync.
    */
-  resubscribe(lastSyncedBlock: number, expandedCredentials?: string[]): void {
+  resubscribe(lastSyncedBlock: number, expandedCredentials?: string[], programmableAddresses?: string[]): void {
     if (expandedCredentials) {
       this.credentials = expandedCredentials;
+    }
+    // Replaces the set, like the credentials above: gero-sync replaces it too.
+    if (programmableAddresses) {
+      this.programmableAddresses = cardanoAddressList(this.chain, programmableAddresses);
     }
     // Live-read the Midnight cursor for resubscribe too — same reason as the
     // initial connect path: store may have advanced since the last SUBSCRIBE.
@@ -603,6 +632,7 @@ class WebSocketService {
       address: this.stakeAddress,
       lastSyncedBlock,
       credentials: this.credentials,
+      ...this.programmableAddressesField(),
       platform: 'extension',
       // Mirror the connect-path payload so a force-resync doesn't accidentally
       // strip Midnight-only resume cursors and re-trigger full replay.
@@ -667,6 +697,7 @@ class WebSocketService {
     this.handlers = {};
     this.stakeAddress = null;
     this.credentials = null;
+    this.programmableAddresses = null;
     this.chain = null;
     this.network = null;
     this.catchingUp = false;

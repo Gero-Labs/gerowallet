@@ -52,8 +52,13 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('SUPPORT_CHAT_AUTH')).toBe(true);
   });
 
-  it('gates the CIP-113 signing preflight (only the wallet’s own pages sign)', () => {
+  it('gates the CIP-113 signing preflight and Trezor signing (only the wallet’s own pages sign)', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_SIGN_PREFLIGHT')).toBe(true);
+    expect(EXTENSION_PAGE_ONLY_METHODS.has('TREZOR')).toBe(true);
+  });
+
+  it('gates the CIP-113 transfer prepare (it grants the one signing allowance)', () => {
+    expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_PREPARE_TRANSFER')).toBe(true);
   });
 
   it('gates the Submit API settings (they choose where signed transactions go and hold the auth header)', () => {

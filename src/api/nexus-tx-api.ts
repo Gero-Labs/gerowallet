@@ -215,6 +215,51 @@ export interface BuildDRepRegistrationTxRequest {
   ttl?: number;
 }
 
+/**
+ * CIP-113 transfer build request. Matches nexus `Cip113TransferRequest`
+ * (`POST /api/tx/build/cip113-transfer`). Nexus re-reads every referenced UTxO from chain.
+ */
+export interface Cip113TransferBuildRequest {
+  /** Policy id followed by the hex asset name. */
+  unit: string;
+  /** Base units, a positive integer. */
+  quantity: string;
+  /** The recipient as typed: base or enterprise address, or a PLB address of this deployment. */
+  recipientAddress: string;
+  /** The wallet's programmable UTxOs to spend, all one owner (at most 20). */
+  programmableInputs: { txHash: string; outputIndex: number }[];
+  /** The wallet's spendable UTxOs for fee, the ADA that travels with the tokens, and collateral (at most 50). */
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  /** Let Nexus lend pool collateral when no fee input is ADA-only and at least 5 ADA. Defaults to true. */
+  allowSponsoredCollateral?: boolean;
+}
+
+/** Most fee inputs Nexus's CIP-113 transfer builder accepts in one request. */
+export const CIP113_MAX_FEE_INPUTS = 50;
+
+/**
+ * Matches nexus `Cip113TransferResponse`. Advisory only: the wallet verifies the
+ * transaction itself before signing (src/chrome/cip113VerifyTransfer.ts).
+ */
+export interface Cip113TransferBuildResponse {
+  tx_cbor: string;
+  tx_hash: string;
+  estimated_fee?: string;
+  moduleId?: string;
+  transferLogicHash?: string;
+  recipientProgrammableAddress?: string;
+  recipientOwner?: { type?: string; hash?: string };
+  lovelaceToRecipient?: string;
+  changeProgrammableAddress?: string;
+  requiredSigners?: string[];
+  registryNodeRef?: string;
+  validityStart?: number;
+  ttl?: number;
+  /** `txHash#index` of Nexus pool collateral; the transaction then needs Nexus's cosign. */
+  sponsoredCollateralRef?: string;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -237,6 +282,15 @@ export function nexusErrorMessage(
     ? body.validationErrors.filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
     : [];
   return details.length ? `${body.message}: ${details.join('; ')}` : body.message;
+}
+
+/**
+ * The `errorCode` of a Nexus error (e.g. a CIP-113 422 `MODULE_UNSUPPORTED`), read from the
+ * response the interceptor below keeps on the error. Undefined for any other error.
+ */
+export function nexusErrorCode(error: unknown): string | undefined {
+  const code = (error as { response?: { data?: { errorCode?: unknown } } })?.response?.data?.errorCode;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/.test(code) ? code : undefined;
 }
 
 // Surface the Nexus error body's message so callers can parse it
@@ -642,5 +696,25 @@ export const nexusTxApi = {
           : null,
       }),
     }));
+  },
+
+  /**
+   * Build an unsigned CIP-113 programmable-token transfer via nexus
+   * (`/api/tx/build/cip113-transfer`). Preprod and preview only; anything Nexus cannot
+   * build safely is a 422 whose `errorCode` nexusErrorCode() reads. The caller must verify
+   * the returned transaction before signing it.
+   */
+  async buildCip113Transfer(
+    request: Cip113TransferBuildRequest,
+    network: string,
+  ): Promise<Cip113TransferBuildResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    if (!nexusNetwork) throw new Error(`CIP-113 transfers are not supported on ${network}`);
+    // The body's network wins over the query's in Nexus; send the slug in both, as above.
+    const { data } = await nexusTxClient.post<Cip113TransferBuildResponse>(
+      `/api/tx/build/cip113-transfer?network=${nexusNetwork}`,
+      { ...request, network: nexusNetwork },
+    );
+    return data;
   },
 };

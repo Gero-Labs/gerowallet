@@ -85,6 +85,10 @@ export interface FeatureFlags {
   // background router honours a saved endpoint whatever this says, because a remote
   // flip must never reroute a privacy user's transactions to Gero.
   isSubmitApiEnabled: boolean;
+  // CIP-113 Send (Gero's own transfer of a programmable token). Default OFF, ships dark.
+  // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
+  // the background's checks stay on the build-time network gates (cip113Deployments.ts).
+  isCip113Enabled: boolean;
   // Multi-account (issue 1307). Default OFF, ships dark. Gates the UI ONLY: the
   // Choose accounts step, Add account and the account switchers. A record already
   // holding an account other than #0 keeps signing for it whatever this says.
@@ -144,6 +148,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     isSubmitApiEnabled: false,
+    isCip113Enabled: false,
     isMultiAccountEnabled: false,
     isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
@@ -183,6 +188,9 @@ export const featureFlagsStore = {
       await featureFlagService.initialize(baseUrl, 'gero-extension', 5);
       this.loadFlags();
       this.subscribeToFlagChanges();
+      // After a failed first fetch the service keeps retrying (issue 1195):
+      // load the real values once it gets them.
+      if (!featureFlagService.isReady()) featureFlagService.onReady(() => this.loadFlags());
       featureFlagsState.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize feature flags:', error);
@@ -229,12 +237,16 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
     // Submit API ships DARK (default false); UI-only gate for the Settings dialog.
     featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
+    // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
+    featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
     // Multi-account ships DARK (default false); UI-only gate.
     featureFlagsState.flags.isMultiAccountEnabled = featureFlagService.getFlag('isMultiAccountEnabled', false);
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
-    persistFlagsForBackground();
+    // Fallbacks (the service has no flags yet) would overwrite the background's
+    // last known values with all-off; mirror only flags the server sent.
+    if (featureFlagService.isReady()) persistFlagsForBackground();
   },
 
   /**
@@ -327,6 +339,9 @@ export const featureFlagsStore = {
     featureFlagService.onFlagChange('isSubmitApiEnabled', (newValue) => {
       featureFlagsState.flags['isSubmitApiEnabled'] = newValue === true;
     });
+    featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
+      featureFlagsState.flags['isCip113Enabled'] = newValue === true;
+    });
     featureFlagService.onFlagChange('isMultiAccountEnabled', (newValue) => {
       featureFlagsState.flags['isMultiAccountEnabled'] = newValue === true;
     });
@@ -373,11 +388,12 @@ export const featureFlagsStore = {
   },
 
   /**
-   * Check if GoMining integration is enabled
+   * Check if GoMining integration is enabled. Driven by the gero-sync
+   * `isGoMiningEnabled` flag (default off); the Bitcoin pages also need
+   * `isBitcoinEnabled`.
    */
   isGoMiningEnabled(): boolean {
-    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
-    return false;
+    return featureFlagsState.flags.isGoMiningEnabled;
   },
 
   /**
@@ -575,6 +591,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if Gero's own Send of a CIP-113 programmable token is offered.
+   * Ships DARK (default false). Gates the UI only; Send also needs a network
+   * whose transfer scripts are configured (networks.resolveCip113TransferScripts).
+   */
+  isCip113Enabled(): boolean {
+    return featureFlagsState.flags.isCip113Enabled;
+  },
+
+  /**
    * Check if multi-account (accounts #1..N of one device) is enabled.
    * Ships DARK (default false). Gates the UI only.
    */
@@ -614,6 +639,7 @@ export const featureFlagsStore = {
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       isSubmitApiEnabled: false,
+      isCip113Enabled: false,
       isMultiAccountEnabled: false,
       isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],

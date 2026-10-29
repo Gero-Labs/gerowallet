@@ -45,6 +45,19 @@ export function formatBalance(value: number): string {
   return value.toFixed(2);
 }
 
+/**
+ * A token quantity in a holdings list, already divided by the token's decimals. Under 1,000 it
+ * keeps the token's own decimals (at most 6), so 2.00457 stays "2.00457" instead of rounding to
+ * "2"; from 1,000 up two decimals are plenty. Trailing zeros are dropped, and anything below
+ * 0.001 reads "<0.001".
+ */
+export function formatTokenQuantity(amount: number, decimals: number): string {
+  if (!Number.isFinite(amount) || amount === 0) return '0';
+  if (amount < 0.001) return '<0.001';
+  const digits = amount < 1e3 ? Math.min(Math.max(Math.trunc(decimals) || 0, 0), 6) : 2;
+  return amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+
 /** Unicode subscript digits for micro-price leading-zero notation */
 const SUBSCRIPT_DIGITS = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
 
@@ -96,6 +109,24 @@ export function formatUsd(value: number | string | null | undefined, opts: { sym
   if (!Number.isFinite(n)) return '—';
   const body = n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return opts.symbol === false ? body : `$${body}`;
+}
+
+/** Satoshis in one bitcoin. */
+export const SATS_PER_BTC = 100_000_000;
+
+/** A satoshi amount in BTC, always eight decimals (123456 → "0.00123456", 1234e8 → "1,234.00000000"). */
+export function formatBtc(sats: number | bigint): string {
+  return (Number(sats) / SATS_PER_BTC).toLocaleString('en-US', { minimumFractionDigits: 8, maximumFractionDigits: 8 });
+}
+
+/** A bitcoin amount from an API that reports BTC, not sats, on the same format (0.0012 → "0.00120000"). */
+export function formatBtcFromBtc(btc: number): string {
+  return formatBtc(Math.round(btc * SATS_PER_BTC));
+}
+
+/** A satoshi amount as a grouped integer (1234567 → "1,234,567"). */
+export function formatSats(sats: number | bigint): string {
+  return Number(sats).toLocaleString('en-US');
 }
 
 /** Format a percentage change (absolute value + %) */

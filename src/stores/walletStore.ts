@@ -121,9 +121,16 @@ export interface WalletStore {
   // them has to remember to opt out, and a forgotten one counts locked tokens as
   // spendable. Fails toward a missing display row rather than an overstated balance.
   programmableTokens: {};
-  /** Lovelace locked in CIP-113 UTxOs: owned but not Gero-spendable — kept out of `utxos`
-   *  and adaBalance, yet priced and counted in portfolio totals (see useHoldingsValuation). */
+  /** Lovelace locked in CIP-113 UTxOs owned by this wallet's STAKE key: owned but not
+   *  Gero-spendable — kept out of `utxos` and adaBalance, yet priced and counted in portfolio
+   *  totals (see useHoldingsValuation). It sits under this wallet's reward address, so the
+   *  provider's `controlled_amount` includes it and spendableControlledAmount() takes it off. */
   programmableLockedLovelace: string;
+  /** Lovelace locked in CIP-113 UTxOs whose owner slot holds one of this wallet's PAYMENT
+   *  keys (the convention Minswap V3 uses). Those addresses belong to a different reward
+   *  address, so `controlled_amount` never included it: displayed and counted like
+   *  programmableLockedLovelace, never subtracted. */
+  programmableLockedLovelaceOutsideStake: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is a dynamic settings bag (~20 varied fields read/written across the app); see GeroStore.config
   config: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reward history entries come straight from the provider payload
@@ -136,11 +143,15 @@ export interface WalletStore {
 }
 
 /**
- * `controlled_amount` is reported per stake address, and CIP-113 UTxOs sit at the shared
- * programmable-logic-base script address carrying that same stake credential, so their
- * lovelace is part of the reported total. Consumers read the field as spendable ADA
- * (max-send, swap sizing, delegation), so the locked share comes off here, at the single
- * point the account enters the store, rather than at each of them.
+ * `controlled_amount` is reported per stake address, and CIP-113 UTxOs owned by this
+ * wallet's stake key sit at the shared programmable-logic-base script address carrying that
+ * same stake credential, so their lovelace is part of the reported total. Consumers read the
+ * field as spendable ADA (max-send, swap sizing, delegation), so the locked share comes off
+ * here, at the single point the account enters the store, rather than at each of them.
+ *
+ * Only that share: lovelace locked under a payment-key owner
+ * (programmableLockedLovelaceOutsideStake) was never in this total, and taking it off would
+ * understate the balance.
  */
 export function spendableControlledAmount(total: string | number | null | undefined): string {
   if (total == null) return '0';
@@ -153,6 +164,22 @@ export function spendableControlledAmount(total: string | number | null | undefi
 }
 
 /**
+ * All lovelace locked in this wallet's CIP-113 UTxOs, whichever key owns them: what the
+ * locked-ADA holdings row shows. Unparseable stored values count as zero.
+ */
+export function totalProgrammableLockedLovelace(): bigint {
+  let total = 0n;
+  for (const value of [walletStore.programmableLockedLovelace, walletStore.programmableLockedLovelaceOutsideStake]) {
+    try {
+      total += BigInt(value || '0');
+    } catch {
+      // A malformed stored value reads as nothing locked rather than throwing.
+    }
+  }
+  return total;
+}
+
+/**
  * True when this wallet holds lovelace locked in CIP-113 UTxOs.
  *
  * Exists so the empty-state gates don't each hand-roll a `BigInt()` parse: they run
@@ -160,11 +187,7 @@ export function spendableControlledAmount(total: string | number | null | undefi
  * page down rather than mis-reporting one number.
  */
 export function hasProgrammableLockedLovelace(): boolean {
-  try {
-    return BigInt(walletStore.programmableLockedLovelace || '0') > 0n;
-  } catch {
-    return false;
-  }
+  return totalProgrammableLockedLovelace() > 0n;
 }
 
 /** Re-derive `controlled_amount` from the provider total, tolerating repeated application. */
@@ -189,6 +212,7 @@ export const walletStore = reactive<WalletStore>({
   collections: {},
   programmableTokens: {},
   programmableLockedLovelace: '0',
+  programmableLockedLovelaceOutsideStake: '0',
   config: {
     tokenAllocationSort: {
       by: 'allocation',
@@ -473,12 +497,17 @@ export default {
 
   // Kept out of `tokens` on purpose: the send pickers read `tokens`, so these can only
   // appear where a surface has explicitly opted in to showing locked holdings.
-  setProgrammableTokens(programmableTokens: {}, programmableLockedLovelace = '0') {
+  setProgrammableTokens(
+    programmableTokens: {},
+    programmableLockedLovelace = '0',
+    programmableLockedLovelaceOutsideStake = '0',
+  ) {
     walletStore.programmableTokens = programmableTokens;
     walletStore.programmableLockedLovelace = programmableLockedLovelace;
-    broadcastFromBackground({ programmableTokens, programmableLockedLovelace });
+    walletStore.programmableLockedLovelaceOutsideStake = programmableLockedLovelaceOutsideStake;
+    broadcastFromBackground({ programmableTokens, programmableLockedLovelace, programmableLockedLovelaceOutsideStake });
     // A SYNC push carries the account and the UTxOs together, so the account can land
-    // before this partition is known. Re-derive it against the locked total just set.
+    // before this partition is known. Re-derive it against the stake-owned share just set.
     this.setAccount(walletStore.account);
   },
 
@@ -629,6 +658,7 @@ export default {
       collections: {},
       programmableTokens: {},
       programmableLockedLovelace: '0',
+      programmableLockedLovelaceOutsideStake: '0',
       config: {},
       rewards: [],
       connectedDapps: [],
@@ -664,6 +694,7 @@ export default {
       collections: {},
       programmableTokens: {},
       programmableLockedLovelace: '0',
+      programmableLockedLovelaceOutsideStake: '0',
       rewards: [],
       contacts: {},
       connectedDapps: [],

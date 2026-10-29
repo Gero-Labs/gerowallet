@@ -12,7 +12,7 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
   return { default: Buffer, Buffer };
 });
 
-import { bitcoinOwnAddresses, describePsbtProblem, reviewBitcoinPsbt, assertPsbtSignable } from './psbtReview';
+import { bitcoinDerivedAddresses, bitcoinOwnAddresses, describePsbtProblem, reviewBitcoinPsbt, assertPsbtSignable } from './psbtReview';
 import { satsToBtcString } from './btcAmount';
 import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from './bitcoinKeyManager';
 
@@ -34,6 +34,7 @@ const OWN_RECEIVE = pubkeyAt(0, 0);
 const OWN_CHANGE = pubkeyAt(1, 0);
 const FOREIGN = pubkeyAt(0, 0, OTHER_PHRASE);
 const own = bitcoinOwnAddresses(XPUB, 'segwit', NETWORK);
+const derived = bitcoinDerivedAddresses(XPUB, 'segwit', NETWORK);
 
 interface InputSpec { pubkey: Buffer; value?: number; withValue?: boolean; sighashType?: number }
 function psbtOf(inputs: InputSpec[], outputs: Array<{ script: Buffer; value: number }>): bitcoin.Psbt {
@@ -59,11 +60,11 @@ describe('reviewBitcoinPsbt', () => {
       [{ script: scriptOf(FOREIGN), value: 99_000 }],
     );
 
-    const review = reviewBitcoinPsbt(psbt.toHex(), { network: NETWORK, ownAddresses: own });
+    const review = reviewBitcoinPsbt(psbt.toHex(), { network: NETWORK, ownAddresses: own, derived });
 
     expect(review.problems).toEqual([]);
     expect(review.signIndices).toEqual([0, 1]);
-    expect(review.outputs).toEqual([{ index: 0, address: addressOf(FOREIGN), valueSats: 99_000n, own: false }]);
+    expect(review.outputs).toEqual([{ index: 0, address: addressOf(FOREIGN), valueSats: 99_000n, own: false, change: false }]);
     expect(review.spentSats).toBe(100_000n);
     expect(review.receivedSats).toBe(0n);
     expect(review.netSats).toBe(100_000n);
@@ -76,11 +77,34 @@ describe('reviewBitcoinPsbt', () => {
       { script: scriptOf(OWN_CHANGE), value: 29_500 },
     ]);
 
-    const review = reviewBitcoinPsbt(psbt.toBase64(), { network: NETWORK, ownAddresses: own });
+    const review = reviewBitcoinPsbt(psbt.toBase64(), { network: NETWORK, ownAddresses: own, derived });
 
     expect(review.outputs.map((o) => o.own)).toEqual([false, true]);
+    expect(review.outputs.map((o) => o.change)).toEqual([false, true]);
     expect(review.netSats).toBe(20_500n);
     expect(review.feeSats).toBe(500n);
+  });
+
+  it('never counts an address a sync listed as the wallet\'s output: only derived addresses are', () => {
+    // A sync server lists the attacker's address among the wallet's coins, and the PSBT pays it.
+    const synced = bitcoinOwnAddresses(XPUB, 'segwit', NETWORK, [{ address: addressOf(FOREIGN) }]);
+    const psbt = psbtOf([{ pubkey: OWN_RECEIVE, value: 50_000 }], [{ script: scriptOf(FOREIGN), value: 49_000 }]);
+
+    const review = reviewBitcoinPsbt(psbt, { network: NETWORK, ownAddresses: synced, derived });
+    expect(review.outputs[0].own).toBe(false);
+    expect(review.netSats).toBe(50_000n);
+    // Without the derived set, no output is the wallet's: what leaves is overstated, never hidden.
+    const unknown = psbtOf([{ pubkey: OWN_RECEIVE, value: 50_000 }], [{ script: scriptOf(OWN_CHANGE), value: 49_000 }]);
+    expect(reviewBitcoinPsbt(unknown, { network: NETWORK, ownAddresses: own }).outputs[0].own).toBe(false);
+  });
+
+  it('shows a data output with no address, as not the wallet\'s', () => {
+    const data = bitcoin.payments.embed({ data: [NodeBuffer.from('gero')] }).output!;
+    const psbt = psbtOf([{ pubkey: OWN_RECEIVE, value: 50_000 }], [{ script: data, value: 0 }, { script: scriptOf(OWN_CHANGE), value: 49_000 }]);
+
+    const review = reviewBitcoinPsbt(psbt, { network: NETWORK, ownAddresses: own, derived });
+    expect(review.outputs[0]).toMatchObject({ address: null, own: false, change: false });
+    expect(review.outputs[1]).toMatchObject({ own: true, change: true });
   });
 
   it('signs only the wallet’s inputs, and only the ones toSignInputs lists', () => {
@@ -155,6 +179,16 @@ describe('reviewBitcoinPsbt', () => {
     const foreignOnly = psbtOf([{ pubkey: FOREIGN }], [{ script: scriptOf(FOREIGN), value: 9_000 }]);
     const review = reviewBitcoinPsbt(foreignOnly, { network: NETWORK, ownAddresses: own });
     expect(() => assertPsbtSignable(review)).toThrow(describePsbtProblem({ code: 'nothingToSign' }));
+  });
+});
+
+describe('bitcoinDerivedAddresses', () => {
+  it('splits the account\'s own addresses into receive and change, and derives nothing from a non-xpub', () => {
+    expect(derived.receive.has(addressOf(OWN_RECEIVE))).toBe(true);
+    expect(derived.change.has(addressOf(OWN_CHANGE))).toBe(true);
+    expect(derived.receive.has(addressOf(FOREIGN)) || derived.change.has(addressOf(FOREIGN))).toBe(false);
+    const none = bitcoinDerivedAddresses('not-an-xpub', 'segwit', NETWORK);
+    expect(none.receive.size + none.change.size).toBe(0);
   });
 });
 
