@@ -283,16 +283,18 @@ export const isJpgStore = (item: StoredTransaction): boolean => {
   const JPGSTORE_SCRIPT_ADDRESS =
     'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
 
-  // Check for jpg.store Ask V1 Contract address (inputs only)
+  // The V3 listing script (the CRFA registry calls it "AskV1" in that marketplace's
+  // release V3). Spending it is a sale or delist; paying to it is a new listing.
   const JPGSTORE_ASK_V1_ADDRESS =
     'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
 
+  const isMarketplaceAddress = (address: string | undefined): boolean =>
+    address === JPGSTORE_SCRIPT_ADDRESS || address === JPGSTORE_ASK_V1_ADDRESS;
+
   const hasJpgStoreAddress =
-    item.utxo?.inputs?.some(
-      (input) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
-    ) ||
-    item.utxo?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+    item.utxo?.inputs?.some((input) => isMarketplaceAddress(input.address)) ||
+    item.utxo?.outputs?.some((output) => isMarketplaceAddress(output.address)) ||
+    cardano?.body?.outputs?.some((output) => isMarketplaceAddress(output.address));
 
   // Check for jpg.store auxiliary data structure (fields 0-10, 30)
   const hasJpgStoreMetadata =
