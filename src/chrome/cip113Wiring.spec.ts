@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8');
+// Normalize CRLF (Windows checkouts) before slicing on newline delimiters.
+const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8').replace(/\r\n/g, '\n');
 const bg = read('chrome/background.ts');
 const walletBg = read('chrome/walletBg.ts');
 
