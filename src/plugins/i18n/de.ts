@@ -6033,7 +6033,7 @@ export default {
   'legacyListings.gone': 'Einige dieser Elemente sind nicht mehr gesperrt. Die Liste wurde aktualisiert.',
   'legacyListings.hardwareSoon': 'Bald für Hardware-Wallets verfügbar',
   'legacyListings.inboxTitle': '{count} Element auf einem geschlossenen Marktplatz festgesteckt | {count} Elemente auf einem geschlossenen Marktplatz festgesteckt',
-  'legacyListings.inboxBody': 'Hole sie zurück in deine Wallet',
+  'legacyListings.inboxBody': 'Hole es zurück in deine Wallet | Hole sie zurück in deine Wallet',
   'legacyListings.failed': 'Die Elemente konnten nicht zurückgeholt werden. Versuche es erneut.',
   'legacyListings.maybeSent': 'Dies wurde möglicherweise bereits gesendet. Prüfe deine Aktivität, bevor du es erneut versuchst.',
   'legacyListings.itemFailed': 'Dieses Element kann gerade nicht zurückgeholt werden. | Eines dieser Elemente kann gerade nicht zurückgeholt werden. Versuche sie einzeln.',

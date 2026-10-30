@@ -5909,7 +5909,7 @@ export default {
   'legacyListings.gone': 'Algunos de estos elementos ya no están bloqueados. La lista se actualizó.',
   'legacyListings.hardwareSoon': 'Próximamente para billeteras de hardware',
   'legacyListings.inboxTitle': '{count} elemento atascado en un mercado cerrado | {count} elementos atascados en un mercado cerrado',
-  'legacyListings.inboxBody': 'Recupéralos en tu billetera',
+  'legacyListings.inboxBody': 'Recupéralo en tu billetera | Recupéralos en tu billetera',
   'legacyListings.failed': 'No se pudieron recuperar estos elementos. Inténtalo de nuevo.',
   'legacyListings.maybeSent': 'Es posible que ya se haya enviado. Revisa tu actividad antes de intentarlo de nuevo.',
   'legacyListings.itemFailed': 'Este elemento no se puede recuperar en este momento. | Uno de estos elementos no se puede recuperar en este momento. Inténtalos uno por uno.',

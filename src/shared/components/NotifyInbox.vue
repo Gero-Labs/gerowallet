@@ -41,7 +41,7 @@
           <span class="notify-inbox__tile"><v-icon size="15" color="var(--g-text-1)">mdi-image-multiple-outline</v-icon></span>
           <span class="notify-inbox__text">
             <span class="notify-inbox__row-title">{{ tc('legacyListings.inboxTitle', legacyCount, { count: legacyCount }) }}</span>
-            <span class="notify-inbox__row-body">{{ t('legacyListings.inboxBody') }}</span>
+            <span class="notify-inbox__row-body">{{ tc('legacyListings.inboxBody', legacyCount) }}</span>
           </span>
           <span class="notify-inbox__meta"><span class="notify-inbox__dot" aria-hidden="true"></span></span>
         </button>

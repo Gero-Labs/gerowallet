@@ -57,8 +57,11 @@ describe('NotifyInbox stuck-items row', () => {
     expect(view.find('.notify-inbox__empty').exists()).toBe(false);
   });
 
-  it('says "1 item" in the singular for a single stuck item', () => {
-    expect(rowTitles(render({ legacyCount: 1 }))).toEqual(['1 item stuck on a closed marketplace']);
+  it('says "1 item" in the singular for a single stuck item, and "it" in the body', () => {
+    const view = render({ legacyCount: 1 });
+
+    expect(rowTitles(view)).toEqual(['1 item stuck on a closed marketplace']);
+    expect(view.find('.notify-inbox__row-body').text()).toBe('Get it back to your wallet');
   });
 
   it('hides it at 0 and keeps the empty state', () => {
