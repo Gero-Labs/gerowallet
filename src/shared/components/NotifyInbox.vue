@@ -11,8 +11,8 @@
     </div>
 
     <div class="notify-inbox__list">
-      <!-- Needs you: sticky security items and the SPO key warning -->
-      <template v-if="needsYou.length || kesVisible">
+      <!-- Needs you: sticky security items, the SPO key warning and items stuck on a closed marketplace -->
+      <template v-if="needsYou.length || kesVisible || legacyVisible">
         <div class="t-label notify-inbox__section">{{ $t('notify.inbox.needsYou') }}</div>
         <button v-if="kesVisible" type="button" class="notify-inbox__row" @click="$emit('kes')">
           <span class="notify-inbox__tile notify-inbox__tile--warn"><v-icon size="15" color="var(--g-warning)">mdi-key-chain</v-icon></span>
@@ -36,6 +36,15 @@
             <span v-if="item.readAt === null" class="notify-inbox__dot" aria-hidden="true"></span>
           </span>
         </button>
+        <!-- Last: a standing to-do of the wallet, not an event, so it never outranks a security row. -->
+        <button v-if="legacyVisible" type="button" class="notify-inbox__row" @click="$emit('legacy')">
+          <span class="notify-inbox__tile"><v-icon size="15" color="var(--g-text-1)">mdi-image-multiple-outline</v-icon></span>
+          <span class="notify-inbox__text">
+            <span class="notify-inbox__row-title">{{ tc('legacyListings.inboxTitle', legacyCount, { count: legacyCount }) }}</span>
+            <span class="notify-inbox__row-body">{{ t('legacyListings.inboxBody') }}</span>
+          </span>
+          <span class="notify-inbox__meta"><span class="notify-inbox__dot" aria-hidden="true"></span></span>
+        </button>
       </template>
 
       <!-- Activity: everything else, newest first -->
@@ -57,7 +66,7 @@
         </button>
       </template>
 
-      <div v-if="!items.length && !kesVisible" class="notify-inbox__empty">
+      <div v-if="!items.length && !kesVisible && !legacyVisible" class="notify-inbox__empty">
         <v-icon size="small" color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
         {{ $t('navigation.nothingNew') }}
       </div>
@@ -79,7 +88,8 @@
 // design board: header with the unread pill, "Needs you" and "Activity" sections, 28px icon
 // tiles, mono timestamps, an accent dot per unread row, and a footer that says where pushes go.
 // Rows come from notifyInboxStore (the worker's notifyInbox key); the SPO key warning keeps
-// its place at the top as a "Needs you" row.
+// its place at the top as a "Needs you" row, and so do the items stuck on a closed marketplace
+// (`legacyCount`, from the host's useLegacyListings: the count is the host's, the row only shows it).
 import { computed, getCurrentInstance, onMounted, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { notifyInboxStore, type NotifyInboxItem } from '@/stores/notifyInboxStore';
@@ -92,11 +102,12 @@ import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 // `surface`: the dashboard hosts this in the bell menu and routes on its own router; Mini Gero
 // hosts it in a bottom sheet, routes on the side panel's router where a route exists, and
 // opens the full dashboard for everything that has no side-panel equivalent.
-const props = withDefaults(defineProps<{ open: boolean; kesVisible?: boolean; kesRemaining?: number | null; surface?: 'dashboard' | 'sidepanel' }>(), { surface: 'dashboard' });
-const emit = defineEmits<{ (e: 'kes'): void; (e: 'settings'): void; (e: 'close'): void }>();
-const { t } = useTranslation();
+const props = withDefaults(defineProps<{ open: boolean; kesVisible?: boolean; kesRemaining?: number | null; legacyCount?: number; surface?: 'dashboard' | 'sidepanel' }>(), { surface: 'dashboard', legacyCount: 0 });
+const emit = defineEmits<{ (e: 'kes'): void; (e: 'legacy'): void; (e: 'settings'): void; (e: 'close'): void }>();
+const { t, tc } = useTranslation();
 const router = getCurrentInstance()?.proxy?.$router;
 const inSheet = computed(() => props.surface === 'sidepanel');
+const legacyVisible = computed(() => props.legacyCount > 0);
 
 const items = computed(() => notifyInboxStore.state.items);
 const unread = computed(() => notifyInboxStore.unread());

@@ -166,7 +166,9 @@
                         :open="notificationsMenu"
                         :kes-visible="kesWarningVisible"
                         :kes-remaining="kesRemainingGlobal"
+                        :legacy-count="legacyCount"
                         @kes="navigateToPoolOperator"
+                        @legacy="openLegacyListings()"
                         @settings="openNotifySettings"
                         @close="notificationsMenu = false"
                       />
@@ -302,6 +304,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
@@ -527,6 +530,18 @@ function openNotifySettingsFromIntro() {
 function navigateToPoolOperator() {
   notificationsMenu.value = false;
   vmProxy.$router.push('/pool-operator');
+}
+
+// Items stuck on a closed marketplace (NFT rescue): the count is the inbox's "Needs you" row, and
+// the row leads to the Collectibles view of Portfolio, where the card gets them back. Calling the
+// composable here starts its lookup with the layout, so the row is real before Portfolio was ever
+// visited; opening the menu asks again, which also retries a lookup that failed. The lookup is
+// off (count 0) unless the isNftMarketEnabled flag is on and the wallet is Cardano mainnet.
+const { count: legacyCount, refresh: refreshLegacyListings } = useLegacyListings();
+watch(notificationsMenu, (isOpen) => { if (isOpen) void refreshLegacyListings(); });
+function openLegacyListings() {
+  notificationsMenu.value = false;
+  vmProxy.$router.push({ path: '/', query: { view: 'collectibles' } });
 }
 
 
