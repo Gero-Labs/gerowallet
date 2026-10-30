@@ -22,6 +22,11 @@ vi.mock('@/shared/dialogs/ReportDialog.vue', () => ({ default: blank }));
 vi.mock('@/modules/transactions/components/MidnightTransactionsList.vue', () => ({ default: blank }));
 vi.mock('@/modules/transactions/components/MidnightUtxosTable.vue', () => ({ default: blank }));
 vi.mock('@/modules/transactions/components/MidnightUtxoDetail.vue', () => ({ default: blank }));
+vi.mock('@/modules/transactions/components/BitcoinTransactionDetails.vue', () => ({ default: blank }));
+vi.mock('@/modules/transactions/components/BitcoinUtxosTable.vue', () => ({
+  default: { render: () => Vue.h('div', { class: 'btc-utxos-list' }) },
+}));
+vi.mock('@/modules/transactions/components/BitcoinUtxoDetail.vue', () => ({ default: blank }));
 vi.mock('@/shared/components/NotificationDot.vue', () => ({
   default: { render(this: Vue.ComponentPublicInstance) { return Vue.h('span', this.$slots['default']?.()); } },
 }));
@@ -40,6 +45,7 @@ vi.mock('@/modules/transactions/components/MidnightTransactionDetails.vue', () =
 
 import TransactionsSfc from './Transactions.vue';
 import { midnightStore } from '@/stores/midnightStore';
+import { walletStore } from '@/stores/walletStore';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 
 enableAutoUnmount(afterEach);
@@ -112,5 +118,23 @@ describe('Transactions page, ?tx= deep link', () => {
     await flushPromises();
     expect(wrapper.findComponent(TransactionsSfc).vm.$).toBe(page);
     expect(historySelected(wrapper)).toBe('false');
+  });
+});
+
+describe('Transactions page, Bitcoin UTxOs', () => {
+  afterEach(() => {
+    walletStore.loggedWallet = { chain: 'Midnight', network: 'Mainnet' };
+    walletStore.utxos = [];
+  });
+
+  it('counts the IUnifiedUtxo records sync stores and opens the Bitcoin list', async () => {
+    walletStore.loggedWallet = { chain: 'Bitcoin', network: 'Mainnet' };
+    walletStore.utxos = [
+      { txHash: 'a'.repeat(64), index: 0, address: 'bc1qa', value: '1000', confirmed: true },
+      { txHash: 'b'.repeat(64), index: 1, address: 'bc1qb', value: '2000', confirmed: false },
+    ] as never;
+    const { wrapper } = await mountPage({ tab: 'utxos' });
+    expect(wrapper.findAll('.tx-tab__count')[1].text()).toBe('2');
+    expect(wrapper.find('.btc-utxos-list').exists()).toBe(true);
   });
 });

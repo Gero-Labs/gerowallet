@@ -606,6 +606,9 @@ export default {
   'card.details.rejectedReason': 'Mensaje de Zione: “{reason}”',
   'card.details.emailSupport': 'Escribir al soporte de Zione',
   'card.details.supportSubject': 'Gero Card: actualizar mi dirección guardada',
+  'card.details.unavailableTitle': 'Zione necesita más datos tuyos',
+  'card.details.unavailableBody': 'A Zione le faltan algunos de tus datos de titular, como tu domicilio, y ahora no se pueden completar en la billetera. Escribe al soporte de Zione para agregarlos y después vuelve a hacer tu pedido.',
+  'card.details.unavailableSubject': 'Gero Card: agregar mis datos de titular faltantes',
   'card.enterNewAddress': 'Ingresar nueva dirección',
   'card.provideNewShippingAddress': 'Indica otra dirección de envío',
   'card.enterStreetAddress': 'Ingresa la calle y el número',
@@ -805,6 +808,10 @@ export default {
   'card.trackerAutoRefresh': 'Esta página busca actualizaciones automáticamente. Tu tarjeta aparecerá aquí en cuanto Zione la emita.',
 
   'card.trackerAwaitingPayment': 'Esperando el pago del costo de envío',
+  'card.trackerPaymentSent': 'Pago enviado, esperando la confirmación de Zione',
+  'card.feeSentBody': 'Ya enviaste el costo de envío desde esta billetera. Zione todavía tiene que confirmarlo. No vuelvas a pagar: si esto no cambia en una hora, escribe al soporte de Zione con tu transacción.',
+  'card.feeSentSubject': 'Gero Card: costo de envío pagado sin confirmar',
+  'card.feeSentMailBody': 'Pedido {order}, transacción de pago {tx}',
 
   'card.trackerDispatched': 'Enviada',
 
@@ -937,6 +944,7 @@ export default {
   'common.contacts': 'Contactos',
   'common.contactsHelper': 'Puedes seleccionar contactos en las distintas pantallas de envío para ahorrar tiempo',
   'common.continue': 'Continuar',
+  'common.copyToClipboard': 'Copiar al portapapeles',
   'common.copied': 'Copiado',
   'common.dappWebsiteFavicon': 'Favicon del sitio web de la dApp',
   'common.date': 'Fecha',
@@ -5927,4 +5935,8 @@ export default {
   'lightning.resolveFailed': 'No se pudo resolver',
   'lightning.invoiceFailed': 'No se pudo obtener la factura',
   'common.copy': 'Copiar',
+  'bitcoin.receiveAddress': 'Dirección de recepción',
+  'bitcoin.changeAddress': 'Dirección de cambio',
+  'transactions.sortLargestFirst': 'Mayor primero',
+  'transactions.sortSmallestFirst': 'Menor primero',
 }

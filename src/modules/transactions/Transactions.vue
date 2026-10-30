@@ -63,6 +63,12 @@
         @row-click="handleOnUtxoRowClick"
         :selectedUtxo="selectedUtxo"
       />
+      <BitcoinUtxosTable
+        v-else-if="isBitcoin"
+        class="tx-split__list"
+        @row-click="handleOnUtxoRowClick"
+        :selectedUtxo="selectedUtxo"
+      />
       <UtxosTable
         v-else
         class="tx-split__list"
@@ -71,6 +77,7 @@
       />
       <section v-if="selectedUtxo" class="tx-split__detail glass-panel">
         <MidnightUtxoDetail v-if="isMidnight" :utxo="selectedUtxo" />
+        <BitcoinUtxoDetail v-else-if="isBitcoin" :utxo="selectedUtxo" />
         <UtxoDetail v-else :utxo="selectedUtxo" />
       </section>
     </div>
@@ -96,9 +103,12 @@ import MidnightTransactionsList from '@/modules/transactions/components/Midnight
 import MidnightTransactionDetails from '@/modules/transactions/components/MidnightTransactionDetails.vue';
 import MidnightUtxosTable from '@/modules/transactions/components/MidnightUtxosTable.vue';
 import MidnightUtxoDetail from '@/modules/transactions/components/MidnightUtxoDetail.vue';
+import BitcoinUtxosTable from '@/modules/transactions/components/BitcoinUtxosTable.vue';
+import BitcoinUtxoDetail from '@/modules/transactions/components/BitcoinUtxoDetail.vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { liveMidnightRow } from '@/modules/transactions/components/midnightTxSelection';
+import { bitcoinUtxoRows } from '@/modules/transactions/components/bitcoinUtxoRows';
 import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
@@ -115,7 +125,8 @@ const isReportDialogOpen = ref(false);
 // depending on isMidnight — neither leaf component exports a shared type.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transactionInfo = ref<any>(null);
-// Row shape is Cardano UtxosTable's local UtxoRow or Midnight's MidnightUtxoRow.
+// Row shape is Cardano UtxosTable's local UtxoRow, Midnight's MidnightUtxoRow
+// or a BitcoinUtxoRow.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const selectedUtxo = ref<any>(null);
 const reportSite = ref('');
@@ -129,6 +140,8 @@ const txCount = computed(() =>
 
 const utxoCount = computed(() => {
   if (isMidnight.value) return midnightStore.utxos.length;
+  // Bitcoin keeps IUnifiedUtxo records in the same field; count them as the list does.
+  if (isBitcoin.value) return bitcoinUtxoRows(walletStore.utxos).length;
   const utxos = walletStore.utxos;
   if (!utxos || utxos.length === 0) return 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

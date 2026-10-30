@@ -45,6 +45,7 @@ const card = vi.hoisted(() => ({
 }));
 
 const snackbar = vi.hoisted(() => ({ setError: vi.fn(), fireSuccess: vi.fn() }));
+const flags = vi.hoisted(() => ({ details: true }));
 
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key, locale: 'us' } }));
 vi.mock('@/shared/composables/useTranslation', () => ({
@@ -56,7 +57,9 @@ vi.mock('@/shared/components/iso/IsoScene.vue', () => ({ default: stubs.empty })
 vi.mock('@/shared/components/PhoneNumberInput.vue', () => ({ default: stubs.phone }));
 vi.mock('../ui/CardSignSection.vue', () => ({ default: stubs.empty }));
 vi.mock('@/stores/modules/card', () => ({ default: card }));
-vi.mock('@/stores/featureFlagsStore', () => ({ default: { isPhysicalCardOrderingEnabled: () => true } }));
+vi.mock('@/stores/featureFlagsStore', () => ({
+  default: { isPhysicalCardOrderingEnabled: () => true, isCardholderDetailsEnabled: () => flags.details },
+}));
 vi.mock('@/stores/walletStore', () => ({ walletStore: { loggedWallet: { baseAddress: 'addr_test1', network: 'preprod' }, utxos: [] } }));
 vi.mock('@/plugins/snackbar', () => ({ default: snackbar }));
 vi.mock('@/api/nexus-tx-api', () => ({
@@ -93,6 +96,7 @@ async function orderVirtual(): Promise<void> {
 beforeEach(() => {
   vi.clearAllMocks();
   card.state.cards = [];
+  flags.details = true;
 });
 
 afterEach(() => wrapper?.unmount());
@@ -208,6 +212,42 @@ describe('OrderCardFlowModal refused orders', () => {
     expect(title()).toBe('card.details.title');
     expect(wrapper.text()).toContain('card.details.nationality');
     expect(snackbar.setError).toHaveBeenCalledWith('card.details.neededToOrder');
+  });
+
+  it('explains missing details plainly when the details form cannot be loaded', async () => {
+    // The 2026-10-21 report: both details calls answered 404 (backend route not deployed) and
+    // the order said "The address field is required." with a delivery address filled in.
+    card.getMissingCardholderDetails.mockRejectedValue(refusal(404, ''));
+    card.orderCard.mockRejectedValue(refusal(400, 'The address field is required.'));
+    await open();
+    await orderVirtual();
+    expect(card.getMissingCardholderDetails).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('card.details.unavailableTitle');
+    expect(wrapper.text()).toContain('card.details.unavailableBody');
+    expect(wrapper.text()).toContain('card.details.rejectedReason {"reason":"The address field is required."}');
+    expect(wrapper.find('a[href^="mailto:support@zione.com"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('card.details.rejectedTitle');
+    expect(snackbar.setError).not.toHaveBeenCalled();
+  });
+
+  it('points to Zione support when Zione refuses for a missing field but lists nothing to fill', async () => {
+    card.getMissingCardholderDetails.mockResolvedValue([]);
+    card.orderCard.mockRejectedValue(refusal(400, 'The address field is required.'));
+    await open();
+    await orderVirtual();
+    expect(wrapper.text()).toContain('card.details.unavailableTitle');
+    expect(snackbar.setError).not.toHaveBeenCalled();
+  });
+
+  it('never calls the details endpoints while the kill switch is off', async () => {
+    flags.details = false;
+    card.orderCard.mockRejectedValue(refusal(400, 'The address field is required.'));
+    await open();
+    expect(title()).toBe('card.orderYourGeroCard');
+    await orderVirtual();
+    expect(card.getMissingCardholderDetails).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('card.details.unavailableTitle');
+    expect(snackbar.setError).not.toHaveBeenCalled();
   });
 
   it('ignores a missing-details re-check that lands after the modal was reopened', async () => {
