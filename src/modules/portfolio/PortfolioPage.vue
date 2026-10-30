@@ -184,6 +184,14 @@
       </v-row>
 
 
+      <!-- NFTs and offers still locked at a closed marketplace: listed above the collectibles
+           with a way to get them back. Only on the Collectibles view, and only when there are any. -->
+      <v-row v-if="activeView === 'collectibles' && legacyListingsCount > 0" no-gutters>
+        <v-col cols="12" class="pa-2">
+          <LegacyListingsCard @get-back="openLegacyRescue" />
+        </v-col>
+      </v-row>
+
       <!-- Filter Chip Bar + Table -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
@@ -399,6 +407,10 @@
 
       <!-- cNIGHT → DUST registration -->
       <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="closeDustRegistration()" />
+
+      <!-- Get stuck marketplace items back. Hosted here, not in the card: a cancel that empties
+           the list removes the card, and this dialog's "done" screen must outlive it. -->
+      <LegacyCancelDialog :is-open="legacyRescueOpen" :refs="legacyRescueRefs" @close="legacyRescueOpen = false" />
     </template>
   </div>
 </template>
@@ -416,6 +428,7 @@ import { useColumnPreferences, type ColumnKey } from '@/modules/market/composabl
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
@@ -429,6 +442,8 @@ import BackupCard from '@/modules/portfolio/components/BackupCard.vue';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
+import LegacyListingsCard from '@/modules/portfolio/components/LegacyListingsCard.vue';
+import LegacyCancelDialog from '@/modules/portfolio/components/LegacyCancelDialog.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
@@ -531,6 +546,18 @@ const isCardanoNonMainnet = computed(() =>
 
 type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist' | 'snekfun';
 const activeView = ref<ViewMode>('holdings');
+
+// Stuck items at a closed marketplace (NFT rescue): the card on the Collectibles view lists them
+// and hands the picked refs here; the dialog gets them back. The lookup itself is gated on the
+// isNftMarketEnabled flag and a Cardano mainnet wallet, so elsewhere the count stays 0.
+const { count: legacyListingsCount } = useLegacyListings();
+const legacyRescueOpen = ref(false);
+const legacyRescueRefs = ref<string[]>([]);
+
+function openLegacyRescue(refs: string[]) {
+  legacyRescueRefs.value = refs;
+  legacyRescueOpen.value = true;
+}
 
 // DUST registration dialog state — only relevant when chain === Midnight.
 const dustRegistrationOpen = ref(false);
