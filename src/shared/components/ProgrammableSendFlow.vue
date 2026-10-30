@@ -112,69 +112,24 @@
         {{ failureText }}
       </v-alert>
 
-      <!-- Hardware wallets sign on the device, in the page. -->
-      <div v-if="deviceType" class="programmable-send__device glass-tier mt-4" data-testid="programmable-send-device">
-        <v-icon size="20" color="var(--g-accent)">{{ deviceIcon }}</v-icon>
-        <p class="t-body-sm">{{ t(deviceHintKey) }}</p>
-        <!-- `btSupported` says the Ledger CAN use Bluetooth, not that it is connected that
-             way, so USB stays the default and the user picks. -->
-        <ToggleSwitch
-          v-if="deviceType === WalletType.Ledger && wallet?.btSupported"
-          class="programmable-send__transport"
-          :text-left="t('wallet.usb')"
-          icon-left="mdi-usb"
-          :text-right="t('wallet.bluetooth')"
-          icon-right="mdi-bluetooth"
-          :model-value="isBT"
-          :disabled="busy"
-          @update:model-value="isBT = $event"
-        />
-      </div>
-      <v-alert
-        v-if="deviceType === WalletType.Keystone"
-        type="warning"
-        variant="tonal"
-        density="compact"
-        class="mt-3"
-        data-testid="programmable-send-keystone-hash"
-      >
-        {{ t('programmableTokens.send.keystoneHashOnly') }}
-        <span class="d-block t-caption g-mono programmable-send__wrap mt-1">{{ summary.txId }}</span>
-      </v-alert>
-
-      <div class="mt-4">
-        <PassKeyPasswordField
-          v-if="usesPassword"
-          :model-value="password"
-          dense
-          outlined
-          hide-details
-          :label="t('wallet.spendingPassword')"
-          :placeholder="t('navigation.typeYourSpendingPassword')"
-          :disabled="busy"
-          required
-          @update:model-value="password = $event"
-          @enter="send()"
-          @passkey-autofill-success="send()"
-        />
-      </div>
+      <PreparedTxCredentials :credentials="credentials" testid="programmable-send" :tx-id="summary.txId" />
       <div class="programmable-send__actions">
         <v-btn variant="outlined" :disabled="busy" @click="back()">{{ t('common.back') }}</v-btn>
         <PassKeyAuthButton
-          v-if="isPrfWallet"
+          v-if="credentials.isPrfWallet.value"
           :block="false"
           :disabled="busy"
           :text="t('common.send')"
-          @success="sendWithPassKey"
-          @error="onPassKeyError"
+          @success="credentials.sendWithPassKey"
+          @error="credentials.onPassKeyError"
         />
         <v-btn
           v-else
           class="geroButton"
           :loading="busy"
-          :disabled="busy || (usesPassword && !password)"
+          :disabled="busy || (credentials.usesPassword.value && !credentials.password.value)"
           data-testid="programmable-send-confirm"
-          @click="send()"
+          @click="credentials.send()"
         >
           {{ t('common.send') }}
         </v-btn>
@@ -221,20 +176,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onScopeDispose, provide, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
-import { CIP113_SEND_SIGN_FAILED, cip113SendErrorKey, useCip113Send } from '@/shared/composables/useCip113Send';
-import { signsOnDevice } from '@/shared/composables/useHardwareTxSigner';
+import { cip113SendErrorKey, useCip113Send } from '@/shared/composables/useCip113Send';
+import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCredentials';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
-import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import PreparedTxCredentials from '@/shared/components/PreparedTxCredentials.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import { walletStore } from '@/stores/walletStore';
-import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
 
 /**
@@ -265,7 +217,6 @@ const { explorerUrl } = useExplorer();
 
 const amountInput = ref('');
 const recipientInput = ref('');
-const password = ref('');
 
 const decimals = computed(() => (Number.isSafeInteger(props.decimals) && (props.decimals ?? 0) >= 0 ? props.decimals ?? 0 : 0));
 const tokenLabel = computed(() => props.ticker || props.name || '');
@@ -302,7 +253,10 @@ const step = computed(() => {
   if (stage === 'review' || stage === 'signing' || stage === 'submitting') return 'review';
   return 'form';
 });
-const busy = computed(() => ['preparing', 'signing', 'submitting'].includes(flow.stage.value));
+// The credentials: the password or PassKey the signature needs, the device hint, and what keeps
+// them from signing another transfer (PassKey staleness, the wallet it was built for).
+const credentials = usePreparedTxCredentials(flow, { isBT, screen: () => step.value });
+const busy = credentials.busy;
 watch(busy, (value) => emit('busy', value));
 
 const summary = computed(() => flow.prepared.value?.summary ?? null);
@@ -323,53 +277,9 @@ const failureText = computed(() => {
   return t(cip113SendErrorKey(failure.code), { max });
 });
 
-const wallet = computed(() => walletStore.loggedWallet);
-const isPrfWallet = computed(() =>
-  wallet.value?.type === WalletType.Normal && (
-    wallet.value?.encryptionMethod === 'prf'
-    || (!!wallet.value?.prfEncryptedPrivateKey && !!wallet.value?.webAuthnCredentialId)
-  ),
-);
-const usesPassword = computed(() => wallet.value?.type === WalletType.Normal && !isPrfWallet.value);
-/** The device that signs, for a hardware wallet; null otherwise. */
-const deviceType = computed(() => (signsOnDevice(wallet.value?.type) ? wallet.value?.type ?? null : null));
-const deviceIcon = computed(() => {
-  if (deviceType.value === WalletType.Keystone) return 'mdi-qrcode-scan';
-  return deviceType.value === WalletType.Ledger && isBT.value ? 'mdi-bluetooth' : 'mdi-usb';
-});
-const deviceHintKey = computed(() => {
-  switch (deviceType.value) {
-    case WalletType.Ledger: return 'miniGero.connectLedger';
-    case WalletType.Trezor: return 'miniGero.connectTrezor';
-    default: return 'miniGero.keystoneSign';
-  }
-});
+const wallet = credentials.wallet;
 const adaTicker = computed(() => networks.resolveNetwork(wallet.value?.chain ?? '', wallet.value?.network ?? '')?.currencyTicker ?? 'ADA');
 const txExplorerUrl = computed(() => explorerUrl('tx', flow.submittedTxId.value));
-
-// A PassKey result belongs to the transfer on screen when the ceremony started: a new build,
-// a step change or a wallet switch makes it stale (PassKeyAuthButton checks before emitting).
-let epoch = 0;
-let disposed = false;
-provide(authorizationScopeKey, {
-  capture() {
-    const captured = epoch;
-    return () => !disposed && captured === epoch;
-  },
-});
-watch(() => [flow.prepared.value?.txId, step.value, wallet.value?.id] as const, () => { epoch++; }, { flush: 'sync' });
-onScopeDispose(() => { disposed = true; epoch++; });
-
-// A transfer belongs to the wallet it was built for: another wallet starts from the form
-// (the worker would refuse to sign it anyway). Checked again when a request settles, since a
-// switch while one is in flight cannot reset it then.
-let builtForWalletId: number | undefined;
-watch(() => [wallet.value?.id, busy.value] as const, ([id, isBusy]) => {
-  if (isBusy || builtForWalletId === undefined || id === builtForWalletId) return;
-  builtForWalletId = undefined;
-  password.value = '';
-  flow.reset();
-});
 
 function formatToken(baseUnits: string): string {
   return baseUnitsToDecimalString(BigInt(baseUnits), decimals.value);
@@ -385,8 +295,7 @@ function setMax(): void {
 
 async function review(): Promise<void> {
   if (!formReady.value || busy.value) return;
-  password.value = '';
-  builtForWalletId = wallet.value?.id;
+  credentials.begin();
   await flow.prepare({
     unit: props.unit,
     quantity: quantity.value.toString(),
@@ -395,34 +304,8 @@ async function review(): Promise<void> {
 }
 
 function back(): void {
-  password.value = '';
+  credentials.clearPassword();
   flow.reset();
-}
-
-async function send(): Promise<void> {
-  if (busy.value || step.value !== 'review') return;
-  if (usesPassword.value) {
-    if (!password.value) return;
-    const typed = password.value;
-    password.value = '';
-    await flow.signAndSubmit({ password: typed });
-    return;
-  }
-  // Google wallets sign with the unlocked session and hardware wallets on the device:
-  // nothing to type.
-  await flow.signAndSubmit();
-}
-
-async function sendWithPassKey(privateKeyBytes: Uint8Array): Promise<void> {
-  if (busy.value || step.value !== 'review') {
-    privateKeyBytes.fill(0);
-    return;
-  }
-  await flow.signAndSubmit({ privateKeyBytes });
-}
-
-function onPassKeyError(): void {
-  flow.failure.value = { code: CIP113_SEND_SIGN_FAILED };
 }
 </script>
 
@@ -453,27 +336,6 @@ function onPassKeyError(): void {
 
 .programmable-send__wrap {
   word-break: break-all;
-}
-
-.programmable-send__device {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--g-s-2);
-  padding: var(--g-s-3);
-  border-radius: var(--g-r-card);
-  text-align: center;
-
-  p {
-    margin: 0;
-    color: var(--g-text-2);
-  }
-}
-
-.programmable-send__transport {
-  width: 100%;
-  padding-top: var(--g-s-2);
-  border-top: 1px solid var(--g-hairline-1);
 }
 
 .programmable-send__chip {

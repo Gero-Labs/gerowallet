@@ -59,6 +59,8 @@ import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
+import { legacyCancelPrepareHandler } from '@/chrome/legacyCancelPrepare';
+import { fetchLegacyListings } from '@/api/legacy-listings-api';
 import { cip113TransferNeedsOwnKey } from '@/chrome/cip113Guard';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
@@ -1706,6 +1708,24 @@ app.addToOptions(MessageTypes.CIP113_PREPARE_TRANSFER, async (request, sendRespo
     });
   }
 });
+
+// NFT rescue: cancel the wallet's own stuck listings and offers at the closed marketplace's
+// legacy contracts. The page sends only the refs. The worker checks they belong to the wallet,
+// has Nexus build the cancel, verifies the CBOR (legacyCancelVerify) and returns it untouched
+// for the page to sign. No CIP-113 allowance: a legacy cancel spends no programmable input.
+app.addToOptions(MessageTypes.LEGACY_LISTING_PREPARE_CANCEL, legacyCancelPrepareHandler({
+  booted,
+  getWallet: () => walletManager.getWallet(),
+  // Cardano only: prepareLegacyCancel refuses any other chain.
+  getState: () => ({
+    utxos: (WalletStore.state.utxos ?? []) as Cardano.Utxo[],
+    keys: WalletStore.state.keys,
+    collateral: WalletStore.state.collateral,
+  }),
+  lookup: (ownerPkhs, network) => fetchLegacyListings(ownerPkhs, network),
+  build: (buildRequest, network) => nexusTxApi.buildLegacyCancel(buildRequest, network),
+  markNexusLent,
+}));
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
   // Same consent re-check as signData before the witness set is released.

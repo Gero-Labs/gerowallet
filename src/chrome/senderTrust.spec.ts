@@ -61,6 +61,10 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_PREPARE_TRANSFER')).toBe(true);
   });
 
+  it('gates the legacy cancel prepare (it builds the transaction the wallet then signs)', () => {
+    expect(EXTENSION_PAGE_ONLY_METHODS.has('LEGACY_LISTING_PREPARE_CANCEL')).toBe(true);
+  });
+
   it('gates the Submit API settings (they choose where signed transactions go and hold the auth header)', () => {
     for (const method of ['SET_SUBMIT_API', 'TEST_SUBMIT_API', 'CLEAR_SUBMIT_API']) {
       expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);

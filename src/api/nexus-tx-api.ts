@@ -247,6 +247,36 @@ export interface Cip113TransferBuildResponse {
   sponsoredCollateralRef?: string;
 }
 
+/**
+ * Legacy marketplace cancel build request. Matches nexus `LegacyListingCancelRequest`
+ * (`POST /api/tx/build/legacy-listing-cancel`, mainnet only). Nexus re-reads every listed
+ * UTxO from chain and answers 422 `LISTING_NOT_FOUND` for one already spent.
+ */
+export interface LegacyCancelBuildRequest {
+  /** The legacy UTxOs to cancel (1 to 10). */
+  listings: { txHash: string; outputIndex: number }[];
+  /** The wallet's spendable UTxOs for the fee and collateral (at most 50). */
+  feeInputs: NexusTxInput[];
+  /** Where every asset and the ADA locked in the cancelled UTxOs go. */
+  returnAddress: string;
+  changeAddress: string;
+  /** Let Nexus lend pool collateral when no fee input is ADA-only and at least 5 ADA. */
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Matches nexus `LegacyListingCancelResponse`. Advisory only: the wallet verifies the
+ * transaction itself before signing it.
+ */
+export interface LegacyCancelBuildResponse {
+  tx_cbor: string;
+  tx_hash: string;
+  estimated_fee?: string;
+  requiredSigners?: string[];
+  /** `txHash#index` of Nexus pool collateral; the transaction then needs Nexus's cosign. */
+  sponsoredCollateralRef?: string;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -580,6 +610,28 @@ export const nexusTxApi = {
     // The body's network wins over the query's in Nexus; send the slug in both, as above.
     const { data } = await nexusTxClient.post<Cip113TransferBuildResponse>(
       `/api/tx/build/cip113-transfer?network=${nexusNetwork}`,
+      { ...request, network: nexusNetwork },
+    );
+    return data;
+  },
+
+  /**
+   * Build an unsigned cancel of listings and offers stuck at the legacy marketplace
+   * contracts via nexus (`/api/tx/build/legacy-listing-cancel`). Nexus builds for mainnet
+   * only (422 `NETWORK_UNSUPPORTED` elsewhere); callers gate on that before asking. Anything
+   * Nexus cannot build safely is a 422 whose `errorCode` nexusErrorCode() reads (e.g.
+   * `LISTING_NOT_FOUND` for a listing spent since the index last ran). The caller must
+   * verify the returned transaction before signing it.
+   */
+  async buildLegacyCancel(
+    request: LegacyCancelBuildRequest,
+    network: string,
+  ): Promise<LegacyCancelBuildResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    if (!nexusNetwork) throw new Error(`Legacy listing cancels are not supported on ${network}`);
+    // The body's network wins over the query's in Nexus; send the slug in both, as above.
+    const { data } = await nexusTxClient.post<LegacyCancelBuildResponse>(
+      `/api/tx/build/legacy-listing-cancel?network=${nexusNetwork}`,
       { ...request, network: nexusNetwork },
     );
     return data;
