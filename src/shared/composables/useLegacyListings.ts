@@ -57,10 +57,21 @@ const metaByUnit = new Map<string, LegacyItemMeta>();
 /** Units whose asset-info lookup answered; the others hold only a decoded fallback name and are asked again. */
 const resolvedUnits = new Set<string>();
 /**
- * Refs the wallet has cancelled. A spent output never comes back, and the index can still list
- * one for a while, so a later or already running lookup must not put it back on the card.
+ * How long a cancelled ref stays off the list while the server still names it. A cancel that is
+ * submitted but not yet confirmed leaves its inputs unspent, so the server keeps listing them
+ * for the length of the mempool window; the item is hidden for that long and no longer, so a
+ * cancel that never confirms (dropped, expired, rolled back) puts a still-stuck item back where
+ * the user can retry it.
  */
-const forgotten = new Set<string>();
+export const FORGET_HIDE_MS = 15 * 60 * 1000;
+
+/**
+ * Refs the wallet has cancelled, with when each was forgotten. The by-owner lookup re-checks that
+ * a row is unspent when it answers, so a confirmed cancel leaves the answer by itself; an entry
+ * is therefore dropped as soon as an answer no longer contains its ref, or once FORGET_HIDE_MS
+ * has passed, whichever comes first. It hides a ref only while the server still returns it.
+ */
+const forgotten = new Map<string, number>();
 
 /** Bumped whenever the list is emptied, so an answer that started before it is not applied after it. */
 let epoch = 0;
@@ -138,12 +149,27 @@ async function resolveUnits(units: string[], target: LookupTarget): Promise<void
   }));
 }
 
+/**
+ * What a fresh answer shows once the forgotten refs are settled against it: a ref it omits is
+ * confirmed spent and leaves the set (so it shows again if a rollback brings it back), a ref
+ * older than FORGET_HIDE_MS leaves the set whatever the answer says, and the rest stay hidden.
+ */
+function withoutForgotten(listed: LegacyListingItem[]): LegacyListingItem[] {
+  if (forgotten.size === 0) return listed;
+  const now = Date.now();
+  const answered = new Set(listed.map(legacyRef));
+  for (const [ref, forgottenAt] of forgotten) {
+    if (now - forgottenAt >= FORGET_HIDE_MS || !answered.has(ref)) forgotten.delete(ref);
+  }
+  return listed.filter((item) => !forgotten.has(legacyRef(item)));
+}
+
 async function load(lookup: LookupTarget, startedAt: number): Promise<void> {
   try {
     const listed = await fetchLegacyListings(lookup.owners, lookup.network);
     if (!isCurrent(lookup.key, startedAt)) return;
 
-    const visible = listed.filter((item) => !forgotten.has(legacyRef(item)));
+    const visible = withoutForgotten(listed);
     const units = [...new Set(visible.flatMap((item) => item.assets.map((asset) => asset.unit)))];
     // Every unit has a name before its item appears; the metadata lookup then improves it.
     let seeded = false;
@@ -186,10 +212,14 @@ function refresh(): Promise<void> {
   return entry.promise;
 }
 
-/** Drops these refs (`txHash#index`) from the list at once, e.g. right after their cancel was submitted. */
+/**
+ * Drops these refs (`txHash#index`) from the list at once, right after their cancel was submitted,
+ * and keeps them off it for up to FORGET_HIDE_MS (see there).
+ */
 function forget(refs: string[]): void {
   if (refs.length === 0) return;
-  for (const ref of refs) forgotten.add(ref);
+  const now = Date.now();
+  for (const ref of refs) forgotten.set(ref, now);
   const gone = new Set(refs);
   items.value = items.value.filter((item) => !gone.has(legacyRef(item)));
 }

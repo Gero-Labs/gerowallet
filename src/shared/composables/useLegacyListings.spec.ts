@@ -47,7 +47,7 @@ vi.mock('@/api/legacy-listings-api', async (importOriginal) => ({
   fetchLegacyListings: (...args: unknown[]) => fetchListings(...args),
 }));
 
-import { resetLegacyListings, useLegacyListings } from './useLegacyListings';
+import { FORGET_HIDE_MS, resetLegacyListings, useLegacyListings } from './useLegacyListings';
 import type { LegacyListingItem } from '@/api/legacy-listings-api';
 
 const PAYMENT = 'a1'.repeat(28);
@@ -399,6 +399,85 @@ describe('useLegacyListings', () => {
     await settle();
 
     expect(items.value.map(refOf)).toEqual([refOf(two)]);
+  });
+
+  describe('how long a forgotten item stays hidden', () => {
+    // Only the clock is faked: the settle() helper and the stubbed lookups need real timers.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('hides it right after forget while the server still lists it', async () => {
+      const [one, two] = [listing(1), listing(2)];
+      fetchListings.mockResolvedValue([one, two]);
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget, refresh } = useLegacyListings();
+      await settle();
+
+      forget([refOf(one)]);
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+
+      vi.advanceTimersByTime(FORGET_HIDE_MS - 1);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+    });
+
+    it('shows it again after 15 minutes if the server still returns it', async () => {
+      expect(FORGET_HIDE_MS).toBe(15 * 60 * 1000);
+      const [one, two] = [listing(1), listing(2)];
+      fetchListings.mockResolvedValue([one, two]);
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget, refresh } = useLegacyListings();
+      await settle();
+
+      forget([refOf(one)]);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+
+      // The cancel never confirmed: the item is still stuck and must be retryable.
+      vi.advanceTimersByTime(FORGET_HIDE_MS);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(one), refOf(two)]);
+    });
+
+    it('stops hiding it once an answer omits it, so a rollback shows it again', async () => {
+      const [one, two] = [listing(1), listing(2)];
+      fetchListings.mockResolvedValue([one, two]);
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget, refresh } = useLegacyListings();
+      await settle();
+
+      forget([refOf(one)]);
+      // The cancel confirmed: the server no longer returns the output.
+      fetchListings.mockResolvedValue([two]);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+
+      // The cancel was rolled back, well inside the 15 minutes.
+      fetchListings.mockResolvedValue([one, two]);
+      vi.advanceTimersByTime(60_000);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(one), refOf(two)]);
+    });
+
+    it('leaves a ref hidden when a lookup fails, since a failure says nothing about it', async () => {
+      const [one, two] = [listing(1), listing(2)];
+      fetchListings.mockResolvedValue([one, two]);
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget, refresh } = useLegacyListings();
+      await settle();
+
+      forget([refOf(one)]);
+      fetchListings.mockRejectedValueOnce(new Error('Nexus is down'));
+      await refresh();
+      await refresh();
+
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+    });
   });
 
   it('resolves names and images for listed units through getAssetsInfo', async () => {
