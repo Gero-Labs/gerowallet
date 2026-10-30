@@ -268,7 +268,7 @@ describe('LegacyCancelDialog', () => {
   });
 
   it('any other failure says so once, in general terms, and offers to try again', async () => {
-    prepareFails('VERIFY_FAILED');
+    prepareFails('BUILD_FAILED');
     const wrapper = render();
     await flushPromises();
 
@@ -282,6 +282,91 @@ describe('LegacyCancelDialog', () => {
     expect(flow.prepare).toHaveBeenCalledTimes(2);
     expect(flow.prepare).toHaveBeenLastCalledWith(REFS);
     expect(wrapper.find('[data-testid="legacy-cancel-confirm"]').exists()).toBe(true);
+  });
+
+  it.each(['BUILD_FAILED', 'NETWORK_UNSUPPORTED', 'WALLET_UNSUPPORTED', 'NOT_OWNED', 'EXPIRED', 'SOMETHING_NEW'])(
+    'a %s failure keeps the general message and its retry, and closing does not refresh',
+    async (code) => {
+      prepareFails(code);
+      const wrapper = render();
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="legacy-cancel-error"]').text()).toBe('Could not get these items back. Try again.');
+      expect(wrapper.find('[data-testid="legacy-cancel-retry"]').exists()).toBe(true);
+      await wrapper.get('[data-testid="legacy-cancel-close"]').trigger('click');
+      expect(wrapper.emitted('close')).toHaveLength(1);
+      expect(listings.refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  it('a signing failure stays on the review with the general message: confirming again is the retry', async () => {
+    flow.signAndSubmit.mockImplementation(async () => {
+      flow.failure.value = { code: 'SIGN_FAILED' };
+      flow.stage.value = 'review';
+      return false;
+    });
+    const wrapper = render();
+    await flushPromises();
+    await wrapper.get('[data-test="password"]').setValue('hunter2');
+    await wrapper.get('[data-testid="legacy-cancel-confirm"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="legacy-cancel-error"]').text()).toBe('Could not get these items back. Try again.');
+    expect(wrapper.find('[data-testid="legacy-cancel-confirm"]').exists()).toBe(true);
+    expect(listings.forget).not.toHaveBeenCalled();
+  });
+
+  describe('a refusal about the items themselves: building them again fails the same way', () => {
+    const ITEM_CODES = ['EVALUATION_FAILED', 'DATUM_UNREADABLE', 'NOT_LEGACY_LISTING', 'VERIFY_FAILED', 'MIXED_CONTRACTS', 'TOO_MANY_LISTINGS'];
+
+    it.each(ITEM_CODES)('%s for one item says that item cannot be returned, with no retry', async (code) => {
+      prepareFails(code);
+      const wrapper = render({ refs: [REFS[0]!] });
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="legacy-cancel-error"]').text()).toBe('This item can\'t be returned right now.');
+      expect(wrapper.find('[data-testid="legacy-cancel-retry"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="legacy-cancel-close"]').text()).toBe('Close');
+      expect(listings.refresh).not.toHaveBeenCalled();
+    });
+
+    it.each(ITEM_CODES)('%s for several items says one of them cannot be returned and to try them one at a time, with no retry', async (code) => {
+      prepareFails(code);
+      const wrapper = render({ refs: REFS });
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="legacy-cancel-error"]').text())
+        .toBe('One of these items can\'t be returned right now. Try them one at a time.');
+      expect(wrapper.find('[data-testid="legacy-cancel-retry"]').exists()).toBe(false);
+      expect(listings.refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a submit that was not confirmed says it may have been sent, offers no retry, and refreshes the list on close', async () => {
+    // What usePreparedTxFlow leaves once a signature exists but SUBMIT_TX gave no transaction id.
+    flow.signAndSubmit.mockImplementation(async () => {
+      flow.prepared.value = null;
+      flow.failure.value = { code: 'SUBMIT_FAILED' };
+      flow.stage.value = 'idle';
+      return false;
+    });
+    const wrapper = render();
+    await flushPromises();
+    await wrapper.get('[data-test="password"]').setValue('hunter2');
+    await wrapper.get('[data-testid="legacy-cancel-confirm"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="legacy-cancel-error"]').text())
+      .toBe('This may have been sent. Check your activity before you try again.');
+    expect(wrapper.find('[data-testid="legacy-cancel-retry"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="legacy-cancel-confirm"]').exists()).toBe(false);
+    expect(listings.forget).not.toHaveBeenCalled();
+    expect(listings.refresh).not.toHaveBeenCalled();
+
+    await wrapper.get('[data-testid="legacy-cancel-close"]').trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(listings.refresh).toHaveBeenCalledTimes(1);
+    expect(flow.prepare).toHaveBeenCalledTimes(1);
   });
 
   it('success forgets the refs and shows done with the transaction link', async () => {

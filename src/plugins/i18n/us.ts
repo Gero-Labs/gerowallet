@@ -6142,4 +6142,6 @@ export default {
   'legacyListings.inboxTitle': '{count} item stuck on a closed marketplace | {count} items stuck on a closed marketplace',
   'legacyListings.inboxBody': 'Get them back to your wallet',
   'legacyListings.failed': 'Could not get these items back. Try again.',
+  'legacyListings.maybeSent': 'This may have been sent. Check your activity before you try again.',
+  'legacyListings.itemFailed': 'This item can\'t be returned right now. | One of these items can\'t be returned right now. Try them one at a time.',
 }

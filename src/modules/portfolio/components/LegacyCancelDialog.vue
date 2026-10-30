@@ -94,8 +94,9 @@
         </v-alert>
         <div class="legacy-cancel__actions">
           <GButton tier="secondary" data-testid="legacy-cancel-close" @click="close()">{{ t('common.close') }}</GButton>
-          <!-- Items that are gone cannot be built again: the refreshed list shows what is left. -->
-          <GButton v-if="!isGone" tier="primary" data-testid="legacy-cancel-retry" @click="start()">{{ t('common.tryAgain') }}</GButton>
+          <!-- Only a failure that building again can fix offers to try again: items that are gone,
+               items Nexus or the wallet refused, and a signed cancel that may be on chain do not. -->
+          <GButton v-if="canRetry" tier="primary" data-testid="legacy-cancel-retry" @click="start()">{{ t('common.tryAgain') }}</GButton>
         </div>
       </template>
     </v-card-text>
@@ -127,7 +128,7 @@ import { useExplorer } from '@/shared/composables/useExplorer';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { useLegacyRescue } from '@/shared/composables/useLegacyRescue';
 import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCredentials';
-import { PREPARED_TX_WRONG_PASSWORD } from '@/shared/composables/usePreparedTxFlow';
+import { PREPARED_TX_SUBMIT_FAILED, PREPARED_TX_WRONG_PASSWORD } from '@/shared/composables/usePreparedTxFlow';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { isLegacyRescueHardware } from '@/utils/legacyMarketScripts';
 
@@ -141,7 +142,10 @@ import { isLegacyRescueHardware } from '@/utils/legacyMarketScripts';
  *
  * Success hides the refs from the list at once (`forget`) and closing looks the list up again.
  * An item that was spent since the list was read (LISTING_NOT_FOUND) is said to be gone and the
- * list is refreshed. Hardware wallets stay out until a device has signed a real rescue
+ * list is refreshed. A signed cancel whose submit was not confirmed (SUBMIT_FAILED) may be on
+ * chain: the user is sent to their activity, no retry, and closing looks the list up again.
+ * A refusal about the items themselves (ITEM_FAILURES) would fail the same way again: no retry.
+ * Hardware wallets stay out until a device has signed a real rescue
  * (LEGACY_RESCUE_HARDWARE_WALLET_TYPES): they are told so and nothing is built.
  */
 const props = defineProps<{
@@ -152,7 +156,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: 'close'): void }>();
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
 const isBT = ref(false);
 const flow = useLegacyRescue({ getIsBT: () => isBT.value });
@@ -183,14 +187,42 @@ const credentials = usePreparedTxCredentials(flow, {
 });
 const busy = credentials.busy;
 
-const isGone = computed(() => flow.failure.value?.code === 'LISTING_NOT_FOUND');
-/** One message for every failure but two: an item that is gone, and a wrong password. */
-const failureText = computed(() => {
+/**
+ * Refusals about the items themselves, from Nexus's builder (the scripts or datums) or the
+ * worker (the transaction it checked, the shape of the request): building again fails the same way.
+ */
+const ITEM_FAILURES: ReadonlySet<string> = new Set([
+  'EVALUATION_FAILED',
+  'DATUM_UNREADABLE',
+  'NOT_LEGACY_LISTING',
+  'VERIFY_FAILED',
+  'MIXED_CONTRACTS',
+  'TOO_MANY_LISTINGS',
+]);
+
+type FailureKind = 'gone' | 'maybeSent' | 'item' | 'wrongPassword' | 'retry';
+
+const failureKind = computed<FailureKind | null>(() => {
   const code = flow.failure.value?.code;
-  if (!code) return '';
-  if (code === 'LISTING_NOT_FOUND') return t('legacyListings.gone');
-  if (code === PREPARED_TX_WRONG_PASSWORD) return t('errors.wrongPassword');
-  return t('legacyListings.failed');
+  if (!code) return null;
+  if (code === 'LISTING_NOT_FOUND') return 'gone';
+  if (code === PREPARED_TX_SUBMIT_FAILED) return 'maybeSent';
+  if (ITEM_FAILURES.has(code)) return 'item';
+  if (code === PREPARED_TX_WRONG_PASSWORD) return 'wrongPassword';
+  return 'retry';
+});
+const isGone = computed(() => failureKind.value === 'gone');
+const canRetry = computed(() => failureKind.value === 'retry');
+/** The message for each kind of failure; anything not named here is the general one, with a retry. */
+const failureText = computed(() => {
+  switch (failureKind.value) {
+    case 'gone': return t('legacyListings.gone');
+    case 'maybeSent': return t('legacyListings.maybeSent');
+    case 'item': return tc('legacyListings.itemFailed', props.refs.length);
+    case 'wrongPassword': return t('errors.wrongPassword');
+    case 'retry': return t('legacyListings.failed');
+    default: return '';
+  }
 });
 
 const feeText = computed(() => `${formatAda(summary.value?.feeLovelace ?? '0')} ADA`);
@@ -216,10 +248,11 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
 
 function close(): void {
   if (busy.value) return;
-  const rescued = stage.value === 'done';
+  // A cancel that went out, or may have: the list catches up with the chain.
+  const sent = stage.value === 'done' || failureKind.value === 'maybeSent';
   credentials.clearPassword();
   emit('close');
-  if (rescued) void refresh();
+  if (sent) void refresh();
 }
 </script>
 
