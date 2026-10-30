@@ -4166,6 +4166,7 @@ export default {
   'market.totalSupply': 'Supply',
   'market.markets': 'Markets',
   'market.snekfun': 'snek.fun',
+  'market.solada': 'Solada',
   'market.marketCap': 'MCap',
   'market.swap': 'Swap',
   'market.swapToken': 'Swap this token',
