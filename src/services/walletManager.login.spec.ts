@@ -5,6 +5,7 @@ const env = vi.hoisted(() => {
   const loading = { loading: false, isRestoring: false };
   return {
     state, loading, constructed: vi.fn(), lastSync: vi.fn(), waitForSync: vi.fn(),
+    storedWallets: vi.fn(async (): Promise<Record<number, unknown>> => ({})),
     syncing: vi.fn((value: boolean) => { state.isSyncing = value; }),
     locked: vi.fn((value: boolean) => { state.isLocked = value; }),
   };
@@ -43,6 +44,7 @@ vi.mock('@/utils/networks', () => ({ default: {} }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ default: {} }));
 vi.mock('@/stores/tapToolsStore', () => ({ default: { clear: vi.fn() } }));
 vi.mock('@/db/wallet-db', () => ({ clearDbCache: vi.fn() }));
+vi.mock('@/db/gero-db', () => ({ getAllWallets: env.storedWallets }));
 vi.mock('@/stores/musicStore', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
@@ -118,6 +120,22 @@ describe('wallet login after worker startup', () => {
     const { instance } = await manager();
     await instance.login({ ...wallet, type: 'Keystone', xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
     expect(env.state.loggedWallet).toMatchObject({ xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+  });
+
+  // A worker restart logs in with the persisted loggedWallet, which may predate a re-pairing.
+  it('logs a Keystone in with the firmware version stored on its record', async () => {
+    const { instance } = await manager();
+    const persisted = { ...wallet, type: 'Keystone', xfp: '0a1b2c3d', firmwareVersion: '1.7.2' };
+    env.storedWallets.mockResolvedValueOnce({ [wallet.id]: { ...persisted, firmwareVersion: '3.2.0' } });
+    await instance.login(persisted);
+    expect(env.state.loggedWallet).toMatchObject({ xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+  });
+
+  it('keeps the given firmware version when the stored record cannot be read', async () => {
+    const { instance } = await manager();
+    env.storedWallets.mockRejectedValueOnce(new Error('DatabaseClosedError'));
+    await instance.login({ ...wallet, type: 'Keystone', xfp: '0a1b2c3d', firmwareVersion: '1.7.2' });
+    expect(env.state.loggedWallet).toMatchObject({ firmwareVersion: '1.7.2' });
   });
 
   it('does not restart syncing or unlock an already initialized wallet', async () => {

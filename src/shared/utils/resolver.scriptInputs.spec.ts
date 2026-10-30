@@ -22,7 +22,7 @@ function signersFor(inputAddress: string) {
     { txId: TX_ID, index: 0, address: inputAddress },
     { address: inputAddress, value: { coins: 2_000_000n } },
   ]] as unknown as Cardano.Utxo[];
-  return analyzeTransactionForSignatures(tx, utxos, { payment: [], change: [], stake: [] } as never, '');
+  return analyzeTransactionForSignatures(tx, utxos, { payment: [], change: [], stake: [] } as never);
 }
 
 describe('analyzeTransactionForSignatures — inputs outside the key set', () => {

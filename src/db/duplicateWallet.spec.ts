@@ -85,14 +85,15 @@ describe('duplicate hardware pairing', () => {
   });
 
   describe('firmware version across the accounts of one device', () => {
-    const XFP = { xfp: 'aabbccdd' };
-    const keystone = (version: string) => ({ ...XFP, firmwareVersion: version });
+    // Each test pairs its own device (fingerprint and keys), so none relies on another's records.
+    const keystone = (xfp: string, version: string) => ({ xfp, firmwareVersion: version });
 
     it('refreshes the added accounts too when account #0 is paired again', async () => {
-      const head = await pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone('1.7.2'));
-      const added = await pair('Device #1', deviceXpub('e5'), Network.MAINNET, WalletType.Keystone, { ...keystone('1.7.2'), accountIndex: 1, parentWalletId: head });
+      const xfp = 'aabbcc01';
+      const head = await pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '1.7.2'));
+      const added = await pair('Device #1', deviceXpub('e5'), Network.MAINNET, WalletType.Keystone, { ...keystone(xfp, '1.7.2'), accountIndex: 1, parentWalletId: head });
 
-      await expect(pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone('3.2.0')))
+      await expect(pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '3.2.0')))
         .rejects.toBeInstanceOf(DuplicateWalletError);
 
       const wallets = await storedWallets();
@@ -100,23 +101,27 @@ describe('duplicate hardware pairing', () => {
     });
 
     it('refreshes account #0 when a new account joins it', async () => {
-      const head = Object.values(await storedWallets()).find((w) => w.publicKey === deviceXpub('d4'))!.id;
-      await pair('Device #2', deviceXpub('f6'), Network.MAINNET, WalletType.Keystone, { ...keystone('3.4.0'), accountIndex: 2, parentWalletId: head });
+      const xfp = 'aabbcc02';
+      const head = await pair('Joined', deviceXpub('d5'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '1.7.2'));
+      await pair('Joined #2', deviceXpub('f6'), Network.MAINNET, WalletType.Keystone, { ...keystone(xfp, '3.4.0'), accountIndex: 2, parentWalletId: head });
       expect((await storedWallets())[head].firmwareVersion).toBe('3.4.0');
     });
 
     it('writes no version onto another kind of wallet with the same key', async () => {
-      const ledger = await pair('Ledger', deviceXpub('a7'), Network.MAINNET, WalletType.Ledger, XFP);
-      await expect(pair('Keystone', deviceXpub('a7'), Network.MAINNET, WalletType.Keystone, keystone('3.4.0')))
+      const xfp = 'aabbcc03';
+      const ledger = await pair('Ledger', deviceXpub('a7'), Network.MAINNET, WalletType.Ledger, { xfp });
+      await expect(pair('Keystone', deviceXpub('a7'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '3.4.0')))
         .rejects.toBeInstanceOf(DuplicateWalletError);
       expect((await storedWallets())[ledger].firmwareVersion).toBeUndefined();
     });
 
     it('still reports the duplicate when the version cannot be written', async () => {
+      const xfp = 'aabbcc04';
+      await pair('Unwritable', deviceXpub('d6'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '1.7.2'));
       const db = await getDb();
       const update = vi.spyOn(Object.getPrototypeOf(db['wallets']), 'update').mockRejectedValueOnce(new Error('QuotaExceededError'));
       try {
-        await expect(pair('Device', deviceXpub('d4'), Network.MAINNET, WalletType.Keystone, keystone('3.6.0')))
+        await expect(pair('Unwritable', deviceXpub('d6'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '3.6.0')))
           .rejects.toBeInstanceOf(DuplicateWalletError);
       } finally {
         update.mockRestore();

@@ -22,7 +22,7 @@ const ctx = (over: Partial<ApprovalContext> = {}): ApprovalContext => ({
   changeAddresses: new Set([CHANGE_ADDR]),
   ownPaymentKeyHashes: new Set([OWN_PAYMENT_HASH]),
   ownStakeKeyHashes: new Set([OWN_STAKE_HASH]),
-  ownRewardAccounts: new Set([OWN_REWARD]),
+  isOwnRewardAccount: (account) => account === OWN_REWARD,
   ownDrepKeyHashes: new Set([OWN_DREP_HASH]),
   ownCcHotKeyHashes: new Set(),
   ownCcColdKeyHashes: new Set(),
@@ -140,6 +140,26 @@ describe('buildTxApprovalSummary', () => {
     }), ctx());
     expect(s.certificates[0].stakeCredentialIsOwn).toBe(true);
     expect(s.votes[0].isOwnVoter).toBe(true);
+  });
+
+  it('marks a withdrawal and a proposal\'s reward account as the wallet\'s by its stake key hash, as the signers sign them', () => {
+    const reward = (type: Cardano.CredentialType) => Cardano.RewardAddress.fromCredentials(
+      Cardano.NetworkId.Testnet, { type, hash: OWN_STAKE_HASH as Cardano.Credential['hash'] },
+    ).toAddress().toBech32();
+    // A stake key listing no address: the signers still sign for its key hash.
+    const wallet = approvalContextFromKeys({ stake: [{ cred: OWN_STAKE_HASH }] }, Cardano.NetworkId.Testnet, () => ({ name: 'Token', decimals: 0 }));
+    const s = buildTxApprovalSummary(tx({
+      withdrawals: [
+        { stakeAddress: reward(Cardano.CredentialType.KeyHash), quantity: 1_000_000n },
+        { stakeAddress: reward(Cardano.CredentialType.ScriptHash), quantity: 1_000_000n },
+      ],
+      proposalProcedures: [{
+        deposit: 1_000_000n, rewardAccount: reward(Cardano.CredentialType.KeyHash),
+        governanceAction: { __typename: Cardano.GovernanceActionType.info_action }, anchor: { url: 'https://example.com', dataHash: '0'.repeat(64) },
+      }],
+    }), wallet);
+    expect(s.withdrawals.map((w) => w.isOwn)).toEqual([true, false]);
+    expect(s.proposals[0].isOwnRewardAccount).toBe(true);
   });
 
   it('flags a body network id or any output (own included) on another network', () => {

@@ -122,6 +122,22 @@ describe('fresh software wallet on a CIP-113 network', () => {
     expect((walletStore.keys as Keys).payment[3].used).toBe(true);
   });
 
+  // The signers sign nothing for a key whose hash the key set doesn't carry, so a row an
+  // older build cached without them would drop the stake, DRep or committee witness.
+  it('derives the keys again when the cached row lacks a key\'s hash', async () => {
+    const bg = softwareWallet(Network.PREPROD);
+    const derived = bg.resolvePathsForMissingAddresses([]);
+    const db = await getDb(bg.id);
+    await db.table('addresses').put({
+      address: XPUB,
+      resolvedKeys: { ...derived, stake: derived.stake.map(({ cred: _cred, ...key }) => key), ccCold: [] },
+    });
+
+    await bg.loadCachedKeys();
+
+    expect(walletStore.keys).toEqual(derived);
+  });
+
   it('keeps its own programmable UTxO out of the spendable set', async () => {
     const bg = softwareWallet(Network.PREPROD);
     await bg.loadCachedKeys();

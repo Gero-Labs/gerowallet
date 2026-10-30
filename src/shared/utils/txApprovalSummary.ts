@@ -1,5 +1,5 @@
 import { Cardano } from '@cardano-sdk/core';
-import { credSet } from '@/shared/utils/keyCreds';
+import { credSet, stakeKeyFor, type KeySet } from '@/shared/utils/keyCreds';
 
 /**
  * What a dApp signTx approval must show: every effect of the transaction the
@@ -25,8 +25,11 @@ export interface ApprovalContext {
   ownPaymentKeyHashes: ReadonlySet<string>;
   /** Stake key hashes (hex) the wallet can sign for. */
   ownStakeKeyHashes: ReadonlySet<string>;
-  /** Reward accounts (stake1… / stake_test1…) of the wallet. */
-  ownRewardAccounts: ReadonlySet<string>;
+  /**
+   * Whether a reward account (stake1… / stake_test1…) is the wallet's: its stake key carries
+   * the account's key hash or sits at that address, as the signers decide it (`stakeKeyFor`).
+   */
+  isOwnRewardAccount(account: string): boolean;
   /** DRep key hashes (hex) of the wallet. */
   ownDrepKeyHashes: ReadonlySet<string>;
   /** Constitutional-committee hot key hashes (hex) of the wallet. */
@@ -219,7 +222,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
   const withdrawals: ApprovalWithdrawal[] = (body.withdrawals ?? []).map((w) => {
     const lovelace = BigInt(w.quantity ?? 0n);
     const rewardAccount = String(w.stakeAddress);
-    return { rewardAccount, ada: formatLovelace(lovelace), lovelace, isOwn: ctx.ownRewardAccounts.has(rewardAccount) };
+    return { rewardAccount, ada: formatLovelace(lovelace), lovelace, isOwn: ctx.isOwnRewardAccount(rewardAccount) };
   });
 
   const certificates: ApprovalCertificate[] = ((body.certificates ?? []) as Cardano.Certificate[]).map((cert) => {
@@ -276,7 +279,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
       actionType: String(p.governanceAction.__typename),
       depositAda: formatLovelace(BigInt(p.deposit ?? 0n)),
       rewardAccount,
-      isOwnRewardAccount: ctx.ownRewardAccounts.has(rewardAccount),
+      isOwnRewardAccount: ctx.isOwnRewardAccount(rewardAccount),
     };
   });
 
@@ -373,7 +376,8 @@ export function approvalContextFromKeys(
     changeAddresses: addrs(keys?.change),
     ownPaymentKeyHashes: credSet(keys?.payment, keys?.change),
     ownStakeKeyHashes: credSet(keys?.stake),
-    ownRewardAccounts: addrs(keys?.stake),
+    // The key set's shape here lacks paths, which ownership never reads.
+    isOwnRewardAccount: (account) => !!stakeKeyFor(keys as KeySet, account),
     ownDrepKeyHashes: credSet(keys?.drep105, keys?.drep129),
     ownCcHotKeyHashes: credSet(keys?.ccHot),
     ownCcColdKeyHashes: credSet(keys?.ccCold),

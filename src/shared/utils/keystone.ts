@@ -14,7 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
-import { credSet } from '@/shared/utils/keyCreds';
+import { walletWitnessPlan, type WitnessRole } from '@/shared/utils/keyCreds';
 import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
@@ -218,176 +218,40 @@ export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array, ex
 /** A wallet key the Keystone signs with: its path, and the address a hash request lists for it. */
 interface SigningKey { path: string; address?: string }
 
-/** A witness beyond the inputs' own: the key hash it is for, and the key that gives it. */
-interface ExtraSigner extends SigningKey { keyHash: string }
+/** A witness beyond the inputs' own: the key hash it is for, the key that gives it, and its role. */
+interface ExtraSigner extends SigningKey { keyHash: string; role: WitnessRole }
 
-/** A key list of the key set, empty when an older or partial key set has none. */
-const keyList = (list: Key[] | undefined): Key[] => (Array.isArray(list) ? list : []);
+/** The DRep and committee keys: a DRep ID or committee credential is not an address, so these list none. */
+const GOVERNANCE_ROLES: ReadonlySet<WitnessRole> = new Set<WitnessRole>(['drep', 'ccCold', 'ccHot']);
 
-/** A DRep ID is not an address, so a DRep key lists none. */
 const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | undefined =>
   key?.path ? { path: key.path, ...(listsAddress && key.address ? { address: key.address } : {}) } : undefined;
 
 /**
- * The wallet's keys by lowercase key hash, as a required signer names them: payment and
- * change keys, then the stake key (the Trezor mapping's order), then the DRep key and
- * the constitutional committee cold and hot keys.
- */
-const ownKeysByHash = (keys: Keys): Map<string, SigningKey> => {
-  const byHash = new Map<string, SigningKey>();
-  const add = (list: Key[] | undefined, listsAddress = true) => keyList(list).forEach((key) => {
-    const hash = String(key.cred ?? '').toLowerCase();
-    const signer = signingKey(key, listsAddress);
-    if (hash && signer && !byHash.has(hash)) byHash.set(hash, signer);
-  });
-  add(keys.payment);
-  add(keys.change);
-  add(keys.stake);
-  add(keys.drep105, false);
-  add(keys.drep129, false);
-  add(keys.ccCold, false);
-  add(keys.ccHot, false);
-  return byHash;
-};
-
-/**
- * Whether a credential is a key hash the given creds own. A key set with no cred of that
- * kind owns none: an extra signer always pairs a key hash with the key that has it, never
- * someone else's hash with one of the wallet's paths.
- */
-const isOwnKeyHash = (owned: Set<string>, credential: { type: Cardano.CredentialType; hash: string }) =>
-  credential.type === Cardano.CredentialType.KeyHash && owned.has(credential.hash.toLowerCase());
-
-/**
- * The stake credential hashes this wallet's stake key signs for: certificates whose
- * stake credential is the wallet's stake key, pool registrations that list its reward
- * address as an owner, and withdrawals from that address. A reward address is the
- * wallet's when its key hash is a stake cred of the key set or it is the wallet's own
- * stake address. Another credential (someone else's key, a script) is not this wallet's
- * to sign, and neither is any certificate when the key set carries no stake cred.
- */
-const ownStakeSignerHashes = (txCore: Cardano.Tx, keys: Keys, stakeAddress: string | undefined): string[] => {
-  const ownStakeCreds = credSet(keys.stake);
-  const isOwnRewardAccount = (account: Cardano.RewardAccount) =>
-    account === stakeAddress || ownStakeCreds.has(Cardano.RewardAccount.toHash(account).toLowerCase());
-  const hashes: string[] = [];
-  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
-    // Each owner of a registered pool signs its registration with that owner's stake key.
-    // The pool's cold key signs too, which is not one of the wallet's keys. Keystone
-    // firmware has parsed and shown pool registrations since 1.5.8.
-    if (cert.__typename === Cardano.CertificateType.PoolRegistration) {
-      cert.poolParameters.owners.forEach((owner: Cardano.RewardAccount) => {
-        if (isOwnRewardAccount(owner)) hashes.push(Cardano.RewardAccount.toHash(owner));
-      });
-      return;
-    }
-    // Check if certificate has stakeCredential property (all stake-related certs do)
-    if ('stakeCredential' in cert && cert.stakeCredential && isOwnKeyHash(ownStakeCreds, cert.stakeCredential)) {
-      hashes.push(cert.stakeCredential.hash);
-    }
-  });
-  txCore.body.withdrawals?.forEach((withdrawal: Cardano.Withdrawal) => {
-    if (isOwnRewardAccount(withdrawal.stakeAddress)) hashes.push(Cardano.RewardAccount.toHash(withdrawal.stakeAddress));
-  });
-  return hashes;
-};
-
-/**
- * The DRep credential hashes this wallet's DRep key signs for: its DRep registration,
- * update and retirement certificates, and the votes it casts as that DRep.
- */
-const ownDrepSignerHashes = (txCore: Cardano.Tx, keys: Keys): string[] => {
-  const ownDrepCreds = credSet(keys.drep105, keys.drep129);
-  const hashes: string[] = [];
-  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
-    if ('dRepCredential' in cert && cert.dRepCredential && isOwnKeyHash(ownDrepCreds, cert.dRepCredential)) hashes.push(cert.dRepCredential.hash);
-  });
-  txCore.body.votingProcedures?.forEach(({ voter }) => {
-    if (voter.__typename === Cardano.VoterType.dRepKeyHash && isOwnKeyHash(ownDrepCreds, voter.credential)) hashes.push(voter.credential.hash);
-  });
-  return hashes;
-};
-
-/**
- * The constitutional committee credential hashes this wallet signs for: the cold key
- * for the committee certificates of its cold credential (authorizing a hot credential,
- * resigning), the hot key for the votes it casts as a committee member. The hot
- * credential an authorization names does not sign it.
- */
-const ownCommitteeSignerHashes = (txCore: Cardano.Tx, keys: Keys): { cold: string[]; hot: string[] } => {
-  const ownColdCreds = credSet(keys.ccCold);
-  const ownHotCreds = credSet(keys.ccHot);
-  const cold: string[] = [];
-  const hot: string[] = [];
-  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
-    if ((cert.__typename === Cardano.CertificateType.AuthorizeCommitteeHot
-      || cert.__typename === Cardano.CertificateType.ResignCommitteeCold)
-      && isOwnKeyHash(ownColdCreds, cert.coldCredential)) cold.push(cert.coldCredential.hash);
-  });
-  txCore.body.votingProcedures?.forEach(({ voter }) => {
-    if (voter.__typename === Cardano.VoterType.ccHotKeyHash && isOwnKeyHash(ownHotCreds, voter.credential)) hot.push(voter.credential.hash);
-  });
-  return { cold, hot };
-};
-
-/**
- * Every witness the transaction needs from this wallet, worked out once for both
- * request types:
+ * Every witness the transaction needs from this wallet, worked out once for both request
+ * types by `walletWitnessPlan` (the rule the software signer follows too):
  * - `inputs`: each input whose UTxO is known, with the payment or change key at its
  *   address (none for an input the wallet does not own).
- * - `extra`: the other witnesses, one per key hash: collateral (the key at the collateral
- *   UTxO's address, as Trezor maps it, unless that key already signs an input), required
- *   signers (DEX orders, a CIP-113 transfer's owner), the stake key for its certificates,
- *   pool ownerships and withdrawals, the DRep key for its certificates and votes, and the
- *   committee cold key for its certificates and hot key for its votes. Any other hash is
- *   not this wallet's to sign: another party signs for it (a multisig).
+ * - `extra`: the other witnesses, one per key hash: collateral at a key no input uses (as
+ *   Trezor maps it), then the stake, DRep and committee keys for the wallet's own
+ *   certificates, votes and withdrawals, and the required signers the key set carries.
  * The firmware signs each extra signer at whatever path it carries, and a key it also
  * signs an input with only once (sign_tx dedupes by public key), so a required signer is
  * listed even when an input's key is the one it names.
  */
-const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], stakeAddress: string | undefined) => {
-  // Indexed once by `txId#index`, the first of any duplicate kept, as a scan would find it.
-  const utxoByRef = new Map<string, Cardano.Utxo>();
-  utxos.forEach((utxo) => {
-    const ref = `${utxo[0].txId}#${utxo[0].index}`;
-    if (!utxoByRef.has(ref)) utxoByRef.set(ref, utxo);
-  });
-  const utxoOf = (txIn: Cardano.TxIn) => utxoByRef.get(`${txIn.txId}#${txIn.index}`);
-  const addressOf = ([txIn, txOut]: Cardano.Utxo) => txIn.address || txOut.address;
-  const keyAt = (address: string) => keyList(keys.payment).find((key) => key.address === address)
-    || keyList(keys.change).find((key) => key.address === address);
+const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[]) => {
+  const plan = walletWitnessPlan(txCore, keys, utxos);
+  const inputs = plan.inputs.map(({ utxo, key }) => ({ utxo, key: signingKey(key) }));
 
-  const inputs = txCore.body.inputs.flatMap((txIn) => {
-    const utxo = utxoOf(txIn);
-    return utxo ? [{ utxo, key: signingKey(keyAt(addressOf(utxo))) }] : [];
-  });
-
-  const inputPaths = new Set(inputs.flatMap(({ key }) => (key ? [key.path] : [])));
   const extra = new Map<string, ExtraSigner>();
-  const add = (keyHash: string | undefined, key: SigningKey | undefined) => {
+  const add = (keyHash: string | undefined, role: WitnessRole, key: SigningKey | undefined) => {
     const hash = String(keyHash ?? '').toLowerCase();
     if (!hash || !key || extra.has(hash)) return;
-    extra.set(hash, { keyHash: hash, ...key });
+    extra.set(hash, { keyHash: hash, role, ...key });
   };
-
-  txCore.body.collaterals?.forEach((txIn) => {
-    const utxo = utxoOf(txIn);
-    const key = utxo && keyAt(addressOf(utxo));
-    const signer = signingKey(key);
-    if (signer && !inputPaths.has(signer.path)) add(key?.cred, signer);
-  });
-  const byHash = ownKeysByHash(keys);
-  const requiredSigners = txCore.body.requiredExtraSignatures ?? [];
-  debugLog('[Keystone] Found required signers:', requiredSigners.length);
-  // Each hash is signed by the key that has it, never by the first key of its kind: an extra
-  // signer pairs no hash with another key's path, and a hash the key set doesn't carry (a
-  // withdrawal matched only by the stake address) adds nothing.
-  const signerFor = (keyHash: string) => add(keyHash, byHash.get(keyHash.toLowerCase()));
-  requiredSigners.forEach(signerFor);
-  ownStakeSignerHashes(txCore, keys, stakeAddress).forEach(signerFor);
-  ownDrepSignerHashes(txCore, keys).forEach(signerFor);
-  const committee = ownCommitteeSignerHashes(txCore, keys);
-  [...committee.cold, ...committee.hot].forEach(signerFor);
+  plan.collateralKeys.forEach((key) => add(key.cred, 'payment', signingKey(key)));
+  debugLog('[Keystone] Found required signers:', txCore.body.requiredExtraSignatures?.length ?? 0);
+  plan.witnesses.forEach(({ keyHash, role, key }) => add(keyHash, role, signingKey(key, !GOVERNANCE_ROLES.has(role))));
 
   return { inputs, extra: [...extra.values()] };
 };
@@ -402,7 +266,7 @@ export interface KeystoneSignRequestResponse {
 /**
  * Creates a Keystone signing request from a transaction
  * @param tx - The transaction to sign (Serialization.Transaction)
- * @param walletData - Wallet data containing xfp, stakeAddress and the paired firmwareVersion
+ * @param walletData - Wallet data containing xfp and the paired firmwareVersion
  * @param utxos - Array of UTXOs for input resolution
  * @param keys - keys mapping for derivation paths
  * @returns UR object with type and cbor properties for QR code generation
@@ -419,7 +283,7 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
 
   const xfp = walletData.xfp ?? "";
   const cborBuffer = Buffer.from(txCborHex, 'hex');
-  const { inputs, extra } = walletSigners(txCore, keys, utxos, walletData.stakeAddress);
+  const { inputs, extra } = walletSigners(txCore, keys, utxos);
 
   // Check if we should sign the hash or full transaction (for multi-sig/script transactions)
   const useHash = sdk.cardano.checkNeedSignTxHash(cborBuffer);
@@ -433,9 +297,7 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
 
     // The device shows a hash request as the hash alone, so the DRep and committee keys never
     // sign one: they sign only a transaction the Keystone's screen shows in full.
-    const governancePaths = new Set([keys.drep105, keys.drep129, keys.ccCold, keys.ccHot]
-      .flatMap(keyList).map((key) => key.path).filter(Boolean));
-    if (extra.some(({ path }) => governancePaths.has(path))) {
+    if (extra.some(({ role }) => GOVERNANCE_ROLES.has(role))) {
       throw new Error(i18n.t('wallet.keystoneHashGovernanceKey') as string);
     }
 

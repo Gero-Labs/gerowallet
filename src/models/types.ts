@@ -75,9 +75,10 @@ export interface Wallet {
    * paired, e.g. "3.2.0". Firmware 1.7.2 and later report it; older firmware answers with
    * a fixed "1.1.0", which keystoneFirmwareVersion() does not record. A Keystone paired
    * before Gero recorded it, or a Bitcoin account exported as a lone crypto-hdkey, has
-   * none. Pairing the same device again is refused but refreshes it (createNewHardwareWallet),
-   * so a Keystone updated since it was paired can report its new version. Non-indexed: no
-   * schema bump.
+   * none. Pairing the same device again is refused but refreshes it on every Keystone record
+   * of that seed (createNewHardwareWallet), so a Keystone updated since it was paired can
+   * report its new version. Two Keystones holding one seed share it: it is the version the
+   * one last paired reported. Non-indexed: no schema bump.
    */
   firmwareVersion?: string;
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)

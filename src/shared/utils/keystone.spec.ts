@@ -15,6 +15,7 @@ import {
   parseBitcoinSignature, parseBitcoinAccount, parseDataSignature, parseKeystoneAccounts, parseSignature,
 } from './keystone';
 import { InvalidAccountIndexError } from './walletAccount';
+import { analyzeTransactionForSignatures } from './resolver';
 
 const mocks = vi.hoisted(() => ({
   build: vi.fn(() => 'cose-signature'), key: vi.fn(() => 'cose-key'),
@@ -523,6 +524,12 @@ describe('Keystone Cardano sign request: extra signers', () => {
       expect(await signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }, elsewhere)).toEqual([]);
     });
 
+    it('asks the stake key at a withdrawal\'s reward address for it when that key carries no cred', async () => {
+      const withoutStakeCred: Keys = { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] };
+      expect(await signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }, withoutStakeCred))
+        .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
+    });
+
     it('lists a key once when two of its signers spell its hash in different case', async () => {
       const upperCase = stakeCred.hash.toUpperCase() as unknown as Ed25519KeyHashHex;
       expect(await signersOf({ requiredExtraSignatures: [upperCase], certificates: [voteDelegation] }))
@@ -550,5 +557,33 @@ describe('Keystone Cardano sign request: extra signers', () => {
 
   it('does not sign a withdrawal from another reward address', async () => {
     expect(await signersOf({ withdrawals: [{ stakeAddress: rewardAccount(foreignStakeCred), quantity: 1_000_000n }] })).toEqual([]);
+  });
+
+  // The software signer (and the fee estimate) follow the same witness plan, so a Keystone is
+  // asked for exactly the keys the fee was sized for.
+  it('asks for the keys the software signer signs with', async () => {
+    const otherStake = keyHash('6f');
+    const bodies: Array<{ body: Partial<Cardano.TxBody>; keySet: Keys }> = [
+      {
+        body: {
+          collaterals: [otherIn],
+          certificates: [voteDelegation, committeeResignation(ccColdCred), drepRegistrationOf(drepCred), poolRegistrationOwnedBy(stakeAddress)],
+          votingProcedures: [...voteAs(drepVoter(drepCred)), ...voteAs(committeeVoter(ccHotCred))],
+          withdrawals: [{ stakeAddress, quantity: 1_000_000n }],
+          requiredExtraSignatures: [signerHash(changeCred), foreignHash],
+        },
+        keySet: keys,
+      },
+      // A withdrawal from an address no stake key is at, or carries the hash of.
+      { body: { withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }, keySet: { ...keys, stake: [{ address: rewardAccount(otherStake), cred: otherStake.hash, path: STAKE_PATH }] } },
+      // A stake key at the reward address with no cred, and certificates the key set carries no cred for.
+      { body: { withdrawals: [{ stakeAddress, quantity: 1_000_000n }], certificates: [voteDelegation] }, keySet: { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] } },
+    ];
+    const accountPath = (derivationPath: number[]) => `m/1852'/1815'/1'/${derivationPath.join('/')}`;
+    for (const { body, keySet } of bodies) {
+      const keystone = new Set([PAYMENT_PATH, ...(await signersOf(body, keySet)).map(({ keyPath }) => keyPath)]);
+      const software = new Set(analyzeTransactionForSignatures(tx(body).toCore(), utxos, keySet).map(({ derivationPath }) => accountPath(derivationPath)));
+      expect(software).toEqual(keystone);
+    }
   });
 });
