@@ -40,6 +40,16 @@ function baseAddress(networkId: Cardano.NetworkId, payment: string, stake: strin
 const RECEIVE = baseAddress(MAINNET, OWNER_A, STAKE);
 const SECOND = baseAddress(MAINNET, OWNER_B, STAKE);
 const FOREIGN = baseAddress(MAINNET, '77'.repeat(28), '88'.repeat(28));
+/** The legacy contract's address carrying the wallet's own stake key: never the wallet's to be paid at. */
+const LEGACY_SCRIPT_ADDRESS = Cardano.BaseAddress.fromCredentials(
+  MAINNET,
+  { hash: Hash28ByteBase16(V3.scriptHash), type: Cardano.CredentialType.ScriptHash },
+  { hash: Hash28ByteBase16(STAKE), type: Cardano.CredentialType.KeyHash },
+).toAddress().toBech32();
+/** The wallet's first payment key with no stake part: a key address of the wallet too. */
+const ENTERPRISE = Cardano.EnterpriseAddress.fromCredentials(MAINNET, {
+  hash: Hash28ByteBase16(OWNER_A), type: Cardano.CredentialType.KeyHash,
+}).toAddress().toBech32();
 const REWARD = Cardano.RewardAddress.fromCredentials(MAINNET, {
   hash: Hash28ByteBase16(STAKE), type: Cardano.CredentialType.KeyHash,
 }).toAddress().toBech32() as Cardano.RewardAccount;
@@ -309,6 +319,27 @@ describe('verifyLegacyCancel: outputs', () => {
     refusedBy('OUTPUTS', () => verify(cancelTx(), REFS, context({ returnAddress: FOREIGN })));
   });
 
+  it('rejects an output to a script address, even one wrongly among the wallet\'s addresses', () => {
+    const ctx = context({ ownAddresses: new Set([RECEIVE, SECOND, LEGACY_SCRIPT_ADDRESS]) });
+    refusedBy('OUTPUTS', () => verify(cancelTx((tx) => {
+      tx.body.outputs.push({ address: Cardano.PaymentAddress(LEGACY_SCRIPT_ADDRESS), value: { coins: 1_000_000n } });
+    }), REFS, ctx));
+  });
+
+  it('rejects an output to a key address among the wallet\'s addresses whose key is not the wallet\'s', () => {
+    const ctx = context({ ownAddresses: new Set([RECEIVE, SECOND, FOREIGN]) });
+    refusedBy('OUTPUTS', () => verify(cancelTx((tx) => {
+      tx.body.outputs.push({ address: Cardano.PaymentAddress(FOREIGN), value: { coins: 1_000_000n } });
+    }), REFS, ctx));
+  });
+
+  it('accepts an output to an enterprise address of one of the wallet\'s keys', () => {
+    const ctx = context({ ownAddresses: new Set([RECEIVE, SECOND, ENTERPRISE]) });
+    expect(verify(cancelTx((tx) => {
+      tx.body.outputs.push({ address: Cardano.PaymentAddress(ENTERPRISE), value: { coins: 1_000_000n } });
+    }), REFS, ctx).txId).toBeTruthy();
+  });
+
   it('rejects an output carrying a datum, a datum hash or a reference script', () => {
     refusedBy('OUTPUTS', () => verify(cancelTx((tx) => { tx.body.outputs[1].datum = plutusData('d87980'); })));
     refusedBy('OUTPUTS', () => verify(cancelTx((tx) => { tx.body.outputs[1].datumHash = Hash32ByteBase16('00'.repeat(32)); })));
@@ -394,6 +425,24 @@ describe('verifyLegacyCancel: collateral', () => {
     refusedBy('COLLATERAL', () => verify(cancelTx((tx) => { tx.body.collateralReturn!.value.assets = assets(NFT, 1n); })));
     refusedBy('COLLATERAL', () => verify(cancelTx((tx) => { tx.body.collateralReturn!.datum = plutusData('d87980'); })));
     refusedBy('COLLATERAL', () => verify(cancelTx((tx) => { tx.body.totalCollateral = 1n; })));
+  });
+
+  it('rejects a collateral return to a script address, even one wrongly among the wallet\'s addresses', () => {
+    const ctx = context({ ownAddresses: new Set([RECEIVE, SECOND, LEGACY_SCRIPT_ADDRESS]) });
+    refusedBy('COLLATERAL', () => verify(cancelTx((tx) => {
+      tx.body.collateralReturn!.address = Cardano.PaymentAddress(LEGACY_SCRIPT_ADDRESS);
+    }), REFS, ctx));
+  });
+
+  it('rejects a collateral return to a key address among the wallet\'s addresses whose key is not the wallet\'s', () => {
+    const ctx = context({ ownAddresses: new Set([RECEIVE, SECOND, FOREIGN]) });
+    refusedBy('COLLATERAL', () => verify(cancelTx((tx) => {
+      tx.body.collateralReturn!.address = Cardano.PaymentAddress(FOREIGN);
+    }), REFS, ctx));
+  });
+
+  it('accepts a collateral return to another key address of the wallet', () => {
+    expect(verify(cancelTx((tx) => { tx.body.collateralReturn!.address = Cardano.PaymentAddress(SECOND); })).txId).toBeTruthy();
   });
 
   it('rejects own collateral that is not an ADA-only fee input, and anything but one collateral', () => {

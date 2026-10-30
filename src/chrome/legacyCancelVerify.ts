@@ -8,8 +8,9 @@
 //    its contract's pinned reference script, signed by exactly the items' owners, all keys
 //    of this wallet;
 //  - spend the wallet's own UTxOs to pay the fee;
-//  - pay every output to one of the wallet's own addresses, every asset of every cancelled
-//    item reaching the return address;
+//  - pay every output to one of the wallet's own addresses whose payment credential is one of
+//    its own keys (never a script, however the address set came to hold one), every asset of
+//    every cancelled item reaching the return address;
 //  - pay a fee of at most LEGACY_CANCEL_MAX_FEE;
 //  - if a script fails anyway, lose at most LEGACY_CANCEL_MAX_COLLATERAL of the wallet's own
 //    collateral, or none when it is the Nexus pool UTxO Nexus said it lent.
@@ -58,7 +59,10 @@ export interface LegacyCancelVerifyContext {
   ownUtxos: readonly Cardano.Utxo[];
   /** The wallet's own key addresses: every output must go to one. */
   ownAddresses: ReadonlySet<string>;
-  /** The wallet's own key hashes: every owner of a cancelled item must be one. */
+  /**
+   * The wallet's own key hashes: every owner of a cancelled item must be one, and so must the
+   * payment credential of every output and of the collateral return.
+   */
   ownKeyHashes: ReadonlySet<string>;
   /** Where every asset of the cancelled items must arrive; one of `ownAddresses`. */
   returnAddress: string;
@@ -172,8 +176,10 @@ export function verifyLegacyCancel(
   for (const out of body.outputs) {
     const address = String(out.address);
     if (outputNetwork(address) !== ctx.networkId) throw new LegacyCancelVerifyError('NETWORK', 'pays an address of another network');
-    // OX Agent: Authorization prevented by ownership check - every output pays the wallet
-    if (!ctx.ownAddresses.has(address)) throw new LegacyCancelVerifyError('OUTPUTS', "pays an address that is not the wallet's");
+    // OX Agent: Authorization prevented by ownership check - every output pays one of the wallet's addresses, at one of its own keys
+    if (!ctx.ownAddresses.has(address) || !paysOwnKey(address, ctx.ownKeyHashes)) {
+      throw new LegacyCancelVerifyError('OUTPUTS', "pays an address that is not the wallet's");
+    }
     if (out.datum !== undefined || out.datumHash !== undefined || out.scriptReference !== undefined) {
       throw new LegacyCancelVerifyError('OUTPUTS', 'an output carries a datum or a reference script');
     }
@@ -300,7 +306,11 @@ function checkCollateral(
     }
     const returned = body.collateralReturn;
     if (returned) {
-      if (!ctx.ownAddresses.has(String(returned.address))) throw new LegacyCancelVerifyError('COLLATERAL', 'returns collateral elsewhere');
+      const address = String(returned.address);
+      // OX Agent: Authorization prevented by ownership check - the collateral return pays one of the wallet's addresses, at one of its own keys
+      if (!ctx.ownAddresses.has(address) || !paysOwnKey(address, ctx.ownKeyHashes)) {
+        throw new LegacyCancelVerifyError('COLLATERAL', 'returns collateral elsewhere');
+      }
       let returnedAssets = 0;
       forEachAsset(returned, () => returnedAssets++);
       if (returnedAssets > 0 || returned.datum !== undefined || returned.datumHash !== undefined || returned.scriptReference !== undefined) {
@@ -318,6 +328,21 @@ function checkCollateral(
   }
   if (ctx.sponsoredCollateralRef && ref === ctx.sponsoredCollateralRef && !inputRefs.has(ref)) return true;
   throw new LegacyCancelVerifyError('COLLATERAL', "the collateral is neither the wallet's nor the lent pool UTxO");
+}
+
+/**
+ * Whether `address` pays a key of this wallet: its payment credential (base, enterprise or
+ * pointer address) is a key hash among `ownKeyHashes`. A script credential, an address with no
+ * payment credential and one that cannot be read do not.
+ */
+function paysOwnKey(address: string, ownKeyHashes: ReadonlySet<string>): boolean {
+  try {
+    const parsed = Cardano.Address.fromBech32(address);
+    const credential = (parsed.asBase() ?? parsed.asEnterprise() ?? parsed.asPointer())?.getPaymentCredential();
+    return credential?.type === Cardano.CredentialType.KeyHash && ownKeyHashes.has(String(credential.hash));
+  } catch {
+    return false;
+  }
 }
 
 function outputNetwork(address: string): Cardano.NetworkId | null {
