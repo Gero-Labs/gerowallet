@@ -5907,7 +5907,7 @@ export default {
   'legacyListings.done': 'Tus elementos van de regreso a tu billetera',
   'legacyListings.gone': 'Algunos de estos elementos ya no están bloqueados. La lista se actualizó.',
   'legacyListings.hardwareSoon': 'Próximamente para billeteras de hardware',
-  'legacyListings.inboxTitle': '{count} elementos atascados en un mercado cerrado',
+  'legacyListings.inboxTitle': '{count} elemento atascado en un mercado cerrado | {count} elementos atascados en un mercado cerrado',
   'legacyListings.inboxBody': 'Recupéralos en tu billetera',
   'legacyListings.failed': 'No se pudieron recuperar estos elementos. Inténtalo de nuevo.',
 }

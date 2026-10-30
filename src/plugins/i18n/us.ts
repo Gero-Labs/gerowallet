@@ -6138,7 +6138,7 @@ export default {
   'legacyListings.done': 'Items on their way back to your wallet',
   'legacyListings.gone': 'Some of these items are no longer locked. The list has been refreshed.',
   'legacyListings.hardwareSoon': 'Coming soon for hardware wallets',
-  'legacyListings.inboxTitle': '{count} items stuck on a closed marketplace',
+  'legacyListings.inboxTitle': '{count} item stuck on a closed marketplace | {count} items stuck on a closed marketplace',
   'legacyListings.inboxBody': 'Get them back to your wallet',
   'legacyListings.failed': 'Could not get these items back. Try again.',
 }

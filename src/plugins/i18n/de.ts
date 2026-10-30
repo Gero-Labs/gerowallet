@@ -6031,7 +6031,7 @@ export default {
   'legacyListings.done': 'Die Elemente sind auf dem Weg zurück in deine Wallet',
   'legacyListings.gone': 'Einige dieser Elemente sind nicht mehr gesperrt. Die Liste wurde aktualisiert.',
   'legacyListings.hardwareSoon': 'Bald für Hardware-Wallets verfügbar',
-  'legacyListings.inboxTitle': '{count} Elemente auf einem geschlossenen Marktplatz festgesteckt',
+  'legacyListings.inboxTitle': '{count} Element auf einem geschlossenen Marktplatz festgesteckt | {count} Elemente auf einem geschlossenen Marktplatz festgesteckt',
   'legacyListings.inboxBody': 'Hole sie zurück in deine Wallet',
   'legacyListings.failed': 'Die Elemente konnten nicht zurückgeholt werden. Versuche es erneut.',
 }

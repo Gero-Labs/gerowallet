@@ -10,7 +10,7 @@
   >
     <v-card-text class="legacy-cancel pt-2 px-5 pb-5" data-testid="legacy-cancel">
       <!-- A hardware wallet no device has signed a rescue with yet: nothing to ask of anyone. -->
-      <p v-if="view === 'hardware'" class="t-body-sm" data-testid="legacy-cancel-hardware">
+      <p v-if="credentials.deviceBlocked.value" class="t-body-sm" data-testid="legacy-cancel-hardware">
         {{ t('legacyListings.hardwareSoon') }}
       </p>
 
@@ -42,71 +42,26 @@
           {{ failureText }}
         </v-alert>
 
-        <!-- Hardware wallets sign on the device, in the page. -->
-        <div v-if="deviceType" class="legacy-cancel__device glass-tier mt-4" data-testid="legacy-cancel-device">
-          <v-icon size="20" color="var(--g-accent)">{{ deviceIcon }}</v-icon>
-          <p class="t-body-sm">{{ t(deviceHintKey) }}</p>
-          <!-- `btSupported` says the Ledger CAN use Bluetooth, not that it is connected that
-               way, so USB stays the default and the user picks. -->
-          <ToggleSwitch
-            v-if="deviceType === WalletType.Ledger && wallet?.btSupported"
-            class="legacy-cancel__transport"
-            :text-left="t('wallet.usb')"
-            icon-left="mdi-usb"
-            :text-right="t('wallet.bluetooth')"
-            icon-right="mdi-bluetooth"
-            :model-value="isBT"
-            :disabled="busy"
-            @update:model-value="isBT = $event"
-          />
-        </div>
-        <v-alert
-          v-if="deviceType === WalletType.Keystone"
-          type="warning"
-          variant="tonal"
-          density="compact"
-          class="mt-3"
-          data-testid="legacy-cancel-keystone-hash"
-        >
-          {{ t('programmableTokens.send.keystoneHashOnly') }}
-          <span class="d-block t-caption g-mono mt-1">{{ summary.txId }}</span>
-        </v-alert>
-
-        <div class="mt-4">
-          <PassKeyPasswordField
-            v-if="usesPassword"
-            :model-value="password"
-            dense
-            outlined
-            hide-details
-            :label="t('wallet.spendingPassword')"
-            :placeholder="t('navigation.typeYourSpendingPassword')"
-            :disabled="busy"
-            required
-            @update:model-value="password = $event"
-            @enter="send()"
-            @passkey-autofill-success="send()"
-          />
-        </div>
+        <PreparedTxCredentials :credentials="credentials" testid="legacy-cancel" :tx-id="summary.txId" />
         <div class="legacy-cancel__actions">
           <GButton tier="secondary" :disabled="busy" data-testid="legacy-cancel-cancel" @click="close()">
             {{ t('common.cancel') }}
           </GButton>
           <PassKeyAuthButton
-            v-if="isPrfWallet"
+            v-if="credentials.isPrfWallet.value"
             :block="false"
             :disabled="busy"
             :text="t('common.confirm')"
-            @success="sendWithPassKey"
-            @error="onPassKeyError"
+            @success="credentials.sendWithPassKey"
+            @error="credentials.onPassKeyError"
           />
           <GButton
             v-else
             tier="primary"
             :loading="busy"
-            :disabled="busy || (usesPassword && !password)"
+            :disabled="busy || (credentials.usesPassword.value && !credentials.password.value)"
             data-testid="legacy-cancel-confirm"
-            @click="send()"
+            @click="credentials.send()"
           >
             {{ t('common.confirm') }}
           </GButton>
@@ -159,25 +114,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onScopeDispose, provide, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
-import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import PreparedTxCredentials from '@/shared/components/PreparedTxCredentials.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import LegacyItemLine from '@/modules/portfolio/components/LegacyItemLine.vue';
 import { formatAda } from '@/modules/portfolio/components/legacyItemDisplay';
-import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
-import { signsOnDevice } from '@/shared/composables/useHardwareTxSigner';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { useLegacyRescue } from '@/shared/composables/useLegacyRescue';
-import { PREPARED_TX_SIGN_FAILED, PREPARED_TX_WRONG_PASSWORD } from '@/shared/composables/usePreparedTxFlow';
+import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCredentials';
+import { PREPARED_TX_WRONG_PASSWORD } from '@/shared/composables/usePreparedTxFlow';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { walletStore } from '@/stores/walletStore';
-import { WalletType } from '@/models/types';
 import { isLegacyRescueHardware } from '@/utils/legacyMarketScripts';
 
 /**
@@ -208,44 +159,29 @@ const flow = useLegacyRescue({ getIsBT: () => isBT.value });
 const { meta, forget, refresh } = useLegacyListings();
 const { explorerUrl } = useExplorer();
 
-const password = ref('');
-
-const wallet = computed(() => walletStore.loggedWallet);
 const stage = computed(() => flow.stage.value);
-const busy = computed(() => stage.value === 'preparing' || stage.value === 'signing' || stage.value === 'submitting');
 const summary = computed(() => flow.prepared.value?.summary ?? null);
 
-const isPrfWallet = computed(() =>
-  wallet.value?.type === WalletType.Normal && (
-    wallet.value?.encryptionMethod === 'prf'
-    || (!!wallet.value?.prfEncryptedPrivateKey && !!wallet.value?.webAuthnCredentialId)
-  ),
-);
-const usesPassword = computed(() => wallet.value?.type === WalletType.Normal && !isPrfWallet.value);
-/** A hardware wallet no device has signed a rescue with: told it is coming, nothing is built. */
-const hardwareBlocked = computed(() => signsOnDevice(wallet.value?.type) && !isLegacyRescueHardware(wallet.value?.type));
-/** The device that signs, for a hardware wallet the rescue allows; null otherwise. */
-const deviceType = computed(() => (signsOnDevice(wallet.value?.type) && isLegacyRescueHardware(wallet.value?.type) ? wallet.value?.type ?? null : null));
-const deviceIcon = computed(() => {
-  if (deviceType.value === WalletType.Keystone) return 'mdi-qrcode-scan';
-  return deviceType.value === WalletType.Ledger && isBT.value ? 'mdi-bluetooth' : 'mdi-usb';
-});
-const deviceHintKey = computed(() => {
-  switch (deviceType.value) {
-    case WalletType.Ledger: return 'miniGero.connectLedger';
-    case WalletType.Trezor: return 'miniGero.connectTrezor';
-    default: return 'miniGero.keystoneSign';
-  }
-});
-
-const view = computed<'hardware' | 'preparing' | 'review' | 'done' | 'failed'>(() => {
-  if (hardwareBlocked.value) return 'hardware';
+const view = computed<'preparing' | 'review' | 'done' | 'failed'>(() => {
   if (stage.value === 'done') return 'done';
   if (summary.value && (stage.value === 'review' || stage.value === 'signing' || stage.value === 'submitting')) return 'review';
   // Nothing built, or a submit that was not confirmed: back at idle with the reason.
   if (stage.value === 'idle' && flow.failure.value) return 'failed';
   return 'preparing';
 });
+
+// The credentials: the password or PassKey the signature needs, the device hint, and what keeps
+// them from signing another cancel (PassKey staleness, the wallet its refs were listed for).
+// A hardware wallet no device has signed a rescue with is not allowed: the dialog tells it so.
+const credentials = usePreparedTxCredentials(flow, {
+  isBT,
+  screen: () => view.value,
+  allowsDevice: isLegacyRescueHardware,
+  // Another wallet closes a dialog that is showing a cancel: the refs were the last one's.
+  isActive: () => props.isOpen,
+  onWalletSwitch: () => emit('close'),
+});
+const busy = credentials.busy;
 
 const isGone = computed(() => flow.failure.value?.code === 'LISTING_NOT_FOUND');
 /** One message for every failure but two: an item that is gone, and a wrong password. */
@@ -260,37 +196,11 @@ const failureText = computed(() => {
 const feeText = computed(() => `${formatAda(summary.value?.feeLovelace ?? '0')} ADA`);
 const txExplorerUrl = computed(() => explorerUrl('tx', flow.submittedTxId.value));
 
-// A PassKey result belongs to the cancel on screen when the ceremony started: a new build, a
-// step change or a wallet switch makes it stale (PassKeyAuthButton checks before emitting).
-let epoch = 0;
-let disposed = false;
-provide(authorizationScopeKey, {
-  capture() {
-    const captured = epoch;
-    return () => !disposed && captured === epoch;
-  },
-});
-watch(() => [flow.prepared.value?.txId, view.value, wallet.value?.id] as const, () => { epoch++; }, { flush: 'sync' });
-onScopeDispose(() => { disposed = true; epoch++; });
-
-// The refs belong to the wallet they were listed for: another wallet closes the dialog (the worker
-// would refuse to build or sign for it anyway). Checked again when a request settles, since a
-// switch while one is in flight cannot close it then.
-let builtForWalletId: number | undefined;
-watch(() => [wallet.value?.id, busy.value] as const, ([id, isBusy]) => {
-  if (!props.isOpen || isBusy || builtForWalletId === undefined || id === builtForWalletId) return;
-  builtForWalletId = undefined;
-  password.value = '';
-  flow.reset();
-  emit('close');
-});
-
 /** Start over: a clean flow, then have the worker build the cancel of the given refs. */
 function start(): void {
-  password.value = '';
+  credentials.begin();
   flow.reset();
-  builtForWalletId = wallet.value?.id;
-  if (hardwareBlocked.value) return;
+  if (credentials.deviceBlocked.value) return;
   void flow.prepare([...props.refs]);
 }
 
@@ -307,36 +217,9 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
 function close(): void {
   if (busy.value) return;
   const rescued = stage.value === 'done';
-  password.value = '';
+  credentials.clearPassword();
   emit('close');
   if (rescued) void refresh();
-}
-
-async function send(): Promise<void> {
-  if (busy.value || view.value !== 'review') return;
-  if (usesPassword.value) {
-    if (!password.value) return;
-    const typed = password.value;
-    // OX Agent: Sensitive Data Protection prevented by taking the typed password out of the field before signing; it is never logged or kept
-    password.value = '';
-    await flow.signAndSubmit({ password: typed });
-    return;
-  }
-  // Google wallets sign with the unlocked session and hardware wallets on the device:
-  // nothing to type.
-  await flow.signAndSubmit();
-}
-
-async function sendWithPassKey(privateKeyBytes: Uint8Array): Promise<void> {
-  if (busy.value || view.value !== 'review') {
-    privateKeyBytes.fill(0);
-    return;
-  }
-  await flow.signAndSubmit({ privateKeyBytes });
-}
-
-function onPassKeyError(): void {
-  flow.failure.value = { code: PREPARED_TX_SIGN_FAILED };
 }
 </script>
 
@@ -395,27 +278,6 @@ function onPassKeyError(): void {
   align-items: center;
   gap: var(--g-s-2);
   margin: var(--g-s-2) 0 0;
-}
-
-.legacy-cancel__device {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--g-s-2);
-  padding: var(--g-s-3);
-  border-radius: var(--g-r-card);
-  text-align: center;
-
-  p {
-    margin: 0;
-    color: var(--g-text-2);
-  }
-}
-
-.legacy-cancel__transport {
-  width: 100%;
-  padding-top: var(--g-s-2);
-  border-top: 1px solid var(--g-hairline-1);
 }
 
 .legacy-cancel__actions {
