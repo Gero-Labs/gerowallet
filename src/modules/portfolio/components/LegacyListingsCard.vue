@@ -44,7 +44,14 @@
     </ul>
 
     <footer class="legacy-card__footer">
-      <p v-if="overCap" class="legacy-card__hint t-caption" data-testid="legacy-max-hint">{{ t('legacyListings.maxHint') }}</p>
+      <div v-if="showMaxHint || showVersionHint" class="legacy-card__hints">
+        <p v-if="showMaxHint" class="legacy-card__hint t-caption" data-testid="legacy-max-hint">
+          {{ t('legacyListings.maxHint', { max: selectedMax }) }}
+        </p>
+        <p v-if="showVersionHint" class="legacy-card__hint t-caption" data-testid="legacy-version-hint">
+          {{ t('legacyListings.versionHint') }}
+        </p>
+      </div>
       <GButton
         tier="primary"
         :disabled="selection.size === 0"
@@ -62,17 +69,19 @@ import { computed, onMounted, ref, useId, watch } from 'vue';
 import { legacyRef, type LegacyListingItem } from '@/api/legacy-listings-api';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { LEGACY_CANCEL_MAX } from '@/utils/legacyMarketScripts';
+import { legacyCancelMax, type LegacyContract } from '@/utils/legacyMarketScripts';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import LegacyItemLine from '@/modules/portfolio/components/LegacyItemLine.vue';
 import { formatAda, legacyItemName } from '@/modules/portfolio/components/legacyItemDisplay';
 
 /**
  * Portfolio -> Collectibles: the wallet's NFTs and offers still locked at a closed marketplace's
- * contracts. The user picks up to LEGACY_CANCEL_MAX (one cancel transaction's limit) and the
- * card hands their refs (`txHash#index`) up as `get-back`; LegacyCancelDialog does the rest.
- * Every stuck item is listed, so a wallet with more than one transaction's worth gets them
- * back over several rounds.
+ * contracts. A cancel transaction takes one marketplace version only, and each version has its
+ * own limit (legacyCancelMax), so the first pick fixes the version: the other version's rows are
+ * disabled until the selection is empty again, and the user picks up to that version's limit.
+ * The card hands their refs (`txHash#index`) up as `get-back`; LegacyCancelDialog does the rest.
+ * Every stuck item is listed, so a wallet with more than one transaction's worth (or both
+ * versions) gets them back over several rounds.
  */
 const emit = defineEmits<{ (e: 'get-back', refs: string[]): void }>();
 
@@ -81,20 +90,35 @@ const { items, meta, loading, refresh } = useLegacyListings();
 const titleId = `legacy-card-title-${useId()}`;
 
 const selection = ref(new Set<string>());
-const atCap = computed(() => selection.value.size >= LEGACY_CANCEL_MAX);
-/** More stuck items than one transaction takes: the limit is worth saying before it is hit. */
-const overCap = computed(() => items.value.length > LEGACY_CANCEL_MAX);
 
-/** At the cap, only the picked rows stay switchable: they are how a slot is given back. */
+/** The version of the selected items: none until something is picked, then fixed until the selection empties. */
+const selectedContract = computed<LegacyContract | undefined>(
+  () => items.value.find((item) => selection.value.has(legacyRef(item)))?.contract,
+);
+/** The limit of the selected version; 0 while nothing is selected (nothing to cap yet). */
+const selectedMax = computed(() => (selectedContract.value ? legacyCancelMax(selectedContract.value) : 0));
+const atCap = computed(() => selectedContract.value !== undefined && selection.value.size >= selectedMax.value);
+/** The limit is worth saying once it is hit, and only when more of that version are waiting. */
+const showMaxHint = computed(
+  () => atCap.value && items.value.filter((item) => item.contract === selectedContract.value).length > selectedMax.value,
+);
+/** Items of the other version are listed: they go back in a transaction of their own. */
+const showVersionHint = computed(
+  () => selectedContract.value !== undefined && items.value.some((item) => item.contract !== selectedContract.value),
+);
+
+/** Only the selected version's rows stay open, and at the cap only the picked ones: they are how a slot is given back. */
 function isBlocked(item: LegacyListingItem): boolean {
-  return atCap.value && !selection.value.has(legacyRef(item));
+  if (selection.value.has(legacyRef(item))) return false;
+  if (selectedContract.value === undefined) return false;
+  return item.contract !== selectedContract.value || atCap.value;
 }
 
 function toggle(item: LegacyListingItem, checked: unknown): void {
   const ref = legacyRef(item);
   const next = new Set(selection.value);
   if (checked) {
-    if (next.size >= LEGACY_CANCEL_MAX) return;
+    if (isBlocked(item)) return;
     next.add(ref);
   } else {
     next.delete(ref);
@@ -176,7 +200,7 @@ onMounted(() => { void refresh(); });
   &:hover { @include g-glass-tier-hover; }
   &--selected,
   &--selected:hover { @include g-glass-tier-active; }
-  // Blocked by the cap: no lift, and the cursor says so.
+  // Blocked (the other version, or the cap): no lift, and the cursor says so.
   &--blocked,
   &--blocked:hover { cursor: not-allowed; opacity: 0.6; }
 }
@@ -188,8 +212,15 @@ onMounted(() => { void refresh(); });
   gap: var(--g-s-3);
 }
 
+// The limit and version hints stack at the footer's start, the button stays at its end.
+.legacy-card__hints {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  margin-right: auto;
+}
+
 .legacy-card__hint {
   margin: 0;
-  margin-right: auto;
 }
 </style>

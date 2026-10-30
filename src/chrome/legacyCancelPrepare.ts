@@ -23,7 +23,7 @@ import {
   nexusErrorCode,
   walletUtxosToNexusInputs,
 } from '@/api/nexus-tx-api';
-import { LEGACY_CANCEL_MAX, isLegacyRescueHardware } from '@/utils/legacyMarketScripts';
+import { LEGACY_CANCEL_MAX, isLegacyRescueHardware, legacyCancelMax } from '@/utils/legacyMarketScripts';
 import { ownKeys } from '@/chrome/cip113PrepareTransfer';
 import { type LegacyCancelSummary, verifyLegacyCancel } from '@/chrome/legacyCancelVerify';
 
@@ -38,6 +38,10 @@ export type LegacyCancelPrepareErrorCode =
   | 'WALLET_UNSUPPORTED'
   | 'NETWORK_UNSUPPORTED'
   | 'NOT_OWNED'
+  /** The refs span both contracts: legacy_v2 cannot be cancelled with a legacy_v3 input in the same transaction. */
+  | 'MIXED_CONTRACTS'
+  /** More refs than one transaction takes at their contract (legacyCancelMax). */
+  | 'TOO_MANY_LISTINGS'
   | 'BUILD_FAILED'
   | 'VERIFY_FAILED'
   /** Or a Nexus 422 errorCode, passed through (LISTING_NOT_FOUND, NOT_LEGACY_LISTING, EVALUATION_FAILED, …). */
@@ -101,6 +105,7 @@ export async function prepareLegacyCancel(request: unknown, env: LegacyCancelPre
   for (const ref of refs) {
     if (!items.has(ref)) throw new LegacyCancelPrepareError('NOT_OWNED', 'One of these listings does not belong to this wallet');
   }
+  assertOneContractWithinCap(refs, items);
 
   const ownUtxos = keyAddressUtxos(env.ownUtxos, own.addresses);
   let built: LegacyCancelBuildResponse;
@@ -166,6 +171,26 @@ function readRefs(request: unknown): string[] {
     throw new LegacyCancelPrepareError('INVALID_REQUEST', `Choose 1 to ${LEGACY_CANCEL_MAX} different listings to cancel`);
   }
   return refs as string[];
+}
+
+/**
+ * Refuses, before Nexus is asked, a request Nexus would refuse for its shape: refs at both
+ * contracts (MIXED_CONTRACTS) or more refs than one transaction takes at their contract
+ * (TOO_MANY_LISTINGS). The contract of each ref is the one the ownership lookup returned,
+ * never the page's. Mixed is said first: a request too big for the smaller contract's cap is
+ * still wrong for being mixed. Every ref is already in `items`.
+ */
+function assertOneContractWithinCap(refs: readonly string[], items: ReadonlyMap<string, LegacyListingItem>): void {
+  // OX Agent: Authorization prevented by reading each ref's contract from the wallet's own ownership lookup, never from the page, and failing closed on a contract the cap table does not know (cap 0)
+  const contracts = new Set(refs.map((ref) => (items.get(ref) as LegacyListingItem).contract));
+  if (contracts.size > 1) {
+    throw new LegacyCancelPrepareError('MIXED_CONTRACTS', 'Items from different marketplace versions go back in separate transactions');
+  }
+  const [contract] = contracts;
+  const max = contract === undefined ? 0 : legacyCancelMax(contract);
+  if (refs.length > max) {
+    throw new LegacyCancelPrepareError('TOO_MANY_LISTINGS', `Choose at most ${max} listings of this kind to cancel at once`);
+  }
 }
 
 /**

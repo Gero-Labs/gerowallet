@@ -39,8 +39,28 @@ export const LEGACY_SCRIPTS: Record<LegacyContract, LegacyScript> = {
   },
 };
 
-/** Most legacy UTxOs one cancel transaction may spend. */
+/** Most legacy UTxOs one cancel transaction may spend, whichever contract: the overall ceiling. */
 export const LEGACY_CANCEL_MAX = 10;
+
+/**
+ * Most UTxOs one cancel transaction may spend at each contract. Measured on mainnet (read-only
+ * evaluations through Ogmios): legacy_v3 fits 10; legacy_v2's cost grows with every input and
+ * 8 exceed the per-transaction memory limit, so it takes 6. Nexus refuses more with 422
+ * TOO_MANY_LISTINGS, and the wallet never sends such a request.
+ *
+ * One transaction also spends one contract only: legacy_v2 fails when a legacy_v3 input is in
+ * the same transaction (Nexus answers 422 MIXED_CONTRACTS), so a wallet with both goes back in
+ * separate transactions.
+ */
+export const LEGACY_CANCEL_MAX_BY_CONTRACT: Readonly<Record<LegacyContract, number>> = {
+  legacy_v3: 10,
+  legacy_v2: 6,
+};
+
+/** Most UTxOs one cancel transaction may spend at `contract`; 0 for a contract this table does not know. */
+export function legacyCancelMax(contract: LegacyContract): number {
+  return Object.hasOwn(LEGACY_CANCEL_MAX_BY_CONTRACT, contract) ? LEGACY_CANCEL_MAX_BY_CONTRACT[contract] : 0;
+}
 
 /** Largest fee, in lovelace, the verifier accepts on a cancel transaction (2 ADA). */
 export const LEGACY_CANCEL_MAX_FEE = 2_000_000n;

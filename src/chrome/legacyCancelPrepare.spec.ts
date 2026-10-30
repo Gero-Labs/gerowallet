@@ -7,7 +7,13 @@ import { Ed25519KeyHashHex, Hash28ByteBase16, Hash32ByteBase16 } from '@cardano-
 import { HexBlob } from '@cardano-sdk/util';
 import { Blockchain, Network } from '@/models/types';
 import type { LegacyListingItem } from '@/api/legacy-listings-api';
-import { LEGACY_CANCEL_MAX, LEGACY_SCRIPTS, isLegacyRescueHardware } from '@/utils/legacyMarketScripts';
+import {
+  LEGACY_CANCEL_MAX,
+  LEGACY_CANCEL_MAX_BY_CONTRACT,
+  LEGACY_SCRIPTS,
+  isLegacyRescueHardware,
+  legacyCancelMax,
+} from '@/utils/legacyMarketScripts';
 import { ownKeys } from './cip113PrepareTransfer';
 import { verifyLegacyCancel } from './legacyCancelVerify';
 import { LegacyCancelPrepareError, type LegacyCancelPrepareEnv, prepareLegacyCancel } from './legacyCancelPrepare';
@@ -300,6 +306,112 @@ describe('prepareLegacyCancel', () => {
       neverCalled(e);
       // Ten distinct refs get past validation; the wallet then does not own them.
       expect((await refusal(prepareLegacyCancel({ refs: refs(LEGACY_CANCEL_MAX) }, env()))).code).toBe('NOT_OWNED');
+    });
+  });
+
+  describe('one contract per transaction, and each contract\'s own cap', () => {
+    /** `n` distinct stuck items at `contract`, owned by the wallet, and their refs. */
+    function stuck(contract: LegacyListingItem['contract'], n: number, seed = 0): { items: LegacyListingItem[]; refs: string[] } {
+      const items = Array.from({ length: n }, (_, i): LegacyListingItem => ({
+        ...LISTING,
+        txHash: (seed + i + 1).toString(16).padStart(2, '0').repeat(32),
+        outputIndex: 0,
+        contract,
+        assets: [{ unit: `${'99'.repeat(28)}${(seed + i + 1).toString(16).padStart(2, '0')}`, quantity: '1' }],
+      }));
+      return { items, refs: items.map((item) => `${item.txHash}#${item.outputIndex}`) };
+    }
+    /** Past the refusals Nexus is asked: a build that fails with a sentinel tells the two apart. */
+    const reachesBuild = (items: LegacyListingItem[]) =>
+      env({ lookup: vi.fn().mockResolvedValue(items), build: vi.fn().mockRejectedValue(nexus422('EVALUATION_FAILED')) });
+
+    it('pins the caps measured on mainnet: 10 for legacy_v3, 6 for legacy_v2, under the overall ceiling', () => {
+      expect(LEGACY_CANCEL_MAX_BY_CONTRACT).toEqual({ legacy_v3: 10, legacy_v2: 6 });
+      expect(legacyCancelMax('legacy_v3')).toBe(10);
+      expect(legacyCancelMax('legacy_v2')).toBe(6);
+      expect(LEGACY_CANCEL_MAX).toBe(10);
+      expect(Math.max(...Object.values(LEGACY_CANCEL_MAX_BY_CONTRACT))).toBeLessThanOrEqual(LEGACY_CANCEL_MAX);
+    });
+
+    it('fails closed on a contract it has no cap for', async () => {
+      expect(legacyCancelMax('legacy_v9' as never)).toBe(0);
+      expect(legacyCancelMax('constructor' as never)).toBe(0);
+      const { items, refs } = stuck('legacy_v3', 1);
+      const e = env({ lookup: vi.fn().mockResolvedValue([{ ...items[0], contract: 'legacy_v9' }]) });
+      expect((await refusal(prepareLegacyCancel({ refs }, e))).code).toBe('TOO_MANY_LISTINGS');
+      expect(e.build).not.toHaveBeenCalled();
+    });
+
+    it('refuses refs spanning legacy_v3 and legacy_v2 with MIXED_CONTRACTS, build never called', async () => {
+      const v3 = stuck('legacy_v3', 1);
+      const v2 = stuck('legacy_v2', 1, 10);
+      const e = env({ lookup: vi.fn().mockResolvedValue([...v3.items, ...v2.items]) });
+      const error = await refusal(prepareLegacyCancel({ refs: [...v3.refs, ...v2.refs] }, e));
+      expect(error.code).toBe('MIXED_CONTRACTS');
+      expect(e.lookup).toHaveBeenCalledTimes(1);
+      expect(e.build).not.toHaveBeenCalled();
+      expect(verifyLegacyCancel).not.toHaveBeenCalled();
+    });
+
+    it('refuses a mixed request whichever order the refs come in', async () => {
+      const v3 = stuck('legacy_v3', 2);
+      const v2 = stuck('legacy_v2', 2, 10);
+      const e = env({ lookup: vi.fn().mockResolvedValue([...v3.items, ...v2.items]) });
+      expect((await refusal(prepareLegacyCancel({ refs: [v2.refs[0], v3.refs[0], v2.refs[1]] }, e))).code).toBe('MIXED_CONTRACTS');
+      expect(e.build).not.toHaveBeenCalled();
+    });
+
+    it('refuses 7 legacy_v2 refs with TOO_MANY_LISTINGS, build never called', async () => {
+      const v2 = stuck('legacy_v2', 7);
+      const e = env({ lookup: vi.fn().mockResolvedValue(v2.items) });
+      const error = await refusal(prepareLegacyCancel({ refs: v2.refs }, e));
+      expect(error.code).toBe('TOO_MANY_LISTINGS');
+      expect(e.lookup).toHaveBeenCalledTimes(1);
+      expect(e.build).not.toHaveBeenCalled();
+      expect(verifyLegacyCancel).not.toHaveBeenCalled();
+    });
+
+    it('accepts 6 legacy_v2 refs and 10 legacy_v3 refs: Nexus is asked', async () => {
+      for (const [contract, count] of [['legacy_v2', 6], ['legacy_v3', 10]] as const) {
+        const { items, refs } = stuck(contract, count);
+        const e = reachesBuild(items);
+        // Nexus's sentinel failure comes back as is: neither refusal fired.
+        expect((await refusal(prepareLegacyCancel({ refs }, e))).code).toBe('EVALUATION_FAILED');
+        expect(e.build).toHaveBeenCalledTimes(1);
+        const [request] = (e.build as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(request.listings).toHaveLength(count);
+      }
+    });
+
+    it('counts the refs asked for, not every item the wallet owns', async () => {
+      // Twelve legacy_v2 items are stuck, six are asked for.
+      const { items, refs } = stuck('legacy_v2', 12);
+      const e = reachesBuild(items);
+      expect((await refusal(prepareLegacyCancel({ refs: refs.slice(0, 6) }, e))).code).toBe('EVALUATION_FAILED');
+      expect(e.build).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not mixed by another contract\'s items the wallet owns but did not ask for', async () => {
+      const v2 = stuck('legacy_v2', 2);
+      const v3 = stuck('legacy_v3', 3, 10);
+      const e = reachesBuild([...v2.items, ...v3.items]);
+      expect((await refusal(prepareLegacyCancel({ refs: v2.refs }, e))).code).toBe('EVALUATION_FAILED');
+      expect(e.build).toHaveBeenCalledTimes(1);
+    });
+
+    it('says a mixed request is mixed before it says it is too big', async () => {
+      const v2 = stuck('legacy_v2', 7);
+      const v3 = stuck('legacy_v3', 1, 10);
+      const e = env({ lookup: vi.fn().mockResolvedValue([...v2.items, ...v3.items]) });
+      expect((await refusal(prepareLegacyCancel({ refs: [...v2.refs, ...v3.refs] }, e))).code).toBe('MIXED_CONTRACTS');
+      expect(e.build).not.toHaveBeenCalled();
+    });
+
+    it('still says NOT_OWNED first when a ref is not the wallet\'s', async () => {
+      const v2 = stuck('legacy_v2', 7);
+      const e = env({ lookup: vi.fn().mockResolvedValue(v2.items.slice(0, 6)) });
+      expect((await refusal(prepareLegacyCancel({ refs: v2.refs }, e))).code).toBe('NOT_OWNED');
+      expect(e.build).not.toHaveBeenCalled();
     });
   });
 

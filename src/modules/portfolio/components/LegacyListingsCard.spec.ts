@@ -1,6 +1,6 @@
 // The "Stuck on a closed marketplace" card (NFT rescue, Portfolio -> Collectibles): one row per
-// stuck item with a checkbox, at most LEGACY_CANCEL_MAX picked, and the picked refs handed to the
-// cancel dialog. The listings composable is replaced by refs the test owns; the copy is the real
+// stuck item with a checkbox, one marketplace version at a time and at most that version's cap
+// picked (legacyCancelMax), and the picked refs handed to the cancel dialog. The listings composable is replaced by refs the test owns; the copy is the real
 // English table, so a mistyped key shows up as a raw key in the assertions.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { enableAutoUnmount, mount } from '@vue/test-utils';
@@ -61,6 +61,9 @@ function item(n: number, over: Partial<LegacyListingItem> = {}): LegacyListingIt
 function render() {
   return mount(LegacyListingsCard, { attachTo: document.body, global: { plugins: [createTestVuetify()] } });
 }
+
+/** `n` stuck items at the older contract: the one whose cancel takes fewer items per transaction. */
+const v2 = (n: number, over: Partial<LegacyListingItem> = {}) => item(n, { contract: 'legacy_v2', ...over });
 
 const rowsOf = (wrapper: ReturnType<typeof render>) => wrapper.findAll('[data-testid="legacy-row"]');
 const boxesOf = (wrapper: ReturnType<typeof render>) => wrapper.findAll('input[type="checkbox"]');
@@ -189,5 +192,176 @@ describe('LegacyListingsCard', () => {
     listings.loading.value = false;
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
+  });
+  describe('one marketplace version per transaction', () => {
+    const VERSION_HINT = 'Items from the other marketplace version go back in a separate transaction';
+    const disabled = (box: { attributes: (name: string) => string | undefined }) => box.attributes('disabled') !== undefined;
+
+    it('disables the other contract once one item is selected and shows the version hint', async () => {
+      // List order: v3, v2, v3, v2.
+      listings.items.value = [item(1), v2(2), item(3), v2(4)];
+      const wrapper = render();
+
+      // Nothing picked: every row is open to a pick and there is nothing to explain yet.
+      expect(boxesOf(wrapper).some(disabled)).toBe(false);
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(false);
+
+      await boxesOf(wrapper)[0]!.setValue(true);
+
+      expect(boxesOf(wrapper).map(disabled)).toEqual([false, true, false, true]);
+      expect(rowsOf(wrapper).map((row) => row.classes('legacy-card__row--blocked'))).toEqual([false, true, false, true]);
+      expect(wrapper.get('[data-testid="legacy-version-hint"]').text()).toBe(VERSION_HINT);
+
+      // The same from the other side: a v2 pick closes the v3 rows.
+      await boxesOf(wrapper)[0]!.setValue(false);
+      await boxesOf(wrapper)[1]!.setValue(true);
+      expect(boxesOf(wrapper).map(disabled)).toEqual([true, false, true, false]);
+      expect(wrapper.get('[data-testid="legacy-version-hint"]').text()).toBe(VERSION_HINT);
+    });
+
+    it('says nothing about versions when the list holds only the selected contract', async () => {
+      listings.items.value = [v2(1), v2(2)];
+      const wrapper = render();
+
+      await boxesOf(wrapper)[0]!.setValue(true);
+
+      expect(boxesOf(wrapper).some(disabled)).toBe(false);
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain(VERSION_HINT);
+    });
+
+    it('clearing the selection re-enables every item and drops the version hint', async () => {
+      listings.items.value = [item(1), v2(2), item(3), v2(4)];
+      const wrapper = render();
+      await boxesOf(wrapper)[0]!.setValue(true);
+      await boxesOf(wrapper)[2]!.setValue(true);
+      expect(boxesOf(wrapper).filter(disabled)).toHaveLength(2);
+
+      // One pick left: still locked to its contract.
+      await boxesOf(wrapper)[0]!.setValue(false);
+      expect(boxesOf(wrapper).map(disabled)).toEqual([false, true, false, true]);
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(true);
+
+      await boxesOf(wrapper)[2]!.setValue(false);
+
+      expect(boxesOf(wrapper).some(disabled)).toBe(false);
+      expect(rowsOf(wrapper).some((row) => row.classes('legacy-card__row--blocked'))).toBe(false);
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="legacy-get-back"]').attributes('disabled')).toBeDefined();
+    });
+
+    it('lets the selection move to the other contract once it is emptied', async () => {
+      listings.items.value = [item(1), v2(2)];
+      const wrapper = render();
+      await boxesOf(wrapper)[0]!.setValue(true);
+      await boxesOf(wrapper)[0]!.setValue(false);
+      await boxesOf(wrapper)[1]!.setValue(true);
+      await wrapper.get('[data-testid="legacy-get-back"]').trigger('click');
+
+      expect(wrapper.emitted('get-back')).toEqual([[[legacyRef(listings.items.value[1]!)]]]);
+    });
+
+    it('ignores a pick of the other contract even if a checkbox reports one', async () => {
+      const items = [item(1), v2(2)];
+      listings.items.value = items;
+      const wrapper = render();
+      await boxesOf(wrapper)[0]!.setValue(true);
+
+      // The blocked row's checkbox cannot be clicked, but its handler must not trust that.
+      wrapper.findAllComponents({ name: 'VCheckboxBtn' })[1]!.vm.$emit('update:modelValue', true);
+      await wrapper.vm.$nextTick();
+      await wrapper.get('[data-testid="legacy-get-back"]').trigger('click');
+
+      expect(wrapper.emitted('get-back')).toEqual([[[legacyRef(items[0]!)]]]);
+    });
+
+    it('drops the lock when the only selected item leaves the list', async () => {
+      const items = [item(1), v2(2)];
+      listings.items.value = items;
+      const wrapper = render();
+      await boxesOf(wrapper)[0]!.setValue(true);
+      expect(disabled(boxesOf(wrapper)[1]!)).toBe(true);
+
+      // The v3 item was just cancelled: its selection goes with it, and so does the lock.
+      listings.items.value = [items[1]!];
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      expect(boxesOf(wrapper).some(disabled)).toBe(false);
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(false);
+    });
+  });
+
+  describe('per-contract caps', () => {
+    it('caps selection at 6 for legacy_v2 items and shows "Up to 6 items per transaction"', async () => {
+      listings.items.value = Array.from({ length: 8 }, (_, index) => v2(index + 1));
+      const wrapper = render();
+
+      for (const box of boxesOf(wrapper).slice(0, 5)) await box.setValue(true);
+      // One slot left: the limit has not been hit, so it is not mentioned.
+      expect(wrapper.find('[data-testid="legacy-max-hint"]').exists()).toBe(false);
+      expect(boxesOf(wrapper).slice(5).some((box) => box.attributes('disabled') !== undefined)).toBe(false);
+
+      await boxesOf(wrapper)[5]!.setValue(true);
+
+      expect(boxesOf(wrapper).slice(0, 6).every(isChecked)).toBe(true);
+      // The seventh and eighth cannot be picked; the picked ones stay switchable.
+      expect(boxesOf(wrapper).slice(6).every((box) => box.attributes('disabled') !== undefined)).toBe(true);
+      expect(boxesOf(wrapper).slice(0, 6).every((box) => box.attributes('disabled') === undefined)).toBe(true);
+      expect(wrapper.get('[data-testid="legacy-max-hint"]').text()).toBe('Up to 6 items per transaction');
+
+      await boxesOf(wrapper)[0]!.setValue(false);
+      expect(boxesOf(wrapper).slice(6).every((box) => box.attributes('disabled') === undefined)).toBe(true);
+      expect(wrapper.find('[data-testid="legacy-max-hint"]').exists()).toBe(false);
+    });
+
+    it('caps selection at 10 for legacy_v3 items', async () => {
+      // Twelve v3 items with a v2 one between them: only the v3 count against the v3 cap.
+      listings.items.value = [...Array.from({ length: 6 }, (_, index) => item(index + 1)), v2(50), ...Array.from({ length: 6 }, (_, index) => item(index + 7))];
+      const wrapper = render();
+      const v3Boxes = () => boxesOf(wrapper).filter((_, index) => index !== 6);
+
+      for (const box of v3Boxes().slice(0, 10)) await box.setValue(true);
+
+      expect(v3Boxes().slice(0, 10).every(isChecked)).toBe(true);
+      expect(v3Boxes().slice(10).every((box) => box.attributes('disabled') !== undefined)).toBe(true);
+      expect(wrapper.get('[data-testid="legacy-max-hint"]').text()).toBe('Up to 10 items per transaction');
+    });
+
+    it('does not show the max hint when the selection filled the cap but nothing more of that contract is left', async () => {
+      // Six v2 items fill the v2 cap exactly; the twelve v3 items are another transaction's business.
+      listings.items.value = [...Array.from({ length: 6 }, (_, index) => v2(index + 1)), ...Array.from({ length: 12 }, (_, index) => item(index + 20))];
+      const wrapper = render();
+
+      for (const box of boxesOf(wrapper).slice(0, 6)) await box.setValue(true);
+
+      expect(boxesOf(wrapper).slice(0, 6).every(isChecked)).toBe(true);
+      expect(wrapper.find('[data-testid="legacy-max-hint"]').exists()).toBe(false);
+      // The other version is still said to go separately.
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(true);
+    });
+
+    it('shows both hints when the cap is hit and the other contract is listed too', async () => {
+      listings.items.value = [...Array.from({ length: 7 }, (_, index) => v2(index + 1)), item(40)];
+      const wrapper = render();
+
+      for (const box of boxesOf(wrapper).slice(0, 6)) await box.setValue(true);
+
+      expect(wrapper.find('[data-testid="legacy-max-hint"]').text()).toBe('Up to 6 items per transaction');
+      expect(wrapper.find('[data-testid="legacy-version-hint"]').exists()).toBe(true);
+    });
+
+    it('emits only the capped, same-contract refs in list order', async () => {
+      const items = [item(1), v2(2), item(3), v2(4), item(5)];
+      listings.items.value = items;
+      const wrapper = render();
+
+      await boxesOf(wrapper)[4]!.setValue(true);
+      await boxesOf(wrapper)[0]!.setValue(true);
+      await boxesOf(wrapper)[2]!.setValue(true);
+      await wrapper.get('[data-testid="legacy-get-back"]').trigger('click');
+
+      expect(wrapper.emitted('get-back')).toEqual([[[legacyRef(items[0]!), legacyRef(items[2]!), legacyRef(items[4]!)]]]);
+    });
   });
 });
