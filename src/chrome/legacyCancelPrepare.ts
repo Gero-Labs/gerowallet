@@ -37,7 +37,14 @@ export type LegacyCancelPrepareErrorCode =
   | 'INVALID_REQUEST'
   | 'WALLET_UNSUPPORTED'
   | 'NETWORK_UNSUPPORTED'
+  /** The lookup returned the ref under an owner that is not one of the wallet's keys. */
   | 'NOT_OWNED'
+  /**
+   * The lookup no longer returns the ref: it asks only about the wallet's own keys and Nexus
+   * answers only UTxOs still unspent, so the item was spent since the list was read. The same
+   * code Nexus's builder answers for it.
+   */
+  | 'LISTING_NOT_FOUND'
   /** The refs span both contracts: legacy_v2 cannot be cancelled with a legacy_v3 input in the same transaction. */
   | 'MIXED_CONTRACTS'
   /** More refs than one transaction takes at their contract (legacyCancelMax). */
@@ -101,9 +108,15 @@ export async function prepareLegacyCancel(request: unknown, env: LegacyCancelPre
   }
 
   // OX Agent: Authorization prevented by looking the refs up under the wallet's own key hashes and refusing any ref whose owner is not one of them
-  const items = await lookUpOwnItems(env, own.keyHashes);
-  for (const ref of refs) {
-    if (!items.has(ref)) throw new LegacyCancelPrepareError('NOT_OWNED', 'One of these listings does not belong to this wallet');
+  const { items, foreign } = await lookUpOwnItems(env, own.keyHashes);
+  if (refs.some((ref) => foreign.has(ref))) {
+    throw new LegacyCancelPrepareError('NOT_OWNED', 'One of these listings does not belong to this wallet');
+  }
+  // Asked about the wallet's own keys, Nexus returns every one of their UTxOs still unspent:
+  // a ref it no longer returns was spent since the list was read (sold, or cancelled elsewhere).
+  // OX Agent: Authorization prevented by failing closed on any ref the wallet's own lookup did not return
+  if (refs.some((ref) => !items.has(ref))) {
+    throw new LegacyCancelPrepareError('LISTING_NOT_FOUND', 'One of these items is no longer locked');
   }
   assertOneContractWithinCap(refs, items);
 
@@ -196,9 +209,13 @@ function assertOneContractWithinCap(refs: readonly string[], items: ReadonlyMap<
 /**
  * The wallet's legacy UTxOs by `txHash#index`: what Nexus lists for the wallet's key hashes,
  * minus anything whose owner is not one of them (Nexus is asked about the wallet's keys, so
- * another owner in its answer is a fault, not an item to cancel).
+ * another owner in its answer is a fault, not an item to cancel). Those are kept apart in
+ * `foreign`, so a ref among them is refused as not the wallet's rather than as gone.
  */
-async function lookUpOwnItems(env: LegacyCancelPrepareEnv, keyHashes: ReadonlySet<string>): Promise<Map<string, LegacyListingItem>> {
+async function lookUpOwnItems(
+  env: LegacyCancelPrepareEnv,
+  keyHashes: ReadonlySet<string>,
+): Promise<{ items: Map<string, LegacyListingItem>; foreign: Set<string> }> {
   let listed: LegacyListingItem[];
   try {
     listed = await env.lookup([...keyHashes], env.network);
@@ -207,10 +224,13 @@ async function lookUpOwnItems(env: LegacyCancelPrepareEnv, keyHashes: ReadonlySe
     throw new LegacyCancelPrepareError(nexusErrorCode(e) ?? 'BUILD_FAILED', message);
   }
   const items = new Map<string, LegacyListingItem>();
+  const foreign = new Set<string>();
   for (const item of Array.isArray(listed) ? listed : []) {
-    if (keyHashes.has(item?.ownerPkh)) items.set(legacyRef(item), item);
+    if (!item || typeof item !== 'object') continue;
+    if (keyHashes.has(item.ownerPkh)) items.set(legacyRef(item), item);
+    else foreign.add(legacyRef(item));
   }
-  return items;
+  return { items, foreign };
 }
 
 /** Whether an address's payment credential is a key (an enterprise or base address of a key), not a script. */

@@ -192,6 +192,16 @@ describe('the LEGACY_LISTING_PREPARE_CANCEL handler', () => {
     expect(replyData(sendResponse)).toEqual({ success: false, error: 'Listing already spent', errorCode: 'LISTING_NOT_FOUND' });
   });
 
+  it('answers LISTING_NOT_FOUND when the worker\'s own lookup no longer returns a ref, and asks Nexus to build nothing', async () => {
+    // The real prepareLegacyCancel: the item was spent between the list and the click.
+    const { run, sendResponse, deps } = setup({ lookup: vi.fn().mockResolvedValue([]) });
+    await run();
+    expect(sendResponse).toHaveBeenCalledTimes(1);
+    expect(replyData(sendResponse)).toMatchObject({ success: false, errorCode: 'LISTING_NOT_FOUND' });
+    expect(deps.lookup).toHaveBeenCalledTimes(1);
+    expect(deps.build).not.toHaveBeenCalled();
+  });
+
   it('answers anything unexpected BUILD_FAILED, still exactly once', async () => {
     const { run, sendResponse } = setup({ getState: vi.fn(() => { throw new Error('store not ready'); }) });
     await run();

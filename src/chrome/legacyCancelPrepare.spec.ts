@@ -304,8 +304,8 @@ describe('prepareLegacyCancel', () => {
       const e = env();
       expect((await refusal(prepareLegacyCancel({ refs: refs(LEGACY_CANCEL_MAX + 1) }, e))).code).toBe('INVALID_REQUEST');
       neverCalled(e);
-      // Ten distinct refs get past validation; the wallet then does not own them.
-      expect((await refusal(prepareLegacyCancel({ refs: refs(LEGACY_CANCEL_MAX) }, env()))).code).toBe('NOT_OWNED');
+      // Ten distinct refs get past validation; the wallet's lookup then finds none of them.
+      expect((await refusal(prepareLegacyCancel({ refs: refs(LEGACY_CANCEL_MAX) }, env()))).code).toBe('LISTING_NOT_FOUND');
     });
   });
 
@@ -407,9 +407,16 @@ describe('prepareLegacyCancel', () => {
       expect(e.build).not.toHaveBeenCalled();
     });
 
-    it('still says NOT_OWNED first when a ref is not the wallet\'s', async () => {
+    it('still says LISTING_NOT_FOUND first when a ref is gone', async () => {
       const v2 = stuck('legacy_v2', 7);
       const e = env({ lookup: vi.fn().mockResolvedValue(v2.items.slice(0, 6)) });
+      expect((await refusal(prepareLegacyCancel({ refs: v2.refs }, e))).code).toBe('LISTING_NOT_FOUND');
+      expect(e.build).not.toHaveBeenCalled();
+    });
+
+    it('still says NOT_OWNED first when a ref is someone else\'s', async () => {
+      const v2 = stuck('legacy_v2', 7);
+      const e = env({ lookup: vi.fn().mockResolvedValue([...v2.items.slice(0, 6), { ...v2.items[6], ownerPkh: '77'.repeat(28) }]) });
       expect((await refusal(prepareLegacyCancel({ refs: v2.refs }, e))).code).toBe('NOT_OWNED');
       expect(e.build).not.toHaveBeenCalled();
     });
@@ -479,9 +486,20 @@ describe('prepareLegacyCancel', () => {
   });
 
   describe('ownership', () => {
-    it('refuses a ref the lookup does not find', async () => {
+    it('answers a ref the lookup no longer returns LISTING_NOT_FOUND: it was spent since the list was read', async () => {
+      // The lookup asks only about the wallet's own keys and returns only unspent UTxOs, so a
+      // ref missing from it is gone (sold, or cancelled from another device), not someone else's.
       const e = env({ lookup: vi.fn().mockResolvedValue([OTHER_LISTING]) });
-      expect((await refusal(prepareLegacyCancel(REQUEST, e))).code).toBe('NOT_OWNED');
+      const error = await refusal(prepareLegacyCancel(REQUEST, e));
+      expect(error.code).toBe('LISTING_NOT_FOUND');
+      expect(e.lookup).toHaveBeenCalledTimes(1);
+      expect(e.build).not.toHaveBeenCalled();
+      expect(verifyLegacyCancel).not.toHaveBeenCalled();
+    });
+
+    it('answers LISTING_NOT_FOUND when the lookup returns nothing at all', async () => {
+      const e = env({ lookup: vi.fn().mockResolvedValue([]) });
+      expect((await refusal(prepareLegacyCancel(REQUEST, e))).code).toBe('LISTING_NOT_FOUND');
       expect(e.build).not.toHaveBeenCalled();
     });
 
@@ -493,9 +511,24 @@ describe('prepareLegacyCancel', () => {
     });
 
     it('refuses the whole request when only one of its refs is not the wallet\'s', async () => {
-      const e = env({ lookup: vi.fn().mockResolvedValue([LISTING]) });
+      const e = env({ lookup: vi.fn().mockResolvedValue([LISTING, { ...OTHER_LISTING, ownerPkh: '77'.repeat(28) }]) });
       expect((await refusal(prepareLegacyCancel({ refs: [REF, OTHER_REF] }, e))).code).toBe('NOT_OWNED');
       expect(e.build).not.toHaveBeenCalled();
+    });
+
+    it('refuses the whole request when only one of its refs is gone', async () => {
+      const e = env({ lookup: vi.fn().mockResolvedValue([LISTING]) });
+      expect((await refusal(prepareLegacyCancel({ refs: [REF, OTHER_REF] }, e))).code).toBe('LISTING_NOT_FOUND');
+      expect(e.build).not.toHaveBeenCalled();
+    });
+
+    it('says NOT_OWNED rather than LISTING_NOT_FOUND when one ref is gone and another is someone else\'s', async () => {
+      const someoneElses: LegacyListingItem = { ...OTHER_LISTING, ownerPkh: '77'.repeat(28) };
+      for (const refs of [[REF, OTHER_REF], [OTHER_REF, REF]]) {
+        const e = env({ lookup: vi.fn().mockResolvedValue([someoneElses]) });
+        expect((await refusal(prepareLegacyCancel({ refs }, e))).code).toBe('NOT_OWNED');
+        expect(e.build).not.toHaveBeenCalled();
+      }
     });
 
     it('treats an item owned by another of the wallet\'s keys as owned', async () => {

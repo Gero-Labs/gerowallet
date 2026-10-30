@@ -10,8 +10,9 @@ import type { LegacyCancelSummary } from '@/chrome/legacyCancelVerify';
  * cancel, verifies the CBOR and answers `{ success, result: { txCbor, txId, summary } }` or
  * `{ success: false, errorCode }`. `failure.code` is then that errorCode: one of the
  * worker's (NOT_OWNED, VERIFY_FAILED, WALLET_UNSUPPORTED, NETWORK_UNSUPPORTED, …) or a Nexus
- * 422 code it passed through (LISTING_NOT_FOUND when an item was spent since the list was
- * read, NOT_LEGACY_LISTING, EVALUATION_FAILED, …).
+ * 422 code it passed through (NOT_LEGACY_LISTING, EVALUATION_FAILED, …). LISTING_NOT_FOUND
+ * means an item was spent since the list was read, whether the worker's own lookup or
+ * Nexus's builder found it gone.
  *
  * Signing and submitting is the shared usePreparedTxFlow: the CBOR is signed and submitted
  * exactly as the worker returned it, never re-encoded, and collateral Nexus lent
