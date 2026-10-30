@@ -260,7 +260,7 @@
               >
                 <template v-slot:activator="{ props: activatorProps }">
                   <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || !showSolada || (!isApex && hasCustomColumns)" dot color="primary" overlap>
                       <v-icon size="small">mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
@@ -284,7 +284,18 @@
                         </v-icon>
                       </div>
                       <v-list-item-title style="font-size: 13px;">
-                        <v-icon size="x-small" color="#A3E635" class="mr-1">mdi-snake</v-icon>{{ $t('market.snekfun') }}
+                        <v-icon size="x-small" color="#A3E635" class="mr-1" :icon="LAUNCHPADS.snekfun.icon" />{{ $t(LAUNCHPADS.snekfun.labelKey) }}
+                      </v-list-item-title>
+                    </v-list-item>
+                    <!-- Solada tokens (curve-stage and graduated): same contract as snek.fun -->
+                    <v-list-item v-if="activeView !== 'collectibles'" @click="showSolada = !showSolada">
+                      <div class="mr-2 g-list-action">
+                        <v-icon size="small" :color="showSolada ? 'primary' : ''">
+                          {{ showSolada ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </div>
+                      <v-list-item-title style="font-size: 13px;">
+                        <v-icon size="x-small" color="var(--g-info)" class="mr-1" :icon="LAUNCHPADS.solada.icon" />{{ $t(LAUNCHPADS.solada.labelKey) }}
                       </v-list-item-title>
                     </v-list-item>
 
@@ -398,6 +409,7 @@ import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
+import { LAUNCHPADS } from '@/modules/market/utils/launchpads';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { useColumnPreferences, type ColumnKey } from '@/modules/market/composables/useColumnPreferences';
@@ -445,6 +457,7 @@ const { openBuyDialog, openReceiveDialog, openSwapDialog, openDialog } = useQuic
 const {
   allTokens,
   snekTokens,
+  soladaTokens,
   loading: marketLoading,
   wsConnected: marketWsConnected,
 } = useMarketData();
@@ -579,6 +592,8 @@ const verifiedOnly = ref(true);
 const verifiedFilterActive = computed(() => verifiedOnly.value && isMainnetCardano.value);
 // Graduated snek.fun tokens shown inline in the market list (toggle, default on)
 const showSnekfun = ref(true);
+// Same for Solada; independent of the snek.fun toggle.
+const showSolada = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
 type NftCollection = NonNullable<InstanceType<typeof TokensDialog>['$props']['modalData']>;
 const nftDialogData = ref<NftCollection | null>(null);
@@ -787,6 +802,13 @@ const displayedTokens = computed(() => {
       } else {
         tokens = tokens.filter(t => !t.isSnekFun);
       }
+      // Solada: same shape (graduates flagged isSolada in the main list, curve-stage
+      // tokens in soladaTokens), under its own toggle.
+      if (showSolada.value) {
+        tokens = [...tokens, ...soladaTokens.value];
+      } else {
+        tokens = tokens.filter(t => !t.isSolada);
+      }
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
@@ -811,7 +833,7 @@ const displayedTokens = computed(() => {
   }
 
   // Apply the verified filter — mainnet Cardano only (verifiedFilterActive),
-  // and NEVER strip snek.fun tokens (bonding-curve tokens are inherently
+  // and NEVER strip snek.fun or Solada tokens (bonding-curve tokens are inherently
   // unverified) or apply it on the snek.fun tab itself. hideScam used to
   // duplicate this exact predicate (dead weight left over from the Xerberus
   // scam-score removal) and off-mainnet chains had no registry to verify
@@ -849,11 +871,11 @@ function applySearchFilter(tokens: MarketToken[]): MarketToken[] {
 
 // Shared by displayedTokens and hiddenByFilterCount — both must agree on which
 // rows the verified filter keeps, or the hidden count drifts from the table.
-// CIP-113 tokens are exempt for the same reason snek.fun ones are: legitimate holdings that
+// CIP-113 tokens are exempt for the same reason launchpad (snek.fun, Solada) ones are: legitimate holdings that
 // are inherently unverified. Only registered ones, though: anything can be sent to the PLB
 // address, and an unregistered token there is an ordinary unverified one (issue 1267).
 const passesVerifiedFilter = (tok: MarketToken): boolean =>
-  tok.verified || tok.isSnekFun || (!!tok.isProgrammable && tok.cip113Registered === true);
+  tok.verified || tok.isSnekFun || tok.isSolada || (!!tok.isProgrammable && tok.cip113Registered === true);
 
 // Rows the verified filter removed from the holdings view — surfaced under the
 // table so a real balance never silently disappears (issue 1003).

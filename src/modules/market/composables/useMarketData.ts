@@ -8,6 +8,7 @@ import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import { isRealFiAsset } from '@/modules/realfi/assets';
+import { launchpadOf } from '@/modules/market/utils/launchpads';
 
 export interface MarketToken {
   unit: string;
@@ -48,12 +49,16 @@ export interface MarketToken {
   // Additional fields from API
   organicVolume24h?: number;
   dex?: string;
+  // Raw feed origin (TokenPriceResponse.source), e.g. 'SOLADA_GRADUATE'.
+  source?: string | null;
   avgCostBasis?: number | null;
   totalPnl?: number | null;
   realizedPnl?: number | null;
   unrealizedPnl?: number | null;
   isNative?: boolean;
   isSnekFun?: boolean;
+  // Same as isSnekFun, for Solada (solada.fun). Carry both wherever one travels.
+  isSolada?: boolean;
   // Visible but not sendable. Carry it wherever isSnekFun travels — missing here
   // means the verified-only filter silently strips the row.
   isProgrammable?: boolean;
@@ -89,6 +94,7 @@ const allTokens: Ref<MarketToken[]> = ref([]);
 // Read-only view of the module-level market cache, for passive watchers (see below).
 export const marketTokensRef: Readonly<Ref<MarketToken[]>> = allTokens;
 const snekTokens: Ref<MarketToken[]> = ref([]);
+const soladaTokens: Ref<MarketToken[]> = ref([]);
 const adaData: Ref<AdaMarketData | null> = ref(null);
 const loading = ref(false);
 const error: Ref<string | null> = ref(null);
@@ -128,6 +134,8 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
   // placeholder-supply market caps (isPlausibleMarketCapAda) and returns null for them, so
   // we surface that null as-is ('—'). the token registry is metadata-only — no numeric mcap fallback.
   const mcap = apiToken.marketCap ?? null;
+
+  const launchpad = launchpadOf(apiToken.source, apiToken.dex);
 
   // Market rows are built from the price feed, which knows nothing about CIP-113. The
   // wallet does: a unit held at the programmable-logic-base address is one Gero refuses
@@ -176,11 +184,14 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     decimals: apiToken.decimals ?? dhToken?.decimals ?? 0,
     organicVolume24h: apiToken.organicVolume24h ?? 0,
     dex: apiToken.dex ?? undefined,
-    // Match both the pre-graduation feed (source 'SNEKFUN') and graduated tokens
-    // that have moved to the bulk /prices feed (source 'SNEKFUN_GRADUATE'). Without
-    // the prefix match, graduated snek tokens (which are unverified) get stripped by
-    // the verified/scam filter and only their stale bonding-curve snapshot survives.
-    isSnekFun: String(apiToken.source ?? '').startsWith('SNEKFUN') || apiToken.dex === 'SNEKFUN',
+    source: apiToken.source ?? null,
+    // Match both the pre-graduation feed (source 'SNEKFUN' / 'SOLADA') and graduated
+    // tokens that have moved to the bulk /prices feed (source '<MARKER>_GRADUATE').
+    // Without the prefix match (launchpadOf), graduated launchpad tokens (which are
+    // unverified) get stripped by the verified/scam filter and only their stale
+    // bonding-curve snapshot survives.
+    isSnekFun: launchpad === 'snekfun',
+    isSolada: launchpad === 'solada',
   };
 }
 
@@ -313,8 +324,8 @@ async function fetchAllTokens(silent = false): Promise<void> {
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
     allTokens.value = [nativeToken, ...filtered];
 
-    // snek.fun bonding-curve tokens (separate list, shown under the snek.fun
-    // filter). Fire-and-forget so it never blocks the main table.
+    // snek.fun and Solada bonding-curve tokens (separate lists, shown under their
+    // launchpad filters). Fire-and-forget so they never block the main table.
     if (!isApex) {
       marketApi.getSnekFunTokens()
         .then(snekRaw => {
@@ -330,6 +341,17 @@ async function fetchAllTokens(silent = false): Promise<void> {
             .filter(t => !existing.has(t.unit));
         })
         .catch(() => { /* snek feed is optional — ignore failures */ });
+
+      // Solada bonding-curve tokens: same contract as the snek feed above (its
+      // graduates, source SOLADA_GRADUATE, are already in the bulk list).
+      marketApi.getSoladaTokens()
+        .then(soladaRaw => {
+          const existing = new Set(allTokens.value.map(t => t.unit));
+          soladaTokens.value = (soladaRaw || [])
+            .map(tp => enrichWithStores(tp, sparklineMap))
+            .filter(t => !existing.has(t.unit));
+        })
+        .catch(() => { /* Solada feed is optional — ignore failures */ });
     }
 
     // Set adaData ref (used for native currency price display)
@@ -634,6 +656,7 @@ export function useMarketData() {
   return {
     allTokens,
     snekTokens,
+    soladaTokens,
     adaData,
     trendingTokens,
     topGainers,

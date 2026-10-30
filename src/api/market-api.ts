@@ -18,6 +18,9 @@ export { axiosInstance as marketAxiosInstance };
 export interface TokenPriceResponse {
   assetId: string;
   dex: string | null;
+  // Where the row comes from. Known launchpad values: 'SNEKFUN' / 'SOLADA' (bonding-curve
+  // tokens, own feeds) and 'SNEKFUN_GRADUATE' / 'SOLADA_GRADUATE' (graduated to a DEX pool,
+  // listed in the bulk price list, unverified). See modules/market/utils/launchpads.ts.
   source?: string | null;
   assetNameAscii: string;
   priceAda: number;
@@ -342,6 +345,19 @@ export default {
   async getSnekFunTokens(): Promise<TokenPriceResponse[]> {
     const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
     const { data } = await axios.get(`${base}/api/v1/market/snekfun`, { timeout: 15000 });
+    return data;
+  },
+
+  /**
+   * Solada (solada.fun) bonding-curve tokens (source/dex "SOLADA") plus its graduates
+   * (source "SOLADA_GRADUATE"), sorted by market cap. Same off-chain-feed shape as
+   * snek.fun and, like it, read from the public market backend directly.
+   * `limit` 0..500, 0 = all (capped at 500 server-side); omitted = server default.
+   */
+  async getSoladaTokens(limit?: number): Promise<TokenPriceResponse[]> {
+    const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
+    const params = limit === undefined ? undefined : { limit };
+    const { data } = await axios.get(`${base}/api/v1/market/solada`, { params, timeout: 15000 });
     return data;
   },
 
