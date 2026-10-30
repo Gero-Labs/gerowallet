@@ -6027,4 +6027,8 @@ export default {
   'lightning.resolveFailed': 'Auflösung fehlgeschlagen',
   'lightning.invoiceFailed': 'Rechnung konnte nicht abgerufen werden',
   'common.copy': 'Kopieren',
+  'bitcoin.receiveAddress': 'Empfangsadresse',
+  'bitcoin.changeAddress': 'Wechselgeldadresse',
+  'transactions.sortLargestFirst': 'Größte zuerst',
+  'transactions.sortSmallestFirst': 'Kleinste zuerst',
 }

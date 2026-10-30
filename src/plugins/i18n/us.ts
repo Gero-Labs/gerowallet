@@ -6134,4 +6134,8 @@ export default {
   'lightning.resolveFailed': 'Failed to resolve',
   'lightning.invoiceFailed': 'Failed to get invoice',
   'common.copy': 'Copy',
+  'bitcoin.receiveAddress': 'Receive address',
+  'bitcoin.changeAddress': 'Change address',
+  'transactions.sortLargestFirst': 'Largest first',
+  'transactions.sortSmallestFirst': 'Smallest first',
 }

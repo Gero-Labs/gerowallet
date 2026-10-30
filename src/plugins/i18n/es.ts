@@ -5903,4 +5903,8 @@ export default {
   'lightning.resolveFailed': 'No se pudo resolver',
   'lightning.invoiceFailed': 'No se pudo obtener la factura',
   'common.copy': 'Copiar',
+  'bitcoin.receiveAddress': 'Dirección de recepción',
+  'bitcoin.changeAddress': 'Dirección de cambio',
+  'transactions.sortLargestFirst': 'Mayor primero',
+  'transactions.sortSmallestFirst': 'Menor primero',
 }
