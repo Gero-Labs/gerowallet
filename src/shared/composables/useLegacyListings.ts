@@ -61,17 +61,25 @@ const resolvedUnits = new Set<string>();
  * submitted but not yet confirmed leaves its inputs unspent, so the server keeps listing them
  * for the length of the mempool window; the item is hidden for that long and no longer, so a
  * cancel that never confirms (dropped, expired, rolled back) puts a still-stuck item back where
- * the user can retry it.
+ * the user can retry it. There is no timer: the window is checked when an answer is applied, so
+ * an expired item shows again with the first answer after it (the next refresh), not by itself.
  */
 export const FORGET_HIDE_MS = 15 * 60 * 1000;
 
+/** A cancelled ref: when it was forgotten, and the owner of the output when the list showed it. */
+interface ForgottenRef {
+  at: number;
+  /** Undefined when the list did not hold the ref at the time; such an entry only ever expires. */
+  ownerPkh: string | undefined;
+}
+
 /**
- * Refs the wallet has cancelled, with when each was forgotten. The by-owner lookup re-checks that
- * a row is unspent when it answers, so a confirmed cancel leaves the answer by itself; an entry
- * is therefore dropped as soon as an answer no longer contains its ref, or once FORGET_HIDE_MS
+ * Refs the wallet has cancelled. The by-owner lookup re-checks that a row is unspent when it
+ * answers, so a confirmed cancel leaves the answer by itself; an entry is therefore dropped as
+ * soon as an answer that asked about the ref's owner no longer contains it, or once FORGET_HIDE_MS
  * has passed, whichever comes first. It hides a ref only while the server still returns it.
  */
-const forgotten = new Map<string, number>();
+const forgotten = new Map<string, ForgottenRef>();
 
 /** Bumped whenever the list is emptied, so an answer that started before it is not applied after it. */
 let epoch = 0;
@@ -150,16 +158,20 @@ async function resolveUnits(units: string[], target: LookupTarget): Promise<void
 }
 
 /**
- * What a fresh answer shows once the forgotten refs are settled against it: a ref it omits is
- * confirmed spent and leaves the set (so it shows again if a rollback brings it back), a ref
- * older than FORGET_HIDE_MS leaves the set whatever the answer says, and the rest stay hidden.
+ * What an answer shows once the forgotten refs are settled against it. A ref older than
+ * FORGET_HIDE_MS leaves the set whatever the answer says. A ref the answer omits leaves the set
+ * only if the answer asked about the ref's owner (`owners`): then it is confirmed spent, and shows
+ * again if a rollback brings it back. An answer for other owners (another wallet, or another key
+ * set of this one) says nothing about it, so its entry stays. The rest stay hidden.
  */
-function withoutForgotten(listed: LegacyListingItem[]): LegacyListingItem[] {
+function withoutForgotten(listed: LegacyListingItem[], owners: readonly string[]): LegacyListingItem[] {
   if (forgotten.size === 0) return listed;
   const now = Date.now();
   const answered = new Set(listed.map(legacyRef));
-  for (const [ref, forgottenAt] of forgotten) {
-    if (now - forgottenAt >= FORGET_HIDE_MS || !answered.has(ref)) forgotten.delete(ref);
+  const asked = new Set(owners);
+  for (const [ref, entry] of forgotten) {
+    const confirmedSpent = !answered.has(ref) && entry.ownerPkh !== undefined && asked.has(entry.ownerPkh);
+    if (now - entry.at >= FORGET_HIDE_MS || confirmedSpent) forgotten.delete(ref);
   }
   return listed.filter((item) => !forgotten.has(legacyRef(item)));
 }
@@ -169,7 +181,7 @@ async function load(lookup: LookupTarget, startedAt: number): Promise<void> {
     const listed = await fetchLegacyListings(lookup.owners, lookup.network);
     if (!isCurrent(lookup.key, startedAt)) return;
 
-    const visible = withoutForgotten(listed);
+    const visible = withoutForgotten(listed, lookup.owners);
     const units = [...new Set(visible.flatMap((item) => item.assets.map((asset) => asset.unit)))];
     // Every unit has a name before its item appears; the metadata lookup then improves it.
     let seeded = false;
@@ -219,7 +231,10 @@ function refresh(): Promise<void> {
 function forget(refs: string[]): void {
   if (refs.length === 0) return;
   const now = Date.now();
-  for (const ref of refs) forgotten.set(ref, now);
+  for (const ref of refs) {
+    const shown = items.value.find((item) => legacyRef(item) === ref);
+    forgotten.set(ref, { at: now, ownerPkh: shown?.ownerPkh ?? forgotten.get(ref)?.ownerPkh });
+  }
   const gone = new Set(refs);
   items.value = items.value.filter((item) => !gone.has(legacyRef(item)));
 }

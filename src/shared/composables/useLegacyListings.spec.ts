@@ -464,6 +464,71 @@ describe('useLegacyListings', () => {
       expect(items.value.map(refOf)).toEqual([refOf(one), refOf(two)]);
     });
 
+    it('keeps it hidden when another wallet\'s answer omits it and the user comes back inside the window', async () => {
+      const [one, two] = [listing(1), listing(2)];
+      const theirs = listing(3, 'Squid B', { ownerPkh: OTHER_PAYMENT });
+      fetchListings.mockImplementation(async (owners: string[]) => (owners.includes(PAYMENT) ? [one, two] : [theirs]));
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget } = useLegacyListings();
+      await settle();
+
+      forget([refOf(one)]);
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+
+      // Wallet B's answer cannot contain A's output, which says nothing about whether it was spent.
+      walletState.keys = null;
+      loginTo(2, { payment: [OTHER_PAYMENT] });
+      await settle();
+      expect(items.value.map(refOf)).toEqual([refOf(theirs)]);
+
+      // Back on A with the cancel still unconfirmed: the server lists the output again.
+      vi.advanceTimersByTime(60_000);
+      walletState.keys = null;
+      loginTo(1, { payment: [PAYMENT] });
+      await settle();
+
+      expect(fetchListings).toHaveBeenCalledTimes(3);
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+    });
+
+    it('keeps it hidden when an answer for another key set of the same wallet omits it', async () => {
+      const [one, two] = [listing(1), listing(2)];
+      fetchListings.mockImplementation(async (owners: string[]) => (owners.includes(PAYMENT) ? [one, two] : []));
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget } = useLegacyListings();
+      await settle();
+
+      forget([refOf(one)]);
+      loginTo(1, { payment: [OTHER_PAYMENT] });
+      await settle();
+      expect(items.value).toEqual([]);
+
+      loginTo(1, { payment: [PAYMENT] });
+      await settle();
+
+      expect(fetchListings).toHaveBeenCalledTimes(3);
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+    });
+
+    it('lets only the window end the hiding of a ref whose owner the list never showed', async () => {
+      const [one, two] = [listing(1), listing(2)];
+      fetchListings.mockResolvedValue([two]);
+      loginTo(1, { payment: [PAYMENT] });
+      const { items, forget, refresh } = useLegacyListings();
+      await settle();
+
+      // Not on the list when forgotten, so there is no owner to match an answer against.
+      forget([refOf(one)]);
+      await refresh();
+      fetchListings.mockResolvedValue([one, two]);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(two)]);
+
+      vi.advanceTimersByTime(FORGET_HIDE_MS);
+      await refresh();
+      expect(items.value.map(refOf)).toEqual([refOf(one), refOf(two)]);
+    });
+
     it('leaves a ref hidden when a lookup fails, since a failure says nothing about it', async () => {
       const [one, two] = [listing(1), listing(2)];
       fetchListings.mockResolvedValue([one, two]);

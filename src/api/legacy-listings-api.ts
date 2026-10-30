@@ -6,8 +6,9 @@ import type { LegacyContract } from '@/utils/legacyMarketScripts';
  * Finds the wallet's listings and offers still sitting at the two legacy marketplace
  * contracts, through gero-backend's Nexus proxy (VITE_NEXUS_URL -> <backend>/api/nexus), which
  * injects the Nexus API key server-side. Nexus answers from its hourly index of the
- * contracts, so an item can be spent between the answer and the click: the cancel build is
- * what settles that (422 LISTING_NOT_FOUND), not this list.
+ * contracts and re-checks each row is still unspent at query time. An item can still be spent
+ * between the answer and the click: the cancel build is what settles that (422
+ * LISTING_NOT_FOUND), not this list.
  */
 
 export interface LegacyListingItem {
