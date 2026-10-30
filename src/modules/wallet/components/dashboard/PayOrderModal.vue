@@ -166,7 +166,9 @@ async function prepareFeeTx(): Promise<Cardano.Tx> {
   return Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
 }
 
-function onSubmitted(): void {
+function onSubmitted(txId: string): void {
+  // Remembered so the dashboard never offers to pay this fee again while Zione confirms it.
+  cardStore.rememberFeePayment(props.orderUuid, txId).catch(() => undefined);
   done.value = true;
   emit('success');
 }

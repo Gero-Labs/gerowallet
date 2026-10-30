@@ -609,6 +609,9 @@ export default {
   'card.details.rejectedReason': 'Zione said: “{reason}”',
   'card.details.emailSupport': 'Email Zione support',
   'card.details.supportSubject': 'Gero Card: please update my saved address',
+  'card.details.unavailableTitle': 'Zione needs more of your details',
+  'card.details.unavailableBody': 'Zione is missing some of your cardholder details, such as your home address, and they cannot be added in the wallet right now. Email Zione support to add them, then place your order again.',
+  'card.details.unavailableSubject': 'Gero Card: please add my missing cardholder details',
   'card.enterNewAddress': 'Enter new address',
   'card.provideNewShippingAddress': 'Provide a different shipping address',
   'card.enterStreetAddress': 'Enter street address',
@@ -808,6 +811,10 @@ export default {
   'card.trackerAutoRefresh': 'This page checks for updates automatically. Your card appears here as soon as Zione issues it.',
 
   'card.trackerAwaitingPayment': 'Waiting for the delivery fee',
+  'card.trackerPaymentSent': 'Payment sent, waiting for Zione to confirm',
+  'card.feeSentBody': 'You already sent the delivery fee from this wallet. Zione still has to confirm it. Do not pay again: if this does not change within an hour, email Zione support with your transaction.',
+  'card.feeSentSubject': 'Gero Card: delivery fee paid but not confirmed',
+  'card.feeSentMailBody': 'Order {order}, payment transaction {tx}',
 
   'card.trackerDispatched': 'Dispatched',
 

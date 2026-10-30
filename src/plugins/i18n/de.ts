@@ -586,6 +586,10 @@ export default {
   'card.trackerAutoRefresh': 'Diese Seite sucht automatisch nach Neuigkeiten. Ihre Karte erscheint hier, sobald Zione sie ausgibt.',
 
   'card.trackerAwaitingPayment': 'Warten auf die Versandgebühr',
+  'card.trackerPaymentSent': 'Zahlung gesendet, Bestätigung durch Zione ausstehend',
+  'card.feeSentBody': 'Sie haben die Liefergebühr bereits aus dieser Wallet gesendet. Zione muss sie noch bestätigen. Zahlen Sie nicht erneut: Falls sich innerhalb einer Stunde nichts ändert, schreiben Sie dem Zione-Support und nennen Sie Ihre Transaktion.',
+  'card.feeSentSubject': 'Gero Card: Liefergebühr bezahlt, aber nicht bestätigt',
+  'card.feeSentMailBody': 'Bestellung {order}, Zahlungstransaktion {tx}',
 
   'card.trackerDispatched': 'Versandt',
 
@@ -915,6 +919,9 @@ export default {
   'card.details.rejectedReason': 'Meldung von Zione: „{reason}“',
   'card.details.emailSupport': 'E-Mail an den Zione-Support',
   'card.details.supportSubject': 'Gero Card: Bitte meine gespeicherte Adresse aktualisieren',
+  'card.details.unavailableTitle': 'Zione benötigt weitere Angaben',
+  'card.details.unavailableBody': 'Zione fehlen einige Ihrer Karteninhaberdaten, etwa Ihre Wohnadresse, und sie können gerade nicht in der Wallet ergänzt werden. Schreiben Sie dem Zione-Support, um sie zu ergänzen, und bestellen Sie danach erneut.',
+  'card.details.unavailableSubject': 'Gero Card: Bitte meine fehlenden Karteninhaberdaten ergänzen',
   'card.verifyingTransaction': 'Transaktion wird überprüft',
   'card.viewCardDetails': 'Kartendetails anzeigen',
   'card.viewCardDetailsSubtitle': 'Die Details Ihrer Karte anzeigen. Diese Aktion kann nicht rückgängig gemacht werden.',
