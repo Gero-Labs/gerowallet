@@ -226,6 +226,15 @@ describe('transaction titles and types', () => {
     expect(classifyTxKind(stale, ctx, now)).toBe('failed');
   });
 
+  it('keeps a Bitcoin transaction pending however long it waits in the mempool', () => {
+    const now = Date.now();
+    for (const type of ['send', 'receive', 'self']) {
+      const waiting = tx({ type, pending: true, tx_timestamp: Math.floor(now / 1000) - 3 * 24 * 3600 });
+      expect(isPendingTooLong(waiting, now)).toBe(false);
+      expect(classifyTxKind(waiting, ctx, now)).toBe('pending');
+    }
+  });
+
   it('titles Bitcoin records by their type field', () => {
     expect(buildTxTitle(tx({ type: 'self' }), ctx, t)).toBe('transactions.selfTransfer');
     expect(buildTxTitle(tx({ type: 'receive' }), ctx, t)).toBe('transactions.receivedFunds');

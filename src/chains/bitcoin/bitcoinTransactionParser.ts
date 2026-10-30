@@ -309,19 +309,3 @@ export function getTransactionStatusText(tx: UnifiedTransaction): string {
 
   return 'Confirmed';
 }
-
-/**
- * Check if transaction is pending too long (>1 hour)
- *
- * @param tx Unified transaction
- * @returns True if pending for more than 1 hour
- */
-export function isPendingTooLong(tx: UnifiedTransaction): boolean {
-  if (!tx.pending) return false;
-
-  const now = Math.floor(Date.now() / 1000);
-  const age = now - tx.tx_timestamp;
-
-  // Consider pending too long if >1 hour (3600 seconds)
-  return age > 3600;
-}
