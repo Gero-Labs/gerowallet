@@ -56,7 +56,7 @@ const SPECIAL_LETTERS: Record<string, string> = {
  */
 export function toProviderText(value: string): string {
   return value
-    .replace(/[\u0080-￿]/g, char => SPECIAL_LETTERS[char] ?? char)
+    .replace(/[\u0080-\uffff]/g, char => SPECIAL_LETTERS[char] ?? char)
     // NFKD also folds compatibility forms: º → o, ² → 2, full-width letters → ASCII.
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
@@ -73,11 +73,40 @@ export function invalidCharacters(value: string, kind: TextKind): string[] {
   return [...new Set([...value].filter(char => !pattern.test(char)))];
 }
 
-/** Picks the known fields out of a `missing_fields` response, in form order. */
+/** How long the order modal waits for the missing-details check before letting the order go on. */
+export const DETAILS_CHECK_TIMEOUT_MS = 8000;
+
+/** Other spellings Zione might use for a field, after case, `_`, `-` and spaces are dropped. */
+const FIELD_ALIASES: Record<string, CardholderField> = {
+  countrycode: 'country',
+  zip: 'zipCode',
+  postcode: 'zipCode',
+  postalcode: 'zipCode',
+  dateofbirth: 'birthDate',
+  phonenumber: 'phone',
+};
+
+/**
+ * The form field a name from Zione refers to, or null. Tolerant on purpose: the published spec
+ * has drifted from the live API before, so `zip_code`, `ZipCode` and `zipCode` all count.
+ */
+function toCardholderField(name: unknown): CardholderField | null {
+  if (typeof name !== 'string') return null;
+  const flat = name.replace(/[\s_-]/g, '').toLowerCase();
+  return CARDHOLDER_FIELDS.find(field => field.toLowerCase() === flat) ?? FIELD_ALIASES[flat] ?? null;
+}
+
+/**
+ * Picks the known fields out of a missing-fields response, in form order. Accepts the
+ * documented `missing_fields`, a `missingFields` spelling or a bare array. Fields the wallet
+ * cannot ask for are left out; the order modal then points the user to Zione support.
+ */
 export function parseMissingFields(data: unknown): CardholderField[] {
-  const listed = (data as { missing_fields?: unknown } | null)?.missing_fields;
+  const body = data as { missing_fields?: unknown; missingFields?: unknown } | null;
+  const listed = Array.isArray(data) ? data : body?.missing_fields ?? body?.missingFields;
   if (!Array.isArray(listed)) return [];
-  return CARDHOLDER_FIELDS.filter(field => listed.includes(field));
+  const found = new Set(listed.map(toCardholderField));
+  return CARDHOLDER_FIELDS.filter(field => found.has(field));
 }
 
 /** `yyyy-mm-dd` (a date input's value) as Zione's `dd.MM.yyyy`, or '' when malformed. */
@@ -119,10 +148,10 @@ export function cardholderFieldErrors(error: unknown): Partial<Record<Cardholder
   const errors = (response?.data as { errors?: unknown } | null)?.errors;
   if (response?.status !== 422 || !errors || typeof errors !== 'object') return {};
   const result: Partial<Record<CardholderField, string>> = {};
-  for (const field of CARDHOLDER_FIELDS) {
-    const messages = (errors as Record<string, unknown>)[field];
+  for (const [name, messages] of Object.entries(errors as Record<string, unknown>)) {
+    const field = toCardholderField(name);
     const first = Array.isArray(messages) ? messages.find(message => typeof message === 'string') : messages;
-    if (typeof first === 'string' && first.trim()) result[field] = first.trim();
+    if (field && !result[field] && typeof first === 'string' && first.trim()) result[field] = first.trim();
   }
   return result;
 }

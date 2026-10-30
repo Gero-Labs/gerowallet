@@ -46,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, toRefs, watch } from 'vue';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
@@ -115,7 +115,20 @@ const canConfirm = computed(() =>
   !props.disabled && !busy.value && (isSubmit.value || !isPasswordWallet.value || spendingPassword.value !== ''),
 );
 
-watch(busy, value => emit('busy', value));
+/** The last busy state the parent was told about. */
+let reportedBusy = false;
+watch(busy, value => {
+  reportedBusy = value;
+  emit('busy', value);
+});
+
+// A successful submit usually swaps this section for a done view in the same tick that
+// `loading` turns false. The parent re-renders first and removes this section, so the watcher
+// above never reports false, and a parent that blocks closing while busy keeps its Done and
+// close buttons dead. Report it on the way out instead.
+onBeforeUnmount(() => {
+  if (reportedBusy) emit('busy', false);
+});
 
 async function build(): Promise<boolean> {
   const current = captureAuthorization();

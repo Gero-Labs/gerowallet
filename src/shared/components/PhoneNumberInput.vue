@@ -9,6 +9,7 @@
       :density="(dense) ? 'compact' : 'default'"
       hide-details
       item-title="dialCode"
+      item-value="countryCode"
       style="max-width: 180px;"
       class="country-code-select"
       :disabled="disabled"

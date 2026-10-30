@@ -47,6 +47,7 @@
       :card="card"
       :view="tracker"
       :expires-at="expiresAt"
+      :sent-payment="sentPayment"
       @pay="emit('complete-payment')"
       @order-new="emit('open-order-card-flow')"
       @activated="emit('activated', $event)"
@@ -74,6 +75,7 @@ import { computed } from 'vue';
 import type { CardInfo } from '@/models/card';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { OrderTrackerView } from '@/modules/wallet/utils/cardOrderTracker';
+import type { SentFeePayment } from '@/modules/wallet/utils/cardFeePayments';
 import { adaFigure, cardMoney } from '@/modules/wallet/utils/cardFormat';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
@@ -85,6 +87,8 @@ const props = withDefaults(defineProps<{
   card?: CardInfo;
   tracker?: OrderTrackerView;
   expiresAt?: string;
+  /** A delivery fee this wallet already sent for the order, while Zione has not confirmed it. */
+  sentPayment?: SentFeePayment;
   canOrder?: boolean;
   showCardDetails?: boolean;
   detailsLoading?: boolean;
@@ -96,6 +100,7 @@ const props = withDefaults(defineProps<{
   card: undefined,
   tracker: undefined,
   expiresAt: undefined,
+  sentPayment: undefined,
   canOrder: false,
   showCardDetails: false,
   detailsLoading: false,
