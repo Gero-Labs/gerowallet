@@ -334,6 +334,10 @@ function checkCollateral(
  * Whether `address` pays a key of this wallet: its payment credential (base, enterprise or
  * pointer address) is a key hash among `ownKeyHashes`. A script credential, an address with no
  * payment credential and one that cannot be read do not.
+ *
+ * A second guard only: callers first require the exact address in `ownAddresses`, which pins the
+ * stake part. Pointer addresses are accepted on purpose (they carry a payment key credential);
+ * `cip113VerifyTransfer.ts` reads base and enterprise only because it resolves a recipient's owner.
  */
 function paysOwnKey(address: string, ownKeyHashes: ReadonlySet<string>): boolean {
   try {
