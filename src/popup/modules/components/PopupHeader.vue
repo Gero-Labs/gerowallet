@@ -17,6 +17,8 @@
         {{ $t('navigation.notAvailable') }}
       </div>
     </v-card-title>
+    <!-- WalletConnect approvals: the website above is the peer's own claim. -->
+    <WcVerifyNotice v-if="showWebsite" :verification="wcVerification" class="mx-auto mt-1" />
     <Select
       v-if="showWallet && loggedWallet"
       :model-value="loggedWallet"
@@ -37,6 +39,8 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
 import { useRoute } from 'vue-router';
+import WcVerifyNotice from '@/shared/components/WcVerifyNotice.vue';
+import { readWcVerification, wcRiskUrl } from '@/services/walletConnect/verifyContext';
 
 const { t } = useTranslation();
 
@@ -89,6 +93,13 @@ const domain = computed(() => {
   return '';
 });
 
+// Set by the background on WalletConnect approvals (`wc`, `wcOrigin` query params).
+const wcVerification = computed(() => {
+  const state = route.query['wc'];
+  const origin = route.query['wcOrigin'];
+  return readWcVerification({ state, origin: typeof origin === 'string' ? origin : undefined });
+});
+
 const websiteRiskIcon = computed(() => {
   return assets.resolveDappRisk(dappRisk.value)
 });
@@ -107,7 +118,8 @@ onMounted(async () => {
 
   queryParams.value = { website: typeof route.query['website'] === 'string' ? route.query['website'] : '', favIconUrl: typeof route.query['favIconUrl'] === 'string' ? route.query['favIconUrl'] : '' };
   try {
-    const riskString = await cardanoShieldApi.scanUrl(queryParams.value['website']);
+    // A WalletConnect peer's attested origin, not just the domain it claims.
+    const riskString = await cardanoShieldApi.scanUrl(wcRiskUrl(queryParams.value['website'], wcVerification.value));
     dappRisk.value = DappRisk[riskString as keyof typeof DappRisk] ?? DappRisk.unknown;
   } catch (e) {
     console.log(e);

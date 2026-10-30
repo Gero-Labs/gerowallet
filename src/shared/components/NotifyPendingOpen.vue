@@ -18,7 +18,7 @@
 
 <script setup lang="ts">
 // B4 (handover B7): a click on a notification about a wallet other than the open one never
-// switches by itself. The worker parks the intent in chrome.storage ('notifyPendingOpen'),
+// switches by itself. The worker parks the intent in the notify store ('notifyPendingOpen'),
 // opens the dashboard on home, and this prompt asks once the dashboard is unlocked.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -30,6 +30,7 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import type { NotifyPendingOpen } from '@/services/notify/notifyStore';
 import { routeFor } from '@/services/notify/notifyRender';
+import { onNotifyKeyChanged, readNotifyKey, removeNotifyKey, requestSettingsTabOnLoad } from '@/services/notify/notifyStorage';
 
 const KEY = 'notifyPendingOpen';
 /** A parked intent older than this is stale: the user has moved on. */
@@ -51,13 +52,12 @@ function isPending(v: unknown): v is NotifyPendingOpen {
 
 async function clear(): Promise<void> {
   pending.value = null;
-  try { await chrome.storage.local.remove(KEY); } catch { /* storage unavailable: nothing parked */ }
+  try { await removeNotifyKey(KEY); } catch { /* storage unavailable: nothing parked */ }
 }
 
 async function load(): Promise<void> {
   try {
-    const got = await chrome.storage.local.get(KEY);
-    const v = got[KEY];
+    const v = await readNotifyKey(KEY);
     if (!isPending(v)) { pending.value = null; return; }
     if (Date.now() - v.at > MAX_AGE_MS) { await clear(); return; }
     pending.value = v;
@@ -80,23 +80,19 @@ async function switchWallet(): Promise<void> {
     const res = (await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.LOGIN, data: { wallet } })) as { data?: { success?: boolean } };
     if (!res?.data?.success) return;
     const route = routeFor(p.d, p.x as Parameters<typeof routeFor>[1], true);
-    if (route.settingsTab) await chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
+    if (route.settingsTab) await requestSettingsTabOnLoad({ tab: route.settingsTab });
     if (router.currentRoute.value.fullPath !== route.dashboard) await router.push(route.dashboard).catch(() => undefined);
     await clear();
   } finally { switching.value = false; }
 }
 
-function onStorageChange(changes: Record<string, chrome.storage.StorageChange>, area: string): void {
-  if (area !== 'local' || !(KEY in changes)) return;
-  const v = changes[KEY]?.newValue;
-  pending.value = isPending(v) ? v : null;
-}
+let unsubscribe: (() => void) | null = null;
 
 onMounted(() => {
   void load();
-  chrome.storage.onChanged.addListener(onStorageChange);
+  unsubscribe = onNotifyKeyChanged(KEY, () => { void load(); });
 });
-onBeforeUnmount(() => chrome.storage.onChanged.removeListener(onStorageChange));
+onBeforeUnmount(() => unsubscribe?.());
 </script>
 
 <style scoped lang="scss">

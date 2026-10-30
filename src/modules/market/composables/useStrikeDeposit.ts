@@ -1,4 +1,5 @@
 import { ref, computed, onUnmounted } from 'vue';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { strikeUserApi } from '@/api/strike-v2.user';
@@ -278,7 +279,7 @@ export function useStrikeDeposit() {
           data: { password },
         })) as BackgroundResponse<VerifyPasswordResponse>;
         if (!passwordVerification.data.success) {
-          throw new Error('Incorrect spending password.');
+          throw new Error(passwordCheckFailure(passwordVerification, 'Incorrect spending password.'));
         }
       }
 

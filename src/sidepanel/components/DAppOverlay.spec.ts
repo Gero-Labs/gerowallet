@@ -14,6 +14,13 @@ const mocks = vi.hoisted(() => ({
   ledgerSignData: vi.fn(), knownAddresses: vi.fn(), ledgerError: vi.fn(),
 }));
 vi.mock('@/services/cip45/signingAuthorization', () => ({ validateCip45Signing: mocks.validate }));
+// bitcoinjs-lib is externalized to Node by Vitest and checks buffers against Node's
+// Buffer, while the sources get the polyfill (see bitcoinSigner.spec.ts).
+vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
+  const { createRequire } = await import('node:module');
+  const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer');
+  return { default: NodeBuffer, Buffer: NodeBuffer };
+});
 vi.mock('../composables/useDAppOverlay', async () => {
   const { ref } = await import('vue');
   const state = { isVisible: ref(true), currentRequest: ref(null), requestQueue: ref([]),
@@ -53,8 +60,11 @@ vi.mock('./KeystoneSignSheet.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./BottomSheet.vue', () => ({ default: { template: '<section><slot /><slot name="footer" /></section>' } }));
 
+import * as bitcoin from 'bitcoinjs-lib';
+import { createRequire } from 'node:module';
 import DAppOverlay from './DAppOverlay.vue';
 import WalletStore from '@/stores/walletStore';
+import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
 import { geroStore } from '@/stores/geroStore';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -343,11 +353,114 @@ describe('dApp connect: the account to connect (#1331)', () => {
   });
 });
 
+describe('a request from an embedded frame', () => {
+  const TAB_ICON = 'https://host.example/favicon.ico';
+  const ask = (embeddedIn?: string) => {
+    const base = request();
+    overlay.currentRequest.value = { ...base, payload: { ...base.payload, favIconUrl: TAB_ICON, embeddedIn } } as never;
+  };
+  const icons = (wrapper: View) => wrapper.findAll('img').map((img) => img.attributes('src'));
+
+  it('names the embedding site and never shows the top-level tab’s favicon', () => {
+    ask('https://host.example');
+    const wrapper = render();
+
+    expect(wrapper.text()).toContain('miniGero.embeddedIn');
+    expect(icons(wrapper)).not.toContain(TAB_ICON);
+  });
+
+  it('keeps the tab’s favicon for a top-level request', () => {
+    ask();
+    const wrapper = render();
+
+    expect(wrapper.text()).not.toContain('miniGero.embeddedIn');
+    expect(icons(wrapper)).toContain(TAB_ICON);
+  });
+});
+
+describe('Midnight balanceUnsealedTransaction: the approval names who gets paid', () => {
+  it('lists each payment of the dapp’s transaction with its recipient', () => {
+    const recipient = 'mn_addr_preprod1recipientxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+    overlay.currentRequest.value = {
+      requestId: 'balance-1', method: 'midnight_balanceUnsealedTransaction',
+      payload: { website: 'https://dapp.example', data: {
+        tx: 'abcd', contributions: [], payments: [{ token: '0'.repeat(64), amount: '5000000', recipient }],
+      } },
+    } as never;
+    const wrapper = render();
+
+    const payments = wrapper.findAll('[data-testid="midnight-balance-payment"]');
+    expect(payments).toHaveLength(1);
+    expect(payments[0].text()).toContain(recipient);
+    expect(wrapper.text()).toContain('midnight.balanceReview.paymentsHeading');
+  });
+});
+
+describe('dApp Bitcoin PSBT: signing waits on the review', () => {
+  const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
+  // Fixed test vectors — never used to hold funds.
+  const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+  const OTHER_PHRASE = 'letter advice cage absurd amount doctor acoustic avoid letter advice cage above';
+  const pubkey = (phrase: string) => NodeBuffer.from(deriveBitcoinRootKey(phrase).derive("m/84'/0'/0'/0/0").publicKey!);
+  const payment = (phrase: string) => bitcoin.payments.p2wpkh({ pubkey: pubkey(phrase) });
+  const attacker = payment(OTHER_PHRASE).address!;
+  // The wallet's coin and another party's coin, both paid to the attacker.
+  const psbtHex = new bitcoin.Psbt()
+    .addInput({ hash: NodeBuffer.alloc(32, 1), index: 0, witnessUtxo: { script: payment(PHRASE).output!, value: 50_000 } })
+    .addInput({ hash: NodeBuffer.alloc(32, 2), index: 0, witnessUtxo: { script: payment(OTHER_PHRASE).output!, value: 50_000 } })
+    .addOutput({ address: attacker, value: 99_000 })
+    .toHex();
+  const signPsbt = (options?: unknown) => ({
+    requestId: 'psbt-1', method: 'btcSignPsbt', payload: { website: 'https://dapp.example', psbtHex, options },
+  });
+
+  beforeEach(() => {
+    WalletStore.state.loggedWallet = {
+      id: 1, type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.MAINNET, encryptionMethod: 'password',
+      addressType: 'segwit', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.MAINNET, 'segwit', 0),
+    } as never;
+    mocks.send.mockResolvedValue({ data: { success: true, signedHex: 'signed' } });
+  });
+
+  it('shows where the coins go and signs the PSBT it showed', async () => {
+    overlay.currentRequest.value = signPsbt() as never;
+    const wrapper = render();
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="bitcoin-psbt-output"]').exists()).toBe(true));
+
+    expect(wrapper.find('[data-testid="bitcoin-psbt-output"]').text()).toContain(attacker);
+    await signPassword(wrapper);
+    await flushPromises();
+    expect(mocks.send).toHaveBeenCalledExactlyOnceWith({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT, data: { psbtHex, options: undefined, password: 'password' },
+    });
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith('signed');
+  });
+
+  it('refuses to sign another party’s input, however the site asks', async () => {
+    overlay.currentRequest.value = signPsbt({ toSignInputs: [{ index: 1 }] }) as never;
+    const wrapper = render();
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="bitcoin-psbt-problem"]').exists()).toBe(true));
+
+    expect(wrapper.find('[data-testid="bitcoin-psbt-problem"]').text()).toContain('bitcoin.psbtReview.problemNotOwn');
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    expect(button(wrapper, 'sign').attributes('disabled')).toBeDefined();
+    await button(wrapper, 'sign').trigger('click');
+    await flushPromises();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+});
+
 // The Bitcoin signer decrypts a PassKey wallet's recovery phrase with the raw PRF output
 // (WalletBg.signBitcoinDappPsbt / signBitcoinDappMessage). The popup's `privateKey` mode
 // answers with the PRF-decrypted private key instead, which cannot open the phrase.
 describe('Bitcoin dApp signing with a PassKey', () => {
-  const psbtHex = new Psbt().addInput({ hash: '01'.repeat(32), index: 0 })
+  // The PSBT spends the wallet's own coin, with its amount: the review lets nothing else be signed.
+  const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
+  const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow'; // test vector, no funds
+  const ownScript = bitcoin.payments.p2wpkh({
+    pubkey: NodeBuffer.from(deriveBitcoinRootKey(PHRASE).derive("m/84'/0'/0'/0/0").publicKey!),
+  }).output!;
+  const psbtHex = new Psbt().addInput({ hash: '01'.repeat(32), index: 0, witnessUtxo: { script: ownScript, value: 2000 } })
     .addOutput({ address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', value: 1000 }).toHex();
   const btcRequests = [
     ['message', { requestId: 'btc-message', method: 'btcSignMessage', payload: { message: 'hello', type: 'bip322-simple' } },
@@ -360,6 +473,7 @@ describe('Bitcoin dApp signing with a PassKey', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     WalletStore.state.loggedWallet = {
       id: 1, type: WalletType.Normal, chain: Blockchain.BITCOIN, network: Network.MAINNET, encryptionMethod: 'prf',
+      addressType: 'segwit', publicKey: deriveBitcoinAccountXpub(PHRASE, Network.MAINNET, 'segwit', 0),
     } as never;
   });
 
@@ -374,6 +488,8 @@ describe('Bitcoin dApp signing with a PassKey', () => {
     overlay.currentRequest.value = btcRequest as never;
     mocks.send.mockResolvedValue({ data: reply });
     const wrapper = render();
+    // A PSBT's Sign waits on the review of what it signs.
+    await vi.waitFor(() => expect(button(wrapper, 'sign').attributes('disabled')).toBeUndefined());
 
     await button(wrapper, 'sign').trigger('click');
     await flushPromises();

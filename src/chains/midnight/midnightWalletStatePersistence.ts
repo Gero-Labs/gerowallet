@@ -13,13 +13,18 @@
 // replaying the whole chain. This mirrors what Nexus's sidecar already does
 // server-side via its `midnight_wallet_state` Postgres table.
 //
-// STORAGE: `chrome.storage.local` (the extension has `unlimitedStorage`, so
-// the per-item 10 MiB default quota is lifted — relevant because a synced
-// ZswapLocalState carries a commitment tree). State survives SW eviction,
-// which is exactly the lifetime we need. Keyed by network + wallet-kind + a
-// non-reversible hash of the wallet's identifying secret seed, so two
-// networks / two wallets / two roles never collide and a restore can never
-// load another wallet's state.
+// STORAGE: its own extension-origin IndexedDB (`gero-midnight-wallet-state`).
+// A synced ZswapLocalState carries the wallet's shielded coins, nullifiers and a
+// commitment tree: multi-MB, and private. It used to live in chrome.storage.local,
+// which every content script can read and rewrite (Gero's own, and the Bring SDK
+// inside it, in every frame of every tab), and whose writes are copied into every
+// storage.onChanged listener. Content scripts cannot open this database. The old
+// chrome.storage copies are deleted once (purgeLegacyChromeWalletState), never
+// read: a page could have written them, and a miss only costs one cold sync.
+// State survives SW eviction, which is exactly the lifetime we need. Keyed by
+// network + wallet-kind + a non-reversible hash of the wallet's identifying
+// secret seed, so two networks / two wallets / two roles never collide and a
+// restore can never load another wallet's state.
 //
 // CORRECTNESS: restore resets `isConnected=false`; the wallet still needs one
 // post-restore event for the SyncProgress to flip complete. On a non-empty
@@ -28,6 +33,7 @@
 // schema-version + network + kind guard on read means a stale/foreign blob is
 // silently ignored and we fall back to cold init — never a wrong restore.
 
+import Dexie, { type Table } from 'dexie';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { debugLog } from '@/utils/debug';
 
@@ -69,8 +75,57 @@ interface PersistedWalletState {
   savedAt: number;
 }
 
-function hasChromeStorage(): boolean {
-  return typeof chrome !== 'undefined' && !!chrome.storage?.local;
+interface StoredWalletState extends PersistedWalletState {
+  key: string;
+}
+
+class MidnightWalletStateDb extends Dexie {
+  states!: Table<StoredWalletState, string>;
+  meta!: Table<{ key: string; value: unknown }, string>;
+
+  constructor() {
+    super('gero-midnight-wallet-state');
+    this.version(1).stores({ states: 'key', meta: 'key' });
+  }
+}
+
+let db: MidnightWalletStateDb | null = null;
+
+function stateDb(): MidnightWalletStateDb {
+  if (!db) db = new MidnightWalletStateDb();
+  return db;
+}
+
+function hasIndexedDb(): boolean {
+  return typeof indexedDB !== 'undefined';
+}
+
+const LEGACY_PURGED = 'legacyChromeStoragePurged';
+let legacyPurge: Promise<void> | null = null;
+
+/**
+ * Delete the state blobs older releases kept in chrome.storage.local, once per
+ * profile (recorded in this database). Nothing is carried over: a content script
+ * could have written them, and the cache rebuilds itself with a cold sync.
+ */
+export function purgeLegacyChromeWalletState(): Promise<void> {
+  if (!legacyPurge) {
+    legacyPurge = (async () => {
+      if (!hasIndexedDb()) return;
+      if ((await stateDb().meta.get(LEGACY_PURGED))?.value === true) return;
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        const all = (await chrome.storage.local.get(null)) ?? {};
+        const keys = Object.keys(all).filter((key) => key.startsWith(`${KEY_PREFIX}_`));
+        if (keys.length > 0) await chrome.storage.local.remove(keys);
+        debugLog(`🌙 wallet-state: removed ${keys.length} legacy chrome.storage blob(s)`);
+      }
+      await stateDb().meta.put({ key: LEGACY_PURGED, value: true });
+    })().catch((e) => {
+      legacyPurge = null; // retried on the next call
+      debugLog('🌙 wallet-state legacy purge failed (retried later)', e);
+    });
+  }
+  return legacyPurge;
 }
 
 function bytesToHex(b: Uint8Array): string {
@@ -100,37 +155,28 @@ export async function loadWalletState(
   kind: MidnightWalletKind,
   identitySeed: Uint8Array,
 ): Promise<string | null> {
-  if (!hasChromeStorage()) return null;
+  if (!hasIndexedDb()) return null;
+  void purgeLegacyChromeWalletState();
   const key = storageKey(network, kind, identitySeed);
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(key, (result) => {
-        if (chrome.runtime?.lastError) {
-          debugLog('🌙 wallet-state load error (cold fallback)', chrome.runtime.lastError);
-          resolve(null);
-          return;
-        }
-        const blob = result?.[key] as PersistedWalletState | undefined;
-        if (
-          !blob
-          || blob.schemaVersion !== schemaVersion(network)
-          || blob.network !== network
-          || blob.kind !== kind
-          || typeof blob.serializedState !== 'string'
-          || blob.serializedState.length === 0
-        ) {
-          resolve(null);
-          return;
-        }
-        const ageMs = Date.now() - (blob.savedAt ?? 0);
-        debugLog(`🌙 wallet-state HIT: ${kind}/${network} (age=${Math.round(ageMs / 1000)}s) — restoring warm`);
-        resolve(blob.serializedState);
-      });
-    } catch (e) {
-      debugLog('🌙 wallet-state load threw (cold fallback)', e);
-      resolve(null);
+  try {
+    const blob = await stateDb().states.get(key);
+    if (
+      !blob
+      || blob.schemaVersion !== schemaVersion(network)
+      || blob.network !== network
+      || blob.kind !== kind
+      || typeof blob.serializedState !== 'string'
+      || blob.serializedState.length === 0
+    ) {
+      return null;
     }
-  });
+    const ageMs = Date.now() - (blob.savedAt ?? 0);
+    debugLog(`🌙 wallet-state HIT: ${kind}/${network} (age=${Math.round(ageMs / 1000)}s) — restoring warm`);
+    return blob.serializedState;
+  } catch (e) {
+    debugLog('🌙 wallet-state load error (cold fallback)', e);
+    return null;
+  }
 }
 
 /**
@@ -144,31 +190,23 @@ export async function saveWalletState(
   identitySeed: Uint8Array,
   serializedState: string,
 ): Promise<void> {
-  if (!hasChromeStorage()) return;
+  if (!hasIndexedDb()) return;
   if (typeof serializedState !== 'string' || serializedState.length === 0) return;
+  void purgeLegacyChromeWalletState();
   const key = storageKey(network, kind, identitySeed);
-  const blob: PersistedWalletState = {
-    schemaVersion: schemaVersion(network),
-    network,
-    kind,
-    serializedState,
-    savedAt: Date.now(),
-  };
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.set({ [key]: blob }, () => {
-        if (chrome.runtime?.lastError) {
-          debugLog('🌙 wallet-state save failed (non-fatal)', chrome.runtime.lastError);
-        } else {
-          debugLog(`🌙 wallet-state SAVED: ${kind}/${network} (${serializedState.length} chars)`);
-        }
-        resolve();
-      });
-    } catch (e) {
-      debugLog('🌙 wallet-state save threw (non-fatal)', e);
-      resolve();
-    }
-  });
+  try {
+    await stateDb().states.put({
+      key,
+      schemaVersion: schemaVersion(network),
+      network,
+      kind,
+      serializedState,
+      savedAt: Date.now(),
+    });
+    debugLog(`🌙 wallet-state SAVED: ${kind}/${network} (${serializedState.length} chars)`);
+  } catch (e) {
+    debugLog('🌙 wallet-state save failed (non-fatal)', e);
+  }
 }
 
 /**
@@ -181,15 +219,22 @@ export async function clearWalletState(
   kind: MidnightWalletKind,
   identitySeed: Uint8Array,
 ): Promise<void> {
-  if (!hasChromeStorage()) return;
-  const key = storageKey(network, kind, identitySeed);
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.remove(key, () => resolve());
-    } catch {
-      resolve();
-    }
-  });
+  if (!hasIndexedDb()) return;
+  try {
+    await stateDb().states.delete(storageKey(network, kind, identitySeed));
+  } catch {
+    // Best-effort: the next restore fails the same way and clears again.
+  }
+}
+
+/**
+ * Delete every state blob whose key starts with one of `prefixes`. Throws when
+ * the database cannot be written, so a caller that must not resume stale state
+ * (a chain reset) can tell.
+ */
+export async function clearWalletStatesByPrefix(prefixes: string[]): Promise<void> {
+  if (!hasIndexedDb() || prefixes.length === 0) return;
+  await stateDb().states.where('key').startsWithAnyOf(prefixes).delete();
 }
 
 /**
@@ -201,35 +246,28 @@ export async function clearWalletState(
  *
  * We can't derive a specific wallet's storage key without its secret seed
  * (the key is a hash of it), so a user-facing reset must clear by prefix.
- * Callable from any context since it only touches chrome.storage.local
- * (shared across BG + browser). Pairs with the gero-sync cursor reset in
- * midnight-sync.service's forceResync so one action clears both halves of the
- * warm state.
+ * Callable from the worker and the extension pages, which share this database.
+ * Pairs with the gero-sync cursor reset in midnight-sync.service's forceResync
+ * so one action clears both halves of the warm state.
  */
 export async function clearAllWalletState(network?: string): Promise<void> {
-  if (!hasChromeStorage()) return;
-  const wantPrefix = network ? `${KEY_PREFIX}_${network}_` : `${KEY_PREFIX}_`;
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(null, (all) => {
-        if (chrome.runtime?.lastError) {
-          debugLog('🌙 wallet-state clear-all: get failed', chrome.runtime.lastError);
-          resolve();
-          return;
-        }
-        const toRemove = Object.keys(all ?? {}).filter((k) => k.startsWith(wantPrefix));
-        if (toRemove.length === 0) {
-          resolve();
-          return;
-        }
-        chrome.storage.local.remove(toRemove, () => {
-          debugLog(`🌙 wallet-state clear-all: removed ${toRemove.length} blob(s)${network ? ` for ${network}` : ''}`);
-          resolve();
-        });
-      });
-    } catch (e) {
-      debugLog('🌙 wallet-state clear-all threw (non-fatal)', e);
-      resolve();
-    }
-  });
+  const prefix = network ? `${KEY_PREFIX}_${network}_` : `${KEY_PREFIX}_`;
+  try {
+    await clearWalletStatesByPrefix([prefix]);
+    debugLog(`🌙 wallet-state clear-all done${network ? ` for ${network}` : ''}`);
+  } catch (e) {
+    debugLog('🌙 wallet-state clear-all failed (non-fatal)', e);
+  }
+}
+
+/** Test seam: drop the cached connection and the purge memo so a fresh fake IndexedDB can be installed. */
+export function resetMidnightWalletStateDbForTest(): void {
+  db?.close();
+  db = null;
+  legacyPurge = null;
+}
+
+/** Test seam: the stored rows. */
+export function midnightWalletStatesForTest(): Table<StoredWalletState, string> {
+  return stateDb().states;
 }

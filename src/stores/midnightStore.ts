@@ -393,13 +393,27 @@ function serializeValue(_key: string, value: unknown): unknown {
 // The rest stays in the small chrome.storage record, which every tip, sync tick and
 // progress sample rewrites. Rewriting the whole store there on each of those pushed
 // the transaction history through Chrome's browser UI thread (see storeCache.ts).
+//
+// Content scripts can read and rewrite that record (privateStore.ts). The Arkhia
+// credentials never go there, and the proof-server choice and the proving consent,
+// which decide where a shielded transaction is sent to be proven, are read from the
+// extension's private copy.
 const persister = new StorePersister(midnightStore as unknown as Record<string, unknown>, {
   storeName: STORE_NAME,
   bulkFields: ['transactions', 'utxos'],
   replacer: serializeValue,
   // Per-wallet chain state is keyed by the active unshielded address.
   scope: (state) => (typeof state['activeWalletKey'] === 'string' ? state['activeWalletKey'] : null),
+  redact: (field, value) => (field === 'proofServer' ? withoutProofServerCredentials(value) : value),
+  trustedFields: ['proofServer', 'shieldedProvingConsent'],
 });
+
+function withoutProofServerCredentials(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- taken out, not used
+  const { zkpaasApiKey: _key, zkpaasApiSecret: _secret, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
 
 /**
  * A confirmed self-transfer arrives from gero-sync with amount 0: every output
@@ -680,7 +694,7 @@ if (context === 'background') {
     if (!bgDurableTouched.chainIdentity) {
       midnightStore.chainIdentity = hydrateChainIdentity(stored.chainIdentity);
     }
-  });
+  }, { migrate: true });
 }
 
 /**

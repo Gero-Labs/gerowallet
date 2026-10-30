@@ -1,5 +1,7 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageTypes } from '@/models/MessageTypes';
+import { getPrivate, resetPrivateStoreForTest } from '@/utils/privateStore';
 
 const API_PUB = 'ab'.repeat(32);
 
@@ -70,16 +72,21 @@ describe('assessBuilderMessage', () => {
 describe('Strike builder connect', () => {
   const MESSAGE = `Strike: bind API wallet ${API_PUB}`;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mocks.storage = {};
+    resetPrivateStoreForTest();
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase('gero-private-store');
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    });
     mocks.wallet.current = { id: 'w1', baseAddress: 'addr_test1qqq', encryptionMethod: 'password' };
     vi.stubGlobal('chrome', {
       storage: {
         local: {
-          get: (key: string, cb: (r: Record<string, unknown>) => void) => cb({ [key]: mocks.storage[key] }),
+          get: async (key: string) => (key in mocks.storage ? { [key]: mocks.storage[key] } : {}),
           set: (items: Record<string, unknown>, cb: () => void) => { Object.assign(mocks.storage, items); cb(); },
-          remove: (key: string, cb: () => void) => { delete mocks.storage[key]; cb(); },
+          remove: (key: string, cb?: () => void) => { delete mocks.storage[key]; cb?.(); return Promise.resolve(); },
         },
       },
     });
@@ -119,6 +126,9 @@ describe('Strike builder connect', () => {
     expect(mocks.verifyBuilderSignature).toHaveBeenCalledWith(expect.objectContaining({ nonce: 'n-1', wallet_signature: 'sig:key' }));
     expect(s.isConnected.value).toBe(true);
     expect(s.pendingMessage.value).toBeNull();
+    // The sealed API key is kept where no content script can read it.
+    expect(mocks.storage).toEqual({});
+    expect(await getPrivate('strike_keys_w1')).toMatchObject({ publicKey: API_PUB, accountId: 'acct-1' });
   });
 
   it('refuses an unsafe message before the user is ever asked to authenticate', async () => {

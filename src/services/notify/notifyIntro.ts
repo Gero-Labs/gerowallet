@@ -9,8 +9,8 @@
 // wallet on together (notifyRegistration.enableWallet).
 //
 // Pure: the gates shared by the worker (system notification) and the page (prompt).
-// The state lives in chrome.storage.local `notifyIntro` (notifyStore); only the worker
-// writes it (NOTIFY_INTRO_ANSWER), the page mirrors it.
+// The state lives in the notify store's `notifyIntro` key (private store, notifyStorage.ts);
+// only the worker writes it (NOTIFY_INTRO_ANSWER), the page mirrors it.
 
 import type { NotifyConfig } from './notifyTypes';
 

@@ -5,7 +5,7 @@
 // cannot be replayed to pin an attacker: the nonce is burned on first use and
 // expires shortly after.
 //
-// Persisted in chrome.storage.local (NOT in-memory): the QR can sit on screen
+// Persisted in the extension's private IndexedDB (NOT in-memory): the QR can sit on screen
 // across a ~40s MV3 service-worker recycle before the phone scans it, and an
 // in-memory nonce would evaporate on that recycle and drop a legitimate pair.
 //
@@ -17,6 +17,7 @@
 // injected, so this is fully unit-testable with an in-memory fake.
 
 import { Mutex } from 'async-mutex';
+import { moveFromChromeLocal, setPrivate } from '@/utils/privateStore';
 
 export interface NonceStorage {
   get(key: string): Promise<unknown>;
@@ -38,14 +39,15 @@ type StoredNonces = Record<string, StoredNonce>; // keyed by nonce (lowercase he
 
 const mutex = new Mutex();
 
-function chromeStorage(): NonceStorage {
+/**
+ * The extension's private IndexedDB (privateStore.ts), not chrome.storage.local:
+ * every content script can read and write that area, and this decides what the
+ * relay is told. The first read moves an older release's copy across.
+ */
+function privateStorage(): NonceStorage {
   return {
-    get: (key) => new Promise((resolve) => {
-      chrome.storage.local.get(key, (r) => resolve(r?.[key]));
-    }),
-    set: (key, value) => new Promise((resolve) => {
-      chrome.storage.local.set({ [key]: value }, () => resolve());
-    }),
+    get: (key) => moveFromChromeLocal(key),
+    set: (key, value) => setPrivate(key, value),
   };
 }
 
@@ -94,7 +96,7 @@ export async function mintPairingNonce(
   now: number,
   randomBytes: (n: number) => Uint8Array,
   ttlSeconds: number = DEFAULT_TTL_SECONDS,
-  storage: NonceStorage = chromeStorage(),
+  storage: NonceStorage = privateStorage(),
 ): Promise<MintedNonce> {
   return mutex.runExclusive(async () => {
     const all = prune(await readAll(storage), now);
@@ -120,7 +122,7 @@ export async function peekPairingNonce(
   nonce: string,
   ownStake: string,
   now: number,
-  storage: NonceStorage = chromeStorage(),
+  storage: NonceStorage = privateStorage(),
 ): Promise<boolean> {
   const entry = (await readAll(storage))[nonce];
   return isStoredNonce(entry) && !entry.used && entry.exp > now && entry.stake === ownStake;
@@ -140,7 +142,7 @@ export async function consumePairingNonce(
   nonce: string,
   ownStake: string,
   now: number,
-  storage: NonceStorage = chromeStorage(),
+  storage: NonceStorage = privateStorage(),
 ): Promise<boolean> {
   return mutex.runExclusive(async () => {
     const all = await readAll(storage);

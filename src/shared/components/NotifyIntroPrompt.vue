@@ -26,6 +26,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { NOTIFY_INTRO_KEY, promptWanted, readIntroState, type NotifyIntroState } from '@/services/notify/notifyIntro';
+import { onNotifyKeyChanged, readNotifyKey } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
 
@@ -54,13 +55,12 @@ const wanted = computed(() => {
 });
 const open = computed(() => !props.suppressed && unlocked.value && settled.value && !answered.value && wanted.value);
 
-const hasChrome = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id && !!chrome.storage?.local;
+const hasChrome = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id && !!chrome.storage;
 
 async function loadState(): Promise<void> {
   if (!hasChrome()) return;
   try {
-    const got = await chrome.storage.local.get(NOTIFY_INTRO_KEY);
-    intro.value = readIntroState(got?.[NOTIFY_INTRO_KEY]);
+    intro.value = readIntroState(await readNotifyKey(NOTIFY_INTRO_KEY));
   } catch { intro.value = readIntroState(undefined); }
   if (intro.value.dismissedAt !== null) return; // nothing is offered on this install any more
   // Storage first, no network: a linked or ineligible wallet needs no /config at all.
@@ -83,14 +83,15 @@ watch([unlocked, loggedId], ([isUnlocked]) => {
   void loadState();
 }, { immediate: true });
 
-function onStorageChange(changes: Record<string, chrome.storage.StorageChange>, area: string): void {
-  if (area === 'local' && NOTIFY_INTRO_KEY in changes) intro.value = readIntroState(changes[NOTIFY_INTRO_KEY]?.newValue);
+let unsubscribe: (() => void) | null = null;
+function reloadIntro(): void {
+  readNotifyKey(NOTIFY_INTRO_KEY).then((v) => { intro.value = readIntroState(v); }, () => undefined);
 }
 
-onMounted(() => { if (hasChrome()) chrome.storage.onChanged.addListener(onStorageChange); });
+onMounted(() => { if (hasChrome()) unsubscribe = onNotifyKeyChanged(NOTIFY_INTRO_KEY, reloadIntro); });
 onBeforeUnmount(() => {
   if (settleTimer) clearTimeout(settleTimer);
-  if (hasChrome()) chrome.storage.onChanged.removeListener(onStorageChange);
+  unsubscribe?.();
 });
 
 function turnOn(): void {

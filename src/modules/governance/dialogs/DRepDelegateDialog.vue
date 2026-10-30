@@ -14,8 +14,8 @@
       <!-- DRep Info - Compact horizontal card -->
       <v-card flat variant="outlined" class="rounded-lg pa-3 mb-3 drep-info-card">
         <div class="d-flex align-start">
-          <v-avatar rounded size="48" v-if="drep.image" class="mr-3 flex-shrink-0">
-            <img :src="drep.image" alt="" @error="fallbackImage" />
+          <v-avatar rounded size="48" v-if="drepImageSrc" class="mr-3 flex-shrink-0">
+            <img :src="drepImageSrc" alt="" @error="fallbackImage" />
           </v-avatar>
           <div class="flex-grow-1" style="min-width: 0">
             <div class="d-flex align-center">
@@ -238,6 +238,7 @@ import TransactionAuthSection from '@/shared/components/TransactionAuthSection.v
 import { walletStore } from '@/stores/walletStore';
 import { buildCip149AuxiliaryData } from '@/shared/utils/builder';
 import { toSafeLinks } from '@/shared/utils/externalLink';
+import { toInAppImageUrl } from '@/modules/governance/utils/govAnchor';
 import type { PendingDRep } from '@/shared/utils/pendingDelegation';
 import governanceStoreActions from '@/stores/governanceStore';
 
@@ -353,6 +354,9 @@ const showCompensationSection = computed(() => {
   return props.drep && props.drep.id &&
     props.drep.id !== 'drep_always_abstain' && props.drep.id !== 'drep_always_no_confidence';
 });
+
+// The DRep's avatar, through Gero's proxies (null hides it).
+const drepImageSrc = computed(() => toInAppImageUrl(props.drep?.image));
 
 // Constants for template
 const xLogo = assets.xSvg;

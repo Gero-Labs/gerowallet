@@ -210,6 +210,23 @@ export interface UnlockMpcWalletDeps {
   sessionCache: { set: (walletId: number, bytes: Uint8Array) => void };
   /** Finish a crashed re-split: make the staged `mpcDeviceShareNext` the primary device share. Optional. */
   promoteMpcDeviceShareNext?: (walletId: number) => Promise<void>;
+  /**
+   * Re-seal the primary device share in the current format once it has just
+   * reconstructed this wallet's key. Best-effort and not awaited. Optional.
+   */
+  upgradeDeviceShare?: (walletId: number, secret: DeviceShareSecret) => Promise<unknown>;
+}
+
+/**
+ * The device secret (or the login share it was paired with) did not reconstruct
+ * this wallet's key: a wrong passkey or spending password, as opposed to a network
+ * or Google failure. Unlock attempts that end this way count toward the back-off.
+ */
+export class MpcCredentialRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MpcCredentialRejectedError';
+  }
 }
 
 /**
@@ -225,7 +242,7 @@ export async function unlockMpcWalletFlow(
   deps: UnlockMpcWalletDeps,
 ): Promise<void> {
   const { walletId, idToken, secret } = input;
-  const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache, promoteMpcDeviceShareNext } = deps;
+  const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache, promoteMpcDeviceShareNext, upgradeDeviceShare } = deps;
 
   const wallet = await getWallet(walletId);
   if (!wallet) {
@@ -249,6 +266,9 @@ export async function unlockMpcWalletFlow(
     // fetch of S'.login. A leftover next is harmless — the next re-split overwrites
     // it via `setMpcDeviceShareNext`.
     sessionCache.set(walletId, bytes);
+    // The primary share is now proven: move an old format forward (skips while a
+    // next share is staged). Never awaited, never fails the unlock.
+    if (upgradeDeviceShare) void Promise.resolve().then(() => upgradeDeviceShare(walletId, secret)).catch(() => {});
     return;
   } catch (primaryErr) {
     // Resume-on-unlock: a re-split (setRecoveryPasswordFlow) that crashed AFTER the
@@ -277,9 +297,10 @@ export async function unlockMpcWalletFlow(
       }
     }
     if (primaryErr instanceof MpcValidationError) {
-      throw new Error('Recovery data mismatch. Unable to unlock this wallet with Google');
+      throw new MpcCredentialRejectedError('Recovery data mismatch. Unable to unlock this wallet with Google');
     }
-    throw primaryErr;
+    // The device share did not open with this secret (or reconstruct): a wrong secret.
+    throw new MpcCredentialRejectedError((primaryErr as Error)?.message || 'Unable to unlock this wallet');
   }
 }
 
@@ -579,7 +600,8 @@ export interface SetRecoveryPasswordDeps {
   reconstructAndValidateEntropy: (deviceShare: string, loginShare: string, expectedXpub: string) => Promise<Uint8Array>;
   /** Fresh 2-of-3 re-split of the SAME entropy → new device/login/recovery shares. */
   createMpcShareSet: (entropy: Uint8Array) => Promise<MpcShareSet>;
-  encryptDeviceShare: (deviceShare: string, secret: DeviceShareSecret) => Promise<string>;
+  /** `replaces`: the envelope the new share takes over from; never sealed weaker than it. */
+  encryptDeviceShare: (deviceShare: string, secret: DeviceShareSecret, replaces?: string) => Promise<string>;
   encryptRecoveryShare: (recoveryShare: string, password: string) => Promise<string>;
   /** Stage (value=blob) or drop (value=undefined) the next-generation device share. */
   setMpcDeviceShareNext: (walletId: number, encryptedDeviceShareNext: string | undefined) => Promise<void>;
@@ -662,7 +684,8 @@ export async function setRecoveryPasswordFlow(
   // mismatch, before step 1.
   await reconstructAndValidateEntropy(next.deviceShare, next.loginShare, wallet.publicKey);
 
-  const encryptedNextDeviceShare = await encryptDeviceShare(next.deviceShare, secret);
+  // Sealed no weaker than the device share it replaces.
+  const encryptedNextDeviceShare = await encryptDeviceShare(next.deviceShare, secret, wallet.mpcDeviceShare);
 
   // 1. Stage next (old device share still primary).
   await setMpcDeviceShareNext(walletId, encryptedNextDeviceShare);

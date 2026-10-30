@@ -19,7 +19,7 @@
       <div class="drep-profile__header">
         <div class="drep-profile__identity">
           <v-avatar rounded size="56" color="var(--g-raised)" class="drep-profile__avatar">
-            <v-img v-if="image" :src="image" >
+            <v-img v-if="imageSrc" :src="imageSrc" >
               <template v-slot:error>
                 <v-icon size="26" color="var(--g-text-3)">mdi-account</v-icon>
               </template>
@@ -255,7 +255,7 @@ import {
   eligibleActionIdsFor,
   epochInflow,
 } from '@/shared/utils/drepView';
-import { drepImageSource } from '@/modules/governance/utils/govAnchor';
+import { drepImageSource, toInAppImageUrl } from '@/modules/governance/utils/govAnchor';
 import { parseDRepId, sameDRep, toCip129 } from '@/shared/utils/drepId';
 import {
   drepRecordFetchedAt,
@@ -418,6 +418,7 @@ const drepId = computed(() => String(record.value?.drep_id ?? routeDRepId.value)
 const name = computed(() => drepDisplayName(record.value) ?? truncate(drepId.value));
 const bio = computed(() => drepBio(record.value));
 const image = computed(() => drepImageSource(record.value));
+const imageSrc = computed(() => toInAppImageUrl(image.value));
 const isCurrent = computed(() => sameDRep(drepId.value, walletStore.account?.drep_id));
 const links = computed(() => toSafeLinks(record.value?.metadata?.meta_json?.body?.['references']));
 

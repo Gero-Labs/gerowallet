@@ -10,14 +10,25 @@ type StorageChange = { newValue?: unknown; oldValue?: unknown };
 type ChangeListener = (changes: Record<string, StorageChange>, area: string) => void;
 
 let store: Record<string, unknown>;
+let localStore: Record<string, unknown>;
 let changeListeners: ChangeListener[];
 
 beforeEach(() => {
   store = {};
+  localStore = {};
   changeListeners = [];
   vi.stubGlobal('chrome', {
     storage: {
       local: {
+        get: vi.fn(async (key: string) => (key in localStore ? { [key]: localStore[key] } : {})),
+        set: vi.fn(async (items: Record<string, unknown>) => {
+          Object.assign(localStore, items);
+        }),
+        remove: vi.fn(async (key: string) => {
+          delete localStore[key];
+        }),
+      },
+      session: {
         get: vi.fn(async (key: string) => (key in store ? { [key]: store[key] } : {})),
         set: vi.fn(async (items: Record<string, unknown>) => {
           Object.assign(store, items);
@@ -41,7 +52,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const fireChange = (change: StorageChange, area = 'local') =>
+const fireChange = (change: StorageChange, area = 'session') =>
   changeListeners.forEach((l) => l({ [PENDING_DREP_DELEGATION_KEY]: change }, area));
 
 describe('pendingDelegation', () => {
@@ -99,6 +110,19 @@ describe('pendingDelegation', () => {
     await setPendingDRepDelegation({ kind: 'abstain' });
     fireChange({ newValue: store[PENDING_DREP_DELEGATION_KEY] }, 'sync');
 
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('ignores a handoff planted in chrome.storage.local, which content scripts can write', async () => {
+    const handler = vi.fn();
+    onPendingDRepDelegation(handler);
+
+    const planted = { kind: 'drep', drep: { id: 'drep1attacker' }, createdAt: Date.now() };
+    localStore[PENDING_DREP_DELEGATION_KEY] = planted;
+    fireChange({ newValue: planted }, 'local');
+
+    expect(await takePendingDRepDelegation()).toBeNull();
     await new Promise((r) => setTimeout(r, 0));
     expect(handler).not.toHaveBeenCalled();
   });

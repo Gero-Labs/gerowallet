@@ -78,6 +78,7 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, toRefs, watch, provide, onScopeDispose } from 'vue';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
@@ -225,8 +226,9 @@ async function signWithPassword(approved: ApprovedRequest, current: () => boolea
   }) as BackgroundResponse<VerifyPasswordResponse>;
   if (!current()) return null;
   if (!verification?.data?.success) {
-    passwordField.value?.showError(t('errors.wrongPassword'));
-    throw new Error(t('errors.wrongPassword'));
+    const message = passwordCheckFailure(verification, t('errors.wrongPassword'));
+    passwordField.value?.showError(message);
+    throw new Error(message);
   }
   return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_DATA,

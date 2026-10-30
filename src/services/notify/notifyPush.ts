@@ -1,8 +1,8 @@
 // Push notifications — the `push` and `notificationclick` handlers (background).
 //
 // Handover B3, B4, B5, B8. Runs on a push wake with NO dependency on login or
-// unlock: everything it needs comes from chrome.storage (the notify store, the wallet
-// list, the locale). It never returns without a displayed notification (contract
+// unlock: everything it needs comes from storage (the notify store in the private store,
+// the wallet list and the locale in chrome.storage). It never returns without a displayed notification (contract
 // §6.7 rule 1), it makes no network call apart from queuing the self-heal DELETE
 // for an unknown wallet tag, and it uses `registration.showNotification` (B5), with
 // `tag = e` and `renotify: false` so a repeated `e` replaces quietly (rule 6).

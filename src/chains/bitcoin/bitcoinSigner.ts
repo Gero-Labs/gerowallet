@@ -124,6 +124,7 @@ function spendsTaproot(input: bitcoin.Psbt['data']['inputs'][number]): boolean {
  * @param network Bitcoin network (Mainnet/Testnet)
  * @param addressType Address type (segwit/legacy/taproot)
  * @param accountIndex BIP32 account index (default: 0)
+ * @param inputIndices Sign only these inputs (default: every input)
  * @returns Signed PSBT
  */
 export function signPsbtWithMnemonic(
@@ -131,7 +132,8 @@ export function signPsbtWithMnemonic(
   mnemonic: string,
   network: string,
   addressType: string = 'segwit',
-  accountIndex: number = 0
+  accountIndex: number = 0,
+  inputIndices?: readonly number[]
 ): bitcoin.Psbt {
   const bitcoinNetwork = getBitcoinNetwork(network);
 
@@ -154,10 +156,13 @@ export function signPsbtWithMnemonic(
   // The receive and change addresses the wallet watches, built when an input first needs them
   let ownAddresses: Record<string, BitcoinDerivationInfo> | undefined;
 
-  // Sign all inputs
   const inputCount = psbtObj.data.inputs.length;
+  const indices = inputIndices ?? Array.from({ length: inputCount }, (_, i) => i);
 
-  for (let i = 0; i < inputCount; i++) {
+  for (const i of indices) {
+    if (!Number.isInteger(i) || i < 0 || i >= inputCount) {
+      throw new Error(`PSBT has no input ${i}`);
+    }
     try {
       // Derive signing key using bip32Derivation (tapBip32Derivation on a Taproot
       // input) metadata if available. An input without it (Gero Sync UTxOs carry no

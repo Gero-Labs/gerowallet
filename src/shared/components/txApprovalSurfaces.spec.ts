@@ -38,4 +38,30 @@ describe('signTx approval surfaces share one summary', () => {
     const src = read('sidepanel/components/DAppOverlay.vue');
     expect(src).toMatch(/s\.bodyNetworkMismatch \|\| s\.outputNetworkMismatch/);
   });
+
+  // A deposit refunded to someone else, or the wallet's collateral returned to a
+  // foreign address, blocks Sign on both surfaces until acknowledged, and both
+  // give the summary the wallet's UTxOs so "You pay" counts the wallet's inputs.
+  for (const [file, gate] of [
+    ['sidepanel/components/DAppOverlay.vue', /approvalSummary\.value\?\.requiresForeignValueAck && !foreignValueAck\.value/],
+    ['popup/modules/views/SignTx.vue', /approvalSummary\.value\.requiresForeignValueAck && !foreignValueAck\.value/],
+  ] as const) {
+    it(`${file} gates Sign on the foreign-value acknowledgement and passes its UTxOs`, () => {
+      const src = read(file);
+      expect(src).toMatch(gate);
+      expect(src).toContain('v-model:foreign-value-ack="foreignValueAck"');
+      expect(src).toMatch(/return \[\.\.\.utxos\.value, \.\.\.\(collateral \? \[collateral\] : \[\]\)\]/);
+    });
+
+    // The UTxO list comes from gero-sync: what the summary counts is checked against
+    // the transactions that created those UTxOs, and a misstated input holds Sign.
+    it(`${file} counts proven UTxOs and gates Sign on a misstated input`, () => {
+      const src = read(file);
+      expect(src).toContain('useProvenApprovalUtxos(');
+      expect(src).toContain('ownUtxos: provenOwnUtxos.value');
+      expect(src).toMatch(/inputsMisreported\.value && !inputsMisreportedAck\.value/);
+      expect(src).toContain('v-model:inputs-misreported-ack="inputsMisreportedAck"');
+      expect(src).toContain(':inputs-misreported="inputsMisreported"');
+    });
+  }
 });

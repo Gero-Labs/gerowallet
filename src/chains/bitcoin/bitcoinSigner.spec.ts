@@ -80,6 +80,17 @@ describe('signPsbtWithMnemonic', () => {
 
     expect(() => signPsbtWithMnemonic(spending(foreign).toHex(), PHRASE, 'Testnet')).toThrow('Failed to sign input 0');
   });
+
+  it('signs only the inputs it is told to, leaving another party’s input alone', () => {
+    const foreign = pubkeyAt(0, 1, 0, OTHER_PHRASE);
+    const receive = pubkeyAt(0, 0);
+
+    const signed = signPsbtWithMnemonic(spending(foreign, receive).toHex(), PHRASE, 'Testnet', 'segwit', 0, [1]);
+
+    expect(signed.data.inputs[0].partialSig).toBeUndefined();
+    expect(signed.data.inputs[1].partialSig![0].pubkey.toString('hex')).toBe(receive.toString('hex'));
+    expect(() => signPsbtWithMnemonic(spending(receive).toHex(), PHRASE, 'Testnet', 'segwit', 0, [3])).toThrow('PSBT has no input 3');
+  });
 });
 
 describe('Taproot (BIP86) wallets', () => {

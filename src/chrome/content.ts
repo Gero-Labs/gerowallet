@@ -1,6 +1,7 @@
 import { Messaging } from './messaging';
 import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
 import { METHOD } from '@/chrome/config';
+import { readBringOptOut } from '@/chrome/bringAddressSharing';
 
 /**
  * Escape HTML entities to prevent XSS attacks
@@ -21,7 +22,8 @@ interface BackgroundReply {
 // Bring runs inside our own content script, so its RPCs must NOT go through the
 // webpage proxy controller (which would gate every call behind the dApp
 // whitelist and return code -3 Refused for any non-connected site). Talk to the
-// background directly instead.
+// background directly instead. The background releases the address only while
+// the wallet is unlocked and the user has cashback on ("Shop & Earn popups").
 const getWalletAddress = async (): Promise<string> => {
   try {
     const response = (await Messaging.sendToBackground({
@@ -49,17 +51,25 @@ const promptLogin = async (): Promise<void> => {
       console.warn('[content.ts] promptLogin refused by background:', response.error);
       return;
     }
-    if (response?.data) {
-      window.dispatchEvent(new CustomEvent('gero:login', {
-        bubbles: true,
-        cancelable: true,
-        composed: false,
-      }));
-    }
+    if (response?.data) await refreshBringAddress();
   } catch (e) {
     console.warn('[content.ts] promptLogin failed:', e);
   }
 };
+
+// Bring's SDK hands us the function that pushes the current address to it (its
+// iframe and its worker). We call it ourselves rather than giving the SDK DOM
+// event names to listen for: a page can dispatch any DOM event on its window.
+let pushAddressToBring: (() => void) | null = null;
+
+/**
+ * Push the current address (or its absence, after a logout) to Bring. Skipped
+ * while the user has cashback turned off; the background refuses then anyway.
+ */
+async function refreshBringAddress(): Promise<void> {
+  if (!pushAddressToBring || await readBringOptOut()) return;
+  pushAddressToBring();
+}
 
 const injectScript = () => {
   const script = document.createElement('script');
@@ -89,7 +99,9 @@ async function injectBring() {
     'text': 'lower',
     getWalletAddress,
     promptLogin,
-    'walletAddressListeners': ['gero:login', 'gero:logout'],
+    walletAddressUpdateCallback: (push: () => void) => {
+      pushAddressToBring = push;
+    },
     'theme': 'dark',
   });
 }
@@ -111,18 +123,10 @@ if (shouldInject()) {
 
     // If the user is already logged in when this page loads, Bring's backend
     // may have cached a stale token (e.g., walletAddress=null from a prior
-    // session). Fire `gero:login` once so the Bring SDK pushes the current
-    // address to its background and re-fetches a fresh cashback token for
-    // this tab. Safe no-op if logged out: getWalletAddress returns ''.
+    // session). Push the current address once so the Bring SDK hands it to its
+    // background and re-fetches a fresh cashback token for this tab.
     try {
-      const currentAddress = await getWalletAddress();
-      if (currentAddress) {
-        window.dispatchEvent(new CustomEvent('gero:login', {
-          bubbles: true,
-          cancelable: true,
-          composed: false,
-        }));
-      }
+      if (!(await readBringOptOut()) && await getWalletAddress()) pushAddressToBring?.();
     } catch (e) {
       console.warn('[content.ts] initial wallet-address check failed:', e);
     }
@@ -161,15 +165,9 @@ if (shouldInject()) {
         }
       } else if (msg.action === 'geroLoggedWalletChanged') {
         // Broadcast from the background: the active Gero wallet changed.
-        // Dispatch the Bring-configured event so its SDK refreshes the
-        // cached wallet address (stored by the SDK in chrome.storage) and
-        // re-fetches any pending cashback token for this tab.
-        const event = msg.loggedIn ? 'gero:login' : 'gero:logout';
-        window.dispatchEvent(new CustomEvent(event, {
-          bubbles: true,
-          cancelable: true,
-          composed: false,
-        }));
+        // Push it so the Bring SDK refreshes the address it stored (or drops
+        // it on logout) and re-fetches any pending cashback token for this tab.
+        refreshBringAddress().catch(() => {});
       }
     };
 

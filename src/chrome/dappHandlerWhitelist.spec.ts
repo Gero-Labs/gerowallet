@@ -16,7 +16,6 @@ import { join } from 'node:path';
 const SHARED_GATES = ['isWhitelisted(', 'requireMidnightProvingOrigin(', 'handleMidnightDappProving('];
 
 const EXEMPT: Record<string, string> = {
-  'METHOD.popupLogin': 'only opens the wallet UI; returns no wallet data',
   'MIDNIGHT_METHOD.getConnectionStatus': 'public by design: reports connected/disconnected and network id',
   'MIDNIGHT_METHOD.hintUsage': 'no-op that resolves void',
 };
@@ -54,5 +53,20 @@ describe('background dApp handlers re-check the whitelist', () => {
 
   it('every exemption still exists (no stale entries)', () => {
     for (const name of Object.keys(EXEMPT)) expect(all.some(h => h.name === name)).toBe(true);
+  });
+
+  // The two handlers our own content script calls without an origin, for Bring.
+  it('getAddressBech32 refuses while locked and asks the shared release policy', () => {
+    const body = all.find(h => h.name === 'METHOD.getAddressBech32')!.body;
+    expect(body).toContain('refuseWhileLocked(request, sendResponse)');
+    expect(body).toContain('mayReleaseAddress(');
+    expect(body).toContain('readBringOptOut()');
+    // The old "origin is truthy" check let an empty origin skip the whitelist.
+    expect(body).not.toMatch(/request\.origin &&/);
+  });
+
+  it('popupLogin checks the whitelist for any page origin', () => {
+    const body = all.find(h => h.name === 'METHOD.popupLogin')!.body;
+    expect(body).toMatch(/request\.origin !== undefined && !WalletStore\.isWhitelisted\(request\.origin\)/);
   });
 });

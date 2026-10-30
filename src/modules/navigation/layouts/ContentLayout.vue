@@ -302,6 +302,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { OPEN_SETTINGS_ON_LOAD_KEY } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
@@ -623,18 +624,19 @@ const openSettingsFromFlag = (flag: unknown) => {
   // The offer's system notification (notifyIntro.ts): the Notifications tab starts the enable step itself.
   if (flag && typeof flag === 'object' && (flag as { enable?: unknown }).enable === 'notify') notifySettingsStore.requestEnable();
   currentDialog.value = dialogs.SETTINGS;
-  chrome.storage.local.remove('openSettingsOnLoad');
+  void chrome.storage.session.remove(OPEN_SETTINGS_ON_LOAD_KEY);
 };
+// Session storage (requestSettingsTabOnLoad): only the extension's own pages can write it.
 const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
-  if (area === 'local' && changes['openSettingsOnLoad']?.newValue) {
-    openSettingsFromFlag(changes['openSettingsOnLoad'].newValue);
+  if (area === 'session' && changes[OPEN_SETTINGS_ON_LOAD_KEY]?.newValue) {
+    openSettingsFromFlag(changes[OPEN_SETTINGS_ON_LOAD_KEY].newValue);
   }
 };
 chrome.storage.onChanged.addListener(handleStorageChange);
 onBeforeUnmount(() => {
   chrome.storage.onChanged.removeListener(handleStorageChange);
   // Clear any leftover flag so the dialog doesn't auto-open next time
-  chrome.storage.local.remove('openSettingsOnLoad');
+  void chrome.storage.session.remove(OPEN_SETTINGS_ON_LOAD_KEY);
 });
 
 // Lifecycle
@@ -642,9 +644,9 @@ onMounted(async () => {
   // Catch the new-tab path: storage.onChanged fired before this listener was
   // registered, so check the flag once on mount. The already-open-tab path
   // is handled by handleStorageChange, which removes the flag before mount.
-  chrome.storage.local.get('openSettingsOnLoad', (result) => {
-    if (result['openSettingsOnLoad']) openSettingsFromFlag(result['openSettingsOnLoad']);
-  });
+  void chrome.storage.session.get(OPEN_SETTINGS_ON_LOAD_KEY).then((result) => {
+    if (result?.[OPEN_SETTINGS_ON_LOAD_KEY]) openSettingsFromFlag(result[OPEN_SETTINGS_ON_LOAD_KEY]);
+  }, () => undefined);
 
   // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue
   // with immediate: true), so there is nothing to do here on mount.

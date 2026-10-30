@@ -46,6 +46,10 @@ export function inspectReleaseArtifact(directory, { expectedVersion, expectedId 
   }
   const objects = directives.get('object-src');
   if (!objects?.length || !objects.every(source => ["'self'", "'none'"].includes(source))) problems.push('object-src must restrict objects to self or none');
+  for (const directive of ['form-action', 'base-uri']) {
+    const sources = directives.get(directive);
+    if (sources?.length !== 1 || sources[0] !== "'none'") problems.push(`${directive} must be 'none'`);
+  }
   for (const directive of ['script-src-elem', 'script-src-attr', 'worker-src']) {
     const sources = directives.get(directive);
     if (sources && (!sources.length || sources.some(source => !["'self'", "'none'"].includes(source)))) problems.push(`${directive} must restrict execution to self or none`);

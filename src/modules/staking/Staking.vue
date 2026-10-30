@@ -355,6 +355,7 @@ import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 import { walletStore } from '@/stores/walletStore';
 import stakingStore from '@/stores/stakingStore';
 import filters from '@/shared/utils/filters';
@@ -529,15 +530,15 @@ const poolExtendedInfo = (pool: PoolRow | null | undefined) => {
     const key = pool.pool_id_bech32 || pool.pool_id;
     if (key && poolExtendedInfoCache.has(key)) return poolExtendedInfoCache.get(key);
     const parsed: PoolExtendedInfo = JSON.parse(pool.pool_extended_info);
-    // Sanitize icon URL — some pools leave the placeholder instruction text
-    // ("http(s) url to pool icon; ...") which starts with "http" but 404s, so
-    // require a real http(s):// scheme with no spaces.
-    const validUrl = (u: unknown) => typeof u === 'string' && /^https?:\/\/\S+$/.test(u);
-    if (parsed?.info?.url_png_icon_64x64 && !validUrl(parsed.info.url_png_icon_64x64)) {
-      parsed.info.url_png_icon_64x64 = '';
+    // The pool's own icon and logo, as the page loads them: through Gero's
+    // proxies, so the operator's host never sees who looks (thirdPartyImageUrl).
+    // That also drops the placeholder text some pools leave ("http(s) url to
+    // pool icon; ..."), which starts with "http" but is not a URL.
+    if (parsed?.info?.url_png_icon_64x64) {
+      parsed.info.url_png_icon_64x64 = thirdPartyImageUrl(parsed.info.url_png_icon_64x64) ?? '';
     }
-    if (parsed?.info?.url_png_logo && !validUrl(parsed.info.url_png_logo)) {
-      parsed.info.url_png_logo = '';
+    if (parsed?.info?.url_png_logo) {
+      parsed.info.url_png_logo = thirdPartyImageUrl(parsed.info.url_png_logo) ?? '';
     }
     if (key) poolExtendedInfoCache.set(key, parsed);
     return parsed;

@@ -36,6 +36,8 @@ vi.mock('@/utils/networks', () => ({ default: {} }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ default: {} }));
 vi.mock('@/stores/tapToolsStore', () => ({ default: { clear: vi.fn() } }));
 vi.mock('@/db/wallet-db', () => ({ clearDbCache: vi.fn() }));
+// Login reads the stored record (resolveGroupSecrets); none here, so these log in as given.
+vi.mock('@/db/gero-db', () => ({ getAllWallets: async () => ({}) }));
 vi.mock('@/stores/musicStore', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
@@ -126,7 +128,8 @@ describe('wallet login after worker startup', () => {
     initialize.mockReturnValue(ready.promise);
     const automatic = instance.login(wallet);
     const click = instance.login(wallet);
-    await Promise.resolve();
+    // Construction follows the stored-record read (resolveGroupSecrets).
+    await vi.waitFor(() => expect(env.constructed).toHaveBeenCalled());
     expect(env.constructed).toHaveBeenCalledTimes(1);
     expect(env.state.isSyncing).toBe(true);
     ready.resolve();

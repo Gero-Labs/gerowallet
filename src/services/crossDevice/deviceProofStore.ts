@@ -11,6 +11,7 @@
 // regeneration, so a stale proof is never sent for the wrong identity/wallet.
 
 import type { DeviceRegisterProof } from './protocol';
+import { moveFromChromeLocal, setPrivate } from '@/utils/privateStore';
 
 export interface ProofStorage {
   get(key: string): Promise<unknown>;
@@ -25,14 +26,15 @@ interface StoredProofEntry {
 }
 type StoredProofs = Record<string, StoredProofEntry>; // keyed by wallet reward address
 
-function chromeStorage(): ProofStorage {
+/**
+ * The extension's private IndexedDB (privateStore.ts), not chrome.storage.local:
+ * every content script can read and write that area, and this decides what the
+ * relay is told. The first read moves an older release's copy across.
+ */
+function privateStorage(): ProofStorage {
   return {
-    get: (key) => new Promise((resolve) => {
-      chrome.storage.local.get(key, (r) => resolve(r?.[key]));
-    }),
-    set: (key, value) => new Promise((resolve) => {
-      chrome.storage.local.set({ [key]: value }, () => resolve());
-    }),
+    get: (key) => moveFromChromeLocal(key),
+    set: (key, value) => setPrivate(key, value),
   };
 }
 
@@ -48,7 +50,7 @@ function isProof(v: unknown): v is DeviceRegisterProof {
 export async function loadDeviceRegisterProof(
   identityDeviceId: string,
   stakeAddress: string,
-  storage: ProofStorage = chromeStorage(),
+  storage: ProofStorage = privateStorage(),
 ): Promise<DeviceRegisterProof | null> {
   if (!identityDeviceId || !stakeAddress) return null;
   try {
@@ -68,7 +70,7 @@ export async function saveDeviceRegisterProof(
   identityDeviceId: string,
   stakeAddress: string,
   proof: DeviceRegisterProof,
-  storage: ProofStorage = chromeStorage(),
+  storage: ProofStorage = privateStorage(),
 ): Promise<void> {
   let all: StoredProofs = {};
   try {

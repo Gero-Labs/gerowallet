@@ -112,10 +112,13 @@ describe('midnightStore persistence', () => {
 
   beforeEach(async () => {
     m?.cache.resetStoreCacheForTest?.();
-    await new Promise<void>((resolve) => {
-      const req = indexedDB.deleteDatabase('gero-store-cache');
-      req.onsuccess = req.onerror = req.onblocked = () => resolve();
-    });
+    (await import('@/utils/privateStore')).resetPrivateStoreForTest();
+    for (const name of ['gero-store-cache', 'gero-private-store']) {
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = req.onblocked = () => resolve();
+      });
+    }
     env.data.clear();
     env.sets.length = 0;
     env.broadcasts.length = 0;
@@ -226,5 +229,30 @@ describe('midnightStore persistence', () => {
     expect(record.proofServer).toMatchObject({ mode: 'local', localUrl: 'http://localhost:6399' });
     expect(record.chainIdentity).toEqual(chainIdentity);
     expect(restarted.midnightStore.chainIdentity).toEqual(chainIdentity);
+  });
+
+  // Content scripts can read and rewrite chrome.storage.local (privateStore.ts).
+  it('keeps the Arkhia credentials out of chrome.storage, and the proving choices out of reach', async () => {
+    m!.midnightActions.setProofServer({
+      mode: 'zkpaas', localUrl: 'http://localhost:6399', localUrlLedger9: 'http://localhost:6300',
+      zkpaasUrl: '', zkpaasApiKey: 'SEALED-key', zkpaasApiSecret: 'SEALED-secret',
+    });
+    m!.midnightActions.acceptShieldedProvingConsent('zkpaas');
+    await settle();
+
+    const record = env.data.get('midnightStore') as { proofServer: Record<string, unknown> };
+    expect(JSON.stringify(record)).not.toContain('SEALED');
+    expect(record.proofServer['mode']).toBe('zkpaas');
+
+    // A page gets the credentials from the extension's private copy.
+    const page = await load('browser');
+    await waitFor(() => page.midnightStore.proofServer.zkpaasApiSecret === 'SEALED-secret');
+
+    // A content script points proving elsewhere and revokes the consent check.
+    env.data.set('midnightStore', { ...record, proofServer: { ...record.proofServer, mode: 'remote' }, shieldedProvingConsent: null });
+    const restarted = await load('background');
+    await waitFor(() => restarted.midnightStore.proofServer.zkpaasApiKey === 'SEALED-key');
+    expect(restarted.midnightStore.proofServer.mode).toBe('zkpaas');
+    expect(restarted.midnightStore.shieldedProvingConsent).toMatchObject({ provider: 'zkpaas' });
   });
 });
