@@ -4,6 +4,17 @@
  * unknown) and, for physical cards, GET /cards/delivery-payment/{uuid} (`status`).
  */
 
+/**
+ * How long to wait before checking again on an order that has no card yet, by the order's age:
+ * every 10 s for the first five minutes (a virtual card usually appears within them), every
+ * minute until it is an hour old, then every five minutes, since a physical card can take days.
+ */
+export function orderPollDelay(ageMs: number): number {
+  if (!Number.isFinite(ageMs) || ageMs < 5 * 60_000) return 10_000;
+  if (ageMs < 60 * 60_000) return 60_000;
+  return 5 * 60_000;
+}
+
 export type DeliveryPaymentState = 'awaiting' | 'detected' | 'paid' | 'expired' | 'rejected' | 'unknown';
 
 /** Normalises the delivery-fee payment status (also covers the 404/410 mappings in the card store). */

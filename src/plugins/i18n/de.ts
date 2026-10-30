@@ -586,6 +586,10 @@ export default {
   'card.trackerAutoRefresh': 'Diese Seite sucht automatisch nach Neuigkeiten. Ihre Karte erscheint hier, sobald Zione sie ausgibt.',
 
   'card.trackerAwaitingPayment': 'Warten auf die Versandgebühr',
+  'card.trackerPaymentSent': 'Zahlung gesendet, Bestätigung durch Zione ausstehend',
+  'card.feeSentBody': 'Sie haben die Liefergebühr bereits aus dieser Wallet gesendet. Zione muss sie noch bestätigen. Zahlen Sie nicht erneut: Falls sich innerhalb einer Stunde nichts ändert, schreiben Sie dem Zione-Support und nennen Sie Ihre Transaktion.',
+  'card.feeSentSubject': 'Gero Card: Liefergebühr bezahlt, aber nicht bestätigt',
+  'card.feeSentMailBody': 'Bestellung {order}, Zahlungstransaktion {tx}',
 
   'card.trackerDispatched': 'Versandt',
 
@@ -915,6 +919,9 @@ export default {
   'card.details.rejectedReason': 'Meldung von Zione: „{reason}“',
   'card.details.emailSupport': 'E-Mail an den Zione-Support',
   'card.details.supportSubject': 'Gero Card: Bitte meine gespeicherte Adresse aktualisieren',
+  'card.details.unavailableTitle': 'Zione benötigt weitere Angaben',
+  'card.details.unavailableBody': 'Zione fehlen einige Ihrer Karteninhaberdaten, etwa Ihre Wohnadresse, und sie können gerade nicht in der Wallet ergänzt werden. Schreiben Sie dem Zione-Support, um sie zu ergänzen, und bestellen Sie danach erneut.',
+  'card.details.unavailableSubject': 'Gero Card: Bitte meine fehlenden Karteninhaberdaten ergänzen',
   'card.verifyingTransaction': 'Transaktion wird überprüft',
   'card.viewCardDetails': 'Kartendetails anzeigen',
   'card.viewCardDetailsSubtitle': 'Die Details Ihrer Karte anzeigen. Diese Aktion kann nicht rückgängig gemacht werden.',
@@ -1058,6 +1065,7 @@ export default {
   'common.contacts': 'Kontakte',
   'common.contactsHelper': 'Kontakte können in den verschiedenen Sendeansichten ausgewählt werden, um Zeit zu sparen',
   'common.continue': 'Weiter',
+  'common.copyToClipboard': 'In die Zwischenablage kopieren',
   'common.copied': 'Kopiert',
   'common.create': 'ERSTELLEN',
   'common.dappWebsiteFavicon': 'Favicon der Dapp-Website',
@@ -6037,4 +6045,8 @@ export default {
   'legacyListings.failed': 'Die Elemente konnten nicht zurückgeholt werden. Versuche es erneut.',
   'legacyListings.maybeSent': 'Dies wurde möglicherweise bereits gesendet. Prüfe deine Aktivität, bevor du es erneut versuchst.',
   'legacyListings.itemFailed': 'Dieses Element kann gerade nicht zurückgeholt werden. | Eines dieser Elemente kann gerade nicht zurückgeholt werden. Versuche sie einzeln.',
+  'bitcoin.receiveAddress': 'Empfangsadresse',
+  'bitcoin.changeAddress': 'Wechselgeldadresse',
+  'transactions.sortLargestFirst': 'Größte zuerst',
+  'transactions.sortSmallestFirst': 'Kleinste zuerst',
 }

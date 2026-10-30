@@ -2,7 +2,7 @@ import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from 'vue';
 import type { CardInfo } from '@/models/card';
 import cardStore from '@/stores/modules/card';
 import { cardUuidFromOrderStatus } from '@/modules/wallet/utils/cardApiCompat';
-import { deliveryPaymentState, type DeliveryPaymentState } from '@/modules/wallet/utils/cardOrderTracker';
+import { deliveryPaymentState, orderPollDelay, type DeliveryPaymentState } from '@/modules/wallet/utils/cardOrderTracker';
 
 export interface OrderSnapshot {
   /** Order status: new, dispatched, activating, done, rejected, unknown. */
@@ -13,19 +13,20 @@ export interface OrderSnapshot {
   expiresAt: string | null;
 }
 
-/** The provider asks clients to poll for the issued card; 10 s is its suggested pace. */
-const POLL_MS = 10_000;
-
 /**
  * Watches every order that has no card yet: its status, its delivery fee and the card
  * issued for it. As soon as a card UUID exists the card list is reloaded, which moves the
- * order out of this set. Polling pauses while the page is hidden.
+ * order out of this set. The provider suggests polling every 10 s, which fits a fresh order;
+ * older orders back off (see `orderPollDelay`), because a physical card can take days and
+ * every check is three requests. Polling pauses while the page is hidden.
  */
 export function useOrderTracking(cards: ComputedRef<CardInfo[]>) {
   const snapshots = ref<Record<string, OrderSnapshot>>({});
   const checking = ref(false);
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
+  /** When this page first saw each order: the age to fall back on without a usable created_at. */
+  const firstSeen = new Map<string, number>();
 
   const pendingOrders = computed(() =>
     cards.value.filter(card => {
@@ -86,16 +87,32 @@ export function useOrderTracking(cards: ComputedRef<CardInfo[]>) {
 
   function stop(): void {
     if (timer) {
-      clearInterval(timer);
+      clearTimeout(timer);
       timer = null;
     }
   }
 
-  function start(): void {
-    if (timer || !pendingOrders.value.length) return;
-    timer = setInterval(() => {
-      if (document.visibilityState === 'visible') refreshAll();
-    }, POLL_MS);
+  /** The shortest wait any pending order needs. The older age wins, so a wrong created_at cannot keep polling fast. */
+  function nextDelay(now: number): number {
+    const delays = pendingOrders.value.map(card => {
+      const orderUuid = card.cardData.order_uuid;
+      if (!firstSeen.has(orderUuid)) firstSeen.set(orderUuid, now);
+      const created = Date.parse(card.cardData.created_at || '');
+      const seenFor = now - (firstSeen.get(orderUuid) ?? now);
+      return orderPollDelay(Number.isFinite(created) ? Math.max(seenFor, now - created) : seenFor);
+    });
+    return Math.min(...delays);
+  }
+
+  /** (Re)starts the timer for the next check; each check schedules the one after it. */
+  function schedule(): void {
+    stop();
+    if (!pendingOrders.value.length) return;
+    timer = setTimeout(async () => {
+      timer = null;
+      if (document.visibilityState === 'visible') await refreshAll();
+      schedule();
+    }, nextDelay(Date.now()));
   }
 
   watch(
@@ -103,7 +120,8 @@ export function useOrderTracking(cards: ComputedRef<CardInfo[]>) {
     ids => {
       if (ids) {
         refreshAll();
-        start();
+        // Restart rather than keep a long wait: a newly placed order needs the fast pace.
+        schedule();
       } else {
         stop();
       }

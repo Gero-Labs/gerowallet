@@ -11,7 +11,12 @@ import { handleCardApiError } from './cardApiErrors';
 import { endProviderSession } from './cardSession';
 import { cardUuidFromOrderStatus, depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
 import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
-import { parseMissingFields, type CardholderDetails, type CardholderField } from '@/modules/wallet/utils/cardholderDetails';
+import {
+  DETAILS_CHECK_TIMEOUT_MS, parseMissingFields, type CardholderDetails, type CardholderField,
+} from '@/modules/wallet/utils/cardholderDetails';
+import {
+  adoptSentFeePayment, loadSentFeePayments, rememberSentFeePayment, sentFeePayment, type SentFeePayment,
+} from '@/modules/wallet/utils/cardFeePayments';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -22,6 +27,9 @@ export interface OrderPhysicalCardPayload {
   phone: string;
   deliveryMethod: string;
 }
+
+/** Orders whose sent fee payment was already synced with gero-backend on this page. */
+const feePaymentSyncs = new Set<string>();
 
 export const cardStore = reactive<CardState>({
   accessToken: null,
@@ -143,6 +151,12 @@ async function getTokenFromCookie(name: string): Promise<string | null> {
 }
 
 // Create API instance for card operations
+async function postSentFeePayment(orderUuid: string, txId: string): Promise<void> {
+  await getCardApi().axiosInstance.post(`/api/kaiserex/cards/delivery-payment/${orderUuid}/sent`, { txId }, {
+    timeout: DETAILS_CHECK_TIMEOUT_MS,
+  });
+}
+
 function getCardApi(): Api {
   const api = new Api(walletStore.loggedWallet, Provider.BLOCKFROST);
 
@@ -672,9 +686,14 @@ export default {
     }
   },
 
-  /** The cardholder details Zione still needs before it can issue a card; empty when none. */
+  /**
+   * The cardholder details Zione still needs before it can issue a card; empty when none.
+   * Short timeout: the order modal waits on this before showing anything.
+   */
   async getMissingCardholderDetails(): Promise<CardholderField[]> {
-    const response = await getCardApi().axiosInstance.get('/api/kaiserex/cards/cardholder-details/missing');
+    const response = await getCardApi().axiosInstance.get('/api/kaiserex/cards/cardholder-details/missing', {
+      timeout: DETAILS_CHECK_TIMEOUT_MS,
+    });
     return parseMissingFields(response.data);
   },
 
@@ -685,6 +704,55 @@ export default {
   async fillCardholderDetails(details: Partial<CardholderDetails>): Promise<CardholderField[]> {
     const response = await getCardApi().axiosInstance.post('/api/kaiserex/cards/cardholder-details', details);
     return parseMissingFields(response.data);
+  },
+
+  /**
+   * Remembers a sent delivery fee in this browser and at gero-backend, so no browser or device
+   * offers to pay it again while Zione has not credited it. The backend write is best effort.
+   */
+  async rememberFeePayment(orderUuid: string | null | undefined, txId: string | null | undefined): Promise<void> {
+    if (!orderUuid || !txId) return;
+    await rememberSentFeePayment(orderUuid, txId);
+    feePaymentSyncs.add(orderUuid);
+    await postSentFeePayment(orderUuid, txId).catch(() => undefined);
+  },
+
+  /** GET the fee payment gero-backend holds for an order, recorded from any device; null when none. */
+  async fetchSentFeePayment(orderUuid: string): Promise<SentFeePayment | null> {
+    try {
+      const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/delivery-payment/${orderUuid}/sent`, {
+        timeout: DETAILS_CHECK_TIMEOUT_MS,
+      });
+      const txId = response.data?.tx_id;
+      const sentAt = Date.parse(response.data?.sent_at ?? '');
+      if (typeof txId !== 'string' || !/^[0-9a-f]{64}$/i.test(txId)) return null;
+      return { txId, sentAt: Number.isFinite(sentAt) ? sentAt : Date.now() };
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } } | null)?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  /**
+   * Once per order and page: adopts a fee payment another device recorded, or sends this
+   * browser's record to gero-backend (it may predate the backend route, or its write failed).
+   */
+  async syncSentFeePayment(orderUuid: string | null | undefined): Promise<void> {
+    if (!orderUuid || feePaymentSyncs.has(orderUuid)) return;
+    feePaymentSyncs.add(orderUuid);
+    try {
+      await loadSentFeePayments();
+      const local = sentFeePayment(orderUuid);
+      if (local) {
+        await postSentFeePayment(orderUuid, local.txId);
+        return;
+      }
+      const remote = await this.fetchSentFeePayment(orderUuid);
+      if (remote) await adoptSentFeePayment(orderUuid, remote);
+    } catch {
+      // Try again on the next page; the local record, if any, still guards this browser.
+      feePaymentSyncs.delete(orderUuid);
+    }
   },
 
   async getOrderDetails(orderUuid: string): Promise<CardOrderStatus> {

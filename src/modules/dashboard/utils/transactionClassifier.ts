@@ -104,9 +104,13 @@ const MINSWAP_SCRIPT_HASHES = new Set([
   MINSWAP_V2_POOL_SCRIPT_HASH,
 ]);
 
-/** A pending transaction older than an hour never reached the chain. */
+/**
+ * A pending Cardano transaction older than an hour never reached the chain (its TTL
+ * has passed). Bitcoin has no TTL: a low-fee transaction can wait in the mempool for
+ * days and still confirm, so a Bitcoin record stays pending until it does.
+ */
 export const isPendingTooLong = (item: StoredTransaction, now: number = Date.now()): boolean => {
-  if (!item.pending) return false;
+  if (!item.pending || btcType(item) !== undefined) return false;
   return now / 1000 - item.tx_timestamp > 60 * 60;
 };
 
