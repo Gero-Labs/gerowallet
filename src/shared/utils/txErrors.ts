@@ -11,6 +11,7 @@
 import i18n from '@/plugins/i18n';
 import {
   CIP113_SIGN_REFUSAL_MESSAGE,
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
@@ -164,6 +165,7 @@ export function friendlyTxError(raw: unknown): string {
   // The CIP-113 signing refusal is thrown from the background as a fixed English
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+  if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
   // same as it being rejected -- the localized copy has to keep that uncertainty.

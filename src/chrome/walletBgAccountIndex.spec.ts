@@ -16,6 +16,7 @@ vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.f
 vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconnect: vi.fn() } }));
 
 import { WalletBg } from './walletBg';
+import { MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from './config';
 import WalletStore from '@/stores/walletStore';
 import { getAddress, getCcColdKey, getCcHotKey, getDrepKey, getPaymentKeyExternal, getStakeKey } from './serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
@@ -117,6 +118,18 @@ describe('WalletBg on account #1', () => {
     const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
 
     expect(signingKeys(witnesses)).toEqual([getPaymentKeyExternal(accountXpub(0), 0).hex()]);
+  });
+
+  // Such a transaction only forfeits its collateral, which the input's witness authorises.
+  it('refuses a transaction marked to fail', async () => {
+    const bg = bootWallet({ publicKey: accountXpub(1), accountIndex: 1 });
+    const keys = bg.resolvePathsForMissingAddresses([]);
+    const { txCbor, utxos } = spendFrom(keys.payment[0].address!);
+    // The trailing isValid flag: f5 is true, f4 false.
+    const markedToFail = `${txCbor.slice(0, -4)}f4f6`;
+    expect(Serialization.Transaction.fromCbor(Serialization.TxCBOR(markedToFail)).isValid()).toBe(false);
+
+    await expect(bg.signTx(markedToFail, '', utxos, keys, rootKeyBytes)).rejects.toThrow(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE);
   });
 
   /** A transaction spending the account's first payment UTxO and carrying `certificate`. */

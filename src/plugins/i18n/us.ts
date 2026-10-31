@@ -3359,6 +3359,7 @@ export default {
   'errors.buildTransactionFailed': 'Failed to build transaction',
   'errors.insufficientBalance': 'Insufficient balance',
   'errors.noCollateral': 'This transaction runs a smart contract, which needs a small ADA-only UTxO for collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
+  'errors.markedToFailRefused': 'This transaction is marked to fail, so signing it would only give up its collateral. Gero won\'t sign it.',
   'errors.insufficientAdaForTx': 'Not enough ADA to complete this transaction once network fees and the minimum per-output are covered. Add a little more ADA and try again.',
   'errors.txRequestRejected': 'The transaction request was rejected: {reason}',
   'errors.submitUnconfirmed': 'We could not confirm whether your transaction reached the network. It may still go through, so check your transaction history before sending it again.',

@@ -39,13 +39,27 @@ const parse = (address: string | undefined) => {
 };
 
 /**
+ * An address's payment credential (a reward address's stake credential), key hash or script
+ * hash. Undefined for a Byron or unparseable address.
+ */
+export const paymentCredential = (address: string | undefined): Cardano.Credential | undefined =>
+  parse(address)?.getProps().paymentPart;
+
+/**
  * The lowercase payment key hash of an address whose payment credential is a key hash. Undefined
  * for a script-locked, Byron or unparseable address, which no key of the wallet signs for.
  */
 export const paymentKeyHash = (address: string | undefined): string | undefined => {
-  const credential = parse(address)?.getProps().paymentPart;
+  const credential = paymentCredential(address);
   return credential?.type === Cardano.CredentialType.KeyHash ? credential.hash.toLowerCase() : undefined;
 };
+
+/**
+ * The first key that matches, one with a path before one without: no signer can use a key with
+ * no path, so it must not hide another key the key set carries for the same hash.
+ */
+const findKey = (keys: ReadonlyArray<Key>, matches: (key: Key) => boolean): Key | undefined =>
+  keys.find((key) => matches(key) && !!key.path) ?? keys.find(matches);
 
 /**
  * The payment or change key that signs for a UTxO at an address: the one at that address, else
@@ -55,10 +69,10 @@ export const paymentKeyHash = (address: string | undefined): string | undefined 
 export const keyAtAddress = (keys: KeySet, address: string | undefined): Key | undefined => {
   if (!address) return undefined;
   const paymentKeys = [...keyList(keys?.payment), ...keyList(keys?.change)];
-  const atAddress = paymentKeys.find((key) => key.address === address);
+  const atAddress = findKey(paymentKeys, (key) => key.address === address);
   if (atAddress) return atAddress;
   const hash = paymentKeyHash(address);
-  return hash ? paymentKeys.find((key) => lower(key.cred) === hash) : undefined;
+  return hash ? findKey(paymentKeys, (key) => lower(key.cred) === hash) : undefined;
 };
 
 /**
@@ -82,9 +96,17 @@ export const stakeKeyFor = (keys: KeySet, account: string): Key | undefined => {
   const network = parse(account)?.getNetworkId();
   const sameNetwork = (key: Key) => !key.address || parse(key.address)?.getNetworkId() === network;
   const stake = keyList(keys?.stake);
-  return stake.find((key) => lower(key.cred) === hash && sameNetwork(key))
-    ?? stake.find((key) => key.address === account && !key.cred);
+  return findKey(stake, (key) => lower(key.cred) === hash && sameNetwork(key))
+    ?? findKey(stake, (key) => key.address === account && !key.cred);
 };
+
+/**
+ * Whether a transaction is marked to fail (isValid: false). It skips its scripts and forfeits its
+ * collateral, and an input's witness alone authorises a collateral UTxO at the same key, so
+ * leaving out the collateral witness can't protect it: the signers refuse such a transaction
+ * outright (MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE). No dApp sends one honestly.
+ */
+export const isMarkedToFail = (tx: Pick<Cardano.Tx, 'isValid'>): boolean => tx.isValid === false;
 
 /** The role of a key that witnesses a transaction, as `analyzeTransactionForSignatures` names it. */
 export type WitnessRole = 'payment' | 'stake' | 'drep' | 'ccCold' | 'ccHot';
@@ -94,6 +116,8 @@ export interface WalletWitness {
   keyHash: string;
   role: WitnessRole;
   key: Key;
+  /** For collateral, the address of the UTxO it signs for, which may differ from the key's own. */
+  address?: string;
 }
 
 /** What a transaction needs the wallet's keys for, worked out once for every signer. */
@@ -132,10 +156,14 @@ const STAKE_KEY_CERTIFICATES: ReadonlySet<Cardano.CertificateType> = new Set([
  * script, or a hash the key set doesn't carry, is not the wallet's to sign: another party
  * signs for it (a multisig), and a key set with no cred of a kind owns none of that kind.
  */
-export const walletWitnessPlan = (tx: Cardano.Tx, keys: KeySet, utxos: ReadonlyArray<Cardano.Utxo>): WalletWitnessPlan => {
+export const walletWitnessPlan = (
+  tx: Cardano.Tx,
+  keys: KeySet,
+  utxos: ReadonlyArray<Cardano.Utxo> | null | undefined,
+): WalletWitnessPlan => {
   // Indexed once by `txId#index`, the first of any duplicate kept, as a scan would find it.
   const utxoByRef = new Map<string, Cardano.Utxo>();
-  utxos.forEach((utxo) => {
+  (utxos ?? []).forEach((utxo) => {
     const ref = `${utxo[0].txId}#${utxo[0].index}`;
     if (!utxoByRef.has(ref)) utxoByRef.set(ref, utxo);
   });
@@ -148,22 +176,19 @@ export const walletWitnessPlan = (tx: Cardano.Tx, keys: KeySet, utxos: ReadonlyA
   });
 
   const witnesses = new Map<string, WalletWitness>();
-  const add = (role: WitnessRole, key: Key | undefined, keyHash: string | undefined = key?.cred) => {
+  const add = (role: WitnessRole, key: Key | undefined, keyHash: string | undefined = key?.cred, address?: string) => {
     const hash = lower(keyHash);
-    if (key && hash && !witnesses.has(hash)) witnesses.set(hash, { keyHash: hash, role, key });
+    if (key && hash && !witnesses.has(hash)) witnesses.set(hash, { keyHash: hash, role, key, ...(address ? { address } : {}) });
   };
 
   // Collateral is witnessed like an input, by its key when no input's key already signs. A
-  // transaction marked invalid exists only to forfeit its collateral, so the wallet witnesses
-  // none for one: a dApp can't take a wallet UTxO as collateral that way.
-  if (tx.isValid !== false) {
-    const inputPaths = new Set(inputs.flatMap(({ key }) => (key?.path ? [key.path] : [])));
-    for (const txIn of tx.body.collaterals ?? []) {
-      const utxo = utxoOf(txIn);
-      const address = utxo && addressOf(utxo);
-      const key = keyAtAddress(keys, address);
-      if (key?.path && !inputPaths.has(key.path)) add('payment', key, key.cred || paymentKeyHash(address));
-    }
+  // transaction marked to fail is refused before this runs (isMarkedToFail).
+  const inputPaths = new Set(inputs.flatMap(({ key }) => (key?.path ? [key.path] : [])));
+  for (const txIn of tx.body.collaterals ?? []) {
+    const utxo = utxoOf(txIn);
+    const address = utxo && addressOf(utxo);
+    const key = keyAtAddress(keys, address);
+    if (key?.path && !inputPaths.has(key.path)) add('payment', key, key.cred || paymentKeyHash(address), address);
   }
 
   const drepKeys = [keys?.drep105, keys?.drep129];
@@ -171,7 +196,7 @@ export const walletWitnessPlan = (tx: Cardano.Tx, keys: KeySet, utxos: ReadonlyA
   const keyFor = (lists: Array<ReadonlyArray<Key> | null | undefined>, credential: Cardano.Credential | undefined) => {
     if (credential?.type !== Cardano.CredentialType.KeyHash) return undefined;
     const hash = lower(credential.hash);
-    return lists.flatMap(keyList).find((key) => lower(key.cred) === hash);
+    return findKey(lists.flatMap(keyList), (key) => lower(key.cred) === hash);
   };
   const ownReward = (account: Cardano.RewardAccount) => add('stake', stakeKeyFor(keys, account), rewardAccountKeyHash(account));
 
@@ -203,14 +228,14 @@ export const walletWitnessPlan = (tx: Cardano.Tx, keys: KeySet, utxos: ReadonlyA
   }
   for (const withdrawal of tx.body.withdrawals ?? []) ownReward(withdrawal.stakeAddress);
 
-  const byRole: Array<[WitnessRole, ReadonlyArray<Key> | null | undefined]> = [
-    ['payment', keys?.payment], ['payment', keys?.change], ['stake', keys?.stake], ['drep', keys?.drep105],
-    ['drep', keys?.drep129], ['ccCold', keys?.ccCold], ['ccHot', keys?.ccHot],
+  const byRole: Array<[WitnessRole, Array<ReadonlyArray<Key> | null | undefined>]> = [
+    ['payment', [keys?.payment, keys?.change]], ['stake', [keys?.stake]], ['drep', drepKeys],
+    ['ccCold', [keys?.ccCold]], ['ccHot', [keys?.ccHot]],
   ];
   for (const required of tx.body.requiredExtraSignatures ?? []) {
     const hash = lower(required);
-    for (const [role, list] of byRole) {
-      const key = keyList(list).find((k) => lower(k.cred) === hash);
+    for (const [role, lists] of byRole) {
+      const key = findKey(lists.flatMap(keyList), (k) => lower(k.cred) === hash);
       if (key) {
         add(role, key, hash);
         break;

@@ -14,7 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
-import { walletWitnessPlan, type WitnessRole } from '@/shared/utils/keyCreds';
+import { isMarkedToFail, walletWitnessPlan, type WitnessRole } from '@/shared/utils/keyCreds';
 import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
@@ -239,12 +239,15 @@ const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | und
  * signs an input with only once (sign_tx dedupes by public key), so a required signer is
  * listed even when an input's key is the one it names.
  */
-const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[]) => {
+const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[] | null | undefined) => {
   const plan = walletWitnessPlan(txCore, keys, utxos);
-  const inputs = plan.inputs.map(({ utxo, key }) => ({ utxo, key: signingKey(key) }));
+  // A hash request lists the address each key signs for: the UTxO's own, which may be another
+  // address of that key (an enterprise one, say) than the one the key set lists.
+  const atUtxo = (key: SigningKey | undefined, address: string | undefined) => (key && address ? { ...key, address } : key);
+  const inputs = plan.inputs.map(({ utxo, key }) => ({ utxo, key: atUtxo(signingKey(key), utxo[0].address || utxo[1].address) }));
   debugLog('[Keystone] Found required signers:', txCore.body.requiredExtraSignatures?.length ?? 0);
-  const extra: ExtraSigner[] = plan.witnesses.flatMap(({ keyHash, role, key }) => {
-    const signer = signingKey(key, !GOVERNANCE_ROLES.has(role));
+  const extra: ExtraSigner[] = plan.witnesses.flatMap(({ keyHash, role, key, address }) => {
+    const signer = atUtxo(signingKey(key, !GOVERNANCE_ROLES.has(role)), address);
     return signer ? [{ keyHash, role, ...signer }] : [];
   });
   return { inputs, extra };
@@ -276,6 +279,9 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
 
   // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
   const txCore = tx.toCore();
+  // A transaction marked to fail only forfeits its collateral, which an input's witness can
+  // authorise on its own.
+  if (isMarkedToFail(txCore)) throw new Error(i18n.t('errors.markedToFailRefused') as string);
   assertFirmwareShowsCertificates(txCore, walletData.firmwareVersion);
 
   const xfp = walletData.xfp ?? "";

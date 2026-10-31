@@ -4,7 +4,7 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import {
   describeSubmitFailure,
   isUnexpectedSubmitResponseError,
@@ -72,7 +72,7 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
-import { carriesSigningCreds } from '@/shared/utils/keyCreds';
+import { carriesSigningCreds, isMarkedToFail, paymentKeyHash } from '@/shared/utils/keyCreds';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
@@ -854,8 +854,9 @@ export class WalletBg {
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
     }
-    const derives = this.derivesOwnAddress();
-    if (cached && (this.type === WalletType.Watch || !derives || carriesSigningCreds(cached))) {
+    // A complete row (or a watch wallet's) is used as it is, with no derivation.
+    const derives = cached && (this.type === WalletType.Watch || carriesSigningCreds(cached)) ? null : this.derivesOwnAddress();
+    if (cached && !derives) {
       debugLog('🔑 Loading cached keys from DB');
       WalletStore.setKeys(cached);
       return;
@@ -1477,19 +1478,13 @@ export class WalletBg {
       // programmable-token script address, and the next push would drop them.
       let added = false;
       for (const addr of serverAddresses) {
-        try {
-          // Key credentials only, as on the HD branch below. With the CIP-113 filter
-          // off the server also reports the programmable-token SCRIPT address; absorbing
-          // its hash would make classifyUtxoAddress call those UTxOs spendable.
-          const paymentCred = Cardano.Address.fromString(addr)?.getProps().paymentPart;
-          if (paymentCred?.type === Cardano.CredentialType.ScriptHash) continue;
-          const cred = keyHashFromAddress(addr) as unknown as string;
-          if (cred && !this.watchCredentials.has(cred)) {
-            this.watchCredentials.add(cred);
-            added = true;
-          }
-        } catch {
-          continue;
+        // Key credentials only, as on the HD branch below. With the CIP-113 filter
+        // off the server also reports the programmable-token SCRIPT address; absorbing
+        // its hash would make classifyUtxoAddress call those UTxOs spendable.
+        const cred = paymentKeyHash(addr);
+        if (cred && !this.watchCredentials.has(cred)) {
+          this.watchCredentials.add(cred);
+          added = true;
         }
       }
       if (!added) return null;
@@ -2411,6 +2406,9 @@ export class WalletBg {
       debugLog('CIP-113: refusing to sign, programmable inputs:', programmableInputs);
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
+    // A transaction marked to fail only forfeits its collateral, which an input's witness can
+    // authorise on its own: refused whoever asks, before the root key is decrypted.
+    if (isMarkedToFail(transaction)) throw new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE);
 
     // Get root private key
     let rootPrivateKey: Bip32PrivateKey;

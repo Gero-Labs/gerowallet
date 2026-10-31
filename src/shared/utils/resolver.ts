@@ -656,7 +656,7 @@ export function analyzeTransactionForSignatures(
   // the fee is sized for the witnesses every signer gives. A key with no path signs nothing:
   // no signer can tell which key it is. Neither does an input no key of the key set signs for
   // (a script's, or a key the key set doesn't carry).
-  const plan = walletWitnessPlan(transaction, addresses, utxos ?? []);
+  const plan = walletWitnessPlan(transaction, addresses, utxos);
   const signers = [
     ...plan.inputs.flatMap(({ key }) => (key?.path ? [{ derivationPath: parseDerivationPath(key.path), type: 'payment' }] : [])),
     // Every other witness at its key's own path, so a key a certificate, a vote and a required

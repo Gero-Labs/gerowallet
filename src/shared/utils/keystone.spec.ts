@@ -499,11 +499,45 @@ describe('Keystone Cardano sign request: extra signers', () => {
       expect(await signersOf({ collaterals: [otherIn] }, withoutCred)).toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
     });
 
-    // A transaction marked invalid exists only to forfeit its collateral.
-    it('asks for no collateral witness for a transaction marked invalid', async () => {
-      const invalid = Serialization.Transaction.fromCore({ ...tx({ collaterals: [otherIn] }).toCore(), isValid: false });
-      const response = await createKeystoneSignRequest(invalid, { xfp: '0a1b2c3d' }, utxos, keys);
-      expect(CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()).toEqual([]);
+    // A transaction marked to fail only forfeits its collateral, and an input's witness
+    // authorises collateral at the same key, so leaving out the collateral witness can't help.
+    it('refuses a transaction marked to fail, whichever key holds the collateral', async () => {
+      const markedToFail = (body: Partial<Cardano.TxBody>) => Serialization.Transaction.fromCore({ ...tx(body).toCore(), isValid: false });
+      await expect(createKeystoneSignRequest(markedToFail({ collaterals: [otherIn] }), { xfp: '0a1b2c3d' }, utxos, keys))
+        .rejects.toThrow('This transaction is marked to fail');
+      await expect(createKeystoneSignRequest(markedToFail({ collaterals: [txIn] }), { xfp: '0a1b2c3d' }, utxos, keys))
+        .rejects.toThrow('This transaction is marked to fail');
+    });
+
+    it('lists the collateral UTxO\'s own address in a hash-signing request', async () => {
+      const response = await request({ collaterals: [otherIn] }, 40);
+      expect(CardanoSignTxHashRequest.fromCBOR(response.ur.cbor).getAddressList()).toEqual([paymentAddress, baseAddress(otherPaymentCred)]);
+    });
+  });
+
+  describe('UTxO addresses', () => {
+    // The enterprise address of the first payment key: in no key list, signed by that key.
+    const enterpriseAddress = Cardano.PaymentAddress(
+      Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Mainnet, paymentCred).toAddress().toBech32(),
+    );
+    const enterpriseIn = { txId: Cardano.TransactionId('55'.repeat(32)), index: 0 };
+    const withEnterprise: Cardano.Utxo[] = [
+      ...utxos,
+      [{ ...enterpriseIn, address: enterpriseAddress }, { address: enterpriseAddress, value: { coins: 5_000_000n } }],
+    ];
+
+    it('lists the address an input\'s UTxO sits at in a hash-signing request, with the key that signs it', async () => {
+      const response = await createKeystoneSignRequest(tx({ inputs: [enterpriseIn] }, 40), { xfp: '0a1b2c3d', stakeAddress }, withEnterprise, keys);
+      expect(response.useHash).toBe(true);
+      const hashRequest = CardanoSignTxHashRequest.fromCBOR(response.ur.cbor);
+      const paths = hashRequest.getPaths() as unknown as DataItem[];
+      expect(paths.map((path) => `m/${CryptoKeypath.fromDataItem(path).getPath()}`)).toEqual([PAYMENT_PATH]);
+      expect(hashRequest.getAddressList()).toEqual([enterpriseAddress]);
+    });
+
+    it('builds a request without the wallet\'s UTxOs, signing no input', async () => {
+      const response = await createKeystoneSignRequest(tx({}), { xfp: '0a1b2c3d', stakeAddress }, undefined as unknown as Cardano.Utxo[], keys);
+      expect(CardanoSignRequest.fromCBOR(response.ur.cbor).getUtxos()).toEqual([]);
     });
   });
 

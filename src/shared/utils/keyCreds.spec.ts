@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Cardano } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import type { Keys } from '@/models/types';
-import { keyAtAddress, rewardAccountKeyHash, stakeKeyFor, walletWitnessPlan } from './keyCreds';
+import { isMarkedToFail, keyAtAddress, rewardAccountKeyHash, stakeKeyFor, walletWitnessPlan } from './keyCreds';
 
 // Synthetic hashes, never a real wallet's keys.
 const STAKE = 'a3'.repeat(28);
@@ -61,6 +61,11 @@ describe('keyAtAddress', () => {
     expect(keyAtAddress(keys, enterpriseAddress(PAYMENT))?.path).toBe(PAYMENT_PATH);
   });
 
+  it('prefers a key with a path to one without for the same hash', () => {
+    const shadowed = { payment: [{ address: '', cred: PAYMENT, path: '' }], change: [{ address: 'addr_test_change', cred: PAYMENT, path: PAYMENT_PATH }] } as Partial<Keys>;
+    expect(keyAtAddress(shadowed, enterpriseAddress(PAYMENT))?.path).toBe(PAYMENT_PATH);
+  });
+
   it('finds none for a key the key set doesn\'t carry or a script-locked address', () => {
     expect(keyAtAddress(keys, enterpriseAddress(OTHER))).toBeUndefined();
     const script = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, keyCred(PAYMENT, Cardano.CredentialType.ScriptHash))
@@ -81,13 +86,28 @@ describe('walletWitnessPlan', () => {
   const utxos = [utxo(0, baseAddress(PAYMENT)), utxo(1, baseAddress(OTHER))];
   const spending = { inputs: [{ txId: utxos[0][0].txId, index: 0 }], collaterals: [{ txId: utxos[1][0].txId, index: 1 }] };
 
-  it('witnesses collateral at a key no input uses, its hash taken from the address when the key has none', () => {
-    expect(walletWitnessPlan(tx(spending), keys, utxos).witnesses.map(({ keyHash, role, key }) => ({ keyHash, role, path: key.path })))
-      .toEqual([{ keyHash: OTHER, role: 'payment', path: OTHER_PATH }]);
+  it('witnesses collateral at a key no input uses, with its hash from the address when the key has none, and the UTxO\'s address', () => {
+    expect(walletWitnessPlan(tx(spending), keys, utxos).witnesses.map(({ keyHash, role, key, address }) => ({ keyHash, role, path: key.path, address })))
+      .toEqual([{ keyHash: OTHER, role: 'payment', path: OTHER_PATH, address: baseAddress(OTHER) }]);
   });
 
-  it('witnesses no collateral for a transaction marked invalid, which only forfeits it', () => {
-    expect(walletWitnessPlan(tx(spending, false), keys, utxos).witnesses).toEqual([]);
+  // An input's witness authorises a collateral UTxO at the same key, so leaving out the
+  // collateral witness can't protect it: the signers refuse the transaction instead.
+  it('marks only a transaction whose isValid is false as marked to fail', () => {
+    expect(isMarkedToFail(tx(spending, false))).toBe(true);
+    expect(isMarkedToFail(tx(spending, true))).toBe(false);
+    expect(isMarkedToFail(tx(spending))).toBe(false);
+  });
+
+  it('reads no UTxO when none are given', () => {
+    expect(walletWitnessPlan(tx(spending), keys, undefined)).toEqual({ inputs: [], witnesses: [] });
+  });
+
+  it('witnesses a DRep vote with the DRep key that has a path when another list carries the hash without one', () => {
+    const DREP = 'e7'.repeat(28);
+    const drepKeys = { drep105: [{ cred: DREP, path: '' }], drep129: [{ cred: DREP, path: "m/1852'/1815'/1'/3/0" }] } as unknown as Partial<Keys>;
+    const vote = [{ voter: { __typename: Cardano.VoterType.dRepKeyHash, credential: keyCred(DREP) }, votes: [] }];
+    expect(walletWitnessPlan(tx({ votingProcedures: vote } as never), drepKeys, []).witnesses.map(({ key }) => key.path)).toEqual(["m/1852'/1815'/1'/3/0"]);
   });
 
   it('gives a MIR certificate naming the stake credential no stake witness', () => {
