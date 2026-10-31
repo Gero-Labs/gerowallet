@@ -103,6 +103,7 @@ import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 import { useChainContext } from './composables/useChainContext';
+import { requestSettingsTabOnLoad } from '@/services/notify/notifyStorage';
 
 const { t } = useTranslation();
 // Answer the worker's NOTIFY_PRESENT when the panel is the focused page (B8).
@@ -236,7 +237,7 @@ function openDashboardCollectibles() {
 
 /** Open the full dashboard's settings dialog, on a given tab when asked (the bell's Settings link). */
 function openDashboardSettings(tab?: string) {
-  chrome.storage.local.set({ openSettingsOnLoad: tab ? { tab } : true });
+  void requestSettingsTabOnLoad(tab ? { tab } : true);
   const dashboardUrl = chrome.runtime.getURL('index.html');
   try {
     chrome.tabs.query({ url: `${dashboardUrl}*` }, (tabs) => {

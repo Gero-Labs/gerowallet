@@ -183,6 +183,11 @@ function buildCSP(dev: boolean): string {
     `frame-src ${frameSrc.join(' ')}`,
     `media-src ${mediaSrc.join(' ')}`,
     `object-src 'self'`,
+    // No extension page submits a native form or needs a <base>: anything
+    // injected into a page must not be able to post a form off-extension or
+    // re-point relative URLs.
+    `form-action 'none'`,
+    `base-uri 'none'`,
   ].join('; ');
 }
 

@@ -113,7 +113,8 @@ export function isOwnExtensionPageSender(
  * not an extension page) may call. Each entry must be safe to call from a
  * hostile renderer:
  * - WC_PAIR: the user clicked a `wc:` link (content.ts); the handler only opens
- *   the pairing approval UI, it approves nothing.
+ *   the pairing approval UI, it approves nothing, and refuses while the wallet is
+ *   locked.
  */
 export const CONTENT_SCRIPT_OPTIONS_METHODS: ReadonlySet<string> = new Set<string>([
   'WC_PAIR',

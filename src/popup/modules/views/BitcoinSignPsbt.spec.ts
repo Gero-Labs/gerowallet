@@ -23,8 +23,16 @@ vi.mock('@/shared/components/AnimatedQRCode.vue', () => ({ default: { template: 
 vi.mock('@/shared/components/AnimatedQRScanner.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/shared/components/EmbeddedSiteWarning.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/shared/components/ToggleSwitch.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('@/shared/components/BitcoinPsbtReview.vue', () => ({ default: { template: '<div />' } }));
+// The review itself has its own specs (psbtReview.spec.ts); here it is a switch.
+vi.mock('@/shared/composables/useBitcoinPsbtReview', async () => {
+  const { ref, shallowRef } = await import('vue');
+  const blocked = ref(false);
+  return { reviewBlocked: blocked, useBitcoinPsbtReview: vi.fn(() => ({ review: shallowRef(null), blocked })) };
+});
 
 import BitcoinSignPsbt from './BitcoinSignPsbt.vue';
+import * as psbtReviewModule from '@/shared/composables/useBitcoinPsbtReview';
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { WalletType } from '@/models/types';
@@ -37,9 +45,11 @@ const unsigned = transaction().toHex();
 const returned = transaction().updateInput(0, { witnessUtxo: { script: transaction().txOutputs[0].script, value: 2000 } }).toHex();
 const devices = ['ledger', 'trezor', 'trezorWeb'] as const;
 type Device = typeof devices[number];
+const reviewBlocked = (psbtReviewModule as unknown as { reviewBlocked: { value: boolean } }).reviewBlocked;
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
+  reviewBlocked.value = false;
   mocks.returnData.mockResolvedValue(undefined);
   mocks.request.mockReset().mockResolvedValue({ data: { psbtHex: unsigned, options: { autoFinalized: false } } });
   for (const device of devices) mocks[device].mockReset().mockResolvedValue(returned);
@@ -118,5 +128,23 @@ describe.each(devices)('%s Bitcoin popup device contract', device => {
     expect(mocks.returnData.mock.calls.filter(([result]) => 'data' in result)).toEqual([]);
     expect(mocks.error).not.toHaveBeenCalled();
     expect(mocks.end).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Bitcoin popup PSBT review', () => {
+  it('reviews the request’s own PSBT, with every own input for a hardware device', async () => {
+    await render('ledger');
+    const source = vi.mocked(psbtReviewModule.useBitcoinPsbtReview).mock.calls[0][0];
+    expect(source()).toMatchObject({ psbtHex: unsigned, options: { autoFinalized: false }, ignoreToSignInputs: true });
+  });
+
+  it.each(devices)('sends nothing to the %s while the review blocks the PSBT', async device => {
+    reviewBlocked.value = true;
+    const wrapper = await render(device);
+    expect(button(wrapper, 'wallet.sign').attributes('disabled')).toBeDefined();
+    await button(wrapper, 'wallet.sign').trigger('click');
+    await flushPromises();
+    expect(mocks[device]).not.toHaveBeenCalled();
+    expect(mocks.returnData).not.toHaveBeenCalled();
   });
 });

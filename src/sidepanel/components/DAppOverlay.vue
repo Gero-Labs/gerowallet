@@ -46,6 +46,9 @@
         <span class="warning--text text-caption">{{ $t('miniGero.embeddedIn', { site: embeddedInSite }) }}</span>
       </div>
 
+      <!-- WalletConnect requests: the domain below is the peer's own claim. -->
+      <WcVerifyNotice :verification="currentRequest.payload?.wcVerify" class="mb-2" />
+
       <!-- DApp Connect -->
       <div v-if="currentRequest.method === 'enable'" class="dapp-connect">
         <!-- Favicon + domain -->
@@ -138,6 +141,9 @@
           v-if="approvalSummary"
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
+          v-model:foreign-value-ack="foreignValueAck"
+          v-model:inputs-misreported-ack="inputsMisreportedAck"
+          :inputs-misreported="inputsMisreported"
           :primary-color="primaryColor"
         />
 
@@ -408,8 +414,8 @@
           </div>
         </div>
 
-        <!-- Every output, the fee and the total (same card as the popup) -->
-        <BitcoinPsbtReview :psbt-hex="btcPsbtHex" class="mb-3" />
+        <!-- Every output, the fee, the total and the inputs this wallet signs (same card as the popup) -->
+        <BitcoinPsbtReview :review="btcPsbtReview" class="mb-3" />
 
         <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
@@ -740,6 +746,16 @@
             <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(c) }} {{ contributionTicker(c) }}</span>
           </div>
           <p v-if="balanceContributions.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.balanceNothing') }}</p>
+          <template v-if="balancePayments.length">
+            <p class="grey--text text-caption mt-3 mb-1">{{ $t('midnight.balanceReview.paymentsHeading') }}</p>
+            <div v-for="(p, i) in balancePayments" :key="'pay' + i" class="mb-2" data-testid="midnight-balance-payment">
+              <div class="d-flex justify-space-between">
+                <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
+                <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(p) }} {{ contributionTicker(p) }}</span>
+              </div>
+              <span class="grey--text text-caption g-mono" style="word-break: break-all;">{{ p.recipient }}</span>
+            </div>
+          </template>
           <div class="d-flex align-start mt-2">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
@@ -1021,7 +1037,7 @@
       <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword" @click="signBtcPsbtNormal">
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || btcPsbtBlocked" @click="signBtcPsbtNormal">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
@@ -1029,7 +1045,7 @@
       <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
         <div class="action-buttons">
           <v-btn variant="outlined" rounded theme="dark" @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded variant="flat" :loading="signing" @click="runBtcPrf(signBtcPsbtPrf)">
+          <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="btcPsbtBlocked" @click="runBtcPrf(signBtcPsbtPrf)">
             {{ $t('miniGero.sign') }}
           </v-btn>
         </div>
@@ -1065,7 +1081,9 @@ import TransactionDetailsCard, {
 } from '@/shared/components/TransactionDetailsCard.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
-import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
+import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
@@ -1083,6 +1101,8 @@ import ledgerUtils from '@/shared/utils/ledger';
 import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, walletDisplayName } from '@/shared/utils/walletAccount';
 import { geroStore } from '@/stores/geroStore';
 import ConnectAccountPicker from '@/shared/components/ConnectAccountPicker.vue';
+import WcVerifyNotice from '@/shared/components/WcVerifyNotice.vue';
+import { readWcVerification, wcRiskUrl } from '@/services/walletConnect/verifyContext';
 import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -1117,6 +1137,8 @@ interface ApprovalPayload {
   address?: string;
   payload?: string;
   cip45Authorization?: Cip45Authorization;
+  /** WalletConnect requests: the Verify API verdict on the claimed `website`. */
+  wcVerify?: unknown;
   data?: {
     data?: string;
     options?: { encoding?: MidnightSignDataEncoding };
@@ -1231,7 +1253,9 @@ const faviconAttempt = ref(0);
 const faviconSources = computed(() => {
   const domain = enableDomain.value;
   if (!domain) return [];
-  const tabFavicon = currentRequest.value?.payload?.favIconUrl;
+  // The tab's favicon is the top-level site's: an embedded frame's request
+  // must not borrow it, so it gets only the icon of its own domain.
+  const tabFavicon = embeddedInSite.value ? undefined : currentRequest.value?.payload?.favIconUrl;
   return [
     // Source 1: the real favicon Chrome already loaded for the dApp tab.
     ...(tabFavicon ? [tabFavicon] : []),
@@ -1289,6 +1313,8 @@ const isBT = ref(false);
 type ConnectorDesiredOutput = { kind: string; type?: string; value: string; recipient: string };
 /** Mirrors `ConnectorContribution` in chains/midnight/midnightConnectorBalance.ts (kept local: that module loads the ledger WASM). */
 type ConnectorContribution = { token: string; amount: string };
+/** Mirrors `ConnectorPayment` there; `recipient` arrives as bech32m. */
+type ConnectorPayment = ConnectorContribution & { recipient: string };
 
 const makeTransferDomain = computed(() => {
   const website = currentRequest.value?.payload?.website || '';
@@ -1445,10 +1471,13 @@ const signDataMessage = computed(() => {
 // Midnight's own signData branch already uses for its unsupported wallet
 // types (see below).
 
-// The PSBT shown by BitcoinPsbtReview, which decodes it for the approval card
-const btcPsbtHex = computed(() =>
-  currentRequest.value?.method === 'btcSignPsbt' ? (currentRequest.value?.payload as { psbtHex?: string })?.psbtHex ?? '' : ''
-);
+// Decoded from the same payload the sign handlers below send, by the same
+// review the background signer enforces.
+const { review: btcPsbtReview, blocked: btcPsbtBlocked } = useBitcoinPsbtReview(() => {
+  if (currentRequest.value?.method !== 'btcSignPsbt') return null;
+  const { psbtHex, options } = currentRequest.value.payload as { psbtHex?: string; options?: unknown };
+  return { psbtHex, options, wallet: WalletStore.state.loggedWallet, utxos: WalletStore.state.utxos };
+});
 
 const btcMessageText = computed(() => {
   if (currentRequest.value?.method !== 'btcSignMessage') return '';
@@ -1463,7 +1492,7 @@ async function signBtcPsbtNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
-  if (!currentRequest.value || !spendingPassword.value) return;
+  if (!currentRequest.value || !spendingPassword.value || btcPsbtBlocked.value) return;
   signing.value = true;
   signError.value = '';
   try {
@@ -1489,7 +1518,7 @@ async function signBtcPsbtNormal() {
 async function signBtcPsbtPrf(prfBytes: Uint8Array) {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
-  if (!currentRequest.value) return;
+  if (!currentRequest.value || btcPsbtBlocked.value) return;
   signing.value = true;
   signError.value = '';
   try {
@@ -1873,21 +1902,49 @@ const txCborForSummary = computed<string | null>(() => {
   return (currentRequest.value.payload?.tx as string | undefined) || null;
 });
 
-// The full approval summary, from the same CBOR the signer hashes. Shared
-// builder (txApprovalSummary.ts) so the popup fallback shows the same effects.
-const approvalSummary = computed<TxApprovalSummary | null>(() => {
+// The transaction of the current sign request, decoded once from the same CBOR
+// the signer hashes.
+const approvalTx = computed<Cardano.Tx | null>(() => {
   const txCbor = txCborForSummary.value;
   if (!txCbor) return null;
   try {
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
-    if (!tx?.body) return null;
+    return tx?.body ? tx : null;
+  } catch (e) {
+    console.error('[DAppOverlay] Failed to decode signTx CBOR:', e);
+    return null;
+  }
+});
+
+// The wallet UTxOs "You pay" counts, checked against the transactions that created
+// them; a misstated one is replaced and Sign waits for an acknowledgement.
+const claimedOwnUtxos = computed<readonly Cardano.Utxo[]>(() => {
+  const collateral = WalletStore.state.collateral;
+  return [...utxos.value, ...(collateral ? [collateral] : [])];
+});
+const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenApprovalUtxos(
+  approvalTx,
+  claimedOwnUtxos,
+  computed(() => loggedWallet.value?.network),
+  () => WalletStore.state.transactions as unknown[],
+);
+
+// The full approval summary. Shared builder (txApprovalSummary.ts) so the popup
+// fallback shows the same effects.
+const approvalSummary = computed<TxApprovalSummary | null>(() => {
+  const tx = approvalTx.value;
+  if (!tx) return null;
+  try {
     const wallet = loggedWallet.value;
     const walletNetworkId = wallet
       ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
       : null;
-    return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo));
+    return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo, {
+      ownUtxos: provenOwnUtxos.value,
+      deposits: approvalDepositsFrom(networkStore.epochParams),
+    }));
   } catch (e) {
-    console.error('[DAppOverlay] Failed to decode signTx CBOR:', e);
+    console.error('[DAppOverlay] Failed to summarize signTx:', e);
     return null;
   }
 });
@@ -1945,6 +2002,14 @@ const signTxNetworkMismatch = computed(() => {
 });
 const networkMismatchAck = ref(false);
 
+// A deposit refunded to someone else, or the wallet's collateral returned to
+// another address (blocking, acknowledged in TxApprovalIntents).
+const foreignValueAck = ref(false);
+
+// The UTxO list misstated an input this transaction spends (blocking,
+// acknowledged in TxApprovalIntents; amounts already use the proven values).
+const inputsMisreportedAck = ref(false);
+
 // Proportional risk friction: the Cardano Shield badge was purely
 // decorative (rendered in TransactionDetailsCard's header, never gated
 // anything). Quiet when safe — low/medium/unverified show only the existing
@@ -1959,6 +2024,8 @@ const signTxBlocked = computed(() =>
   ttlDisplay.value.expired
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
+  || (!!approvalSummary.value?.requiresForeignValueAck && !foreignValueAck.value)
+  || (inputsMisreported.value && !inputsMisreportedAck.value)
   || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
 
@@ -2031,7 +2098,8 @@ watch(
       || WalletStore.state.loggedWallet?.baseAddress
       || '';
     const fromAddress = WalletStore.state.loggedWallet?.baseAddress || '';
-    const url = req.payload?.website || '';
+    // A WalletConnect peer's attested origin, not just the domain it claims.
+    const url = wcRiskUrl(req.payload?.website || '', readWcVerification(req.payload?.wcVerify));
 
     // Neutral fallback used when the scan times out, errors, or returns an empty body.
     // The badge maps this to the "Unverified" state instead of hiding entirely so the
@@ -2109,6 +2177,8 @@ watch(currentRequest, () => {
   faviconAttempt.value = 0;
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
+  foreignValueAck.value = false;
+  inputsMisreportedAck.value = false;
   highRiskAck.value = false;
 });
 
@@ -3106,6 +3176,12 @@ async function signMidnightTransferPrf() {
 const balanceContributions = computed<ConnectorContribution[]>(() => {
   const data = currentRequest.value?.payload?.data as { contributions?: ConnectorContribution[] } | undefined;
   return Array.isArray(data?.contributions) ? (data!.contributions as ConnectorContribution[]) : [];
+});
+// Whom the dapp's own transaction pays (outputs not to this wallet), so the
+// approval shows where value goes and not only what the wallet adds.
+const balancePayments = computed<ConnectorPayment[]>(() => {
+  const data = currentRequest.value?.payload?.data as { payments?: ConnectorPayment[] } | undefined;
+  return Array.isArray(data?.payments) ? (data!.payments as ConnectorPayment[]) : [];
 });
 
 /** A contribution rendered through the same colour-aware helpers as transfer outputs. */

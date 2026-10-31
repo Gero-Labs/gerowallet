@@ -1,6 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import featureFlagService from '@/services/featureFlag.service';
+import { writeFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
+
+// The background's copy of the flags lives in the extension-only private store, not chrome.storage.local.
+vi.mock('@/shared/utils/featureFlagMirror', () => ({ writeFeatureFlagMirror: vi.fn(async () => undefined) }));
 
 vi.mock('@/services/featureFlag.service', () => ({
   default: {
@@ -145,8 +149,9 @@ test('exposes isNftMarketEnabled, defaulting to false, following the remote flag
 // pick the real values up then, and must not hand the background all-off
 // fallbacks in the meantime.
 test('does not mirror fallback values to the background before the service has flags', () => {
-  const set = vi.fn(async () => undefined);
-  vi.stubGlobal('chrome', { storage: { local: { set } } });
+  const set = vi.mocked(writeFeatureFlagMirror);
+  set.mockClear();
+  vi.stubGlobal('chrome', { runtime: { id: 'gero' } });
   vi.mocked(featureFlagService.isReady).mockReturnValue(false);
 
   featureFlagsStore.loadFlags();
@@ -159,8 +164,9 @@ test('does not mirror fallback values to the background before the service has f
 });
 
 test('loads the flags once a retry gets them after a failed first fetch', async () => {
-  const set = vi.fn(async () => undefined);
-  vi.stubGlobal('chrome', { storage: { local: { set } } });
+  const set = vi.mocked(writeFeatureFlagMirror);
+  set.mockClear();
+  vi.stubGlobal('chrome', { runtime: { id: 'gero' } });
   featureFlagsStore.reset();
   vi.mocked(featureFlagService.getFlag).mockImplementation((_key: string, fallback: unknown) => fallback);
   vi.mocked(featureFlagService.isReady).mockReturnValue(false);
@@ -178,7 +184,7 @@ test('loads the flags once a retry gets them after a failed first fetch', async 
   onReady?.();
 
   expect(featureFlagsStore.isGovernanceEnabled()).toBe(true);
-  expect(set).toHaveBeenLastCalledWith({ featureFlags: expect.objectContaining({ isGovernanceEnabled: true }) });
+  expect(set).toHaveBeenLastCalledWith(expect.objectContaining({ isGovernanceEnabled: true }));
   featureFlagsStore.reset();
   vi.unstubAllGlobals();
 });

@@ -41,6 +41,15 @@ vi.mock('@/stores/walletStore', () => ({
   default: {},
 }));
 
+// The service keeps its pairings in the private store (cip45Storage.spec.ts covers
+// that); here its reads and writes are routed to this mock to observe them.
+vi.mock('./cip45Storage', () => ({
+  cip45Storage: {
+    get: (keys: string | string[]) => (globalThis.chrome as typeof chrome).storage.local.get(keys),
+    set: (items: Record<string, unknown>) => (globalThis.chrome as typeof chrome).storage.local.set(items),
+  },
+}));
+
 const chromeMock = {
   storage: { local: { get: vi.fn().mockResolvedValue({}), set: vi.fn().mockResolvedValue(undefined) } },
   runtime: { getManifest: () => ({ version: '9.9.9' }) },

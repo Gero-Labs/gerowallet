@@ -93,6 +93,7 @@
 import { computed, getCurrentInstance, onMounted, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { notifyInboxStore, type NotifyInboxItem } from '@/stores/notifyInboxStore';
+import { requestSettingsTabOnLoad, writeNotifyKey } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
 import { routeFor } from '@/services/notify/notifyRender';
@@ -143,13 +144,13 @@ function open(item: NotifyInboxItem) {
   emit('close');
   const loggedId = (walletStore.loggedWallet as { id?: number } | null)?.id ?? null;
   if (item.walletId !== null && loggedId !== null && item.walletId !== loggedId) {
-    void chrome.storage.local.set({ notifyPendingOpen: { walletId: item.walletId, d: item.d, ...(item.x ? { x: item.x } : {}), at: Date.now() } });
+    void writeNotifyKey('notifyPendingOpen', { walletId: item.walletId, d: item.d, ...(item.x ? { x: item.x } : {}), at: Date.now() });
     // The switch prompt lives on the dashboard; the panel hands over to it.
     if (inSheet.value) void openFullDashboard();
     return;
   }
   const route = routeFor(item.d, item.x as Parameters<typeof routeFor>[1], true);
-  if (route.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
+  if (route.settingsTab) void requestSettingsTabOnLoad({ tab: route.settingsTab });
   if (inSheet.value) {
     if (route.settingsTab || route.sidepanel === null) { void openFullDashboard(`#${route.dashboard}`); return; }
     if (router && router.currentRoute.value.fullPath !== route.sidepanel) router.push(route.sidepanel).catch(() => undefined);

@@ -2,7 +2,7 @@
 //
 // Handover B2. Everything network- or key-related runs here in the background; the
 // UI only sends NOTIFY_* messages (background.ts handlers) and reads getState().
-// Composes: notifyStore (chrome.storage.local) + notifyClient (fetch, relay identity,
+// Composes: notifyStore (private store, notifyStorage.ts) + notifyClient (fetch, relay identity,
 // chrome.alarms for long retries) + notifyRegistration (the §8 state machine).
 //
 // Triggers (§8.2): worker start (background.ts, not awaited), the daily
@@ -24,6 +24,7 @@ import {
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
+import { requestSettingsTabOnLoad } from './notifyStorage';
 import { systemIntroWanted } from './notifyIntro';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
 import { pushLocale, type RouteIntent, type TokenInfo } from './notifyRender';
@@ -187,7 +188,7 @@ function presentToPages(request: ToastRequest): Promise<boolean> {
 
 /** B4: focus the dashboard tab on the route, or open one. The side panel route waits on B0's click test. */
 async function openDashboard(route: RouteIntent): Promise<void> {
-  if (route.settingsTab) await chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
+  if (route.settingsTab) await requestSettingsTabOnLoad({ tab: route.settingsTab });
   await focusDashboard(route.dashboard);
 }
 
@@ -196,7 +197,7 @@ async function openDashboard(route: RouteIntent): Promise<void> {
  * dashboard, with the enable step started (`enable: 'notify'` is read by ContentLayout).
  */
 export async function openNotifySettings(): Promise<void> {
-  await chrome.storage.local.set({ openSettingsOnLoad: { tab: 'notifications', enable: 'notify' } });
+  await requestSettingsTabOnLoad({ tab: 'notifications', enable: 'notify' });
   await focusDashboard('/');
 }
 

@@ -676,6 +676,7 @@ async function saveUnlockMethod(method: UnlockMethod) {
       // of the password must not outlive the feature that needs it. Re-enabling
       // autofill asks for the password and encrypts it again.
       await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
+      await configTable.where({ key: 'passKeyUnlockVerifier' }).delete();
 
       // Disable PassKey features when the unlock method is set to None
       await configTable.put({ key: 'passKeyForUnlock', value: false });
@@ -746,12 +747,38 @@ async function handlePassKeyUnlockChange(enabled: boolean) {
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    // PassKey must already be registered - just toggle the setting
+    // PassKey must already be registered. Switching unlock on seals the verifier the
+    // background checks a PassKey unlock against (it opens only with this PassKey's
+    // PRF output), so this asks for the PassKey once.
+    if (enabled) {
+      const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
+      if (!credentialConfig?.value) {
+        throw new Error(t('security.passKeySettingsUpdateFailed'));
+      }
+      const { evaluatePrfForWallet, sealPassKeyUnlockVerifier } = await import('@/shared/utils/webauthn-prf');
+      let prf: ArrayBuffer;
+      try {
+        prf = await evaluatePrfForWallet(credentialConfig.value, String(wallet.id));
+      } catch (prfError: unknown) {
+        if (prfError instanceof Error && prfError.message.includes('PRF evaluation failed')) {
+          throw new Error(t('security.passKeyPrfNotSupported'));
+        }
+        throw prfError;
+      }
+      try {
+        const verifier = await sealPassKeyUnlockVerifier(prf, credentialConfig.value, String(wallet.id));
+        await configTable.put({ key: 'passKeyUnlockVerifier', value: verifier });
+      } finally {
+        new Uint8Array(prf).fill(0);
+      }
+    }
+
     // Save PassKey unlock setting
     await configTable.put({ key: 'passKeyForUnlock', value: enabled });
 
-    // If disabling, also disable auto-trigger
+    // If disabling, also disable auto-trigger and drop the verifier
     if (!enabled) {
+      await configTable.where({ key: 'passKeyUnlockVerifier' }).delete();
       await configTable.put({ key: 'passKeyAutoTriggerUnlock', value: false });
       passKeyAutoTriggerUnlock.value = false;
     }
@@ -1023,6 +1050,7 @@ async function handlePassKeyDeregister() {
     debugLog('🗑️ Deregistering PassKey...');
     await configTable.where({ key: 'webAuthnCredentialId' }).delete();
     await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
+    await configTable.where({ key: 'passKeyUnlockVerifier' }).delete();
     await configTable.put({ key: 'passKeyForUnlock', value: false });
     await configTable.put({ key: 'passKeyForPasswordAutofill', value: false });
     await configTable.put({ key: 'passKeyAutoTrigger', value: false });

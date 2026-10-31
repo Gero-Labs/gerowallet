@@ -13,10 +13,23 @@
  */
 
 import axios, { AxiosError } from 'axios';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
+import i18n from '@/plugins/i18n';
 import { Network } from '@/models/types';
 import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
 import { inlineDatumPlutusData } from '@/shared/utils/utxoCbor';
+import { debugLog } from '@/utils/debug';
+import {
+  drepRegistrationMatches,
+  parseDRepTarget,
+  stakeCertificatesMatch,
+  stakeCredentialOf,
+  TxIntentMismatchError,
+  verifyTxIntent,
+  type IntendedOutput,
+  type TxIntent,
+} from '@/shared/utils/txIntentGuard';
 import { forEachAsset, selectInputCandidates, type InputSelectionOptions } from './nexusInputSelection';
 
 export { InputLimitError, NEXUS_MAX_INPUTS, selectInputCandidates } from './nexusInputSelection';
@@ -450,6 +463,75 @@ export function requiredAssetsFromOutputs(outputs: NexusTxOutput[]): Map<string,
   return required;
 }
 
+// ── Built-transaction verification ──
+//
+// Nexus builds the transaction, but the wallet decides what it signs: every build
+// below is decoded and compared with the request before the CBOR is handed back.
+// A transaction that pays anyone the request did not name, spends a UTxO the
+// wallet did not offer, or carries a certificate, withdrawal, mint, vote or
+// collateral the flow did not ask for is refused here, so no caller can sign it.
+
+interface BuildContextFields {
+  changeAddress: string;
+  senderAddress?: string;
+  utxos?: NexusTxInput[];
+}
+
+/**
+ * The addresses change may go to: the change and sender addresses the wallet put
+ * in the request (its own base address). Not the addresses of `utxos`: that list
+ * comes from gero-sync, and an address slipped into it would turn an output to
+ * someone else into "change".
+ */
+function ownAddressesOf(request: BuildContextFields): string[] {
+  return [
+    request.changeAddress,
+    ...(request.senderAddress ? [request.senderAddress] : []),
+  ].filter((a): a is string => !!a);
+}
+
+function allowedInputsOf(request: BuildContextFields): string[] | undefined {
+  return request.utxos && request.utxos.length > 0
+    ? request.utxos.map((u) => `${u.txHash}#${u.outputIndex}`)
+    : undefined;
+}
+
+function intendedOutputOf(output: NexusTxOutput, selectAll: boolean): IntendedOutput {
+  const assets = new Map<string, bigint>();
+  for (const a of output.assets ?? []) {
+    const unit = a.policyId + a.assetName;
+    assets.set(unit, (assets.get(unit) ?? BigInt(0)) + BigInt(a.quantity));
+  }
+  // `lovelace: "0"` with selectAll asks Nexus to put everything left in this output.
+  const lovelace = selectAll && output.lovelace === '0' ? 'max' : BigInt(output.lovelace);
+  return { address: output.address, lovelace, assets };
+}
+
+function mismatch(violations: TxIntentMismatchError['violations']): TxIntentMismatchError {
+  return new TxIntentMismatchError(String(i18n.t('txGuard.builtTxMismatch')), violations);
+}
+
+/**
+ * Throws {@link TxIntentMismatchError} unless `response.tx_cbor` is exactly what
+ * `intent()` describes. An empty CBOR is left to the caller, which reports it.
+ */
+function verifyBuilt(response: BuildTxResponse, intent: () => TxIntent): BuildTxResponse {
+  if (!response?.tx_cbor) return response;
+  let violations;
+  try {
+    const tx = Serialization.Transaction.fromCbor(HexBlob(response.tx_cbor)).toCore();
+    violations = verifyTxIntent(tx, intent());
+  } catch (e) {
+    debugLog('Nexus build: could not verify the built transaction', e);
+    throw mismatch([]);
+  }
+  if (violations.length > 0) {
+    debugLog('Nexus build: refused a transaction that differs from the request', violations);
+    throw mismatch(violations);
+  }
+  return response;
+}
+
 // ── Public API ──
 
 export interface MaxAdaRequest {
@@ -485,7 +567,12 @@ export const nexusTxApi = {
     // wallet's 'MAINNET'/'PREPROD' — the Network @JsonCreator rejects the latter and
     // Spring returns "Malformed request body". Override with the resolved slug.
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork });
-    return data;
+    return verifyBuilt(data, () => ({
+      outputs: request.outputs.map((o) => intendedOutputOf(o, !!request.selectAll)),
+      ownAddresses: ownAddressesOf(request),
+      allowedInputs: allowedInputsOf(request),
+      withdrawals: (request.withdrawals ?? []).map((w) => ({ rewardAccount: w.stakeAddress, lovelace: BigInt(w.amount) })),
+    }));
   },
 
   /**
@@ -517,7 +604,12 @@ export const nexusTxApi = {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/build/withdrawal?network=${nexusNetwork}` : '/api/tx/build/withdrawal';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
-    return data;
+    return verifyBuilt(data, () => ({
+      outputs: [],
+      ownAddresses: ownAddressesOf(request),
+      allowedInputs: allowedInputsOf(request),
+      withdrawals: [{ rewardAccount: request.stakeAddress, lovelace: BigInt(request.amount) }],
+    }));
   },
 
   /**
@@ -535,7 +627,15 @@ export const nexusTxApi = {
       ? `/api/tx/build/stake-registration?network=${nexusNetwork}`
       : '/api/tx/build/stake-registration';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
-    return data;
+    return verifyBuilt(data, () => ({
+      outputs: [],
+      ownAddresses: ownAddressesOf(request),
+      allowedInputs: allowedInputsOf(request),
+      certificates: stakeCertificatesMatch({
+        stakeCredential: stakeCredentialOf(request.stakeAddress),
+        ...(request.deregister ? { deregistration: true } : { registration: 'required' as const }),
+      }),
+    }));
   },
 
   /**
@@ -553,7 +653,16 @@ export const nexusTxApi = {
       ? `/api/tx/build/delegation?network=${nexusNetwork}`
       : '/api/tx/build/delegation';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
-    return data;
+    return verifyBuilt(data, () => ({
+      outputs: [],
+      ownAddresses: ownAddressesOf(request),
+      allowedInputs: allowedInputsOf(request),
+      certificates: stakeCertificatesMatch({
+        stakeCredential: stakeCredentialOf(request.stakeAddress),
+        poolId: request.poolId,
+        registration: request.includeStakeRegistration ? 'allowed' : undefined,
+      }),
+    }));
   },
 
   /**
@@ -573,7 +682,17 @@ export const nexusTxApi = {
       ? `/api/tx/build/vote-delegation?network=${nexusNetwork}`
       : '/api/tx/build/vote-delegation';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
-    return data;
+    return verifyBuilt(data, () => ({
+      outputs: [],
+      ownAddresses: ownAddressesOf(request),
+      allowedInputs: allowedInputsOf(request),
+      certificates: stakeCertificatesMatch({
+        stakeCredential: stakeCredentialOf(request.stakeAddress),
+        drep: parseDRepTarget(request.drepId),
+        poolId: request.poolId,
+        registration: request.includeStakeRegistration ? 'allowed' : undefined,
+      }),
+    }));
   },
 
   /**
@@ -592,7 +711,21 @@ export const nexusTxApi = {
       ? `/api/tx/build/drep-registration?network=${nexusNetwork}`
       : '/api/tx/build/drep-registration';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
-    return data;
+    return verifyBuilt(data, () => ({
+      outputs: [],
+      ownAddresses: ownAddressesOf(request),
+      allowedInputs: allowedInputsOf(request),
+      certificates: drepRegistrationMatches({
+        credential: {
+          type: request.scriptCredential ? Cardano.CredentialType.ScriptHash : Cardano.CredentialType.KeyHash,
+          hash: request.drepCredentialHash.toLowerCase() as Cardano.Credential['hash'],
+        },
+        deregister: !!request.deregister,
+        anchor: request.anchorUrl && request.anchorDataHash
+          ? { url: request.anchorUrl, dataHash: request.anchorDataHash }
+          : null,
+      }),
+    }));
   },
 
   /**

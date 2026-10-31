@@ -17,6 +17,7 @@ import {
   decryptPrivateKeyWithPrf,
 } from '@/shared/utils/webauthn-prf';
 import { walletStore } from '@/stores/walletStore';
+import { moveFromChromeLocal, removePrivate, setPrivate } from '@/utils/privateStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useStrikeTrading } from './useStrikeTrading';
@@ -148,29 +149,25 @@ function storageKey(walletId: string): string {
   return `strike_keys_${walletId}`;
 }
 
+// The keys live in the extension's private IndexedDB (privateStore.ts): content
+// scripts can read chrome.storage.local, where older releases kept them. The first
+// read moves such a copy across.
 async function loadKeysForWallet(walletId: string): Promise<StrikeStoredKeys | null> {
-  return new Promise((resolve) => {
-    const key = storageKey(walletId);
-    chrome.storage.local.get(key, (result) => {
-      const stored = result[key] as StrikeStoredKeys | undefined;
-      // Only accept the new encrypted shape — silently drop legacy plaintext.
-      if (stored && typeof stored.publicKey === 'string' && typeof stored.privateKeyEncrypted === 'string') {
-        resolve(stored);
-      } else {
-        resolve(null);
-      }
-    });
-  });
+  const stored = await moveFromChromeLocal<StrikeStoredKeys>(storageKey(walletId));
+  // Only accept the new encrypted shape — silently drop legacy plaintext.
+  if (stored && typeof stored.publicKey === 'string' && typeof stored.privateKeyEncrypted === 'string') {
+    return stored;
+  }
+  return null;
 }
 
 async function saveKeysForWallet(walletId: string, keys: StrikeStoredKeys): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [storageKey(walletId)]: keys }, () => resolve());
-  });
+  await setPrivate(storageKey(walletId), keys);
 }
 
 async function removeKeysForWallet(walletId: string): Promise<void> {
-  return new Promise((resolve) => {
+  await removePrivate(storageKey(walletId));
+  await new Promise<void>((resolve) => {
     chrome.storage.local.remove(storageKey(walletId), () => resolve());
   });
 }

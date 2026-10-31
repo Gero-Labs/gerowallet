@@ -31,8 +31,11 @@ import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/m
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
+  MidnightTxOutput,
   SubmitMidnightTxResponse,
 } from '@/api/midnight-api';
+import i18n from '@/plugins/i18n';
+import { MIDNIGHT_BUILT_TX_MISMATCH } from '@/chains/midnight/midnightBuiltTxGuard';
 
 export interface SignedSegment {
   index: number;
@@ -47,6 +50,15 @@ export interface MidnightSendCredentials {
 
 function assertCurrentApproval(current: () => boolean): void {
   if (!current()) throw new StaleApprovalError();
+}
+
+/**
+ * The background refused to sign a transaction Nexus built because it is not
+ * what the user asked for: say so in the user's language. Other errors pass through.
+ */
+function backgroundError(error: string | undefined, fallback: string): Error {
+  if (error === MIDNIGHT_BUILT_TX_MISMATCH) return new Error(String(i18n.t('txGuard.builtTxMismatch')));
+  return new Error(error || fallback);
 }
 
 /**
@@ -105,20 +117,23 @@ export async function getWalletKeys(
 export async function signSegments(
   segments: MidnightSegmentToSign[],
   credentials: MidnightSendCredentials,
-  unprovenTxHex?: string,
+  unprovenTxHex: string,
+  /** The DUST address the registration is for; the background checks Nexus's transaction against it. */
+  dustReceiverAddressBech32: string,
 ): Promise<SignedSegment[]> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_MIDNIGHT_SEGMENTS,
     data: {
       segments,
       unprovenTxHex,
+      dustReceiverAddressBech32,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
   }) as { data: { success: boolean; signatures?: SignedSegment[]; error?: string } };
 
   if (!response?.data?.success) {
-    throw new Error(response?.data?.error || 'Midnight signing failed');
+    throw backgroundError(response?.data?.error, 'Midnight signing failed');
   }
   return response.data.signatures ?? [];
 }
@@ -142,6 +157,7 @@ async function buildUnshielded(
 async function balanceAndSignInBg(
   unprovenTxHex: string,
   ttlMs: number,
+  intendedOutputs: readonly MidnightTxOutput[],
   credentials: MidnightSendCredentials,
   sponsor?: MidnightSponsor,
   proving?: { url: string; headers?: Record<string, string> },
@@ -151,6 +167,8 @@ async function balanceAndSignInBg(
     data: {
       unprovenTxHex,
       ttlMs,
+      // What was asked of Nexus: the background signs only a transaction that is exactly this.
+      intendedOutputs: intendedOutputs.map(({ address, amount, token }) => ({ address, amount, token })),
       proving,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
@@ -167,7 +185,7 @@ async function balanceAndSignInBg(
   }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; ledgerTxHash?: string; error?: string } };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
-    throw new Error(response?.data?.error || 'Midnight balance/sign failed');
+    throw backgroundError(response?.data?.error, 'Midnight balance/sign failed');
   }
   if (proving && !response.data.proven) throw new Error('Wallet-side proving requested but BG returned an unproven tx');
   return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven, ledgerTxHash: response.data.ledgerTxHash };
@@ -248,7 +266,7 @@ export async function sendUnshieldedNight(
   onStage?.('working');
   if (target) onStage?.(target.stage);
   const { signedTxHex, proven, ledgerTxHash } = await balanceAndSignInBg(
-    built.unprovenTxHex, baseRequest.ttlMs, credentials, sponsor,
+    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, sponsor,
     target ? { url: target.url, headers: target.headers } : undefined,
   );
   assertCurrentApproval(current);
@@ -297,7 +315,7 @@ export async function buildAndSignUnshieldedTransfer(
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   assertCurrentApproval(current);
   const { signedTxHex } = await balanceAndSignInBg(
-    built.unprovenTxHex, baseRequest.ttlMs, credentials, undefined,
+    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, undefined,
     target ? { url: target.url, headers: target.headers } : undefined,
   );
   assertCurrentApproval(current);
@@ -691,6 +709,7 @@ export async function registerNightForDust(
       [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
       credentials,
       built.unprovenTxHex,
+      args.dustReceiverAddressBech32,
     );
     if (signed.length !== 1) {
       throw new Error('Expected exactly one signature for DUST registration');

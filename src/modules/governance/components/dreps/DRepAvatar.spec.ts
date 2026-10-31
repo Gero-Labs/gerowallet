@@ -9,7 +9,7 @@ import * as Vue from 'vue';
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import DRepAvatar from './DRepAvatar.vue';
-import { ipfsPathOf, toInAppUrl, toExternalHref } from '@/modules/governance/utils/govAnchor';
+import { ipfsPathOf, toInAppDocumentUrl, toExternalHref } from '@/modules/governance/utils/govAnchor';
 
 /** Real CIDs, so the CID parser is exercised rather than a stubbed one. */
 const CID_V1 = 'bafybeickzy3mupolsvukd2pt7huyba7a3wkln7vcfr47wnjkna7no6g72u';
@@ -108,19 +108,19 @@ describe('govAnchor', () => {
     // The leading segment has to PARSE as a CID; the proxy cannot resolve a
     // filename, and re-pointing this URL would break a link that works today.
     expect(ipfsPathOf('https://example.test/ipfs/not-a-cid.png')).toBeNull();
-    expect(toInAppUrl('https://example.test/ipfs/not-a-cid.png')).toBe(
+    expect(toInAppDocumentUrl('https://example.test/ipfs/not-a-cid.png')).toBe(
       'https://example.test/ipfs/not-a-cid.png',
     );
   });
 
   it('sends IPFS through the proxy in-app and a public gateway outside', () => {
-    expect(toInAppUrl(`ipfs://${CID_V1}`)).toContain(`/api/ipfs?path=${CID_V1}`);
+    expect(toInAppDocumentUrl(`ipfs://${CID_V1}`)).toContain(`/api/ipfs?path=${CID_V1}`);
     expect(toExternalHref(`ipfs://${CID_V1}`)).toBe(`https://inbrowser.link/ipfs/${CID_V1}`);
   });
 
   it('returns null for anything that is not a web link or IPFS content', () => {
     for (const hostile of ['javascript:alert(1)', 'data:text/html,<script>', 'not a url', '']) {
-      expect(toInAppUrl(hostile)).toBeNull();
+      expect(toInAppDocumentUrl(hostile)).toBeNull();
       expect(toExternalHref(hostile)).toBeNull();
     }
   });

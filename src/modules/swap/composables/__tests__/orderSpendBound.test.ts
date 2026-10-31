@@ -1,0 +1,62 @@
+import { describe, expect, it } from 'vitest';
+import {
+  ORDER_OVERHEAD_MAX_LOVELACE, SERVICE_FEE_MIN_LOVELACE, TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits,
+} from '../orderSpendBound';
+
+const ADA = 1_000_000n;
+const TOKEN = `${'ab'.repeat(28)}474552`;
+const adaLeg = (intent: Parameters<typeof swapSpendBound>[0]) =>
+  swapSpendBound(intent).maxOutflow.get('lovelace')! - (intent.tokenIn === 'lovelace' ? intent.amountIn : 0n);
+
+describe('swap spend budget', () => {
+  it('allows the amount typed plus the largest DEX overhead and the minimum service fee for an ordinary swap', () => {
+    // 50 ADA: 5 ADA at 10 bps is below the 1.2 ADA minimum. No flat floor on top.
+    expect(swapSpendBound({ tokenIn: 'lovelace', amountIn: 50n * ADA }).maxOutflow.get('lovelace')).toBe(56_700_000n);
+  });
+
+  it('raises the leg only by the service fee at 10 bps of a large ADA sale', () => {
+    // 100,000 ADA: 100 ADA at 10 bps, plus the largest DEX overhead.
+    expect(adaLeg({ tokenIn: 'lovelace', amountIn: 100_000n * ADA })).toBe(100n * ADA + ORDER_OVERHEAD_MAX_LOVELACE);
+  });
+
+  it('budgets a token sale as the tokens typed plus the minimum service fee only, however large', () => {
+    const bound = swapSpendBound({ tokenIn: TOKEN, amountIn: 10n ** 15n });
+    expect(bound.maxOutflow.get(TOKEN)).toBe(10n ** 15n);
+    expect(bound.maxOutflow.get('lovelace')).toBe(ORDER_OVERHEAD_MAX_LOVELACE + SERVICE_FEE_MIN_LOVELACE);
+  });
+
+  it('puts the token-sale limit where 10 bps reaches the 1.2 ADA minimum', () => {
+    expect(TOKEN_SALE_LIMIT_ADA).toBe(1_200n);
+    // An ADA sale of that size is still charged only the minimum.
+    expect(adaLeg({ tokenIn: 'lovelace', amountIn: TOKEN_SALE_LIMIT_ADA * ADA })).toBe(ORDER_OVERHEAD_MAX_LOVELACE + SERVICE_FEE_MIN_LOVELACE);
+  });
+});
+
+describe('quote events', () => {
+  it('reads the route a quote event carries, or nothing', () => {
+    expect(routeFromQuoteEvent([{ route: { tokenIn: 'lovelace', amountIn: '5' } }])).toEqual({ tokenIn: 'lovelace', amountIn: '5' });
+    expect(routeFromQuoteEvent({ route: { tokenIn: '', amountIn: '5' } })).toBeNull();
+    expect(routeFromQuoteEvent({ route: { tokenIn: 'lovelace', amountIn: '-5' } })).toBeNull();
+    expect(routeFromQuoteEvent(null)).toBeNull();
+  });
+});
+
+describe('typed amounts', () => {
+  it('converts the way the widget does, cutting extra decimals', () => {
+    expect(toBaseUnits('1.5', 6)).toBe(1_500_000n);
+    expect(toBaseUnits('1.1234567', 6)).toBe(1_123_456n);
+    expect(toBaseUnits('.5', 6)).toBe(500_000n);
+    expect(toBaseUnits('5.', 6)).toBe(5_000_000n);
+    expect(toBaseUnits('12.9', 0)).toBe(12n);
+    expect(toBaseUnits(' 7 ', 2)).toBe(700n);
+  });
+
+  it('refuses anything that is not a plain non-negative decimal', () => {
+    for (const bad of ['', '.', '-1', '1e3', 'abc', '1,000', undefined, null, {}]) {
+      expect(toBaseUnits(bad, 6)).toBeNull();
+    }
+    expect(toBaseUnits('1', -1)).toBeNull();
+    expect(toBaseUnits('1', 1.5)).toBeNull();
+  });
+
+});

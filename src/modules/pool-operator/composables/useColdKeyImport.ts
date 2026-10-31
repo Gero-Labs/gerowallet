@@ -2,6 +2,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { MessageTypes } from '@/models/MessageTypes';
 import { sealKeySecret } from '@/shared/utils/secretWriters';
 import { SecretPurpose } from '@/shared/utils/secretEnvelope';
@@ -103,7 +104,7 @@ export function useColdKeyImport() {
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password },
       })) as { data: { success: boolean; error?: string } };
-      if (!verification.data.success) throw new Error(t('errors.wrongPassword'));
+      if (!verification.data.success) throw new Error(passwordCheckFailure(verification, t('errors.wrongPassword')));
     }
     const encrypted = await sealKeySecret(rawKeyBytes, password, SecretPurpose.ColdKey);
     const { coldKeyHash, poolIdBech32 } = await derivePoolId(rawKeyBytes);

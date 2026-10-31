@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { matchesDappWhitelistEntry } from '@/stores/walletStore';
 import { authorizationStillHolds, sessionApprovedAccounts, sessionAuthorizesWallet, walletCaip10Account } from '@/services/walletConnect/sessionBinding';
-import { claimedOriginMatchesSender, embeddingSite } from './originBinding';
+import { claimedOriginMatchesSender, embeddingSite, promptSite } from './originBinding';
 
 describe('matchesDappWhitelistEntry', () => {
   it('matches a full-origin entry exactly (scheme, host and port)', () => {
@@ -124,6 +124,16 @@ describe('origin binding to the real MessageSender', () => {
     expect(embeddingSite('https://host.example', frame('https://host.example', { frameId: 3, tab }))).toBeUndefined();
     expect(embeddingSite('https://dapp.example', frame('https://dapp.example', { frameId: 0, tab }))).toBeUndefined();
   });
+
+  it('a prompt for an embedded frame names the embedding site and does not borrow its favicon', () => {
+    const tab = { url: 'https://host.example/page', favIconUrl: 'https://host.example/favicon.ico' } as chrome.tabs.Tab;
+    expect(promptSite('https://dapp.example', frame('https://dapp.example', { frameId: 3, tab }))).toEqual({
+      website: 'https://dapp.example', favIconUrl: undefined, embeddedIn: 'https://host.example',
+    });
+    expect(promptSite('https://host.example', frame('https://host.example', { frameId: 0, tab }))).toEqual({
+      website: 'https://host.example', favIconUrl: 'https://host.example/favicon.ico', embeddedIn: undefined,
+    });
+  });
 });
 
 describe('router refuses a dApp message whose origin was forged in the body', () => {
@@ -205,6 +215,17 @@ describe('embedding-site warning on popup approvals (PR #2 review)', () => {
     expect(batch).toContain('const embeddedIn = embeddingSite(request.origin, request.send);');
     expect(batch).toContain('data: { psbtHex, options }, embeddedIn }');
     expect(batch).toContain('website: request.origin, favIconUrl, embeddedIn }');
+  });
+
+  it('every Midnight prompt carries it to the side panel', () => {
+    const bg = read('chrome/background.ts');
+    for (const name of ['connect', 'signData', 'balanceUnsealedTransaction', 'makeTransfer']) {
+      const start = bg.indexOf(`app.add(MIDNIGHT_METHOD.${name}, `);
+      expect(start, name).toBeGreaterThan(-1);
+      const handler = bg.slice(start, bg.indexOf('\napp.add(', start + 10));
+      expect(handler, name).toContain('promptSite(origin, send)');
+      expect(handler, name).not.toContain('send.tab?.favIconUrl');
+    }
   });
 
   it('connect, signTx and signData popups render the warning', () => {

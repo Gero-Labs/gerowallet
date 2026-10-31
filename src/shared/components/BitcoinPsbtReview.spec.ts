@@ -1,85 +1,106 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { describe, expect, it, vi } from 'vitest';
 import * as Vue from 'vue';
-import { flushPromises, mount } from '@vue/test-utils';
-import { Psbt } from 'bitcoinjs-lib';
-import { createRequire } from 'node:module';
-import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import { mount } from '@vue/test-utils';
+import type { PsbtReview } from '@/chains/bitcoin/psbtReview';
 
-// bitcoinjs-lib is externalized to Node by Vitest and checks keys against Node's Buffer,
-// while the sources get the polyfill. Hand the sources Node's Buffer too.
-vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
-  const { createRequire: requireFrom } = await import('node:module');
-  const { Buffer } = requireFrom(import.meta.url)('node:buffer');
-  return { default: Buffer, Buffer };
-});
+vi.mock('@/shared/composables/useTranslation', () => ({
+  useTranslation: () => ({ t: (key: string, args?: { index?: unknown }) => `${key}:${args?.index ?? ''}`, tc: (key: string) => key }),
+}));
 vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({
-  loggedWallet: { id: 1, chain: 'Bitcoin', network: 'Mainnet', publicKey: 'not-an-xpub', baseAddress: '' },
-  keys: { payment: [], change: [] },
+  loggedWallet: { id: 1, chain: 'Bitcoin', network: 'Testnet' },
 }) }));
 vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.reactive({ btcUsd: { lastPrice: 100_000 } }) }));
-vi.mock('@/shared/composables/useTranslation', () => ({
-  useTranslation: () => ({ t: (key: string) => key, tc: (key: string) => key }),
-}));
 vi.mock('@/shared/composables/useCurrencyConverter', () => ({
   useCurrencyConverter: () => ({ convertFiat: (n: number) => n, getCurrencySymbol: () => '$' }),
 }));
 
+// @ts-ignore: tsconfig ships no `*.vue` shim; vite resolves this fine.
 import BitcoinPsbtReview from './BitcoinPsbtReview.vue';
+// @ts-ignore: as above.
 import TransactionDetailsCard from './TransactionDetailsCard.vue';
-import { walletStore } from '@/stores/walletStore';
 
-const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
-const SHOP = 'bc1qenxvenxvenxvenxvenxvenxvenxvenxvx46avd';
+const ATTACKER = 'tb1qattackeraddressxxxxxxxxxxxxxxxxxxxxxxxx';
+const OWN = 'tb1qownwalletaddressxxxxxxxxxxxxxxxxxxxxxxx';
+const CHANGE = 'tb1qownchangeaddressxxxxxxxxxxxxxxxxxxxxxx';
 
-const mountReview = async (psbtHex: string) => {
-  const wrapper = mount(BitcoinPsbtReview, {
-    props: { psbtHex },
-    global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
-  });
-  // The review loads bitcoinjs-lib and the key derivation on demand
-  await vi.waitFor(() => {
-    if (!wrapper.findComponent(TransactionDetailsCard).exists() && !wrapper.find('[role="alert"]').exists()) throw new Error('still loading');
-  });
-  await flushPromises();
-  return wrapper;
+const drain: PsbtReview = {
+  inputs: [
+    { index: 0, address: OWN, valueSats: 40_000n, own: true, willSign: true },
+    { index: 1, address: OWN, valueSats: 60_000n, own: true, willSign: true },
+  ],
+  outputs: [{ index: 0, address: ATTACKER, valueSats: 99_000n, own: false, change: false }],
+  signIndices: [0, 1],
+  spentSats: 100_000n,
+  receivedSats: 0n,
+  netSats: 100_000n,
+  feeSats: 1_000n,
+  problems: [],
 };
 
-describe('Bitcoin PSBT review', () => {
-  it('puts every output, the fee and the total on the approval card', async () => {
-    const change = 'bc1qhwamhwamhwamhwamhwamhwamhwamhwame6jz2r';
-    walletStore.keys = { payment: [], change: [{ address: change }] } as never;
-    const psbt = new Psbt()
-      .addInput({ hash: '01'.repeat(32), index: 0, witnessUtxo: { script: NodeBuffer.from('0014' + 'aa'.repeat(20), 'hex'), value: 100_000 } })
-      .addOutput({ address: SHOP, value: 60_000 })
-      .addOutput({ address: change, value: 39_000 });
+const mountWith = (review: PsbtReview | null, result = '') => mount(BitcoinPsbtReview, {
+  props: { review, result },
+  global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { 'v-icon': true } },
+});
 
-    const wrapper = await mountReview(psbt.toHex());
-    const card = wrapper.getComponent(TransactionDetailsCard);
+describe('BitcoinPsbtReview', () => {
+  it('puts every output, what leaves the wallet and the fee on the approval card', () => {
+    const payment: PsbtReview = {
+      ...drain,
+      inputs: [{ index: 0, address: OWN, valueSats: 100_000n, own: true, willSign: true }],
+      outputs: [
+        { index: 0, address: ATTACKER, valueSats: 60_000n, own: false, change: false },
+        { index: 1, address: CHANGE, valueSats: 39_000n, own: true, change: true },
+      ],
+      receivedSats: 39_000n,
+      netSats: 61_000n,
+    };
+    const w = mountWith(payment, 'bitcoin.signedPsbt');
+    const card = w.getComponent(TransactionDetailsCard);
 
-    expect(card.props('outputs').map((output: { kind: string; ada: string }) => [output.kind, output.ada])).toEqual([
+    expect(card.props('outputs').map((o: { kind: string; ada: string }) => [o.kind, o.ada])).toEqual([
       ['external', '0.00060000'],
       ['change', '0.00039000'],
     ]);
-    expect(card.props('totals')).toMatchObject({
-      totalSendingAda: '0.00060000',
-      feeAda: '0.00001000',
-      youPayAda: '0.00061000',
-      isInternal: false,
-    });
-    expect(card.props('unit')).toBe('BTC');
-    expect(wrapper.text()).toContain('≈ $61');
+    expect(card.props('totals')).toMatchObject({ totalSendingAda: '0.00060000', feeAda: '0.00001000', youPayAda: '0.00061000', isInternal: false });
+    expect(w.text()).toContain('bitcoin.signedPsbt');
+    expect(w.findAll('[data-testid="bitcoin-psbt-signed-input"]')).toHaveLength(1);
+    expect(w.find('[data-testid="bitcoin-psbt-problem"]').exists()).toBe(false);
   });
 
-  it('says the fee is unknown when an input does not carry its value', async () => {
-    const psbt = new Psbt().addInput({ hash: '01'.repeat(32), index: 0 }).addOutput({ address: SHOP, value: 1_000 });
-    const wrapper = await mountReview(psbt.toHex());
-    expect(wrapper.getComponent(TransactionDetailsCard).props('totals')).toMatchObject({ feeAda: '—', youPayAda: '—' });
-    expect(wrapper.text()).toContain('bitcoin.psbtFeeUnknown');
+  it('counts a drain to a foreign output as leaving the wallet in full, with the full address', () => {
+    const w = mountWith(drain);
+    const card = w.getComponent(TransactionDetailsCard);
+    expect(card.props('outputs')[0].kind).toBe('external');
+    expect(card.props('totals')).toMatchObject({ totalSendingAda: '0.00099000', youPayAda: '0.00100000' });
+    // The card shortens addresses; the recipient is also shown in full.
+    const recipients = w.findAll('[data-testid="bitcoin-psbt-output"]');
+    expect(recipients).toHaveLength(1);
+    expect(recipients[0].text()).toContain(ATTACKER);
   });
 
-  it('warns instead of showing a card when the PSBT cannot be read', async () => {
-    const wrapper = await mountReview('not a psbt');
-    expect(wrapper.findComponent(TransactionDetailsCard).exists()).toBe(false);
-    expect(wrapper.find('[role="alert"]').text()).toContain('bitcoin.psbtUnreadable');
+  it('says the fee is unknown, rather than showing a wrong one, for a partial PSBT', () => {
+    const w = mountWith({ ...drain, feeSats: -5_000n });
+    expect(w.getComponent(TransactionDetailsCard).props('totals').feeAda).toBe('—');
+    expect(w.text()).toContain('bitcoin.psbtFeeUnknown');
+  });
+
+  it('names the first problem, above the card', () => {
+    const w = mountWith({ ...drain, problems: [{ code: 'notOwn', index: 1 }] });
+
+    expect(w.find('[data-testid="bitcoin-psbt-problem"]').text()).toContain('bitcoin.psbtReview.problemNotOwn:1');
+  });
+
+  it('shows only the problem for a PSBT it cannot decode', () => {
+    const w = mountWith({ ...drain, inputs: [], outputs: [], problems: [{ code: 'unparseable' }] });
+
+    expect(w.find('[data-testid="bitcoin-psbt-problem"]').text()).toContain('bitcoin.psbtReview.problemUnparseable');
+    expect(w.findComponent(TransactionDetailsCard).exists()).toBe(false);
+  });
+
+  it('shows nothing while the review is loading', () => {
+    const w = mountWith(null);
+    expect(w.findComponent(TransactionDetailsCard).exists()).toBe(false);
+    expect(w.find('[data-testid="bitcoin-psbt-problem"]').exists()).toBe(false);
   });
 });

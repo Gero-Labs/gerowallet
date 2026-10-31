@@ -1,7 +1,9 @@
 // Balance a dapp's proven-but-unbound transaction (DApp Connector
 // `balanceUnsealedTransaction`) on ledger 8:
 //
-//   decode → SDK balanceUnboundTransaction (the wallet's NIGHT inputs and
+//   decode → refuse a tx that already spends the wallet's coins (signing
+//   below signs every input the wallet owns, the approval lists only what
+//   balancing adds) → SDK balanceUnboundTransaction (the wallet's NIGHT inputs and
 //   change are merged into the dapp's OWN intent) → DUST fee tx from the
 //   existing helper → prove the fee tx wallet-side → merge → sign every
 //   NightExternal segment → bind → serialize.
@@ -15,7 +17,7 @@
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from './midnightConfig';
-import { decodeUnboundTransaction, summarizeContributions } from './midnightConnectorBalance';
+import { countWalletOwnedInputs, decodeUnboundTransaction, summarizeContributions } from './midnightConnectorBalance';
 import type { ConnectorContribution, UnboundTransaction } from './midnightConnectorBalance';
 import { requireMidnightLedger8 } from './midnightLedger';
 import { debugLog } from '@/utils/debug';
@@ -52,7 +54,7 @@ export interface UnshieldedSdkWallet {
 /** Injected so the pipeline is unit-testable without SDK sync or a proof server. */
 export interface BalanceDappTransactionDeps {
   startUnshieldedWallet: (sdkNetworkId: string, endpoints: MidnightNetworkEndpoints, secretKey: Uint8Array) =>
-    Promise<{ wallet: UnshieldedSdkWallet; keystore: { signData(data: Uint8Array): ledger.Signature } }>;
+    Promise<{ wallet: UnshieldedSdkWallet; keystore: { signData(data: Uint8Array): ledger.Signature; getAddress(): ledger.UserAddress } }>;
   balanceFees: (
     args: { sdkNetworkId: string; endpoints: MidnightNetworkEndpoints; dustSecretSeed: Uint8Array; ttl: Date; dustRegisteredAt?: Date },
     txs: ReadonlyArray<UnboundTransaction>,
@@ -99,6 +101,11 @@ export async function balanceDappTransaction(
 
   const { wallet, keystore } = await d.startUnshieldedWallet(args.sdkNetworkId, args.endpoints, args.unshieldedSecretKey);
   try {
+    // The SDK signs every input this key owns, including any the dapp put in;
+    // the approval listed only what balancing adds, so refuse those up front.
+    if (countWalletOwnedInputs(tx, keystore.getAddress()) > 0) {
+      throw new Error('This transaction already spends from your wallet; the wallet only adds its own inputs when it balances');
+    }
     await Promise.race([
       wallet.waitForSyncedState(),
       new Promise<never>((_, reject) => {

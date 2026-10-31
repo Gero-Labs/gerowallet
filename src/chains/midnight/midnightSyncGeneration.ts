@@ -1,3 +1,5 @@
+import { clearWalletStatesByPrefix } from './midnightWalletStatePersistence';
+
 export interface MidnightSyncIdentity {
   network: string;
   generation: number;
@@ -48,19 +50,12 @@ export class MidnightGenerationQueue {
 /** Clear only this Midnight network's SDK caches, including historical SDK namespaces. */
 export async function clearMidnightNetworkCheckpoints(network: string): Promise<void> {
   if (!/^midnight-(mainnet|preprod|stagenet)$/.test(network)) throw new Error('Invalid Midnight reset network');
-  if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
   const sdkNetwork = network.slice('midnight-'.length);
   const prefixes = [`midnight_wallet_state_${sdkNetwork}_`, `midnight_wallet_state_${sdkNetwork}-ledger9-`,
     `midnight_wallet_state_${network}-ledger9-`];
-  await new Promise<void>((resolve, reject) => {
-    chrome.storage.local.get(null, (all) => {
-      if (chrome.runtime?.lastError) { reject(new Error('Cannot read Midnight checkpoints')); return; }
-      const keys = Object.keys(all ?? {}).filter((key) => prefixes.some((prefix) => key.startsWith(prefix)));
-      if (!keys.length) { resolve(); return; }
-      chrome.storage.local.remove(keys, () => {
-        if (chrome.runtime?.lastError) reject(new Error('Cannot clear Midnight checkpoints'));
-        else resolve();
-      });
-    });
-  });
+  try {
+    await clearWalletStatesByPrefix(prefixes);
+  } catch {
+    throw new Error('Cannot clear Midnight checkpoints');
+  }
 }

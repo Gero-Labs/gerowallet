@@ -179,6 +179,7 @@ const { t } = useTranslation();
 import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
+import { forgetBringWalletAddress } from '@/chrome/bringAddressSharing';
 import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -312,6 +313,9 @@ const loadCashbackPopups = async () => {
 
 const updateCashbackPopups = async (val: boolean) => {
   await setTurnOff(val);
+  // Off also stops sharing the wallet address with Bring (the background checks
+  // the same opt-out): drop the copy Bring's worker already stored.
+  if (val) await forgetBringWalletAddress();
 };
 
 const reSync = async () => {
