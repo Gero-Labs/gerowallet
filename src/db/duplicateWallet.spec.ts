@@ -117,15 +117,18 @@ describe('duplicate hardware pairing', () => {
 
     it('still reports the duplicate when the version cannot be written', async () => {
       const xfp = 'aabbcc04';
-      await pair('Unwritable', deviceXpub('d6'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '1.7.2'));
+      const head = await pair('Unwritable', deviceXpub('d6'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '1.7.2'));
       const db = await getDb();
       const update = vi.spyOn(Object.getPrototypeOf(db['wallets']), 'update').mockRejectedValueOnce(new Error('QuotaExceededError'));
       try {
         await expect(pair('Unwritable', deviceXpub('d6'), Network.MAINNET, WalletType.Keystone, keystone(xfp, '3.6.0')))
           .rejects.toBeInstanceOf(DuplicateWalletError);
+        // The refresh did try to write the new version, and the failed write left the record as it was.
+        expect(update).toHaveBeenCalledWith(head, { firmwareVersion: '3.6.0' });
       } finally {
         update.mockRestore();
       }
+      expect((await storedWallets())[head].firmwareVersion).toBe('1.7.2');
     });
   });
 

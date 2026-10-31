@@ -161,9 +161,7 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      const resolved = await this.resolveGroupSecrets(requested);
-      // Only a Keystone waits on its record: any other login keeps its timing.
-      const wallet = resolved?.type === WalletType.Keystone ? await this.withStoredFirmware(resolved) : resolved;
+      const wallet = await this.resolveGroupSecrets(requested);
       // Clean up an existing wallet if different. On a SWITCH, only clear the
       // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
       // may already be reconstructed (auth-then-switch) and must survive.
@@ -253,32 +251,31 @@ export class WalletManager {
 
   /**
    * The record to log in with. An account added under another record stores no
-   * secrets and takes its account #0's (withGroupSecrets); any other wallet is
-   * logged in as given.
+   * secrets and takes its account #0's (withGroupSecrets). A Keystone takes the
+   * firmware version stored on its record: a pairing refreshes it there
+   * (refreshKeystoneFirmware), while a worker restart logs in again with the
+   * persisted loggedWallet, which may predate it; an unreadable record keeps the
+   * version given. Any other wallet is logged in as given, with nothing read.
    */
   private async resolveGroupSecrets(wallet) {
-    if (wallet?.parentWalletId == null) return wallet;
-    const { getAllWallets } = await import('@/db/gero-db');
-    return withGroupSecrets(wallet, await getAllWallets());
-  }
-
-  /**
-   * A Keystone logs in with the firmware version stored on its record. A pairing refreshes it
-   * there (refreshKeystoneFirmware), while a worker restart logs in again with the persisted
-   * loggedWallet, which may predate it. Never throws: an unreadable record keeps the version
-   * given.
-   */
-  private async withStoredFirmware(wallet) {
-    if (wallet?.id == null) return wallet;
+    const isKeystone = wallet?.type === WalletType.Keystone && wallet.id != null;
+    if (wallet?.parentWalletId == null && !isKeystone) return wallet;
+    const db = await import('@/db/gero-db');
+    let resolved = wallet;
+    let stored;
+    if (wallet.parentWalletId != null) {
+      const wallets = await db.getAllWallets();
+      resolved = withGroupSecrets(wallet, wallets);
+      stored = wallets?.[wallet.id];
+    }
+    if (!isKeystone) return resolved;
     try {
-      const { getAllWallets } = await import('@/db/gero-db');
-      const stored = (await getAllWallets())?.[wallet.id];
-      if (!stored || stored.firmwareVersion === wallet.firmwareVersion) return wallet;
-      return { ...wallet, firmwareVersion: stored.firmwareVersion };
+      stored ??= await db.getWalletRecord(wallet.id);
     } catch (error) {
       debugLog('WalletManager: stored firmware version unreadable:', error);
-      return wallet;
+      return resolved;
     }
+    return stored && stored.firmwareVersion !== resolved.firmwareVersion ? { ...resolved, firmwareVersion: stored.firmwareVersion } : resolved;
   }
 
   /**
@@ -328,9 +325,7 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      const resolved = await this.resolveGroupSecrets(requested);
-      // Only a Keystone waits on its record: any other login keeps its timing.
-      const wallet = resolved?.type === WalletType.Keystone ? await this.withStoredFirmware(resolved) : resolved;
+      const wallet = await this.resolveGroupSecrets(requested);
       // Clean up an existing wallet if different. On a SWITCH, only clear the
       // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
       // may already be reconstructed (auth-then-switch) and must survive.

@@ -493,6 +493,18 @@ describe('Keystone Cardano sign request: extra signers', () => {
       expect(await signersOf({ collaterals: [txIn] })).toEqual([]);
       expect(await signersOf({ collaterals: [unknownIn] })).toEqual([]);
     });
+
+    it('takes the collateral key\'s hash from its address when the key set carries none', async () => {
+      const withoutCred: Keys = { ...keys, payment: [keys.payment[0], { ...keys.payment[1], cred: '' }] };
+      expect(await signersOf({ collaterals: [otherIn] }, withoutCred)).toEqual([{ keyHash: otherPaymentCred.hash, keyPath: OTHER_PAYMENT_PATH }]);
+    });
+
+    // A transaction marked invalid exists only to forfeit its collateral.
+    it('asks for no collateral witness for a transaction marked invalid', async () => {
+      const invalid = Serialization.Transaction.fromCore({ ...tx({ collaterals: [otherIn] }).toCore(), isValid: false });
+      const response = await createKeystoneSignRequest(invalid, { xfp: '0a1b2c3d' }, utxos, keys);
+      expect(CardanoSignRequest.fromCBOR(response.ur.cbor).getAdditionalSigners()).toEqual([]);
+    });
   });
 
   describe('key sets and wallet data', () => {
@@ -528,6 +540,11 @@ describe('Keystone Cardano sign request: extra signers', () => {
       const withoutStakeCred: Keys = { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] };
       expect(await signersOf({ withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }, withoutStakeCred))
         .toEqual([{ keyHash: stakeCred.hash, keyPath: STAKE_PATH }]);
+    });
+
+    it('refuses to build a request without a key set', async () => {
+      await expect(createKeystoneSignRequest(tx({}), { xfp: '0a1b2c3d' }, utxos, null as unknown as Keys))
+        .rejects.toThrow('Keystone signing failed');
     });
 
     it('lists a key once when two of its signers spell its hash in different case', async () => {
@@ -578,6 +595,11 @@ describe('Keystone Cardano sign request: extra signers', () => {
       { body: { withdrawals: [{ stakeAddress, quantity: 1_000_000n }] }, keySet: { ...keys, stake: [{ address: rewardAccount(otherStake), cred: otherStake.hash, path: STAKE_PATH }] } },
       // A stake key at the reward address with no cred, and certificates the key set carries no cred for.
       { body: { withdrawals: [{ stakeAddress, quantity: 1_000_000n }], certificates: [voteDelegation] }, keySet: { ...keys, stake: [{ address: stakeAddress, cred: '', path: STAKE_PATH }] } },
+      // Collateral at a key the key set carries no hash for, and keys with no path.
+      {
+        body: { collaterals: [otherIn], certificates: [voteDelegation], votingProcedures: voteAs(drepVoter(drepCred)) },
+        keySet: { ...keys, payment: [keys.payment[0], { ...keys.payment[1], cred: '' }], stake: [{ ...keys.stake[0], path: '' }], drep129: [], drep105: [{ cred: drepCred.hash, path: '' }] },
+      },
     ];
     const accountPath = (derivationPath: number[]) => `m/1852'/1815'/1'/${derivationPath.join('/')}`;
     for (const { body, keySet } of bodies) {

@@ -29,7 +29,7 @@ function txWithVote(voterType: Cardano.VoterType) {
 // returns the signer array directly. The key set carries the voter's credential as the
 // wallet's own DRep and committee hot key; the voting branch consults nothing else.
 function analyze(tx: never) {
-  return analyzeTransactionForSignatures(tx, [], { drep129: [{ cred: CRED, path: '' }], ccHot: [{ cred: CRED, path: '' }] } as never);
+  return analyzeTransactionForSignatures(tx, [], { drep129: [{ cred: CRED, path: "m/1852'/1815'/0'/3/0" }], ccHot: [{ cred: CRED, path: "m/1852'/1815'/0'/5/0" }] } as never);
 }
 
 describe('analyzeTransactionForSignatures — voting procedures', () => {
@@ -44,9 +44,13 @@ describe('analyzeTransactionForSignatures — voting procedures', () => {
     expect(result.some(s => s.derivationPath[0] === ChainDerivations.DREP)).toBe(false);
   });
 
-  it('flags the cold key out-of-band for a stake-pool voter, like pool certificates do', () => {
-    const result = analyze(txWithVote(Cardano.VoterType.stakePoolKeyHash));
-    expect((result as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature).toBe(true);
+  it('signs nothing for a stake-pool voter: the pool cold key is not one of the wallet\'s keys', () => {
+    expect(analyze(txWithVote(Cardano.VoterType.stakePoolKeyHash))).toHaveLength(0);
+  });
+
+  it('signs nothing for a voter whose key the key set carries no path for', () => {
+    expect(analyzeTransactionForSignatures(txWithVote(Cardano.VoterType.dRepKeyHash), [], { drep129: [{ cred: CRED, path: '' }] } as never))
+      .toHaveLength(0);
   });
 
   it('requires a CC hot-key witness for a ccHotKeyHash voter', () => {
@@ -90,7 +94,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
   }) as never;
 
   it('adds the DRep witness for our own DRep voter, not for someone else’s', () => {
-    const own = keys({ drep129: [{ cred: CRED, path: '' }] });
+    const own = keys({ drep129: [{ cred: CRED, path: "m/1852'/1815'/0'/3/0" }] });
     expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, CRED), [], own)
       .some(s => s.derivationPath[0] === ChainDerivations.DREP)).toBe(true);
     expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, FOREIGN), [], own)
@@ -98,7 +102,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
   });
 
   it('adds the CC-hot witness only for our own CC-hot voter', () => {
-    const own = keys({ ccHot: [{ cred: CRED, path: '' }] });
+    const own = keys({ ccHot: [{ cred: CRED, path: "m/1852'/1815'/0'/5/0" }] });
     expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.ccHotKeyHash, FOREIGN), [], own)).toHaveLength(0);
   });
 
@@ -127,7 +131,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
   });
 
   it('adds the stake witness only for a certificate on our own stake credential', () => {
-    const own = keys({ stake: [{ cred: CRED, path: '', address: 'stake_test1' }] });
+    const own = keys({ stake: [{ cred: CRED, path: "m/1852'/1815'/0'/2/0", address: 'stake_test1' }] });
     const cert = (hash: string) => ({ body: { inputs: [], outputs: [], certificates: [{
       __typename: Cardano.CertificateType.VoteDelegation,
       stakeCredential: { type: Cardano.CredentialType.KeyHash, hash },
@@ -141,7 +145,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
     const COLD = 'c'.repeat(56);
     const HOT = 'e'.repeat(56);
     const requiring = (...hashes: string[]) => ({ body: { inputs: [], outputs: [], requiredExtraSignatures: hashes } }) as never;
-    const own = keys({ drep129: [{ cred: CRED, path: '' }], ccCold: [{ cred: COLD, path: '' }], ccHot: [{ cred: HOT, path: '' }] });
+    const own = keys({ drep129: [{ cred: CRED, path: "m/1852'/1815'/0'/3/0" }], ccCold: [{ cred: COLD, path: "m/1852'/1815'/0'/4/0" }], ccHot: [{ cred: HOT, path: "m/1852'/1815'/0'/5/0" }] });
 
     it('signs a governance required signer at the key\'s own path when the key set carries one', () => {
       const withPaths = keys({ drep129: [{ cred: CRED, path: "m/1852'/1815'/1'/3/2" }], ccCold: [{ cred: COLD, path: "m/1852'/1815'/1'/4/1" }] });
@@ -272,7 +276,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
       __typename: Cardano.CertificateType.UnregisterDelegateRepresentative, dRepCredential, deposit: 500_000_000n,
     });
     const withCertificates = (...certificates: unknown[]) => ({ body: { inputs: [], outputs: [], certificates } }) as never;
-    const own = keys({ drep105: [{ cred: CRED, path: '' }], drep129: [{ cred: CRED, path: '' }] });
+    const own = keys({ drep105: [{ cred: CRED, path: "m/1852'/1815'/0'/3/0" }], drep129: [{ cred: CRED, path: "m/1852'/1815'/0'/3/0" }] });
     const drepSigner = { derivationPath: [ChainDerivations.DREP, 0], type: 'drep' };
 
     it('adds the DRep-key witness for our own registration, update and retirement', () => {
@@ -311,7 +315,7 @@ describe('analyzeTransactionForSignatures — only signs for the wallet’s own 
       __typename: Cardano.CertificateType.ResignCommitteeCold, coldCredential: cold, anchor: null,
     });
     const withCertificates = (...certificates: unknown[]) => ({ body: { inputs: [], outputs: [], certificates } }) as never;
-    const own = keys({ ccCold: [{ cred: CRED, path: '' }], ccHot: [{ cred: HOT, path: '' }] });
+    const own = keys({ ccCold: [{ cred: CRED, path: "m/1852'/1815'/0'/4/0" }], ccHot: [{ cred: HOT, path: "m/1852'/1815'/0'/5/0" }] });
     const coldSigner = { derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 0], type: 'ccCold' };
 
     it('adds the cold-key witness for our own hot-key authorization and resignation', () => {

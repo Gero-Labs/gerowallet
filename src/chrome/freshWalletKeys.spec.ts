@@ -124,9 +124,11 @@ describe('fresh software wallet on a CIP-113 network', () => {
 
   // The signers sign nothing for a key whose hash the key set doesn't carry, so a row an
   // older build cached without them would drop the stake, DRep or committee witness.
-  it('derives the keys again when the cached row lacks a key\'s hash', async () => {
+  it('derives the keys again when the cached row lacks a key\'s hash, keeping the addresses it marks used', async () => {
     const bg = softwareWallet(Network.PREPROD);
-    const derived = bg.resolvePathsForMissingAddresses([]);
+    // Used addresses at 15 and 30: the scan reaches 30 only from 15's used flag.
+    const usedAt = (index: number) => getAddress(XPUB, Blockchain.CARDANO, Network.PREPROD, index).toBech32();
+    const derived = bg.resolvePathsForMissingAddresses([usedAt(15), usedAt(30)]);
     const db = await getDb(bg.id);
     await db.table('addresses').put({
       address: XPUB,
@@ -136,6 +138,7 @@ describe('fresh software wallet on a CIP-113 network', () => {
     await bg.loadCachedKeys();
 
     expect(walletStore.keys).toEqual(derived);
+    expect((walletStore.keys as Keys).payment[30]).toMatchObject({ address: usedAt(30), used: true });
   });
 
   it('keeps its own programmable UTxO out of the spendable set', async () => {

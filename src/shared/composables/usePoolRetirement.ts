@@ -20,7 +20,7 @@ import snackbar from '@/plugins/snackbar';
 export function usePoolRetirement() {
   const { t } = useTranslation();
 
-  const { loggedWallet, utxos, keys } = toRefs(walletStore);
+  const { utxos, keys } = toRefs(walletStore);
   const { epochParams, tip } = toRefs(networkStore);
 
   const txData = ref<Cardano.Tx | null>(null);
@@ -74,7 +74,6 @@ export function usePoolRetirement() {
         implicitCoin,
         walletContext: {
           keys: keys.value,
-          stakeAddress: loggedWallet.value?.stakeAddress || '',
         },
       });
 

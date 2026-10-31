@@ -230,8 +230,8 @@ const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | und
 /**
  * Every witness the transaction needs from this wallet, worked out once for both request
  * types by `walletWitnessPlan` (the rule the software signer follows too):
- * - `inputs`: each input whose UTxO is known, with the payment or change key at its
- *   address (none for an input the wallet does not own).
+ * - `inputs`: each input whose UTxO is known, with the payment or change key that signs for it
+ *   (none for an input the wallet does not own).
  * - `extra`: the other witnesses, one per key hash: collateral at a key no input uses (as
  *   Trezor maps it), then the stake, DRep and committee keys for the wallet's own
  *   certificates, votes and withdrawals, and the required signers the key set carries.
@@ -242,18 +242,12 @@ const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | und
 const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[]) => {
   const plan = walletWitnessPlan(txCore, keys, utxos);
   const inputs = plan.inputs.map(({ utxo, key }) => ({ utxo, key: signingKey(key) }));
-
-  const extra = new Map<string, ExtraSigner>();
-  const add = (keyHash: string | undefined, role: WitnessRole, key: SigningKey | undefined) => {
-    const hash = String(keyHash ?? '').toLowerCase();
-    if (!hash || !key || extra.has(hash)) return;
-    extra.set(hash, { keyHash: hash, role, ...key });
-  };
-  plan.collateralKeys.forEach((key) => add(key.cred, 'payment', signingKey(key)));
   debugLog('[Keystone] Found required signers:', txCore.body.requiredExtraSignatures?.length ?? 0);
-  plan.witnesses.forEach(({ keyHash, role, key }) => add(keyHash, role, signingKey(key, !GOVERNANCE_ROLES.has(role))));
-
-  return { inputs, extra: [...extra.values()] };
+  const extra: ExtraSigner[] = plan.witnesses.flatMap(({ keyHash, role, key }) => {
+    const signer = signingKey(key, !GOVERNANCE_ROLES.has(role));
+    return signer ? [{ keyHash, role, ...signer }] : [];
+  });
+  return { inputs, extra };
 };
 
 export interface KeystoneSignRequestResponse {
@@ -276,6 +270,9 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
   // index; every caller, the dApp approvals included, passes through here.
   const txCborHex = tx.toCbor();
   await assertCip113SignAllowed(txCborHex, i18n.t('wallet.keystoneSigningFailed') as string);
+
+  // Without the key set no path is known, and the device could only refuse the request.
+  if (!keys) throw new Error(i18n.t('wallet.keystoneSigningFailed') as string);
 
   // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
   const txCore = tx.toCore();

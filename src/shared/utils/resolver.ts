@@ -9,9 +9,9 @@ import { unwrapForIndexedDB } from '@/db/cloneBoundary';
 import { resolveIconUrl, type IconPlaceholders } from '@/shared/utils/iconResolver';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
-import { HARDENED, ChainDerivations, Keys } from '@/models/types';
+import { HARDENED, Keys } from '@/models/types';
 import { debugLog } from '@/utils/debug';
-import { walletWitnessPlan, type WitnessRole } from '@/shared/utils/keyCreds';
+import { walletWitnessPlan } from '@/shared/utils/keyCreds';
 import assetsModule from '@/utils/assets';
 
 // Service worker compatible icon resolution
@@ -638,14 +638,6 @@ export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
   return Bip32PrivateKey.fromBip39Entropy(Buffer.from(bip39entropy, 'hex'), '');
 }
 
-/** The path of a role's key when the key set carries none for it: index 0 of the role. A payment key has none. */
-const ROLE_FALLBACK_PATH: Partial<Record<WitnessRole, number[]>> = {
-  stake: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-  drep: [ChainDerivations.DREP, 0],
-  ccCold: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, 0],
-  ccHot: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
-};
-
 /**
  * Analyzes transaction to determine which keys need to sign
  * @param transaction - The transaction to analyze
@@ -661,62 +653,23 @@ export function analyzeTransactionForSignatures(
   // No key set, no answer: minFee falls back to its heuristic on this throw.
   if (!addresses) throw new Error('No key set to analyze the transaction\'s signers with');
   // Which keys sign is walletWitnessPlan's rule, the one the Keystone signer follows too, so
-  // the fee is sized for the witnesses every signer gives.
+  // the fee is sized for the witnesses every signer gives. A key with no path signs nothing:
+  // no signer can tell which key it is. Neither does an input no key of the key set signs for
+  // (a script's, or a key the key set doesn't carry).
   const plan = walletWitnessPlan(transaction, addresses, utxos ?? []);
-  const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
-
-  for (const { utxo, key } of plan.inputs) {
-    if (key?.path) {
-      requiredSigners.push({ derivationPath: parseDerivationPath(key.path), type: 'payment' });
-    } else if (!isScriptLocked(String(utxo[1].address))) {
-      // This should not happen if the wallet store is properly populated
-      // But fallback to external 0 as a last resort. Never for a script-locked input
-      // (a CIP-113 programmable UTxO, say): its script and any required signer witness it.
-      requiredSigners.push({ derivationPath: [ChainDerivations.EXTERNAL, 0], type: 'payment' });
-    }
-  }
-
-  // Collateral is witnessed like an input, even when no input uses its key (as Trezor and
-  // Keystone map it).
-  for (const key of plan.collateralKeys) {
-    requiredSigners.push({ derivationPath: parseDerivationPath(key.path), type: 'payment' });
-  }
-
-  // Every other witness at its key's own path, so a key a certificate, a vote and a required
-  // signer all name is one signer. A key set carrying no path for a role's key signs at index 0
-  // of the role; a payment key with no path signs nothing.
-  for (const { role, key } of plan.witnesses) {
-    const derivationPath = key.path ? parseDerivationPath(key.path) : ROLE_FALLBACK_PATH[role];
-    if (derivationPath) requiredSigners.push({ derivationPath, type: role });
-  }
+  const signers = [
+    ...plan.inputs.flatMap(({ key }) => (key?.path ? [{ derivationPath: parseDerivationPath(key.path), type: 'payment' }] : [])),
+    // Every other witness at its key's own path, so a key a certificate, a vote and a required
+    // signer all name is one signer.
+    ...plan.witnesses.flatMap(({ role, key }) => (key.path ? [{ derivationPath: parseDerivationPath(key.path), type: role }] : [])),
+  ];
 
   // Remove duplicates
-  const result = requiredSigners.filter((signer, index, self) =>
+  return signers.filter((signer, index, self) =>
       index === self.findIndex(s =>
         s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type
       )
   );
-
-  // A pool registration or retirement, or a pool's vote, needs the pool cold key too. It lives
-  // outside the HD tree (imported, or on a hardware device), so the pool signing flow handles it.
-  if (plan.needsPoolColdKey) {
-    (result as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
-  }
-
-  return result;
-}
-
-/** Whether `address` has a script payment credential. False for anything unparseable. */
-function isScriptLocked(address: string): boolean {
-  try {
-    const parsed = Cardano.Address.fromString(address);
-    const credential = parsed?.asBase()?.getPaymentCredential()
-      ?? parsed?.asEnterprise()?.getPaymentCredential()
-      ?? parsed?.asPointer()?.getPaymentCredential();
-    return credential?.type === Cardano.CredentialType.ScriptHash;
-  } catch {
-    return false;
-  }
 }
 
 /**

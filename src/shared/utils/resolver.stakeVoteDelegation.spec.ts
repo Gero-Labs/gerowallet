@@ -26,7 +26,7 @@ function txWithCert(certType: Cardano.CertificateType) {
 // returns the signer array directly. The key set carries the certificate's stake
 // credential (the wallet's own); the certificate branch consults nothing else.
 function requiredPaths(certType: Cardano.CertificateType): string[] {
-  const result = analyzeTransactionForSignatures(txWithCert(certType), [], { stake: [{ cred: 'a'.repeat(56), path: '' }] } as never);
+  const result = analyzeTransactionForSignatures(txWithCert(certType), [], { stake: [{ cred: 'a'.repeat(56), path: "m/1852'/1815'/0'/2/0" }] } as never);
   return result.map(s => JSON.stringify(s.derivationPath));
 }
 

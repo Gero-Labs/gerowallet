@@ -162,6 +162,27 @@ describe('buildTxApprovalSummary', () => {
     expect(s.proposals[0].isOwnRewardAccount).toBe(true);
   });
 
+  it('never marks a script stake credential as the wallet\'s, whatever its hash', () => {
+    const s = buildTxApprovalSummary(tx({
+      certificates: [{ __typename: Cardano.CertificateType.StakeDelegation, stakeCredential: { type: Cardano.CredentialType.ScriptHash, hash: OWN_STAKE_HASH }, poolId: POOL }],
+    }), ctx());
+    expect(s.certificates[0].stakeCredentialIsOwn).toBe(false);
+  });
+
+  it('does not mark a reward account on another network as the wallet\'s, though it carries the same key hash', () => {
+    const reward = (network: Cardano.NetworkId) => Cardano.RewardAddress.fromCredentials(
+      network, { type: Cardano.CredentialType.KeyHash, hash: OWN_STAKE_HASH as Cardano.Credential['hash'] },
+    ).toAddress().toBech32();
+    const wallet = approvalContextFromKeys(
+      { stake: [{ address: reward(Cardano.NetworkId.Testnet), cred: OWN_STAKE_HASH }] }, Cardano.NetworkId.Testnet, () => ({ name: 'Token', decimals: 0 }),
+    );
+    const s = buildTxApprovalSummary(tx({ withdrawals: [
+      { stakeAddress: reward(Cardano.NetworkId.Testnet), quantity: 1_000_000n },
+      { stakeAddress: reward(Cardano.NetworkId.Mainnet), quantity: 1_000_000n },
+    ] }), wallet);
+    expect(s.withdrawals.map((w) => w.isOwn)).toEqual([true, false]);
+  });
+
   it('flags a body network id or any output (own included) on another network', () => {
     expect(buildTxApprovalSummary(tx({ networkId: Cardano.NetworkId.Mainnet }), ctx()).bodyNetworkMismatch).toBe(true);
     expect(buildTxApprovalSummary(tx({ networkId: Cardano.NetworkId.Testnet }), ctx()).bodyNetworkMismatch).toBe(false);

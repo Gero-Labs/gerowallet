@@ -702,7 +702,6 @@ const sign = () => approval.run(async () => {
           // Create Keystone signing request
           const walletData = {
             xfp: loggedWallet.value.xfp,
-            stakeAddress: loggedWallet.value.stakeAddress,
             firmwareVersion: loggedWallet.value.firmwareVersion,
           };
 

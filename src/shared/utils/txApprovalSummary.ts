@@ -184,9 +184,9 @@ function addressNetworkId(address: string): Cardano.NetworkId | null {
   }
 }
 
-function stakeCredentialHash(cert: Cardano.Certificate): string | null {
-  const c = cert as { stakeCredential?: { hash?: unknown } };
-  return c.stakeCredential && typeof c.stakeCredential.hash === 'string' ? c.stakeCredential.hash : null;
+function stakeCredentialOf(cert: Cardano.Certificate): { hash: string; type: unknown } | null {
+  const c = cert as { stakeCredential?: { hash?: unknown; type?: unknown } };
+  return c.stakeCredential && typeof c.stakeCredential.hash === 'string' ? { hash: c.stakeCredential.hash, type: c.stakeCredential.type } : null;
 }
 
 function voteChoice(vote: Cardano.Vote): ApprovalVoteChoice {
@@ -230,8 +230,12 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
       type: cert.__typename as Cardano.CertificateType,
       stakeCredentialIsOwn: null,
     };
-    const stakeHash = stakeCredentialHash(cert);
-    if (stakeHash !== null) row.stakeCredentialIsOwn = ctx.ownStakeKeyHashes.has(stakeHash.toLowerCase());
+    // A script credential is never the wallet's, whatever its hash: no signer witnesses it.
+    const stakeCredential = stakeCredentialOf(cert);
+    if (stakeCredential !== null) {
+      row.stakeCredentialIsOwn = stakeCredential.type === Cardano.CredentialType.KeyHash
+        && ctx.ownStakeKeyHashes.has(stakeCredential.hash.toLowerCase());
+    }
     if ('poolId' in cert && cert.poolId) row.poolId = String(cert.poolId);
     if ('deposit' in cert && cert.deposit != null) row.depositAda = formatLovelace(BigInt(cert.deposit as unknown as bigint));
     if ('dRep' in cert && cert.dRep) {

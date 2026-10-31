@@ -840,9 +840,9 @@ export class WalletBg {
    * address replaces it. It is not persisted, so the cached row only ever holds keys a
    * sync resolved.
    *
-   * A row missing a key's hash (an older build's) is derived again the same way: the signers
-   * sign nothing for a key whose hash the key set doesn't carry. A wallet that can't derive
-   * its own keys keeps the row it has.
+   * A row missing a key's hash (an older build's) is derived again from the addresses it marks
+   * used, so it keeps those and the gap scan past them: the signers sign nothing for a key whose
+   * hash the key set doesn't carry. A wallet that can't derive its own keys keeps the row it has.
    */
   public async loadCachedKeys() {
     let cached: Keys | undefined;
@@ -862,7 +862,8 @@ export class WalletBg {
     }
     if (!derives) return;
     debugLog(cached ? '🔑 Cached keys lack key hashes; deriving them locally' : '🔑 No cached keys; deriving them locally');
-    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+    const used = [...(cached?.payment ?? []), ...(cached?.change ?? [])].flatMap((key) => (key?.used && key.address ? [key.address] : []));
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses(used));
   }
 
   /**

@@ -44,7 +44,10 @@ vi.mock('@/utils/networks', () => ({ default: {} }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ default: {} }));
 vi.mock('@/stores/tapToolsStore', () => ({ default: { clear: vi.fn() } }));
 vi.mock('@/db/wallet-db', () => ({ clearDbCache: vi.fn() }));
-vi.mock('@/db/gero-db', () => ({ getAllWallets: env.storedWallets }));
+vi.mock('@/db/gero-db', () => ({
+  getAllWallets: env.storedWallets,
+  getWalletRecord: async (id: number) => (await env.storedWallets())[id],
+}));
 vi.mock('@/stores/musicStore', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
