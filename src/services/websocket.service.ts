@@ -40,6 +40,19 @@ interface WsHandlers {
   onSocketOpen?: () => void;
 }
 
+/**
+ * Progress line for the catch-up overlay, or null when the server's counts are
+ * unusable. The counts come from the sync server, so only finite non-negative
+ * integers are accepted and the result is plain text (the overlay renders it as
+ * text, never as markup).
+ */
+export function catchUpProgressText(rawSent: unknown, rawTotal: unknown): string | null {
+  const sent = typeof rawSent === 'number' ? rawSent : NaN;
+  const total = typeof rawTotal === 'number' ? rawTotal : NaN;
+  if (!Number.isSafeInteger(sent) || !Number.isSafeInteger(total) || sent <= 0 || total <= 0) return null;
+  return `Syncing wallet data...\n${Math.min(sent, total)}/${total} transactions`;
+}
+
 // Relay message types routed to the cross-device signing bridge. The first six are
 // the CrossDeviceMessageType wire messages (src/services/crossDevice/protocol.ts);
 // WAKE_PENDING is a relay CONTROL frame (unsigned, not a CrossDeviceMessage) that the
@@ -280,7 +293,7 @@ class WebSocketService {
       this.stopSyncCheck();
 
       if (!this.intentionallyClosed) {
-        LoadingState.setText('Wallet is Disconnected from the Network.<br>Reconnecting ...');
+        LoadingState.setText('Wallet is Disconnected from the Network.\nReconnecting ...');
         this.scheduleReconnect();
       }
     };
@@ -328,13 +341,14 @@ class WebSocketService {
             // During catch-up, accumulate batches — don't write to DB yet
             this.pendingTxBatches.push(data);
             // Update progress bar
-            const total = data['catch_up_total'] as number;
-            const sent = data['catch_up_sent'] as number;
-            debugLog(`📊 Progress: ${sent}/${total}`);
-            if (total && sent) {
-              const pct = Math.round((sent / total) * 90); // 0-90%, last 10% for processing
+            const total = data['catch_up_total'];
+            const sent = data['catch_up_sent'];
+            debugLog(`📊 Progress: ${String(sent)}/${String(total)}`);
+            const progressText = catchUpProgressText(sent, total);
+            if (progressText) {
+              const pct = Math.round((Math.min(sent as number, total as number) / (total as number)) * 90); // 0-90%, last 10% for processing
               LoadingState.setProgress(pct);
-              LoadingState.setText(`Syncing wallet data...<br><span style="font-size: 12px; opacity: 0.7">${sent}/${total} transactions</span>`);
+              LoadingState.setText(progressText);
             }
             debugLog(`📦 Accumulated batch (${this.pendingTxBatches.length} batches so far)`);
           } else {

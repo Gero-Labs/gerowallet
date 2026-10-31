@@ -17,6 +17,7 @@ import { childAccounts } from '@/shared/utils/walletAccount';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { redactWalletRecords } from '@/utils/storageRedaction';
 
 export interface GeroStore {
   wallets: Record<number, Wallet>;
@@ -41,12 +42,17 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
+  // Fields the port has delivered. The chrome.storage copy is older, and its wallets
+  // carry no secrets (see persistedState), so it must never overwrite them.
+  const deliveredFields = new Set<string>();
+
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<GeroStore>) => {
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in geroStore) {
+        deliveredFields.add(key);
         geroStore[key] = updates[key as keyof GeroStore];
       }
     });
@@ -54,9 +60,13 @@ if (context === 'browser') {
 
   // Initial hydration from chrome.storage (fallback for initial state)
   chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(geroStore, result[STORE_NAME]);
-    }
+    const stored = result[STORE_NAME] as Partial<GeroStore> | undefined;
+    if (!stored) return;
+    Object.keys(stored).forEach(key => {
+      if (key in geroStore && !deliveredFields.has(key)) {
+        geroStore[key] = stored[key as keyof GeroStore];
+      }
+    });
   });
 }
 
@@ -84,6 +94,26 @@ let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 // wallets. So the worker holds its storage writes until setWallets() has run
 // once; broadcasts to open pages still go out immediately.
 let walletsHydrated = false;
+let resolveWalletsHydrated: () => void = () => {};
+const walletsHydratedPromise = new Promise<void>((resolve) => { resolveWalletsHydrated = resolve; });
+
+/**
+ * What the worker writes to chrome.storage.local. Every content script can read that
+ * area, so the wallet records go without their encrypted keys, recovery phrases and
+ * PassKey/MPC blobs (storageRedaction.ts). The extension's pages get the full records
+ * over the store-sync port: the snapshot below, then every broadcast.
+ */
+function persistedState(): GeroStore {
+  return { ...geroStore, wallets: redactWalletRecords(geroStore.wallets) };
+}
+
+if (context === 'background') {
+  backgroundStoreMessaging.registerSnapshot(
+    STORE_NAME,
+    () => JSON.parse(JSON.stringify(geroStore, serializeValue)),
+    walletsHydratedPromise,
+  );
+}
 
 /**
  * Broadcast updates from background context
@@ -117,7 +147,7 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
       try {
         // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
         // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
-        const finalState = { ...geroStore };
+        const finalState = persistedState();
         chrome.storage.local.set({
           [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
         });
@@ -135,7 +165,7 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
         try {
           // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
           // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
-          const finalState = { ...geroStore };
+          const finalState = persistedState();
           chrome.storage.local.set({
             [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
           });
@@ -152,8 +182,10 @@ export default {
     geroStore.wallets = wallets;
     // The first call is the worker's hydration from gero-db: persist right away,
     // including any config (locale) that arrived before it.
+    // That first write also replaces a record an older release wrote with the secrets in.
     const firstHydration = !walletsHydrated;
     walletsHydrated = true;
+    resolveWalletsHydrated();
     broadcastFromBackground({ wallets }, firstHydration);
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is the dynamic settings bag (see GeroStore.config)

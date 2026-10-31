@@ -3,11 +3,13 @@
  *
  * Manages a stable per-install device ID + JWT cache for authenticating with the
  * Nexus backend (server-side tx building, providers, etc.). The device ID is a
- * random UUID generated on first launch and persisted in chrome.storage.local —
- * it has nothing to do with user wallet keys, so no signing prompt is ever shown.
+ * random UUID generated on first launch and persisted in the extension's private
+ * store (privateStore.ts) — it has nothing to do with user wallet keys, so no
+ * signing prompt is ever shown. The bearer tokens live there too: content
+ * scripts can read chrome.storage.local, where older releases kept both.
  *
  * Auth flow (handled by nexus's existing /api/auth/device endpoints):
- *   1. Wallet generates a UUID once → stores it in chrome.storage.local
+ *   1. Wallet generates a UUID once → stores it in the private store
  *   2. POST /api/auth/device { deviceId } → returns { accessToken, refreshToken, expiresIn }
  *   3. Subsequent calls send Authorization: Bearer <accessToken>
  *   4. On 401 / near-expiry, POST /api/auth/device/refresh { refreshToken } → new tokens
@@ -16,6 +18,7 @@
 
 import axios from 'axios';
 import { debugLog } from '@/utils/debug';
+import { moveFromChromeLocal, removePrivate, setPrivate } from '@/utils/privateStore';
 
 const DEVICE_ID_KEY = 'geroNexusDeviceId';
 const TOKEN_KEY = 'geroNexusTokens';
@@ -65,27 +68,25 @@ const authClient = axios.create({
  * UUIDs are 36 chars, well within nexus's 8-100 char limit.
  */
 async function getOrCreateDeviceId(): Promise<string> {
-  const stored = await chrome.storage.local.get(DEVICE_ID_KEY);
-  const existing = stored?.[DEVICE_ID_KEY] as string | undefined;
-  if (existing) return existing;
+  const existing = await moveFromChromeLocal<string>(DEVICE_ID_KEY);
+  if (typeof existing === 'string' && existing) return existing;
 
   const deviceId = crypto.randomUUID();
-  await chrome.storage.local.set({ [DEVICE_ID_KEY]: deviceId });
+  await setPrivate(DEVICE_ID_KEY, deviceId);
   debugLog('[nexusAuth] Generated new device ID:', deviceId);
   return deviceId;
 }
 
 async function readCachedTokens(): Promise<CachedTokens | null> {
-  const stored = await chrome.storage.local.get(TOKEN_KEY);
-  return (stored?.[TOKEN_KEY] as CachedTokens | undefined) ?? null;
+  return (await moveFromChromeLocal<CachedTokens>(TOKEN_KEY)) ?? null;
 }
 
 async function writeCachedTokens(tokens: CachedTokens): Promise<void> {
-  await chrome.storage.local.set({ [TOKEN_KEY]: tokens });
+  await setPrivate(TOKEN_KEY, tokens);
 }
 
 async function clearCachedTokens(): Promise<void> {
-  await chrome.storage.local.remove(TOKEN_KEY);
+  await removePrivate(TOKEN_KEY);
 }
 
 function tokensFromResponse(res: DeviceAuthResponse): CachedTokens {

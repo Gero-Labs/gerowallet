@@ -2,6 +2,7 @@ import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, S
 import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
 import { claimedOriginMatchesSender } from './originBinding';
+import { BITCOIN_DAPP_ENABLED, isDappMethodAvailable } from './bitcoinDappGate';
 
 interface Message {
   method?: string;
@@ -290,7 +291,9 @@ class BackgroundController {
           if (request.sender === SENDER.webpage && request.method && this.methodList[request.method]) {
             // The origin in the body is written inside the page's renderer; it
             // must match the browser-reported origin of the sending frame.
-            if (!claimedOriginMatchesSender(request.origin, sender)) {
+            // A gated-off dApp API stays off even when a page posts the request
+            // itself instead of going through a provider it can't see.
+            if (!claimedOriginMatchesSender(request.origin, sender) || !isDappMethodAvailable(request.method)) {
               sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
               return true;
             }
@@ -597,20 +600,23 @@ export const Messaging = {
       // itself for these methods (see the signTx/signData/MIDNIGHT_METHOD.
       // signData/BITCOIN_METHOD.signPsbt(s)/signMessage handlers in
       // background.ts).
+      const bitcoinFastPath = BITCOIN_DAPP_ENABLED && (
+        request.method === BITCOIN_METHOD.enable ||
+        request.method === BITCOIN_METHOD.isEnabled ||
+        request.method === BITCOIN_METHOD.signPsbt ||
+        request.method === BITCOIN_METHOD.signPsbts ||
+        request.method === BITCOIN_METHOD.signMessage
+      );
       if (
         request.method === METHOD.enable ||
         request.method === METHOD.isEnabled ||
-        request.method === BITCOIN_METHOD.enable ||
-        request.method === BITCOIN_METHOD.isEnabled ||
         request.method === MIDNIGHT_METHOD.connect ||
         request.method === METHOD.signTx ||
         request.method === METHOD.signData ||
         request.method === MIDNIGHT_METHOD.signData ||
         request.method === MIDNIGHT_METHOD.makeTransfer ||
         request.method === MIDNIGHT_METHOD.balanceUnsealedTransaction ||
-        request.method === BITCOIN_METHOD.signPsbt ||
-        request.method === BITCOIN_METHOD.signPsbts ||
-        request.method === BITCOIN_METHOD.signMessage
+        bitcoinFastPath
       ) {
         Messaging.sendToBackground({
           ...request,

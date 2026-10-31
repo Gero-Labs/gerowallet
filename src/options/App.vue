@@ -19,7 +19,9 @@
         >
           <span v-if="progress > 0" style="color: black; font-size: 11px; font-weight: 700;">{{ progress }}%</span>
         </v-progress-linear>
-        <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
+        <!-- Plain text only: the sync server feeds this overlay, so it must never
+             render markup. Line breaks are "\n" (pre-line). -->
+        <v-card-text style="color: white; height: 76px; white-space: pre-line">{{ text }}</v-card-text>
       </v-card>
     </v-overlay>
     <!-- Global, so every hardware-wallet signing path gets the "continue on

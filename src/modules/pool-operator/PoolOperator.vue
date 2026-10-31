@@ -223,6 +223,7 @@
 import { isAxiosError } from 'axios';
 import type { DisplayNode, NodeVersions, PoolInfo, LeaderSchedule, Ratio, KesRotateResponse } from './types';
 import { ref, computed, toRefs, onMounted, watch } from 'vue';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore, loadPoolOperatorConfig } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
@@ -384,8 +385,9 @@ async function fetchPoolData() {
       try {
         if (data.pool_extended_info) {
           const parsed = JSON.parse(data.pool_extended_info);
-          const icon = parsed?.info?.url_png_icon_64x64;
-          if (icon && typeof icon === 'string' && icon.startsWith('http')) poolIcon.value = icon;
+          // Through Gero's proxies, like every pool icon (thirdPartyImageUrl).
+          const icon = thirdPartyImageUrl(parsed?.info?.url_png_icon_64x64);
+          if (icon) poolIcon.value = icon;
         }
       } catch {}
       if (data.live_pledge != null && data.pledge != null) {

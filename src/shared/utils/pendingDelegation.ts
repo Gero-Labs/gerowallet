@@ -10,6 +10,10 @@
  *
  * Before this existed the panel opened the dashboard and dropped the selection
  * on the floor, so the button appeared to do nothing.
+ *
+ * The handoff lives in chrome.storage.session, which only the extension's own
+ * pages and worker can reach. In chrome.storage.local any content script could
+ * plant one and open a pre-filled delegation dialog.
  */
 
 export const PENDING_DREP_DELEGATION_KEY = 'pendingDRepDelegation';
@@ -55,7 +59,7 @@ function isUsable(value: unknown): value is PendingDRepDelegation {
 export async function setPendingDRepDelegation(
   pending: Omit<PendingDRepDelegation, 'createdAt'>,
 ): Promise<void> {
-  await chrome.storage.local.set({
+  await chrome.storage.session.set({
     [PENDING_DREP_DELEGATION_KEY]: { ...pending, createdAt: Date.now() },
   });
 }
@@ -66,10 +70,10 @@ export async function setPendingDRepDelegation(
  */
 export async function takePendingDRepDelegation(): Promise<PendingDRepDelegation | null> {
   try {
-    const stored = await chrome.storage.local.get(PENDING_DREP_DELEGATION_KEY);
+    const stored = await chrome.storage.session.get(PENDING_DREP_DELEGATION_KEY);
     const pending = stored?.[PENDING_DREP_DELEGATION_KEY];
     if (pending === undefined) return null;
-    await chrome.storage.local.remove(PENDING_DREP_DELEGATION_KEY);
+    await chrome.storage.session.remove(PENDING_DREP_DELEGATION_KEY);
     return isUsable(pending) ? pending : null;
   } catch (error) {
     console.warn('takePendingDRepDelegation: failed to read handoff', error);
@@ -91,7 +95,7 @@ export function onPendingDRepDelegation(
   ) => {
     // Only react to a write. The remove that take() performs also fires here,
     // with no newValue — ignoring it is what keeps this from looping.
-    if (areaName !== 'local' || !changes[PENDING_DREP_DELEGATION_KEY]?.newValue) return;
+    if (areaName !== 'session' || !changes[PENDING_DREP_DELEGATION_KEY]?.newValue) return;
     void takePendingDRepDelegation().then((pending) => {
       if (pending) handler(pending);
     });

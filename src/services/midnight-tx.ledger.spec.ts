@@ -20,6 +20,7 @@ vi.mock('@/stores/midnightStore', () => ({
   },
 }));
 vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health }));
+vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@/chains/midnight/midnightZkpaas', () => ({
   resolveZkpaasUrl: () => 'https://prover.example',
   buildZkpaasHeaders: () => ({}),
@@ -268,10 +269,27 @@ describe('Midnight ledger-specific orchestration', () => {
     const result = await registerNightForDust('Stagenet', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
     expect(mocks.send).toHaveBeenLastCalledWith({
       method: MessageTypes.SIGN_MIDNIGHT_SEGMENTS,
-      data: { segments: [{ index: 1, role: 'NightExternal', dataHex: '0xcc' }], unprovenTxHex: 'aabb', password: undefined, prfSecret: undefined },
+      data: {
+        segments: [{ index: 1, role: 'NightExternal', dataHex: '0xcc' }], unprovenTxHex: 'aabb',
+        // The background checks the registration against the chosen DUST address before signing.
+        dustReceiverAddressBech32: 'unused', password: undefined, prfSecret: undefined,
+      },
     });
     expect(result).toEqual({ status: 'failed', message: 'Signing payload mismatch' });
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('hands the background the requested outputs, and reports a refused build in the user\'s language', async () => {
+    const outputs = [{ address: 'mn_addr_preprod1recipient', amount: '10', token: 'NIGHT' }];
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: vi.fn() });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: false, error: 'MIDNIGHT_BUILT_TX_MISMATCH' } });
+    await expect(sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs, ttlMs: Date.now() + 60000 }, {}))
+      .rejects.toThrow('txGuard.builtTxMismatch');
+    expect(mocks.send).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
+      data: expect.objectContaining({ unprovenTxHex: 'aa', intendedOutputs: outputs }),
+    }));
   });
 
   // ── which side names the ledger hash ─────────────────────────────────────

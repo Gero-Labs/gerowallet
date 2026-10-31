@@ -6,11 +6,15 @@
 // STABLE identity for the browser install, so pins survive logins.
 //
 // The stored value is an Ed25519 relay-auth keypair — SEPARATE from the wallet
-// key, used only to authenticate relay messages. It is NOT a spending key.
-// FOLLOW-UP (tracked): encrypt it at rest / derive it from the unlocked wallet
-// so it isn't readable from chrome.storage at rest.
+// key, used only to authenticate relay messages. It is NOT a spending key, but it
+// is what lets this browser speak for the wallet to the user's paired phone. It is
+// kept in the extension's private IndexedDB (privateStore.ts), which content
+// scripts cannot open; older releases kept it in chrome.storage.local, from where
+// the first read moves it. FOLLOW-UP (tracked): encrypt it at rest / derive it
+// from the unlocked wallet.
 
-import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
+import { generateDeviceKeypair, deviceIdFromPubKey, isKeypairConsistent } from './deviceIdentity';
+import { moveFromChromeLocal, setPrivate } from '@/utils/privateStore';
 
 export interface StoredDeviceIdentity {
   deviceId: string;
@@ -18,7 +22,7 @@ export interface StoredDeviceIdentity {
   pubKeyHex: string;
 }
 
-/** Minimal async KV surface (chrome.storage.local in prod; in-memory in tests). */
+/** Minimal async KV surface (the private store in prod; in-memory in tests). */
 export interface IdentityStorage {
   get(key: string): Promise<unknown>;
   set(key: string, value: unknown): Promise<void>;
@@ -32,18 +36,16 @@ function isValid(v: unknown): v is StoredDeviceIdentity {
   return typeof o['deviceId'] === 'string'
     && typeof o['privKeyHex'] === 'string'
     && typeof o['pubKeyHex'] === 'string'
-    // fail closed on a tampered/corrupt store: the id must derive from the key.
-    && deviceIdFromPubKey(o['pubKeyHex']) === o['deviceId'];
+    // fail closed on a tampered/corrupt store: the id must derive from the key,
+    // and the key from the private key.
+    && deviceIdFromPubKey(o['pubKeyHex']) === o['deviceId']
+    && isKeypairConsistent(o['privKeyHex'], o['pubKeyHex']);
 }
 
-function chromeStorage(): IdentityStorage {
+function privateStorage(): IdentityStorage {
   return {
-    get: (key) => new Promise((resolve) => {
-      chrome.storage.local.get(key, (r) => resolve(r?.[key]));
-    }),
-    set: (key, value) => new Promise((resolve) => {
-      chrome.storage.local.set({ [key]: value }, () => resolve());
-    }),
+    get: (key) => moveFromChromeLocal(key),
+    set: (key, value) => setPrivate(key, value),
   };
 }
 
@@ -52,7 +54,7 @@ function chromeStorage(): IdentityStorage {
  * Deterministic across logins for a given install. Injectable storage for tests.
  */
 export async function loadOrCreateDeviceIdentity(
-  storage: IdentityStorage = chromeStorage(),
+  storage: IdentityStorage = privateStorage(),
 ): Promise<StoredDeviceIdentity> {
   try {
     const existing = await storage.get(STORAGE_KEY);

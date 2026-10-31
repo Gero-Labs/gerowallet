@@ -1,8 +1,9 @@
 import { Buffer } from 'buffer';
 import { SecretPurpose, decrypt, decryptKeyBlob, decryptPrivateKey } from './crypto';
-import { sealKeySecret, sealTextSecret } from './secretWriters';
+import { resealKeySecret, resealTextSecret } from './secretWriters';
 import { CONFIG_SECRET_FIELDS, openConfigSecret, sealConfigSecret, type ConfigSecretField, type ConfigSecretPlain } from './walletSecretFields';
 import { debugLog } from '@/utils/debug';
+import { moveFromChromeLocal, setPrivateMany } from '@/utils/privateStore';
 
 /**
  * Re-encrypt every secret a password wallet stores under its spending password,
@@ -12,12 +13,15 @@ import { debugLog } from '@/utils/debug';
  *  1. `prepare` decrypts the root key and mnemonic with the current password
  *     (throws on a wrong one) and seals them under the new one. It also decrypts
  *     and re-seals the secondary secrets: 2FA data and the password-encrypted SPO
- *     cold key (per-wallet config), and the Strike key (chrome.storage.local). A
+ *     cold key (per-wallet config), and the Strike key (privateStore.ts). A
  *     secondary value that does not open with the current password is already
  *     unusable and is left as it is.
  *  2. The caller writes the wallets row, then calls `commitSecondary`, which is
  *     best-effort: a failed secondary write is logged, never turns a completed
  *     password change into an error.
+ *
+ * Every field is re-sealed at least as strongly as it is stored: a `gpw2` field
+ * stays `gpw2` even when the flag has since been turned off (`reseal*Secret`).
  *
  * Root keys are handled as raw bytes for every chain; wrapping them in a Cardano
  * `Bip32PrivateKey` rejected Bitcoin (32-byte) and Midnight (64-byte) keys.
@@ -70,8 +74,8 @@ async function prepareConfig(walletId: number, currentPassword: string, newPassw
     const next = await sealConfigSecret(
       field,
       plain,
-      text => sealTextSecret(text, newPassword, SecretPurpose.SecurityData),
-      bytes => sealKeySecret(bytes, newPassword, SecretPurpose.ColdKey),
+      text => resealTextSecret(text, newPassword, SecretPurpose.SecurityData, row.value),
+      bytes => resealKeySecret(bytes, newPassword, SecretPurpose.ColdKey, row.value),
     );
     updates.push({ key: row.key, next });
   }
@@ -86,7 +90,7 @@ interface StrikeRecord {
 async function prepareStrike(wallet: RotationWallet, currentPassword: string, newPassword: string): Promise<{ key: string; record: StrikeRecord } | null> {
   if (!hasChromeStorage() || wallet.encryptionMethod === 'prf') return null;
   const key = `strike_keys_${wallet.id}`;
-  const record = (await chrome.storage.local.get(key))?.[key] as StrikeRecord | undefined;
+  const record = await moveFromChromeLocal<StrikeRecord>(key);
   if (!record || typeof record.privateKeyEncrypted !== 'string') return null;
   let keyBytes: Buffer;
   try {
@@ -96,7 +100,10 @@ async function prepareStrike(wallet: RotationWallet, currentPassword: string, ne
   }
   return {
     key,
-    record: { ...record, privateKeyEncrypted: await sealKeySecret(keyBytes, newPassword, SecretPurpose.StrikeKey) },
+    record: {
+      ...record,
+      privateKeyEncrypted: await resealKeySecret(keyBytes, newPassword, SecretPurpose.StrikeKey, record.privateKeyEncrypted),
+    },
   };
 }
 
@@ -117,8 +124,10 @@ export async function prepareSpendingPasswordRotation(
     ? decrypt(wallet.encryptedMnemonic, currentPassword, SecretPurpose.Mnemonic)
     : null;
 
-  const encryptedPrivateKey = await sealKeySecret(rootKey, newPassword, SecretPurpose.RootKey);
-  const encryptedMnemonic = mnemonic === null ? null : await sealTextSecret(mnemonic, newPassword, SecretPurpose.Mnemonic);
+  const encryptedPrivateKey = await resealKeySecret(rootKey, newPassword, SecretPurpose.RootKey, wallet.encryptedPrivateKey);
+  const encryptedMnemonic = mnemonic === null
+    ? null
+    : await resealTextSecret(mnemonic, newPassword, SecretPurpose.Mnemonic, wallet.encryptedMnemonic);
 
   const configUpdates: Array<{ walletId: number; updates: ConfigUpdate[] }> = [];
   const strikes: Array<{ key: string; record: StrikeRecord }> = [];
@@ -151,7 +160,7 @@ export async function prepareSpendingPasswordRotation(
         }
       }
       try {
-        if (strikes.length > 0) await chrome.storage.local.set(Object.fromEntries(strikes.map(({ key, record }) => [key, record])));
+        if (strikes.length > 0) await setPrivateMany(strikes.map(({ key, record }) => ({ key, value: record })));
       } catch (e) {
         debugLog('🔐 Could not re-encrypt secondary secrets after password change:', e);
       }

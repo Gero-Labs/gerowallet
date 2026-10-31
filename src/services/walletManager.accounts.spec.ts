@@ -138,11 +138,35 @@ describe('logging in to an added account', () => {
     expect(lastConstructed()).toMatchObject({ id: 11, encryptedPrivateKey: undefined, secretsWalletId: 11 });
   });
 
-  it('logs any other wallet in as given', async () => {
+  it('logs any other wallet in as stored, its secrets bound to itself', async () => {
     const { instance } = await manager();
     await instance.login(other);
 
-    expect(lastConstructed()).toEqual(other);
+    expect(lastConstructed()).toEqual({ ...other, secretsWalletId: 20 });
+  });
+
+  // At a worker start the login object is the logged wallet hydrated from
+  // chrome.storage.local, which any content script can rewrite.
+  it('takes the keys, account and secrets from the stored record, not from the login object', async () => {
+    const { instance } = await manager();
+    await instance.login({
+      ...other, publicKey: 'xpub-planted', encryptedPrivateKey: 'planted-key', accountIndex: 3,
+      parentWalletId: 10, secretsWalletId: 10, mpcDeviceShare: 'planted-share',
+    });
+
+    const built = lastConstructed();
+    expect(built).toMatchObject({ id: 20, publicKey: 'xpub-other', encryptedPrivateKey: 'other-key', secretsWalletId: 20 });
+    expect(built).not.toHaveProperty('accountIndex');
+    expect(built['parentWalletId']).toBeUndefined();
+    expect(built).not.toHaveProperty('mpcDeviceShare');
+  });
+
+  it('logs a wallet the database does not hold in as given', async () => {
+    const { instance } = await manager();
+    const unstored = { id: 99, name: 'Temp', ...base };
+    await instance.login(unstored);
+
+    expect(lastConstructed()).toEqual(unstored);
   });
 
   it('keeps the Google session when switching between accounts of one wallet', async () => {

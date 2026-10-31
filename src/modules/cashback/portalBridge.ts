@@ -1,6 +1,8 @@
 // Pure helpers for the Bring Cashback Portal postMessage bridge.
 // Shapes follow the internal Bring Cashback portal migration design.
 
+import { reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
+
 export type PortalInboundAction = 'LOGIN' | 'SIGN_MESSAGE' | 'POPUP_CLOSED';
 
 /**
@@ -43,10 +45,10 @@ export function isTrustedPortalMessage(event: MessageEvent, portalOrigin: string
 
 /**
  * The challenge of a `SIGN_MESSAGE` request, or null when the message carries
- * none the wallet should sign: not a string, empty, oversized, or containing
+ * none the wallet should sign: not a string, empty, oversized, containing
  * control characters or bidi overrides / isolates (a challenge is one
  * printable line; anything else could hide or reorder text in the approval
- * prompt).
+ * prompt), or one of Gero's own protocol subjects.
  */
 export function signRequestMessage(data: unknown): string | null {
   const message = (data as { messageToSign?: unknown } | null | undefined)?.messageToSign;
@@ -54,6 +56,7 @@ export function signRequestMessage(data: unknown): string | null {
   if (message.length === 0 || message.length > MAX_SIGN_MESSAGE_LENGTH) return null;
   // eslint-disable-next-line no-control-regex -- rejecting control characters is the point
   if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/.test(message)) return null;
+  if (reservedSigningDomain(message)) return null;
   return message;
 }
 

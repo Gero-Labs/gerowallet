@@ -117,12 +117,33 @@ async function seedWallet(w: Worker, id: number, txCount = 400) {
 
 const lastRecord = (key: string) => env.data.get(key) as Record<string, unknown> | undefined;
 
-async function wipeCache(w?: Worker) {
-  w?.cache.resetStoreCacheForTest?.();
-  await new Promise<void>((resolve) => {
-    const req = indexedDB.deleteDatabase('gero-store-cache');
+function deleteDatabase(name: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const req = indexedDB.deleteDatabase(name);
     req.onsuccess = req.onerror = req.onblocked = () => resolve();
   });
+}
+
+/**
+ * Nothing this release writes: the state of a profile an older release ran on. The
+ * private store holds the trusted copies of loggedWallet and isLocked, and once a
+ * worker of this release has run, a record written to chrome.storage afterwards is
+ * not believed for those (see StorePersister trustedFields). The worker `beforeEach`
+ * started writes there too, so it is let finish first.
+ */
+async function wipePrivateStore(running?: Worker) {
+  if (running) {
+    await running.wallet.hydrateWalletStore();
+    await settle(running.wallet);
+  }
+  (await import('@/utils/privateStore')).resetPrivateStoreForTest();
+  await deleteDatabase('gero-private-store');
+}
+
+async function wipeCache(w?: Worker) {
+  w?.cache.resetStoreCacheForTest?.();
+  await deleteDatabase('gero-store-cache');
+  await wipePrivateStore();
 }
 
 describe('store persistence in the worker', () => {
@@ -202,6 +223,7 @@ describe('store persistence in the worker', () => {
       config: { currency: 'usd' }, contacts: {}, connectedDapps: [], ...big,
       utxos: [], programmableTokens: {}, programmableLockedLovelace: '0', collateral: null,
     }));
+    await wipePrivateStore(w); // the first start of this release, over an older one's profile
     env.data.set('walletStore', legacy);
     w = await startWorker(); // the worker starts with the old record already in place
 
@@ -229,6 +251,7 @@ describe('store persistence in the worker', () => {
       config: { currency: 'usd' }, contacts: {}, connectedDapps: [], ...big,
       utxos: [], programmableTokens: {}, programmableLockedLovelace: '0', collateral: null,
     }));
+    await wipePrivateStore(w); // the first start of this release, over an older one's profile
     env.data.set('walletStore', legacy);
     w = await startWorker();
     w.wallet.default.setLocked(true);

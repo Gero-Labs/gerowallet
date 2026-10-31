@@ -22,8 +22,9 @@
  * Three facts drive this component:
  *
  *  1. The image URL comes out of CIP-119 metadata the DRep wrote, so it is
- *     third-party input. It is resolved through `toInAppUrl`, which allows only
- *     http(s) and maps IPFS onto gero-backend's proxy — an `ipfs://` avatar (the
+ *     third-party input. It is resolved through `toInAppImageUrl`, which sends
+ *     https through Gero's image proxy (the DRep's host never sees who looks)
+ *     and maps IPFS onto gero-backend's IPFS proxy — an `ipfs://` avatar (the
  *     Cardano Foundation's among them) simply did not render before, because
  *     nothing in the browser resolves that scheme and the public gateways refuse
  *     cross-origin extension requests outright.
@@ -39,7 +40,7 @@
  * shape between them.
  */
 import { computed, ref, watch } from 'vue';
-import { toInAppUrl } from '@/modules/governance/utils/govAnchor';
+import { toInAppImageUrl } from '@/modules/governance/utils/govAnchor';
 
 const props = defineProps({
   /** The raw `body.image.contentUrl` from CIP-119 metadata. http(s) or ipfs. */
@@ -62,7 +63,7 @@ const props = defineProps({
 /** Flipped by the image's own error event; reset whenever the URL changes. */
 const broken = ref(false);
 
-const src = computed(() => toInAppUrl(props.imageUrl));
+const src = computed(() => toInAppImageUrl(props.imageUrl));
 
 watch(src, () => {
   broken.value = false;

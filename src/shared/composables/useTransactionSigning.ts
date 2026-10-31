@@ -1,4 +1,5 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Ref, ComputedRef, toRefs, ref, computed, watch, getCurrentScope, onScopeDispose, getCurrentInstance, provide } from 'vue';
 import { authorizationScopeKey } from './authorizationScope';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -253,7 +254,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
         if (!attempt.current()) return false;
         if (!passwordVerification.data.success) {
-          passwordField.value?.showError(t('errors.wrongPassword'));
+          passwordField.value?.showError(passwordCheckFailure(passwordVerification, t('errors.wrongPassword')));
           loading.value = false;
           return false;
         }

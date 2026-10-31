@@ -5,8 +5,10 @@
  * roughly a quarter of them are `ipfs://`. Two DIFFERENT URLs come out of the
  * same input here, and conflating them is the bug this module exists to prevent:
  *
- *  - {@link toInAppUrl} is what the extension page itself loads (an `<img>` src,
- *    a `fetch`). An `ipfs://` URI cannot be one, and neither can a public
+ *  - {@link toInAppDocumentUrl} and {@link toInAppImageUrl} are what the
+ *    extension page itself loads (a `fetch`, an `<img>` src), always through
+ *    gero-backend so the author's host never sees who reads or looks. An
+ *    `ipfs://` URI cannot be loaded as is, and neither can a public
  *    gateway URL: `ipfs.io`, Pinata and Cloudflare answer cross-origin extension
  *    requests with 403 plus `Cross-Origin-Resource-Policy`, which Chrome blocks
  *    outright (see `shared/utils/ipfs.ts`). That is precisely why so many DRep
@@ -23,6 +25,7 @@
 
 import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared/utils/ipfs';
 import { safeExternalHref } from '@/shared/utils/externalLink';
+import { proxiedAnchorUrl, thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 
 /**
  * The public gateway an `ipfs://` link is opened through OUTSIDE the extension.
@@ -68,22 +71,37 @@ export function ipfsPathOf(raw: unknown): string | null {
 }
 
 /**
- * A URL the extension page may load itself, or null when there is nothing safe
- * to load. IPFS goes through the backend proxy; http(s) passes through the
- * shared scheme guard unchanged.
+ * A DOCUMENT the extension page may fetch (a vote rationale), or null when there
+ * is nothing it can fetch privately: IPFS through the IPFS proxy, https through
+ * gero-backend's anchor proxy (`/api/anchor`), so the author's host never sees
+ * who reads it. Plain http is not fetched at all; a new tab can still open it
+ * ({@link toExternalHref}).
  */
-export function toInAppUrl(raw: unknown): string | null {
+export function toInAppDocumentUrl(raw: unknown): string | null {
   const path = ipfsPathOf(raw);
   if (path) return ipfsProxyUrl(path);
-  return safeExternalHref(raw) ?? null;
+  const href = safeExternalHref(raw);
+  return href && href.startsWith('https:') ? proxiedAnchorUrl(href) : null;
+}
+
+/**
+ * An IMAGE the extension page may load, or null: IPFS through the IPFS proxy,
+ * https through Gero's image proxy (so the DRep's host never sees who looks at
+ * the avatar), nothing else. Documents use {@link toInAppDocumentUrl}: the image
+ * proxy serves images only.
+ */
+export function toInAppImageUrl(raw: unknown): string | null {
+  const path = ipfsPathOf(raw);
+  if (path) return ipfsProxyUrl(path);
+  return thirdPartyImageUrl(safeExternalHref(raw));
 }
 
 /**
  * The avatar URI a DRep published, kept in the form they wrote it.
  *
  * The single source for every DRep face in the app. It deliberately does NOT
- * resolve the URI: `DRepAvatar` runs it through `toInAppUrl`, and it must stay
- * the only place that maps one.
+ * resolve the URI: `DRepAvatar` runs it through `toInAppImageUrl`, and it must
+ * stay the only place that maps one.
  *
  * The bug this replaced: the directory and the profile both read the avatar
  * through `drepImageUrl()`, which resolved via `safeExternalHref` — http(s)
@@ -92,7 +110,7 @@ export function toInAppUrl(raw: unknown): string | null {
  * rendered as one who had not. Nothing errored; the face was simply absent.
  *
  * The value is still scheme-checked, by the SAME mapping the avatar will use: a
- * URI `toInAppUrl` cannot turn into something loadable is not returned at all.
+ * URI `toInAppImageUrl` cannot turn into something loadable is not returned at all.
  */
 export function drepImageSource(record: unknown): string | undefined {
   if (!record || typeof record !== 'object') return undefined;
@@ -103,7 +121,7 @@ export function drepImageSource(record: unknown): string | undefined {
   const raw = (image as Record<string, unknown>)['contentUrl'];
   if (typeof raw !== 'string') return undefined;
   const uri = raw.trim();
-  return uri && toInAppUrl(uri) ? uri : undefined;
+  return uri && toInAppImageUrl(uri) ? uri : undefined;
 }
 
 /**

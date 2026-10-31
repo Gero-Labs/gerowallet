@@ -11,8 +11,15 @@
  * last one written is skipped, so a one-flag update costs one small write rather
  * than re-serializing and rewriting the whole store. storeCache.ts explains why
  * the bulk fields must stay out of chrome.storage.
+ *
+ * Every content script can read and rewrite chrome.storage.local (privateStore.ts).
+ * So secrets are taken out of the compact record (`redact`), and a field the worker
+ * relies on for a security decision (who is logged in, whether the wallet is locked)
+ * also keeps its authoritative copy in the extension's private IndexedDB
+ * (`trustedFields`). Every context reads that copy in preference to the record.
  */
 import { readStoreCache, writeStoreCache, type StoreCacheEntry } from '@/utils/storeCache';
+import { getPrivateMany, setPrivateMany } from '@/utils/privateStore';
 
 type Replacer = (key: string, value: unknown) => unknown;
 type State = Record<string, unknown>;
@@ -27,6 +34,12 @@ export interface BulkStorage {
   write(entries: StoreCacheEntry[]): Promise<void>;
 }
 
+/** Extension-only storage for `trustedFields`: each value is the field's JSON. */
+export interface TrustedStorage {
+  read(keys: string[]): Promise<Map<string, string>>;
+  write(entries: Array<{ key: string; json: string }>): Promise<void>;
+}
+
 export interface StorePersisterOptions {
   storeName: string;
   /** Fields persisted to IndexedDB instead of chrome.storage. */
@@ -38,8 +51,20 @@ export interface StorePersisterOptions {
   /** Session the bulk fields belong to. Hydration drops bulk entries from any other session. */
   scope?: (state: State) => string | null;
   debounceMs?: number;
+  /**
+   * Applied to each compact field before it is written to chrome.storage.local, to
+   * take out what no content script may read. Return undefined to leave the field out.
+   */
+  redact?: (field: string, value: unknown) => unknown;
+  /**
+   * Compact fields whose authoritative copy is kept in the extension's private
+   * IndexedDB as well. Hydration takes them from there; the chrome.storage copy
+   * (redacted) only serves a value that was never written there yet (an upgrade).
+   */
+  trustedFields?: readonly string[];
   compact?: CompactStorage;
   bulk?: BulkStorage;
+  trusted?: TrustedStorage;
 }
 
 export interface HydrateOptions {
@@ -61,6 +86,19 @@ const chromeCompactStorage: CompactStorage = {
 
 const indexedDbBulkStorage: BulkStorage = { read: readStoreCache, write: writeStoreCache };
 
+const privateTrustedStorage: TrustedStorage = {
+  async read(keys) {
+    const found = new Map<string, string>();
+    (await getPrivateMany(keys)).forEach((value, key) => {
+      if (typeof value === 'string') found.set(key, value);
+    });
+    return found;
+  },
+  async write(entries) {
+    await setPrivateMany(entries.map(({ key, json }) => ({ key, value: json })));
+  },
+};
+
 /** cyrb53, a fast 53-bit string hash. Used only to skip rewriting an unchanged field. */
 function hash53(str: string): number {
   let h1 = 0xdeadbeef;
@@ -79,13 +117,34 @@ function fingerprint(scope: string | null, json: string): string {
   return `${scope ?? ''}|${json.length}|${hash53(json)}`;
 }
 
+/** What the private store holds for a store's trusted fields. */
+interface TrustedCopy {
+  values: Map<string, unknown>;
+  /**
+   * The worker has taken this store's trusted fields over (adoptStoredRecord). From
+   * then on the chrome.storage copy of a trusted field is never used, even for one
+   * the private store has no value for.
+   */
+  adopted: boolean;
+  /** The private store could not be read. Nothing is adopted from such a read. */
+  failed?: boolean;
+}
+
+const NO_TRUSTED_COPY: TrustedCopy = { values: new Map(), adopted: false };
+
 const RETRY_MIN_MS = 1000;
 const RETRY_MAX_MS = 30000;
 
 export class StorePersister {
   private readonly bulkFields: ReadonlySet<string>;
   private readonly immediateFields: ReadonlySet<string>;
+  private readonly trustedFields: ReadonlySet<string>;
   private readonly bulkDirty = new Set<string>();
+  private readonly trustedDirty = new Set<string>();
+  /** Write the adoption marker with the next trusted write (see TrustedCopy.adopted). */
+  private adoptionPending = false;
+  /** JSON of each trusted field as last written to (or read from) the private store. */
+  private readonly lastTrusted = new Map<string, string>();
   private compactDirty = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inFlight: Promise<void> | null = null;
@@ -122,6 +181,10 @@ export class StorePersister {
   constructor(private readonly state: State, private readonly options: StorePersisterOptions) {
     this.bulkFields = new Set(options.bulkFields);
     this.immediateFields = new Set(options.immediateFields ?? []);
+    this.trustedFields = new Set(options.trustedFields ?? []);
+    for (const field of this.trustedFields) {
+      if (this.bulkFields.has(field)) throw new Error(`${options.storeName}.${field} cannot be both bulk and trusted`);
+    }
   }
 
   private get compact(): CompactStorage {
@@ -130,6 +193,18 @@ export class StorePersister {
 
   private get bulk(): BulkStorage {
     return this.options.bulk ?? indexedDbBulkStorage;
+  }
+
+  private get trusted(): TrustedStorage {
+    return this.options.trusted ?? privateTrustedStorage;
+  }
+
+  private trustedKey(field: string): string {
+    return `store:${this.options.storeName}.${field}`;
+  }
+
+  private adoptionKey(): string {
+    return `store:${this.options.storeName}@adopted`;
   }
 
   private scope(): string | null {
@@ -150,6 +225,7 @@ export class StorePersister {
         this.legacyHeld.delete(field);
       } else {
         this.compactDirty = true;
+        if (this.trustedFields.has(field)) this.trustedDirty.add(field);
       }
       if (this.immediateFields.has(field)) immediate = true;
       this.hydrationWatchers.forEach((touched) => touched.add(field));
@@ -176,20 +252,23 @@ export class StorePersister {
     if (this.compactRead) await this.compactRead;
     // One write at a time, so two flushes can never land the same key out of order.
     while (this.inFlight) await this.inFlight;
-    if (!this.compactDirty && this.bulkDirty.size === 0) return;
+    if (!this.compactDirty && this.bulkDirty.size === 0 && this.trustedDirty.size === 0 && !this.adoptionPending) return;
     const bulkFields = [...this.bulkDirty];
+    const trustedFields = [...this.trustedDirty];
     const compactDirty = this.compactDirty;
     this.bulkDirty.clear();
+    this.trustedDirty.clear();
     this.compactDirty = false;
-    this.inFlight = this.write(bulkFields, compactDirty).finally(() => {
+    this.inFlight = this.write(bulkFields, compactDirty, trustedFields).finally(() => {
       this.inFlight = null;
     });
     return this.inFlight;
   }
 
-  private async write(bulkFields: string[], compactDirty: boolean): Promise<void> {
+  private async write(bulkFields: string[], compactDirty: boolean, trustedFields: string[] = []): Promise<void> {
     const { storeName, replacer } = this.options;
     let failedBulk: string[] = [];
+    let failedTrusted: string[] = [];
     let compactFailed = false;
     let writeCompact = compactDirty;
 
@@ -245,6 +324,38 @@ export class StorePersister {
       }
     }
 
+    // The authoritative copies first: the compact record may name a wallet or a lock
+    // state only once the private store knows it too.
+    const adopting = this.adoptionPending;
+    if (trustedFields.length > 0 || adopting) {
+      const entries: Array<{ key: string; json: string }> = [];
+      const pending = new Map<string, string>();
+      for (const field of trustedFields) {
+        let json: string;
+        try {
+          json = JSON.stringify(this.state[field] ?? null, replacer);
+        } catch (error) {
+          console.error(`Failed to serialize ${storeName}.${field}:`, error);
+          continue;
+        }
+        if (this.lastTrusted.get(field) === json) continue;
+        entries.push({ key: this.trustedKey(field), json });
+        pending.set(field, json);
+      }
+      // In the same transaction as the values it vouches for.
+      if (adopting) entries.push({ key: this.adoptionKey(), json: 'true' });
+      if (entries.length > 0) {
+        try {
+          await this.trusted.write(entries);
+          pending.forEach((json, field) => this.lastTrusted.set(field, json));
+          if (adopting) this.adoptionPending = false;
+        } catch (error) {
+          failedTrusted = [...pending.keys()];
+          console.error(`Failed to persist ${storeName} (${failedTrusted.join(', ')}):`, error);
+        }
+      }
+    }
+
     // Never held back by a failed bulk write: a lock or logout must persist regardless.
     if (writeCompact) {
       try {
@@ -259,8 +370,9 @@ export class StorePersister {
       }
     }
 
-    if (failedBulk.length > 0 || compactFailed) {
+    if (failedBulk.length > 0 || failedTrusted.length > 0 || this.adoptionPending || compactFailed) {
       failedBulk.forEach((field) => this.bulkDirty.add(field));
+      failedTrusted.forEach((field) => this.trustedDirty.add(field));
       if (compactFailed) this.compactDirty = true;
       this.retryMs = Math.min(Math.max(this.retryMs * 2, RETRY_MIN_MS), RETRY_MAX_MS);
       this.schedule(this.retryMs);
@@ -272,10 +384,74 @@ export class StorePersister {
   private compactView(): State {
     const view: State = {};
     for (const key of Object.keys(this.state)) {
-      if (!this.bulkFields.has(key)) view[key] = this.state[key];
-      else if (this.legacyInline.has(key)) view[key] = this.legacyHeld.has(key) ? this.legacyHeld.get(key) : this.state[key];
+      if (!this.bulkFields.has(key)) {
+        const value = this.redactCompact(key, this.state[key]);
+        if (value !== undefined) view[key] = value;
+      } else if (this.legacyInline.has(key)) view[key] = this.legacyHeld.has(key) ? this.legacyHeld.get(key) : this.state[key];
     }
     return view;
+  }
+
+  private redactCompact(field: string, value: unknown): unknown {
+    return this.options.redact ? this.options.redact(field, value) : value;
+  }
+
+  /** True when a stored record holds something `redact` takes out (written by an older release). */
+  private holdsRedacted(stored: State): boolean {
+    if (!this.options.redact) return false;
+    return Object.entries(stored).some(([field, value]) =>
+      !this.bulkFields.has(field) && JSON.stringify(this.redactCompact(field, value)) !== JSON.stringify(value));
+  }
+
+  /** The trusted fields the private store holds, parsed. Empty when it cannot be read. */
+  private async readTrusted(): Promise<TrustedCopy> {
+    if (this.trustedFields.size === 0) return NO_TRUSTED_COPY;
+    const found = new Map<string, unknown>();
+    let adopted = false;
+    try {
+      const rows = await this.trusted.read([...[...this.trustedFields].map((field) => this.trustedKey(field)), this.adoptionKey()]);
+      adopted = rows.get(this.adoptionKey()) === 'true';
+      for (const field of this.trustedFields) {
+        const json = rows.get(this.trustedKey(field));
+        if (json === undefined) continue;
+        try {
+          found.set(field, JSON.parse(json));
+          this.lastTrusted.set(field, json);
+        } catch (error) {
+          console.error(`Discarding unreadable trusted ${this.options.storeName}.${field}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to read trusted ${this.options.storeName}:`, error);
+      return { values: found, adopted: false, failed: true };
+    }
+    return { values: found, adopted };
+  }
+
+  /** Whether the chrome.storage copy of `field` may be used at all. */
+  private compactServes(field: string, trusted: TrustedCopy): boolean {
+    return !this.trustedFields.has(field) || (!trusted.adopted && !trusted.values.has(field));
+  }
+
+  /**
+   * After the owner (the worker) has read the stored record: copy a trusted field the
+   * private store does not hold yet into it, and rewrite a record that still holds
+   * what `redact` takes out. Both happen once, on the first start of a release.
+   */
+  private adoptStoredRecord(stored: State | null, trusted: TrustedCopy): void {
+    let dirty = false;
+    if (this.trustedFields.size > 0 && !trusted.adopted && !trusted.failed) {
+      // Every trusted field, as hydration left it: from the private store, the record
+      // an older release wrote, or the default.
+      this.trustedFields.forEach((field) => this.trustedDirty.add(field));
+      this.adoptionPending = true;
+      dirty = true;
+    }
+    if (stored && this.holdsRedacted(stored)) {
+      this.compactDirty = true;
+      dirty = true;
+    }
+    if (dirty) this.schedule(0);
   }
 
   /**
@@ -293,7 +469,13 @@ export class StorePersister {
     const keep = (field: string) => !touched.has(field) && !skip?.has(field);
     try {
       // Set before the first await: a flush from here on waits for this read (see flush).
-      const reading = this.readCompactRecord();
+      // Both copies are read before the gate opens, so nothing awaits between it opening
+      // and the values below being applied.
+      let trusted = NO_TRUSTED_COPY;
+      const reading = Promise.all([this.readCompactRecord(), this.readTrusted()]).then(([record, privateCopy]) => {
+        trusted = privateCopy;
+        return record;
+      });
       this.compactRead = reading;
       let stored: State | null;
       try {
@@ -306,9 +488,14 @@ export class StorePersister {
       if (stored) {
         for (const [field, value] of Object.entries(stored)) {
           if (this.bulkFields.has(field)) legacy[field] = value;
-          else if (keep(field)) this.state[field] = value;
+          // The private copy of a trusted field wins over whatever chrome.storage says.
+          else if (this.compactServes(field, trusted) && keep(field)) this.state[field] = value;
         }
       }
+      trusted.values.forEach((value, field) => {
+        if (keep(field)) this.state[field] = value;
+      });
+      if (migrate) this.adoptStoredRecord(stored, trusted);
       const legacyFields = Object.keys(legacy);
       const storedScope = stored ? this.options.scope?.(stored) ?? null : null;
       if (migrate && legacyFields.length > 0 && storedScope === this.scope()) {
@@ -386,13 +573,16 @@ export class StorePersister {
    * it, as hydrate() does. For a store that restores only some fields, through its own
    * validators, rather than the whole record.
    */
-  async hydrateWith(apply: (stored: State | null) => void): Promise<void> {
-    const reading = this.readCompactRecord().then((stored) => {
+  async hydrateWith(apply: (stored: State | null) => void, { migrate = false }: Pick<HydrateOptions, 'migrate'> = {}): Promise<void> {
+    const trustedRead = this.readTrusted();
+    const reading = this.readCompactRecord().then(async (stored) => {
+      const trusted = await trustedRead;
       try {
-        apply(stored);
+        apply(this.withTrusted(stored, trusted));
       } catch (error) {
         console.error(`Failed to hydrate ${this.options.storeName}:`, error);
       }
+      if (migrate) this.adoptStoredRecord(stored, trusted);
       return stored;
     });
     // Set before the first await: a flush from here on waits for this read (see flush).
@@ -413,7 +603,8 @@ export class StorePersister {
    */
   async read(): Promise<State | null> {
     const { storeName } = this.options;
-    const stored = await this.readCompactRecord();
+    const [compact, trusted] = await Promise.all([this.readCompactRecord(), this.readTrusted()]);
+    const stored = this.withTrusted(compact, trusted);
     if (!stored) return null;
     let entries = new Map<string, StoreCacheEntry>();
     try {
@@ -433,6 +624,19 @@ export class StorePersister {
       }
     }
     return record;
+  }
+
+  /** `stored` with the private store's trusted fields in place of the record's copies. */
+  private withTrusted(stored: State | null, trusted: TrustedCopy): State | null {
+    if (trusted.values.size === 0 && !trusted.adopted) return stored;
+    const record: State = {};
+    for (const [field, value] of Object.entries(stored ?? {})) {
+      if (this.compactServes(field, trusted)) record[field] = value;
+    }
+    trusted.values.forEach((value, field) => {
+      record[field] = value;
+    });
+    return stored || trusted.values.size > 0 ? record : null;
   }
 
   private async readCompactRecord(): Promise<State | null> {

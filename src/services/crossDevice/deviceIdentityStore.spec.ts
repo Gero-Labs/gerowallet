@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { loadOrCreateDeviceIdentity, type IdentityStorage } from './deviceIdentityStore';
-import { deviceIdFromPubKey, isDeviceIdConsistent } from './deviceIdentity';
+import { deviceIdFromPubKey, generateDeviceKeypair, isDeviceIdConsistent, isKeypairConsistent } from './deviceIdentity';
 
 function memStorage(seed: Record<string, unknown> = {}): IdentityStorage {
   const store: Record<string, unknown> = { ...seed };
@@ -48,5 +48,25 @@ describe('isDeviceIdConsistent (fail-closed pairing guard)', () => {
   });
   it('false on malformed input', () => {
     expect(isDeviceIdConsistent('x', 'zz')).toBe(false);
+  });
+});
+
+describe('stored identity integrity', () => {
+  it('regenerates when the private key is not the public key\'s (a planted keypair)', async () => {
+    const mine = generateDeviceKeypair();
+    const theirs = generateDeviceKeypair();
+    // A self-consistent id and public key, but someone else's private key.
+    const storage = memStorage({
+      crossDeviceIdentity: { deviceId: deviceIdFromPubKey(mine.pubKeyHex), pubKeyHex: mine.pubKeyHex, privKeyHex: theirs.privKeyHex },
+    });
+    const id = await loadOrCreateDeviceIdentity(storage);
+    expect(id.pubKeyHex).not.toBe(mine.pubKeyHex);
+    expect(isKeypairConsistent(id.privKeyHex, id.pubKeyHex)).toBe(true);
+  });
+
+  it('keeps a stored identity whose keys belong together', async () => {
+    const kp = generateDeviceKeypair();
+    const stored = { deviceId: deviceIdFromPubKey(kp.pubKeyHex), ...kp };
+    expect(await loadOrCreateDeviceIdentity(memStorage({ crossDeviceIdentity: stored }))).toEqual(stored);
   });
 });

@@ -44,3 +44,17 @@ export function embeddingSite(
   if (!top || top === 'null' || top === requestOrigin) return undefined;
   return top;
 }
+
+/**
+ * Who an approval prompt says is asking: the requesting origin, and the site
+ * embedding it when that is a cross-origin frame. The tab's favicon is the
+ * top-level site's, so an embedded request carries none instead of pairing
+ * the frame's origin with the embedding site's icon.
+ */
+export function promptSite(
+  requestOrigin: string,
+  sender: chrome.runtime.MessageSender | undefined,
+): { website: string; favIconUrl?: string; embeddedIn?: string } {
+  const embeddedIn = embeddingSite(requestOrigin, sender);
+  return { website: requestOrigin, favIconUrl: embeddedIn ? undefined : sender?.tab?.favIconUrl, embeddedIn };
+}

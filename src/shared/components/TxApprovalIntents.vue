@@ -10,10 +10,15 @@
         <v-icon size="14" :color="cert.stakeCredentialIsOwn === false ? 'error' : primaryColor" class="mr-1">mdi-certificate-outline</v-icon>
         <div class="tx-intent-text">
           <span class="white--text text-caption">{{ certificateLabel(cert.type) }}</span>
-          <span v-if="cert.depositAda" class="grey--text text-caption ml-1">({{ $t('signTx.depositAmount', { amount: cert.depositAda }) }})</span>
+          <span v-if="cert.depositAda && cert.depositDirection === 'refunded'" class="grey--text text-caption ml-1">({{ $t('txGuard.depositRefunded', { amount: cert.depositAda }) }})</span>
+          <span v-else-if="cert.depositAda" class="grey--text text-caption ml-1">({{ $t('signTx.depositAmount', { amount: cert.depositAda }) }})</span>
           <span v-if="cert.drepSentinel" class="grey--text text-caption ml-1">{{ $t(`governance.${cert.drepSentinel}`) }}</span>
           <div v-if="cert.drepId" class="grey--text text-caption tx-intent-id">{{ $t('signTx.delegatesVoteTo', { drep: cert.drepId }) }}</div>
           <div v-if="cert.poolId" class="grey--text text-caption tx-intent-id">{{ cert.poolId }}</div>
+          <div v-if="cert.refundAccount" class="text-caption tx-intent-id" :class="cert.refundIsOwn === false ? 'error--text' : 'grey--text'">
+            {{ $t('txGuard.refundTo', { account: cert.refundAccount }) }}
+          </div>
+          <div v-if="cert.depositDirection === 'paid' && cert.refundIsOwn === false" class="error--text text-caption">{{ $t('txGuard.refundNotYours') }}</div>
           <div v-if="cert.stakeCredentialIsOwn === false" class="error--text text-caption">{{ $t('signTx.notYourStakeKey') }}</div>
         </div>
       </div>
@@ -60,7 +65,7 @@
         <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-lock-outline</v-icon>
         <div class="tx-intent-text">
           <span class="white--text text-caption">{{ $t('signTx.reservesCollateral', { count: summary.collateralCount }, summary.collateralCount) }}</span>
-          <div v-if="summary.totalCollateralAda" class="grey--text text-caption">{{ $t('signTx.totalCollateral', { amount: summary.totalCollateralAda }) }}</div>
+          <div v-if="collateralAtRisk" class="grey--text text-caption">{{ $t('signTx.totalCollateral', { amount: collateralAtRisk }) }}</div>
           <div v-if="summary.collateralReturn" class="text-caption" :class="summary.collateralReturn.isOwn ? 'grey--text' : 'error--text'">
             {{ $t('signTx.collateralReturnTo', { amount: summary.collateralReturn.ada, address: truncate(summary.collateralReturn.address) }) }}
           </div>
@@ -88,6 +93,53 @@
       <div v-if="summary.hasMetadata" class="tx-intent-row">
         <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-tag-text-outline</v-icon>
         <span class="white--text text-caption">{{ $t('signTx.includesMetadata') }}</span>
+      </div>
+
+      <div v-if="summary.unmatchedInputCount > 0" class="tx-intent-row" data-testid="tx-intent-unmatched-inputs">
+        <v-icon size="14" color="warning" class="mr-1">mdi-help-circle-outline</v-icon>
+        <span class="warning--text text-caption">{{ $t('txGuard.unmatchedInputs', { count: summary.unmatchedInputCount }, summary.unmatchedInputCount) }}</span>
+      </div>
+    </div>
+
+    <!-- A deposit refunded to someone else, or the wallet's collateral returned
+         to another address if a script fails (blocking). The parent gates Sign
+         on the acknowledgement. -->
+    <div v-if="summary.requiresForeignValueAck" class="tx-network-banner mb-3" data-testid="tx-foreign-value-banner">
+      <v-icon color="error" size="20" class="mr-2">mdi-account-arrow-right-outline</v-icon>
+      <div class="tx-network-text">
+        <div class="tx-network-title">{{ $t('txGuard.foreignValueTitle') }}</div>
+        <div class="tx-network-body">{{ $t('txGuard.foreignValueBody') }}</div>
+        <v-checkbox
+          :model-value="foreignValueAck"
+          color="error"
+          hide-details
+          theme="dark"
+          density="compact"
+          class="mt-2"
+          :label="$t('signTx.highRiskAck')"
+          @update:model-value="emit('update:foreignValueAck', !!$event)"
+        />
+      </div>
+    </div>
+
+    <!-- The wallet's UTxO list (gero-sync) misstated an input this transaction
+         spends; the amounts above already use the proven values (blocking).
+         The parent gates Sign on the acknowledgement. -->
+    <div v-if="inputsMisreported" class="tx-network-banner mb-3" data-testid="tx-inputs-misreported-banner">
+      <v-icon color="error" size="20" class="mr-2">mdi-database-alert-outline</v-icon>
+      <div class="tx-network-text">
+        <div class="tx-network-title">{{ $t('txGuard.inputsMisreportedTitle') }}</div>
+        <div class="tx-network-body">{{ $t('txGuard.inputsMisreportedBody') }}</div>
+        <v-checkbox
+          :model-value="inputsMisreportedAck"
+          color="error"
+          hide-details
+          theme="dark"
+          density="compact"
+          class="mt-2"
+          :label="$t('signTx.highRiskAck')"
+          @update:model-value="emit('update:inputsMisreportedAck', !!$event)"
+        />
       </div>
     </div>
 
@@ -121,23 +173,33 @@ import filters from '@/shared/utils/filters';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   summary: TxApprovalSummary;
   networkAck: boolean;
+  foreignValueAck?: boolean;
+  /** The wallet's UTxO list misstated an input this transaction spends (useProvenApprovalUtxos). */
+  inputsMisreported?: boolean;
+  inputsMisreportedAck?: boolean;
   primaryColor?: string;
+}>(), { foreignValueAck: false, inputsMisreported: false, inputsMisreportedAck: false, primaryColor: undefined });
+const emit = defineEmits<{
+  (e: 'update:networkAck', value: boolean): void;
+  (e: 'update:foreignValueAck', value: boolean): void;
+  (e: 'update:inputsMisreportedAck', value: boolean): void;
 }>();
-const emit = defineEmits<{ (e: 'update:networkAck', value: boolean): void }>();
 
 const { t } = useTranslation();
 
 const networkMismatch = computed(() => props.summary.bodyNetworkMismatch || props.summary.outputNetworkMismatch);
 const foreignSignerCount = computed(() => props.summary.requiredSigners.filter(s => !s.isOwn).length);
+// What the wallet itself stands to lose; the declared total when its inputs can't be resolved.
+const collateralAtRisk = computed(() => props.summary.collateralAtRiskAda ?? props.summary.totalCollateralAda);
 const hasIntents = computed(() => {
   const s = props.summary;
   return s.certificates.length > 0 || s.withdrawals.length > 0 || s.votes.length > 0 || s.proposals.length > 0
     || !!s.treasuryDonationAda
     || s.mints.length > 0 || s.collateralCount > 0 || s.referenceInputCount > 0 || s.requiredSigners.length > 0
-    || s.validityStartSlot !== null || s.hasMetadata;
+    || s.validityStartSlot !== null || s.hasMetadata || s.unmatchedInputCount > 0;
 });
 
 const truncate = (value: string) => filters.truncate(value);

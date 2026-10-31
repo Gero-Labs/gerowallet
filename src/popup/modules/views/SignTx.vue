@@ -54,6 +54,9 @@
           class="mt-2"
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
+          v-model:foreign-value-ack="foreignValueAck"
+          v-model:inputs-misreported-ack="inputsMisreportedAck"
+          :inputs-misreported="inputsMisreported"
         />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
@@ -221,6 +224,7 @@
 </template>
 <script setup lang="ts">
 import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { DappRisk, DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
@@ -253,10 +257,12 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
-import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import filters from '@/shared/utils/filters';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
@@ -316,6 +322,18 @@ const addresses = computed(() => {
 
 // Every effect of the tx, from the same CBOR the signer hashes (shared with the
 // side panel). Asset names aren't resolved here, so units show truncated.
+// The wallet UTxOs "You pay" counts are checked against the transactions that
+// created them (useProvenApprovalUtxos); a misstated one blocks Sign until acknowledged.
+const claimedOwnUtxos = computed<readonly Cardano.Utxo[]>(() => {
+  const collateral = walletStore.collateral;
+  return [...utxos.value, ...(collateral ? [collateral] : [])];
+});
+const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenApprovalUtxos(
+  computed(() => tx.value ?? null),
+  claimedOwnUtxos,
+  computed(() => loggedWallet.value?.network),
+  () => walletStore.transactions as unknown[],
+);
 const approvalSummary = computed<TxApprovalSummary | null>(() => {
   if (!tx.value?.body) return null;
   try {
@@ -325,7 +343,10 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
       : null;
     return buildTxApprovalSummary(
       tx.value,
-      approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 })),
+      approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 }), {
+        ownUtxos: provenOwnUtxos.value,
+        deposits: approvalDepositsFrom(networkStore.epochParams),
+      }),
     );
   } catch {
     return null;
@@ -335,11 +356,15 @@ const approvalCard = computed(() =>
   approvalSummary.value ? toTransactionDetailsCardProps(approvalSummary.value, filters.truncate) : null,
 );
 const networkMismatchAck = ref(false);
-// Sign is blocked until a network mismatch is explicitly acknowledged.
+const foreignValueAck = ref(false);
+const inputsMisreportedAck = ref(false);
+// Sign is blocked until a network mismatch, a deposit refund or collateral return
+// to someone else, and a misstated input are explicitly acknowledged.
 const signBlocked = computed(() =>
   !!approvalSummary.value
-  && (approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch)
-  && !networkMismatchAck.value,
+  && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
+    || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
+    || (inputsMisreported.value && !inputsMisreportedAck.value)),
 );
 
 const txAutoSubmit = computed(() => {
@@ -762,7 +787,7 @@ const sign = () => approval.run(async () => {
         if (passwordVerification.data.success) {
           await awaitFreshApproval(async () => (signAndReturnTx()), approvalCurrent);
         } else {
-          passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
+          passwordField.value?.showError(passwordCheckFailure(passwordVerification, t('wallet.invalidSpendingPassword')));
         }
       }
     }

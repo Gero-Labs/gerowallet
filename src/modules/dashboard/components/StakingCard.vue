@@ -127,6 +127,7 @@
 import { useUnstake } from '@/shared/composables/useUnstake';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import { toRefs, computed, ref, watch, onMounted } from 'vue';
+import { thirdPartyImageUrl } from '@/shared/utils/iconResolver';
 import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -200,9 +201,9 @@ const totalEarnedLovelace = computed(() => (rewardsData.value || []).reduce((s: 
 const resolvePoolIcon = () => {
   const p = currentPool.value;
   const url = p ? JSON.parse(p.pool_extended_info)?.info?.url_png_icon_64x64 : '';
-  // Many pools leave the icon field as the placeholder instruction text
-  // ("http(s) url to pool icon; ...") which 404s. Only accept a real URL.
-  return typeof url === 'string' && /^https:\/\/\S+$/.test(url) ? url : '';
+  // Through Gero's proxies, so the operator's host never sees who looks. This also
+  // drops the placeholder text many pools leave ("http(s) url to pool icon; ...").
+  return thirdPartyImageUrl(url) ?? '';
 };
 
 const loadPoolData = async (poolId: string) => {

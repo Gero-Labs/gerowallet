@@ -55,6 +55,8 @@ describe('signRequestMessage', () => {
     ['an oversized challenge', { messageToSign: 'a'.repeat(MAX_SIGN_MESSAGE_LENGTH + 1) }],
     ['a control character', { messageToSign: 'claim\u0000hidden' }],
     ['null data', null],
+    ['Gero\'s support-login subject', { messageToSign: 'gero-support/v1|stake1uxyz|AbCdEfGhIjKlMnOpQr' }],
+    ['Gero\'s device-registration subject', { messageToSign: 'gero-xdev/v1|DEVICE_REGISTER|0123|abcd|stake1uxyz' }],
   ])('refuses %s', (_name, data) => {
     expect(signRequestMessage(data)).toBeNull();
   });

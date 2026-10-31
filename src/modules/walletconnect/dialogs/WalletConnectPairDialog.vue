@@ -136,6 +136,8 @@ const pair = async () => {
     if (response.data?.success) {
       emit('paired');
       close();
+    } else if (response.data?.error === 'locked') {
+      errorMessage.value = t('walletConnect.unlockToPair');
     } else {
       errorMessage.value = response.data?.error || t('walletConnect.pairingFailed');
     }

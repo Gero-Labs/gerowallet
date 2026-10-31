@@ -31,11 +31,12 @@
  *  - `oversize` — past {@link MAX_RATIONALE_BYTES}. The URL is attacker-chosen,
  *    so the response size is attacker-chosen; the cap is checked against the
  *    declared length AND against what actually arrived.
- *  - `network` — offline, refused, aborted at {@link RATIONALE_TIMEOUT_MS}, or
- *    blocked by the extension's `connect-src` allowlist (an author's own host is
- *    not on it; IPFS anchors go through gero-backend's proxy, which is). All of
- *    those are the same fact to a reader: the wallet could not get the file, and
- *    the browser can.
+ *  - `network` — offline, refused, aborted at {@link RATIONALE_TIMEOUT_MS}, or a
+ *    plain-http anchor, which is never fetched. Every fetch goes through
+ *    gero-backend (`/api/anchor` for https, the IPFS proxy for IPFS), so the
+ *    author's host never sees who reads the rationale. All of those are the
+ *    same fact to a reader: the wallet could not get the file, and the browser
+ *    can.
  *  - `empty` — the file arrived and carries nothing to show.
  *
  * Nothing here touches the DOM and the fetch is injectable, so the whole
@@ -43,7 +44,7 @@
  */
 
 import { anchorHashOfBytes } from '@/shared/utils/cip119';
-import { toInAppUrl } from '@/modules/governance/utils/govAnchor';
+import { toInAppDocumentUrl } from '@/modules/governance/utils/govAnchor';
 
 /** Give up on a third-party host after this long. */
 export const RATIONALE_TIMEOUT_MS = 10_000;
@@ -166,7 +167,7 @@ function failed(reason: RationaleFailure): RationaleResult {
  * error on a page the user opened by clicking a link.
  */
 export async function loadRationale(options: LoadRationaleOptions): Promise<RationaleResult> {
-  const target = toInAppUrl(options.url);
+  const target = toInAppDocumentUrl(options.url);
   if (!target) return failed('network');
 
   // Nothing to check against is NOT "probably fine": the document is still
@@ -189,6 +190,8 @@ export async function loadRationale(options: LoadRationaleOptions): Promise<Rati
       cache: 'no-store',
       redirect: 'follow',
     });
+    // The anchor proxy refuses a document over its cap (the same cap) with 413.
+    if (response?.status === 413) return failed('oversize');
     if (!response?.ok) return failed('network');
 
     // Cheap refusal before anything is buffered. A lying Content-Length is

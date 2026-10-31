@@ -69,6 +69,16 @@ export function generateDeviceKeypair(
   };
 }
 
+/** True when `pubKeyHex` is the Ed25519 public key of `privKeyHex`. Never throws. */
+export function isKeypairConsistent(privKeyHex: string, pubKeyHex: string): boolean {
+  try {
+    const priv = hexToBytes(privKeyHex);
+    return priv.length === 32 && bytesToHex(ed25519.getPublicKey(priv)) === pubKeyHex.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 // Length (in hex chars) of the derived device id. 32 hex chars = 16 bytes of
 // sha256, ample collision resistance for a per-wallet device set.
 const DEVICE_ID_HEX_LEN = 32;
