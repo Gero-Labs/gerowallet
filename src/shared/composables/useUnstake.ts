@@ -122,7 +122,6 @@ export function useUnstake() {
           implicitCoin: -stakeKeyDepositLovelace, // Deposit is returned
           walletContext: {
             keys: keys.value,
-            stakeAddress: loggedWallet.value?.stakeAddress || '',
           }
         });
         assertStakeWalletUnchanged(wallet, t);

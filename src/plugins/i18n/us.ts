@@ -3570,6 +3570,8 @@ export default {
   'wallet.keystoneScanError': 'Keystone scanner error',
   'wallet.keystoneSign': 'Sign with Keystone',
   'wallet.keystoneSigningFailed': 'Keystone signing failed',
+  'wallet.keystoneFirmwareNoPoolRegistration': 'This Keystone firmware cannot show pool registrations. Update it to {version} or later and try again.',
+  'wallet.keystoneHashGovernanceKey': 'This transaction is too large for your Keystone to show, so it can\'t be signed with your DRep or committee key.',
   'wallet.keystoneSupport': '3 Pro',
   'wallet.ledger': 'Ledger',
   'wallet.ledgerAppClosed': 'Cardano app is closed',

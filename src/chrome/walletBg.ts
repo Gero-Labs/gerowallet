@@ -72,6 +72,7 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
+import { carriesSigningCreds } from '@/shared/utils/keyCreds';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
@@ -162,6 +163,7 @@ export class WalletBg {
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
 
   encryptedPrivateKey: string;
   passwordLastUpdate: Date;
@@ -220,6 +222,7 @@ export class WalletBg {
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
+    this.firmwareVersion = wallet.firmwareVersion;
     this.api = new Api(wallet, this.provider);
 
     // Chain-specific address derivation
@@ -836,23 +839,31 @@ export class WalletBg {
    * with. The derived set marks nothing as used, and the first sync that does name an
    * address replaces it. It is not persisted, so the cached row only ever holds keys a
    * sync resolved.
+   *
+   * A row missing a key's hash (an older build's) is derived again from the addresses it marks
+   * used, so it keeps those and the gap scan past them: the signers sign nothing for a key whose
+   * hash the key set doesn't carry. A wallet that can't derive its own keys keeps the row it has.
    */
   public async loadCachedKeys() {
+    let cached: Keys | undefined;
     try {
       const db = await this.getDb();
       const table = db.table('addresses');
       const row = await table.where({ address: this.publicKey }).first();
-      if (row?.resolvedKeys) {
-        debugLog('🔑 Loading cached keys from DB');
-        WalletStore.setKeys(row.resolvedKeys);
-        return;
-      }
+      cached = row?.resolvedKeys;
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
     }
-    if (!this.derivesOwnAddress()) return;
-    debugLog('🔑 No cached keys; deriving them locally');
-    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+    const derives = this.derivesOwnAddress();
+    if (cached && (this.type === WalletType.Watch || !derives || carriesSigningCreds(cached))) {
+      debugLog('🔑 Loading cached keys from DB');
+      WalletStore.setKeys(cached);
+      return;
+    }
+    if (!derives) return;
+    debugLog(cached ? '🔑 Cached keys lack key hashes; deriving them locally' : '🔑 No cached keys; deriving them locally');
+    const used = [...(cached?.payment ?? []), ...(cached?.change ?? [])].flatMap((key) => (key?.used && key.address ? [key.address] : []));
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses(used));
   }
 
   /**
@@ -2423,12 +2434,7 @@ export class WalletBg {
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
-    const requiredSigners = analyzeTransactionForSignatures(
-      transaction,
-      utxos,
-      addresses,
-      this.stakeAddress,
-    );
+    const requiredSigners = analyzeTransactionForSignatures(transaction, utxos, addresses);
 
     // Sign with each required key
     for (const signer of requiredSigners) {

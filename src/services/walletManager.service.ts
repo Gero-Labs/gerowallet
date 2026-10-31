@@ -201,6 +201,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
@@ -250,13 +251,31 @@ export class WalletManager {
 
   /**
    * The record to log in with. An account added under another record stores no
-   * secrets and takes its account #0's (withGroupSecrets); any other wallet is
-   * logged in as given.
+   * secrets and takes its account #0's (withGroupSecrets). A Keystone takes the
+   * firmware version stored on its record: a pairing refreshes it there
+   * (refreshKeystoneFirmware), while a worker restart logs in again with the
+   * persisted loggedWallet, which may predate it; an unreadable record keeps the
+   * version given. Any other wallet is logged in as given, with nothing read.
    */
   private async resolveGroupSecrets(wallet) {
-    if (wallet?.parentWalletId == null) return wallet;
-    const { getAllWallets } = await import('@/db/gero-db');
-    return withGroupSecrets(wallet, await getAllWallets());
+    const isKeystone = wallet?.type === WalletType.Keystone && wallet.id != null;
+    if (wallet?.parentWalletId == null && !isKeystone) return wallet;
+    const db = await import('@/db/gero-db');
+    let resolved = wallet;
+    let stored;
+    if (wallet.parentWalletId != null) {
+      const wallets = await db.getAllWallets();
+      resolved = withGroupSecrets(wallet, wallets);
+      stored = wallets?.[wallet.id];
+    }
+    if (!isKeystone) return resolved;
+    try {
+      stored ??= await db.getWalletRecord(wallet.id);
+    } catch (error) {
+      debugLog('WalletManager: stored firmware version unreadable:', error);
+      return resolved;
+    }
+    return stored && stored.firmwareVersion !== resolved.firmwareVersion ? { ...resolved, firmwareVersion: stored.firmwareVersion } : resolved;
   }
 
   /**
@@ -350,6 +369,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,

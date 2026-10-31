@@ -1,4 +1,5 @@
 import { Cardano } from '@cardano-sdk/core';
+import { credSet, stakeKeyFor, type KeySet } from '@/shared/utils/keyCreds';
 
 /**
  * What a dApp signTx approval must show: every effect of the transaction the
@@ -24,12 +25,17 @@ export interface ApprovalContext {
   ownPaymentKeyHashes: ReadonlySet<string>;
   /** Stake key hashes (hex) the wallet can sign for. */
   ownStakeKeyHashes: ReadonlySet<string>;
-  /** Reward accounts (stake1… / stake_test1…) of the wallet. */
-  ownRewardAccounts: ReadonlySet<string>;
+  /**
+   * Whether a reward account (stake1… / stake_test1…) is the wallet's: its stake key carries
+   * the account's key hash or sits at that address, as the signers decide it (`stakeKeyFor`).
+   */
+  isOwnRewardAccount(account: string): boolean;
   /** DRep key hashes (hex) of the wallet. */
   ownDrepKeyHashes: ReadonlySet<string>;
   /** Constitutional-committee hot key hashes (hex) of the wallet. */
   ownCcHotKeyHashes: ReadonlySet<string>;
+  /** Constitutional-committee cold key hashes (hex) of the wallet. */
+  ownCcColdKeyHashes: ReadonlySet<string>;
   /** Network of the active wallet, or null when unknown. */
   walletNetworkId: Cardano.NetworkId | null;
   resolveAsset(unit: string): ApprovalAssetInfo;
@@ -178,9 +184,9 @@ function addressNetworkId(address: string): Cardano.NetworkId | null {
   }
 }
 
-function stakeCredentialHash(cert: Cardano.Certificate): string | null {
-  const c = cert as { stakeCredential?: { hash?: unknown } };
-  return c.stakeCredential && typeof c.stakeCredential.hash === 'string' ? c.stakeCredential.hash : null;
+function stakeCredentialOf(cert: Cardano.Certificate): { hash: string; type: unknown } | null {
+  const c = cert as { stakeCredential?: { hash?: unknown; type?: unknown } };
+  return c.stakeCredential && typeof c.stakeCredential.hash === 'string' ? { hash: c.stakeCredential.hash, type: c.stakeCredential.type } : null;
 }
 
 function voteChoice(vote: Cardano.Vote): ApprovalVoteChoice {
@@ -216,7 +222,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
   const withdrawals: ApprovalWithdrawal[] = (body.withdrawals ?? []).map((w) => {
     const lovelace = BigInt(w.quantity ?? 0n);
     const rewardAccount = String(w.stakeAddress);
-    return { rewardAccount, ada: formatLovelace(lovelace), lovelace, isOwn: ctx.ownRewardAccounts.has(rewardAccount) };
+    return { rewardAccount, ada: formatLovelace(lovelace), lovelace, isOwn: ctx.isOwnRewardAccount(rewardAccount) };
   });
 
   const certificates: ApprovalCertificate[] = ((body.certificates ?? []) as Cardano.Certificate[]).map((cert) => {
@@ -224,8 +230,12 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
       type: cert.__typename as Cardano.CertificateType,
       stakeCredentialIsOwn: null,
     };
-    const stakeHash = stakeCredentialHash(cert);
-    if (stakeHash !== null) row.stakeCredentialIsOwn = ctx.ownStakeKeyHashes.has(stakeHash);
+    // A script credential is never the wallet's, whatever its hash: no signer witnesses it.
+    const stakeCredential = stakeCredentialOf(cert);
+    if (stakeCredential !== null) {
+      row.stakeCredentialIsOwn = stakeCredential.type === Cardano.CredentialType.KeyHash
+        && ctx.ownStakeKeyHashes.has(stakeCredential.hash.toLowerCase());
+    }
     if ('poolId' in cert && cert.poolId) row.poolId = String(cert.poolId);
     if ('deposit' in cert && cert.deposit != null) row.depositAda = formatLovelace(BigInt(cert.deposit as unknown as bigint));
     if ('dRep' in cert && cert.dRep) {
@@ -253,8 +263,8 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
   const votes: ApprovalVote[] = (body.votingProcedures ?? []).map(({ voter, votes: voterVotes }) => {
     const voterHash = String(voter.credential.hash);
     const isOwnVoter =
-      (voter.__typename === Cardano.VoterType.dRepKeyHash && ctx.ownDrepKeyHashes.has(voterHash)) ||
-      (voter.__typename === Cardano.VoterType.ccHotKeyHash && ctx.ownCcHotKeyHashes.has(voterHash));
+      (voter.__typename === Cardano.VoterType.dRepKeyHash && ctx.ownDrepKeyHashes.has(voterHash.toLowerCase())) ||
+      (voter.__typename === Cardano.VoterType.ccHotKeyHash && ctx.ownCcHotKeyHashes.has(voterHash.toLowerCase()));
     return {
       voterType: voter.__typename,
       voterHash,
@@ -273,7 +283,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
       actionType: String(p.governanceAction.__typename),
       depositAda: formatLovelace(BigInt(p.deposit ?? 0n)),
       rewardAccount,
-      isOwnRewardAccount: ctx.ownRewardAccounts.has(rewardAccount),
+      isOwnRewardAccount: ctx.isOwnRewardAccount(rewardAccount),
     };
   });
 
@@ -281,12 +291,15 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
   const collateralReturn = body.collateralReturn ? toOutput(body.collateralReturn) : null;
   const totalCollateralAda = body.totalCollateral != null ? formatLovelace(BigInt(body.totalCollateral)) : null;
   const referenceInputCount = (body.referenceInputs ?? []).length;
+  // Every key the signers sign a required signer with (resolver.ts and keystone.ts) counts as
+  // the wallet's own here, so the card never calls a signature the wallet gives foreign.
   const requiredSigners = (body.requiredExtraSignatures ?? []).map((h) => {
     const keyHash = String(h);
+    const hash = keyHash.toLowerCase();
     return {
       keyHash,
-      isOwn: ctx.ownPaymentKeyHashes.has(keyHash) || ctx.ownStakeKeyHashes.has(keyHash)
-        || ctx.ownDrepKeyHashes.has(keyHash) || ctx.ownCcHotKeyHashes.has(keyHash),
+      isOwn: ctx.ownPaymentKeyHashes.has(hash) || ctx.ownStakeKeyHashes.has(hash)
+        || ctx.ownDrepKeyHashes.has(hash) || ctx.ownCcHotKeyHashes.has(hash) || ctx.ownCcColdKeyHashes.has(hash),
     };
   });
 
@@ -356,21 +369,22 @@ export function approvalContextFromKeys(
     drep105?: Array<{ cred: string }>;
     drep129?: Array<{ cred: string }>;
     ccHot?: Array<{ cred: string }>;
+    ccCold?: Array<{ cred: string }>;
   } | null | undefined,
   walletNetworkId: Cardano.NetworkId | null,
   resolveAsset: (unit: string) => ApprovalAssetInfo,
 ): ApprovalContext {
   const addrs = (list?: Array<{ address?: string }>) => new Set((list ?? []).map((k) => k.address).filter((a): a is string => !!a));
-  const creds = (...lists: Array<Array<{ cred: string }> | undefined>) =>
-    new Set(lists.flatMap((l) => (l ?? []).map((k) => String(k.cred).toLowerCase())));
   return {
     paymentAddresses: addrs(keys?.payment),
     changeAddresses: addrs(keys?.change),
-    ownPaymentKeyHashes: creds(keys?.payment, keys?.change),
-    ownStakeKeyHashes: creds(keys?.stake),
-    ownRewardAccounts: addrs(keys?.stake),
-    ownDrepKeyHashes: creds(keys?.drep105, keys?.drep129),
-    ownCcHotKeyHashes: creds(keys?.ccHot),
+    ownPaymentKeyHashes: credSet(keys?.payment, keys?.change),
+    ownStakeKeyHashes: credSet(keys?.stake),
+    // The key set's shape here lacks paths, which ownership never reads.
+    isOwnRewardAccount: (account) => !!stakeKeyFor(keys as KeySet, account),
+    ownDrepKeyHashes: credSet(keys?.drep105, keys?.drep129),
+    ownCcHotKeyHashes: credSet(keys?.ccHot),
+    ownCcColdKeyHashes: credSet(keys?.ccCold),
     walletNetworkId,
     resolveAsset,
   };

@@ -93,18 +93,17 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { Blockchain, coin_type, purpose, WalletType } from '@/models/types';
 import ledger from '@/shared/utils/ledger';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import { getKeystoneAccountsUR, getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount, parseKeystoneAccounts } from '@/shared/utils/keystone';
+import {
+  getKeystoneAccountsUR, getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount, parseKeystoneAccounts,
+} from '@/shared/utils/keystone';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
-import { CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import snackbar from '@/plugins/snackbar';
-import { bech32 } from 'bech32';
 import { UR } from '@keystonehq/keystone-sdk';
 import { debugLog } from '@/utils/debug';
 import type { NetworkInfo } from '@/utils/networks';
@@ -117,6 +116,8 @@ interface ConnectionPayload {
   keys: Array<{ publicKey: string; chainCode: string; path: string }>;
   btSupported: boolean;
   xfp?: string;
+  /** Keystone: the firmware version its pairing answer reported, when it reports one. */
+  firmwareVersion?: string;
   /** Multi-account pairing: every account the device exported, by index. */
   accounts?: AccountXpub[];
 }
@@ -133,11 +134,12 @@ const props = defineProps<{
 const multiAccount = computed(() => props.network?.blockchain === Blockchain.CARDANO && !!props.accountIndices?.length);
 
 /** The payload for a multi-account export; the record fields come from each account. */
-const accountsPayload = (accounts: AccountXpub[], btSupported: boolean, xfp?: string): ConnectionPayload => ({
+const accountsPayload = (accounts: AccountXpub[], btSupported: boolean, xfp?: string, firmwareVersion?: string): ConnectionPayload => ({
   publicKey: accounts[0].publicKey,
   keys: accounts[0].keys,
   btSupported,
   ...(xfp ? { xfp } : {}),
+  ...(firmwareVersion ? { firmwareVersion } : {}),
   accounts,
 });
 
@@ -198,6 +200,7 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
           path: bitcoinAccount.path,
         }],
         btSupported: false,
+        ...(bitcoinAccount.firmwareVersion ? { firmwareVersion: bitcoinAccount.firmwareVersion } : {}),
       };
 
       snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
@@ -207,39 +210,22 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
     }
 
     if (multiAccount.value) {
-      const { xfp, accounts } = parseKeystoneAccounts(Buffer.from(ur.cbor, 'hex'), props.accountIndices!);
+      const { xfp, accounts, firmwareVersion } = parseKeystoneAccounts(Buffer.from(ur.cbor, 'hex'), props.accountIndices!);
       snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
       keystoneScan.value = false;
-      emit('connected', accountsPayload(accounts, false, xfp));
+      emit('connected', accountsPayload(accounts, false, xfp, firmwareVersion));
       return;
     }
 
-    const cborBuffer = Buffer.from(ur.cbor, 'hex');
-    const cryptoMultiAccounts = CryptoMultiAccounts.fromCBOR(cborBuffer);
-
-    const device = cryptoMultiAccounts.getDevice();
-    debugLog('[Keystone] Parsed device', device);
-    const keys = cryptoMultiAccounts.getKeys();
-    const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
-
-    const xfp = masterFingerprint.toString('hex');
-    const firstKey = keys[0];
-    const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(
-      firstKey.getKey().toString('hex') + firstKey.getChainCode().toString('hex')
-    );
-    const words = bech32.toWords(bip32PublicKey.bytes());
-    const publicKey = bech32.encode('xpub', words, 1023);
-    const mappedKeys = keys.map(key => ({
-      publicKey: key.getKey().toString('hex'),
-      chainCode: key.getChainCode().toString('hex'),
-      path: key.getOrigin().getPath(),
-    }));
-
+    // The one account asked for (#0), read as the multi-account answer is; the payload stays
+    // single-account (no `accounts`), so the review creates one record as before.
+    const { xfp, accounts, firmwareVersion } = parseKeystoneAccounts(Buffer.from(ur.cbor, 'hex'), [0]);
     const payload: ConnectionPayload = {
-      publicKey,
-      keys: mappedKeys,
+      publicKey: accounts[0].publicKey,
+      keys: accounts[0].keys,
       btSupported: false,
       xfp,
+      ...(firmwareVersion ? { firmwareVersion } : {}),
     };
 
     snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
