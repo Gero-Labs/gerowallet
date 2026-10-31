@@ -61,7 +61,14 @@
     <!-- The bell's inbox (B-M3): the dashboard's notification centre in a sheet. Rows route on
          the panel's router where a page exists and hand over to the full dashboard otherwise. -->
     <BottomSheet v-model="showNotifications" height="85%">
-      <NotifyInbox surface="sidepanel" :open="showNotifications" @close="showNotifications = false" @settings="openDashboardSettings('notifications')" />
+      <NotifyInbox
+        surface="sidepanel"
+        :open="showNotifications"
+        :legacy-count="legacyCount"
+        @close="showNotifications = false"
+        @legacy="openDashboardCollectibles()"
+        @settings="openDashboardSettings('notifications')"
+      />
     </BottomSheet>
 
     <!-- Global, so every hardware-wallet signing path gets the "continue on
@@ -90,6 +97,8 @@ import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
@@ -110,6 +119,12 @@ initDappRequestHub();
 
 const showWalletSwitcher = ref(false);
 const showNotifications = ref(false);
+// Items stuck on a closed marketplace (NFT rescue): the inbox's "Needs you" row. Calling the
+// composable here starts its lookup with the panel; opening the sheet asks again (it also retries
+// a failed lookup). The lookup is off (count 0) unless the isNftMarketEnabled flag is on and the
+// logged wallet is Cardano mainnet.
+const { count: legacyCount, refresh: refreshLegacyListings } = useLegacyListings();
+watch(showNotifications, (isOpen) => { if (isOpen) void refreshLegacyListings(); });
 // When set, a full-screen pre-switch unlock overlay is shown for this target MPC
 // wallet — we authenticate it (Google + passkey/password) BEFORE switching, so the
 // current wallet stays active until the switch actually completes.
@@ -208,6 +223,16 @@ async function onWalletSwitch(wallet: Wallet) {
 async function onSwitchUnlocked(wallet: Wallet) {
   pendingSwitchWallet.value = null;
   await doLogin(wallet);
+}
+
+/**
+ * The inbox row for stuck items: the card that gets them back lives on the full dashboard, at
+ * Portfolio -> Collectibles. An open dashboard tab is sent there too (forceNavigate), since the
+ * whole point of the click is to land on that view.
+ */
+function openDashboardCollectibles() {
+  showNotifications.value = false;
+  void openFullDashboard('#/?view=collectibles', true);
 }
 
 /** Open the full dashboard's settings dialog, on a given tab when asked (the bell's Settings link). */

@@ -1,0 +1,322 @@
+<template>
+  <BaseDialog
+    :is-open="isOpen"
+    :title="t('legacyListings.title')"
+    icon="mdi-lifebuoy"
+    size="md"
+    :min-height="0"
+    :persistent="busy"
+    @close="close()"
+  >
+    <v-card-text class="legacy-cancel pt-2 px-5 pb-5" data-testid="legacy-cancel">
+      <!-- A hardware wallet no device has signed a rescue with yet: nothing to ask of anyone. -->
+      <p v-if="credentials.deviceBlocked.value" class="t-body-sm" data-testid="legacy-cancel-hardware">
+        {{ t('legacyListings.hardwareSoon') }}
+      </p>
+
+      <!-- The worker is having Nexus build the cancel and checking it. -->
+      <div v-else-if="view === 'preparing'" class="legacy-cancel__wait" data-testid="legacy-cancel-preparing">
+        <v-progress-circular indeterminate :size="28" :width="3" color="var(--g-accent)" role="status" :aria-label="t('common.loading')" />
+      </div>
+
+      <!-- What the worker verified the cancel does. Nothing here comes from Nexus's word. -->
+      <template v-else-if="view === 'review' && summary">
+        <p class="legacy-cancel__heading t-label">{{ t('legacyListings.review') }}</p>
+        <ul class="legacy-cancel__items" data-testid="legacy-cancel-items">
+          <li v-for="item in summary.items" :key="`${item.txHash}#${item.outputIndex}`" class="legacy-cancel__item glass-tier">
+            <LegacyItemLine :item="item" :meta="meta" />
+          </li>
+        </ul>
+        <dl class="legacy-cancel__rows glass-tier" data-testid="legacy-cancel-review">
+          <div class="legacy-cancel__row">
+            <dt class="t-caption">{{ t('legacyListings.networkFee') }}</dt>
+            <dd class="t-body-sm g-num">{{ feeText }}</dd>
+          </div>
+        </dl>
+        <p v-if="summary.sponsoredCollateralRef" class="legacy-cancel__sponsored t-caption" data-testid="legacy-cancel-sponsored">
+          <v-icon size="16" color="var(--g-success)">mdi-shield-check-outline</v-icon>
+          <span>{{ t('legacyListings.sponsored') }}</span>
+        </p>
+
+        <v-alert v-if="failureText" type="error" variant="tonal" density="compact" class="mt-3" data-testid="legacy-cancel-error">
+          {{ failureText }}
+        </v-alert>
+
+        <PreparedTxCredentials :credentials="credentials" testid="legacy-cancel" :tx-id="summary.txId" />
+        <div class="legacy-cancel__actions">
+          <GButton tier="secondary" :disabled="busy" data-testid="legacy-cancel-cancel" @click="close()">
+            {{ t('common.cancel') }}
+          </GButton>
+          <PassKeyAuthButton
+            v-if="credentials.isPrfWallet.value"
+            :block="false"
+            :disabled="busy"
+            :text="t('common.confirm')"
+            @success="credentials.sendWithPassKey"
+            @error="credentials.onPassKeyError"
+          />
+          <GButton
+            v-else
+            tier="primary"
+            :loading="busy"
+            :disabled="busy || (credentials.usesPassword.value && !credentials.password.value)"
+            data-testid="legacy-cancel-confirm"
+            @click="credentials.send()"
+          >
+            {{ t('common.confirm') }}
+          </GButton>
+        </div>
+      </template>
+
+      <!-- Submitted. -->
+      <template v-else-if="view === 'done'">
+        <div class="text-center py-2" data-testid="legacy-cancel-done">
+          <v-icon size="48" color="var(--g-success)">mdi-check-circle-outline</v-icon>
+          <p class="t-heading mt-2">{{ t('legacyListings.done') }}</p>
+          <p class="t-caption mt-2">{{ t('transactions.transactionId') }}</p>
+          <p class="t-caption g-mono">
+            {{ flow.submittedTxId.value }}
+            <CopyButton x-small :value="flow.submittedTxId.value ?? ''" class="ml-1" />
+          </p>
+          <v-btn v-if="txExplorerUrl" variant="text" size="small" :href="txExplorerUrl" target="_blank" rel="noopener noreferrer">
+            {{ t('market.viewOnExplorer') }}
+          </v-btn>
+        </div>
+        <div class="legacy-cancel__actions">
+          <GButton tier="primary" block data-testid="legacy-cancel-done-button" @click="close()">{{ t('common.done') }}</GButton>
+        </div>
+      </template>
+
+      <!-- Nothing was built, or the submit was not confirmed. -->
+      <template v-else>
+        <v-alert type="error" variant="tonal" density="compact" data-testid="legacy-cancel-error">
+          {{ failureText }}
+        </v-alert>
+        <div class="legacy-cancel__actions">
+          <GButton tier="secondary" data-testid="legacy-cancel-close" @click="close()">{{ t('common.close') }}</GButton>
+          <!-- Only a failure that building again can fix offers to try again: items that are gone,
+               items Nexus or the wallet refused, and a signed cancel that may be on chain do not. -->
+          <GButton v-if="canRetry" tier="primary" data-testid="legacy-cancel-retry" @click="start()">{{ t('common.tryAgain') }}</GButton>
+        </div>
+      </template>
+    </v-card-text>
+
+    <!-- Keystone signs by QR: this cancel's request out, the device's signature back in. -->
+    <KeystoneSignDialog
+      v-if="flow.keystone.keystoneShow.value"
+      :is-open="flow.keystone.keystoneShow.value"
+      :keystone-type="flow.keystone.keystoneType.value"
+      :keystone-cbor="flow.keystone.keystoneCbor.value"
+      @scan="flow.keystone.onKeystoneScan"
+      @error="flow.keystone.failKeystone"
+      @close="flow.keystone.cancelKeystone"
+    />
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import PreparedTxCredentials from '@/shared/components/PreparedTxCredentials.vue';
+import CopyButton from '@/shared/components/CopyButton.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import LegacyItemLine from '@/modules/portfolio/components/LegacyItemLine.vue';
+import { formatAda } from '@/modules/portfolio/components/legacyItemDisplay';
+import { useExplorer } from '@/shared/composables/useExplorer';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { useLegacyRescue } from '@/shared/composables/useLegacyRescue';
+import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCredentials';
+import { PREPARED_TX_SUBMIT_FAILED, PREPARED_TX_WRONG_PASSWORD } from '@/shared/composables/usePreparedTxFlow';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { isLegacyRescueHardware } from '@/utils/legacyMarketScripts';
+
+/**
+ * Gets the picked stuck items back: the worker builds and verifies the cancel (prepare), the
+ * dialog shows what it does, then signs and submits it. Hosted by PortfolioPage, outside the
+ * card: a cancel that empties the list must not take this dialog's "done" screen with it.
+ *
+ *   open -> preparing -> review (items, network fee, who lends collateral) -> credentials
+ *        -> submitting -> done (transaction link)  |  a failure
+ *
+ * Success hides the refs from the list at once (`forget`) and closing looks the list up again.
+ * An item that was spent since the list was read (LISTING_NOT_FOUND) is said to be gone and the
+ * list is refreshed. A signed cancel whose submit was not confirmed (SUBMIT_FAILED) may be on
+ * chain: the user is sent to their activity, no retry, and closing looks the list up again.
+ * A refusal about the items themselves (ITEM_FAILURES) would fail the same way again: no retry.
+ * Hardware wallets stay out until a device has signed a real rescue
+ * (LEGACY_RESCUE_HARDWARE_WALLET_TYPES): they are told so and nothing is built.
+ */
+const props = defineProps<{
+  isOpen: boolean;
+  /** The picked items' `txHash#index` refs, at most LEGACY_CANCEL_MAX. */
+  refs: string[];
+}>();
+
+const emit = defineEmits<{ (e: 'close'): void }>();
+
+const { t, tc } = useTranslation();
+// Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
+const isBT = ref(false);
+const flow = useLegacyRescue({ getIsBT: () => isBT.value });
+const { meta, forget, refresh } = useLegacyListings();
+const { explorerUrl } = useExplorer();
+
+const stage = computed(() => flow.stage.value);
+const summary = computed(() => flow.prepared.value?.summary ?? null);
+
+const view = computed<'preparing' | 'review' | 'done' | 'failed'>(() => {
+  if (stage.value === 'done') return 'done';
+  if (summary.value && (stage.value === 'review' || stage.value === 'signing' || stage.value === 'submitting')) return 'review';
+  // Nothing built, or a submit that was not confirmed: back at idle with the reason.
+  if (stage.value === 'idle' && flow.failure.value) return 'failed';
+  return 'preparing';
+});
+
+// The credentials: the password or PassKey the signature needs, the device hint, and what keeps
+// them from signing another cancel (PassKey staleness, the wallet its refs were listed for).
+// A hardware wallet no device has signed a rescue with is not allowed: the dialog tells it so.
+const credentials = usePreparedTxCredentials(flow, {
+  isBT,
+  screen: () => view.value,
+  allowsDevice: isLegacyRescueHardware,
+  // Another wallet closes a dialog that is showing a cancel: the refs were the last one's.
+  isActive: () => props.isOpen,
+  onWalletSwitch: () => emit('close'),
+});
+const busy = credentials.busy;
+
+/**
+ * Refusals about the items themselves, from Nexus's builder (the scripts or datums) or the
+ * worker (the transaction it checked, the shape of the request): building again fails the same way.
+ */
+const ITEM_FAILURES: ReadonlySet<string> = new Set([
+  'EVALUATION_FAILED',
+  'DATUM_UNREADABLE',
+  'NOT_LEGACY_LISTING',
+  'VERIFY_FAILED',
+  'MIXED_CONTRACTS',
+  'TOO_MANY_LISTINGS',
+]);
+
+type FailureKind = 'gone' | 'maybeSent' | 'item' | 'wrongPassword' | 'retry';
+
+const failureKind = computed<FailureKind | null>(() => {
+  const code = flow.failure.value?.code;
+  if (!code) return null;
+  if (code === 'LISTING_NOT_FOUND') return 'gone';
+  if (code === PREPARED_TX_SUBMIT_FAILED) return 'maybeSent';
+  if (ITEM_FAILURES.has(code)) return 'item';
+  if (code === PREPARED_TX_WRONG_PASSWORD) return 'wrongPassword';
+  return 'retry';
+});
+const isGone = computed(() => failureKind.value === 'gone');
+const canRetry = computed(() => failureKind.value === 'retry');
+/** The message for each kind of failure; anything not named here is the general one, with a retry. */
+const failureText = computed(() => {
+  switch (failureKind.value) {
+    case 'gone': return t('legacyListings.gone');
+    case 'maybeSent': return t('legacyListings.maybeSent');
+    case 'item': return tc('legacyListings.itemFailed', props.refs.length);
+    case 'wrongPassword': return t('errors.wrongPassword');
+    case 'retry': return t('legacyListings.failed');
+    default: return '';
+  }
+});
+
+const feeText = computed(() => `${formatAda(summary.value?.feeLovelace ?? '0')} ADA`);
+const txExplorerUrl = computed(() => explorerUrl('tx', flow.submittedTxId.value));
+
+/** Start over: a clean flow, then have the worker build the cancel of the given refs. */
+function start(): void {
+  credentials.begin();
+  flow.reset();
+  if (credentials.deviceBlocked.value) return;
+  void flow.prepare([...props.refs]);
+}
+
+// An item spent since the list was read: say so, and let the list catch up behind the dialog.
+watch(isGone, (gone) => { if (gone) void refresh(); });
+
+// The cancel went to the network: those items leave the list now, not when the server catches up.
+watch(stage, (value) => { if (value === 'done') forget([...(summary.value?.refs ?? props.refs)]); });
+
+// State is reset when the dialog opens, not when it closes: the content stays as it was while
+// the dialog fades out. Last of the watchers: it starts the build, whose outcome the others watch.
+watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true });
+
+function close(): void {
+  if (busy.value) return;
+  // A cancel that went out, or may have: the list catches up with the chain.
+  const sent = stage.value === 'done' || failureKind.value === 'maybeSent';
+  credentials.clearPassword();
+  emit('close');
+  if (sent) void refresh();
+}
+</script>
+
+<style scoped lang="scss">
+.legacy-cancel__wait {
+  display: flex;
+  justify-content: center;
+  padding: var(--g-s-6) 0;
+}
+
+.legacy-cancel__heading {
+  margin: 0 0 var(--g-s-2);
+}
+
+.legacy-cancel__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  // Up to ten items: they scroll inside the dialog, the fee and the buttons stay in view.
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.legacy-cancel__item {
+  padding: var(--g-s-2) var(--g-s-3);
+}
+
+.legacy-cancel__rows {
+  margin: var(--g-s-3) 0 0;
+  padding: var(--g-s-3);
+  border-radius: var(--g-r-card);
+}
+
+.legacy-cancel__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+
+  dt {
+    color: var(--g-text-2);
+    flex-shrink: 0;
+  }
+
+  dd {
+    margin: 0;
+    color: var(--g-text-1);
+    text-align: right;
+  }
+}
+
+.legacy-cancel__sponsored {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  margin: var(--g-s-2) 0 0;
+}
+
+.legacy-cancel__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  margin-top: var(--g-s-4);
+}
+</style>

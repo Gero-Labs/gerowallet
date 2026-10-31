@@ -334,6 +334,17 @@ export function normalizeAssetUnit(unit: string): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- token records mix provider payload + chain-specific metadata shapes; resolves to a dynamic display bag consumed across the app
 export function resolveAsset(token: any): any {
+  return resolveAssetWithRow(token, NetworkStore.state.assets[normalizeAssetUnit(token.unit)]);
+}
+
+/**
+ * resolveAsset() for an asset row the caller already holds (a `POST /api/assets/info` answer)
+ * instead of the one the network store caches for the wallet's own assets. The row is cloned
+ * first, so the metadata walk below never writes into it. A missing row resolves the name from
+ * the asset name alone, as resolveAsset() does for a unit the store has not seen.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- same dynamic token/row shapes as resolveAsset
+export function resolveAssetWithRow(token: any, assetRow: any): any {
   const unit = normalizeAssetUnit(token.unit);
   let metadata = null;
   let onchain_metadata = null;
@@ -344,7 +355,7 @@ export function resolveAsset(token: any): any {
   let policy_id: string;
   let asset_name: string;
 
-  const asset = structuredClone(unwrapForIndexedDB(NetworkStore.state.assets[unit]));
+  const asset = structuredClone(unwrapForIndexedDB(assetRow));
   if (!asset) {
     // TODO
   }

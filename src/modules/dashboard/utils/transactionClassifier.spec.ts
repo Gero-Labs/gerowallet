@@ -14,6 +14,7 @@ import {
   isDexOrderCancellation,
   isDexTransaction,
   isInternalTransfer,
+  isJpgStore,
   isMinswap,
   isPendingTooLong,
   withMinusSign,
@@ -27,6 +28,8 @@ const MINSWAP_V2_ORDER = 'addr1w8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcnqst
 const MINSWAP_V2_ORDER_STAKED = 'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
 const MINSWAP_V2_POOL = 'addr1z84q0denmyep98ph3tmzwsmw0j7zau9ljmsqx6a4rvaau66j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq777e2a';
 const MINSWAP_V1_MARKET_ORDER = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
+// The V3 listing script ("AskV1" in the marketplace's release V3), carrying a stake credential
+const JPGSTORE_V3_LISTING = 'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
 const metadata = (...msg: string[]) => ({ auxiliaryData: { blob: { 674: { msg } } } });
 
 const t = (key: string, params?: Record<string, unknown>) => (params ? `${key}:${JSON.stringify(params)}` : key);
@@ -171,6 +174,16 @@ describe('transaction titles and types', () => {
       expect(tagKeys(item)).toEqual(expect.arrayContaining(['steelswap', 'minswap']));
       expect(tagKeys(item)).not.toContain('geroswap');
     });
+  });
+
+  it('tags a tx with an output to the V3 listing address', () => {
+    const item = tx({
+      ada: -2_000_000, sentAmount: 2_000_000,
+      utxo: { inputs: [], outputs: [] },
+      body: { outputs: [io(JPGSTORE_V3_LISTING)] },
+    });
+    expect(isJpgStore(item)).toBe(true);
+    expect(buildTxTags(item, ctx, t, classifyTxKind(item, ctx)).map((tag) => tag.key)).toContain('jpgstore');
   });
 
   it('tags a DUST registration by its output to the mapping validator', () => {
