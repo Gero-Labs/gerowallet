@@ -587,7 +587,6 @@ import { useChainContext } from '../../composables/useChainContext';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
-import { assertTokenDecimals } from '@/shared/utils/verifiedDecimals';
 import { matchIntendedOutputs } from '@/shared/utils/txIntentGuard';
 
 const { themeColors } = useChainContext();
@@ -1140,15 +1139,6 @@ async function buildTransaction() {
         assets: assetsMap
       }
     }];
-
-    // The typed token amounts became base units with these decimals; confirm them
-    // outside Gero's backend before anything is built (verifiedDecimals.ts).
-    await awaitFreshApproval(() => assertTokenDecimals(
-      extraTokens.value
-        .filter((token) => decimalToBaseUnits(token.sendAmount, token.decimals ?? 0) > 0n)
-        .map((token) => ({ unit: String(token.unit), decimals: token.decimals ?? 0 })),
-      loggedWallet.value.network,
-    ), current);
 
     // Build the transfer server-side via Nexus (protocol params + fee always fresh,
     // upgradable without an extension release). All send flows use Nexus unconditionally.

@@ -260,7 +260,6 @@ import { Collectible, SendRecipient, Token } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import { baseUnitsToDecimalString, decimalToBaseUnits } from '@/shared/utils/amount';
-import { assertTokenDecimals, type UsedDecimals } from '@/shared/utils/verifiedDecimals';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -733,13 +732,6 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
   return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
 }
 
-/** The decimals recipientToNexusOutput converts each typed token amount with. */
-function decimalsUsedBy(list: SendRecipient[]): UsedDecimals[] {
-  return list.flatMap((r) => r.selectedTokens
-    .filter((tk: Token) => tk?.unit && tk.ticker !== nativeTicker.value)
-    .map((token: Token) => ({ unit: String(token.unit), decimals: token.decimals != null ? token.decimals : 0 })));
-}
-
 /**
  * Candidate inputs for a Nexus request: the whole wallet when it fits the request
  * limit, otherwise the holders of everything the recipients send plus the largest
@@ -774,9 +766,6 @@ async function buildTx(options?: { selectAll?: boolean }) {
   );
   if (!allValid) return;
 
-  // The typed token amounts became base units with these decimals; confirm them
-  // outside Gero's backend before anything is built (verifiedDecimals.ts).
-  await assertTokenDecimals(decimalsUsedBy(recipients.value), loggedWallet.value.network);
   const nexusOutputs = recipients.value.map((r: SendRecipient) => recipientToNexusOutput(r));
 
   const request: BuildTxRequest = {

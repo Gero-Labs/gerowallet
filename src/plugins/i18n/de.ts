@@ -4747,8 +4747,6 @@ export default {
   'signTx.rejected': 'Transaktionssignierung abgebrochen',
   'txGuard.builtTxMismatch': 'Die für dich vorbereitete Transaktion entspricht nicht deiner Anfrage, deshalb hat Gero sie nicht signiert. Es wurde nichts gesendet. Versuche es später erneut.',
   'txGuard.orderMismatch': 'Diese Order würde mehr aus deiner Wallet nehmen, als du zugestimmt hast, deshalb hat Gero sie nicht signiert. Es wurde nichts gesendet.',
-  'txGuard.tokenDecimalsMismatch': 'Die Angaben zu diesem Token von Geros Server stimmen nicht mit seinem Eintrag auf der Blockchain überein, daher hat Gero die Transaktion nicht vorbereitet. Es wurde nichts gesendet.',
-  'txGuard.tokenDecimalsUnverified': 'Gero konnte die Angaben zu diesem Token gerade nicht mit der Blockchain abgleichen, daher wurde nichts gesendet. Versuche es gleich noch einmal.',
   'txGuard.depositRefunded': '{amount} ADA Kaution zurückerstattet',
   'txGuard.refundTo': 'Kaution wird an {account} zurückerstattet',
   'txGuard.refundNotYours': 'Die Kaution wird an jemand anderen zurückerstattet, nicht an dich',

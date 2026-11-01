@@ -115,11 +115,6 @@ const KOIOS_URLS: Record<string, string> = {
   [Network.PREVIEW]: 'https://preview.koios.rest/api/v1',
 };
 
-/** Koios's API root for a Cardano network, or undefined for one it does not serve. */
-export function koiosBaseUrl(network: string | undefined): string | undefined {
-  return network ? KOIOS_URLS[network] : undefined;
-}
-
 const KOIOS_BATCH = 50;
 const KOIOS_TIMEOUT_MS = 15_000;
 
@@ -129,7 +124,7 @@ const KOIOS_TIMEOUT_MS = 15_000;
  * asked for. No source for a network Koios does not serve.
  */
 export function koiosSource(network: string | undefined, fetchImpl: typeof fetch = fetch): TxCborSource {
-  const base = koiosBaseUrl(network);
+  const base = network ? KOIOS_URLS[network] : undefined;
   return async (txHashes) => {
     const found = new Map<string, string>();
     if (!base) return found;

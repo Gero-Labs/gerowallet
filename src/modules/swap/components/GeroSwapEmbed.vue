@@ -125,7 +125,6 @@ import {
   TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits, type QuotedRoute, type SwapIntent,
 } from '../composables/orderSpendBound';
 import { TxIntentMismatchError, type SpendBound } from '@/shared/utils/txIntentGuard';
-import { assertTokenDecimals, TokenDecimalsError } from '@/shared/utils/verifiedDecimals';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
@@ -318,8 +317,6 @@ async function currentSwapIntent(): Promise<SwapIntent | null> {
   // The decimals the widget converted the typed amount with: ours, through resolveToken.
   const decimals = tokenIn === 'lovelace' ? 6 : (await resolveToken(tokenIn))?.decimals;
   if (typeof decimals !== 'number') return null;
-  // A token's decimals come from Gero's backend: confirm them before they size the budget.
-  if (tokenIn !== 'lovelace') await assertTokenDecimals([{ unit: tokenIn, decimals }], walletStore.loggedWallet?.network);
   const amountIn = toBaseUnits(typed, decimals);
   return amountIn ? { tokenIn, amountIn } : null;
 }
@@ -329,9 +326,7 @@ async function spendBoundForSignature(): Promise<SpendBound | null> {
   try {
     const intent = await currentSwapIntent();
     return intent ? swapSpendBound(intent) : null;
-  } catch (e) {
-    // Said as itself, not as the order exceeding a near-zero budget.
-    if (e instanceof TokenDecimalsError) throw e;
+  } catch {
     return null;
   }
 }
@@ -366,10 +361,6 @@ const signer = {
     try {
       return await sharedSigner.signTx(unsignedTxCbor);
     } catch (e) {
-      if (e instanceof TokenDecimalsError) {
-        signRefusal = e.message;
-        throw e;
-      }
       if (!(e instanceof TxIntentMismatchError)) throw e;
       const refused = refusalFor(e);
       signRefusal = refused.message;

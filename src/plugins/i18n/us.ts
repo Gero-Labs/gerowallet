@@ -4427,8 +4427,6 @@ export default {
   'signTx.rejected': 'Transaction signing cancelled',
   'txGuard.builtTxMismatch': 'The transaction prepared for you doesn\'t match what you asked for, so Gero didn\'t sign it. Nothing was sent. Try again later.',
   'txGuard.orderMismatch': 'This order would take more from your wallet than you agreed to, so Gero didn\'t sign it. Nothing was sent.',
-  'txGuard.tokenDecimalsMismatch': 'This token\'s details from Gero\'s server don\'t match its record on the blockchain, so Gero didn\'t prepare the transaction. Nothing was sent.',
-  'txGuard.tokenDecimalsUnverified': 'Gero couldn\'t check this token\'s details against the blockchain right now, so nothing was sent. Try again in a moment.',
   'txGuard.depositRefunded': '{amount} ADA deposit returned',
   'txGuard.refundTo': 'Deposit refunded to {account}',
   'txGuard.refundNotYours': 'The deposit is refunded to someone else, not to you',
