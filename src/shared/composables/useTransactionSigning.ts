@@ -3,7 +3,7 @@ import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Ref, ComputedRef, toRefs, ref, computed, watch, getCurrentScope, onScopeDispose, getCurrentInstance, provide } from 'vue';
 import { authorizationScopeKey } from './authorizationScope';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
@@ -576,10 +576,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         await submitTx(attempt);
       } else if (result.data.reason === 'expired') {
         snackbar.setError(t('crossDevice.requestExpired'));
-      } else if (result.data.reason === CIP113_SIGN_REFUSAL_MESSAGE) {
+      } else if (result.data.reason === CIP113_SIGN_REFUSAL_MESSAGE || result.data.reason === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) {
         // Refused on THIS device, before the relay — the other device was never asked,
         // so the generic "rejected" would blame a co-signer that never saw the request.
-        snackbar.setError(t('programmableTokens.signRefused'));
+        snackbar.setError(friendlyTxError(new Error(result.data.reason)));
       } else {
         snackbar.setError(t('crossDevice.requestRejected'));
       }

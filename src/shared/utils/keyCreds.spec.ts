@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import type { Keys } from '@/models/types';
-import { isMarkedToFail, keyAtAddress, rewardAccountKeyHash, stakeKeyFor, walletWitnessPlan } from './keyCreds';
+import { isMarkedToFail, isMarkedToFailCbor, keyAtAddress, rewardAccountKeyHash, stakeKeyFor, walletWitnessPlan } from './keyCreds';
 
 // Synthetic hashes, never a real wallet's keys.
 const STAKE = 'a3'.repeat(28);
@@ -97,6 +97,17 @@ describe('walletWitnessPlan', () => {
     expect(isMarkedToFail(tx(spending, false))).toBe(true);
     expect(isMarkedToFail(tx(spending, true))).toBe(false);
     expect(isMarkedToFail(tx(spending))).toBe(false);
+  });
+
+  // Read from the CBOR a signing entry receives, never from a dApp-supplied object.
+  it('reads the flag from a transaction\'s CBOR, and refuses nothing it cannot parse', () => {
+    const cbor = (isValid?: boolean) => Serialization.Transaction.fromCore({ ...tx(spending, isValid), witness: { signatures: new Map() } }).toCbor();
+    expect(isMarkedToFailCbor(cbor(false))).toBe(true);
+    expect(isMarkedToFailCbor(cbor(true))).toBe(false);
+    expect(isMarkedToFailCbor(cbor())).toBe(false);
+    expect(isMarkedToFailCbor('not cbor')).toBe(false);
+    expect(isMarkedToFailCbor({ isValid: false })).toBe(false);
+    expect(isMarkedToFailCbor(undefined)).toBe(false);
   });
 
   it('reads no UTxO when none are given', () => {

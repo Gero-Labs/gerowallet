@@ -1,4 +1,4 @@
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import type { Key, Keys } from '@/models/types';
 
 /**
@@ -154,6 +154,20 @@ export const utxoIndex = (utxos: ReadonlyArray<Cardano.Utxo> | null | undefined)
  * outright (MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE). No dApp sends one honestly.
  */
 export const isMarkedToFail = (tx: Pick<Cardano.Tx, 'isValid'>): boolean => tx.isValid === false;
+
+/**
+ * `isMarkedToFail` read from a transaction's own CBOR, as a signing entry receives it, never
+ * from an object a dApp supplied. Unparseable or missing CBOR is not refused here: no signer
+ * can sign it either, and each refuses it on its own terms.
+ */
+export const isMarkedToFailCbor = (txCbor: unknown): boolean => {
+  if (typeof txCbor !== 'string' || !txCbor) return false;
+  try {
+    return isMarkedToFail({ isValid: Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor)).isValid() });
+  } catch {
+    return false;
+  }
+};
 
 /** The role of a key that witnesses a transaction, as `analyzeTransactionForSignatures` names it. */
 export type WitnessRole = 'payment' | 'stake' | 'drep' | 'ccCold' | 'ccHot';
