@@ -16,8 +16,12 @@ import { canonicalAddress } from '@/shared/utils/txIntentGuard';
  * of the transaction that created `txHash#index` proves that output's address
  * and value, whoever served the CBOR: hash the body, compare with `txHash`, read
  * output `index`. Sources are tried in order (the wallet's own history first,
- * then Koios, a provider outside Gero's backend) and a CBOR whose hash does not
- * match is simply ignored.
+ * then gero-backend) and a CBOR whose hash does not match is simply ignored.
+ *
+ * The source does not have to be independent of the backend that reported the
+ * UTxOs. For an output that is on chain, only the real transaction hashes to its
+ * id. One that is not on chain can be "proven" with any value, but a transaction
+ * spending it is rejected by the chain, so nothing leaves the wallet.
  */
 
 /** `txHash#index`, lower case. */
@@ -109,35 +113,40 @@ export function historySource(transactions: readonly unknown[] | null | undefine
   };
 }
 
-const KOIOS_URLS: Record<string, string> = {
-  [Network.MAINNET]: 'https://api.koios.rest/api/v1',
-  [Network.PREPROD]: 'https://preprod.koios.rest/api/v1',
-  [Network.PREVIEW]: 'https://preview.koios.rest/api/v1',
+/** gero-backend's network names, as its `network` query parameter takes them. */
+const BACKEND_NETWORKS: Record<string, string> = {
+  [Network.MAINNET]: 'MAINNET',
+  [Network.PREPROD]: 'PREPROD',
+  [Network.PREVIEW]: 'PREVIEW',
 };
 
-const KOIOS_BATCH = 50;
-const KOIOS_TIMEOUT_MS = 15_000;
+const BACKEND_BATCH = 50;
+const BACKEND_TIMEOUT_MS = 15_000;
 
 /**
- * Koios `tx_cbor`, a public indexer independent of Gero's backend. Its answers
- * are not trusted either: proveOutputs keeps only CBOR that hashes to the id
- * asked for. No source for a network Koios does not serve.
+ * gero-backend's `POST /api/transactions/cbor`. Its answers are not trusted:
+ * proveOutputs keeps only CBOR that hashes to the id asked for. No source for a
+ * network the backend does not serve.
  */
-export function koiosSource(network: string | undefined, fetchImpl: typeof fetch = fetch): TxCborSource {
-  const base = network ? KOIOS_URLS[network] : undefined;
+export function backendSource(
+  network: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+  baseUrl: string | undefined = import.meta.env['VITE_BACKEND_URL'],
+): TxCborSource {
+  const backendNetwork = network ? BACKEND_NETWORKS[network] : undefined;
   return async (txHashes) => {
     const found = new Map<string, string>();
-    if (!base) return found;
-    for (let i = 0; i < txHashes.length; i += KOIOS_BATCH) {
-      const response = await fetchImpl(`${base}/tx_cbor`, {
+    if (!backendNetwork || !baseUrl) return found;
+    for (let i = 0; i < txHashes.length; i += BACKEND_BATCH) {
+      const response = await fetchImpl(`${baseUrl}/api/transactions/cbor?chain=CARDANO&network=${backendNetwork}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ _tx_hashes: txHashes.slice(i, i + KOIOS_BATCH) }),
+        body: JSON.stringify(txHashes.slice(i, i + BACKEND_BATCH)),
         credentials: 'omit',
         redirect: 'error',
-        signal: AbortSignal.timeout(KOIOS_TIMEOUT_MS),
+        signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
       });
-      if (!response.ok) throw new Error(`Koios tx_cbor answered ${response.status}`);
+      if (!response.ok) throw new Error(`gero-backend transactions/cbor answered ${response.status}`);
       const rows = (await response.json()) as unknown;
       if (!Array.isArray(rows)) continue;
       for (const row of rows) {

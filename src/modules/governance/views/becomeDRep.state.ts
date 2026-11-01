@@ -1,3 +1,5 @@
+import type { Cardano } from '@cardano-sdk/core';
+
 /**
  * Flow-state rules for the Become a DRep view.
  *
@@ -55,4 +57,15 @@ export function isRegisteredDRep(record: DRepRegistryRecord | null | undefined):
  */
 export function anchorIdentity(url: string, dataHash: string): string {
   return `${url.trim()}|${dataHash.trim().toLowerCase()}`;
+}
+
+/**
+ * The network fee to show for a built registration or retirement, in lovelace:
+ * the one in the transaction the user signs, never the `estimated_fee` Nexus
+ * reports beside it. The build service is not trusted to describe its own
+ * transaction (nexus-tx-api verifies the bytes), so the review step must read
+ * the same bytes.
+ */
+export function signedFeeLovelace(tx: Pick<Cardano.Tx, 'body'>): string {
+  return BigInt(tx.body.fee).toString();
 }
