@@ -16,6 +16,7 @@ import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import { toTransactionUnspentOutput } from '@/shared/utils/utxoCbor';
+import { paymentCredential } from '@/shared/utils/keyCreds';
 import WalletStore from '@/stores/walletStore';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
@@ -916,29 +917,13 @@ export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAcco
   }
 }
 
-export function keyHashFromAddress(address: string): Hash28ByteBase16 {
-  const keyAddress: Cardano.Address = Cardano.Address.fromBech32(address);
-  try {
-    return Cardano.BaseAddress.fromAddress(keyAddress).getPaymentCredential().hash;
-  } catch (e) {
-    // I want the application to not crush but don't care about the message
-  }
-  try {
-    return Cardano.EnterpriseAddress.fromAddress(keyAddress).getPaymentCredential().hash
-  } catch (e) {
-    // I want the application to not crush but don't care about the message
-  }
-  try {
-    return Cardano.PointerAddress.fromAddress(keyAddress).getPaymentCredential().hash
-  } catch (e) {
-    // I want the application to not crush but don't care about the message
-  }
-  try {
-    return Cardano.RewardAddress.fromAddress(keyAddress).getPaymentCredential().hash
-  } catch (e) {
-    // I want the application to not crush but don't care about the message
-  }
-  return undefined;
+/**
+ * An address's payment credential hash (a reward address's stake credential hash), key hash or
+ * script hash alike; undefined for a Byron or unparseable address. `paymentKeyHash` (keyCreds.ts)
+ * is the same read for key hashes only, which is what a signer wants.
+ */
+export function keyHashFromAddress(address: string): Hash28ByteBase16 | undefined {
+  return paymentCredential(address)?.hash;
 }
 
 // Loose structural shapes for the mixed transaction records the legacy

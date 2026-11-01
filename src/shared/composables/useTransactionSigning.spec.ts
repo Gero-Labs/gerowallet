@@ -6,6 +6,8 @@ import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { useTransactionSigning } from './useTransactionSigning';
+import i18n from '@/plugins/i18n';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), ledger: vi.fn(), evaluatePrf: vi.fn(), decryptPrf: vi.fn(), error: vi.fn(), success: vi.fn(), createQr: vi.fn(), parseQr: vi.fn() }));
@@ -205,3 +207,22 @@ describe('transaction approval under asynchronous validation and authentication'
     } finally { wrapper.unmount(); }
   });
 });
+
+// A refusal on THIS device, before the relay, names its own reason: the other device never saw it.
+describe('cross-device signing refused before the relay', () => {
+  it.each([
+    [CIP113_SIGN_REFUSAL_MESSAGE, 'programmableTokens.signRefused'],
+    [MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, 'errors.markedToFailRefused'],
+  ])('shows why for %s', async (reason, key) => {
+    mocks.send.mockImplementation(async ({ method }) => (method === MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE
+      ? { data: { decision: 'rejected', reason } }
+      : { data: {} }));
+    const { signing } = signer();
+
+    await signing.signOnAnotherDevice();
+
+    expect(mocks.error).toHaveBeenCalledWith(i18n.t(key));
+    expect(mocks.error).not.toHaveBeenCalledWith('crossDevice.requestRejected');
+  });
+});
+

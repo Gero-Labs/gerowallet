@@ -9,8 +9,9 @@ import { unwrapForIndexedDB } from '@/db/cloneBoundary';
 import { resolveIconUrl, type IconPlaceholders } from '@/shared/utils/iconResolver';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
-import { HARDENED, ChainDerivations, Keys } from '@/models/types';
+import { HARDENED, Keys } from '@/models/types';
 import { debugLog } from '@/utils/debug';
+import { walletWitnessPlan } from '@/shared/utils/keyCreds';
 import assetsModule from '@/utils/assets';
 
 // Service worker compatible icon resolution
@@ -641,245 +642,34 @@ export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
  * Analyzes transaction to determine which keys need to sign
  * @param transaction - The transaction to analyze
  * @param utxos - Available UTXOs
- * @param addresses - Address mappings
- * @param stakeAddress - The stake address for the wallet
+ * @param addresses - The wallet's key set (WalletStore.state.keys)
  * @returns Array of signers with their derivation paths
  */
 export function analyzeTransactionForSignatures(
   transaction: Cardano.Tx,
   utxos: Cardano.Utxo[],
   addresses: Keys,
-  stakeAddress: string,
 ): Array<{ derivationPath: number[], type: string }> {
-  const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
-
-  // Only sign for credentials this wallet owns. A stake/DRep/CC witness for a
-  // credential that isn't ours authorises nothing, and adding it hides what the
-  // tx really does. If the key set carries no creds of a kind (not expected
-  // for a normal wallet), fall back to the old behaviour rather than drop a
-  // witness the wallet's own action needs.
-  const credsOf = (...lists: Array<Array<{ cred?: string }> | undefined>) =>
-    new Set(lists.flatMap((l) => (Array.isArray(l) ? l : []).map((k) => String(k?.cred ?? '').toLowerCase()).filter(Boolean)));
-  const keySet = (addresses ?? {}) as Partial<Keys>;
-  const ownStakeCreds = credsOf(keySet.stake);
-  const ownDrepCreds = credsOf(keySet.drep105, keySet.drep129);
-  const ownCcHotCreds = credsOf(keySet.ccHot);
-  const ownedOrUnknown = (owned: Set<string>, hash: unknown) =>
-    owned.size === 0 || (typeof hash === 'string' && owned.has(hash.toLowerCase()));
-
-  // Check transaction inputs
-  for (const input of transaction.body.inputs) {
-    const utxo = utxos.find(u =>
-      u[0].txId === input.txId && u[0].index === input.index
-    );
-
-    if (utxo) {
-      const outputAddress = utxo[1].address;
-
-      // The addresses parameter is actually the keys object from the wallet store
-      // It has structure: { payment: [addressObj], change: [addressObj], stake: [addressObj], ... }
-      let foundAddressInfo = null;
-
-      // Search in payment addresses
-      if (addresses.payment) {
-        foundAddressInfo = addresses.payment.find((addr: { address: string }) => addr.address === outputAddress);
-      }
-
-      // Search in change addresses if not found in payment
-      if (!foundAddressInfo && addresses.change) {
-        foundAddressInfo = addresses.change.find((addr: { address: string }) => addr.address === outputAddress);
-      }
-
-      if (foundAddressInfo && foundAddressInfo.path) {
-        const pathArray = parseDerivationPath(foundAddressInfo.path);
-        requiredSigners.push({
-          derivationPath: pathArray,
-          type: 'payment'
-        });
-      } else if (!isScriptLocked(String(outputAddress))) {
-        // This should not happen if the wallet store is properly populated
-        // But fallback to external 0 as a last resort. Never for a script-locked input
-        // (a CIP-113 programmable UTxO, say): its script and any required signer witness it.
-        requiredSigners.push({
-          derivationPath: [ChainDerivations.EXTERNAL, 0],
-          type: 'payment'
-        });
-      }
-    }
-  }
-
-  // Check for certificates (staking operations and governance)
-  if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-    for (const certificate of transaction.body.certificates) {
-      if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
-          certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
-          certificate.__typename === Cardano.CertificateType.Registration ||
-          certificate.__typename === Cardano.CertificateType.Unregistration ||
-          certificate.__typename === Cardano.CertificateType.StakeDelegation ||
-          certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
-          certificate.__typename === Cardano.CertificateType.StakeVoteDelegation ||
-          certificate.__typename === Cardano.CertificateType.VoteDelegation ||
-          certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
-          certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
-        // Need stake key signature for both staking and governance operations
-        // (including Conway-era certificates), but only for OUR stake credential.
-        const certStakeHash = (certificate as { stakeCredential?: { hash?: unknown } }).stakeCredential?.hash;
-        if (certStakeHash === undefined || ownedOrUnknown(ownStakeCreds, certStakeHash)) {
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake'
-          });
-        }
-      }
-
-      // Pool operator certificates
-      if (certificate.__typename === Cardano.CertificateType.PoolRegistration) {
-        // Pool registration requires owner stake key signatures
-        // The cold key signature is handled separately (outside HD derivation tree)
-        const poolCert = certificate as Cardano.PoolRegistrationCertificate;
-        if (poolCert.poolParameters?.owners) {
-          for (const owner of poolCert.poolParameters.owners) {
-            // If this wallet's stake address is an owner, require stake key signature
-            if (owner === stakeAddress) {
-              requiredSigners.push({
-                derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-                type: 'stake'
-              });
-            }
-          }
-        }
-        // Flag that cold key signature is also needed (handled by pool signing flow)
-        (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
-      }
-
-      if (certificate.__typename === Cardano.CertificateType.PoolRetirement) {
-        // Pool retirement requires cold key signature (handled by pool signing flow)
-        (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
-      }
-    }
-  }
-
-  // Conway voting procedures. This is BOTH the witness source and the fee
-  // sizer (minFee counts these signers for witness overhead), so a missing
-  // branch here under-bills the transaction as well as producing an
-  // unwitnessable one.
-  //
-  // VotingProcedures is an array of { voter, votes[] } groups. One group per
-  // voter means one witness per voter regardless of how many votes it carries —
-  // that is what makes a batch vote a single signature.
-  if (transaction.body.votingProcedures && transaction.body.votingProcedures.length > 0) {
-    for (const group of transaction.body.votingProcedures) {
-      switch (group.voter?.__typename) {
-        case Cardano.VoterType.dRepKeyHash:
-          // Only when the voter is this wallet's own DRep key.
-          if (ownedOrUnknown(ownDrepCreds, group.voter.credential?.hash)) {
-            requiredSigners.push({
-              derivationPath: [ChainDerivations.DREP, 0],
-              type: 'drep'
-            });
-          }
-          break;
-        case Cardano.VoterType.stakePoolKeyHash:
-          // The pool cold key lives outside the HD tree — it is imported or
-          // held on a hardware device — so it is flagged out-of-band exactly
-          // as pool certificates are above, not resolved to a path here.
-          (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
-          break;
-        case Cardano.VoterType.ccHotKeyHash:
-          if (ownedOrUnknown(ownCcHotCreds, group.voter.credential?.hash)) {
-            requiredSigners.push({
-              derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
-              type: 'ccHot'
-            });
-          }
-          break;
-        // Script-credential voters (dRepScriptHash, ccHotScriptHash) are
-        // witnessed by the script itself, not by a key from this wallet.
-        default:
-          break;
-      }
-    }
-  }
-
-  // Check for withdrawals
-  if (transaction.body.withdrawals && transaction.body.withdrawals.length > 0) {
-    for (const rewardAddress of transaction.body.withdrawals) {
-      if (rewardAddress.stakeAddress === stakeAddress) {
-        // Need stake key signature for withdrawal
-        requiredSigners.push({
-          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-          type: 'stake'
-        });
-      }
-    }
-  }
-
-  // Check for required signers field
-  // Only check for signatures that belong to this wallet (for multisig support)
-  if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
-    debugLog('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
-    for (const keyHash of transaction.body.requiredExtraSignatures) {
-      debugLog(`🔍 Looking for required key hash: ${keyHash}`);
-      let foundMatch = false;
-
-      // Search through all known addresses in the wallet store keys
-      const addressTypes = ['payment', 'change', 'stake'];
-
-      for (const addressType of addressTypes) {
-        if (foundMatch) break;
-
-        const addressArray = addresses[addressType];
-        if (addressArray && Array.isArray(addressArray)) {
-          for (const addressInfo of addressArray) {
-            if (addressInfo && (addressInfo.cred)) {
-              debugLog(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
-              // Compare key hash directly from wallet store
-              // Use cred field if keyHash is not available (this is the actual field name in WalletStore)
-              if (keyHash === addressInfo.cred) {
-                const pathArray = parseDerivationPath(addressInfo.path);
-                debugLog(`🔍 Full parsed path: [${pathArray.join(',')}]`);
-                debugLog(`🔍 Should be: [0, 0] for external address index 0`);
-                requiredSigners.push({
-                  derivationPath: pathArray,
-                  type: addressType === 'stake' ? 'stake' : 'payment'
-                });
-                foundMatch = true;
-                debugLog(`✅ Found matching key for ${keyHash} in ${addressType} addresses at path ${addressInfo.path}`);
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  // No key set, no answer: minFee falls back to its heuristic on this throw.
+  if (!addresses) throw new Error('No key set to analyze the transaction\'s signers with');
+  // Which keys sign is walletWitnessPlan's rule, the one the Keystone signer follows too, so
+  // the fee is sized for the witnesses every signer gives. A key with no path signs nothing:
+  // no signer can tell which key it is. Neither does an input no key of the key set signs for
+  // (a script's, or a key the key set doesn't carry).
+  const plan = walletWitnessPlan(transaction, addresses, utxos);
+  const signers = [
+    ...plan.inputs.flatMap(({ key }) => (key?.path ? [{ derivationPath: parseDerivationPath(key.path), type: 'payment' }] : [])),
+    // Every other witness at its key's own path, so a key a certificate, a vote and a required
+    // signer all name is one signer.
+    ...plan.witnesses.flatMap(({ role, key }) => (key.path ? [{ derivationPath: parseDerivationPath(key.path), type: role }] : [])),
+  ];
 
   // Remove duplicates
-  const result = requiredSigners.filter((signer, index, self) =>
+  return signers.filter((signer, index, self) =>
       index === self.findIndex(s =>
         s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type
       )
   );
-
-  // Carry forward the pool operator cold key flag (if set during certificate analysis)
-  if ((requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature) {
-    (result as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
-  }
-
-  return result;
-}
-
-/** Whether `address` has a script payment credential. False for anything unparseable. */
-function isScriptLocked(address: string): boolean {
-  try {
-    const parsed = Cardano.Address.fromString(address);
-    const credential = parsed?.asBase()?.getPaymentCredential()
-      ?? parsed?.asEnterprise()?.getPaymentCredential()
-      ?? parsed?.asPointer()?.getPaymentCredential();
-    return credential?.type === Cardano.CredentialType.ScriptHash;
-  } catch {
-    return false;
-  }
 }
 
 /**

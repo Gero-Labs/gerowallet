@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import i18n from '@/plugins/i18n';
 import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
 import {
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
@@ -112,6 +114,16 @@ describe('friendlyTxError on submit failures', () => {
       + 'The \'data\' field, therefore, contains errors for each era.';
     expect(friendlyTxError(new Error(essay)))
       .toBe('Invalid transaction; It looks like the given transaction wasn\'t well-formed.');
+  });
+});
+
+describe('friendlyTxError on a signing refusal', () => {
+  it('localizes the background\'s refusal of a transaction marked to fail', () => {
+    expect(friendlyTxError(new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE))).toBe(i18n.t('errors.markedToFailRefused'));
+  });
+
+  it('localizes the Trezor refusal of a body it cannot carry', () => {
+    expect(friendlyTxError(new Error(TREZOR_GOVERNANCE_REFUSAL_MESSAGE))).toBe(i18n.t('errors.trezorGovernanceRefused'));
   });
 });
 

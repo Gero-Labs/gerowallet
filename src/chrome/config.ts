@@ -6,6 +6,21 @@
 export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-113 programmable tokens';
 
 /**
+ * The refusal for a transaction marked to fail (isValid: false). Such a transaction skips its
+ * scripts and forfeits its collateral, and no dApp sends one honestly: listing a wallet UTxO as
+ * collateral, and another at the same key as an input, would take it. Same fixed-English-string
+ * contract as CIP113_SIGN_REFUSAL_MESSAGE: friendlyTxError() localises it.
+ */
+export const MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE = 'Gero does not sign a transaction marked to fail';
+
+/**
+ * The Trezor refusal for a body with governance votes, proposals or treasury fields: the device's
+ * request cannot carry them, so it would show and sign a different body (trezorWitnesses.ts).
+ * Same fixed-English-string contract as CIP113_SIGN_REFUSAL_MESSAGE: friendlyTxError() localises it.
+ */
+export const TREZOR_GOVERNANCE_REFUSAL_MESSAGE = 'Trezor cannot sign governance votes, proposals or treasury donations';
+
+/**
  * Fixed marker for "we never learned what happened to this transaction" (5xx, or no
  * response at all) as opposed to the node rejecting it (4xx, where the node's own
  * reason is the useful part). The background has no i18n, so — like

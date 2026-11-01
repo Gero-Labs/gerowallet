@@ -110,6 +110,7 @@ interface ConnectionPayload {
   keys: Array<{ publicKey: string; chainCode: string; path: string }>;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
 }
 
 const props = defineProps<{
@@ -167,6 +168,7 @@ const recordFields = () => ({
   icon: networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || ''),
   btSupported: props.connection?.btSupported,
   ...(props.connection?.xfp ? { xfp: props.connection.xfp } : {}),
+  ...(props.connection?.firmwareVersion ? { firmwareVersion: props.connection.firmwareVersion } : {}),
 });
 
 /**

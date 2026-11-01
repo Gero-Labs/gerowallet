@@ -141,7 +141,6 @@ export function useDRepDelegation(): UseDRepDelegation {
           implicitCoin: registered ? 0n : stakeKeyDeposit,
           walletContext: {
             keys,
-            stakeAddress: wallet.stakeAddress,
           },
         });
         assertStakeWalletUnchanged(wallet, t);

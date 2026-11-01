@@ -4,7 +4,7 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import {
   describeSubmitFailure,
   isUnexpectedSubmitResponseError,
@@ -71,6 +71,7 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
+import { carriesSigningCreds, isMarkedToFail, paymentKeyHash } from '@/shared/utils/keyCreds';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
@@ -165,6 +166,7 @@ export class WalletBg {
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
 
   encryptedPrivateKey: string;
   passwordLastUpdate: Date;
@@ -223,6 +225,7 @@ export class WalletBg {
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
+    this.firmwareVersion = wallet.firmwareVersion;
     this.api = new Api(wallet, this.provider);
 
     // Chain-specific address derivation
@@ -839,23 +842,32 @@ export class WalletBg {
    * with. The derived set marks nothing as used, and the first sync that does name an
    * address replaces it. It is not persisted, so the cached row only ever holds keys a
    * sync resolved.
+   *
+   * A row missing a key's hash (an older build's) is derived again from the addresses it marks
+   * used, so it keeps those and the gap scan past them: the signers sign nothing for a key whose
+   * hash the key set doesn't carry. A wallet that can't derive its own keys keeps the row it has.
    */
   public async loadCachedKeys() {
+    let cached: Keys | undefined;
     try {
       const db = await this.getDb();
       const table = db.table('addresses');
       const row = await table.where({ address: this.publicKey }).first();
-      if (row?.resolvedKeys) {
-        debugLog('🔑 Loading cached keys from DB');
-        WalletStore.setKeys(row.resolvedKeys);
-        return;
-      }
+      cached = row?.resolvedKeys;
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
     }
-    if (!this.derivesOwnAddress()) return;
-    debugLog('🔑 No cached keys; deriving them locally');
-    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+    // A complete row (or a watch wallet's) is used as it is, with no derivation.
+    const derives = cached && (this.type === WalletType.Watch || carriesSigningCreds(cached)) ? null : this.derivesOwnAddress();
+    if (cached && !derives) {
+      debugLog('🔑 Loading cached keys from DB');
+      WalletStore.setKeys(cached);
+      return;
+    }
+    if (!derives) return;
+    debugLog(cached ? '🔑 Cached keys lack key hashes; deriving them locally' : '🔑 No cached keys; deriving them locally');
+    const used = [...(cached?.payment ?? []), ...(cached?.change ?? [])].flatMap((key) => (key?.used && key.address ? [key.address] : []));
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses(used));
   }
 
   /**
@@ -1469,19 +1481,13 @@ export class WalletBg {
       // programmable-token script address, and the next push would drop them.
       let added = false;
       for (const addr of serverAddresses) {
-        try {
-          // Key credentials only, as on the HD branch below. With the CIP-113 filter
-          // off the server also reports the programmable-token SCRIPT address; absorbing
-          // its hash would make classifyUtxoAddress call those UTxOs spendable.
-          const paymentCred = Cardano.Address.fromString(addr)?.getProps().paymentPart;
-          if (paymentCred?.type === Cardano.CredentialType.ScriptHash) continue;
-          const cred = keyHashFromAddress(addr) as unknown as string;
-          if (cred && !this.watchCredentials.has(cred)) {
-            this.watchCredentials.add(cred);
-            added = true;
-          }
-        } catch {
-          continue;
+        // Key credentials only, as on the HD branch below. With the CIP-113 filter
+        // off the server also reports the programmable-token SCRIPT address; absorbing
+        // its hash would make classifyUtxoAddress call those UTxOs spendable.
+        const cred = paymentKeyHash(addr);
+        if (cred && !this.watchCredentials.has(cred)) {
+          this.watchCredentials.add(cred);
+          added = true;
         }
       }
       if (!added) return null;
@@ -2434,6 +2440,9 @@ export class WalletBg {
       debugLog('CIP-113: refusing to sign, programmable inputs:', programmableInputs);
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
+    // A transaction marked to fail only forfeits its collateral, which an input's witness can
+    // authorise on its own: refused whoever asks, before the root key is decrypted.
+    if (isMarkedToFail(transaction)) throw new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE);
 
     // Get root private key
     let rootPrivateKey: Bip32PrivateKey;
@@ -2457,12 +2466,7 @@ export class WalletBg {
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
-    const requiredSigners = analyzeTransactionForSignatures(
-      transaction,
-      utxos,
-      addresses,
-      this.stakeAddress,
-    );
+    const requiredSigners = analyzeTransactionForSignatures(transaction, utxos, addresses);
 
     // Sign with each required key
     for (const signer of requiredSigners) {

@@ -21,6 +21,7 @@ import {
   WALLET_ACCOUNT_XPUB,
   WALLET_ADDRESS,
 } from '@/shared/utils/__fixtures__/handAssembledTxs';
+import { deviceWitnessPaths } from '@/shared/utils/__fixtures__/trezorDeviceWitnesses';
 import { InvalidAccountIndexError } from '@/shared/utils/walletAccount';
 import { Ada } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
@@ -170,11 +171,13 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
     return connect.cardanoSignTransaction.mock.lastCall![0];
   }
 
+  // The withdrawal carries the stake key's path, so the device witnesses that key from it.
   it('asks for the stake witness for a withdrawal of the wallet’s own rewards', async () => {
     const request = await deviceRequest(keysOnAccount(1), withdrawalTx(`e1${'22'.repeat(28)}`));
 
     expect(request.withdrawals?.[0].path).toBe("m/1852'/1815'/1'/2/0");
-    expect(request.additionalWitnessRequests).toEqual(["m/1852'/1815'/1'/2/0"]);
+    expect(deviceWitnessPaths(request)).toEqual(["m/1852'/1815'/1'/0/0", "m/1852'/1815'/1'/2/0"]);
+    expect(request.additionalWitnessRequests).toBeUndefined();
   });
 
   // A CIP-113 transfer runs three zero withdrawals of scripts; the stake key is not asked for
@@ -197,7 +200,8 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
       addressParameters: { path: "m/1852'/1815'/1'/0/0", stakingPath: "m/1852'/1815'/1'/2/0" },
     });
     expect(request.certificates?.[0].path).toBe("m/1852'/1815'/1'/2/0");
-    expect(request.additionalWitnessRequests).toEqual(["m/1852'/1815'/1'/2/0"]);
+    expect(deviceWitnessPaths(request)).toEqual(["m/1852'/1815'/1'/0/0", "m/1852'/1815'/1'/2/0"]);
+    expect(request.additionalWitnessRequests).toBeUndefined();
     expect(pathStrings(request).filter((path) => !path.startsWith("m/1852'/1815'/1'/"))).toEqual([]);
     expect(connect.cardanoGetPublicKey).not.toHaveBeenCalled();
   });

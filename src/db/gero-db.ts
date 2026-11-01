@@ -664,6 +664,37 @@ export async function createNewWallet(
   }
 }
 
+/**
+ * A Keystone reports its firmware version only in its pairing answer. Store it on every
+ * Keystone record of that device (same master fingerprint), the accounts already paired
+ * included, whether this pairing adds a record or is refused as a duplicate, so none keeps a
+ * version from before an update. Only Keystone records are written. Best effort: a failed
+ * write never stops a pairing or hides why one was refused. Takes effect from the next login,
+ * a worker restart's included (walletManager reads it from the record).
+ *
+ * The master fingerprint names the seed, not the device. Two Keystones holding one seed share
+ * its records (pairing the second is refused as a duplicate), so the version stored is the one
+ * the device last paired with that seed reported, older or newer. Nothing a Keystone sends when
+ * it signs names it, so the version can't be kept per device.
+ */
+async function refreshKeystoneFirmware(
+  wallet: { type?: string; xfp?: string; firmwareVersion?: unknown },
+  wallets: Record<string, Wallet>,
+): Promise<void> {
+  if (wallet.type !== WalletType.Keystone || !wallet.xfp || typeof wallet.firmwareVersion !== 'string') return;
+  const version = wallet.firmwareVersion;
+  const xfp = wallet.xfp.toLowerCase();
+  try {
+    const stale = Object.values(wallets as Record<string, Wallet & { xfp?: string }>)
+      .filter((w) => w?.type === WalletType.Keystone && String(w.xfp ?? '').toLowerCase() === xfp && w.firmwareVersion !== version);
+    if (stale.length === 0) return;
+    const db: Dexie = await getDb();
+    await Promise.all(stale.map((w) => db['wallets'].update(w.id, { firmwareVersion: version })));
+  } catch (error) {
+    debugLog('[gero-db] Could not refresh the Keystone firmware version:', error);
+  }
+}
+
 export async function createNewHardwareWallet(wallet) {
   // Validate xfp format before creating wallet (for Keystone wallets)
   if (wallet.xfp) {
@@ -672,9 +703,13 @@ export async function createNewHardwareWallet(wallet) {
     }
   }
 
+  // Read once for the firmware refresh and the duplicate check.
+  const wallets = (await getAllWallets()) as Record<string, Wallet>;
+  await refreshKeystoneFirmware(wallet, wallets);
+
   // Pairing the same device again would otherwise store a second copy of the
   // account it already has. A watch wallet has no public key, so never matches.
-  const duplicate = await findExistingWallet(wallet);
+  const duplicate = findDuplicateWallet<Wallet>(wallet, wallets);
   if (duplicate) {
     throw new DuplicateWalletError(duplicate);
   }
