@@ -231,6 +231,7 @@
                       </v-alert>
                     </v-col>
                   </v-row>
+                  <HoldingsWarningBanner />
                   <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
                   <v-sheet class="transparent pt-2">
                     <slot name="help-content">
@@ -283,6 +284,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import RouteContent from '../RouteContent.vue';
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
+import HoldingsWarningBanner from '@/shared/components/HoldingsWarningBanner.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
 import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue';

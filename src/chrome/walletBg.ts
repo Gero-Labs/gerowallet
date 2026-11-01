@@ -61,7 +61,7 @@ import {
   type BitcoinAddressSet,
   type BitcoinAddressTypeName,
 } from '@/chains/bitcoin/bitcoinKeyManager';
-import WalletStore, { spendableControlledAmount, type Account } from '@/stores/walletStore';
+import WalletStore, { spendableControlledAmount, walletStore, type Account } from '@/stores/walletStore';
 import NetworkStore, { isBitcoinTip } from '@/stores/networkStore';
 import {
   analyzeTransactionForSignatures,
@@ -84,6 +84,8 @@ import {
   Ed25519PublicKey,
 } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import { HoldingsCheck, koiosAccountTotalSource, koiosOutputSource } from '@/chrome/holdingsCheck';
+import { outputRef } from '@/shared/utils/provenInputs';
 import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
 import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex, withGroupSecrets } from '@/shared/utils/walletAccount';
@@ -114,6 +116,11 @@ import {
   assertNativeNightConversionSupported,
   validateShieldedTokenType,
 } from '@/chains/midnight/midnightTokenCapabilities';
+
+/** How long after a UTxO push the holdings check runs, so a burst of pushes is checked once. */
+const HOLDINGS_CHECK_DELAY_MS = 5_000;
+/** How often the check comes back while an output or the total is still unconfirmed. */
+const HOLDINGS_RECHECK_MS = 45_000;
 
 /**
  * Row shape of the per-wallet `account` table — the persisted (possibly
@@ -307,6 +314,67 @@ export class WalletBg {
 
   unsubscribeAll() {
     this.loaderFactory.unsubscribeAll();
+    this.stopHoldingsCheck();
+  }
+
+  // ---- Holdings checked outside Gero's backend (holdingsCheck.ts) ----
+
+  private holdings: HoldingsCheck | null = null;
+  private holdingsTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastReport: { utxos: Cardano.Utxo[]; partitionKnown: boolean; reported: Cardano.Utxo[] } | null = null;
+
+  /** Remember what the backend reported and check it shortly (pushes come in bursts). */
+  private noteReported(utxos: Cardano.Utxo[], partitionKnown: boolean, reported: Cardano.Utxo[]): void {
+    // Only inside the extension: it reaches a public indexer on a timer.
+    if (this.chain !== Blockchain.CARDANO || typeof chrome === 'undefined' || !chrome.runtime?.id) return;
+    if (!this.holdings) {
+      const outputs = koiosOutputSource(this.network);
+      if (!outputs) return;
+      this.holdings = new HoldingsCheck(outputs, koiosAccountTotalSource(this.network));
+    }
+    this.lastReport = { utxos, partitionKnown, reported };
+    this.scheduleHoldingsCheck(HOLDINGS_CHECK_DELAY_MS);
+  }
+
+  private scheduleHoldingsCheck(delayMs: number): void {
+    if (this.holdingsTimer) clearTimeout(this.holdingsTimer);
+    this.holdingsTimer = setTimeout(() => {
+      this.holdingsTimer = null;
+      void this.runHoldingsCheck();
+    }, delayMs);
+  }
+
+  private stopHoldingsCheck(): void {
+    if (this.holdingsTimer) clearTimeout(this.holdingsTimer);
+    this.holdingsTimer = null;
+    this.holdings = null;
+    this.lastReport = null;
+  }
+
+  /** Run the check; show its outcome, and come back while anything is still unconfirmed. */
+  async runHoldingsCheck(): Promise<void> {
+    const holdings = this.holdings;
+    const report = this.lastReport;
+    if (!holdings || !report) return;
+    const claimed = walletStore.account?.controlled_amount_total ?? walletStore.account?.controlled_amount;
+    let account: { stakeAddress: string; claimedTotal: bigint } | null = null;
+    try {
+      if (this.stakeAddress && claimed != null) account = { stakeAddress: this.stakeAddress, claimedTotal: BigInt(String(claimed)) };
+    } catch { /* an unreadable total is not compared */ }
+    let changed = false;
+    try {
+      changed = await holdings.run(report.reported, account);
+    } catch (e) {
+      debugLog('Holdings check failed', e);
+    }
+    if (this.holdings !== holdings) return; // logged out, or another wallet, meanwhile
+    if (changed) {
+      const warning = holdings.warning;
+      if (warning) console.warn('Holdings check: gero-sync reported holdings the chain does not show');
+      WalletStore.setHoldingsWarning(warning ? { walletId: this.id, ...warning } : null);
+      await this.applyUtxos(report.utxos, false, report.partitionKnown);
+    }
+    if (holdings.pending && this.holdings === holdings) this.scheduleHoldingsCheck(HOLDINGS_RECHECK_MS);
   }
 
   networkId(): number {
@@ -365,7 +433,9 @@ export class WalletBg {
    *   refusal index loadProgrammableRefs() just restored.
    */
   async applyUtxos(utxos: Cardano.Utxo[], persist = false, partitionKnown = true) {
+    const reportedInput = utxos ?? [];
     if (!utxos || utxos.length === 0) {
+      this.noteReported(reportedInput, partitionKnown, []);
       // An empty set still says the programmable half is empty, and that has to land
       // before the early return: otherwise a phantom locked balance — and the refusal
       // index derived from it — outlives the holdings it came from and keeps being
@@ -388,11 +458,11 @@ export class WalletBg {
     const programmableOwners = programmableBases.size > 0
       ? this.programmableOwnerCredentials(myCredentials)
       : new Set<string>();
-    const programmable: Cardano.Utxo[] = [];
+    let programmable: Cardano.Utxo[] = [];
     // Tripwire: gero-sync scopes results to the subscribed stake address, so a
     // non-zero count means we are being sent holdings that are not ours.
     let programmableOther = 0;
-    const filtered = utxos.filter(utxo => {
+    let filtered = utxos.filter(utxo => {
       const partition = classifyUtxoAddress(
         utxo[1].address as string,
         myCredentials,
@@ -413,6 +483,15 @@ export class WalletBg {
         `CIP-113: dropped ${programmableOther} programmable UTxO(s) owned by other wallets — ` +
         `gero-sync is returning holdings that are not ours`
       );
+    }
+    // What the backend reports goes to the holdings check as reported; what it
+    // already disproved is not shown (holdingsCheck.ts).
+    this.noteReported(reportedInput, partitionKnown, [...filtered, ...programmable]);
+    const holdings = this.holdings;
+    if (holdings) {
+      const shown = (utxo: Cardano.Utxo) => !holdings.hides(outputRef(utxo[0]));
+      filtered = filtered.filter(shown);
+      programmable = programmable.filter(shown);
     }
     if (filtered.length !== utxos.length) {
       debugLog(`🔒 Credential filter: ${utxos.length} → ${filtered.length} UTxOs (${utxos.length - filtered.length} Franken removed, ${programmable.length} CIP-113)`);
