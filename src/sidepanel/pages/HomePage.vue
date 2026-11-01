@@ -22,7 +22,6 @@
     </template>
 
     <template v-else>
-      <HoldingsWarningBanner />
       <BalanceSection @buy-sell="handleBuySell" />
 
       <QuickActions @action="handleAction" />
@@ -154,7 +153,6 @@ import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vu
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import BalanceSection from '../components/BalanceSection.vue';
-import HoldingsWarningBanner from '@/shared/components/HoldingsWarningBanner.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';

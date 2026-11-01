@@ -131,10 +131,6 @@ export interface WalletStore {
    *  address, so `controlled_amount` never included it: displayed and counted like
    *  programmableLockedLovelace, never subtracted. */
   programmableLockedLovelaceOutsideStake: string;
-  /** Set by the background when an independent indexer contradicts the holdings the
-   *  backend reported (chrome/holdingsCheck.ts). For one wallet: shown only while it is
-   *  the logged one. `chainTotal` is the indexer's account total, in lovelace. */
-  holdingsWarning: { walletId: number; chainTotal: string | null } | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is a dynamic settings bag (~20 varied fields read/written across the app); see GeroStore.config
   config: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reward history entries come straight from the provider payload
@@ -217,7 +213,6 @@ export const walletStore = reactive<WalletStore>({
   programmableTokens: {},
   programmableLockedLovelace: '0',
   programmableLockedLovelaceOutsideStake: '0',
-  holdingsWarning: null,
   config: {
     tokenAllocationSort: {
       by: 'allocation',
@@ -443,11 +438,6 @@ export default {
     broadcastFromBackground({ account: adjusted });
   },
 
-  setHoldingsWarning(holdingsWarning: WalletStore['holdingsWarning']) {
-    walletStore.holdingsWarning = holdingsWarning;
-    broadcastFromBackground({ holdingsWarning });
-  },
-
   setTransactions(transactions: WalletStore['transactions']) {
     walletStore.transactions = transactions;
     broadcastFromBackground({ transactions });
@@ -669,7 +659,6 @@ export default {
       programmableTokens: {},
       programmableLockedLovelace: '0',
       programmableLockedLovelaceOutsideStake: '0',
-      holdingsWarning: null,
       config: {},
       rewards: [],
       connectedDapps: [],
