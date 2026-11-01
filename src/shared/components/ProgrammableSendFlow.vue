@@ -391,6 +391,8 @@ async function review(): Promise<void> {
     unit: props.unit,
     quantity: quantity.value.toString(),
     recipientAddress: recipientInput.value.trim(),
+    decimals: decimals.value,
+    network: wallet.value?.network,
   });
 }
 

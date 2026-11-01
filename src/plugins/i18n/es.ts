@@ -4312,6 +4312,8 @@ export default {
   'signTx.rejected': 'Firma de transacción cancelada',
   'txGuard.builtTxMismatch': 'La transacción que se preparó para ti no coincide con lo que pediste, así que Gero no la firmó. No se envió nada. Inténtalo más tarde.',
   'txGuard.orderMismatch': 'Esta orden tomaría de tu billetera más de lo que aceptaste, así que Gero no la firmó. No se envió nada.',
+  'txGuard.tokenDecimalsMismatch': 'Los datos de este token que envió el servidor de Gero no coinciden con su registro en la blockchain, así que Gero no preparó la transacción. No se envió nada.',
+  'txGuard.tokenDecimalsUnverified': 'Gero no pudo comprobar los datos de este token con la blockchain en este momento, así que no se envió nada. Inténtalo de nuevo en un momento.',
   'txGuard.depositRefunded': 'Se devuelve un depósito de {amount} ADA',
   'txGuard.refundTo': 'Depósito reembolsado a {account}',
   'txGuard.refundNotYours': 'El depósito se reembolsa a otra persona, no a ti',

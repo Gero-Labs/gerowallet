@@ -23,6 +23,11 @@ vi.mock('../../composables/useNativeSwapSigner', () => ({
   },
 }));
 const resolveToken = vi.hoisted(() => vi.fn());
+const checkDecimals = vi.hoisted(() => vi.fn());
+vi.mock('@/shared/utils/verifiedDecimals', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/utils/verifiedDecimals')>()),
+  assertTokenDecimals: (...args: unknown[]) => checkDecimals(...args),
+}));
 vi.mock('../../composables/useSwapTokenResolver', () => ({
   useSwapTokenResolver: () => ({ resolveToken }),
   buildHeldBalanceMap: () => new Map(),
@@ -39,6 +44,7 @@ const setError = vi.hoisted(() => vi.fn());
 vi.mock('@/plugins/snackbar', () => ({ default: { setError } }));
 
 import GeroSwapEmbed from '../GeroSwapEmbed.vue';
+import { TokenDecimalsError } from '@/shared/utils/verifiedDecimals';
 import i18n from '@/plugins/i18n';
 
 const TOKEN = `${'cd'.repeat(28)}534e454b`;
@@ -63,6 +69,7 @@ const budget = () => signerOptions.current!.getSpendBound!();
 beforeEach(() => {
   getTokenByUnit.mockReset().mockReturnValue({ priceAda: 1_000_000 }); // a price the budget must not use
   resolveToken.mockReset().mockResolvedValue({ unit: TOKEN, decimals: 0 });
+  checkDecimals.mockReset().mockResolvedValue(undefined);
   sharedSignTx.mockReset();
   setError.mockReset();
 });
@@ -87,8 +94,26 @@ describe('GeroSwapEmbed spend budget', () => {
     el.dispatchEvent(widgetEvent('quote', inflatedQuote(TOKEN)));
     const bound = await budget();
     expect(resolveToken).toHaveBeenCalledWith(TOKEN);
+    expect(checkDecimals).toHaveBeenCalledWith([{ unit: TOKEN, decimals: 0 }], 'Mainnet');
     expect(bound?.maxOutflow.get(TOKEN)).toBe(500n);
     expect(bound?.maxOutflow.get('lovelace')).toBe(6_700_000n);
+  });
+
+  it('refuses to budget a token sale whose decimals are not the published ones', async () => {
+    // A catalogue reporting 12 decimals for a 0-decimal token would let "500" sell 500e12.
+    resolveToken.mockResolvedValue({ unit: TOKEN, decimals: 12 });
+    checkDecimals.mockRejectedValue(new TokenDecimalsError('mismatch', [TOKEN]));
+    const { el } = mountWithInput('500');
+    el.dispatchEvent(widgetEvent('token-change', { tokenIn: TOKEN, tokenOut: 'lovelace' }));
+    el.dispatchEvent(widgetEvent('quote', inflatedQuote(TOKEN)));
+    await expect(budget()).rejects.toBeInstanceOf(TokenDecimalsError);
+  });
+
+  it('asks nothing for ADA, whose decimals are the protocol\'s', async () => {
+    const { el } = mountWithInput('50');
+    el.dispatchEvent(widgetEvent('quote', inflatedQuote('lovelace')));
+    await budget();
+    expect(checkDecimals).not.toHaveBeenCalled();
   });
 
   it('gives no budget for an amount it cannot read or a token without decimals', async () => {
@@ -132,6 +157,16 @@ describe('GeroSwapEmbed signing refusals', () => {
     await expect(el.signer!.signTx('CBOR')).rejects.toBe(refusal);
     el.dispatchEvent(widgetEvent('swap-error', { code: 'UNKNOWN', message: refusal.message }));
     expect(setError).toHaveBeenCalledWith(refusal.message);
+  });
+
+  it('shows a decimals refusal as itself, in the widget and the snackbar', async () => {
+    const refusal = new TokenDecimalsError('mismatch', [TOKEN]);
+    sharedSignTx.mockRejectedValueOnce(refusal);
+    const { el } = mountWithInput('500', { tokenIn: TOKEN });
+    el.dispatchEvent(widgetEvent('quote', inflatedQuote(TOKEN)));
+    await expect(el.signer!.signTx('CBOR')).rejects.toBe(refusal);
+    el.dispatchEvent(widgetEvent('swap-error', { code: 'UNKNOWN', message: refusal.message }));
+    expect(setError).toHaveBeenCalledWith(String(i18n.t('txGuard.tokenDecimalsMismatch')));
   });
 
   it('keeps the generic text for an unrelated widget error', async () => {

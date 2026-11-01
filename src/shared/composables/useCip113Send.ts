@@ -11,6 +11,7 @@ import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHardwareTxSigner';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import type { Cip113TransferSummary } from '@/chrome/cip113VerifyTransfer';
+import { assertTokenDecimals, TokenDecimalsError } from '@/shared/utils/verifiedDecimals';
 
 /**
  * Gero's own Send of a CIP-113 programmable token, page side (options and side panel).
@@ -50,6 +51,9 @@ export interface Cip113SendIntent {
   /** Base units. */
   quantity: string;
   recipientAddress: string;
+  /** The decimals the typed amount was converted with, confirmed before the build (verifiedDecimals.ts). */
+  decimals: number;
+  network: string | undefined;
 }
 
 /** Credentials for the signature: the spending password, or a PassKey wallet's decrypted root key. Google and hardware wallets need neither. */
@@ -77,10 +81,13 @@ export const CIP113_SEND_WRONG_PASSWORD = 'WRONG_PASSWORD';
 export const CIP113_SEND_EXPIRED = 'EXPIRED';
 export const CIP113_SEND_SIGN_FAILED = 'SIGN_FAILED';
 export const CIP113_SEND_SUBMIT_FAILED = 'SUBMIT_FAILED';
+/** The token's decimals from Gero's backend are not its published ones, or could not be checked. */
+export const CIP113_SEND_DECIMALS_MISMATCH = 'DECIMALS_MISMATCH';
+export const CIP113_SEND_DECIMALS_UNVERIFIED = 'DECIMALS_UNVERIFIED';
 
 /**
  * The i18n key explaining a failure. Every key named here exists in us/de/es
- * (`programmableTokens.send.error.*`, and the shared wrong-password message); unknown
+ * (`programmableTokens.send.error.*`, the shared wrong-password and token-decimals messages); unknown
  * codes fall back to the generic one.
  */
 export function cip113SendErrorKey(code: string): string {
@@ -102,6 +109,10 @@ export function cip113SendErrorKey(code: string): string {
     case CIP113_SEND_SIGN_FAILED:
     case CIP113_SEND_SUBMIT_FAILED:
       return `programmableTokens.send.error.${code}`;
+    case CIP113_SEND_DECIMALS_MISMATCH:
+      return 'txGuard.tokenDecimalsMismatch';
+    case CIP113_SEND_DECIMALS_UNVERIFIED:
+      return 'txGuard.tokenDecimalsUnverified';
     case 'INVALID_REQUEST':
     case 'LOGIC_BYTES_UNAVAILABLE':
     case 'CIP68_REFERENCE_TOKEN':
@@ -135,6 +146,13 @@ export function useCip113Send(options: Cip113SendOptions = {}) {
     failure.value = null;
     prepared.value = null;
     stage.value = 'preparing';
+    try {
+      await assertTokenDecimals([{ unit: intent.unit, decimals: intent.decimals }], intent.network);
+    } catch (e) {
+      stage.value = 'idle';
+      if (e instanceof TokenDecimalsError && e.problem === 'mismatch') return fail(CIP113_SEND_DECIMALS_MISMATCH);
+      return fail(CIP113_SEND_DECIMALS_UNVERIFIED);
+    }
     const reply = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.CIP113_PREPARE_TRANSFER,
       data: { unit: intent.unit, quantity: intent.quantity, recipientAddress: intent.recipientAddress },

@@ -9,8 +9,9 @@ const UNIT = 'cd'.repeat(28) + '4d69636b79';
 const TX_CBOR = '84a400';
 const TX_ID = 'ab'.repeat(32);
 
-const { send, walletState, deviceSign, device } = vi.hoisted(() => ({
+const { send, walletState, deviceSign, device, checkDecimals } = vi.hoisted(() => ({
   send: vi.fn(),
+  checkDecimals: vi.fn(),
   deviceSign: vi.fn(),
   // What the page handed the device signer, and the Keystone dialog's switch.
   device: { options: undefined as { getIsBT?: () => boolean } | undefined, keystoneShow: undefined as { value: boolean } | undefined },
@@ -23,6 +24,10 @@ const { send, walletState, deviceSign, device } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: (...args: unknown[]) => send(...args) } }));
+vi.mock('@/shared/utils/verifiedDecimals', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/utils/verifiedDecimals')>()),
+  assertTokenDecimals: (...args: unknown[]) => checkDecimals(...args),
+}));
 vi.mock('@/stores/walletStore', async () => {
   const { reactive } = await import('vue');
   return { walletStore: reactive(walletState) };
@@ -121,6 +126,7 @@ describe('ProgrammableSendFlow', () => {
 
   beforeEach(() => {
     send.mockReset();
+    checkDecimals.mockReset().mockResolvedValue(undefined);
     store.programmableTokens = { [UNIT]: { unit: UNIT, quantity: '21000000', isProgrammable: true, cip113Registered: true } };
     store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Normal' };
   });
@@ -143,6 +149,8 @@ describe('ProgrammableSendFlow', () => {
     await flushPromises();
 
     expect((send.mock.calls[0][0] as { data: unknown }).data).toEqual({ unit: UNIT, quantity: '1500000', recipientAddress: 'addr_test1qrecipient' });
+    // The decimals 1.5 became base units with, confirmed for the wallet's network.
+    expect(checkDecimals).toHaveBeenCalledWith([{ unit: UNIT, decimals: 6 }], 'Preprod');
     const review = wrapper.get('[data-testid="programmable-send-review"]').text();
     expect(review).toContain('1.5 MICKY');
     expect(review).toContain('addr_test1zprogrammable');

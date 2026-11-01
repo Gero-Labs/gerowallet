@@ -6,12 +6,13 @@ import { deferred } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { createTestVuetify } from '@test/helpers/vuetify';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), build: vi.fn(), minCoin: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn(), built: new Map<string, unknown>() }));
+const mocks = vi.hoisted(() => ({ checkDecimals: vi.fn(), send: vi.fn(), build: vi.fn(), minCoin: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn(), built: new Map<string, unknown>() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, utxos: [], keys: {}, tokens: {}, collections: {}, contacts: {}, config: {}, isLocked: false }) }));
 vi.mock('@/stores/networkStore', async () => ({ networkStore: (await import('vue')).reactive({ tip: {}, epochParams: {} }) }));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isCrossDeviceSigningEnabled: () => true, state: { flags: { isTrezorWebUsbEnabled: true } } } }));
 vi.mock('@/stores/remoteSigningStore', () => ({ remoteSigningStore: { ensureLoaded: async () => {}, isEnabled: () => true, hasTrustedSigner: () => true, requiresRemoteForSend: () => false } }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
+vi.mock('@/shared/utils/verifiedDecimals', () => ({ assertTokenDecimals: mocks.checkDecimals }));
 vi.mock('@/chrome/cardanoJsSdkCbor', () => ({ serializeCardanoJsSdkTx: (tx: unknown) => JSON.stringify(tx) }));
 vi.mock('@cardano-sdk/core', () => ({ Serialization: {
   Transaction: { fromCbor: (cbor: string) => ({ toCore: () => mocks.built.get(cbor) ?? JSON.parse(cbor) }) },
@@ -48,7 +49,7 @@ import { Blockchain, Network, WalletType } from '@/models/types';
 
 interface View {
   tx: Cardano.Tx | undefined; step: number; address: string; paymentAddress: string; adaAmount: string;
-  spendingPassword: string; txSuccess: boolean; txBuilt: boolean; passwordError: string;
+  spendingPassword: string; txSuccess: boolean; txBuilt: boolean; passwordError: string; txBuildError: string;
   extraTokens: { unit: string; sendAmount: string; decimals?: number; balance?: string }[]; selectedNfts: { unit: string; toSendQuantity: number }[];
   signAndSubmit(): Promise<void>; signLedger(): Promise<void>; signTrezor(): Promise<void>;
   signOnAnotherDevice(): Promise<void>; onPassKeySuccess(key: Uint8Array): Promise<void>;
@@ -74,6 +75,7 @@ function render(realBottomSheet = false) {
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.checkDecimals.mockResolvedValue(undefined);
   walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
   walletStore.isLocked = false;
   // Module-level mock stores outlive each test; reset what individual tests assign.
@@ -139,6 +141,25 @@ describe('side-panel exact transaction amounts', () => {
     await view.goToStep(3);
     expect(mocks.build).not.toHaveBeenCalled();
     expect(view.step).toBe(2);
+  });
+
+  it('confirms the decimals each typed token amount was converted with, and builds nothing when they are wrong', async () => {
+    const view = recipient();
+    view.adaAmount = '2';
+    view.extraTokens = [{ unit: 'token', sendAmount: '1.5', decimals: 2 }, { unit: 'unsent', sendAmount: '', decimals: 6 }];
+    await view.goToStep(3);
+    expect(mocks.checkDecimals).toHaveBeenCalledWith([{ unit: 'token', decimals: 2 }], Network.MAINNET);
+    expect(view.txBuilt).toBe(true);
+
+    mocks.build.mockClear();
+    mocks.checkDecimals.mockRejectedValueOnce(new Error('txGuard.tokenDecimalsMismatch'));
+    const refused = recipient();
+    refused.adaAmount = '2';
+    refused.extraTokens = [{ unit: 'token', sendAmount: '1.5', decimals: 2 }];
+    await refused.goToStep(3);
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(refused.txBuilt).toBe(false);
+    expect(refused.txBuildError).toBe('txGuard.tokenDecimalsMismatch');
   });
 
   it('reviews the exact built output, including the minimum-ADA top-up', async () => {

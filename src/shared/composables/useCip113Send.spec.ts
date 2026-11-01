@@ -3,7 +3,8 @@
 // bytes they carry are what is checked.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { send, walletState, deviceSign, signerOptions, cosign, prompt } = vi.hoisted(() => ({
+const { send, walletState, deviceSign, signerOptions, cosign, prompt, checkDecimals } = vi.hoisted(() => ({
+  checkDecimals: vi.fn(),
   send: vi.fn(),
   walletState: {
     keys: { payment: [{ address: 'addr_p', cred: 'p', path: "m/1852'/1815'/0'/0/0" }], change: [], stake: [] },
@@ -36,15 +37,21 @@ vi.mock('@/shared/utils/witnessSets', () => ({
   mergeWitnessSets: async (user: string, extra: string) => `${user}+${extra}`,
 }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: prompt }));
+vi.mock('@/shared/utils/verifiedDecimals', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/utils/verifiedDecimals')>()),
+  assertTokenDecimals: (...args: unknown[]) => checkDecimals(...args),
+}));
 
 import { cip113SendErrorKey, useCip113Send } from './useCip113Send';
+import { TokenDecimalsError } from '@/shared/utils/verifiedDecimals';
 import { MessageTypes } from '@/models/MessageTypes';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 const TX_CBOR = '84a400d9010281825820aa';
 const TX_ID = 'ab'.repeat(32);
 const SUMMARY = { txId: TX_ID, fee: '352696', moduleId: 'freeze-and-seize' };
-const INTENT = { unit: 'cd'.repeat(28) + '4d', quantity: '1000000', recipientAddress: 'addr_test1recipient' };
+const WORKER_INTENT = { unit: 'cd'.repeat(28) + '4d', quantity: '1000000', recipientAddress: 'addr_test1recipient' };
+const INTENT = { ...WORKER_INTENT, decimals: 6, network: 'Preprod' };
 
 type Handler = (data: Record<string, unknown>) => unknown;
 function respond(handlers: Partial<Record<string, Handler>>) {
@@ -61,6 +68,7 @@ const methods = () => send.mock.calls.map(([message]) => (message as { method: s
 describe('useCip113Send', () => {
   beforeEach(() => {
     send.mockReset();
+    checkDecimals.mockReset().mockResolvedValue(undefined);
     walletState.loggedWallet = undefined;
   });
 
@@ -86,11 +94,30 @@ describe('useCip113Send', () => {
     ]);
     const [prepareCall, , signCall, submitCall] = send.mock.calls.map(([message]) => message as { data: Record<string, unknown> });
     // The page sends intent only, never inputs.
-    expect(prepareCall.data).toEqual(INTENT);
+    expect(prepareCall.data).toEqual(WORKER_INTENT);
+    expect(checkDecimals).toHaveBeenCalledWith([{ unit: INTENT.unit, decimals: 6 }], 'Preprod');
     expect(signCall.data).toMatchObject({ txCbor: TX_CBOR, password: 'secret', utxos: walletState.utxos, addresses: walletState.keys });
     expect(submitCall.data).toEqual({ txCbor: TX_CBOR, witnessHex: 'WITNESSES' });
     expect(flow.submittedTxId.value).toBe(TX_ID);
     expect(flow.stage.value).toBe('done');
+  });
+
+  it('confirms the decimals before the worker builds, and builds nothing when they are wrong', async () => {
+    respond({ [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared });
+    const flow = useCip113Send();
+
+    checkDecimals.mockRejectedValueOnce(new TokenDecimalsError('mismatch', [INTENT.unit]));
+    expect(await flow.prepare(INTENT)).toBe(false);
+    expect(flow.failure.value).toEqual({ code: 'DECIMALS_MISMATCH' });
+    expect(cip113SendErrorKey('DECIMALS_MISMATCH')).toBe('txGuard.tokenDecimalsMismatch');
+
+    checkDecimals.mockRejectedValueOnce(new TokenDecimalsError('unverified', [INTENT.unit]));
+    expect(await flow.prepare(INTENT)).toBe(false);
+    expect(flow.failure.value).toEqual({ code: 'DECIMALS_UNVERIFIED' });
+    expect(cip113SendErrorKey('DECIMALS_UNVERIFIED')).toBe('txGuard.tokenDecimalsUnverified');
+
+    expect(send).not.toHaveBeenCalled();
+    expect(flow.stage.value).toBe('idle');
   });
 
   it('signs a PassKey wallet with its decrypted key, and wipes the key afterwards', async () => {
