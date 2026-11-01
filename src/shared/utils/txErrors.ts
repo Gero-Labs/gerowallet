@@ -16,6 +16,7 @@ import {
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
   SUBMIT_API_STORAGE_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
@@ -166,6 +167,7 @@ export function friendlyTxError(raw: unknown): string {
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
   if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
+  if (message === TREZOR_GOVERNANCE_REFUSAL_MESSAGE) return i18n.t('errors.trezorGovernanceRefused') as string;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
   // same as it being rejected -- the localized copy has to keep that uncertainty.

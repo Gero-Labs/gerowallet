@@ -101,6 +101,53 @@ export const stakeKeyFor = (keys: KeySet, account: string): Key | undefined => {
 };
 
 /**
+ * The key of `lists` that carries a credential's hash, when that credential is a key hash. A
+ * script's credential, or a hash the lists don't carry, has none.
+ */
+export const credentialKey = (
+  lists: Array<ReadonlyArray<Key> | null | undefined>,
+  credential: Cardano.Credential | undefined,
+): Key | undefined => {
+  if (credential?.type !== Cardano.CredentialType.KeyHash) return undefined;
+  const hash = lower(credential.hash);
+  return findKey(lists.flatMap(keyList), (key) => lower(key.cred) === hash);
+};
+
+/** The stake key that signs for a stake credential: the one carrying its key hash. */
+export const stakeCredentialKey = (keys: KeySet, credential: Cardano.Credential | undefined): Key | undefined =>
+  credentialKey([keys?.stake], credential);
+
+/**
+ * The key a required signer names, with its role: payment and change keys first, then the stake,
+ * DRep and committee keys. A hash the key set doesn't carry is another party's.
+ */
+export const requiredSignerKey = (keys: KeySet, keyHash: string): { role: WitnessRole; key: Key } | undefined => {
+  const credential = { type: Cardano.CredentialType.KeyHash, hash: keyHash } as Cardano.Credential;
+  const byRole: Array<[WitnessRole, Array<ReadonlyArray<Key> | null | undefined>]> = [
+    ['payment', [keys?.payment, keys?.change]], ['stake', [keys?.stake]], ['drep', [keys?.drep105, keys?.drep129]],
+    ['ccCold', [keys?.ccCold]], ['ccHot', [keys?.ccHot]],
+  ];
+  for (const [role, lists] of byRole) {
+    const key = credentialKey(lists, credential);
+    if (key) return { role, key };
+  }
+  return undefined;
+};
+
+/** A UTxO's address, as the input or its output records it. */
+export const utxoAddress = ([txIn, txOut]: Cardano.Utxo): string | undefined => txIn.address || txOut.address;
+
+/** Looks a transaction input up among `utxos`, indexed once by `txId#index` (the first of any duplicate). */
+export const utxoIndex = (utxos: ReadonlyArray<Cardano.Utxo> | null | undefined): ((txIn: Cardano.TxIn) => Cardano.Utxo | undefined) => {
+  const byRef = new Map<string, Cardano.Utxo>();
+  (utxos ?? []).forEach((utxo) => {
+    const ref = `${utxo[0].txId}#${utxo[0].index}`;
+    if (!byRef.has(ref)) byRef.set(ref, utxo);
+  });
+  return (txIn) => byRef.get(`${txIn.txId}#${txIn.index}`);
+};
+
+/**
  * Whether a transaction is marked to fail (isValid: false). It skips its scripts and forfeits its
  * collateral, and an input's witness alone authorises a collateral UTxO at the same key, so
  * leaving out the collateral witness can't protect it: the signers refuse such a transaction
@@ -161,18 +208,11 @@ export const walletWitnessPlan = (
   keys: KeySet,
   utxos: ReadonlyArray<Cardano.Utxo> | null | undefined,
 ): WalletWitnessPlan => {
-  // Indexed once by `txId#index`, the first of any duplicate kept, as a scan would find it.
-  const utxoByRef = new Map<string, Cardano.Utxo>();
-  (utxos ?? []).forEach((utxo) => {
-    const ref = `${utxo[0].txId}#${utxo[0].index}`;
-    if (!utxoByRef.has(ref)) utxoByRef.set(ref, utxo);
-  });
-  const utxoOf = (txIn: Cardano.TxIn) => utxoByRef.get(`${txIn.txId}#${txIn.index}`);
-  const addressOf = ([txIn, txOut]: Cardano.Utxo) => txIn.address || txOut.address;
+  const utxoOf = utxoIndex(utxos);
 
   const inputs = tx.body.inputs.flatMap((txIn) => {
     const utxo = utxoOf(txIn);
-    return utxo ? [{ utxo, key: keyAtAddress(keys, addressOf(utxo)) }] : [];
+    return utxo ? [{ utxo, key: keyAtAddress(keys, utxoAddress(utxo)) }] : [];
   });
 
   const witnesses = new Map<string, WalletWitness>();
@@ -186,18 +226,12 @@ export const walletWitnessPlan = (
   const inputPaths = new Set(inputs.flatMap(({ key }) => (key?.path ? [key.path] : [])));
   for (const txIn of tx.body.collaterals ?? []) {
     const utxo = utxoOf(txIn);
-    const address = utxo && addressOf(utxo);
+    const address = utxo && utxoAddress(utxo);
     const key = keyAtAddress(keys, address);
     if (key?.path && !inputPaths.has(key.path)) add('payment', key, key.cred || paymentKeyHash(address), address);
   }
 
   const drepKeys = [keys?.drep105, keys?.drep129];
-  // The key of `lists` carrying a credential's hash, when that credential is a key hash.
-  const keyFor = (lists: Array<ReadonlyArray<Key> | null | undefined>, credential: Cardano.Credential | undefined) => {
-    if (credential?.type !== Cardano.CredentialType.KeyHash) return undefined;
-    const hash = lower(credential.hash);
-    return findKey(lists.flatMap(keyList), (key) => lower(key.cred) === hash);
-  };
   const ownReward = (account: Cardano.RewardAccount) => add('stake', stakeKeyFor(keys, account), rewardAccountKeyHash(account));
 
   for (const cert of tx.body.certificates ?? []) {
@@ -210,37 +244,27 @@ export const walletWitnessPlan = (
       case Cardano.CertificateType.RegisterDelegateRepresentative:
       case Cardano.CertificateType.UpdateDelegateRepresentative:
       case Cardano.CertificateType.UnregisterDelegateRepresentative:
-        add('drep', keyFor(drepKeys, cert.dRepCredential));
+        add('drep', credentialKey(drepKeys, cert.dRepCredential));
         break;
       case Cardano.CertificateType.AuthorizeCommitteeHot:
       case Cardano.CertificateType.ResignCommitteeCold:
         // Witnessed by the cold credential: the hot credential an authorization names signs nothing.
-        add('ccCold', keyFor([keys?.ccCold], cert.coldCredential));
+        add('ccCold', credentialKey([keys?.ccCold], cert.coldCredential));
         break;
       default:
-        if (STAKE_KEY_CERTIFICATES.has(cert.__typename) && 'stakeCredential' in cert) add('stake', keyFor([keys?.stake], cert.stakeCredential));
+        if (STAKE_KEY_CERTIFICATES.has(cert.__typename) && 'stakeCredential' in cert) add('stake', stakeCredentialKey(keys, cert.stakeCredential));
     }
   }
   // One group per voter, so a batch of votes is one witness. A pool's vote is its cold key's.
   for (const { voter } of tx.body.votingProcedures ?? []) {
-    if (voter.__typename === Cardano.VoterType.dRepKeyHash) add('drep', keyFor(drepKeys, voter.credential));
-    else if (voter.__typename === Cardano.VoterType.ccHotKeyHash) add('ccHot', keyFor([keys?.ccHot], voter.credential));
+    if (voter.__typename === Cardano.VoterType.dRepKeyHash) add('drep', credentialKey(drepKeys, voter.credential));
+    else if (voter.__typename === Cardano.VoterType.ccHotKeyHash) add('ccHot', credentialKey([keys?.ccHot], voter.credential));
   }
   for (const withdrawal of tx.body.withdrawals ?? []) ownReward(withdrawal.stakeAddress);
 
-  const byRole: Array<[WitnessRole, Array<ReadonlyArray<Key> | null | undefined>]> = [
-    ['payment', [keys?.payment, keys?.change]], ['stake', [keys?.stake]], ['drep', drepKeys],
-    ['ccCold', [keys?.ccCold]], ['ccHot', [keys?.ccHot]],
-  ];
   for (const required of tx.body.requiredExtraSignatures ?? []) {
-    const hash = lower(required);
-    for (const [role, lists] of byRole) {
-      const key = findKey(lists.flatMap(keyList), (k) => lower(k.cred) === hash);
-      if (key) {
-        add(role, key, hash);
-        break;
-      }
-    }
+    const signer = requiredSignerKey(keys, required);
+    if (signer) add(signer.role, signer.key, required);
   }
 
   return { inputs, witnesses: [...witnesses.values()] };

@@ -1687,6 +1687,7 @@ export default {
   'errors.insufficientBalance': 'Unzureichendes Guthaben',
   'errors.noCollateral': 'Diese Transaktion führt einen Smart Contract aus und benötigt einen kleinen reinen ADA-UTxO als Collateral, aber deine gesamte ADA ist mit Tokens gebündelt. Sende etwa 6 ADA an deine eigene Wallet-Adresse, um einen zu erstellen, und versuche es dann erneut.',
   'errors.markedToFailRefused': 'Diese Transaktion ist als fehlschlagend markiert. Sie zu signieren würde nur ihr Kollateral abgeben, deshalb signiert Gero sie nicht.',
+  'errors.trezorGovernanceRefused': 'Trezor kann keine Governance-Abstimmungen, -Anträge oder Treasury-Spenden signieren.',
   'errors.insufficientAdaForTx': 'Nicht genug ADA, um diese Transaktion nach Netzwerkgebühren und dem Minimum pro Ausgabe abzuschließen. Füge etwas mehr ADA hinzu und versuche es erneut.',
   'errors.txRequestRejected': 'Die Transaktionsanfrage wurde abgelehnt: {reason}',
   'errors.submitUnconfirmed': 'Wir konnten nicht bestätigen, ob deine Transaktion das Netzwerk erreicht hat. Sie kann trotzdem noch durchgehen. Prüfe deinen Transaktionsverlauf, bevor du sie erneut sendest.',
