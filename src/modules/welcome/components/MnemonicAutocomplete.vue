@@ -4,14 +4,13 @@
                   :items="englishWords" auto-select-first :rules="[rules.required()]"
                   @keydown.tab.exact="handleTab" @keydown.shift.tab="handleShiftTab"
   >
-    <template v-slot:prepend>
-      <span :style="{ color: primaryColor, marginTop: '4px', minWidth: '22px' }">{{index}}.</span>
+    <template v-slot:prepend-inner>
+      <span class="mnemonic-index">{{ index }}.</span>
     </template>
   </v-autocomplete>
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
-import { useTheme } from 'vuetify';
 import rules from "@/utils/rules";
 import * as bip39 from "bip39";
 
@@ -29,12 +28,6 @@ const emit = defineEmits(['update:modelValue']);
 
 const instance = getCurrentInstance();
 const mnemonic = ref(props.modelValue);
-const theme = useTheme();
-
-// Get primary color from Vuetify theme
-const primaryColor = computed(() => {
-  return String(theme.current.value.colors['primary']);
-});
 const search = ref('');
 
 const englishWords = computed(() => {

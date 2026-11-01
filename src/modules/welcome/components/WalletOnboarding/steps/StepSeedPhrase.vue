@@ -2,31 +2,28 @@
   <div class="step-seed-phrase">
     <div class="step-scroll">
 
-    <div class="t-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
+    <div id="recovery-phrase-length-label" class="t-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
 
-    <!-- Seed length toggle (12 / 15 / 24) -->
-    <v-row no-gutters class="pb-2">
-      <v-spacer></v-spacer>
-      <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
-        <v-btn size="small" value="12">
-          <v-icon style="right: -5px">mdi-numeric-1</v-icon>
-          <v-icon style="left: -5px">mdi-numeric-2</v-icon>
-        </v-btn>
-        <v-btn size="small" value="15">
-          <v-icon style="right: -5px">mdi-numeric-1</v-icon>
-          <v-icon style="left: -5px">mdi-numeric-5</v-icon>
-        </v-btn>
-        <v-btn size="small" value="24">
-          <v-icon style="right: -5px">mdi-numeric-2</v-icon>
-          <v-icon style="left: -5px">mdi-numeric-4</v-icon>
-        </v-btn>
-      </v-btn-toggle>
+    <!-- Seed length choices (12 / 15 / 24) -->
+    <v-row no-gutters class="pb-2 justify-center">
+      <div class="seed-phrase-length-toggle" role="group" aria-labelledby="recovery-phrase-length-label">
+        <button
+          v-for="length in ['12', '15', '24']"
+          :key="length"
+          type="button"
+          class="seed-phrase-length-option"
+          :aria-pressed="seedPhraseLength === length"
+          @click="seedPhraseLength = length"
+        >
+          {{ length }}
+        </button>
+      </div>
     </v-row>
 
     <!-- Mnemonic autocomplete grid -->
-    <v-card flat class="mb-0 pa-0 transparent mnemonic-grid">
+    <div class="mnemonic-grid">
       <v-row no-gutters>
-        <v-col class="pa-half" cols="6" :md="3" v-for="index in recoverySeedPhraseLength" :key="index">
+          <v-col cols="6" :md="3" v-for="index in recoverySeedPhraseLength" :key="index">
           <mnemonic-autocomplete
             v-model="recoverySeedPhrase[index - 1]"
             :index="index"
@@ -35,7 +32,7 @@
           ></mnemonic-autocomplete>
         </v-col>
       </v-row>
-    </v-card>
+    </div>
     </div>
 
     <!-- Navigation buttons -->
@@ -170,48 +167,101 @@ const handleContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
-// Mnemonic grid — compact inputs
-.pa-half {
-  padding: 2px !important;
+.seed-phrase-length-toggle {
+  display: inline-flex;
+  gap: var(--g-s-1);
+  padding: var(--g-s-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+  background: var(--g-surface);
 }
 
-.mnemonic-grid {
-  :deep(.v-input) {
-    font-size: 12px;
-    --v-input-control-height: 30px;
+.seed-phrase-length-option {
+  min-width: 56px;
+  height: var(--g-btn-h-compact);
+  padding: 0 var(--g-s-4);
+  border: 0;
+  border-radius: var(--g-r-chip);
+  background: transparent;
+  color: var(--g-text-2);
+  font-family: var(--g-font-mono);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease), color var(--g-dur-fast) var(--g-ease);
+
+  &:hover:not([aria-pressed='true']) {
+    background: var(--g-raised);
+    color: var(--g-text-1);
   }
+
+  &[aria-pressed='true'] {
+    background: var(--g-accent);
+    color: var(--g-on-grad);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--g-accent);
+    outline-offset: 2px;
+  }
+}
+
+// Mnemonic grid
+.mnemonic-grid {
+  :deep(.v-row--no-gutters > .v-col) {
+    padding: var(--g-s-1) var(--g-s-2);
+  }
+
+  :deep(.v-input) {
+    font-size: 0.875rem;
+    --v-input-control-height: 44px;
+  }
+
   :deep(.v-field) {
-    --v-field-padding-start: 6px;
-    --v-field-padding-end: 6px;
+    min-height: 44px;
+    border-radius: var(--g-r-control);
+    background: var(--g-surface);
+    font-size: 0.875rem;
+    --v-field-padding-start: var(--g-s-3);
+    --v-field-padding-end: var(--g-s-2);
     --v-field-input-padding-top: 0px;
     --v-field-input-padding-bottom: 0px;
   }
-  :deep(.v-field__input) {
-    min-height: 30px !important;
-  }
-  :deep(.v-input__prepend) {
-    margin-top: 4px !important;
-    margin-right: 2px !important;
 
-    span {
-      font-size: 10px !important;
-      min-width: 18px !important;
-    }
+  :deep(.v-field__input) {
+    min-height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
   }
+
+  :deep(.mnemonic-index) {
+    color: var(--g-accent);
+    font-family: var(--g-font-mono);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    opacity: 0.85;
+  }
+
   :deep(.v-field--variant-outlined .v-field__outline) {
     --v-field-border-width: 1px;
   }
-  :deep(input) {
-    padding: 2px 0 !important;
-    font-size: 11px;
-  }
+
   :deep(.v-field__append-inner) {
-    margin-top: 2px !important;
-    padding-left: 0 !important;
+    padding-left: var(--g-s-1);
 
     .v-icon {
-      font-size: 16px !important;
+      font-size: 18px;
     }
+  }
+
+  :deep(.v-field:hover .v-field__outline) {
+    color: var(--g-hairline-3);
+  }
+
+  :deep(.v-field--focused .v-field__outline) {
+    color: var(--g-accent);
   }
 }
 </style>
