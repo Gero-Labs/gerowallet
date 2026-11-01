@@ -6,7 +6,7 @@ import { deferred } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { createTestVuetify } from '@test/helpers/vuetify';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), build: vi.fn(), minCoin: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn() }));
+const mocks = vi.hoisted(() => ({ send: vi.fn(), build: vi.fn(), minCoin: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), qr: vi.fn(), parseQr: vi.fn(), success: vi.fn(), built: new Map<string, unknown>() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, utxos: [], keys: {}, tokens: {}, collections: {}, contacts: {}, config: {}, isLocked: false }) }));
 vi.mock('@/stores/networkStore', async () => ({ networkStore: (await import('vue')).reactive({ tip: {}, epochParams: {} }) }));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isCrossDeviceSigningEnabled: () => true, state: { flags: { isTrezorWebUsbEnabled: true } } } }));
@@ -14,7 +14,7 @@ vi.mock('@/stores/remoteSigningStore', () => ({ remoteSigningStore: { ensureLoad
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
 vi.mock('@/chrome/cardanoJsSdkCbor', () => ({ serializeCardanoJsSdkTx: (tx: unknown) => JSON.stringify(tx) }));
 vi.mock('@cardano-sdk/core', () => ({ Serialization: {
-  Transaction: { fromCbor: (cbor: string) => ({ toCore: () => JSON.parse(cbor) }) },
+  Transaction: { fromCbor: (cbor: string) => ({ toCore: () => mocks.built.get(cbor) ?? JSON.parse(cbor) }) },
   TransactionWitnessSet: { fromCore: () => ({ toCbor: () => 'hardware-witness' }) },
 } }));
 vi.mock('@cardano-sdk/util', () => ({ HexBlob: (value: string) => value }));
@@ -89,8 +89,23 @@ beforeEach(() => {
 
 describe('side-panel exact transaction amounts', () => {
   beforeEach(() => {
-    mocks.build.mockResolvedValue({ tx_cbor: JSON.stringify(transaction()) });
+    // Like Nexus: the built transaction carries the requested output. The review is
+    // read from the built transaction, so it must contain what was asked for.
+    mocks.build.mockImplementation(async (request: { outputs: Cardano.TxOut[] }) => {
+      const key = `built-${mocks.built.size}`;
+      mocks.built.set(key, { body: { id: 'original', fee: 1, outputs: request.outputs } });
+      return { tx_cbor: key };
+    });
     networkStore.epochParams = { coinsPerUtxoByte: 1 } as never;
+  });
+
+  it('refuses to review a built transaction that lacks the requested output', async () => {
+    mocks.build.mockResolvedValueOnce({ tx_cbor: JSON.stringify(transaction()) });
+    const { view } = render();
+    Object.assign(view, { step: 2, address: 'recipient', paymentAddress: 'recipient', adaAmount: '5' });
+    await view.goToStep(3);
+    expect(view.txBuilt).toBe(false);
+    expect(view.step).toBe(2);
   });
   const recipient = () => {
     const { view } = render();

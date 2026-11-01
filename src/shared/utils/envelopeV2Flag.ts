@@ -7,18 +7,20 @@
  * reader-only one opens `gpw2`, so turning the flag off again never strands a
  * wallet that was already migrated — it only stops new `gpw2` writes.
  *
- * Read from the `featureFlags` mirror in chrome.storage.local (the UI contexts
- * mirror flag values there; the EventSource flag service cannot run in the MV3
- * service worker). This module is context-agnostic because writers run in the UI
- * and in the background.
+ * Read from the feature-flag mirror (featureFlagMirror.ts: the UI contexts mirror
+ * flag values there; the EventSource flag service cannot run in the MV3 service
+ * worker). This module is context-agnostic because writers run in the UI and in
+ * the background.
  */
+import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
+
 const FLAG_KEY = 'isKeyEnvelopeV2Enabled';
 
 let enabled = false;
 let forced: boolean | null = null;
 
-function hasChromeStorage(): boolean {
-  return typeof chrome !== 'undefined' && !!chrome.runtime?.id && !!chrome.storage?.local;
+function inExtension(): boolean {
+  return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
 }
 
 /**
@@ -28,14 +30,9 @@ function hasChromeStorage(): boolean {
  */
 export async function refreshEnvelopeV2Flag(): Promise<boolean> {
   if (forced !== null) return forced;
-  if (!hasChromeStorage()) return enabled;
-  try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const flags = (stored?.['featureFlags'] as Record<string, unknown>) ?? {};
-    enabled = flags[FLAG_KEY] === true;
-  } catch {
-    enabled = false;
-  }
+  if (!inExtension()) return enabled;
+  // An unreadable mirror reads as empty, i.e. off.
+  enabled = (await readFeatureFlagMirror())[FLAG_KEY] === true;
   return enabled;
 }
 

@@ -1,4 +1,5 @@
-// Push notifications — durable client state in chrome.storage.local (background).
+// Push notifications — durable client state in the extension's private store
+// (notifyStorage.ts; it used to live in chrome.storage.local, which content scripts can reach).
 //
 // Handover B1 `notifyStore.ts`. Every access is wrapped in try/catch: a storage failure
 // must never take the service worker down, and every reader gets a sane default.
@@ -14,6 +15,7 @@
 //   notifyIntro           the offer to turn notifications on: shown / dismissed / answered per wallet (notifyIntro.ts)
 
 import { NOTIFY_INTRO_KEY, readIntroState, type NotifyIntroState } from './notifyIntro';
+import { privateNotifyStorage } from './notifyStorage';
 import type { NotifyConfig, WalletPrefs } from './notifyTypes';
 
 export interface NotifyStorage {
@@ -133,13 +135,6 @@ const KEYS = {
   intro: NOTIFY_INTRO_KEY,
 } as const;
 
-function chromeStorage(): NotifyStorage {
-  return {
-    get: (key) => new Promise((resolve) => chrome.storage.local.get(key, (r) => resolve(r?.[key]))),
-    set: (key, value) => new Promise((resolve) => chrome.storage.local.set({ [key]: value }, () => resolve())),
-    remove: (key) => new Promise((resolve) => chrome.storage.local.remove(key, () => resolve())),
-  };
-}
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -173,7 +168,7 @@ export interface NotifyStore {
   updateIntro(patch: Partial<NotifyIntroState>): Promise<NotifyIntroState>;
 }
 
-export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log: (m: string, e?: unknown) => void = () => undefined): NotifyStore {
+export function createNotifyStore(storage: NotifyStorage = privateNotifyStorage, log: (m: string, e?: unknown) => void = () => undefined): NotifyStore {
   async function read<T>(key: string, fallback: T, valid: (v: unknown) => v is T): Promise<T> {
     try {
       const v = await storage.get(key);

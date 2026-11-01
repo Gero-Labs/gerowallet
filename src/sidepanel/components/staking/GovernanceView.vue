@@ -90,8 +90,8 @@
         @click="selectDRep(drep)"
       >
         <div class="drep-item-left">
-          <v-avatar size="28" rounded class="mr-2" v-if="drep.image">
-            <v-img :src="drep.image"  />
+          <v-avatar size="28" rounded class="mr-2" v-if="toInAppImageUrl(drep.image)">
+            <v-img :src="toInAppImageUrl(drep.image) ?? undefined"  />
           </v-avatar>
           <v-avatar size="28" rounded class="mr-2 drep-avatar-placeholder" v-else>
             <v-icon size="small" color="grey">mdi-account</v-icon>
@@ -138,8 +138,8 @@
       <div v-if="selectedDRep" class="delegate-confirm">
         <div class="confirm-drep-info">
           <div class="d-flex align-center mb-2">
-            <v-avatar size="32" rounded class="mr-2" v-if="selectedDRep.image">
-              <v-img :src="selectedDRep.image"  />
+            <v-avatar size="32" rounded class="mr-2" v-if="toInAppImageUrl(selectedDRep.image)">
+              <v-img :src="toInAppImageUrl(selectedDRep.image) ?? undefined"  />
             </v-avatar>
             <div>
               <div class="text-subtitle-2 white--text font-weight-bold">{{ selectedDRep.name }}</div>
@@ -173,7 +173,7 @@
 import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import governanceStoreActions, { governanceStore as governanceStoreState } from '@/stores/governanceStore';
-import { drepImageSource } from '@/modules/governance/utils/govAnchor';
+import { drepImageSource, toInAppImageUrl } from '@/modules/governance/utils/govAnchor';
 import filtersUtil from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';

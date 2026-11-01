@@ -451,6 +451,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { ref, computed, onMounted, nextTick, toRefs, watch } from 'vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDialog.vue';
@@ -910,7 +911,7 @@ async function verifyCurrentMethod() {
           }) as BackgroundResponse<VerifyPasswordResponse>;
           isValid = passwordVerification.data.success;
           if (!isValid) {
-            tooltip.value.text = t('errors.wrongPassword');
+            tooltip.value.text = passwordCheckFailure(passwordVerification, t('errors.wrongPassword'));
             enableToolTip();
           }
         } catch (error) {

@@ -221,12 +221,6 @@ export async function getNextWalletId(): Promise<number> {
   }
 }
 
-/** One stored wallet record, or undefined when none has that id. */
-export async function getWalletRecord(walletId: number): Promise<Wallet | undefined> {
-  const db: Dexie = await getDb();
-  return db['wallets'].get(walletId);
-}
-
 export async function getAllWallets() {
   const db: Dexie = await getDb();
   const wallets = await db['wallets'].toArray();

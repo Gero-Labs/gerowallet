@@ -4,7 +4,8 @@ import { getContextType } from '@/utils/storageSync';
 import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
-import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
+import { addConnectedDapp, getConnectedDapps, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
+import { redactWalletConfig, redactWalletRecord } from '@/utils/storageRedaction';
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
 import { Contact, Keys } from '@/models/types';
@@ -246,6 +247,17 @@ const BULK_FIELDS: (keyof WalletStore)[] = [
   'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'rewards', 'keys',
 ];
 
+/**
+ * What the compact chrome.storage.local record may hold. Content scripts can read and
+ * rewrite it (privateStore.ts), so the logged wallet's encrypted keys and the config's
+ * secret rows stay out of it: the pages get them over the store-sync port.
+ */
+function redactForStorage(field: string, value: unknown): unknown {
+  if (field === 'loggedWallet') return redactWalletRecord(value);
+  if (field === 'config') return redactWalletConfig(value);
+  return value;
+}
+
 const persister = new StorePersister(walletStore as unknown as Record<string, unknown>, {
   storeName: STORE_NAME,
   bulkFields: BULK_FIELDS,
@@ -253,6 +265,10 @@ const persister = new StorePersister(walletStore as unknown as Record<string, un
   // Who is logged in, and whether the wallet is locked, must survive a worker that
   // dies right after the change.
   immediateFields: ['loggedWallet', 'isLocked'],
+  redact: redactForStorage,
+  // The worker logs in, and answers dApps, from these. A content script can rewrite
+  // the chrome.storage copy, so every context reads the extension's own copy instead.
+  trustedFields: ['loggedWallet', 'isLocked'],
   // Bulk data is tagged with its wallet so it can never hydrate into another wallet's session.
   scope: (state) => {
     const id = (state['loggedWallet'] as { id?: unknown } | null)?.id;
@@ -296,12 +312,35 @@ if (context === 'background') {
   // before then, and until hydration has read the stored record the persister holds
   // their writes back rather than replace it with the store's defaults. The worker owns
   // the data, so it also moves a record in the old format out of chrome.storage.
-  hydration = persister.hydrate({ migrate: true }).then(() => undefined);
+  //
+  // The connected-dApp list decides which origins the dApp handlers answer. The worker
+  // never takes it from chrome.storage, which a content script can write: it reads the
+  // wallet's database, as ConnectedDappsLoader does after login.
+  hydration = persister.hydrate({ migrate: true, skip: new Set(['connectedDapps']) })
+    .then(() => restoreConnectedDapps());
   backgroundStoreMessaging.registerSnapshot(
     STORE_NAME,
     () => JSON.parse(JSON.stringify(walletStore, serializeValue)),
     hydration,
   );
+}
+
+/** The logged wallet's connected dApps from its database, unless a setter got there first. */
+async function restoreConnectedDapps(): Promise<void> {
+  const walletId = (walletStore.loggedWallet as { id?: unknown } | null)?.id;
+  if (typeof walletId !== 'number') return;
+  const before = walletStore.connectedDapps;
+  try {
+    const rows = await getConnectedDapps(walletId);
+    if (walletStore.connectedDapps === before && walletStore.loggedWallet?.id === walletId) {
+      walletStore.connectedDapps = rows;
+      // Also replaces the chrome.storage copy the pages paint from.
+      broadcastFromBackground({ connectedDapps: rows });
+    }
+  } catch (error) {
+    // Stays empty (nothing connected) until the loader runs at login: fails closed.
+    console.warn('Could not read connected dApps at startup:', error);
+  }
 }
 
 // Promise-based storage hydration for backward compatibility. One read per context:

@@ -5,7 +5,8 @@
 // that both popup views send the raw PRF output (`prf-output`) and never that key.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { Psbt } from 'bitcoinjs-lib';
+import * as bitcoin from 'bitcoinjs-lib';
+import { createRequire } from 'node:module';
 import { dialogControls } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 
@@ -22,7 +23,13 @@ vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: vi.fn(), end: vi
 vi.mock('@/shared/utils/ledger', () => ({ default: {} }));
 vi.mock('@/shared/utils/trezor', () => ({ default: {} }));
 vi.mock('@/shared/utils/trezorWeb', () => ({ default: {} }));
-vi.mock('@/chains/bitcoin/bitcoinPsbtBuilder', () => ({ getBitcoinNetwork: () => undefined }));
+// bitcoinjs-lib is externalized to Node by Vitest and checks buffers against Node's
+// Buffer, while the sources get the polyfill (see bitcoinSigner.spec.ts).
+vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
+  const { createRequire: requireFrom } = await import('node:module');
+  const { Buffer } = requireFrom(import.meta.url)('node:buffer');
+  return { default: Buffer, Buffer };
+});
 vi.mock('@/utils/rules', () => ({ default: { required: () => () => true } }));
 vi.mock('@/popup/modules/components/PopupHeader.vue', () => ({ default: { template: '<main><slot /></main>' } }));
 vi.mock('@/shared/components/PassKeyPasswordField.vue', () => ({ default: { template: '<div />' } }));
@@ -39,8 +46,15 @@ import BitcoinSignPsbt from './BitcoinSignPsbt.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
+import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
 
-const PSBT = new Psbt().addInput({ hash: '01'.repeat(32), index: 0 })
+// The PSBT spends the wallet's own coin, with its amount: the review lets nothing else be signed.
+const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
+const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow'; // test vector, no funds
+const OWN_SCRIPT = bitcoin.payments.p2wpkh({
+  pubkey: NodeBuffer.from(deriveBitcoinRootKey(PHRASE).derive("m/84'/0'/0'/0/0").publicKey!),
+}).output!;
+const PSBT = new bitcoin.Psbt().addInput({ hash: '01'.repeat(32), index: 0, witnessUtxo: { script: OWN_SCRIPT, value: 2000 } })
   .addOutput({ address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', value: 1000 }).toHex();
 
 const views = [
@@ -56,6 +70,7 @@ beforeEach(() => {
   mocks.returnData.mockResolvedValue(undefined);
   walletStore.loggedWallet = {
     id: 1, type: WalletType.Normal, chain: 'Bitcoin', network: 'Mainnet', addressType: 'segwit',
+    publicKey: deriveBitcoinAccountXpub(PHRASE, 'Mainnet', 'segwit', 0),
     encryptionMethod: 'prf', webAuthnCredentialId: 'credential', prfEncryptedPrivateKey: 'encrypted-key',
   } as never;
   walletStore.isLocked = false;
@@ -71,6 +86,10 @@ async function render(view: typeof views[number]) {
     config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key, $route: { query: { website: 'https://dapp.example' } } }) },
   } });
   await flushPromises();
+  // A PSBT is signed only once the review of what it signs is in.
+  if (view.name === 'PSBT') {
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="bitcoin-psbt-signed-input"]').exists()).toBe(true));
+  }
   return wrapper;
 }
 

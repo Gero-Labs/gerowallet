@@ -243,7 +243,7 @@ describe('verifyStoreCandidate', () => {
       manifest_version: 3, version: '2.8.0', key: KEY,
       background: { service_worker: 'background/index.js' },
       options_page: 'index.html', side_panel: { default_path: 'sidepanel/index.html' },
-      content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none';" },
+      content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; form-action 'none'; base-uri 'none';" },
     }));
     write(extension(), 'background/index.js', 'export {};');
     write(extension(), 'assets/crypto.wasm', Buffer.from([0, 97, 115, 109]));

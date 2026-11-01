@@ -1,5 +1,7 @@
+import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
 import { MidnightGenerationQueue, parseMidnightSyncIdentity, clearMidnightNetworkCheckpoints } from './midnightSyncGeneration';
+import { midnightWalletStatesForTest, resetMidnightWalletStateDbForTest } from './midnightWalletStatePersistence';
 
 const network = 'midnight-stagenet';
 const stamp = (generation = 1) => ({ midnight_network: network, midnight_chain_generation: generation,
@@ -46,18 +48,21 @@ describe('Midnight generation replay', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it('clears only the selected Midnight network and never Cardano or other networks', async () => {
-    const removed: string[] = [];
-    vi.stubGlobal('chrome', { runtime: {}, storage: { local: {
-      get: (_key, callback) => callback({ midnight_wallet_state_stagenet_dust_x: {},
-        'midnight_wallet_state_midnight-stagenet-ledger9-rc3_old': {},
-        midnight_wallet_state_preprod_dust_x: {}, Cardano_stagenet: {}, wallet: {} }),
-      remove: (keys, callback) => { removed.push(...keys); callback(); },
-    } } });
-    try {
-      await clearMidnightNetworkCheckpoints(network);
-      expect(removed).toEqual(['midnight_wallet_state_stagenet_dust_x',
-        'midnight_wallet_state_midnight-stagenet-ledger9-rc3_old']);
-    } finally { vi.unstubAllGlobals(); }
+  it('clears only the selected Midnight network and never other networks', async () => {
+    resetMidnightWalletStateDbForTest();
+    const row = (key: string) => ({ key, schemaVersion: 1, network: 'x', kind: 'dust' as const, serializedState: 's', savedAt: 0 });
+    const table = midnightWalletStatesForTest();
+    await table.clear();
+    await table.bulkPut([
+      row('midnight_wallet_state_stagenet_dust_x'),
+      row('midnight_wallet_state_midnight-stagenet-ledger9-rc3_old'),
+      row('midnight_wallet_state_preprod_dust_x'),
+      row('midnight_wallet_state_mainnet_shielded_y'),
+    ]);
+    await clearMidnightNetworkCheckpoints(network);
+    expect((await table.toArray()).map((r) => r.key).sort()).toEqual([
+      'midnight_wallet_state_mainnet_shielded_y',
+      'midnight_wallet_state_preprod_dust_x',
+    ]);
   });
 });

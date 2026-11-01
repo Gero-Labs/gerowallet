@@ -1,11 +1,13 @@
 // The in-app notification centre behind the bell (B-M3). The worker writes every push it
-// showed to `chrome.storage.local.notifyInbox` (notifyStore); pages mirror that key here and
-// send NOTIFY_INBOX_READ / NOTIFY_INBOX_CLEAR back, so the worker stays the only writer.
+// showed to the `notifyInbox` key of the notify store (private store, notifyStorage.ts);
+// pages mirror that key here and send NOTIFY_INBOX_READ / NOTIFY_INBOX_CLEAR back, so the
+// worker stays the only writer.
 
 import { reactive } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { NotifyInboxItem } from '@/services/notify/notifyStore';
+import { onNotifyKeyChanged, readNotifyKey } from '@/services/notify/notifyStorage';
 
 export type { NotifyInboxItem };
 
@@ -27,16 +29,18 @@ function accept(v: unknown): void {
   state.loaded = true;
 }
 
-const hasChromeStorage = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id && !!chrome.storage?.local;
+const inExtension = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id && !!chrome.storage;
+
+function reload(): void {
+  readNotifyKey(KEY).then(accept, () => accept(undefined));
+}
 
 let subscribed = false;
 function subscribe(): void {
-  if (subscribed || !hasChromeStorage()) return;
+  if (subscribed || !inExtension()) return;
   subscribed = true;
-  chrome.storage.local.get(KEY, (r) => accept(r?.[KEY]));
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && KEY in changes) accept(changes[KEY]?.newValue);
-  });
+  reload();
+  onNotifyKeyChanged(KEY, reload);
 }
 
 export const notifyInboxStore = {

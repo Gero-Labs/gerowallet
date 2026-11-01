@@ -121,6 +121,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
+import {
+  TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits, type QuotedRoute, type SwapIntent,
+} from '../composables/orderSpendBound';
+import { TxIntentMismatchError, type SpendBound } from '@/shared/utils/txIntentGuard';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
@@ -296,11 +300,55 @@ function onTransportCancel() {
   transportReject = null;
 }
 
+// A quote only tells us an order is being placed. What the signer lets the order take
+// comes from what the user asked for: the token they are selling (our prop and the
+// widget's own token-change events) and the amount they typed (the widget exposes its
+// input as `amountIn`). Never from the quote: the server that quotes builds the order.
+let quotedRoute: QuotedRoute | null = null;
+const sellingUnit = ref<string>(props.tokenIn ?? 'lovelace');
+watch(() => props.tokenIn, (unit) => {
+  if (unit !== undefined) sellingUnit.value = unit;
+});
+
+async function currentSwapIntent(): Promise<SwapIntent | null> {
+  if (!quotedRoute) return null;
+  const tokenIn = sellingUnit.value;
+  const typed = (geroSwapEl.value as unknown as { amountIn?: unknown } | null)?.amountIn;
+  // The decimals the widget converted the typed amount with: ours, through resolveToken.
+  const decimals = tokenIn === 'lovelace' ? 6 : (await resolveToken(tokenIn))?.decimals;
+  if (typeof decimals !== 'number') return null;
+  const amountIn = toBaseUnits(typed, decimals);
+  return amountIn ? { tokenIn, amountIn } : null;
+}
+
+/** The budget for the order being signed, or null (only a signature taking almost nothing passes). */
+async function spendBoundForSignature(): Promise<SpendBound | null> {
+  try {
+    const intent = await currentSwapIntent();
+    return intent ? swapSpendBound(intent) : null;
+  } catch {
+    return null;
+  }
+}
+
 const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
   getIsBT: () => isBT.value,
+  getSpendBound: spendBoundForSignature,
 });
+
+// Why the wallet last refused to sign, for onSwapError: the widget reports a signer
+// error with code UNKNOWN, which would otherwise show a generic message.
+let signRefusal: string | null = null;
+
+/** A refused order, reworded when it is a token sale over the size the budget allows. */
+function refusalFor(error: TxIntentMismatchError): TxIntentMismatchError {
+  const tokenSale = quotedRoute !== null && sellingUnit.value !== 'lovelace';
+  if (!tokenSale || !error.violations.includes('spendExceeded')) return error;
+  const message = String(i18n.t('swap.tokenSaleTooLarge', { limit: String(TOKEN_SALE_LIMIT_ADA) }));
+  return new TxIntentMismatchError(message, error.violations);
+}
 
 // The widget signs both swaps and order cancels through signTx, so the question sits
 // in front of every Ledger signature. Everything else passes through unchanged.
@@ -310,7 +358,14 @@ const signer = {
     const w = walletStore.loggedWallet;
     isBT.value = false;
     if (w?.type === WalletType.Ledger && w.btSupported) await chooseTransport();
-    return sharedSigner.signTx(unsignedTxCbor);
+    try {
+      return await sharedSigner.signTx(unsignedTxCbor);
+    } catch (e) {
+      if (!(e instanceof TxIntentMismatchError)) throw e;
+      const refused = refusalFor(e);
+      signRefusal = refused.message;
+      throw refused;
+    }
   },
 };
 const { resolveToken } = useSwapTokenResolver();
@@ -461,6 +516,16 @@ function wireProps() {
   node['ownerPkh'] = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
+// The widget is a Vue custom element: it dispatches every emit as a CustomEvent whose
+// `detail` is the emit's argument ARRAY (`[payload]`), not the payload. Reading
+// `detail.txHash` off that array silently found nothing, so swaps were never
+// registered for fill/cancel alerts and error codes never mapped to a message.
+// A plain payload (older builds, tests) is accepted as well.
+function widgetPayload(e: Event): unknown {
+  const detail = (e as CustomEvent).detail;
+  return Array.isArray(detail) ? detail[0] : detail;
+}
+
 // Ask the worker to watch this swap for a fill or cancel push. Fire-and-forget: a wallet that has not
 // opted in to notifications answers not_registered, and nothing here may block or break the emit.
 function registerSwapForAlerts(detail: unknown) {
@@ -479,8 +544,14 @@ function registerSwapForAlerts(detail: unknown) {
   }
 }
 
+function onQuote(e: Event) {
+  quotedRoute = routeFromQuoteEvent(widgetPayload(e));
+}
+
 function onSwapSubmitted(e: Event) {
-  const detail = (e as CustomEvent).detail;
+  // The quote is spent: a later signature (e.g. an order cancel) gets no budget from it.
+  quotedRoute = null;
+  const detail = widgetPayload(e);
   emit('swap-submitted', detail);
   registerSwapForAlerts(detail);
 }
@@ -495,11 +566,15 @@ const SWAP_ERROR_CODE_TO_I18N_KEY: Record<string, string> = {
 };
 
 function onSwapError(e: Event) {
-  const detail = (e as CustomEvent).detail as { code?: string; message?: string } | undefined;
+  const detail = widgetPayload(e) as { code?: string; message?: string } | undefined;
   emit('swap-error', detail);
 
+  const refusal = signRefusal;
+  signRefusal = null;
   const key = detail?.code ? SWAP_ERROR_CODE_TO_I18N_KEY[detail.code] : undefined;
-  const text = key ? (i18n.t(key) as string) : detail?.message || (i18n.t('errors.unknownError') as string);
+  const text = refusal && detail?.message === refusal
+    ? refusal
+    : key ? (i18n.t(key) as string) : detail?.message || (i18n.t('errors.unknownError') as string);
   snackbar.setError(text);
 }
 function onTokenChange(e: Event) {
@@ -508,7 +583,10 @@ function onTokenChange(e: Event) {
   // emit" comment), so from here on the default-GERO logic above must never override
   // whatever the user has chosen.
   userPickedTokenOut.value = true;
-  emit('token-change', (e as CustomEvent).detail);
+  const detail = widgetPayload(e);
+  const tokenIn = (detail as { tokenIn?: unknown } | undefined)?.tokenIn;
+  if (typeof tokenIn === 'string' && tokenIn) sellingUnit.value = tokenIn;
+  emit('token-change', detail);
 }
 
 function attach() {
@@ -516,6 +594,7 @@ function attach() {
   if (!node) return;
   wireProps();
   tryResolveDefaultGeroTokenOut();
+  node.addEventListener('quote', onQuote);
   node.addEventListener('swap-submitted', onSwapSubmitted);
   node.addEventListener('swap-error', onSwapError);
   node.addEventListener('token-change', onTokenChange);
@@ -528,6 +607,7 @@ function detach() {
   }
   const node = geroSwapEl.value;
   if (!node) return;
+  node.removeEventListener('quote', onQuote);
   node.removeEventListener('swap-submitted', onSwapSubmitted);
   node.removeEventListener('swap-error', onSwapError);
   node.removeEventListener('token-change', onTokenChange);

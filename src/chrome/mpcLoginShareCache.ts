@@ -2,9 +2,9 @@
  * Session cache for a wallet's MPC LOGIN share (the backend-held share, fetched
  * once per login after a Google idToken is verified).
  *
- * Purpose: let a logged-in MPC wallet be re-unlocked after a lock with only the
- * device secret (passkey / spending password) — no repeat Google sign-in — for
- * the rest of the BROWSER session. Reconstruction still needs TWO shares: the
+ * Purpose: let a logged-in MPC wallet be re-unlocked after the service worker
+ * restarted (which drops the reconstructed key) with only the device secret
+ * (passkey / spending password) — no repeat Google sign-in. Reconstruction still needs TWO shares: the
  * cached login share here PLUS the device share, which is decrypted with the
  * passkey/password and validated against the wallet's xpub. So this cache alone
  * reconstructs nothing.
@@ -19,9 +19,10 @@
  *
  * Lifetime, deliberately narrow:
  *  - SET after a successful Google unlock (reconstruct+validate passed).
- *  - KEPT across WalletStore lock — that is what enables Google-free re-unlock.
- *  - CLEARED on logout / wallet switch (walletManager.service.ts) and on browser
- *    close (chrome.storage.session semantics).
+ *  - KEPT across service-worker restarts — that is what enables Google-free re-unlock.
+ *  - CLEARED on lock, so a locked wallet needs Google again (a cached login share
+ *    plus the device secret would otherwise be enough), on logout / wallet switch
+ *    (walletManager.service.ts) and on browser close (chrome.storage.session semantics).
  *
  * Persisting this to disk would put both the (at-rest encrypted) device share
  * and the login share on disk, collapsing the durable 2-of-3 posture — so it

@@ -26,6 +26,7 @@
 
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import { historySource } from '@/shared/utils/provenInputs';
 import { geroStore } from '@/stores/geroStore';
 import { Blockchain, Network, Wallet } from '@/models/types';
 import {
@@ -40,6 +41,8 @@ import { clearDustPending, getDustPending, markDustPending, reconcileDustPending
 import { extractNexusErrorMessage, isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
 import { CNIGHT_ASSETS } from '@/shared/utils/cnightAssets';
+import { DUST_MAPPING_VALIDATOR } from '@/shared/utils/dustMappingValidator';
+import { inputRefOf } from '@/shared/utils/txIntentGuard';
 import { resolveAccountIndex, secretsWalletId, walletDisplayName } from '@/shared/utils/walletAccount';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
@@ -56,32 +59,9 @@ export interface DustDestination {
 // the existing importers.
 export { CNIGHT_ASSETS };
 
-/**
- * DUST mapping validator (`cnight_generates_dust`) per Cardano network — the
- * script a cNIGHT→DUST registration locks its mapping NFT under. Used to detect
- * and deep-link a registration transaction. Script hashes portal-verified
- * 2026-07-14; addresses derived from them (type-7 enterprise script address).
- * Preview, preprod and stagenet share one deployment — Nexus pins the same
- * hash for stagenet and preprod for the same reason.
- */
-export const DUST_MAPPING_VALIDATOR: Record<string, { scriptHash: string; address: string }> = {
-  [Network.MAINNET]: {
-    scriptHash: '73e4aea31b5b51d9b0ca386196fc6a4c422f74c5aea011e4b8bdf4e5',
-    address: 'addr1w9e7ft4rrdd4rkdseguxr9hudfxyytm5ckh2qy0yhz7lfeg9lvhq7',
-  },
-  [Network.PREPROD]: {
-    scriptHash: '7e69087d98fac5869eac14e13dfb6f98228c41e638aa2a59d1f85e9c',
-    address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
-  },
-  [Network.PREVIEW]: {
-    scriptHash: '7e69087d98fac5869eac14e13dfb6f98228c41e638aa2a59d1f85e9c',
-    address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
-  },
-  [Network.STAGENET]: {
-    scriptHash: '7e69087d98fac5869eac14e13dfb6f98228c41e638aa2a59d1f85e9c',
-    address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
-  },
-};
+// The mapping validator per network lives in a dependency-free module (the API
+// layer checks built transactions against it); re-exported for the existing importers.
+export { DUST_MAPPING_VALIDATOR };
 
 /**
  * Map a raw Nexus build error to a stable code the dialogs can localize. The
@@ -221,6 +201,16 @@ function isOutpointTombstoned(key: string): boolean {
 
 export function useCnightDustRegistration() {
   const { loggedWallet, tokens, keys, utxos } = toRefs(walletStore);
+  /** `txHash#index` of every UTxO the wallet holds (lets the build check tell a lent collateral from the user's own). */
+  const ownUtxoRefs = (): string[] =>
+    ((utxos.value ?? []) as unknown as Array<[{ txId: unknown; index: unknown }, unknown]>).map(([input]) => inputRefOf(input));
+
+  // What the build check knows about the wallet: its UTxOs, and its history, from
+  // which the registration UTxO (and so the mapping NFT) is proven before Koios is asked.
+  const buildContext = () => ({
+    ownUtxoRefs: ownUtxoRefs(),
+    proofSources: [historySource(walletStore.transactions as unknown[])],
+  });
 
   const status = ref<MidnightDustRegistrationStatusDto | null>(null);
   const statusLoading = ref(false);
@@ -524,7 +514,7 @@ export function useCnightDustRegistration() {
         cardanoAddress: wallet.baseAddress,
         paymentKeyHashHex: paymentKeyHashHex ?? '',
         dustAddressHex,
-      });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete registration transaction');
       }
@@ -707,7 +697,7 @@ export function useCnightDustRegistration() {
         paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
         registrationUtxoTxHash: outpoint.txHash,
         registrationUtxoOutputIndex: outpoint.outputIndex,
-      });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete deregistration transaction');
       }
@@ -766,7 +756,7 @@ export function useCnightDustRegistration() {
         paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
         registrationUtxoTxHash: txHash,
         registrationUtxoOutputIndex: outputIndex,
-      });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete deregistration transaction');
       }
@@ -828,7 +818,7 @@ export function useCnightDustRegistration() {
         registrationUtxoTxHash: outpoint.txHash,
         registrationUtxoOutputIndex: outpoint.outputIndex,
         dustAddressHex,
-      });
+      }, buildContext());
       if (build.status !== 'complete' || !build.txCbor) {
         throw new Error(build.note || 'Nexus did not return a complete update transaction');
       }

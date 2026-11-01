@@ -8,6 +8,7 @@ import { walletStore } from '@/stores/walletStore';
 import { parseCip45Input } from './qr';
 import type { Cip45Pairing, Cip45Session, Cip45WalletContext, Cip45Authorization } from './types';
 import { CIP45_REVOKED, walletContext, sameWallet } from './authorization';
+import { cip45Storage } from './cip45Storage';
 
 const PAIRINGS_KEY = 'cip45Pairings';
 const PEER_ID_KEY = 'cip45PeerId';
@@ -155,7 +156,7 @@ class Cip45Service {
 
   private async loadPairings(): Promise<void> {
     await this.storageMutex.runExclusive(async () => {
-      const stored = await chrome.storage.local.get(PAIRINGS_KEY);
+      const stored = await cip45Storage.get(PAIRINGS_KEY);
       this.pairingsCache = (stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? [];
     });
   }
@@ -207,16 +208,16 @@ class Cip45Service {
       };
       assertCurrent();
       if (this.wallet) return this.wallet;
-      const stored = await chrome.storage.local.get([PEER_ID_KEY, LIB_STORAGE_KEY]);
+      const stored = await cip45Storage.get([PEER_ID_KEY, LIB_STORAGE_KEY]);
       assertCurrent();
       let peerId = stored?.[PEER_ID_KEY] as string | undefined;
       if (!peerId) {
         peerId = `gero-${crypto.randomUUID()}`;
-        await chrome.storage.local.set({ [PEER_ID_KEY]: peerId });
+        await cip45Storage.set({ [PEER_ID_KEY]: peerId });
         assertCurrent();
       }
       const cache = (stored?.[LIB_STORAGE_KEY] as Record<string, string>) ?? {};
-      const persist = () => { void chrome.storage.local.set({ [LIB_STORAGE_KEY]: cache }); };
+      const persist = () => { void cip45Storage.set({ [LIB_STORAGE_KEY]: cache }); };
       const storage: PeerConnectStorage = {
         get: key => cache[key] ?? null,
         set: (key, value) => { cache[key] = value; persist(); },
@@ -309,14 +310,14 @@ class Cip45Service {
           await this.storageMutex.runExclusive(async () => {
             this.assertAttempt(attempt);
             if (settled || peer !== this.wallet) throw new Error(CIP45_REVOKED);
-            const stored = await chrome.storage.local.get(PAIRINGS_KEY);
+            const stored = await cip45Storage.get(PAIRINGS_KEY);
             this.assertAttempt(attempt);
             if (settled || peer !== this.wallet) throw new Error(CIP45_REVOKED);
             const rows = (stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? [];
             if (!rows.some(p => p.walletId === attempt.context.walletId && p.dappPeerId === attempt.peerId)) {
               rows.push({ dappPeerId: attempt.peerId, dappName: session.dappName,
                 dappUrl: session.dappUrl, walletId: attempt.context.walletId, pairedAt: Date.now() });
-              await chrome.storage.local.set({ [PAIRINGS_KEY]: rows });
+              await cip45Storage.set({ [PAIRINGS_KEY]: rows });
             }
             this.pairingsCache = rows;
           });
@@ -339,10 +340,10 @@ class Cip45Service {
     const context = this.currentContext();
     if (this.session?.dappPeerId === dappPeerId || this.attempt?.peerId === dappPeerId) this.invalidate();
     await this.storageMutex.runExclusive(async () => {
-      const stored = await chrome.storage.local.get(PAIRINGS_KEY);
+      const stored = await cip45Storage.get(PAIRINGS_KEY);
       this.pairingsCache = ((stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? []).filter(p =>
         !(p.dappPeerId === dappPeerId && p.walletId === context.walletId));
-      await chrome.storage.local.set({ [PAIRINGS_KEY]: this.pairingsCache });
+      await cip45Storage.set({ [PAIRINGS_KEY]: this.pairingsCache });
     });
   }
 

@@ -21,7 +21,7 @@ describe('release artifact gate', () => {
       manifest_version: 3, version: '3.0.0', key,
       background: { service_worker: './background/index.js' },
       options_page: 'index.html', side_panel: { default_path: 'sidepanel/index.html' },
-      content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none';" },
+      content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; form-action 'none'; base-uri 'none';" },
       web_accessible_resources: [{ resources: ['assets/*.wasm'], matches: ['<all_urls>'] }],
     }));
     write('background/index.js', 'export {};');
@@ -52,6 +52,8 @@ describe('release artifact gate', () => {
     ['eval permitted', manifest => { manifest.content_security_policy.extension_pages = "script-src 'self' 'unsafe-eval'; object-src 'none'"; }],
     ['duplicate CSP directive', manifest => { manifest.content_security_policy.extension_pages = "script-src https:; script-src 'self'; object-src 'none'"; }],
     ['script element override', manifest => { manifest.content_security_policy.extension_pages += 'script-src-elem https:;'; }],
+    ['form posts permitted', manifest => { manifest.content_security_policy.extension_pages = manifest.content_security_policy.extension_pages.replace("form-action 'none'", 'form-action https:'); }],
+    ['base element permitted', manifest => { manifest.content_security_policy.extension_pages = manifest.content_security_policy.extension_pages.replace("base-uri 'none'", "base-uri 'self'"); }],
     ['resource outside package', manifest => { manifest.web_accessible_resources[0].resources = ['../secret.wasm']; }],
   ])('rejects %s', (_name, change) => {
     updateManifest(change);

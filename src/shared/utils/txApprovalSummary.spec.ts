@@ -212,6 +212,112 @@ describe('buildTxApprovalSummary', () => {
   });
 });
 
+describe('buildTxApprovalSummary: what actually leaves the wallet', () => {
+  const ownUtxo = (index: number, coins: bigint) =>
+    [{ txId: TX_ID, index }, { address: OWN_ADDR, value: { coins } }] as unknown as Cardano.Utxo;
+  const poolRegistration = (rewardAccount: string) => ({
+    __typename: Cardano.CertificateType.PoolRegistration,
+    poolParameters: { id: POOL, rewardAccount, owners: [], pledge: 0n, cost: 340_000_000n, margin: { numerator: 0, denominator: 1 }, relays: [], vrf: '0'.repeat(64) },
+  });
+  const deposits = { stakeKey: 2_000_000n, pool: 500_000_000n };
+
+  it('counts a pool deposit refunded to someone else, and asks for an acknowledgement', () => {
+    // 600 ADA in, 99.83 ADA back as change: the 500 ADA deposit and the fee leave the wallet.
+    const s = buildTxApprovalSummary(tx({
+      inputs: [{ txId: TX_ID, index: 0 }],
+      outputs: [out(CHANGE_ADDR, 99_830_000n)],
+      certificates: [poolRegistration(FOREIGN_REWARD)],
+    }), ctx({ ownUtxos: [ownUtxo(0, 600_000_000n)], deposits }));
+    expect(s.totals.youPayAda).toBe('500.17');
+    expect(s.certificates[0]).toMatchObject({ poolId: POOL, depositAda: '500.00', depositDirection: 'paid', refundAccount: FOREIGN_REWARD, refundIsOwn: false });
+    expect(s.requiresForeignValueAck).toBe(true);
+  });
+
+  it('includes deposits in the estimate when the wallet’s UTxOs are unknown', () => {
+    const s = buildTxApprovalSummary(tx({ outputs: [out(CHANGE_ADDR, 1n)], certificates: [poolRegistration(FOREIGN_REWARD)] }), ctx({ deposits }));
+    expect(s.totals.youPayAda).toBe('500.17');
+    // The wallet's own pool: no acknowledgement needed.
+    expect(buildTxApprovalSummary(tx({ certificates: [poolRegistration(OWN_REWARD)] }), ctx({ deposits })).requiresForeignValueAck).toBe(false);
+  });
+
+  it('flags a DRep registration for someone else’s DRep and counts its deposit', () => {
+    const reg = (hash: string) => ({ __typename: Cardano.CertificateType.RegisterDelegateRepresentative, dRepCredential: keyCred(hash), deposit: 500_000_000n, anchor: null });
+    const foreign = buildTxApprovalSummary(tx({ certificates: [reg(FOREIGN_DREP_HASH)] }), ctx());
+    expect(foreign.certificates[0].refundIsOwn).toBe(false);
+    expect(foreign.totals.youPayAda).toBe('500.17');
+    expect(foreign.requiresForeignValueAck).toBe(true);
+    expect(buildTxApprovalSummary(tx({ certificates: [reg(OWN_DREP_HASH)] }), ctx()).requiresForeignValueAck).toBe(false);
+  });
+
+  // No signer witnesses a script credential with the DRep key, whatever its hash.
+  it('does not count a script DRep credential carrying the wallet\'s DRep hash as the wallet\'s', () => {
+    const scriptReg = { __typename: Cardano.CertificateType.RegisterDelegateRepresentative, dRepCredential: { type: Cardano.CredentialType.ScriptHash, hash: OWN_DREP_HASH }, deposit: 500_000_000n, anchor: null };
+    const s = buildTxApprovalSummary(tx({ certificates: [scriptReg] }), ctx());
+    expect(s.certificates[0].refundIsOwn).toBe(false);
+    expect(s.requiresForeignValueAck).toBe(true);
+  });
+
+  it('flags a governance proposal whose deposit is refunded to someone else', () => {
+    const s = buildTxApprovalSummary(tx({
+      proposalProcedures: [{ deposit: 100_000_000_000n, rewardAccount: FOREIGN_REWARD, governanceAction: { __typename: Cardano.GovernanceActionType.info_action }, anchor: {} }],
+    }), ctx());
+    expect(s.totals.youPayAda).toBe('100000.17');
+    expect(s.requiresForeignValueAck).toBe(true);
+  });
+
+  it('shows all of the wallet’s collateral at risk when it returns to someone else', () => {
+    const body = {
+      inputs: [{ txId: TX_ID, index: 0 }],
+      outputs: [out(CHANGE_ADDR, 9_830_000n)],
+      collaterals: [{ txId: TX_ID, index: 1 }],
+      totalCollateral: 1_000_000n,
+    };
+    const utxos = [ownUtxo(0, 10_000_000n), ownUtxo(1, 50_000_000n)];
+    const foreign = buildTxApprovalSummary(tx({ ...body, collateralReturn: out(EXT_ADDR, 49_000_000n) }), ctx({ ownUtxos: utxos }));
+    expect(foreign.collateralAtRiskAda).toBe('50.00');
+    expect(foreign.requiresForeignValueAck).toBe(true);
+    const own = buildTxApprovalSummary(tx({ ...body, collateralReturn: out(CHANGE_ADDR, 49_000_000n) }), ctx({ ownUtxos: utxos }));
+    expect(own.collateralAtRiskAda).toBe('1.00');
+    expect(own.requiresForeignValueAck).toBe(false);
+  });
+
+  it('does not ask about a collateral return when the collateral is not the wallet’s', () => {
+    const s = buildTxApprovalSummary(tx({
+      inputs: [{ txId: TX_ID, index: 0 }],
+      outputs: [out(CHANGE_ADDR, 9_830_000n)],
+      collaterals: [{ txId: '7'.repeat(64), index: 0 }],
+      collateralReturn: out(EXT_ADDR, 4_000_000n),
+    }), ctx({ ownUtxos: [ownUtxo(0, 10_000_000n)] }));
+    expect(s.requiresForeignValueAck).toBe(false);
+  });
+
+  it('is exact with the wallet’s inputs known, and an estimate (named) with an unknown one', () => {
+    const body = { inputs: [{ txId: TX_ID, index: 0 }, { txId: TX_ID, index: 1 }], outputs: [out(EXT_ADDR, 5_000_000n), out(CHANGE_ADDR, 14_830_000n)] };
+    const exact = buildTxApprovalSummary(tx(body), ctx({ ownUtxos: [ownUtxo(0, 10_000_000n), ownUtxo(1, 10_000_000n)] }));
+    expect(exact.totals.youPayAda).toBe('5.17');
+    expect(exact.unmatchedInputCount).toBe(0);
+    const partial = buildTxApprovalSummary(tx(body), ctx({ ownUtxos: [ownUtxo(0, 10_000_000n)] }));
+    expect(partial.unmatchedInputCount).toBe(1);
+    expect(partial.totals.youPayAda).toBe('5.17');
+  });
+
+  it('never counts a script input as the wallet’s or as unmatched', () => {
+    // Buying from a script listing: the listing's 2 ADA input is not the wallet's.
+    const s = buildTxApprovalSummary(tx({
+      inputs: [{ txId: TX_ID, index: 0 }, { txId: '8'.repeat(64), index: 0 }],
+      outputs: [out(EXT_ADDR, 12_000_000n), out(CHANGE_ADDR, 9_830_000n)],
+    }), ctx({ ownUtxos: [ownUtxo(0, 20_000_000n)] }));
+    expect(s.unmatchedInputCount).toBe(1);
+    const withRedeemer = { ...tx({
+      inputs: [{ txId: TX_ID, index: 0 }, { txId: '8'.repeat(64), index: 0 }],
+      outputs: [out(EXT_ADDR, 12_000_000n), out(CHANGE_ADDR, 9_830_000n)],
+    }), witness: { redeemers: [{ purpose: Cardano.RedeemerPurpose.spend, index: 1, data: {}, executionUnits: { memory: 0, steps: 0 } }] } } as unknown as Cardano.Tx;
+    const listing = buildTxApprovalSummary(withRedeemer, ctx({ ownUtxos: [ownUtxo(0, 20_000_000n)] }));
+    expect(listing.unmatchedInputCount).toBe(0);
+    expect(listing.totals.youPayAda).toBe('10.17');
+  });
+});
+
 describe('formatLovelace', () => {
   it('formats with bigint precision and at least two decimals', () => {
     expect(formatLovelace(0n)).toBe('0.00');

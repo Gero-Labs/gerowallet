@@ -125,6 +125,7 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useNativeSwapSigner } from '@/modules/swap/composables/useNativeSwapSigner';
+import type { SpendBound } from '@/shared/utils/txIntentGuard';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
@@ -262,11 +263,11 @@ const { signer: sharedSigner, keystone } = useNativeSwapSigner({
 });
 
 const signer = {
-  async signTx(unsignedTxCbor: string): Promise<string> {
+  async signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string> {
     const w = walletStore.loggedWallet;
     isBT.value = false;
     if (w?.type === WalletType.Ledger && w.btSupported) await chooseTransport();
-    return sharedSigner.signTx(unsignedTxCbor);
+    return sharedSigner.signTx(unsignedTxCbor, bound);
   },
 };
 

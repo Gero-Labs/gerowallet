@@ -20,8 +20,14 @@ import { approvalNamesActiveAccount, connectApprovedAccount, readConnectApproval
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { unlockAfterStartup } from '@/chrome/unlockStartup';
+import { UnlockThrottledError, mustLockAfterLogin, preLoginGrants, setUnlockThrottleMessage, verifySecondFactor, withUnlockThrottle } from '@/chrome/unlockGuards';
+import { createDexieDeviceShareStore, upgradeMpcDeviceShare } from '@/chrome/mpcDeviceShareUpgrade';
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
-import { embeddingSite } from '@/chrome/originBinding';
+import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
+import { embeddingSite, promptSite } from '@/chrome/originBinding';
+import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
+import { RESERVED_SIGN_DATA_MESSAGE, reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
+import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -99,9 +105,8 @@ import * as shieldedAddressCodecs from '@midnightntwrk/wallet-sdk-address-format
 import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorAddresses';
 import { connectorConfiguration } from '@/chains/midnight/midnightConnectorConfiguration';
 import {
-  decodeUnboundTransaction,
+  connectorBalancePrompt,
   isSealedMidnightTransaction,
-  summarizeContributions,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
@@ -118,6 +123,7 @@ import {
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
+  MpcCredentialRejectedError,
 } from '@/chrome/mpcWalletHandlers';
 import type { DeviceShareSecret } from '@/shared/utils/mpc';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
@@ -158,6 +164,17 @@ let resolveBooted: () => void = () => {};
 const workerBooted = new Promise<void>((resolve) => { resolveBooted = resolve; });
 const booted = () => Promise.race([workerBooted, new Promise<void>((resolve) => setTimeout(resolve, 15_000))]);
 
+/** True when gero-db holds a wallet record with this id. A read error answers true: login decides. */
+async function isStoredWallet(id: unknown): Promise<boolean> {
+  if (typeof id !== 'number') return false;
+  try {
+    const { getDb } = await import('@/db/gero-db');
+    return (await (await getDb())['wallets'].get(id)) != null;
+  } catch {
+    return true;
+  }
+}
+
 loadWallets().then(async () => {
   // PRIV-01: older releases stored the Midnight viewing key in plaintext on the
   // wallet record. Scrub it before anything reads the records; the live query
@@ -185,6 +202,12 @@ loadWallets().then(async () => {
   // awaited, and it needs no logged-in wallet; the opt-out rule inside makes it a no-op
   // (queue flush only) while the user has not turned notifications on.
   void notifyReassert('start');
+
+  // The logged wallet comes back from storage; only a wallet the database still holds
+  // is logged in again (login then takes its keys and secrets from that record).
+  if (walletStore.loggedWallet && !(await isStoredWallet(walletStore.loggedWallet.id))) {
+    WalletStore.logout();
+  }
 
   if (walletStore.loggedWallet) {
     // Safety: clear stale isLocked if no unlock method is configured
@@ -233,6 +256,17 @@ loadWallets().then(async () => {
 // MoonPay frame headers: stripped only for frames this extension opens. Session
 // rules don't survive a browser restart, so (re)install on every worker start.
 installMoonpayFrameRule().catch((e) => debugLog('MoonPay frame rule not installed:', e));
+
+// A back-off error's message is shown as-is by some pages (signing flows): give it
+// the user's language. Read at throw time, so a later language change applies.
+setUnlockThrottleMessage((seconds) => String(i18n.t('unlockGuard.tooManyAttempts', { seconds })));
+
+// Midnight SDK state used to sit in chrome.storage.local, readable by every content
+// script. It now lives in its own IndexedDB; delete the old copies once, even for a
+// profile that no longer uses Midnight.
+void import('@/chains/midnight/midnightWalletStatePersistence')
+  .then(({ purgeLegacyChromeWalletState }) => purgeLegacyChromeWalletState())
+  .catch((e) => debugLog('Legacy Midnight wallet state not purged:', e));
 
 (async () => {
   // Skip cashback init without its env vars — the SDK throws on missing config.
@@ -686,10 +720,14 @@ const processedDomains: Set<string> = new Set<string>();
 // Skips the phishing url-scan/overlay so it can't disrupt the Trezor handshake.
 const TRUSTED_DOMAINS: Set<string> = new Set<string>(['gerowallet.io', 'trezor.io']);
 
-chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
-  const domains = result['processedDomains'] || [];
-  domains.forEach((domain: string) => processedDomains.add(domain));
+// Sites the user let past the phishing check. In chrome.storage.session, which content
+// scripts cannot reach (chrome.storage.local is theirs to write, and a domain added
+// there would skip the check). Older releases kept the list in chrome.storage.local.
+chrome.storage.session.get(['processedDomains'], (result) => {
+  const domains = result['processedDomains'];
+  if (Array.isArray(domains)) domains.forEach((domain: string) => processedDomains.add(domain));
 });
+void chrome.storage.local.remove(['processedDomains', 'lastCleared']).catch(() => undefined);
 
 // Cleanup: drop the orphaned `realFiStore` key. It cached price candles for the removed
 // legacy price-candles store; nothing reads or writes it now, but existing installs still
@@ -710,7 +748,7 @@ chrome.storage.local.get('realFiStore', (result) => {
 
 function clearProcessedDomains() {
   processedDomains.clear();
-  chrome.storage.local.remove(['processedDomains', 'lastCleared'], () => {
+  chrome.storage.session.remove(['processedDomains'], () => {
     if (chrome.runtime.lastError) {
       console.error('Error removing processedDomains from storage:', chrome.runtime.lastError);
     }
@@ -878,7 +916,7 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       const res = await handleBlacklisted(request, details.tabId);
       if (res['data'] === 'proceed') {
         processedDomains.add(domain);
-        await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+        await chrome.storage.session.set({ processedDomains: Array.from(processedDomains) });
         await chrome.tabs.sendMessage(details.tabId, { action: 'removeOverlay', url: request.origin });
       } else if (res['data'] === 'safety') {
         await chrome.tabs.update(details.tabId, { url: 'https://www.google.com' });
@@ -886,7 +924,7 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
         await chrome.tabs.update(details.tabId, { url: chrome.runtime.getURL(`index.html#/transactions?website=${request.origin}`) });
       } else if (res === 'approved') {
         processedDomains.add(domain);
-        await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+        await chrome.storage.session.set({ processedDomains: Array.from(processedDomains) });
       } else if (res === 'skip') {
         // nothing
       } else {
@@ -907,6 +945,19 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
 function refuseWhileLocked(request: { id?: unknown }, sendResponse: (r: unknown) => void): boolean {
   if (!walletStore.isLocked) return false;
   sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  return true;
+}
+
+/**
+ * Security settings of the logged-in wallet (Submit API endpoint, cross-device
+ * trust and policy, push-notification registration and preferences) and new dApp
+ * sessions (WalletConnect, CIP-45) cannot change behind the lock screen, nor can a
+ * Google account's MPC registration be deleted. Options handlers only; answers
+ * `{ success: false, error }` in the shape those handlers use.
+ */
+function refuseSettingsWhileLocked(request: { id?: unknown }, sendResponse: (r: unknown) => void, error: string = 'locked'): boolean {
+  if (!walletStore.isLocked) return false;
+  sendResponse({ id: request.id, data: { success: false, error }, target: TARGET, sender: SENDER.extension });
   return true;
 }
 
@@ -1150,12 +1201,18 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
-  // Gate dApp (CIP-30) callers on the whitelist. The origin-present guard leaves
-  // the trusted internal caller intact: Bring cashback runs in our own content
-  // script and calls this directly (no origin) to bypass the dApp whitelist by
-  // design (see content.ts getWalletAddress). Page requests always carry an
-  // origin (stamped by the relay), so they are always checked.
-  if (request.origin && !WalletStore.isWhitelisted(request.origin)) {
+  // dApp (CIP-30) callers need the whitelist; page requests always carry the
+  // relay-stamped origin. The one origin-less caller is our own content script,
+  // handing the address to Bring cashback (content.ts getWalletAddress): it gets
+  // it only while the user has cashback on. Nobody gets it while locked.
+  if (refuseWhileLocked(request, sendResponse)) return;
+  const releasable = await mayReleaseAddress({
+    origin: request.origin,
+    locked: walletStore.isLocked,
+    isWhitelisted: (origin) => WalletStore.isWhitelisted(origin),
+    bringOptedOut: () => readBringOptOut(),
+  });
+  if (!releasable) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
   }
@@ -1318,8 +1375,7 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
   if (!WalletStore.isWhitelisted(origin)) return false;
   // (a) Gero-curated allowlist — entries are full origins, compared by exact equality.
   try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const list = (stored?.featureFlags as { collateralTrustedDapps?: unknown })?.collateralTrustedDapps;
+    const list = (await readFeatureFlagMirror())['collateralTrustedDapps'];
     if (Array.isArray(list) && list.some((e) => {
       if (typeof e !== 'string' || e.length === 0) return false;
       try {
@@ -1455,6 +1511,13 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
   const reply = (opts: ReplyOpts) =>
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
 
+  // Our own content script calls this without an origin (Bring's "log in"
+  // button, reachable only from Bring's own iframe). A page request always
+  // carries one and must come from a connected site.
+  if (request.origin !== undefined && !WalletStore.isWhitelisted(request.origin)) {
+    return reply({ error: APIError.Refused });
+  }
+
   // If somehow already logged in, resolve immediately.
   if (WalletStore.state.loggedWallet) {
     return reply({ data: 'login' });
@@ -1534,6 +1597,10 @@ app.add(METHOD.signData, (request, sendResponse) => {
   // enforce the whitelist here instead of in that pre-check round-trip.
   if (!WalletStore.isWhitelisted(request.origin)) {
     return signDataReply({ error: APIError.Refused });
+  }
+  // Gero's own proofs (device registration, support login) are signData too.
+  if (reservedSigningDomain(request.data?.payload)) {
+    return signDataReply({ error: { code: APIError.Refused.code, info: RESERVED_SIGN_DATA_MESSAGE } });
   }
 
   // Explicit fields only: never spread page-supplied data into the approval
@@ -2422,19 +2489,34 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
           return cached;
         };
 
-    await unlockMpcWalletFlow(
-      { walletId, idToken: idToken || '', secret },
-      {
-        getWallet: async (id) => {
-          const wallets = await getAllWallets();
-          return wallets[id];
+    // One back-off with every other check of this wallet group's secrets: a wrong
+    // 2FA code or a device secret that does not reconstruct the key counts; a
+    // Google or network failure does not.
+    await withUnlockThrottle(walletId, async () => {
+      // 2FA, when the wallet has it, applies here as on every other unlock path.
+      // Never log request.data: it carries the TOTP code and the spending password.
+      const { getDb } = await import('@/db/wallet-db');
+      const configTable = (await getDb(walletId)).table('config');
+      if (!(await verifySecondFactor(configTable, request.data?.totpCode, request.data?.spendingPassword))) {
+        throw new MpcCredentialRejectedError('Invalid 2FA code');
+      }
+      await unlockMpcWalletFlow(
+        { walletId, idToken: idToken || '', secret },
+        {
+          getWallet: async (id) => {
+            const wallets = await getAllWallets();
+            return wallets[id];
+          },
+          getLoginShare,
+          reconstructRootKeyBytes,
+          sessionCache: mpcSessionCache,
+          promoteMpcDeviceShareNext,
+          upgradeDeviceShare: (walletId, secret) => upgradeMpcDeviceShare(
+            walletId, secret, createDexieDeviceShareStore(async () => (await import('@/db/gero-db')).getDb()),
+          ),
         },
-        getLoginShare,
-        reconstructRootKeyBytes,
-        sessionCache: mpcSessionCache,
-        promoteMpcDeviceShareNext,
-      },
-    );
+      );
+    }, { rejected: () => false, rejection: (error) => error instanceof MpcCredentialRejectedError });
 
     // Reconstruct+validate passed — only now is it safe to cache the freshly
     // fetched login share so later re-unlocks this session can skip Google.
@@ -2459,6 +2541,10 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
       sender: SENDER.extension,
     });
   } catch (error) {
+    if (error instanceof UnlockThrottledError) {
+      sendResponse({ id: request.id, data: { success: false, retryAfterMs: error.retryAfterMs, error: error.message }, target: TARGET, sender: SENDER.extension });
+      return true;
+    }
     console.error('Error unlocking MPC wallet:', getErrorMessage(error, 'unlock failed'));
     sendResponse({
       id: request.id,
@@ -2686,6 +2772,8 @@ app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse
  */
 app.addToOptions(MessageTypes.DEREGISTER_MPC_ACCOUNT, async (request, sendResponse) => {
   try {
+    // Reachable from the welcome page while locked: say why, in the user's language.
+    if (refuseSettingsWhileLocked(request, sendResponse, String(i18n.t('welcome.resetGoogleAccountLocked')))) return true;
     const { idToken, chain, network } = request.data || {};
     if (!idToken || !chain || !network) {
       throw new Error('idToken, chain and network are required');
@@ -2851,7 +2939,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     // Note: Never log password data
     const walletBg = walletManager.getWallet();
     if (walletBg) {
-      // Await verifySpendingPassword (now async to support PRF wallets)
+      // Counted toward the wallet's back-off; throws UnlockThrottledError during a wait.
       const isValid = await walletBg.verifySpendingPassword(request.data.password);
       sendResponse({
         id: request.id,
@@ -2868,6 +2956,10 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
       });
     }
   } catch (error) {
+    if (error instanceof UnlockThrottledError) {
+      sendResponse({ id: request.id, data: { success: false, retryAfterMs: error.retryAfterMs, error: error.message }, target: TARGET, sender: SENDER.extension });
+      return true;
+    }
     console.error('Error verifying spending password:', error);
     sendResponse({
       id: request.id,
@@ -3123,6 +3215,7 @@ app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) =>
 app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const result = await notifyActions.setBrowserEnabled(request.data?.enabled === true);
     sendResponse(crossDeviceReply(request.id, { success: true, result, state: await getNotifyState() }));
   } catch (error) {
@@ -3133,6 +3226,7 @@ app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendRe
 app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
     const pkBytes = request.data?.privateKeyBytes;
     const privateKeyBytes = Array.isArray(pkBytes) ? Uint8Array.from(pkBytes) : undefined;
@@ -3147,6 +3241,7 @@ app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse
 app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     await notifyActions.disableWallet(Number(request.data?.walletId));
     sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState() }));
   } catch (error) {
@@ -3157,6 +3252,7 @@ app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendRespons
 app.addToOptions(MessageTypes.NOTIFY_SET_PREFS, async (request, sendResponse) => {
   try {
     await booted();
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const result = await notifyActions.setPrefs(Number(request.data?.walletId), request.data?.prefs ?? {});
     sendResponse(crossDeviceReply(request.id, { success: result === 'ok', result, state: await getNotifyState() }));
   } catch (error) {
@@ -3268,6 +3364,7 @@ app.addToOptions(MessageTypes.GET_CROSS_DEVICE_DEVICES, async (request, sendResp
 });
 
 app.addToOptions(MessageTypes.SET_REMOTE_SIGNING_ENABLED, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
   try {
     const settings = await walletManager.setRemoteSigningEnabled(!!request.data?.enabled);
     sendResponse(crossDeviceReply(request.id, { success: true, settings }));
@@ -3277,6 +3374,7 @@ app.addToOptions(MessageTypes.SET_REMOTE_SIGNING_ENABLED, async (request, sendRe
 });
 
 app.addToOptions(MessageTypes.SET_CROSS_DEVICE_POLICY, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
   try {
     const policy = request.data?.policy === 'require_remote' ? 'require_remote' : 'ask';
     const settings = await walletManager.setCrossDevicePolicy(policy);
@@ -3287,6 +3385,7 @@ app.addToOptions(MessageTypes.SET_CROSS_DEVICE_POLICY, async (request, sendRespo
 });
 
 app.addToOptions(MessageTypes.SET_SERVE_PROOFS_ENABLED, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
   try {
     const settings = await walletManager.setServeProofsEnabled(!!request.data?.enabled);
     sendResponse(crossDeviceReply(request.id, { success: true, settings }));
@@ -3296,6 +3395,7 @@ app.addToOptions(MessageTypes.SET_SERVE_PROOFS_ENABLED, async (request, sendResp
 });
 
 app.addToOptions(MessageTypes.SET_DEVICE_SERVE_PROOFS, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
   try {
     const deviceId = String(request.data?.deviceId ?? '');
     const settings = await walletManager.setDeviceServeProofs(deviceId, !!request.data?.enabled);
@@ -3306,6 +3406,7 @@ app.addToOptions(MessageTypes.SET_DEVICE_SERVE_PROOFS, async (request, sendRespo
 });
 
 app.addToOptions(MessageTypes.TRUST_CROSS_DEVICE, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
   try {
     const deviceId = String(request.data?.deviceId ?? '');
     const settings = await walletManager.trustCrossDevice(deviceId);
@@ -3320,6 +3421,7 @@ app.addToOptions(MessageTypes.TRUST_CROSS_DEVICE, async (request, sendResponse) 
 });
 
 app.addToOptions(MessageTypes.UNTRUST_CROSS_DEVICE, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
   try {
     const settings = await walletManager.untrustCrossDevice(String(request.data?.deviceId ?? ''));
     sendResponse(crossDeviceReply(request.id, { success: true, settings }));
@@ -3568,6 +3670,7 @@ function registerSubmitApiHandler(
   failure: SubmitApiSettingsError,
 ) {
   app.addToOptions(method, async (request, sendResponse) => {
+    if (refuseSettingsWhileLocked(request, sendResponse, failure)) return;
     let data: unknown;
     try {
       data = await run(submitApiWallet(), (request.data ?? {}) as Record<string, unknown>);
@@ -3945,8 +4048,39 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
  * link and WalletConnect. The wallet list, the account switcher and a dApp
  * connect that picked another account (connectApproved) all log in here.
  */
+/**
+ * Whether a LOGIN must leave `requested` locked (see `mustLockAfterLogin`): a
+ * locked or logged-out session is never unlocked by a LOGIN alone. The previous
+ * state is read before anything awaits. If the target's lock settings cannot be
+ * read, a locked or logged-out session stays locked.
+ */
+async function loginRequiresUnlock(requested: { id?: unknown } | null | undefined): Promise<boolean> {
+  const priorLoggedIn = !!walletStore.loggedWallet;
+  const priorLocked = walletStore.isLocked;
+  try {
+    const { getAllWallets } = await import('@/db/gero-db');
+    const wallets = await getAllWallets();
+    const record = typeof requested?.id === 'number' ? wallets[requested.id] : undefined;
+    if (!record) return !priorLoggedIn || priorLocked;
+    const group = secretsWallet(record, wallets);
+    const { getDb } = await import('@/db/wallet-db');
+    const unlockMethod = await (await getDb(group.id)).table('config').where({ key: 'unlockMethod' }).first();
+    return mustLockAfterLogin({
+      targetIsMpc: group.encryptionMethod === 'mpc',
+      hasUnlockMethod: !!unlockMethod?.value,
+      preLoginVerified: preLoginGrants.consume(group.id),
+      priorLoggedIn,
+      priorLocked,
+    });
+  } catch (e) {
+    console.warn('Could not read lock settings for login:', getErrorMessage(e, 'unknown'));
+    return !priorLoggedIn || priorLocked;
+  }
+}
+
 async function loginWallet(wallet: Parameters<typeof walletManager.login>[0]) {
-  const walletBg = await walletManager.login(wallet);
+  const requireUnlock = await loginRequiresUnlock(wallet);
+  const walletBg = await walletManager.login(wallet, { requireUnlock });
   if (walletBg) {
     // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
     void notifyReassert('login');
@@ -4050,14 +4184,21 @@ app.addToOptions(MessageTypes.BACKGROUND_READY, (request, sendResponse) => {
   sendResponse({ id: request.id, data: { ready: true }, target: TARGET, sender: SENDER.extension });
 });
 
+/** The PRF output a PassKey unlock carries (`passKeyPrf`, a number[]), or undefined for any other unlock. */
+function passKeyPrfOf(data: { passKeyPrf?: unknown } | undefined): number[] | undefined {
+  return Array.isArray(data?.passKeyPrf) ? (data.passKeyPrf as number[]) : undefined;
+}
+
 app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
+  // A PassKey unlock carries the PassKey's PRF output; wiped once checked. Never logged.
+  const passKeyPrf = passKeyPrfOf(request.data);
   try {
     const { unlockCredential, totpCode, password, unlockMethod } = request.data;
     const success = await unlockAfterStartup(
       booted(),
       request.data.walletId,
       () => walletStore.loggedWallet?.id,
-      () => walletManager.unlock(unlockCredential, totpCode, password, unlockMethod),
+      () => walletManager.unlock(unlockCredential, totpCode, password, unlockMethod, passKeyPrf),
     );
     sendResponse({
       id: request.id,
@@ -4066,6 +4207,11 @@ app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (err) {
+    if (err instanceof UnlockThrottledError) {
+      // Too many wrong attempts: say how long to wait instead of checking anything.
+      sendResponse({ id: request.id, data: { success: false, retryAfterMs: err.retryAfterMs }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
     console.error('unlock error', err);
     // A string survives messaging (an Error serializes to {}); the UI shows a
     // generic failure for any error instead of a wrong-credential message.
@@ -4076,13 +4222,19 @@ app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
       sender: SENDER.extension,
       error: getErrorMessage(err, 'unlock-failed'),
     });
+  } finally {
+    passKeyPrf?.fill(0);
   }
 });
 
 app.addToOptions(MessageTypes.VERIFY_PRE_LOGIN_UNLOCK, async (request, sendResponse) => {
+  const passKeyPrf = passKeyPrfOf(request.data);
   try {
     const { walletId, unlockCredential, totpCode, password, unlockMethod } = request.data;
-    const success = await walletManager.verifyPreLoginUnlock(walletId, unlockCredential, totpCode, password, unlockMethod);
+    const success = await walletManager.verifyPreLoginUnlock(walletId, unlockCredential, totpCode, password, unlockMethod, passKeyPrf);
+    // The LOGIN that follows a verified pre-login unlock may open the wallet unlocked.
+    // Granted per secrets record (account #0 of a group; not MPC-specific despite the helper's name).
+    if (success && typeof walletId === 'number') preLoginGrants.grant(await mpcSecretsWalletId(walletId));
     sendResponse({
       id: request.id,
       data: { success },
@@ -4090,14 +4242,21 @@ app.addToOptions(MessageTypes.VERIFY_PRE_LOGIN_UNLOCK, async (request, sendRespo
       sender: SENDER.extension,
     });
   } catch (err) {
+    if (err instanceof UnlockThrottledError) {
+      sendResponse({ id: request.id, data: { success: false, retryAfterMs: err.retryAfterMs }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
     console.error('pre-login unlock verification error', err);
+    // A string survives messaging; an Error serializes to {}.
     sendResponse({
       id: request.id,
       data: { success: false },
       target: TARGET,
       sender: SENDER.extension,
-      error: err,
+      error: getErrorMessage(err, 'unlock-failed'),
     });
+  } finally {
+    passKeyPrf?.fill(0);
   }
 });
 
@@ -4646,7 +4805,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
     return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
   }
 
-  const { psbtHexs, options } = request.data;
+  const { psbtHexs, options: batchOptions } = request.data;
   const tabId = request.send?.tab?.id;
   const favIconUrl = request.send?.tab?.favIconUrl;
   const embeddedIn = embeddingSite(request.origin, request.send);
@@ -4657,7 +4816,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   // signPsbt handler above, extracted here since this handler drives it once
   // per PSBT in a sequential loop (matching the popup-only version's original
   // one-popup-per-PSBT behavior).
-  const signOne = async (psbtHex: string): Promise<string> => {
+  const signOne = async (psbtHex: string, options: unknown): Promise<string> => {
     const singleRequest = { ...request, data: { psbtHex, options }, embeddedIn };
 
     const viaPopup = async (): Promise<string> => {
@@ -4695,8 +4854,9 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
 
   const signedHexs: string[] = [];
   try {
-    for (const psbtHex of psbtHexs) {
-      signedHexs.push(await signOne(psbtHex));
+    for (const [i, psbtHex] of (psbtHexs as string[]).entries()) {
+      // Unisat signPsbts takes one options object per PSBT.
+      signedHexs.push(await signOne(psbtHex, Array.isArray(batchOptions) ? batchOptions[i] : batchOptions));
     }
     sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
   } catch (err) {
@@ -4825,7 +4985,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_PSBT, async (request, sendRespon
     assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { psbtHex, options, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
-    const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret);
+    const ownUtxos = (WalletStore.state.utxos || []) as IUnifiedUtxo[];
+    const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret, ownUtxos);
     sendResponse({ id: request.id, data: { success: true, signedHex }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
@@ -4861,8 +5022,7 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendRes
  */
 async function isWalletConnectEnabled(): Promise<boolean> {
   try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const flags = (stored?.featureFlags as Record<string, unknown>) ?? {};
+    const flags = await readFeatureFlagMirror();
     return flags['isWalletConnectEnabled'] === true; // default OFF; only explicit true enables
   } catch {
     return false;
@@ -4894,16 +5054,23 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     try {
       const proposalData = proposal.params;
       const peerUrl = proposalData?.proposer?.metadata?.url || '';
+      // The peer names its own URL; the Verify API says where it really is.
+      const wcVerify = assessWcVerification(proposal.verifyContext);
+      if (wcVerify.state === 'scam') {
+        await wcService.rejectSession(proposalData.id, 'Website flagged as malicious');
+        return;
+      }
 
       // Blacklist check: WC pairing had no equivalent of the tab-navigation
       // blacklist scan (handleBlacklisted above) — a malicious dApp's WC
-      // metadata was never checked, unlike a malicious website's URL.
-      if (peerUrl) {
+      // metadata was never checked, unlike a malicious website's URL. Scans the
+      // attested origin too when it differs from the claimed one.
+      for (const scanTarget of wcScanTargets(peerUrl, wcVerify)) {
         try {
           const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
             ? walletStore.config.websiteProtection : true;
           if (websiteProtectionEnabled) {
-            const scanResponse = await urlScan(peerUrl);
+            const scanResponse = await urlScan(scanTarget);
             const verdict = await scanResponse.json();
             if (verdict === 'blacklist') {
               await wcService.rejectSession(proposalData.id, 'Website flagged as malicious');
@@ -4919,33 +5086,30 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       let approved = false;
       const useMiniGero = miniGeroPorts.size > 0;
       console.log(`🔗 WC proposal routing: ${useMiniGero ? 'mini-gero panel' : 'popup'} (miniGeroPorts=${miniGeroPorts.size})`);
+      // Feed the peer URL (+ icon) as query params so PopupHeader renders the
+      // dApp website + favicon + risk scan instead of "N/A" — WC popups carry
+      // no tab origin, unlike injected-dApp popups — plus the Verify verdict.
+      const openProposalPopup = async (): Promise<boolean> => {
+        const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
+        const q = new URLSearchParams({ website: peerUrl || 'WalletConnect', ...wcVerificationQuery(wcVerify) });
+        if (peerIcon) q.set('favIconUrl', peerIcon);
+        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
+        const tab = await focusOrCreatePopup(popupURL, 470, 600);
+        const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: { ...proposalData, wcVerify } }) as { data?: { approved?: boolean } };
+        return !!popupResponse?.data?.approved;
+      };
       if (useMiniGero) {
         try {
-          const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect' }, undefined);
+          const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect', wcVerify }, undefined);
           approved = !!(response.data as { approved?: boolean } | undefined)?.approved;
         } catch (miniErr) {
           // A dead/stale panel port must not silently reject a real approval —
           // fall back to the standalone popup instead of hard-rejecting.
           console.warn('⚠️ WC mini-gero proposal failed, falling back to popup:', miniErr);
-          const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
-          const q = new URLSearchParams({ website: peerUrl || 'WalletConnect' });
-          if (peerIcon) q.set('favIconUrl', peerIcon);
-          const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
-          const tab = await focusOrCreatePopup(popupURL, 470, 600);
-          const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
-          approved = !!popupResponse?.data?.approved;
+          approved = await openProposalPopup();
         }
       } else {
-        // Feed the peer URL (+ icon) as query params so PopupHeader renders the
-        // dApp website + favicon + risk scan instead of "N/A" — WC popups carry
-        // no tab origin, unlike injected-dApp popups.
-        const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
-        const q = new URLSearchParams({ website: peerUrl || 'WalletConnect' });
-        if (peerIcon) q.set('favIconUrl', peerIcon);
-        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
-        const tab = await focusOrCreatePopup(popupURL, 470, 600);
-        const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
-        approved = !!popupResponse?.data?.approved;
+        approved = await openProposalPopup();
       }
 
       if (approved) {
@@ -4991,10 +5155,12 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     popupSize: [number, number],
     /** The request's CAIP-2 chain: the release re-check requires it to stay the wallet's own. */
     chainId: string,
+    /** The Verify API verdict on this request's origin, shown with the claimed domain. */
+    wcVerify: WcVerification,
   ): Promise<void> {
     const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
     const peerMeta = session?.peer?.metadata;
-    const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0] };
+    const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0], wcVerify };
     // The wallet this request was authorized for (onSessionRequest checked it).
     const walletAtRequest = WalletStore.state.loggedWallet ? { ...WalletStore.state.loggedWallet } : null;
     // Release a signature only if that authorization still holds now: the
@@ -5019,7 +5185,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     }
 
     const fakeRequest = { id: `wc-${id}`, data: payload, origin: 'WalletConnect', send: { tab: { id: -1 } } };
-    const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?website=${encodeURIComponent('WalletConnect')}`);
+    // The peer's claimed site, labelled as a WalletConnect claim with its verdict.
+    const popupQuery = new URLSearchParams({ website: peerMeta?.url || 'WalletConnect', ...wcVerificationQuery(wcVerify) });
+    const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?${popupQuery.toString()}`);
     const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
     const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
     if (response.data !== undefined) {
@@ -5035,8 +5203,14 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     const { topic, params, id } = event;
     const { request: wcRequest, chainId } = params;
     const method = wcRequest.method;
+    const wcVerify = assessWcVerification(event.verifyContext);
 
     try {
+      if (wcVerify.state === 'scam') {
+        await wcService.respondError(topic, id, 4100, 'Request flagged as malicious');
+        return;
+      }
+
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet) {
         await wcService.respondError(topic, id, 4100, 'No wallet logged in');
@@ -5146,16 +5320,20 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'signTx',
               { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
-              topic, id, POPUP.signTx, [470, 852], chainId,
+              topic, id, POPUP.signTx, [470, 852], chainId, wcVerify,
             );
             return;
           }
           case 'cardano_signData': {
             const wcParams = wcRequest.params || {};
+            if (reservedSigningDomain(wcParams.payload)) {
+              await wcService.respondError(topic, id, 4100, RESERVED_SIGN_DATA_MESSAGE);
+              return;
+            }
             await routeWcSigningRequest(
               'signData',
               { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
-              topic, id, POPUP.dappSignData, [470, 600], chainId,
+              topic, id, POPUP.dappSignData, [470, 600], chainId, wcVerify,
             );
             return;
           }
@@ -5175,7 +5353,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'btcSignPsbt',
               { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
-              topic, id, POPUP.bitcoinSignPsbt, [470, 600], chainId,
+              topic, id, POPUP.bitcoinSignPsbt, [470, 600], chainId, wcVerify,
             );
             return;
           }
@@ -5184,7 +5362,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'btcSignMessage',
               { message: wcParams.message, type: wcParams.type || 'ecdsa' },
-              topic, id, POPUP.bitcoinSignMessage, [470, 600], chainId,
+              topic, id, POPUP.bitcoinSignMessage, [470, 600], chainId, wcVerify,
             );
             return;
           }
@@ -5207,6 +5385,8 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
 
 app.addToOptions(MessageTypes.WC_PAIR, async (request, sendResponse) => {
   try {
+    // A `wc:` link clicked on any page lands here (content.ts): no pairing starts behind the lock screen.
+    if (refuseSettingsWhileLocked(request, sendResponse)) return true;
     if (!(await isWalletConnectEnabled())) {
       sendResponse({ id: request.id, data: { success: false, error: 'WalletConnect is disabled' }, target: TARGET, sender: SENDER.extension });
       return true;
@@ -5226,6 +5406,7 @@ app.addToOptions(MessageTypes.WC_PAIR, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.WC_APPROVE_SESSION, async (request, sendResponse) => {
   try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
     const { default: WCStore } = await import('@/stores/walletConnectStore');
     const { id, accounts, chain, network } = request.data;
@@ -5275,8 +5456,7 @@ async function isCip45Enabled(): Promise<boolean> {
   // Build-time default; an explicit value in the mirror still wins.
   const buildDefault = import.meta.env['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
   try {
-    const stored = await chrome.storage.local.get('featureFlags');
-    const flags = (stored?.['featureFlags'] as Record<string, unknown>) ?? {};
+    const flags = await readFeatureFlagMirror();
     if (typeof flags['isCip45Enabled'] === 'boolean') {
       return flags['isCip45Enabled'];
     }
@@ -5301,6 +5481,7 @@ app.addToOptions(MessageTypes.CIP45_UPDATE_SESSION, async (request, sendResponse
 
 app.addToOptions(MessageTypes.CIP45_BEGIN_SESSION, async (request, sendResponse) => {
   let authorization: Cip45Authorization | undefined;
+  if (refuseSettingsWhileLocked(request, sendResponse)) return true;
   try {
     const { context, dappPeerId } = request.data as { context: Cip45WalletContext; dappPeerId: string };
     authorization = cip45Authorization.begin(cip45Owner(request.send), context, dappPeerId);
@@ -5475,6 +5656,10 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'signData': {
+        if (reservedSigningDomain(params.payload)) {
+          fail(APIError.Refused.code, RESERVED_SIGN_DATA_MESSAGE);
+          break;
+        }
         try {
           const result = await routeCip45SigningRequest(
             'signData',
@@ -5573,10 +5758,13 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
   try {
     const walletBg = walletManager.getWallet();
     if (!walletBg) throw new Error('No wallet logged in');
-    const { segments, password, prfSecret, unprovenTxHex } = request.data || {};
+    const { segments, password, prfSecret, unprovenTxHex, dustReceiverAddressBech32 } = request.data || {};
     if (!Array.isArray(segments)) throw new Error('segments[] is required');
+    if (dustReceiverAddressBech32 !== undefined && typeof dustReceiverAddressBech32 !== 'string') {
+      throw new Error('dustReceiverAddressBech32 must be a string');
+    }
     const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes, unprovenTxHex);
+    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes, unprovenTxHex, dustReceiverAddressBech32);
     sendResponse({
       id: request.id,
       data: { success: true, signatures },
@@ -5620,10 +5808,18 @@ app.addToOptions(
         walletId: walletManager.getWallet()?.id, network: walletManager.getWallet()?.network,
         locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
       }));
-      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor, proving } = request.data || {};
+      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor, proving, intendedOutputs } = request.data || {};
       const provingArg = parseProvingRequest(proving);
       if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
         throw new Error('unprovenTxHex is required');
+      }
+      // What the user asked Nexus to build; walletBg checks Nexus's transaction against it.
+      if (!Array.isArray(intendedOutputs) || intendedOutputs.length === 0 || !intendedOutputs.every((o: unknown) =>
+        !!o && typeof o === 'object'
+        && typeof (o as { address?: unknown }).address === 'string'
+        && typeof (o as { amount?: unknown }).amount === 'string'
+        && typeof (o as { token?: unknown }).token === 'string')) {
+        throw new Error('intendedOutputs[] ({ address, amount, token }) is required');
       }
       if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs)) {
         throw new Error('ttlMs is required (epoch millis)');
@@ -5667,6 +5863,7 @@ app.addToOptions(
         password,
         prfBytes,
         sponsorArg,
+        intendedOutputs,
       );
       assertSession();
       // Only the wallet-proved path can name the ledger hash here: the proven
@@ -6494,8 +6691,8 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
     return true;
   }
 
-  const favIconUrl = send.tab?.favIconUrl;
-  const connectPayload = { website: origin, favIconUrl };
+  // Names the embedding site for a cross-origin frame, as the Cardano and Bitcoin prompts do.
+  const connectPayload = promptSite(origin, send);
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
@@ -6953,8 +7150,7 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   // the user declined one unrelated one would be a functionality regression,
   // not a security improvement. `connect` is coherent to sticky-deny because
   // it's always the same idempotent action; signData isn't.
-  const favIconUrl = send.tab?.favIconUrl;
-  const signDataPayload = { data, website: origin, favIconUrl };
+  const signDataPayload = { data, ...promptSite(origin, send) };
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.signData, signDataPayload, tabId)
@@ -7025,22 +7221,23 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
       reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
       return;
     }
-    let contributions;
-    try {
-      contributions = summarizeContributions(
-        await decodeUnboundTransaction(validation.tx, midnightSdkNetworkId(currentWallet.network)),
-      );
-    } catch {
-      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is not a valid unsealed transaction for the connected network') });
+    const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
+    const prompt = await connectorBalancePrompt(
+      validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.addresses.unshielded,
+    );
+    if (prompt.ok === false) {
+      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, prompt.reason) });
       return;
     }
-    const payload = { data: { tx: validation.tx, contributions }, website: origin, favIconUrl: send.tab?.favIconUrl };
+    const payload = {
+      data: { tx: validation.tx, contributions: prompt.contributions, payments: prompt.payments },
+      ...promptSite(origin, send),
+    };
     // The dapp calls this after its (async) proving, so there is no user
     // gesture left to open the panel with. Park the request instead of
     // failing it (badge; delivered when the user opens the panel; immediate
     // when it is already open) — same treatment as the private-balance and
     // proof-server prompts.
-    const { midnightActions } = await import('@/stores/midnightStore');
     midnightActions.recordSiteActivity(origin, { type: 'funding' });
     parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
       .then((response: BackgroundResponse) => {
@@ -7273,8 +7470,7 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
     return true;
   }
-  const favIconUrl = send.tab?.favIconUrl;
-  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, website: origin, favIconUrl };
+  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, ...promptSite(origin, send) };
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
