@@ -278,6 +278,7 @@ import {
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
 import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
+import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
@@ -732,6 +733,11 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
   return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
 }
 
+/** The wallet's UTxOs less those a transaction it already submitted spends (see withoutPendingSpends). */
+function spendableUtxos(): Cardano.Utxo[] {
+  return withoutPendingSpends(utxos.value as Cardano.Utxo[], walletStore.transactions);
+}
+
 /**
  * Candidate inputs for a Nexus request: the whole wallet when it fits the request
  * limit, otherwise the holders of everything the recipients send plus the largest
@@ -739,7 +745,7 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
  * calls of one attempt see the same candidates.
  */
 function nexusInputs(): NexusTxInput[] {
-  const selection = selectInputCandidates(utxos.value as Cardano.Utxo[], {
+  const selection = selectInputCandidates(spendableUtxos(), {
     requiredAssets: committedBaseUnitsExcluding(''),
   });
   inputSelection.value = selection;
@@ -1036,8 +1042,9 @@ async function sendEntireWallet(recipientId: string) {
   if (idx !== -1) {
     const recipient = recipients.value[idx];
 
+    const available = spendableUtxos();
     const totals = new Map<string, bigint>();
-    for (const utxo of (utxos.value as Cardano.Utxo[])) {
+    for (const utxo of available) {
       const raw = utxo[1].value.assets as unknown;
       if (!raw) continue;
       const add = (unit: string, qty: unknown) => {
@@ -1092,7 +1099,7 @@ async function sendEntireWallet(recipientId: string) {
     await nextTick();
 
     debugLog('sendEntireWallet: scanned', {
-      utxoCount: (utxos.value as Cardano.Utxo[]).length,
+      utxoCount: available.length,
       uniqueAssets: totals.size,
       tokensKeptInRecipient: adaOnlyTokens.length,
       collectiblesEmitted: Object.keys(fullCollectibles).length,
@@ -1148,7 +1155,7 @@ async function runBuild(): Promise<void> {
     // balance on screen. A wallet short even as a whole gets the real shortfall.
     const selection = inputSelection.value;
     const shortfall = shortfallLovelaceFromMessage(msg);
-    const outside = selection?.truncated ? lovelaceOf(utxos.value as Cardano.Utxo[]) - lovelaceOf(selection.utxos) : BigInt(0);
+    const outside = selection?.truncated ? lovelaceOf(spendableUtxos()) - lovelaceOf(selection.utxos) : BigInt(0);
     const fragmented = !!selection?.truncated && shortfall !== undefined && outside >= shortfall;
     if (e instanceof InputLimitError) {
       buildError.value = friendlyTxError(e);
