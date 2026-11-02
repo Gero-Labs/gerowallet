@@ -129,6 +129,7 @@
                     <span v-else class="global-total__ada g-num">—</span>
                   </div>
                   <div v-if="buildError" class="global-total__row global-total__error" role="alert">{{ buildError }}</div>
+                  <div v-else-if="sweepNote" class="global-total__row global-total__note">{{ sweepNote }}</div>
                   <div v-else-if="maxLimitNote" class="global-total__row global-total__note">{{ maxLimitNote }}</div>
                 </div>
               </div>
@@ -142,6 +143,8 @@
               :recipients="recipients"
               :tx-data="tx"
               :active="isOpen && currentStep === 2"
+              :additional-fee-lovelace="sweepFeeLovelace"
+              :steps="sweepSteps"
               @next="handleSign"
               @prev="prevStep"
             />
@@ -162,6 +165,7 @@
 
       <!-- Actions -->
       <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <div v-if="sweepProgressText" class="t-caption text-center mb-1" role="status">{{ sweepProgressText }}</div>
         <!-- Under a "require remote" policy, local signing (password AND passkey)
              is disabled; only "Sign on another device" remains. -->
         <div v-if="currentStep === 2 && requiresRemoteForSend" class="text-caption grey--text text-center mb-2">
@@ -227,7 +231,7 @@
           </v-btn>
           <!-- Step 2: Sign on another device (flag-gated, dark by default) -->
           <v-btn
-            v-if="currentStep === 2 && canSignOnAnotherDevice"
+            v-if="currentStep === 2 && canSignOnAnotherDevice && !sweep"
             variant="text"
             class="ml-2"
             @click="signOnAnotherDevice()"
@@ -244,9 +248,9 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, shallowRef, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
+import { useTransactionSigning, type SweepProgress } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
@@ -277,6 +281,8 @@ import {
   type NexusTxInput,
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
+import { planMerges, type SweepPrerequisites } from '@/api/sweepPlan';
+import { buildSweep, type BuiltSweep } from '@/api/sweepBuild';
 import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
 import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -340,11 +346,40 @@ const maxRecipientIds = ref<Set<string>>(new Set());
 const inputSelection = ref<InputSelection | null>(null);
 /** A build failure the user has to act on, shown under the total. Null while nothing is wrong or a build is in flight. */
 const buildError = ref<string | null>(null);
+/**
+ * A sweep: when Max needs more UTxOs than one Nexus request carries, the merges
+ * (self-transfers) that bring them under the limit, and the UTxO set they came from.
+ */
+const sweep = shallowRef<(BuiltSweep & { key: string; builtAt: number }) | null>(null);
+const sweepPrerequisites = computed<SweepPrerequisites | null>(() =>
+  sweep.value ? { cbors: sweep.value.mergeCbors, outputs: sweep.value.mergeOutputs } : null);
+/** The merges' fees, which the user pays on top of the payment's. */
+const sweepFeeLovelace = computed(() => Number(sweep.value?.mergeFee ?? BigInt(0)));
+/** Transactions the send goes out as. */
+const sweepSteps = computed(() => (sweep.value ? sweep.value.merges.length + 1 : 1));
+const sweepProgress = ref<SweepProgress | null>(null);
+/** Rebuild a sweep's merges after this: Nexus gives them two hours to land, and signing takes the rest. */
+const SWEEP_REBUILD_AFTER_MS = 60 * 60 * 1000;
 /** Max/sweep only reaches the candidates one request may carry: say so rather than silently leaving UTxOs behind. */
 const maxLimitNote = computed(() => {
   const selection = inputSelection.value;
   if (!selection?.truncated || maxRecipientIds.value.size === 0) return null;
   return t('send.inputLimitMaxNote', { max: selection.limit, remaining: selection.total - selection.limit });
+});
+
+/** With a sweep, Max reaches every UTxO: say how, in place of the note about the ones it leaves behind. */
+const sweepNote = computed(() => {
+  const built = sweep.value;
+  if (!built) return null;
+  return t('send.sweepPlanNote', { count: built.utxoCount, steps: built.merges.length + 1 });
+});
+
+/** The line under the sign button while a sweep runs. */
+const sweepProgressText = computed(() => {
+  const progress = sweepProgress.value;
+  if (!progress) return '';
+  if (progress.phase === 'waiting') return t('send.sweepWaiting');
+  return t(progress.phase === 'signing' ? 'send.sweepSigning' : 'send.sweepSending', { step: progress.step, total: progress.total });
 });
 
 function createEmptyRecipient(): SendRecipient {
@@ -406,6 +441,8 @@ const {
 } = useTransactionSigning({
   active: isSummaryReady,
   tx,
+  prerequisites: sweepPrerequisites,
+  onProgress: (progress) => { sweepProgress.value = progress; },
   successMessageKey: 'wallet.txSubmittedSuccess',
   onSuccess: () => {
     // If this send swept rewards (auto-withdraw), zero the local balance so a
@@ -415,6 +452,11 @@ const {
   },
   onClose: () => emit('close'),
 });
+
+/** A sweep is signed under one approval: only signers that give one (password, PassKey, Google), never under a remote-only policy. */
+const canSweep = computed(() =>
+  (loggedWallet.value?.type === WalletType.Normal || loggedWallet.value?.type === WalletType.Google) &&
+  !requiresRemoteForSend.value);
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
@@ -489,6 +531,8 @@ const resetData = () => {
   txValid.value = false;
   buildError.value = null;
   inputSelection.value = null;
+  sweep.value = null;
+  sweepProgress.value = null;
   maxRecipientIds.value = new Set();
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
@@ -642,11 +686,11 @@ const globalTotal = computed(() => {
     });
   });
 
-  // Extract fee from built tx
+  // Extract fee from built tx, plus a sweep's merge fees: the user pays all of them.
   let feeAda = 0;
   let formattedFee = '';
   if (tx.value?.body?.fee) {
-    const feeLovelace = Number(tx.value.body.fee);
+    const feeLovelace = Number(tx.value.body.fee) + sweepFeeLovelace.value;
     feeAda = feeLovelace / 1_000_000;
     formattedFee = filters.toCurrency(feeLovelace, false, 6, '₳', '', false, 6);
   }
@@ -739,17 +783,51 @@ function spendableUtxos(): Cardano.Utxo[] {
 }
 
 /**
- * Candidate inputs for a Nexus request: the whole wallet when it fits the request
- * limit, otherwise the holders of everything the recipients send plus the largest
- * lovelace (see selectInputCandidates). Deterministic, so the max-ada and build
- * calls of one attempt see the same candidates.
+ * Candidate inputs for a Nexus request. With a sweep, the payment spends the merges'
+ * outputs and everything the merges leave. Otherwise the whole wallet when it fits
+ * the request limit, else the holders of everything the recipients send plus the
+ * largest lovelace (see selectInputCandidates). Deterministic, so the max-ada and
+ * build calls of one attempt see the same candidates.
  */
 function nexusInputs(): NexusTxInput[] {
+  if (sweep.value) {
+    inputSelection.value = null;
+    return [...sweep.value.direct, ...sweep.value.mergeOutputs].map(cardanoUtxoToNexusInput);
+  }
   const selection = selectInputCandidates(spendableUtxos(), {
     requiredAssets: committedBaseUnitsExcluding(''),
   });
   inputSelection.value = selection;
   return selection.utxos.map(cardanoUtxoToNexusInput);
+}
+
+/** The UTxO set as one string: a sweep is rebuilt when it changes. */
+function utxoSetKey(list: Cardano.Utxo[]): string {
+  return list.map(([txIn]) => `${txIn.txId}#${txIn.index}`).sort().join(',');
+}
+
+/**
+ * Max on a wallet holding more UTxOs than one Nexus request carries: build the merges
+ * that bring them under the limit, once per UTxO set (rebuilt after an hour, so the
+ * merges' two-hour validity never runs out before they are sent). Clears the sweep
+ * when none is needed or this wallet cannot sign one.
+ */
+async function ensureSweep(): Promise<void> {
+  const available = spendableUtxos();
+  const plan = canSweep.value && maxRecipientIds.value.size > 0 ? planMerges(available) : null;
+  if (!plan) {
+    sweep.value = null;
+    return;
+  }
+  const key = utxoSetKey(available);
+  if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return;
+  sweep.value = null;
+  const built = await buildSweep(plan, {
+    ownAddress: keys.value.payment[0].address,
+    network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+    walletNetwork: loggedWallet.value.network,
+  });
+  sweep.value = { ...built, key, builtAt: Date.now() };
 }
 
 /** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
@@ -896,6 +974,14 @@ async function setMax(recipientId: string, tokenIndex: number) {
       return recipientToNexusOutput(r);
     });
 
+  try {
+    await ensureSweep();
+  } catch (e) {
+    // The merges could not be built: nothing to compute the max from.
+    buildError.value = friendlyTxError(e);
+    isCalculatingMax.value = false;
+    return;
+  }
   let maxInputs: NexusTxInput[];
   try {
     maxInputs = nexusInputs();
@@ -1135,6 +1221,15 @@ async function runBuild(): Promise<void> {
   if (!hasAnyAmount()) {
     txValid.value = false;
     buildError.value = null;
+    return;
+  }
+
+  try {
+    await ensureSweep();
+  } catch (e) {
+    buildError.value = friendlyTxError(e);
+    txValid.value = false;
+    tx.value = undefined;
     return;
   }
 

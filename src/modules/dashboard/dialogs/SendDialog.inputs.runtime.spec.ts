@@ -125,3 +125,63 @@ describe('Quick Send inputs', () => {
     expect(request.utxos.map((input) => input.txHash)).toEqual([txId(1), txId(3)]);
   });
 });
+
+describe('Quick Send Max over the request limit', () => {
+  // 205 UTxOs of about 1 ADA: five more than one Nexus request may carry.
+  const fragmented = () => Array.from({ length: 205 }, (_, n) => utxo(n, 1_000_000 + n));
+  const isMerge = (request: BuildRequest) => request.outputs.length === 1 && request.outputs[0].address === 'own-address';
+
+  beforeEach(() => {
+    walletStore.utxos = fragmented() as never;
+    mocks.maxAda.mockResolvedValue({ max_lovelace: '204000000', estimated_fee: '400000', change_min_utxo: '0', total_balance: '205020910' });
+    mocks.build.mockImplementation(async (request: BuildRequest) => {
+      const merge = isMerge(request);
+      const total = request.utxos.reduce((sum, input) => sum + Number(input.lovelace), 0);
+      return { tx_cbor: JSON.stringify({
+        id: merge ? `merge-${request.utxos[0].txHash.slice(-4)}` : 'payment',
+        body: {
+          inputs: request.utxos.map((input) => ({ txId: input.txHash, index: input.outputIndex })),
+          outputs: request.outputs.map((output) => ({ address: output.address, value: { coins: String(merge ? total - 200_000 : output.lovelace) } })),
+          fee: '200000',
+        },
+      }) };
+    });
+  });
+
+  async function pressMax() {
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+  }
+
+  it('merges the smallest UTxOs first so one payment spends the whole wallet', async () => {
+    await pressMax();
+    const merges = requests().filter(isMerge);
+    expect(merges).toHaveLength(1);
+    expect(merges[0].selectAll).toBe(true);
+    expect(merges[0].utxos.map((input) => input.txHash)).toEqual([0, 1, 2, 3, 4, 5].map(txId));
+
+    const [maxRequest] = mocks.maxAda.mock.calls.at(-1)! as [BuildRequest];
+    expect(maxRequest.utxos).toHaveLength(200);
+    expect(maxRequest.utxos.map((input) => input.txHash)).toContain('merge-0000');
+
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors.map((cbor) => JSON.parse(cbor).id)).toEqual(['merge-0000']);
+    expect(dialog().text()).toContain('send.sweepPlanNote');
+    // The fee row is the merge's fee plus the payment's.
+    expect(dialog().get('.global-total__fee').text()).toBe('- 0.4');
+  });
+
+  it('keeps a hardware wallet on its 200 largest UTxOs and says so', async () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, type: WalletType.Ledger };
+    await pressMax();
+    expect(requests().some(isMerge)).toBe(false);
+    const [maxRequest] = mocks.maxAda.mock.calls.at(-1)! as [BuildRequest];
+    expect(maxRequest.utxos).toHaveLength(200);
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+    expect(dialog().text()).toContain('send.inputLimitMaxNote');
+  });
+});
