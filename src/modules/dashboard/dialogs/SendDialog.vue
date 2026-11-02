@@ -1665,7 +1665,7 @@ onMounted(() => {
 .global-total__ada {
   font-size: 14px;
   font-weight: 600;
-  color: var(--g-accent);
+  color: var(--g-text-1);
 }
 
 .global-total__fiat {
@@ -1725,9 +1725,10 @@ onMounted(() => {
   color: var(--g-text-3);
 }
 
+/* A figure, not a warning: the fee reads in the primary tone like the total it feeds. */
 .global-total__fee {
   font-size: 11px;
-  color: var(--g-error) !important;
+  color: var(--g-text-1);
 }
 
 .global-total__withdrawal {
