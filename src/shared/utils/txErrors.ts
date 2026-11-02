@@ -186,3 +186,12 @@ export function friendlyTxError(raw: unknown): string {
 
   return message;
 }
+
+/**
+ * Whether a submit failed because an input is unknown to the node that took it: spent
+ * already, or the output of a transaction that node has not seen yet (a sweep's
+ * payment reaching a node before the merges it spends).
+ */
+export function isMissingInputError(message: string): boolean {
+  return /BadInputsUTxO|unknown utxo reference/i.test(message);
+}

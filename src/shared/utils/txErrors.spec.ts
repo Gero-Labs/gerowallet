@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import i18n from '@/plugins/i18n';
-import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
+import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, isMissingInputError, shortfallLovelaceFromMessage } from './txErrors';
 import {
   MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
   TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
@@ -192,5 +192,20 @@ describe('friendlyTxError: Submit API', () => {
     const raw = `${SUBMIT_API_ENDPOINT_PREFIX}Wallet could not send the tx. Ogmios rejected tx: The withdrawal amount does not match the reward balance.`;
     expect(friendlyTxError(new Error(raw))).toContain('Your submit endpoint: ');
     expect(friendlyTxError(new Error(raw))).toContain('withdrawal amount does not match');
+  });
+});
+
+describe('isMissingInputError', () => {
+  it.each([
+    'BadInputsUTxO',
+    'Ogmios rejected tx: (BadInputsUTxO (fromList [TxIn ...]))',
+    'The transaction contains unknown UTxO references as inputs',
+  ])('recognises %s', (message) => {
+    expect(isMissingInputError(message)).toBe(true);
+  });
+
+  it('does not mistake other refusals for it', () => {
+    expect(isMissingInputError('ValueNotConservedUTxO')).toBe(false);
+    expect(isMissingInputError('OutsideValidityIntervalUTxO')).toBe(false);
   });
 });
