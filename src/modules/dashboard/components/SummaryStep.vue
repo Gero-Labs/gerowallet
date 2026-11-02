@@ -37,6 +37,9 @@ import TransactionDetailsCard, {
   type TxDetailsRiskBadge,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import SweepTimeline from './sweep/SweepTimeline.vue';
+// The timeline shows each stage's fee on its own, symbol included (the details card adds
+// the unit to its figures itself, hence the symbol-less formatAda below).
+import { formatAda as formatAdaWithSymbol } from '@/shared/utils/format';
 
 import type { SendRecipient } from '@/models/send-flow.types';
 
@@ -125,9 +128,6 @@ const feeAda = computed(() => {
   return formatAda(Number(tx.value.body.fee) + props.additionalFeeLovelace);
 });
 
-// The timeline shows each stage's fee on its own, symbol included (the details card
-// adds the unit to its figures itself).
-const formatAdaWithSymbol = (lovelace: number): string => filters.toCurrency(lovelace, false, 6, '₳', '', false, 6);
 const mergeFeeAda = computed(() => formatAdaWithSymbol(props.additionalFeeLovelace));
 const paymentFeeAda = computed(() => formatAdaWithSymbol(tx.value?.body?.fee ? Number(tx.value.body.fee) : 0));
 

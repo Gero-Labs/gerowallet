@@ -377,15 +377,39 @@ describe('Quick Send Max over the request limit', () => {
     expect(dialog().get('.continue-button').text()).toBe('wallet.sign');
   });
 
+  it('forgets where a sweep stopped once the user goes back, since the signer forgets what it sent', async () => {
+    await openMax();
+    await dialog().get('.continue-button').trigger('click');
+    await flushPromises();
+    mocks.signingOptions!.onProgress!({ phase: 'sending', step: 1, total: 2 });
+    mocks.signingOptions!.onProgress!(null);
+    mocks.signingOptions!.onInterrupted!({ step: 1, total: 2, mergesSent: 0, reason: 'the node refused it' });
+    await flushPromises();
+    expect(dialog().find('.sweep-progress__alert').exists()).toBe(true);
+
+    const back = dialog().findAll('button').find((button) => button.text().includes('common.back'))!;
+    await back.trigger('click');
+    await flushPromises();
+    await dialog().get('.continue-button').trigger('click');
+    await flushPromises();
+    expect(dialog().find('.sweep-progress__alert').exists()).toBe(false);
+    expect(dialog().find('.sweep-progress').exists()).toBe(false);
+    expect(dialog().get('.continue-button').text()).toBe('wallet.sign');
+  });
+
   it('stays open on what went out after a sweep, until Done', async () => {
+    // The module mock above carries only toCurrency; the done panel also truncates.
+    Object.assign((await import('@/shared/utils/filters')).default, { truncate: (value: string) => value });
     const wrapper = await openMax();
-    expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(false);
     const paymentId = 'b'.repeat(64);
+    // The signer asks closeOnSuccess right after onSuccess.
     mocks.signingOptions!.onSuccess!(paymentId);
+    expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(false);
     await flushPromises();
     const done = dialog().get('.sweep-done');
     expect(done.text()).toContain('send.sweepDoneTitle');
     expect(done.text()).toContain('send.sweepDoneTransactions');
+    expect(done.text()).toContain('send.sweepDoneTo');
     expect(done.get('a.sweep-done__explorer').attributes('href')).toBe(`https://cexplorer.io/tx/${paymentId}`);
     expect(dialog().find('.continue-button').exists()).toBe(false);
     expect(wrapper.emitted('close')).toBeUndefined();
@@ -399,8 +423,8 @@ describe('Quick Send Max over the request limit', () => {
     await dialog().get('[data-amount]').trigger('click');
     await settle();
     expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
-    expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(true);
     mocks.signingOptions!.onSuccess!('c'.repeat(64));
+    expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(true);
     await flushPromises();
     expect(dialog().find('.sweep-done').exists()).toBe(false);
   });

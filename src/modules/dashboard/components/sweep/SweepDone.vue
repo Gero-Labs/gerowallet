@@ -6,18 +6,20 @@
       <span class="sweep-done__badge" aria-hidden="true">
         <v-icon size="28" color="var(--g-success)">mdi-check</v-icon>
       </span>
-      <h3 class="t-heading sweep-done__title">{{ t('send.sweepDoneTitle') }}</h3>
+      <!-- Takes focus on mount: the button the user pressed unmounted with the stepper.
+           The dialog's title is not a heading, so this is the outline's first level. -->
+      <h2 ref="title" class="t-heading sweep-done__title" tabindex="-1">{{ t('send.sweepDoneTitle') }}</h2>
       <span class="t-title g-num">{{ amount }}</span>
-      <span class="g-mono sweep-done__to">{{ t('send.sweepDoneTo', { address: middle(address) }) }}</span>
+      <span class="g-mono sweep-done__to">{{ recipientLine }}</span>
       <div class="sweep-done__rule" aria-hidden="true"></div>
       <dl class="sweep-done__facts">
         <dt class="t-caption">{{ t('dashboard.transactions') }}</dt>
-        <dd class="t-body-sm g-num sweep-done__value">{{ t('send.sweepDoneTransactions', { steps, merges }) }}</dd>
+        <dd class="t-body-sm g-num sweep-done__value">{{ tc('send.sweepDoneTransactions', merges, { steps, merges }) }}</dd>
         <dt class="t-caption">{{ t('signTx.networkFee') }}</dt>
         <dd class="t-body-sm g-num sweep-done__value">{{ fee }}</dd>
         <dt class="t-caption">{{ t('dashboard.transactionId') }}</dt>
         <dd class="sweep-done__value sweep-done__id">
-          <span class="g-mono">{{ middle(txId) }}</span>
+          <span class="g-mono">{{ truncate(txId) }}</span>
           <CopyButton x-small :value="txId" color="var(--g-accent)" />
         </dd>
       </dl>
@@ -43,18 +45,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, useTemplateRef } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useExplorer } from '@/shared/composables/useExplorer';
+import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 
 const props = defineProps<{
   /** The payment's transaction id. */
   txId: string;
-  /** What the recipient receives, formatted with the currency symbol. */
+  /** What the recipients received together, formatted with the currency symbol. */
   amount: string;
-  /** The recipient's address. */
+  /** The one recipient's address; ignored when the payment went to several. */
   address: string;
+  /** Distinct addresses the payment paid. */
+  recipients: number;
   /** Transactions the send went out as: the merges plus the payment. */
   steps: number;
   /** Every transaction's fee together, formatted with the currency symbol. */
@@ -63,18 +68,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (event: 'done'): void }>();
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 const { explorerUrl } = useExplorer();
+const { truncate } = filters;
+
+const title = useTemplateRef<HTMLHeadingElement>('title');
+onMounted(() => title.value?.focus());
 
 const merges = computed(() => Math.max(0, props.steps - 1));
+const recipientLine = computed(() => (props.recipients > 1
+  ? t('send.sweepDoneToMany', { count: props.recipients })
+  : t('send.sweepDoneTo', { address: truncate(props.address) })));
 /** The payment on the wallet's chosen explorer; empty when that explorer has no transaction page. */
 const explorerHref = computed(() => explorerUrl('tx', props.txId));
-
-/** `addr1qy3z…9xq2`: enough of both ends to recognise, in one line. */
-function middle(value: string): string {
-  if (!value || value.length <= 20) return value;
-  return `${value.slice(0, 8)}…${value.slice(-6)}`;
-}
 </script>
 
 <style scoped>
@@ -90,7 +96,7 @@ function middle(value: string): string {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-s-2);
   padding: var(--g-s-5) var(--g-s-4) var(--g-s-4);
   text-align: center;
 }
@@ -104,7 +110,7 @@ function middle(value: string): string {
   border: 1px solid var(--g-success-line);
   display: grid;
   place-items: center;
-  margin-bottom: 6px;
+  margin-bottom: var(--g-s-2);
 }
 
 .sweep-done__title {
@@ -119,7 +125,7 @@ function middle(value: string): string {
   align-self: stretch;
   height: 1px;
   background: var(--g-hairline-1);
-  margin: 10px 0 var(--g-s-1);
+  margin: var(--g-s-2) 0 var(--g-s-1);
 }
 
 .sweep-done__facts {

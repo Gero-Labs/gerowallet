@@ -31,8 +31,8 @@ const { t } = useTranslation();
 .max-limit-note {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: var(--g-s-3) 14px;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3) var(--g-s-4);
   margin-top: var(--g-s-2);
   text-align: left;
 }

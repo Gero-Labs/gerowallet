@@ -6,7 +6,7 @@ import { createTestVuetify } from '@test/helpers/vuetify';
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => (params ? `${key}${JSON.stringify(params)}` : key),
-    tc: (key: string) => key,
+    tc: (key: string, _choice?: number, params?: Record<string, unknown>) => (params ? `${key}${JSON.stringify(params)}` : key),
   }),
 }));
 
@@ -27,7 +27,8 @@ describe('SweepProgressPanel', () => {
   it('is a polite live region with a cell per transaction and the checklist while sending', () => {
     const wrapper = mountPanel({ progress: { phase: 'sending', step: 7, total: 11 }, stop: null });
     const panel = wrapper.get('.sweep-progress');
-    expect(panel.attributes('aria-live')).toBe('polite');
+    expect(panel.attributes('aria-live')).toBeUndefined();
+    expect(wrapper.get('.sweep-progress__panel').attributes('aria-live')).toBe('polite');
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     expect(panel.text()).toContain('send.sweepSending{"step":7,"total":11}');
     expect(panel.text()).toContain('send.sweepSentCount{"sent":6,"total":11}');
@@ -59,6 +60,8 @@ describe('SweepProgressPanel', () => {
     const wrapper = mountPanel({ progress: null, stop: { step: 4, total: 11, mergesSent: 3, reason: 'ValueNotConservedUTxO' } });
     const alert = wrapper.get('.sweep-progress__alert');
     expect(alert.attributes('role')).toBe('alert');
+    // The alert announces itself: it must not also sit inside the live region.
+    expect(alert.element.closest('[aria-live]')).toBeNull();
     expect(alert.text()).toContain('send.sweepStoppedTitle{"step":4,"total":11}');
     expect(alert.text()).toContain('send.sweepStoppedBody{"sent":3,"merges":10}');
     expect(alert.get('details summary').text()).toBe('send.sweepShowDetails');

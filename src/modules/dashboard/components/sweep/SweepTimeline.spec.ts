@@ -6,7 +6,7 @@ import { createTestVuetify } from '@test/helpers/vuetify';
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => (params ? `${key}${JSON.stringify(params)}` : key),
-    tc: (key: string) => key,
+    tc: (key: string, _choice?: number, params?: Record<string, unknown>) => (params ? `${key}${JSON.stringify(params)}` : key),
   }),
 }));
 
@@ -21,7 +21,7 @@ describe('SweepTimeline', () => {
       global: { plugins: [createTestVuetify()] },
     });
     const section = wrapper.get('.sweep-timeline');
-    const title = section.get('h3');
+    const title = section.get('h2');
     expect(title.text()).toBe('send.sweepHowItGoesOut');
     expect(section.attributes('aria-labelledby')).toBe(title.attributes('id'));
     expect(section.text()).toContain('send.sweepPlanPill{"steps":11}');

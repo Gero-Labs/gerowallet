@@ -2,7 +2,8 @@
   <!-- Summary step: the two stages a sweep goes out in, and that one approval covers both. -->
   <section class="glass-tier sweep-timeline" :aria-labelledby="titleId">
     <div class="sweep-timeline__head">
-      <h3 :id="titleId" class="t-body-sm sweep-timeline__title">{{ t('send.sweepHowItGoesOut') }}</h3>
+      <!-- The dialog's title is not a heading, so this is the outline's first level. -->
+      <h2 :id="titleId" class="t-body-sm sweep-timeline__title">{{ t('send.sweepHowItGoesOut') }}</h2>
       <span class="t-caption sweep-timeline__pill">{{ t('send.sweepPlanPill', { steps }) }}</span>
     </div>
     <!-- The list below is read row by row; this one sentence gives a screen reader the
@@ -12,7 +13,7 @@
       <li class="sweep-timeline__row sweep-timeline__row--merges">
         <span class="t-caption g-num sweep-timeline__marker" aria-hidden="true">{{ merges }}</span>
         <div class="sweep-timeline__text">
-          <div class="t-body-sm sweep-timeline__label">{{ t('send.sweepMergesStep', { merges }) }}</div>
+          <div class="t-body-sm sweep-timeline__label">{{ tc('send.sweepMergesStep', merges, { merges }) }}</div>
           <div class="t-caption sweep-timeline__detail">{{ t('send.sweepMergesStepNote', { count: utxoCount }) }}</div>
         </div>
         <span class="t-caption g-num sweep-timeline__fee">{{ mergeFee }}</span>
@@ -48,7 +49,7 @@ const props = defineProps<{
   paymentFee: string;
 }>();
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 const titleId = useId();
 const merges = computed(() => Math.max(0, props.steps - 1));
 </script>
@@ -58,7 +59,7 @@ const merges = computed(() => Math.max(0, props.steps - 1));
   display: flex;
   flex-direction: column;
   gap: var(--g-s-3);
-  padding: 14px;
+  padding: var(--g-s-4);
   text-align: left;
 }
 
@@ -91,32 +92,34 @@ const merges = computed(() => Math.max(0, props.steps - 1));
   flex-direction: column;
 }
 
+/* The marker's size sets the column and the connector's place under it. */
 .sweep-timeline__row {
+  --sweep-marker: 28px;
   position: relative;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  column-gap: 10px;
+  grid-template-columns: var(--sweep-marker) minmax(0, 1fr) auto;
+  column-gap: var(--g-s-2);
   align-items: start;
 }
 
 /* The connector from the merges' marker down to the payment's. */
 .sweep-timeline__row--merges {
-  padding-bottom: 14px;
+  padding-bottom: var(--g-s-4);
 }
 
 .sweep-timeline__row--merges::before {
   content: '';
   position: absolute;
-  left: 13px;
-  top: 30px;
+  left: calc(var(--sweep-marker) / 2);
+  top: calc(var(--sweep-marker) + 2px);
   bottom: 2px;
   width: 1px;
   background: var(--g-hairline-2);
 }
 
 .sweep-timeline__marker {
-  width: 28px;
-  height: 28px;
+  width: var(--sweep-marker);
+  height: var(--sweep-marker);
   box-sizing: border-box;
   border-radius: var(--g-r-pill);
   border: 1px solid var(--g-hairline-3);
@@ -140,7 +143,6 @@ const merges = computed(() => Math.max(0, props.steps - 1));
 }
 
 .sweep-timeline__detail {
-  margin-top: 2px;
   line-height: 1.5;
 }
 

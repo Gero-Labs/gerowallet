@@ -133,8 +133,8 @@
                     <span v-else-if="globalTotal.formattedFee && txValid" class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
                     <span v-else class="global-total__fee-label g-num">—</span>
                   </div>
-                  <div v-if="sweepFeeBreakdown && !feePending" class="global-total__row global-total__breakdown">
-                    <span class="t-caption g-num">{{ sweepFeeBreakdown }}</span>
+                  <div v-if="sweepFeeBreakdownText && !feePending" class="global-total__row global-total__breakdown">
+                    <span class="t-caption g-num">{{ sweepFeeBreakdownText }}</span>
                   </div>
                   <div v-if="globalTotal.formattedWithdrawal && !feePending" class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
@@ -205,6 +205,7 @@
             :password-label="t('wallet.spendingPassword')"
             :password-rules="passwordRules"
             :submit-text="t('common.confirm')"
+            :passkey-text="sweepStop ? t('common.tryAgain') : undefined"
             :show-bt-toggle="isBTSupported"
             :is-b-t="isBT"
             @update:isBT="isBT = $event"
@@ -283,6 +284,7 @@ import SweepPlanCard from '../components/sweep/SweepPlanCard.vue';
 import MaxLimitNote from '../components/sweep/MaxLimitNote.vue';
 import SweepProgressPanel from '../components/sweep/SweepProgressPanel.vue';
 import SweepDone from '../components/sweep/SweepDone.vue';
+import { maxLimitFigures, sweepDoneSummary, sweepFeeBreakdown, type SweepDoneSummary } from '../components/sweep/sweepDialogState';
 import MidnightSendDialog from './MidnightSendDialog.vue';
 import rules from '@/utils/rules';
 import { Blockchain, WalletType } from '@/models/types';
@@ -324,7 +326,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['close']);
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 
 const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolvedCollections } = toRefs(walletStore)
 const { epochParams } = toRefs(networkStore)
@@ -389,7 +391,7 @@ const sweepPreparing = ref<{ built: number; total: number; utxoCount: number } |
 /** Where the last sweep stopped, until the next attempt starts or the dialog resets. */
 const sweepStop = ref<SweepStop | null>(null);
 /** A sweep whose payment went out: the dialog shows this instead of closing. */
-const sweepDone = ref<{ txId: string; amount: string; address: string; steps: number; fee: string } | null>(null);
+const sweepDone = ref<SweepDoneSummary | null>(null);
 /**
  * The merge build in flight, keyed by the UTxO set it is for. A second caller for the
  * same set awaits this one instead of building merges of its own (their ids would differ).
@@ -402,38 +404,13 @@ let sweepBuild: { key: string; promise: Promise<BuiltSweep> } | null = null;
  * again rebuilds them.
  */
 const SWEEP_REBUILD_AFTER_MS = 60 * 60 * 1000;
-const formatAda = (lovelace: number): string => filters.toCurrency(lovelace, false, 6, '₳', '', false, 6);
-
-/**
- * Max without a sweep only reaches the candidates one request may carry: say what it
- * sends and what stays behind rather than silently leaving UTxOs out.
- */
-const maxLimit = computed(() => {
-  const selection = inputSelection.value;
-  if (!selection?.truncated || maxRecipientIds.value.size === 0) return null;
-  let lovelace = BigInt(0);
-  for (const recipient of recipients.value) {
-    if (!maxRecipientIds.value.has(recipient.id)) continue;
-    const ada = recipient.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
-    if (ada?.quantity) lovelace += decimalToBaseUnits(ada.quantity, 6);
-  }
-  return {
-    amount: formatAda(Number(lovelace)),
-    total: selection.total,
-    max: selection.limit,
-    remaining: selection.total - selection.limit,
-  };
-});
+/** Max without a sweep only reaches the candidates one request may carry: what it sends and what stays behind. */
+const maxLimit = computed(() => maxLimitFigures(inputSelection.value, recipients.value, maxRecipientIds.value, nativeTicker.value));
 
 /** Under the fee row: how a sweep's fee splits between the merges and the payment. */
-const sweepFeeBreakdown = computed(() => {
-  const built = sweep.value;
-  if (!built || !txValid.value || !tx.value?.body?.fee) return null;
-  return t('send.sweepFeeBreakdown', {
-    merges: built.merges.length,
-    mergeFee: formatAda(sweepFeeLovelace.value),
-    paymentFee: formatAda(Number(tx.value.body.fee)),
-  });
+const sweepFeeBreakdownText = computed(() => {
+  const split = sweepFeeBreakdown(sweep.value, txValid.value ? tx.value?.body?.fee : undefined);
+  return split ? tc('send.sweepFeeBreakdown', split.merges, { ...split }) : null;
 });
 
 function createEmptyRecipient(): SendRecipient {
@@ -502,12 +479,13 @@ const {
     if (progress) sweepStop.value = null;
   },
   onInterrupted: (stop) => { sweepStop.value = stop; },
-  // A single send closes as before; a sweep stays open on what went out.
-  closeOnSuccess: () => !sweep.value,
+  // The signer asks this right after onSuccess: the dialog stays open exactly when it
+  // has a done panel to show, so the two can never disagree.
+  closeOnSuccess: () => !sweepDone.value,
   successMessageKey: 'wallet.txSubmittedSuccess',
   onSuccess: (txId) => {
     // Read off the sweep and payment now: the dialog's state resets behind this.
-    if (sweep.value && tx.value) sweepDone.value = sweepDoneSummary(txId, tx.value, sweep.value);
+    if (sweep.value && tx.value) sweepDone.value = sweepDoneSummary(txId, tx.value, sweep.value, ownAddresses());
     // If this send swept rewards (auto-withdraw), zero the local balance so a
     // second send before the next account sync doesn't re-attach the
     // already-claimed withdrawal (issue 941)
@@ -516,28 +494,16 @@ const {
   onClose: () => emit('close'),
 });
 
-/** The done panel's figures: what left the wallet, to whom, in how many transactions, and every fee together. */
-function sweepDoneSummary(txId: string, payment: Cardano.Tx, built: BuiltSweep): NonNullable<typeof sweepDone.value> {
-  const own = new Set<string>([
-    ...(keys.value?.payment ?? []).map((key: { address?: string }) => key.address),
-    ...(keys.value?.change ?? []).map((key: { address?: string }) => key.address),
-  ].filter((address): address is string => !!address));
-  let amount = BigInt(0);
-  let address = '';
-  for (const output of payment.body.outputs) {
-    const to = String(output.address);
-    if (own.has(to)) continue;
-    amount += BigInt(output.value.coins);
-    if (!address) address = to;
-  }
-  return {
-    txId,
-    amount: formatAda(Number(amount)),
-    address,
-    steps: built.merges.length + 1,
-    fee: formatAda(Number(payment.body.fee) + Number(built.mergeFee)),
-  };
+/** The wallet's own payment and change addresses: a payment output there is change, not a recipient. */
+function ownAddresses(): string[] {
+  return [...(keys.value?.payment ?? []), ...(keys.value?.change ?? [])]
+    .map((key: { address?: string }) => key.address)
+    .filter((address): address is string => !!address);
 }
+
+// Leaving the summary (Back, or a rebuilt payment) resets the signer, which forgets the
+// merges it already sent: a stop still on screen would promise to skip them.
+watch([tx, currentStep], () => { sweepStop.value = null; });
 
 /** A sweep is signed under one approval: only signers that give one (password, PassKey, Google), never under a remote-only policy. */
 const canSweep = computed(() =>
@@ -1681,8 +1647,7 @@ onMounted(() => {
 /* A sweep's fee split, right under the fee it adds up to. */
 .global-total__breakdown {
   justify-content: flex-end;
-  margin-top: -2px;
-  margin-bottom: 4px;
+  margin-bottom: var(--g-s-1);
 }
 
 /* Shimmer stand-ins sized like the figures they replace, so the rows keep their height. */

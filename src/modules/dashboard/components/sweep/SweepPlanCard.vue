@@ -10,12 +10,12 @@
       <div class="sweep-plan__head">
         <v-progress-circular indeterminate size="18" width="2" color="var(--g-accent)" aria-hidden="true" />
         <span class="t-body-sm sweep-plan__title">{{ t('send.sweepPreparing', { steps }) }}</span>
-        <span class="t-caption g-num">{{ t('send.sweepPreparingCount', { built: preparing.built, total: preparing.total }) }}</span>
+        <span class="t-caption g-num">{{ preparingCount }}</span>
       </div>
       <div
         class="sweep-plan__track"
         role="progressbar"
-        :aria-label="t('send.sweepPreparingCount', { built: preparing.built, total: preparing.total })"
+        :aria-label="preparingCount"
         aria-valuemin="0"
         :aria-valuemax="preparing.total"
         :aria-valuenow="preparing.built"
@@ -41,7 +41,7 @@
         <span class="sweep-plan__segment sweep-plan__segment--payment"></span>
       </div>
       <div class="sweep-plan__legend">
-        <span class="t-caption">{{ t('send.sweepMergesLabel', { merges }) }}</span>
+        <span class="t-caption">{{ tc('send.sweepMergesLabel', merges, { merges }) }}</span>
         <span class="t-caption sweep-plan__legend-payment">{{ t('send.sweepPaymentLabel') }}</span>
       </div>
       <p class="t-caption sweep-plan__note">{{ t('send.sweepPlanNote', { count: utxoCount }) }}</p>
@@ -65,9 +65,13 @@ const props = defineProps<{
   preparing: { built: number; total: number } | null;
 }>();
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 
 const steps = computed(() => (props.preparing ? props.preparing.total : props.merges) + 1);
+const preparingCount = computed(() => {
+  const preparing = props.preparing;
+  return preparing ? tc('send.sweepPreparingCount', preparing.total, { built: preparing.built, total: preparing.total }) : '';
+});
 const segmented = computed(() => props.merges + 1 <= SEGMENT_CAP);
 const segmentColumns = computed(() => (segmented.value ? `repeat(${props.merges}, minmax(0, 1fr)) 3fr` : '3fr 1fr'));
 const fillWidth = computed(() => {
@@ -81,8 +85,8 @@ const fillWidth = computed(() => {
 .sweep-plan {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: var(--g-s-3) 14px;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3) var(--g-s-4);
   margin-top: var(--g-s-2);
   text-align: left;
 }
@@ -125,7 +129,7 @@ const fillWidth = computed(() => {
 
 .sweep-plan__segments {
   display: grid;
-  gap: 3px;
+  gap: var(--g-s-1);
   height: 8px;
 }
 

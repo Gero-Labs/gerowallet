@@ -75,7 +75,7 @@ describe('sweepProgressView', () => {
     });
     expect(view.stop).toEqual({
       title: { key: 'send.sweepStoppedTitle', params: { step: 4, total: 11 } },
-      body: { key: 'send.sweepStoppedBody', params: { sent: 3, merges: 10 } },
+      body: { key: 'send.sweepStoppedBody', params: { sent: 3, merges: 10 }, choice: 10 },
       reason: 'ValueNotConservedUTxO',
       tryAgain: { key: 'send.sweepTryAgainNote', params: { step: 4 } },
     });

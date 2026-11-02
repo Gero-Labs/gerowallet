@@ -1,6 +1,7 @@
 <template>
   <!-- Summary step actions: where a sweep is while it signs and sends, and where it stopped. -->
-  <div v-if="view" class="sweep-progress" aria-live="polite">
+  <div v-if="view" class="sweep-progress">
+    <!-- An alert announces itself; it sits outside the live region so it is not read twice. -->
     <div v-if="view.stop" class="sweep-progress__alert" role="alert">
       <v-icon size="18" color="var(--g-error)" class="sweep-progress__alert-icon" aria-hidden="true">mdi-alert-circle-outline</v-icon>
       <div class="sweep-progress__alert-body">
@@ -15,7 +16,7 @@
       </div>
     </div>
 
-    <section class="glass-tier sweep-progress__panel" :aria-label="headline">
+    <section class="glass-tier sweep-progress__panel" :aria-label="headline" aria-live="polite">
       <div v-if="view.title" class="sweep-progress__head">
         <v-progress-circular indeterminate size="20" width="2" color="var(--g-accent)" aria-hidden="true" />
         <span class="t-body sweep-progress__title">{{ tt(view.title) }}</span>
@@ -79,8 +80,9 @@ const props = defineProps<{
   stop: SweepStop | null;
 }>();
 
-const { t } = useTranslation();
-const tt = (value: SweepText): string => t(value.key, value.params);
+const { t, tc } = useTranslation();
+const tt = (value: SweepText): string =>
+  (value.choice === undefined ? t(value.key, value.params) : tc(value.key, value.choice, value.params));
 
 const view = computed(() => sweepProgressView(props.progress, props.stop));
 /** What the panel is about, for its label: the running title, or where the sweep stopped. */
@@ -112,8 +114,8 @@ const fillWidth = computed(() => {
 .sweep-progress__alert {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: var(--g-s-3) 14px;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3) var(--g-s-4);
   background: var(--g-error-fill);
   border: 1px solid var(--g-error-line);
   border-radius: var(--g-r-card);
@@ -163,21 +165,21 @@ const fillWidth = computed(() => {
 }
 
 .sweep-progress__reason {
-  margin: 6px 0 0;
+  margin: var(--g-s-2) 0 0;
 }
 
 /* ─── Progress panel ─── */
 .sweep-progress__panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 14px;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4);
 }
 
 .sweep-progress__head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-s-2);
 }
 
 .sweep-progress__title {
@@ -193,7 +195,7 @@ const fillWidth = computed(() => {
 
 .sweep-progress__segments {
   display: grid;
-  gap: 3px;
+  gap: var(--g-s-1);
   height: 8px;
 }
 
@@ -254,7 +256,7 @@ const fillWidth = computed(() => {
 .sweep-progress__row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--g-s-2);
 }
 
 .sweep-progress__mark {
@@ -294,7 +296,6 @@ const fillWidth = computed(() => {
 }
 
 .sweep-progress__detail {
-  margin-top: 1px;
   line-height: 1.5;
 }
 

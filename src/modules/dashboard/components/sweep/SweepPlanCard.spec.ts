@@ -6,7 +6,7 @@ import { createTestVuetify } from '@test/helpers/vuetify';
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => (params ? `${key}${JSON.stringify(params)}` : key),
-    tc: (key: string) => key,
+    tc: (key: string, _choice?: number, params?: Record<string, unknown>) => (params ? `${key}${JSON.stringify(params)}` : key),
   }),
 }));
 

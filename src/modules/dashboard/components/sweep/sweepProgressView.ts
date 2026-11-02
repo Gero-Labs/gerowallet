@@ -8,10 +8,11 @@ import type { SweepProgress, SweepStop } from '@/shared/composables/useTransacti
 
 export type SweepMarkState = 'done' | 'active' | 'pending' | 'error';
 
-/** An i18n key with its parameters, resolved by the component's `t()`. */
+/** An i18n key with its parameters, resolved by the component's `t()`, or `tc()` when `choice` picks a plural form. */
 export interface SweepText {
   key: string;
   params?: Record<string, number | string>;
+  choice?: number;
 }
 
 export interface SweepChecklistRow {
@@ -44,6 +45,7 @@ export interface SweepProgressView {
 }
 
 const text = (key: string, params?: Record<string, number | string>): SweepText => (params ? { key, params } : { key });
+const plural = (key: string, choice: number, params: Record<string, number | string>): SweepText => ({ key, params, choice });
 
 function runningView(progress: SweepProgress): SweepProgressView {
   const { phase, step, total } = progress;
@@ -117,7 +119,7 @@ function stoppedView(stop: SweepStop): SweepProgressView {
     caption: null,
     stop: {
       title: text('send.sweepStoppedTitle', { step, total }),
-      body: text('send.sweepStoppedBody', { sent: mergesSent, merges }),
+      body: plural('send.sweepStoppedBody', merges, { sent: mergesSent, merges }),
       reason: stop.reason,
       tryAgain: text('send.sweepTryAgainNote', { step }),
     },
