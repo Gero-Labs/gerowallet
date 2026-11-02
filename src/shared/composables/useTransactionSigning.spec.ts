@@ -228,7 +228,9 @@ describe('cross-device signing refused before the relay', () => {
 });
 
 describe('sweep prerequisites', () => {
-  const merge = (id: string) => ({ id, body: { inputs: [{ txId: `in-${id}`, index: 0 }], outputs: [], fee: 1 } }) as unknown as Cardano.Tx;
+  const merge = (id: string) => ({
+    id, body: { inputs: [{ txId: `in-${id}`, index: 0 }], outputs: [{ address: 'own', value: { coins: 5 } }], fee: 1 },
+  }) as unknown as Cardano.Tx;
   const payment = (...spends: string[]) =>
     ({ id: 'payment', body: { inputs: spends.map((txId) => ({ txId, index: 0 })), outputs: [], fee: 1 } }) as unknown as Cardano.Tx;
   const output = (id: string) => [{ txId: id, index: 0, address: 'own' }, { address: 'own', value: { coins: 5n } }] as unknown as Cardano.Utxo;
@@ -249,12 +251,21 @@ describe('sweep prerequisites', () => {
     return { signing, progress };
   }
 
+  let previousKeys: typeof walletStore.keys;
+
   beforeEach(() => {
     walletStore.utxos = [];
+    // The merges pay 'own': the binder must find it among the wallet's own addresses.
+    previousKeys = walletStore.keys;
+    walletStore.keys = { payment: [{ address: 'own' }], change: [] } as never;
     vi.mocked(Serialization.Transaction.fromCbor).mockImplementation(((cbor: string) => ({
       getId: () => JSON.parse(cbor).id,
       toCore: () => JSON.parse(cbor),
     })) as never);
+  });
+
+  afterEach(() => {
+    walletStore.keys = previousKeys;
   });
 
   it('signs every merge and the payment after one password check, then submits them in order', async () => {
@@ -337,16 +348,10 @@ describe('sweep prerequisites', () => {
     const stray = (id: string) => ({
       id, body: { inputs: [{ txId: `in-${id}`, index: 0 }], outputs: [{ address: 'elsewhere', value: { coins: 1 } }], fee: 1 },
     }) as unknown as Cardano.Tx;
-    const previousKeys = walletStore.keys;
-    walletStore.keys = { payment: [{ address: 'own' }], change: [] } as never;
-    try {
-      const { signing } = sweeper(['m1'], ['m1'], stray);
-      await signing.handleSign();
-      expect(mocks.send).not.toHaveBeenCalled();
-      expect(mocks.error).toHaveBeenCalledWith('txGuard.builtTxMismatch');
-    } finally {
-      walletStore.keys = previousKeys;
-    }
+    const { signing } = sweeper(['m1'], ['m1'], stray);
+    await signing.handleSign();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith('txGuard.builtTxMismatch');
   });
 
   it('fails closed on an empty merge witness', async () => {

@@ -88,9 +88,10 @@ export interface DecodedMerge {
 /**
  * The merges a payment is sent with, as the signer takes them, in order. Everything is
  * read from the bytes that get signed (`decode`), and the set must hang together: every
- * merge pays only `ownAddresses`, no merge repeats, the payment spends every merge, and
- * every listed output belongs to a merge and is spent by the payment, one at least per
- * merge. Throws SweepChainError otherwise.
+ * merge has an output and pays only `ownAddresses`, no merge repeats, the payment spends
+ * every merge, and every listed output is one a merge has (its index below that merge's
+ * output count) and is spent by the payment, one at least per merge. Throws
+ * SweepChainError otherwise.
  */
 export function chainedPrerequisites(
   payment: Cardano.Tx,
@@ -100,19 +101,23 @@ export function chainedPrerequisites(
 ): { id: string; cbor: string }[] {
   const spentRefs = new Set(payment.body.inputs.map((input) => `${input.txId}#${input.index}`));
   const spentTxs = new Set(payment.body.inputs.map((input) => String(input.txId)));
+  /** Each merge's output count, by id: a listed output must be one the merge has. */
+  const outputCounts = new Map<string, number>();
   const merges = prerequisites.cbors.map((cbor) => {
     const { id, outputAddresses } = decode(cbor);
-    if (!spentTxs.has(id) || !outputAddresses.every((address) => ownAddresses.has(address))) throw new SweepChainError();
+    if (outputAddresses.length === 0 || !spentTxs.has(id) || !outputAddresses.every((address) => ownAddresses.has(address))) {
+      throw new SweepChainError();
+    }
+    outputCounts.set(id, outputAddresses.length);
     return { id, cbor };
   });
-  const ids = new Set(merges.map(({ id }) => id));
-  if (ids.size !== merges.length) throw new SweepChainError();
+  if (outputCounts.size !== merges.length) throw new SweepChainError();
   const withOutput = new Set<string>();
   for (const [txIn] of prerequisites.outputs) {
     const id = String(txIn.txId);
-    if (!ids.has(id) || !spentRefs.has(`${id}#${txIn.index}`)) throw new SweepChainError();
+    if (txIn.index >= (outputCounts.get(id) ?? 0) || !spentRefs.has(`${id}#${txIn.index}`)) throw new SweepChainError();
     withOutput.add(id);
   }
-  if (withOutput.size !== ids.size) throw new SweepChainError();
+  if (withOutput.size !== outputCounts.size) throw new SweepChainError();
   return merges;
 }

@@ -72,8 +72,11 @@ describe('ownOutputsAsUtxos', () => {
 });
 
 describe('chainedPrerequisites', () => {
-  const tx = (id: string, spends: string[] = []) =>
-    ({ id, body: { inputs: spends.map((spent) => ({ txId: spent, index: 0 })) } }) as unknown as Cardano.Tx;
+  /** A payment spending index 0 of each named transaction, or the given `[txId, index]`. */
+  const tx = (id: string, spends: (string | [string, number])[] = []) => ({
+    id,
+    body: { inputs: spends.map((spent) => (typeof spent === 'string' ? { txId: spent, index: 0 } : { txId: spent[0], index: spent[1] })) },
+  }) as unknown as Cardano.Tx;
   const decode = (cbor: string) => JSON.parse(cbor) as DecodedMerge;
   const merge = (id: string, outputAddresses = ['own']) => JSON.stringify({ id, outputAddresses });
   const output = (id: string, index = 0) =>
@@ -107,12 +110,22 @@ describe('chainedPrerequisites', () => {
   });
 
   it('refuses an output the payment does not spend', () => {
-    const prerequisites = { cbors: [merge('m1')], outputs: [output('m1', 1)] };
+    const prerequisites = { cbors: [merge('m1', ['own', 'own'])], outputs: [output('m1', 1)] };
     expect(() => chainedPrerequisites(tx('pay', ['m1']), prerequisites, decode, own)).toThrow(SweepChainError);
   });
 
   it('refuses a merge with no listed output', () => {
     const prerequisites = { cbors: [merge('m1'), merge('m2')], outputs: [output('m1')] };
     expect(() => chainedPrerequisites(tx('pay', ['m1', 'm2']), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+
+  it('refuses a merge with no outputs', () => {
+    const prerequisites = { cbors: [merge('m1', [])], outputs: [output('m1')] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+
+  it('refuses an output index the merge does not have', () => {
+    const prerequisites = { cbors: [merge('m1')], outputs: [output('m1', 1)] };
+    expect(() => chainedPrerequisites(tx('pay', [['m1', 1]]), prerequisites, decode, own)).toThrow(SweepChainError);
   });
 });
