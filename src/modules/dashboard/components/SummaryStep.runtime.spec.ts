@@ -162,3 +162,16 @@ describe('Quick Send transaction review with native lazy stepper windows', () =>
     vi.restoreAllMocks();
   });
 });
+
+describe('Quick Send review of a sweep', () => {
+  it('adds the merge fees to the totals and says how many transactions go out', async () => {
+    const wrapper = mount(SummaryStep, {
+      props: { txData: transaction(), recipients: [], active: true, additionalFeeLovelace: 2_000_000, steps: 3 },
+      global: { plugins: [createTestVuetify()] },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('2.310525');
+    expect(wrapper.text()).toContain('12.310525');
+    expect(wrapper.text()).toContain('send.sweepPlanSummary');
+  });
+});
