@@ -58,6 +58,12 @@ import {
   type OwnListingIdentity,
   type OwnListingRejection,
 } from '@/chrome/nftMarket/ownListings';
+import { findMarketTouch } from '@/chrome/nftMarket/marketGuard';
+import {
+  NFT_MARKET_SIGN_REFUSAL_MESSAGE,
+  consumeMarketSignAllowance,
+  hasMarketSignAllowance,
+} from '@/chrome/nftMarket/marketAllowance';
 import { SecretPurpose, decrypt, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
@@ -857,6 +863,21 @@ export class WalletBg {
    */
   listedScriptHashes(): Set<string> {
     return new Set(networks.resolveNftMarketDeployments(this.chain, this.network).map((d) => d.scriptHash));
+  }
+
+  /**
+   * How `transaction` touches the Gero market: an output at a deployed listing script, or an input
+   * that is one of this wallet's own listings (marketGuard.ts). Non-empty means the transaction
+   * must not be witnessed unless a market prepare handler verified it and granted its exact id an
+   * allowance, which signTx checks (marketAllowance.ts). Reads the logged wallet's verified
+   * listings from the store: a listing the partition has not recognised (yet) cannot be told
+   * apart from somebody else's, and spending somebody else's is not the wallet's loss.
+   * Background only. Never depends on the `isNftMarketEnabled` flag: this is a guard, not UI.
+   */
+  findMarketTouch(transaction: Cardano.Tx): string[] {
+    const deployments = networks.resolveNftMarketDeployments(this.chain, this.network);
+    const ownListedRefs = new Set((WalletStore.state.listedListings ?? []).map((listing) => listing.ref));
+    return findMarketTouch(transaction, deployments, ownListedRefs);
   }
 
   /**
@@ -2546,6 +2567,17 @@ export class WalletBg {
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
 
+    // The Gero NFT market, the same shape: a transaction that creates a listing or spends one of
+    // this wallet's own is signed only when a market prepare handler verified it (the exact id
+    // holds a one-shot allowance, used up below). Nothing else is refused here: the dApp paths
+    // are not refused up front (their approval screens preview a listing), only unverified ones.
+    const marketHits = this.findMarketTouch(transaction);
+    // OX Agent: Authorization prevented by refusing to sign a market transaction without a one-shot allowance for its exact id
+    if (marketHits.length > 0 && !hasMarketSignAllowance(this.id, transaction.id, marketHits)) {
+      debugLog('NFT market: refusing to sign, unverified market transaction:', marketHits);
+      throw new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    }
+
     // Get root private key
     let rootPrivateKey: Bip32PrivateKey;
     if (privateKeyBytes) {
@@ -2561,6 +2593,10 @@ export class WalletBg {
     assertAuthorized?.();
     if (programmableInputs.length > 0 && !consumeCip113SignAllowance(this.id, transaction.id, programmableInputs)) {
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+    }
+    // OX Agent: Authorization prevented by using the allowance up right before the signature
+    if (marketHits.length > 0 && !consumeMarketSignAllowance(this.id, transaction.id, marketHits)) {
+      throw new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
     }
     const accountPrivateKey: Bip32PrivateKey = deriveSigningAccountKey(rootPrivateKey, this.accountIndex, this.publicKey);
 

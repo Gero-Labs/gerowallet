@@ -64,6 +64,7 @@ import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE, hasMarketSignAllowance } from '@/chrome/nftMarket/marketAllowance';
 import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
 import { legacyCancelPrepareHandler } from '@/chrome/legacyCancelPrepare';
 import { fetchLegacyListings } from '@/api/legacy-listings-api';
@@ -1703,22 +1704,61 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
   }
 }
 
+/** Why a hardware signer was refused: `reason` for the log, `message` for the page that asked. */
+interface HardwareSignRefusal {
+  reason: string;
+  message: string;
+}
+
 /**
- * refusalForProgrammableInputs for a hardware signer, which Gero's own Send reaches through an
- * extension page only: the one transfer CIP113_PREPARE_TRANSFER verified passes. Its allowance
- * is not used up (the device may still be declined); it expires on its own.
+ * The market half of the hardware refusal: a transaction that creates a Gero listing or spends
+ * one of this wallet's own is signed only when a market prepare handler verified its exact id
+ * (marketAllowance.ts). Unlike the CIP-113 refusal, the dApp approval paths do not refuse these up
+ * front (their approval screens preview a listing), so this is the one place a device path meets
+ * the guard, as WalletBg.signTx is for the software path. The allowance is only read here: the device may still
+ * be declined, and it expires on its own.
  */
-function hardwareSignRefusal(txCbor: unknown): string | null {
-  const refusal = refusalForProgrammableInputs(txCbor);
-  if (!refusal) return null;
+function marketSignRefusal(txCbor: unknown): string | null {
+  if (typeof txCbor !== 'string' || !txCbor) return null;
   const wallet = walletManager.getWallet();
+  if (!wallet?.findMarketTouch) return null;
   try {
-    const tx = deserializeCardanoJsSdkTx(txCbor as string);
-    if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) return null;
-  } catch {
-    // Unparseable: keep the refusal.
+    const tx = deserializeCardanoJsSdkTx(txCbor);
+    const hits = wallet.findMarketTouch(tx);
+    // OX Agent: Authorization prevented by refusing a device signature for a market transaction without the allowance
+    if (hits.length > 0 && !hasMarketSignAllowance(wallet.id, tx.id, hits)) {
+      return `NFT market: refusing to sign, unverified market transaction ${hits.join(', ')}`;
+    }
+    return null;
+  } catch (e) {
+    // Unparseable here means the signer would fail anyway, as for CIP-113 above.
+    debugLog('NFT market preflight could not parse transaction:', e);
+    return null;
   }
-  return refusal;
+}
+
+/**
+ * The refusals for a hardware signer, which Gero's own flows reach through an extension page
+ * only: the one CIP-113 transfer CIP113_PREPARE_TRANSFER verified passes
+ * (refusalForProgrammableInputs otherwise), and so does the one market transaction a market
+ * prepare handler verified (marketSignRefusal). Neither allowance is used up (the device may
+ * still be declined); they expire on their own. A refusal says which message the page reports.
+ */
+function hardwareSignRefusal(txCbor: unknown): HardwareSignRefusal | null {
+  const refusal = refusalForProgrammableInputs(txCbor);
+  if (refusal) {
+    const wallet = walletManager.getWallet();
+    let allowed = false;
+    try {
+      const tx = deserializeCardanoJsSdkTx(txCbor as string);
+      if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) allowed = true;
+    } catch {
+      // Unparseable: keep the refusal.
+    }
+    if (!allowed) return { reason: refusal, message: CIP113_SIGN_REFUSAL_MESSAGE };
+  }
+  const market = marketSignRefusal(txCbor);
+  return market ? { reason: market, message: NFT_MARKET_SIGN_REFUSAL_MESSAGE } : null;
 }
 
 // The same refusal for a signer outside the worker: Ledger, Keystone and Trezor over WebUSB
@@ -1729,8 +1769,14 @@ app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendRespons
   // check would pass everything.
   await booted();
   const refusal = hardwareSignRefusal(request.data?.txCbor);
-  if (refusal) debugLog(refusal);
-  sendResponse({ id: request.id, data: { success: true, refused: refusal !== null }, target: TARGET, sender: SENDER.extension });
+  if (refusal) debugLog(refusal.reason);
+  // `message` is what the page throws: CIP-113's or the market's, so each flow can map its own.
+  sendResponse({
+    id: request.id,
+    data: { success: true, refused: refusal !== null, ...(refusal ? { message: refusal.message } : {}) },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
 });
 
 // Gero's own Send of a CIP-113 token. The page sends only what the user asked for; the
@@ -4486,8 +4532,8 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       // Trezor signs here rather than through WalletBg.signTx, so it needs its own check.
       const trezorRefusal = hardwareSignRefusal(txCbor);
       if (trezorRefusal) {
-        debugLog(trezorRefusal);
-        throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+        debugLog(trezorRefusal.reason);
+        throw new Error(trezorRefusal.message);
       }
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
