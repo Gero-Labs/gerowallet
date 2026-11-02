@@ -307,4 +307,101 @@ describe('Quick Send Max over the request limit', () => {
     expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
     expect(dialog().get('.global-total__fee').text()).toBe('- 0.4');
   });
+
+  /** Like pressMax, but hands back the wrapper for its emitted events. */
+  async function openMax() {
+    const wrapper = await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    return wrapper;
+  }
+
+  it('shows the merges being prepared, then the plan, while Max builds them', async () => {
+    // 400 UTxOs take two merges, so the card can count one of them before the other is built.
+    walletStore.utxos = Array.from({ length: 400 }, (_, n) => utxo(n, 1_000_000 + n)) as never;
+    const held = deferred<{ tx_cbor: string }>();
+    let heldRequest!: BuildRequest;
+    mocks.build.mockImplementationOnce((request: BuildRequest) => { heldRequest = request; return held.promise; });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    const track = dialog().get('.sweep-plan__track');
+    expect(track.attributes('aria-valuemax')).toBe('2');
+    expect(track.attributes('aria-valuenow')).toBe('1');
+    expect(dialog().text()).toContain('send.sweepPreparing');
+    expect(dialog().text()).not.toContain('send.sweepPlanTitle');
+    expect(dialog().find('.max-limit-note').exists()).toBe(false);
+
+    held.resolve(buildResponse(heldRequest));
+    await settle();
+    expect(dialog().find('.sweep-plan__track').exists()).toBe(false);
+    expect(dialog().text()).toContain('send.sweepPlanTitle');
+    expect(dialog().text()).toContain('send.sweepPlanNote');
+    expect(dialog().text()).toContain('send.sweepFeeBreakdown');
+    expect(dialog().get('.global-total__fee').text()).toBe('- 0.6');
+  });
+
+  it('takes the preparing card down when a merge cannot be built', async () => {
+    mocks.build.mockRejectedValueOnce(new Error('nexus down'));
+    await pressMax();
+    expect(dialog().find('.sweep-plan').exists()).toBe(false);
+    expect(dialog().get('.global-total__error').text()).toContain('nexus down');
+  });
+
+  it('shows where a sweep stopped, offers Try again, and clears the stop on the next attempt', async () => {
+    await openMax();
+    await dialog().get('.continue-button').trigger('click');
+    await flushPromises();
+    mocks.signingOptions!.onProgress!({ phase: 'sending', step: 1, total: 2 });
+    await flushPromises();
+    expect(dialog().get('.sweep-progress').text()).toContain('send.sweepSending');
+    expect(dialog().get('.send-dialog__auth').isVisible()).toBe(false);
+
+    mocks.signingOptions!.onProgress!(null);
+    mocks.signingOptions!.onInterrupted!({ step: 1, total: 2, mergesSent: 0, reason: 'the node refused it' });
+    await flushPromises();
+    const alert = dialog().get('.sweep-progress__alert');
+    expect(alert.attributes('role')).toBe('alert');
+    expect(alert.text()).toContain('send.sweepStoppedTitle');
+    expect(alert.text()).toContain('the node refused it');
+    expect(dialog().get('.send-dialog__auth').isVisible()).toBe(true);
+    expect(dialog().get('.continue-button').text()).toBe('common.tryAgain');
+
+    mocks.signingOptions!.onProgress!({ phase: 'signing', step: 1, total: 2 });
+    await flushPromises();
+    expect(dialog().find('.sweep-progress__alert').exists()).toBe(false);
+    expect(dialog().get('.continue-button').text()).toBe('wallet.sign');
+  });
+
+  it('stays open on what went out after a sweep, until Done', async () => {
+    const wrapper = await openMax();
+    expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(false);
+    const paymentId = 'b'.repeat(64);
+    mocks.signingOptions!.onSuccess!(paymentId);
+    await flushPromises();
+    const done = dialog().get('.sweep-done');
+    expect(done.text()).toContain('send.sweepDoneTitle');
+    expect(done.text()).toContain('send.sweepDoneTransactions');
+    expect(done.get('a.sweep-done__explorer').attributes('href')).toBe(`https://cexplorer.io/tx/${paymentId}`);
+    expect(dialog().find('.continue-button').exists()).toBe(false);
+    expect(wrapper.emitted('close')).toBeUndefined();
+
+    await done.get('.sweep-done__button').trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
+  });
+
+  it('closes after a single send as before', async () => {
+    await openSend();
+    await dialog().get('[data-amount]').trigger('click');
+    await settle();
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+    expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(true);
+    mocks.signingOptions!.onSuccess!('c'.repeat(64));
+    await flushPromises();
+    expect(dialog().find('.sweep-done').exists()).toBe(false);
+  });
 });

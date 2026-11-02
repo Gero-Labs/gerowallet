@@ -10,7 +10,14 @@
       :cbor-hex="getCborHex()"
       class="mb-3"
     />
-    <p v-if="tx && steps > 1" class="t-caption mb-3">{{ t('send.sweepPlanSummary', { steps }) }}</p>
+    <SweepTimeline
+      v-if="tx && steps > 1"
+      :steps="steps"
+      :utxo-count="utxoCount"
+      :merge-fee="mergeFeeAda"
+      :payment-fee="paymentFeeAda"
+      class="mb-3"
+    />
   </v-card>
 </template>
 <script setup lang="ts">
@@ -29,7 +36,7 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
   type TxDetailsRiskBadge,
 } from '@/shared/components/TransactionDetailsCard.vue';
-import { useTranslation } from '@/shared/composables/useTranslation';
+import SweepTimeline from './sweep/SweepTimeline.vue';
 
 import type { SendRecipient } from '@/models/send-flow.types';
 
@@ -41,10 +48,11 @@ interface Props {
   additionalFeeLovelace?: number;
   /** Transactions this send goes out as. Above 1, a sweep's merges go first. */
   steps?: number;
+  /** UTxOs a sweep spends in all, for the timeline's explanation of the merges. */
+  utxoCount?: number;
 }
 
-const props = withDefaults(defineProps<Props>(), { active: true, additionalFeeLovelace: 0, steps: 1 });
-const { t } = useTranslation();
+const props = withDefaults(defineProps<Props>(), { active: true, additionalFeeLovelace: 0, steps: 1, utxoCount: 0 });
 defineExpose({ isReadyFor });
 
 const loading = ref<boolean>(false);
@@ -116,6 +124,12 @@ const feeAda = computed(() => {
   if (!tx.value?.body?.fee) return '0';
   return formatAda(Number(tx.value.body.fee) + props.additionalFeeLovelace);
 });
+
+// The timeline shows each stage's fee on its own, symbol included (the details card
+// adds the unit to its figures itself).
+const formatAdaWithSymbol = (lovelace: number): string => filters.toCurrency(lovelace, false, 6, '₳', '', false, 6);
+const mergeFeeAda = computed(() => formatAdaWithSymbol(props.additionalFeeLovelace));
+const paymentFeeAda = computed(() => formatAdaWithSymbol(tx.value?.body?.fee ? Number(tx.value.body.fee) : 0));
 
 // Only lovelace leaving the wallet counts as "sending" — change and
 // self-payments are excluded, matching the sidepanel signing summary.

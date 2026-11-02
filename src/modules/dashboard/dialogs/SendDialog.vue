@@ -19,8 +19,16 @@
     :width="428"
     img-color="var(--g-accent)"
   >
+    <!-- A sweep's payment is out: what went where, instead of closing like a single send.
+         Before the empty-wallet state, since a Max may well have emptied the wallet. -->
+    <template v-if="sweepDone">
+      <v-card-text class="send-dialog-content pa-0">
+        <SweepDone v-bind="sweepDone" @done="resetState(); emit('close')" />
+      </v-card-text>
+    </template>
+
     <!-- Empty wallet state -->
-    <template v-if="isWalletEmpty">
+    <template v-else-if="isWalletEmpty">
       <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
         <div class="empty-wallet-state">
           <v-icon size="64" color="var(--g-text-3)" class="mb-4">mdi-wallet-outline</v-icon>
@@ -105,6 +113,16 @@
                   </v-btn>
                 </div>
 
+                <!-- Max over the request limit: the merges being built, then the plan; or,
+                     when this wallet cannot sweep, what Max sends and what stays behind. -->
+                <SweepPlanCard
+                  v-if="sweepPreparing || sweep"
+                  :utxo-count="sweepPreparing?.utxoCount ?? sweep?.utxoCount ?? 0"
+                  :merges="sweepPreparing?.total ?? sweep?.merges.length ?? 0"
+                  :preparing="sweepPreparing ? { built: sweepPreparing.built, total: sweepPreparing.total } : null"
+                />
+                <MaxLimitNote v-else-if="maxLimit" v-bind="maxLimit" />
+
                 <!-- Global total: always in the layout so the dialog keeps its height. Empty
                      (dashes) until there is something to build, a shimmer while the fee is
                      being computed, the figures once the transaction is built. -->
@@ -114,6 +132,9 @@
                     <span v-if="feePending" class="g-skeleton global-total__skeleton global-total__skeleton--fee" aria-hidden="true"></span>
                     <span v-else-if="globalTotal.formattedFee && txValid" class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
                     <span v-else class="global-total__fee-label g-num">—</span>
+                  </div>
+                  <div v-if="sweepFeeBreakdown && !feePending" class="global-total__row global-total__breakdown">
+                    <span class="t-caption g-num">{{ sweepFeeBreakdown }}</span>
                   </div>
                   <div v-if="globalTotal.formattedWithdrawal && !feePending" class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
@@ -129,8 +150,6 @@
                     <span v-else class="global-total__ada g-num">—</span>
                   </div>
                   <div v-if="buildError" class="global-total__row global-total__error" role="alert">{{ buildError }}</div>
-                  <div v-else-if="sweepNote" class="global-total__row global-total__note">{{ sweepNote }}</div>
-                  <div v-else-if="maxLimitNote" class="global-total__row global-total__note">{{ maxLimitNote }}</div>
                 </div>
               </div>
             </div>
@@ -145,6 +164,7 @@
               :active="isOpen && currentStep === 2"
               :additional-fee-lovelace="sweepFeeLovelace"
               :steps="sweepSteps"
+              :utxo-count="sweep?.utxoCount ?? 0"
               @next="handleSign"
               @prev="prevStep"
             />
@@ -165,14 +185,16 @@
 
       <!-- Actions -->
       <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
-        <div v-if="sweepProgressText" class="t-caption text-center mb-1" role="status">{{ sweepProgressText }}</div>
+        <!-- A sweep in flight, or where it stopped. The auth section below stays mounted
+             (its field holds the password for a retry) but out of sight while it runs. -->
+        <SweepProgressPanel v-if="currentStep === 2 && (sweepProgress || sweepStop)" :progress="sweepProgress" :stop="sweepStop" />
         <!-- Under a "require remote" policy, local signing (password AND passkey)
              is disabled; only "Sign on another device" remains. -->
         <div v-if="currentStep === 2 && requiresRemoteForSend" class="text-caption grey--text text-center mb-2">
           {{ $t('crossDevice.settings.policyRequireHint') }}
         </div>
         <!-- Transaction Authentication Section (step 2 only) -->
-        <div v-else-if="currentStep === 2">
+        <div v-else-if="currentStep === 2" v-show="!sweepProgress" class="send-dialog__auth">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -227,7 +249,7 @@
             @click="nextStep"
             :disabled="!isValid || txSignLoading || (requiresRemoteForSend && !isSubmit)"
             :loading="txSignLoading"
-          >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
+          >{{ isSubmit ? $t('common.confirm') : sweepStop ? $t('common.tryAgain') : $t('wallet.sign') }}
           </v-btn>
           <!-- Step 2: Sign on another device (flag-gated, dark by default) -->
           <v-btn
@@ -250,13 +272,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, shallowRef, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useTransactionSigning, type SweepProgress } from '@/shared/composables/useTransactionSigning';
+import { useTransactionSigning, type SweepProgress, type SweepStop } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
+import SweepPlanCard from '../components/sweep/SweepPlanCard.vue';
+import MaxLimitNote from '../components/sweep/MaxLimitNote.vue';
+import SweepProgressPanel from '../components/sweep/SweepProgressPanel.vue';
+import SweepDone from '../components/sweep/SweepDone.vue';
 import MidnightSendDialog from './MidnightSendDialog.vue';
 import rules from '@/utils/rules';
 import { Blockchain, WalletType } from '@/models/types';
@@ -282,7 +308,7 @@ import {
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
 import { planMerges, type SweepPrerequisites } from '@/api/sweepPlan';
-import { buildSweep, type BuiltSweep } from '@/api/sweepBuild';
+import { buildSweep, type BuiltSweep, type SweepBuildContext } from '@/api/sweepBuild';
 import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
 import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -358,6 +384,12 @@ const sweepFeeLovelace = computed(() => Number(sweep.value?.mergeFee ?? BigInt(0
 /** Transactions the send goes out as. */
 const sweepSteps = computed(() => (sweep.value ? sweep.value.merges.length + 1 : 1));
 const sweepProgress = ref<SweepProgress | null>(null);
+/** The merges being built: how many are done, how many the plan has, and the UTxOs it spends. Null when none is building. */
+const sweepPreparing = ref<{ built: number; total: number; utxoCount: number } | null>(null);
+/** Where the last sweep stopped, until the next attempt starts or the dialog resets. */
+const sweepStop = ref<SweepStop | null>(null);
+/** A sweep whose payment went out: the dialog shows this instead of closing. */
+const sweepDone = ref<{ txId: string; amount: string; address: string; steps: number; fee: string } | null>(null);
 /**
  * The merge build in flight, keyed by the UTxO set it is for. A second caller for the
  * same set awaits this one instead of building merges of its own (their ids would differ).
@@ -370,26 +402,38 @@ let sweepBuild: { key: string; promise: Promise<BuiltSweep> } | null = null;
  * again rebuilds them.
  */
 const SWEEP_REBUILD_AFTER_MS = 60 * 60 * 1000;
-/** Max/sweep only reaches the candidates one request may carry: say so rather than silently leaving UTxOs behind. */
-const maxLimitNote = computed(() => {
+const formatAda = (lovelace: number): string => filters.toCurrency(lovelace, false, 6, '₳', '', false, 6);
+
+/**
+ * Max without a sweep only reaches the candidates one request may carry: say what it
+ * sends and what stays behind rather than silently leaving UTxOs out.
+ */
+const maxLimit = computed(() => {
   const selection = inputSelection.value;
   if (!selection?.truncated || maxRecipientIds.value.size === 0) return null;
-  return t('send.inputLimitMaxNote', { max: selection.limit, remaining: selection.total - selection.limit });
+  let lovelace = BigInt(0);
+  for (const recipient of recipients.value) {
+    if (!maxRecipientIds.value.has(recipient.id)) continue;
+    const ada = recipient.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    if (ada?.quantity) lovelace += decimalToBaseUnits(ada.quantity, 6);
+  }
+  return {
+    amount: formatAda(Number(lovelace)),
+    total: selection.total,
+    max: selection.limit,
+    remaining: selection.total - selection.limit,
+  };
 });
 
-/** With a sweep, Max reaches every UTxO: say how, in place of the note about the ones it leaves behind. */
-const sweepNote = computed(() => {
+/** Under the fee row: how a sweep's fee splits between the merges and the payment. */
+const sweepFeeBreakdown = computed(() => {
   const built = sweep.value;
-  if (!built) return null;
-  return t('send.sweepPlanNote', { count: built.utxoCount, steps: built.merges.length + 1 });
-});
-
-/** The line under the sign button while a sweep runs. */
-const sweepProgressText = computed(() => {
-  const progress = sweepProgress.value;
-  if (!progress) return '';
-  if (progress.phase === 'waiting') return t('send.sweepWaiting');
-  return t(progress.phase === 'signing' ? 'send.sweepSigning' : 'send.sweepSending', { step: progress.step, total: progress.total });
+  if (!built || !txValid.value || !tx.value?.body?.fee) return null;
+  return t('send.sweepFeeBreakdown', {
+    merges: built.merges.length,
+    mergeFee: formatAda(sweepFeeLovelace.value),
+    paymentFee: formatAda(Number(tx.value.body.fee)),
+  });
 });
 
 function createEmptyRecipient(): SendRecipient {
@@ -452,9 +496,18 @@ const {
   active: isSummaryReady,
   tx,
   prerequisites: sweepPrerequisites,
-  onProgress: (progress) => { sweepProgress.value = progress; },
+  onProgress: (progress) => {
+    sweepProgress.value = progress;
+    // A new attempt: the stop it is retrying no longer applies.
+    if (progress) sweepStop.value = null;
+  },
+  onInterrupted: (stop) => { sweepStop.value = stop; },
+  // A single send closes as before; a sweep stays open on what went out.
+  closeOnSuccess: () => !sweep.value,
   successMessageKey: 'wallet.txSubmittedSuccess',
-  onSuccess: () => {
+  onSuccess: (txId) => {
+    // Read off the sweep and payment now: the dialog's state resets behind this.
+    if (sweep.value && tx.value) sweepDone.value = sweepDoneSummary(txId, tx.value, sweep.value);
     // If this send swept rewards (auto-withdraw), zero the local balance so a
     // second send before the next account sync doesn't re-attach the
     // already-claimed withdrawal (issue 941)
@@ -462,6 +515,29 @@ const {
   },
   onClose: () => emit('close'),
 });
+
+/** The done panel's figures: what left the wallet, to whom, in how many transactions, and every fee together. */
+function sweepDoneSummary(txId: string, payment: Cardano.Tx, built: BuiltSweep): NonNullable<typeof sweepDone.value> {
+  const own = new Set<string>([
+    ...(keys.value?.payment ?? []).map((key: { address?: string }) => key.address),
+    ...(keys.value?.change ?? []).map((key: { address?: string }) => key.address),
+  ].filter((address): address is string => !!address));
+  let amount = BigInt(0);
+  let address = '';
+  for (const output of payment.body.outputs) {
+    const to = String(output.address);
+    if (own.has(to)) continue;
+    amount += BigInt(output.value.coins);
+    if (!address) address = to;
+  }
+  return {
+    txId,
+    amount: formatAda(Number(amount)),
+    address,
+    steps: built.merges.length + 1,
+    fee: formatAda(Number(payment.body.fee) + Number(built.mergeFee)),
+  };
+}
 
 /** A sweep is signed under one approval: only signers that give one (password, PassKey, Google), never under a remote-only policy. */
 const canSweep = computed(() =>
@@ -544,6 +620,9 @@ const resetData = () => {
   sweep.value = null;
   sweepBuild = null;
   sweepProgress.value = null;
+  sweepPreparing.value = null;
+  sweepStop.value = null;
+  sweepDone.value = null;
   maxRecipientIds.value = new Set();
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
@@ -842,14 +921,21 @@ async function ensureSweep(): Promise<void> {
   // One build per UTxO set at a time: a concurrent caller waits for the same merges
   // instead of building its own, whose ids would differ.
   if (sweepBuild?.key !== key) {
-    sweepBuild = {
-      key,
-      promise: buildSweep(plan, {
-        ownAddress: keys.value.payment[0].address,
-        network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
-        walletNetwork: loggedWallet.value.network,
-      }),
+    const utxoCount = plan.direct.length + plan.batches.reduce((sum, batch) => sum + batch.length, 0);
+    // The card counts this build's merges only while it owns the slot: a build for a
+    // newer UTxO set takes the slot, and this one's late reports must not move its bar.
+    let slot: { key: string; promise: Promise<BuiltSweep> } | null = null;
+    const context: SweepBuildContext = {
+      ownAddress: keys.value.payment[0].address,
+      network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+      walletNetwork: loggedWallet.value.network,
+      onMergeBuilt: (built, total) => {
+        if (slot && sweepBuild === slot) sweepPreparing.value = { built, total, utxoCount };
+      },
     };
+    sweepPreparing.value = { built: 0, total: plan.batches.length, utxoCount };
+    slot = { key, promise: buildSweep(plan, context) };
+    sweepBuild = slot;
   }
   const pending = sweepBuild;
   try {
@@ -858,7 +944,11 @@ async function ensureSweep(): Promise<void> {
     // same promise finds the slot empty and leaves that result in place.
     if (sweepBuild === pending) sweep.value = { ...built, key, builtAt: Date.now() };
   } finally {
-    if (sweepBuild === pending) sweepBuild = null;
+    // Whichever way it ended, the build that owns the slot takes its card down with it.
+    if (sweepBuild === pending) {
+      sweepBuild = null;
+      sweepPreparing.value = null;
+    }
   }
   // The slot never holds `pending` past the finally, so a build still in it is a newer
   // one for another UTxO set, started while this one ran: wait for that sweep rather
@@ -1585,6 +1675,13 @@ onMounted(() => {
 }
 
 .global-total__fee-row {
+  margin-bottom: 4px;
+}
+
+/* A sweep's fee split, right under the fee it adds up to. */
+.global-total__breakdown {
+  justify-content: flex-end;
+  margin-top: -2px;
   margin-bottom: 4px;
 }
 
