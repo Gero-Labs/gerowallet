@@ -19,7 +19,7 @@ import type Transport from '@ledgerhq/hw-transport';
 import type * as Trezor from '@trezor/connect';
 import { Blockchain, Keys, Network } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import networks from '@/utils/networks';
 import {
   FEE_INPUT,
@@ -104,6 +104,16 @@ describe('the worker preflight', () => {
 
   it('refuses what the worker refuses', async () => {
     answers({ success: true, refused: true });
+    await expect(assertCip113SignAllowed('84a0', 'no answer')).rejects.toThrow(CIP113_SIGN_REFUSAL_MESSAGE);
+  });
+
+  it('refuses with the reason the worker names: a transaction marked to fail', async () => {
+    answers({ success: true, refused: true, message: MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE });
+    await expect(assertCip113SignAllowed('84a0', 'no answer')).rejects.toThrow(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE);
+  });
+
+  it('shows no text from the worker that it does not know', async () => {
+    answers({ success: true, refused: true, message: 'anything else' });
     await expect(assertCip113SignAllowed('84a0', 'no answer')).rejects.toThrow(CIP113_SIGN_REFUSAL_MESSAGE);
   });
 

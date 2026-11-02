@@ -12,7 +12,7 @@ import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
 import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
 import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
 import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
-import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
@@ -66,6 +66,7 @@ import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
 import { cip113TransferNeedsOwnKey } from '@/chrome/cip113Guard';
+import { isMarkedToFailCbor } from '@/shared/utils/keyCreds';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import type { Cip45Session } from '@/services/cip45/types';
@@ -1702,13 +1703,30 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
 }
 
 /**
- * refusalForProgrammableInputs for a hardware signer, which Gero's own Send reaches through an
- * extension page only: the one transfer CIP113_PREPARE_TRANSFER verified passes. Its allowance
- * is not used up (the device may still be declined); it expires on its own.
+ * The refusal at a dApp signing entry, before the approval UI opens. Returns the fixed message the
+ * entry sends back (friendlyTxError() localises each), or null:
+ * - a transaction marked to fail (isValid: false), read from its CBOR. It only forfeits its
+ *   collateral, which an input's witness can authorise; no dApp sends one honestly, and no Gero
+ *   flow builds one;
+ * - a CIP-113 programmable input (refusalForProgrammableInputs).
+ * Never reads the Send allowance: every dApp path stays refused.
+ */
+function dappSignRefusal(txCbor: unknown): string | null {
+  if (isMarkedToFailCbor(txCbor)) return MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE;
+  const programmable = refusalForProgrammableInputs(txCbor);
+  if (programmable) debugLog(programmable);
+  return programmable ? CIP113_SIGN_REFUSAL_MESSAGE : null;
+}
+
+/**
+ * dappSignRefusal for a hardware signer, which Gero's own Send reaches through an extension page
+ * only: the one transfer CIP113_PREPARE_TRANSFER verified passes the CIP-113 refusal. Its
+ * allowance is not used up (the device may still be declined); it expires on its own. A
+ * transaction marked to fail is refused whatever the allowance.
  */
 function hardwareSignRefusal(txCbor: unknown): string | null {
-  const refusal = refusalForProgrammableInputs(txCbor);
-  if (!refusal) return null;
+  const refusal = dappSignRefusal(txCbor);
+  if (refusal !== CIP113_SIGN_REFUSAL_MESSAGE) return refusal;
   const wallet = walletManager.getWallet();
   try {
     const tx = deserializeCardanoJsSdkTx(txCbor as string);
@@ -1726,9 +1744,14 @@ app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendRespons
   // A worker this message woke may not have restored the wallet yet, and without it the
   // check would pass everything.
   await booted();
+  // `message` names the refusal, so the page shows why (assertCip113SignAllowed).
   const refusal = hardwareSignRefusal(request.data?.txCbor);
-  if (refusal) debugLog(refusal);
-  sendResponse({ id: request.id, data: { success: true, refused: refusal !== null }, target: TARGET, sender: SENDER.extension });
+  sendResponse({
+    id: request.id,
+    data: { success: true, refused: refusal !== null, ...(refusal ? { message: refusal } : {}) },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
 });
 
 // Gero's own Send of a CIP-113 token. The page sends only what the user asked for; the
@@ -1787,12 +1810,11 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     return signTxReply({ error: APIError.Refused });
   }
 
-  const programmableRefusal = refusalForProgrammableInputs(request.data?.tx);
-  if (programmableRefusal) {
-    debugLog(programmableRefusal);
+  const signRefusal = dappSignRefusal(request.data?.tx);
+  if (signRefusal) {
     // Refused, like the whitelist check above: this returns before the approval UI opens
     // and Gero does hold the key, so the wallet is declining by policy.
-    return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
+    return signTxReply({ error: { code: APIError.Refused.code, info: signRefusal } });
   }
 
   // Explicit fields only (see signData): the prompt must be built from the tx
@@ -3155,12 +3177,11 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
     const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
 
     // The relay only forwards CBOR, so the receiving device never sees our index.
-    const crossDeviceRefusal = refusalForProgrammableInputs(unsignedCbor);
+    const crossDeviceRefusal = dappSignRefusal(unsignedCbor);
     if (crossDeviceRefusal) {
-      debugLog(crossDeviceRefusal);
       sendResponse({
         id: request.id,
-        data: { decision: 'rejected', reason: CIP113_SIGN_REFUSAL_MESSAGE },
+        data: { decision: 'rejected', reason: crossDeviceRefusal },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -4465,10 +4486,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
 
       // Trezor signs here rather than through WalletBg.signTx, so it needs its own check.
       const trezorRefusal = hardwareSignRefusal(txCbor);
-      if (trezorRefusal) {
-        debugLog(trezorRefusal);
-        throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
-      }
+      if (trezorRefusal) throw new Error(trezorRefusal);
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
 
@@ -5311,10 +5329,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           case 'cardano_signTx': {
             const wcParams = wcRequest.params || {};
             const wcTx = wcParams.tx || wcParams;
-            const wcProgrammableRefusal = refusalForProgrammableInputs(wcTx);
-            if (wcProgrammableRefusal) {
-              debugLog(wcProgrammableRefusal);
-              await wcService.respondError(topic, id, 4100, CIP113_SIGN_REFUSAL_MESSAGE);
+            const wcSignRefusal = dappSignRefusal(wcTx);
+            if (wcSignRefusal) {
+              await wcService.respondError(topic, id, 4100, wcSignRefusal);
               return;
             }
             await routeWcSigningRequest(
@@ -5636,10 +5653,9 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
       }
       case 'signTx': {
         // The same entry refusal as CIP-30 signTx, before the approval UI opens.
-        const programmableRefusal = refusalForProgrammableInputs(params.tx);
-        if (programmableRefusal) {
-          debugLog(programmableRefusal);
-          fail(APIError.Refused.code, CIP113_SIGN_REFUSAL_MESSAGE);
+        const signRefusal = dappSignRefusal(params.tx);
+        if (signRefusal) {
+          fail(APIError.Refused.code, signRefusal);
           break;
         }
         try {
