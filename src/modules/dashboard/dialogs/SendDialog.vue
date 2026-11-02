@@ -1265,6 +1265,8 @@ async function runBuild(): Promise<void> {
     return;
   }
 
+  // A payment built from the previous sweep must not stay signable while the sweep is replaced.
+  txValid.value = false;
   try {
     await ensureSweep();
   } catch (e) {

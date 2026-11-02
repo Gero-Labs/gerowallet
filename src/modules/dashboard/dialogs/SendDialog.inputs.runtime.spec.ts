@@ -137,21 +137,24 @@ describe('Quick Send Max over the request limit', () => {
   const fragmented = () => Array.from({ length: 205 }, (_, n) => utxo(n, 1_000_000 + n));
   const isMerge = (request: BuildRequest) => request.outputs.length === 1 && request.outputs[0].address === 'own-address';
 
+  /** What Nexus answers: a merge pays its whole batch less the fee to its one output; a payment echoes its outputs. */
+  const buildResponse = (request: BuildRequest) => {
+    const merge = isMerge(request);
+    const total = request.utxos.reduce((sum, input) => sum + Number(input.lovelace), 0);
+    return { tx_cbor: JSON.stringify({
+      id: merge ? `merge-${request.utxos[0].txHash.slice(-4)}` : 'payment',
+      body: {
+        inputs: request.utxos.map((input) => ({ txId: input.txHash, index: input.outputIndex })),
+        outputs: request.outputs.map((output) => ({ address: output.address, value: { coins: String(merge ? total - 200_000 : output.lovelace) } })),
+        fee: '200000',
+      },
+    }) };
+  };
+
   beforeEach(() => {
     walletStore.utxos = fragmented() as never;
     mocks.maxAda.mockResolvedValue({ max_lovelace: '204000000', estimated_fee: '400000', change_min_utxo: '0', total_balance: '205020910' });
-    mocks.build.mockImplementation(async (request: BuildRequest) => {
-      const merge = isMerge(request);
-      const total = request.utxos.reduce((sum, input) => sum + Number(input.lovelace), 0);
-      return { tx_cbor: JSON.stringify({
-        id: merge ? `merge-${request.utxos[0].txHash.slice(-4)}` : 'payment',
-        body: {
-          inputs: request.utxos.map((input) => ({ txId: input.txHash, index: input.outputIndex })),
-          outputs: request.outputs.map((output) => ({ address: output.address, value: { coins: String(merge ? total - 200_000 : output.lovelace) } })),
-          fee: '200000',
-        },
-      }) };
-    });
+    mocks.build.mockImplementation(async (request: BuildRequest) => buildResponse(request));
   });
 
   async function pressMax() {
@@ -195,6 +198,12 @@ describe('Quick Send Max over the request limit', () => {
     await flushPromises();
     await vi.advanceTimersByTimeAsync(500);
     await flushPromises();
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
   }
 
   it('builds the merges once when Max is pressed twice', async () => {
@@ -262,5 +271,40 @@ describe('Quick Send Max over the request limit', () => {
     expect(payments.length).toBeGreaterThan(0);
     expect(payments.every((request) => request.outputs.every((output) => !output.assets?.length))).toBe(true);
     expect(mocks.maxAda).toHaveBeenCalledTimes(1);
+  });
+
+  it('the previous payment is not signable while the merges are rebuilt', async () => {
+    // Max-ada first answers 0, so that Max schedules a plain rebuild instead of building: the one
+    // way into runBuild that raises no shimmer. A second Max then builds a payment from the
+    // current merges before that rebuild fires.
+    mocks.maxAda.mockResolvedValueOnce({ max_lovelace: '0', estimated_fee: '0', change_min_utxo: '0', total_balance: '205020910' });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+
+    // The UTxO set changes before that rebuild fires, so it has to replace the merges: hold that build.
+    walletStore.utxos = [...fragmented(), utxo(999, 3_000_000)] as never;
+    const held = deferred<{ tx_cbor: string }>();
+    let heldRequest!: BuildRequest;
+    mocks.build.mockImplementationOnce((request: BuildRequest) => { heldRequest = request; return held.promise; });
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+    expect(requests().filter(isMerge)).toHaveLength(2);
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+    expect(mocks.signingOptions?.active?.()).toBe(false);
+    expect(dialog().get('.continue-button').attributes('disabled')).toBeDefined();
+
+    held.resolve(buildResponse(heldRequest));
+    await settle();
+    expect(requests().filter(isMerge).at(-1)?.utxos).toHaveLength(7);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+    expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
+    expect(dialog().get('.global-total__fee').text()).toBe('- 0.4');
   });
 });
