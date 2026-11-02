@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, defineComponent, effectScope, h, ref, type EffectScope } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import type { Cardano } from '@cardano-sdk/core';
+import { Serialization } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
@@ -223,6 +224,110 @@ describe('cross-device signing refused before the relay', () => {
 
     expect(mocks.error).toHaveBeenCalledWith(i18n.t(key));
     expect(mocks.error).not.toHaveBeenCalledWith('crossDevice.requestRejected');
+  });
+});
+
+describe('sweep prerequisites', () => {
+  const merge = (id: string) => ({ id, body: { inputs: [{ txId: `in-${id}`, index: 0 }], outputs: [], fee: 1 } }) as unknown as Cardano.Tx;
+  const payment = (...spends: string[]) =>
+    ({ id: 'payment', body: { inputs: spends.map((txId) => ({ txId, index: 0 })), outputs: [], fee: 1 } }) as unknown as Cardano.Tx;
+  const output = (id: string) => [{ txId: id, index: 0, address: 'own' }, { address: 'own', value: { coins: 5n } }] as unknown as Cardano.Utxo;
+  const sentIds = (method: string) => mocks.send.mock.calls
+    .filter(([message]) => message.method === method)
+    .map(([message]) => JSON.parse(message.data.txCbor).id as string);
+
+  function sweeper(merges: string[], spends = merges) {
+    const scope = effectScope();
+    scopes.push(scope);
+    const tx = ref<Cardano.Tx | undefined>(payment(...spends));
+    const prerequisites = ref({ cbors: merges.map((id) => JSON.stringify(merge(id))), outputs: merges.map(output) });
+    const progress: unknown[] = [];
+    const signing = scope.run(() => useTransactionSigning({
+      tx, active: () => true, successMessageKey: 'success', prerequisites, onProgress: (step) => progress.push(step),
+    }))!;
+    signing.spendingPassword.value = 'approved-password';
+    return { signing, progress };
+  }
+
+  beforeEach(() => {
+    walletStore.utxos = [];
+    vi.mocked(Serialization.Transaction.fromCbor).mockImplementation(((cbor: string) => ({ getId: () => JSON.parse(cbor).id })) as never);
+  });
+
+  it('signs every merge and the payment after one password check, then submits them in order', async () => {
+    const { signing, progress } = sweeper(['m1', 'm2']);
+    await signing.handleSign();
+    await flushPromises();
+    expect(methods()).toEqual([
+      MessageTypes.VERIFY_SPENDING_PASSWORD,
+      MessageTypes.SIGN_TX, MessageTypes.SIGN_TX, MessageTypes.SIGN_TX,
+      MessageTypes.SUBMIT_TX, MessageTypes.SUBMIT_TX, MessageTypes.SUBMIT_TX,
+    ]);
+    expect(sentIds(MessageTypes.SIGN_TX)).toEqual(['m1', 'm2', 'payment']);
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'm2', 'payment']);
+    // The payment's signer is shown the merge outputs it spends.
+    const paymentSign = mocks.send.mock.calls.filter(([message]) => message.method === MessageTypes.SIGN_TX).at(-1)![0];
+    expect(paymentSign.data.utxos.map(([txIn]: Cardano.Utxo) => txIn.txId)).toEqual(['m1', 'm2']);
+    expect(mocks.success).toHaveBeenCalledTimes(1);
+    expect(progress).toContainEqual({ phase: 'signing', step: 1, total: 3 });
+    expect(progress).toContainEqual({ phase: 'sending', step: 3, total: 3 });
+    expect(progress.at(-1)).toBeNull();
+  });
+
+  it('refuses a merge the payment does not spend, before asking for the password', async () => {
+    const { signing } = sweeper(['m1', 'm2'], ['m1']);
+    await signing.handleSign();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith('txGuard.builtTxMismatch');
+  });
+
+  it('stops at a failed merge and, signed again, skips the merges already sent', async () => {
+    let failSecond = true;
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id === 'm2' && failSecond) { failSecond = false; return { data: { error: 'node busy' } }; }
+      return { data: { txId: 'submitted' } };
+    });
+    const { signing } = sweeper(['m1', 'm2']);
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'm2']);
+    expect(mocks.error).toHaveBeenCalledWith('send.sweepInterrupted');
+    mocks.send.mockClear();
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m2', 'payment']);
+    expect(mocks.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the merges to land and resends the payment a node did not accept yet', async () => {
+    vi.useFakeTimers();
+    let paymentTries = 0;
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id === 'payment' && ++paymentTries === 1) return { data: { error: 'BadInputsUTxO' } };
+      return { data: { txId: 'submitted' } };
+    });
+    const { signing, progress } = sweeper(['m1']);
+    const done = signing.handleSign();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(progress).toContainEqual({ phase: 'waiting', step: 2, total: 2 });
+    expect(paymentTries).toBe(1);
+    walletStore.utxos = [output('m1')];
+    await vi.advanceTimersByTimeAsync(2000);
+    await done;
+    expect(paymentTries).toBe(2);
+    expect(mocks.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a sweep on a hardware wallet without reaching the device', async () => {
+    walletStore.loggedWallet.type = WalletType.Ledger;
+    const { signing } = sweeper(['m1']);
+    await signing.handleSign();
+    expect(mocks.ledger).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith('send.sweepSoftwareOnly');
   });
 });
 
