@@ -3363,7 +3363,7 @@ export default {
   'send.sweepSigning': 'Transaktion {step} von {total} wird signiert…',
   'send.sweepSending': 'Transaktion {step} von {total} wird gesendet…',
   'send.sweepWaiting': 'Warte auf die Bestätigung der Zusammenführungen, bevor die Zahlung gesendet wird…',
-  'send.sweepInterrupted': 'Transaktion {step} von {total} ist fehlgeschlagen: {reason} Bereits Gesendetes liegt in deinem eigenen Wallet. Warte eine Minute und tippe dann erneut auf Max.',
+  'send.sweepInterrupted': 'Transaktion {step} von {total} ist fehlgeschlagen. Bereits Gesendetes liegt in deinem eigenen Wallet; warte eine Minute und tippe dann erneut auf Max. Details: {reason}',
   'send.sweepSoftwareOnly': 'Dieser Versand braucht mehrere Transaktionen, und nur ein Wallet mit Wiederherstellungsphrase, PassKey oder Google kann sie mit einer Bestätigung signieren.',
   'send.invalidAddress': 'Ungültige Bitcoin-Adresse',
   'send.invalidAmount': 'Ungültiger Betrag',

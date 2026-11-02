@@ -29,6 +29,14 @@ describe('planMerges', () => {
     expect(refs(plan.direct)).toEqual(refs([utxo(5, 7), utxo(3, 8), utxo(1, 9)]));
   });
 
+  it('orders by lovelace even when coins arrive as strings', () => {
+    const stringUtxo = (n: number, coins: string) =>
+      [{ txId: txId(n), index: 0 }, { address: 'addr1qown', value: { coins } }] as unknown as Cardano.Utxo;
+    const plan = planMerges([stringUtxo(1, '9'), stringUtxo(2, '1'), stringUtxo(3, '8'), stringUtxo(4, '2'), stringUtxo(5, '7')], 4)!;
+    expect(refs(plan.batches.flat())).toEqual(refs([utxo(2, 1), utxo(4, 2)]));
+    expect(refs(plan.direct)).toEqual(refs([utxo(5, 7), utxo(3, 8), utxo(1, 9)]));
+  });
+
   it('keeps every token holder in the payment and never merges one', () => {
     const holder = utxo(9, 1, new Map([[TOKEN, 5n]]));
     const plan = planMerges([holder, utxo(1, 3), utxo(2, 4), utxo(3, 5), utxo(4, 6)], 4)!;
@@ -56,28 +64,28 @@ describe('ownOutputsAsUtxos', () => {
       { address: 'addr1qelse', value: { coins: 1n } },
       { address: 'addr1qown', value: { coins: 2n } },
     ] } } as unknown as Cardano.Tx;
-    expect(ownOutputsAsUtxos(tx, 'addr1qown').map(([txIn, txOut]) => [txIn.txId, txIn.index, txOut.value.coins]))
+    const own = ownOutputsAsUtxos(tx, 'addr1qown');
+    expect(own.map(([txIn, txOut]) => [txIn.txId, txIn.index, txOut.value.coins]))
       .toEqual([['merge-tx', 0, 5n], ['merge-tx', 2, 2n]]);
+    expect(own.map(([txIn]) => txIn.address)).toEqual(['addr1qown', 'addr1qown']);
   });
 });
 
 describe('chainedPrerequisites', () => {
   const tx = (id: string, spends: string[] = []) =>
     ({ id, body: { inputs: spends.map((spent) => ({ txId: spent, index: 0 })) } }) as unknown as Cardano.Tx;
-  const serialize = (t: Cardano.Tx) => JSON.stringify({ id: t.id });
   const idOf = (cbor: string) => JSON.parse(cbor).id as string;
 
-  it('serializes each merge the payment spends, in order', () => {
-    expect(chainedPrerequisites(tx('pay', ['m1', 'm2']), [tx('m1'), tx('m2')], serialize, idOf))
+  it('returns each merge the payment spends, in order, with its bytes', () => {
+    expect(chainedPrerequisites(tx('pay', ['m1', 'm2']), ['{"id":"m1"}', '{"id":"m2"}'], idOf))
       .toEqual([{ id: 'm1', cbor: '{"id":"m1"}' }, { id: 'm2', cbor: '{"id":"m2"}' }]);
   });
 
   it('refuses a merge the payment does not spend', () => {
-    expect(() => chainedPrerequisites(tx('pay', ['m1']), [tx('m1'), tx('m2')], serialize, idOf)).toThrow(SweepChainError);
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), ['{"id":"m1"}', '{"id":"m2"}'], idOf)).toThrow(SweepChainError);
   });
 
-  it('takes the id from the bytes, not from the object', () => {
-    const otherBytes = () => JSON.stringify({ id: 'other' });
-    expect(() => chainedPrerequisites(tx('pay', ['m1']), [tx('m1')], otherBytes, idOf)).toThrow(SweepChainError);
+  it('refuses the same merge twice', () => {
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), ['{"id":"m1"}', '{"id":"m1"}'], idOf)).toThrow(SweepChainError);
   });
 });

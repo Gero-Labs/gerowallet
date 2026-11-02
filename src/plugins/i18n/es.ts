@@ -4592,7 +4592,7 @@ export default {
   'send.sweepSigning': 'Firmando la transacción {step} de {total}…',
   'send.sweepSending': 'Enviando la transacción {step} de {total}…',
   'send.sweepWaiting': 'Esperando que se confirmen las combinaciones antes de enviar el pago…',
-  'send.sweepInterrupted': 'Falló la transacción {step} de {total}: {reason} Lo que ya se envió está en tu propia billetera. Espera un minuto y vuelve a tocar Máx.',
+  'send.sweepInterrupted': 'Falló la transacción {step} de {total}. Lo que ya se envió está en tu propia billetera; espera un minuto y vuelve a tocar Máx. Detalles: {reason}',
   'send.sweepSoftwareOnly': 'Este envío necesita varias transacciones y solo una billetera con frase de recuperación, PassKey o Google puede firmarlas con una sola aprobación.',
   'send.transactionSummary': 'Resumen de la transacción',
   'send.to': 'Para',

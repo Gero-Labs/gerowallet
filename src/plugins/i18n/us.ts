@@ -4718,7 +4718,7 @@ export default {
   'send.sweepSigning': 'Signing transaction {step} of {total}…',
   'send.sweepSending': 'Sending transaction {step} of {total}…',
   'send.sweepWaiting': 'Waiting for the merges to confirm before sending the payment…',
-  'send.sweepInterrupted': 'Transaction {step} of {total} failed: {reason} Anything already sent is in your own wallet. Wait a minute, then press Max again.',
+  'send.sweepInterrupted': 'Transaction {step} of {total} failed. Anything already sent is in your own wallet; wait a minute, then press Max again. Details: {reason}',
   'send.sweepSoftwareOnly': 'This send needs several transactions, and only a recovery-phrase, PassKey or Google wallet can sign them with one approval.',
   'send.transactionSummary': 'Transaction Summary',
   'send.to': 'To',

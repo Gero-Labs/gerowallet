@@ -9,6 +9,7 @@ vi.mock('./nexus-tx-api', () => ({
 vi.mock('@cardano-sdk/core', () => ({ Serialization: { Transaction: { fromCbor: (cbor: string) => ({ toCore: () => JSON.parse(cbor) }) } } }));
 vi.mock('@cardano-sdk/util', () => ({ HexBlob: (value: string) => value }));
 
+import i18n from '@/plugins/i18n';
 import { buildSweep } from './sweepBuild';
 import type { MergePlan } from './sweepPlan';
 
@@ -50,6 +51,7 @@ describe('buildSweep', () => {
     });
     const built = await buildSweep(plan, context);
     expect(built.merges.map((tx) => tx.id)).toEqual(['merge-a', 'merge-c']);
+    expect(built.mergeCbors.map((cbor) => JSON.parse(cbor).id)).toEqual(['merge-a', 'merge-c']);
     expect(built.mergeOutputs.map(([txIn]) => txIn.txId)).toEqual(['merge-a', 'merge-c']);
     expect(built.mergeFee).toBe(340n);
     expect(built.direct).toBe(plan.direct);
@@ -69,5 +71,28 @@ describe('buildSweep', () => {
     const batches = Array.from({ length: 10 }, (_, n) => [utxo(`x${n}`, 5), utxo(`y${n}`, 5)]);
     await buildSweep({ batches, direct: [] }, context);
     expect(peak).toBe(3);
+  });
+
+  it('stops asking Nexus once a build fails', async () => {
+    mocks.build
+      .mockImplementation(async (request: { utxos: { txHash: string }[] }) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return merged(`merge-${request.utxos[0].txHash}`, 1);
+      })
+      .mockImplementationOnce(async () => {
+        throw new Error('nexus down');
+      });
+    const batches = Array.from({ length: 10 }, (_, n) => [utxo(`x${n}`, 5), utxo(`y${n}`, 5)]);
+    await expect(buildSweep({ batches, direct: [] }, context)).rejects.toThrow('nexus down');
+    // The builds already in flight finish after the rejection; none may start after it.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mocks.build.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  it('refuses a merge with more than one output', async () => {
+    mocks.build.mockImplementation(async () => ({
+      tx_cbor: JSON.stringify({ id: 'merge-a', body: { outputs: [{ address: 'own', value: { coins: 1 } }, { address: 'own', value: { coins: 2 } }], fee: '170' } }),
+    }));
+    await expect(buildSweep(plan, context)).rejects.toThrow(String(i18n.t('txGuard.builtTxMismatch')));
   });
 });

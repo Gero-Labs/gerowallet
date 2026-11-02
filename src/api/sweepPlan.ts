@@ -1,5 +1,5 @@
 import type { Cardano } from '@cardano-sdk/core';
-import { forEachAsset, NEXUS_MAX_INPUTS } from './nexusInputSelection';
+import { forEachAsset, lovelaceOf, NEXUS_MAX_INPUTS, refOf } from './nexusInputSelection';
 
 /**
  * How Max reaches a wallet holding more UTxOs than one Nexus request may carry:
@@ -13,29 +13,22 @@ export interface MergePlan {
   direct: Cardano.Utxo[];
 }
 
-/** A sweep's merges as the signer takes them: the transactions, and their outputs the payment spends. */
+/** A sweep's merges as the signer takes them. */
 export interface SweepPrerequisites {
-  txs: Cardano.Tx[];
+  /** The merges as Nexus built them (CBOR hex), in submission order: signed and submitted byte for byte. */
+  cbors: string[];
+  /** Their outputs at the wallet's own address, which the payment spends. */
   outputs: Cardano.Utxo[];
 }
 
-/** Thrown when a payment does not spend an output of every merge sent with it. */
+/**
+ * Thrown when the merges sent with a payment are not exactly the ones it spends: one
+ * whose output the payment does not spend, or the same merge twice.
+ */
 export class SweepChainError extends Error {
   constructor() {
     super('The payment does not spend the output of every merge sent with it');
     this.name = 'SweepChainError';
-  }
-}
-
-function refOf(utxo: Cardano.Utxo): string {
-  return `${utxo[0].txId}#${utxo[0].index}`;
-}
-
-function lovelaceOf(utxo: Cardano.Utxo): bigint {
-  try {
-    return BigInt(String(utxo[1].value.coins ?? 0));
-  } catch {
-    return BigInt(0);
   }
 }
 
@@ -90,22 +83,21 @@ export function ownOutputsAsUtxos(tx: Cardano.Tx, ownAddress: string): Cardano.U
 }
 
 /**
- * The merges a payment is sent with, serialized for signing, in order. Each id comes
- * from the merge's own bytes (`idOf`), and the payment must spend an output of every
- * one: the approval covers the payment's bytes, and through its inputs exactly these
- * merges. Throws SweepChainError otherwise.
+ * The merges a payment is sent with, in order, each with its id taken from the bytes
+ * the signer will sign (`idOf`). The payment must spend an output of every one, and no
+ * merge may appear twice: the approval covers the payment's bytes, and through its
+ * inputs exactly these merges. Throws SweepChainError otherwise.
  */
 export function chainedPrerequisites(
   payment: Cardano.Tx,
-  merges: Cardano.Tx[],
-  serialize: (tx: Cardano.Tx) => string,
+  mergeCbors: string[],
   idOf: (cbor: string) => string,
 ): { id: string; cbor: string }[] {
   const spent = new Set(payment.body.inputs.map((input) => String(input.txId)));
-  return merges.map((merge) => {
-    const cbor = serialize(merge);
-    const id = idOf(cbor);
-    if (!spent.has(id)) throw new SweepChainError();
-    return { id, cbor };
-  });
+  const merges = mergeCbors.map((cbor) => ({ id: idOf(cbor), cbor }));
+  if (new Set(merges.map((merge) => merge.id)).size !== merges.length) throw new SweepChainError();
+  for (const merge of merges) {
+    if (!spent.has(merge.id)) throw new SweepChainError();
+  }
+  return merges;
 }
