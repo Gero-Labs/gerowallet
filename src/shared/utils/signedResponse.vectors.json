@@ -1,0 +1,100 @@
+{
+  "profile": "gero-v1",
+  "note": "TEST keys derived from public labels. Never pin or configure them anywhere real.",
+  "signingSeedHex": "6aacc3c7b192c3ae7d7b93135d59dcd6adf3f469bed9c9fbf8716d6eafa30984",
+  "signingPublicKeyHex": "1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0",
+  "keyid": "backend-test",
+  "created": 1761955200,
+  "expires": 1761955500,
+  "cases": [
+    {
+      "name": "delegation build relayed from Nexus",
+      "request": {
+        "method": "POST",
+        "path": "/api/nexus/api/tx/build/delegation",
+        "query": "network=MAINNET",
+        "body": "{\"stakeAddress\":\"stake1uxyz\",\"poolId\":\"pool1abc\"}"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\"cbor\":\"84a400\",\"estimated_fee\":\"171045\"}"
+      },
+      "expected": {
+        "requestDigest": "sha-256=:FP1k7mAq/D+w4VMeOKIs1gtM7LIRCVUkZKE9Yikgifw=:",
+        "bodyDigest": "sha-256=:uX69uHW6OrKDIlHW6AZe0jAPK8VBl3I9vaLZrQQL7Ek=:",
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: POST\n\"@path\";req: /api/nexus/api/tx/build/delegation\n\"@query\";req: ?network=MAINNET\n\"@status\": 200\n\"gero-request-digest\": sha-256=:FP1k7mAq/D+w4VMeOKIs1gtM7LIRCVUkZKE9Yikgifw=:\n\"gero-body-digest\": sha-256=:uX69uHW6OrKDIlHW6AZe0jAPK8VBl3I9vaLZrQQL7Ek=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:wNgpG+zlQjt1BYtdgIAxKi/tD1l4QSquS5IHKILrPZ+kNa7IrQxAobN6Upv8uGKdIS2CwACcBcUwXbJqRDbQBQ==:"
+      }
+    },
+    {
+      "name": "pool list with non-ASCII text",
+      "request": {
+        "method": "GET",
+        "path": "/api/pools",
+        "query": "",
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "body": "[{\"ticker\":\"ÆGIS\",\"name\":\"Pool ✓ ünïcode\",\"id\":\"pool1xyz\"}]"
+      },
+      "expected": {
+        "requestDigest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:",
+        "bodyDigest": "sha-256=:SWO9Wb4a99JYunq3IjLjcYOUiUrIjcFKmDxXeQSGjFs=:",
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: GET\n\"@path\";req: /api/pools\n\"@query\";req: ?\n\"@status\": 200\n\"gero-request-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-body-digest\": sha-256=:SWO9Wb4a99JYunq3IjLjcYOUiUrIjcFKmDxXeQSGjFs=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:atPilKUreZUip8WSZ0dqSp+DCaOxZO94O2oBW6nkruyXtRJ2xSdOtVdYqybWPbmNdyQvL5n/8x2ourqtYVCFDQ==:"
+      }
+    },
+    {
+      "name": "handle lookup refused",
+      "request": {
+        "method": "GET",
+        "path": "/api/assets/handle",
+        "query": "name=alice&network=MAINNET",
+        "body": ""
+      },
+      "response": {
+        "status": 404,
+        "body": "{\"message\":\"Handle not found\"}"
+      },
+      "expected": {
+        "requestDigest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:",
+        "bodyDigest": "sha-256=:wT5zZx37aG2O9ayD2RsE7w7DbMv+Fp60RwjzQVBWBRE=:",
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: GET\n\"@path\";req: /api/assets/handle\n\"@query\";req: ?name=alice&network=MAINNET\n\"@status\": 404\n\"gero-request-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-body-digest\": sha-256=:wT5zZx37aG2O9ayD2RsE7w7DbMv+Fp60RwjzQVBWBRE=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:+Tg0UVmLlgmueO5EXPWg7l0i93T5qhguWeuAsZ7109T1D7ugl2vpPG+dwkEd1BRWGv46GIvCQpRKJGL9yj4IDA==:"
+      }
+    },
+    {
+      "name": "empty body with chain tip",
+      "request": {
+        "method": "POST",
+        "path": "/api/nexus/api/collateral/lend",
+        "query": "network=PREPROD",
+        "body": "{\"ref\":\"aa#0\"}"
+      },
+      "response": {
+        "status": 204,
+        "body": "",
+        "chainTip": "171234567,0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      },
+      "expected": {
+        "requestDigest": "sha-256=:Qit39J4OCdOomppEK5hz2UWv2eTG6FbHPrO4t7Cl+zs=:",
+        "bodyDigest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:",
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\" \"gero-chain-tip\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: POST\n\"@path\";req: /api/nexus/api/collateral/lend\n\"@query\";req: ?network=PREPROD\n\"@status\": 204\n\"gero-request-digest\": sha-256=:Qit39J4OCdOomppEK5hz2UWv2eTG6FbHPrO4t7Cl+zs=:\n\"gero-body-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-chain-tip\": 171234567,0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\" \"gero-chain-tip\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:0bnufEJ7COsZ1StAhDI2kCEHJBqG//V66YdmLD8na4h7x9JgEG6DJan7QL5pdYkUgNy3sYAdYpXz5QTJd/dbAg==:"
+      }
+    }
+  ],
+  "root": {
+    "seedHex": "5283550a723d36b62f6dcc4a039f9d2c0b1699b1cf2e08c6efcd41ba1a71da41",
+    "publicKeyHex": "bb220f3860d6b7270cf43f47946dd19f5c695b2939ea786a397250f124b9c987",
+    "delegation": {
+      "statement": "gero-delegation-v1\n{\"kid\":\"backend-test\",\"pub\":\"1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0\",\"service\":\"gero-backend\",\"hosts\":[\"api.gerowallet.io\"],\"notBefore\":\"2025-10-01T00:00:00Z\",\"notAfter\":\"2026-04-01T00:00:00Z\"}",
+      "coseSign1": "84582aa201276761646472657373581de1c93df850c777b862f29f5ac849170346436f4997c3e3e3708cf20e28a166686173686564f458ee6765726f2d64656c65676174696f6e2d76310a7b226b6964223a226261636b656e642d74657374222c22707562223a2231653233636437373131323466623036393364636336643332326430356661636130333461636137656434396561306465386331623433383563383263336130222c2273657276696365223a226765726f2d6261636b656e64222c22686f737473223a5b226170692e6765726f77616c6c65742e696f225d2c226e6f744265666f7265223a22323032352d31302d30315430303a30303a30305a222c226e6f744166746572223a22323032362d30342d30315430303a30303a30305a227d5840261cc70483e42417ca23337e47ce4f714392519660ef91d205c6f8078c38e5aa56646c77fa38be8e8a3e4cbb26b2390e137069dcc94ff93472f882a4ca5f3504"
+    }
+  }
+}
