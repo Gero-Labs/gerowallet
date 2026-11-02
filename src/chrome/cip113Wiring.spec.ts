@@ -29,16 +29,28 @@ function functionBody(src: string, signature: string): string {
 
 describe('CIP-113 signing wiring', () => {
   it('every dApp signing entry refuses programmable inputs before its prompt opens', () => {
-    expect(section(bg, 'app.add(METHOD.signTx,')).toContain('refusalForProgrammableInputs(request.data?.tx)');
-    expect(section(bg, "case 'signTx': {")).toContain('refusalForProgrammableInputs(params.tx)');
-    expect(bg).toContain('refusalForProgrammableInputs(wcTx)');
-    expect(bg).toContain('refusalForProgrammableInputs(unsignedCbor)');
+    expect(section(bg, 'app.add(METHOD.signTx,')).toContain('dappSignRefusal(request.data?.tx)');
+    expect(section(bg, "case 'signTx': {")).toContain('dappSignRefusal(params.tx)');
+    expect(bg).toContain('dappSignRefusal(wcTx)');
+    expect(bg).toContain('dappSignRefusal(unsignedCbor)');
+    expect(functionBody(bg, 'function dappSignRefusal(')).toContain('refusalForProgrammableInputs(txCbor)');
   });
 
   it('the dApp refusal never reads the Send allowance, and checks the PLG tripwire', () => {
     const body = functionBody(bg, 'function refusalForProgrammableInputs(');
     expect(body).not.toMatch(/Cip113SignAllowance/);
     expect(body).toContain('cip113TransferNeedsOwnKey(');
+    expect(functionBody(bg, 'function dappSignRefusal(')).not.toMatch(/Cip113SignAllowance/);
+  });
+
+  // The allowance covers one verified CIP-113 transfer; it never lets a transaction marked to fail through.
+  it('the hardware refusal keeps any refusal but the CIP-113 one before it reads the allowance', () => {
+    const body = functionBody(bg, 'function hardwareSignRefusal(');
+    const kept = body.indexOf('if (refusal !== CIP113_SIGN_REFUSAL_MESSAGE) return refusal;');
+    expect(kept).toBeGreaterThan(-1);
+    expect(kept).toBeLessThan(body.indexOf('hasCip113SignAllowance('));
+    expect(section(bg, 'app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT,')).toContain('message: refusal');
+    expect(section(bg, 'app.addToOptions(MessageTypes.TREZOR,')).toContain('throw new Error(trezorRefusal)');
   });
 
   it('the prepare handler grants the allowance only for what prepareCip113Transfer verified', () => {

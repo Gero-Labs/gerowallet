@@ -69,7 +69,7 @@ export class BrowserTxConstruction {
    * @param tx - The Cardano JS SDK transaction
    * @param resolvedInputs - Array of input UTXOs
    * @param protocolParams - Protocol parameters with fee coefficients
-   * @param walletContext - Optional wallet context for accurate signature estimation (keys, stakeAddress)
+   * @param walletContext - Optional wallet context for accurate signature estimation (its key set)
    * @returns Minimum fee in lovelace as BigInt
    */
   static minFee(
@@ -78,7 +78,6 @@ export class BrowserTxConstruction {
     protocolParams: Parameters<typeof minFeeSDK>[2],
     walletContext?: {
       keys: Keys;
-      stakeAddress: string;
     }
   ): bigint {
     try {
@@ -91,12 +90,7 @@ export class BrowserTxConstruction {
         // Use accurate signature analysis if wallet context is available
         if (walletContext) {
           try {
-            const requiredSigners = analyzeTransactionForSignatures(
-              tx,
-              resolvedInputs,
-              walletContext.keys,
-              walletContext.stakeAddress,
-            );
+            const requiredSigners = analyzeTransactionForSignatures(tx, resolvedInputs, walletContext.keys);
 
             estimatedSignatures = requiredSigners.length;
           } catch (error) {

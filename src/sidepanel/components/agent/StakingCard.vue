@@ -223,7 +223,6 @@ export default defineComponent({
         implicitCoin,
         walletContext: {
           keys,
-          stakeAddress: walletStore.loggedWallet?.stakeAddress || '',
         },
       });
       assertStakeWalletUnchanged(wallet, t);

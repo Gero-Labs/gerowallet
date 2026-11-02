@@ -85,10 +85,13 @@ import { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMid
 /**
  * Record fields whose only source is the stored wallet record, with its secrets
  * (GROUP_SECRET_FIELDS): the wallet's keys and account. When the record lacks one,
- * the login object must not supply it either (resolveGroupSecrets).
+ * the login object must not supply it either (resolveGroupSecrets). A Keystone's
+ * firmwareVersion is one: a pairing refreshes it on the record (refreshKeystoneFirmware),
+ * and the Keystone signer gates pool registrations on it.
  */
 const RECORD_IDENTITY_FIELDS: readonly string[] = [
   'publicKey', 'accountIndex', 'parentWalletId', 'type', 'chain', 'network', 'addressType', 'watchAddress', 'xfp',
+  'firmwareVersion',
 ];
 
 /**
@@ -213,6 +216,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
@@ -388,6 +392,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
