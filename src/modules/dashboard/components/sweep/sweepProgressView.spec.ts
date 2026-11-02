@@ -1,9 +1,10 @@
 // How the progress panel reads the signer's hooks: which transaction is where, and what each row says.
 import { describe, expect, it } from 'vitest';
-import { sweepProgressView } from './sweepProgressView';
+import { sweepProgressView, type SweepChecklistRow } from './sweepProgressView';
 
-const rows = (view: ReturnType<typeof sweepProgressView>) =>
-  Object.fromEntries(view!.rows.map((row) => [row.id, { state: row.state, detail: row.detail }]));
+type RowView = Pick<SweepChecklistRow, 'state' | 'detail'>;
+const rows = (view: ReturnType<typeof sweepProgressView>): Record<SweepChecklistRow['id'], RowView> =>
+  Object.fromEntries(view!.rows.map((row) => [row.id, { state: row.state, detail: row.detail }])) as Record<SweepChecklistRow['id'], RowView>;
 
 describe('sweepProgressView', () => {
   it('shows nothing with neither progress nor a stop', () => {
