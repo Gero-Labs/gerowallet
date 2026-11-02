@@ -55,6 +55,8 @@ describe('classifyUtxoAddress: Gero market listed partition', () => {
 
   const ownPayment = new Set([OWN_PAYMENT]);
   const owners = new Set([OWN_PAYMENT, OWN_STAKE]);
+  /** What the listed branch counts as own: the stake key only (ruling P20). */
+  const stakeOnly = new Set([OWN_STAKE]);
   const listedSet = new Set([LISTED]);
   const plbSet = new Set([PLB]);
   const none = new Set<string>();
@@ -73,48 +75,71 @@ describe('classifyUtxoAddress: Gero market listed partition', () => {
   const listedOther = base(LISTED, SCRIPT, STRANGER, KEY);
 
   it('is listed for the listing script under the wallet\'s own stake key', () => {
-    expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet)).toBe('listed');
+    expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet, stakeOnly)).toBe('listed');
   });
 
   it('is listed-other under another stake key', () => {
-    expect(classifyUtxoAddress(listedOther, ownPayment, none, owners, listedSet)).toBe('listed-other');
+    expect(classifyUtxoAddress(listedOther, ownPayment, none, owners, listedSet, stakeOnly)).toBe('listed-other');
   });
 
   it('is listed-other when the stake slot holds a script credential', () => {
-    expect(classifyUtxoAddress(base(LISTED, SCRIPT, OWN_STAKE, SCRIPT), ownPayment, none, owners, listedSet)).toBe('listed-other');
+    expect(classifyUtxoAddress(base(LISTED, SCRIPT, OWN_STAKE, SCRIPT), ownPayment, none, owners, listedSet, stakeOnly)).toBe('listed-other');
   });
 
   it('recognises every configured version', () => {
     const both = new Set([LISTED, LISTED_V2]);
-    expect(classifyUtxoAddress(base(LISTED_V2, SCRIPT, OWN_STAKE, KEY), ownPayment, none, owners, both)).toBe('listed');
-    expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, both)).toBe('listed');
+    expect(classifyUtxoAddress(base(LISTED_V2, SCRIPT, OWN_STAKE, KEY), ownPayment, none, owners, both, stakeOnly)).toBe('listed');
+    expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, both, stakeOnly)).toBe('listed');
   });
 
   it('requires a script credential in the payment slot', () => {
-    expect(classifyUtxoAddress(base(LISTED, KEY, OWN_STAKE, KEY), ownPayment, none, owners, listedSet)).toBe('foreign');
+    expect(classifyUtxoAddress(base(LISTED, KEY, OWN_STAKE, KEY), ownPayment, none, owners, listedSet, stakeOnly)).toBe('foreign');
   });
 
   it('leaves another script under the own stake key foreign', () => {
-    expect(classifyUtxoAddress(base(STRANGER, SCRIPT, OWN_STAKE, KEY), ownPayment, none, owners, listedSet)).toBe('foreign');
+    expect(classifyUtxoAddress(base(STRANGER, SCRIPT, OWN_STAKE, KEY), ownPayment, none, owners, listedSet, stakeOnly)).toBe('foreign');
   });
 
   it('keeps the wallet\'s own address spendable', () => {
     const own = base(OWN_PAYMENT, KEY, OWN_STAKE, KEY);
-    expect(classifyUtxoAddress(own, ownPayment, none, owners, listedSet)).toBe('spendable');
-    expect(classifyUtxoAddress(own, ownPayment, plbSet, owners, listedSet)).toBe('spendable');
+    expect(classifyUtxoAddress(own, ownPayment, none, owners, listedSet, stakeOnly)).toBe('spendable');
+    expect(classifyUtxoAddress(own, ownPayment, plbSet, owners, listedSet, stakeOnly)).toBe('spendable');
   });
 
   it('lets a CIP-113 hash win its own branch', () => {
     const plbOwn = base(PLB, SCRIPT, OWN_STAKE, KEY);
-    expect(classifyUtxoAddress(plbOwn, ownPayment, plbSet, owners, listedSet)).toBe('programmable');
-    expect(classifyUtxoAddress(base(PLB, SCRIPT, STRANGER, KEY), ownPayment, plbSet, owners, listedSet)).toBe('programmable-other');
+    expect(classifyUtxoAddress(plbOwn, ownPayment, plbSet, owners, listedSet, stakeOnly)).toBe('programmable');
+    expect(classifyUtxoAddress(base(PLB, SCRIPT, STRANGER, KEY), ownPayment, plbSet, owners, listedSet, stakeOnly)).toBe('programmable-other');
     // Even when the same hash is configured on both lists, CIP-113 is decided first.
-    expect(classifyUtxoAddress(listedOwn, ownPayment, listedSet, owners, listedSet)).toBe('programmable');
+    expect(classifyUtxoAddress(listedOwn, ownPayment, listedSet, owners, listedSet, stakeOnly)).toBe('programmable');
   });
 
   it('classifies a listing even while the CIP-113 gate is shut', () => {
-    expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet)).toBe('listed');
-    expect(classifyUtxoAddress(listedOwn, ownPayment, plbSet, owners, listedSet)).toBe('listed');
+    expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet, stakeOnly)).toBe('listed');
+    expect(classifyUtxoAddress(listedOwn, ownPayment, plbSet, owners, listedSet, stakeOnly)).toBe('listed');
+  });
+
+  // Ruling P20: a listing's stake slot is "own" only when it holds the wallet's STAKE key. A
+  // listing under one of the wallet's payment keys sits under a different reward address, so
+  // the stake anchor never returns it for this wallet and it is not this wallet's to subtract.
+  // (CIP-113 keeps accepting a payment key in its owner slot: Minswap V3 puts one there.)
+  describe('which stake slot counts as the wallet\'s', () => {
+    const underPaymentKey = base(LISTED, SCRIPT, OWN_PAYMENT, KEY);
+
+    it('is listed-other when the stake slot holds one of the wallet\'s payment keys', () => {
+      expect(classifyUtxoAddress(underPaymentKey, ownPayment, none, owners, listedSet, stakeOnly)).toBe('listed-other');
+      expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet, stakeOnly)).toBe('listed');
+    });
+
+    it('leaves the CIP-113 owner set to the CIP-113 branch', () => {
+      const plbUnderPaymentKey = base(PLB, SCRIPT, OWN_PAYMENT, KEY);
+      expect(classifyUtxoAddress(plbUnderPaymentKey, ownPayment, plbSet, owners, listedSet, stakeOnly)).toBe('programmable');
+    });
+
+    it('fails closed: with no owner set given nothing is the wallet\'s listing', () => {
+      expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet)).toBe('listed-other');
+      expect(classifyUtxoAddress(listedOwn, ownPayment, none, owners, listedSet, new Set())).toBe('listed-other');
+    });
   });
 
   describe('with no listed hash configured', () => {
@@ -159,8 +184,8 @@ describe('classifyUtxoAddress: Gero market listed partition', () => {
   // sends []), so these fallbacks are then the only gate and have to fail closed, as for CIP-113.
   describe('a configured listed hash closes the gate', () => {
     it('drops unparseable addresses', () => {
-      expect(classifyUtxoAddress('not-an-address', ownPayment, none, owners, listedSet)).toBe('foreign');
-      expect(classifyUtxoAddress('', ownPayment, none, owners, listedSet)).toBe('foreign');
+      expect(classifyUtxoAddress('not-an-address', ownPayment, none, owners, listedSet, stakeOnly)).toBe('foreign');
+      expect(classifyUtxoAddress('', ownPayment, none, owners, listedSet, stakeOnly)).toBe('foreign');
     });
 
     it('drops a stranger\'s enterprise address but keeps the wallet\'s own', () => {
@@ -172,8 +197,8 @@ describe('classifyUtxoAddress: Gero market listed partition', () => {
         hash: Hash28ByteBase16(OWN_PAYMENT),
         type: KEY,
       }).toAddress().toBech32();
-      expect(classifyUtxoAddress(stranger, ownPayment, none, owners, listedSet)).toBe('foreign');
-      expect(classifyUtxoAddress(own, ownPayment, none, owners, listedSet)).toBe('spendable');
+      expect(classifyUtxoAddress(stranger, ownPayment, none, owners, listedSet, stakeOnly)).toBe('foreign');
+      expect(classifyUtxoAddress(own, ownPayment, none, owners, listedSet, stakeOnly)).toBe('spendable');
     });
   });
 });

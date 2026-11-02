@@ -11,7 +11,7 @@ import priceService from '@/stores/priceStore';
 import { Contact, Keys } from '@/models/types';
 import { EXPLORER_CONFIG_KEY } from '@/shared/utils/explorer';
 import type { IUnifiedUtxo, IBalance } from '@/chains/common/interfaces';
-import type { OwnListing } from '@/chrome/nftMarket/ownListings';
+import { reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
 
 interface WhitelistedEntry {
   domain: string;
@@ -360,12 +360,28 @@ if (context === 'background') {
   // never takes it from chrome.storage, which a content script can write: it reads the
   // wallet's database, as ConnectedDappsLoader does after login.
   hydration = persister.hydrate({ migrate: true, skip: new Set(['connectedDapps']) })
-    .then(() => restoreConnectedDapps());
+    .then(() => {
+      reviveHydratedListings();
+      return restoreConnectedDapps();
+    });
   backgroundStoreMessaging.registerSnapshot(
     STORE_NAME,
     () => JSON.parse(JSON.stringify(walletStore, serializeValue)),
     hydration,
   );
+}
+
+/**
+ * The wallet's own market listings as hydration left them: their bigint fields (`datum.price`,
+ * each royalty's `lovelace`) were stored as decimal strings (serializeValue). The worker's own
+ * readers (the market verifiers, the signing guard) compare and price with bigints, and until
+ * login publishes the listings again nothing else would restore them, so they are revived here,
+ * before the worker answers anything. UI contexts keep the strings and read them through
+ * `reviveOwnListings`. Idempotent: an entry that already holds bigints is unchanged.
+ */
+function reviveHydratedListings(): void {
+  if (walletStore.listedListings.length === 0) return;
+  walletStore.listedListings = reviveOwnListings(walletStore.listedListings);
 }
 
 /** The logged wallet's connected dApps from its database, unless a setter got there first. */
@@ -561,9 +577,12 @@ export default {
    * written or broadcast for a repeat.
    */
   setListedListings(listedListings: OwnListing[], listedLockedLovelace = '0') {
+    // The same refs mean the same listings, unless the held copy still has its bigints as
+    // strings (a copy read back from storage): then it is replaced, so no reader sees them.
     const unchanged = walletStore.listedLockedLovelace === listedLockedLovelace
       && walletStore.listedListings.length === listedListings.length
-      && listedListings.every((listing, i) => walletStore.listedListings[i]?.ref === listing.ref);
+      && listedListings.every((listing, i) => walletStore.listedListings[i]?.ref === listing.ref
+        && typeof walletStore.listedListings[i].datum?.price === 'bigint');
     if (unchanged) return;
     walletStore.listedListings = listedListings;
     walletStore.listedLockedLovelace = listedLockedLovelace;

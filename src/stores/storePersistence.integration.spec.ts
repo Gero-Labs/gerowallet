@@ -308,4 +308,78 @@ describe('store persistence in the worker', () => {
     expect(ui.walletStore.transactions).toEqual([{ tx_hash: 'fresh' }]);
     expect(ui.walletStore.tokens).not.toEqual({});
   });
+  // The store's persisted copy of a bigint is a decimal string (serializeValue). The worker's own
+  // readers of the wallet's listings (the market verifiers, the signing guard) compare and price
+  // with bigints, and the repeat-push check in setListedListings would keep a stringified copy
+  // forever, so a restarted worker must not hand them strings (ruling P20).
+  describe('the wallet\'s own listings after a restart', () => {
+    const listing = (ref: string) => ({
+      ref,
+      unit: `${'e'.repeat(56)}4e4654`,
+      datum: {
+        owner: hex(56, 1),
+        sellerAddress: 'addr_test1qseller',
+        price: 50_000_000n,
+        royalties: [{ address: 'addr_test1qroyalty', lovelace: 1_500_000n }],
+        buyer: null,
+      },
+      depositLovelace: '2000000',
+      deploymentVersion: 1,
+    });
+    const REF = `${'b1'.repeat(32)}#0`;
+
+    it('reads datum.price and royalty lovelace as bigint in the restarted worker', async () => {
+      await seedWallet(w!, 9, 5);
+      w!.wallet.default.setListedListings([listing(REF)], '2000000');
+      await settle(w!.wallet);
+
+      w = await startWorker();
+      await w.wallet.hydrateWalletStore();
+
+      const [hydrated] = w.wallet.walletStore.listedListings;
+      expect(hydrated.ref).toBe(REF);
+      expect(hydrated.datum.price).toBe(50_000_000n);
+      expect(hydrated.datum.royalties[0].lovelace).toBe(1_500_000n);
+      expect(hydrated.datum.buyer).toBeNull();
+      expect(hydrated.depositLovelace).toBe('2000000');
+      expect(w.wallet.walletStore.listedLockedLovelace).toBe('2000000');
+    });
+
+    it('writes nothing new for the revival: the stored JSON is the same', async () => {
+      await seedWallet(w!, 9, 5);
+      w!.wallet.default.setListedListings([listing(REF)], '2000000');
+      await settle(w!.wallet);
+
+      w = await startWorker();
+      await w.wallet.hydrateWalletStore();
+      const writeStoreCache = w.cache.writeStoreCache as unknown as ReturnType<typeof vi.fn>;
+      writeStoreCache.mockClear();
+      await settle(w.wallet);
+
+      expect(writeStoreCache).not.toHaveBeenCalled();
+    });
+
+    it('a hydrated copy is not a listing the wallet has no more of: an empty store stays empty', async () => {
+      await seedWallet(w!, 9, 5);
+      await settle(w!.wallet);
+
+      w = await startWorker();
+      await w.wallet.hydrateWalletStore();
+
+      expect(w.wallet.walletStore.listedListings).toEqual([]);
+    });
+
+    it('replaces a stringified copy when the same listing is published again', async () => {
+      await seedWallet(w!, 9, 5);
+      // As a context other than the worker would hold it, or any path that bypassed the revival.
+      (w!.wallet.walletStore as unknown as { listedListings: unknown }).listedListings = JSON.parse(
+        JSON.stringify([listing(REF)], (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
+      );
+      expect(typeof w!.wallet.walletStore.listedListings[0].datum.price).toBe('string');
+
+      w!.wallet.default.setListedListings([listing(REF)], '0');
+
+      expect(w!.wallet.walletStore.listedListings[0].datum.price).toBe(50_000_000n);
+    });
+  });
 });

@@ -319,6 +319,27 @@ describe('own listings: the partition', () => {
       expect(walletStore.listedListings).toEqual([]);
     });
 
+    // Ruling P20: only the wallet's STAKE key in the stake slot is "own". A listing under one of
+    // its payment keys is under a different reward address (the stake anchor never returns it
+    // for this wallet), so it is not listed and its deposit is not the wallet's to subtract.
+    it('drops a listing whose stake slot holds one of the wallet\'s payment keys, and does not subtract it', async () => {
+      const bg = bootWallet(makeWallet());
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const underPaymentKey = utxo(LISTING_TX, scriptAddress(V1.scriptHash, OWN_PAYMENT), DEPOSIT, {
+        assets: [[NFT, 1n]],
+        datum: listingDatum(),
+      });
+
+      await bg.applyUtxos([spendableUtxo(), underPaymentKey], true);
+      WalletStore.setAccount(account(CONTROLLED_TOTAL));
+
+      expect(walletStore.listedListings).toEqual([]);
+      expect(walletStore.listedLockedLovelace).toBe('0');
+      expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
+      expect(walletStore.account?.controlled_amount).toBe(CONTROLLED_TOTAL.toString());
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('other stake keys'));
+    });
+
     it.each([
       ['no inline datum', utxo(LISTING_TX, listingAddress, DEPOSIT, { assets: [[NFT, 1n]] })],
       ['a datum that is not a Listing', utxo(LISTING_TX, listingAddress, DEPOSIT, { assets: [[NFT, 1n]], datum: 'd87980' })],

@@ -404,9 +404,14 @@ export class WalletBg {
     // key, the same shape: the user's, never spendable. They are diverted too, and the ones the
     // datum proves to be this wallet's own listings are kept (setListedUtxos below).
     const listedBases = this.listedScriptHashes();
-    const programmableOwners = programmableBases.size > 0 || listedBases.size > 0
+    const programmableOwners = programmableBases.size > 0
       ? this.programmableOwnerCredentials(myCredentials)
       : new Set<string>();
+    // A listing is the user's only under the wallet's own STAKE key: a listing whose stake slot
+    // holds one of its payment keys is under another reward address (the stake anchor never
+    // returns it for this wallet), so it is not listed and not subtracted. No stake key to derive
+    // means no listing is recognised as own.
+    const listedOwners = listedBases.size > 0 ? this.listedOwnerCredentials() : new Set<string>();
     const programmable: Cardano.Utxo[] = [];
     const listedCandidates: Cardano.Utxo[] = [];
     // Tripwire: gero-sync scopes results to the subscribed stake address, so a
@@ -420,6 +425,7 @@ export class WalletBg {
         programmableBases,
         programmableOwners,
         listedBases,
+        listedOwners,
       );
       if (partition === 'programmable') {
         programmable.push(utxo);
@@ -584,6 +590,17 @@ export class WalletBg {
     const stakeCred = this.ownStakeCredential();
     if (stakeCred) owners.add(stakeCred);
     return owners;
+  }
+
+  /**
+   * What counts as "own stake" for a Gero listing: this wallet's stake key hash and nothing else.
+   * A listing sits at the listing script under its seller's reward address, so the stake anchor
+   * returns it under the wallet's stake key; a payment key of the wallet in that slot would be a
+   * different reward address. Empty when the stake key cannot be derived (nothing is recognised).
+   */
+  private listedOwnerCredentials(): Set<string> {
+    const stakeCred = this.ownStakeCredential();
+    return new Set<string>(stakeCred ? [stakeCred] : []);
   }
 
   /**

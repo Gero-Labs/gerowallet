@@ -258,10 +258,15 @@ export type UtxoPartition =
  *        the programmable branch.
  * @param programmableOwnerCredentials the wallet's payment credentials and its stake
  *        credential, since which one occupies the stake slot is a per-deployment choice.
- *        The listed branch reads the same set for "own stake".
  * @param listedScriptHashes the script hashes of every deployed version of the Gero listing
  *        contract on this network (all versions, so old listings stay recognised). Empty
  *        disables the listed branch and leaves every result as it was before it existed.
+ * @param listedOwnerCredentials what counts as "own stake" for the listed branch: the wallet's
+ *        STAKE key credential only. A listing is anchored to its seller's reward address, so one
+ *        under any other key in the stake slot (a payment key of the wallet included) belongs to
+ *        a different reward address that gero-sync never returns for this wallet, and is not
+ *        this wallet's to show or to subtract from its balance. Unlike the CIP-113 owner set,
+ *        which accepts payment keys too. Empty (the default) recognises no listing as own.
  */
 export function classifyUtxoAddress(
   address: string,
@@ -269,6 +274,7 @@ export function classifyUtxoAddress(
   programmableBaseScriptHashes: Set<string>,
   programmableOwnerCredentials: Set<string>,
   listedScriptHashes: Set<string> = new Set<string>(),
+  listedOwnerCredentials: Set<string> = new Set<string>(),
 ): UtxoPartition {
   // With CIP-113 or the listing contract configured, walletBg sends an empty `credentials`
   // list so gero-sync stops pre-filtering by payment credential — which makes these fallbacks
@@ -318,7 +324,7 @@ export function classifyUtxoAddress(
     const stakeCred = baseAddr.getStakeCredential();
     if (
       stakeCred?.type === Cardano.CredentialType.KeyHash &&
-      programmableOwnerCredentials.has(stakeCred.hash)
+      listedOwnerCredentials.has(stakeCred.hash)
     ) {
       return 'listed';
     }
