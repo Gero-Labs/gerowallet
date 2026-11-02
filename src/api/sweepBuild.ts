@@ -32,6 +32,8 @@ export interface SweepBuildContext {
   network: 'MAINNET' | 'PREPROD';
   /** The wallet's network name, for the endpoint. */
   walletNetwork: string;
+  /** Called after each merge is built and checked, with how many are built so far and how many the plan has. */
+  onMergeBuilt?: (built: number, total: number) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export async function buildSweep(plan: MergePlan, context: SweepBuildContext): P
   const merges: Cardano.Tx[] = new Array(plan.batches.length);
   const mergeCbors: string[] = new Array(plan.batches.length);
   let next = 0;
+  let built = 0;
   let failed = false;
   const worker = async (): Promise<void> => {
     while (!failed && next < plan.batches.length) {
@@ -64,6 +67,8 @@ export async function buildSweep(plan: MergePlan, context: SweepBuildContext): P
         }
         merges[index] = tx;
         mergeCbors[index] = txCbor;
+        // Merges finish out of order: report the count, not the index.
+        context.onMergeBuilt?.(++built, plan.batches.length);
       } catch (error) {
         failed = true;
         throw error;

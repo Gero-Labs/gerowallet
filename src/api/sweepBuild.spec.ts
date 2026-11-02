@@ -95,4 +95,25 @@ describe('buildSweep', () => {
     }));
     await expect(buildSweep(plan, context)).rejects.toThrow(String(i18n.t('txGuard.builtTxMismatch')));
   });
+
+  it('reports each merge as it is built', async () => {
+    // The first merge answers last: the count still rises by one per merge.
+    mocks.build.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return merged('merge-x0', 1);
+    });
+    const batches = Array.from({ length: 3 }, (_, n) => [utxo(`x${n}`, 5), utxo(`y${n}`, 5)]);
+    const reported: [number, number][] = [];
+    await buildSweep({ batches, direct: [] }, { ...context, onMergeBuilt: (built, total) => reported.push([built, total]) });
+    expect(reported).toEqual([[1, 3], [2, 3], [3, 3]]);
+  });
+
+  it('does not report a merge it refuses', async () => {
+    mocks.build.mockImplementation(async () => ({
+      tx_cbor: JSON.stringify({ id: 'merge-c', body: { outputs: [{ address: 'own', value: { coins: 1 } }, { address: 'own', value: { coins: 2 } }], fee: '170' } }),
+    })).mockImplementationOnce(async () => merged('merge-a', 130));
+    const onMergeBuilt = vi.fn();
+    await expect(buildSweep(plan, { ...context, onMergeBuilt })).rejects.toThrow(String(i18n.t('txGuard.builtTxMismatch')));
+    expect(onMergeBuilt.mock.calls).toEqual([[1, 2]]);
+  });
 });

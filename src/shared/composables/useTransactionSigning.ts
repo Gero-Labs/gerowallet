@@ -53,12 +53,24 @@ export interface TransactionSigningOptions {
   prerequisites?: Ref<SweepPrerequisites | null> | ComputedRef<SweepPrerequisites | null>;
   /** Where a sweep is: the transaction being signed or sent, or waiting for the merges. Null once it ends. */
   onProgress?: (progress: SweepProgress | null) => void;
+  /** A sweep's failed submission is reported here instead of a snackbar. */
+  onInterrupted?: (stop: SweepStop) => void;
+  /** Return false to keep the dialog open after a successful submit, e.g. to show a done state; defaults to closing. */
+  closeOnSuccess?: () => boolean;
 }
 
 export interface SweepProgress {
   phase: 'signing' | 'sending' | 'waiting';
   step: number;
   total: number;
+}
+
+/** Where a sweep stopped: the transaction that failed, how many there were, how many merges already went out, and the friendly reason. */
+export interface SweepStop {
+  step: number;
+  total: number;
+  mergesSent: number;
+  reason: string;
 }
 
 /** How long a sweep's payment waits for its merges to land after a node did not know them. */
@@ -632,12 +644,13 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
       snackbar.fireSuccess(t(options.successMessageKey, { txId: submitResult.data.txId }));
       options.onSuccess?.(submitResult.data.txId || '');
-      options.onClose?.();
+      if (options.closeOnSuccess?.() ?? true) options.onClose?.();
     } catch (e) {
       if (!attempt.current()) return;
       console.error('Error submitting transaction:', e);
       const reason = e instanceof Error ? friendlyTxError(e) : t('errors.unknownError');
-      snackbar.setError(total > 1 ? t('send.sweepInterrupted', { step, total, reason }) : reason);
+      if (total > 1 && options.onInterrupted) options.onInterrupted({ step, total, mergesSent: submittedPrerequisites.size, reason });
+      else snackbar.setError(total > 1 ? t('send.sweepInterrupted', { step, total, reason }) : reason);
     } finally {
       submitting = false;
       if (total > 1) options.onProgress?.(null);

@@ -6,7 +6,7 @@ import { Serialization } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
-import { useTransactionSigning } from './useTransactionSigning';
+import { useTransactionSigning, type TransactionSigningOptions } from './useTransactionSigning';
 import i18n from '@/plugins/i18n';
 import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -238,14 +238,14 @@ describe('sweep prerequisites', () => {
     .filter(([message]) => message.method === method)
     .map(([message]) => JSON.parse(message.data.txCbor).id as string);
 
-  function sweeper(merges: string[], spends = merges, mergeOf = merge) {
+  function sweeper(merges: string[], spends = merges, mergeOf = merge, extra: Partial<TransactionSigningOptions> = {}) {
     const scope = effectScope();
     scopes.push(scope);
     const tx = ref<Cardano.Tx | undefined>(payment(...spends));
     const prerequisites = ref({ cbors: merges.map((id) => JSON.stringify(mergeOf(id))), outputs: merges.map(output) });
     const progress: unknown[] = [];
     const signing = scope.run(() => useTransactionSigning({
-      tx, active: () => true, successMessageKey: 'success', prerequisites, onProgress: (step) => progress.push(step),
+      tx, active: () => true, successMessageKey: 'success', prerequisites, onProgress: (step) => progress.push(step), ...extra,
     }))!;
     signing.spendingPassword.value = 'approved-password';
     return { signing, progress };
@@ -394,6 +394,42 @@ describe('sweep prerequisites', () => {
     expect(sentIds(MessageTypes.SUBMIT_TX).filter((id) => id === 'payment')).toHaveLength(1);
     expect(mocks.error).toHaveBeenCalledWith('send.sweepInterrupted');
     expect(mocks.success).not.toHaveBeenCalled();
+  });
+
+  it('reports a stopped sweep to the dialog instead of a snackbar', async () => {
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id === 'm2') return { data: { error: 'node busy' } };
+      return { data: { txId: 'submitted' } };
+    });
+    const onInterrupted = vi.fn();
+    const { signing } = sweeper(['m1', 'm2'], ['m1', 'm2'], merge, { onInterrupted });
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'm2']);
+    expect(onInterrupted).toHaveBeenCalledTimes(1);
+    expect(onInterrupted).toHaveBeenCalledWith({ step: 2, total: 3, mergesSent: 1, reason: 'node busy' });
+    expect(mocks.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dialog open after a sweep when asked', async () => {
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    const { signing } = sweeper(['m1'], ['m1'], merge, { onSuccess, onClose, closeOnSuccess: () => false });
+    await signing.handleSign();
+    await flushPromises();
+    expect(mocks.success).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledWith('submitted');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes after success by default', async () => {
+    const onClose = vi.fn();
+    const { signing } = sweeper(['m1'], ['m1'], merge, { onClose });
+    await signing.handleSign();
+    await flushPromises();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
