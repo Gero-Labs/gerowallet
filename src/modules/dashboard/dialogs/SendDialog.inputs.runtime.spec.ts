@@ -7,7 +7,11 @@ import type { TransactionSigningOptions } from '@/shared/composables/useTransact
 import { WalletType } from '@/models/types';
 
 interface NexusInput { txHash: string; outputIndex: number; address: string; lovelace: string }
-interface BuildRequest { outputs: { address: string; lovelace: string }[]; utxos: NexusInput[]; selectAll?: boolean }
+interface BuildRequest {
+  outputs: { address: string; lovelace: string; assets?: { policyId: string; assetName: string; quantity: string }[] }[];
+  utxos: NexusInput[];
+  selectAll?: boolean;
+}
 
 const mocks = vi.hoisted(() => ({
   build: vi.fn(), maxAda: vi.fn(), scan: vi.fn(),
@@ -69,11 +73,13 @@ vi.mock('@/shared/dialogs/KeystoneSignDialog.vue', () => ({ default: { template:
 vi.mock('./MidnightSendDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/shared/components/CopyButton.vue', () => ({ default: { template: '<button>Copy</button>' } }));
 vi.mock('../components/SendRecipientCard.vue', () => ({ default: {
-  props: ['recipient'], emits: ['update:recipient', 'setMax'],
+  props: ['recipient'], emits: ['update:recipient', 'setMax', 'sendEntireWallet'],
   template: `<div>
     <button data-amount @click="$emit('update:recipient', { ...recipient, address: 'external-address', selectedTokens: [{ ...recipient.selectedTokens[0], quantity: '2' }] })">Amount</button>
     <button data-address @click="$emit('update:recipient', { ...recipient, address: 'external-address' })">Address</button>
     <button data-max @click="$emit('setMax', { tokenIndex: 0 })">Max</button>
+    <button data-entire @click="$emit('sendEntireWallet')">Entire</button>
+    <span data-collectibles>{{ Object.keys(recipient.selectedCollectibles).length }}</span>
   </div>`,
 } }));
 
@@ -238,5 +244,23 @@ describe('Quick Send Max over the request limit', () => {
     expect(requests().filter(isMerge)).toHaveLength(2);
     expect(mocks.signingOptions?.prerequisites?.value?.cbors.map((cbor) => JSON.parse(cbor).id)).toEqual(['merge-0000']);
     expect(dialog().text()).toContain('send.sweepPlanNote');
+  });
+
+  it('ignores Send entire wallet while a Max is running', async () => {
+    // One token holder beside the ADA-only UTxOs: a rewrite would move its token onto the recipient.
+    const unit = 'a'.repeat(56) + '746f6b656e';
+    walletStore.utxos = [...fragmented(), [{ txId: txId(999), index: 0 }, { address: 'own-address', value: { coins: 2_000_000, assets: { [unit]: 1 } } }]] as never;
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await Promise.all([dialog().get('[data-max]').trigger('click'), dialog().get('[data-entire]').trigger('click')]);
+    await settle();
+    // The recipient still holds only ADA, and no payment Nexus was asked for carries the token.
+    expect(dialog().get('[data-collectibles]').text()).toBe('0');
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    const payments = requests().filter((request) => !isMerge(request));
+    expect(payments.length).toBeGreaterThan(0);
+    expect(payments.every((request) => request.outputs.every((output) => !output.assets?.length))).toBe(true);
+    expect(mocks.maxAda).toHaveBeenCalledTimes(1);
   });
 });

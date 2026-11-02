@@ -860,6 +860,11 @@ async function ensureSweep(): Promise<void> {
   } finally {
     if (sweepBuild === pending) sweepBuild = null;
   }
+  // The slot never holds `pending` past the finally, so a build still in it is a newer
+  // one for another UTxO set, started while this one ran: wait for that sweep rather
+  // than go on without one. This recurses only while such a build is pending, so it
+  // ends with the first build to complete unsuperseded.
+  if (sweepBuild !== null && sweepBuild !== pending) return ensureSweep();
 }
 
 /** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
@@ -1149,6 +1154,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
 /** Send entire wallet: all tokens + NFTs are already added by the child, just trigger MAX ADA */
 async function sendEntireWallet(recipientId: string) {
+  // A Max already running owns the recipient and the build: rewriting the recipient now would leave the form ahead of the transaction.
+  if (isCalculatingMax.value) return;
   // Wait for the child's emit to propagate
   await nextTick();
 
