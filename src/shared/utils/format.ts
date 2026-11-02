@@ -1,3 +1,5 @@
+import filters from '@/shared/utils/filters';
+
 /**
  * Canonical number/price formatting. This is the ONE home for these functions.
  *
@@ -5,6 +7,11 @@
  * formatUsd outside this file as `formatFnForks` and ratchets that number down,
  * so new forks fail the build. Re-point a fork here rather than copying it.
  */
+
+/** Lovelace as ADA with the symbol and up to six decimals, grouped: 1200489603 → "₳1,200.489603". */
+export function formatAda(lovelace: number | bigint): string {
+  return filters.toCurrency(Number(lovelace), false, 6, '₳', '', false, 6);
+}
 
 /** Format a number in compact notation (e.g. 1.20B, 3.50M, 800.0K) — 2dp for B/M, 1dp for K */
 export function formatCompact(value: number): string {

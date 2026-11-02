@@ -561,6 +561,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { computeMinimumCoinQuantity } from '@cardano-sdk/tx-construction';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
@@ -1146,7 +1147,7 @@ async function buildTransaction() {
     const request: BuildTxRequest = {
       outputs: nexusOutputs,
       changeAddress: loggedWallet.value.baseAddress,
-      utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral, true, {
+      utxos: walletUtxosToNexusInputs(withoutPendingSpends(utxos.value as Cardano.Utxo[], walletStore.transactions), walletStore.collateral, true, {
         requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
       }),
     };
