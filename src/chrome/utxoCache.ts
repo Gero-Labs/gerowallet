@@ -4,14 +4,16 @@ import { Cardano } from '@cardano-sdk/core';
  * The per-wallet `utxos` table: the UTxO set the wallet is rebuilt from on login and
  * after an MV3 worker restart, before gero-sync has pushed anything.
  *
- * Both halves of the CIP-113 partition are stored, tagged. The spendable half alone is
+ * Every half of the partition is stored, tagged. The spendable half alone is
  * not enough: the locked lovelace is inside the stake-level `controlled_amount`, so a
- * restore that cannot see the programmable half reports the locked ADA as spendable
- * until the first live push lands.
+ * restore that cannot see the programmable half (or the wallet's own Gero listings) reports
+ * the locked ADA as spendable until the first live push lands. Only the listings the wallet
+ * verified as its own are written as `listed`; whatever else sat at the listing script is
+ * re-derived from the next live push.
  */
 
-/** Which half of the CIP-113 partition a row was in when it was written. */
-export type CachedUtxoPartition = 'spendable' | 'programmable';
+/** Which half of the partition a row was in when it was written. */
+export type CachedUtxoPartition = 'spendable' | 'programmable' | 'listed';
 
 /** Row shape in the `utxos` table. Values are structured-clone safe (no BigInt, no Map). */
 export interface CachedUtxoRow {
@@ -46,12 +48,12 @@ export function serializeUtxoRows(utxos: Cardano.Utxo[], partition: CachedUtxoPa
 /**
  * Rebuild the cached UTxOs.
  *
- * Both halves come back in one list: the partition is re-derived by
+ * All halves come back in one list: the partition is re-derived by
  * classifyUtxoAddress on the way in, exactly as it is for a live push, so the cache
  * never carries an opinion that the classifier would now disagree with (a deployment
  * added to or removed from the network config takes effect here too).
  *
- * `partitionKnown` says whether these rows account for the programmable half. A cache
+ * `partitionKnown` says whether these rows account for the partition. A cache
  * written before the tag existed does not: aggregating from it would report zero locked
  * lovelace and clear the refusal index that loadProgrammableRefs() just restored.
  */

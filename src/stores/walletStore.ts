@@ -11,6 +11,7 @@ import priceService from '@/stores/priceStore';
 import { Contact, Keys } from '@/models/types';
 import { EXPLORER_CONFIG_KEY } from '@/shared/utils/explorer';
 import type { IUnifiedUtxo, IBalance } from '@/chains/common/interfaces';
+import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 
 interface WhitelistedEntry {
   domain: string;
@@ -131,6 +132,17 @@ export interface WalletStore {
    *  address, so `controlled_amount` never included it: displayed and counted like
    *  programmableLockedLovelace, never subtracted. */
   programmableLockedLovelaceOutsideStake: string;
+  /** The wallet's own Gero NFT market listings. Their UTxOs sit at the listing script under this
+   *  wallet's stake key, so the provider returns them as the user's: applyUtxos keeps them out of
+   *  `utxos`, which is what coin selection and the CIP-30 handlers read, and this is what is left
+   *  to show. Only listings whose datum names this wallet as owner AND seller are in it. Bulk
+   *  field (IndexedDB). In a context other than the worker the datum's bigints are decimal
+   *  strings: read through reviveOwnListings(). */
+  listedListings: OwnListing[];
+  /** Lovelace held by those listings (their deposits): the wallet's, not Gero-spendable. It is
+   *  inside the provider's stake-level `controlled_amount`, so spendableControlledAmount()
+   *  takes it off. */
+  listedLockedLovelace: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is a dynamic settings bag (~20 varied fields read/written across the app); see GeroStore.config
   config: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reward history entries come straight from the provider payload
@@ -152,11 +164,17 @@ export interface WalletStore {
  * Only that share: lovelace locked under a payment-key owner
  * (programmableLockedLovelaceOutsideStake) was never in this total, and taking it off would
  * understate the balance.
+ *
+ * The wallet's own Gero listings are the same case: the listing script carries the seller's
+ * stake key, so their deposits are in the total too, and `listedLockedLovelace` comes off with
+ * the CIP-113 share.
  */
 export function spendableControlledAmount(total: string | number | null | undefined): string {
   if (total == null) return '0';
   try {
-    const remaining = BigInt(total) - BigInt(walletStore.programmableLockedLovelace || '0');
+    const remaining = BigInt(total)
+      - BigInt(walletStore.programmableLockedLovelace || '0')
+      - BigInt(walletStore.listedLockedLovelace || '0');
     return (remaining > 0n ? remaining : 0n).toString();
   } catch {
     return String(total);
@@ -190,6 +208,29 @@ export function hasProgrammableLockedLovelace(): boolean {
   return totalProgrammableLockedLovelace() > 0n;
 }
 
+/** Lovelace held by this wallet's own Gero listings. An unparseable stored value counts as zero. */
+export function totalListedLockedLovelace(): bigint {
+  try {
+    return BigInt(walletStore.listedLockedLovelace || '0');
+  } catch {
+    return 0n;
+  }
+}
+
+/** True when this wallet holds lovelace in its own Gero listings (see hasProgrammableLockedLovelace). */
+export function hasListedLockedLovelace(): boolean {
+  return totalListedLockedLovelace() > 0n;
+}
+
+/**
+ * True when any of this wallet's lovelace is owned but locked away from spending: in CIP-113
+ * UTxOs or in its own Gero listings. What the empty-state gates ask, since `controlled_amount`
+ * is spendable-only and a wallet whose ADA is all locked reads exactly '0' there.
+ */
+export function hasLockedLovelace(): boolean {
+  return hasProgrammableLockedLovelace() || hasListedLockedLovelace();
+}
+
 /** Re-derive `controlled_amount` from the provider total, tolerating repeated application. */
 function withSpendableControlledAmount(account: Account | null): Account | null {
   if (!account) return account;
@@ -213,6 +254,8 @@ export const walletStore = reactive<WalletStore>({
   programmableTokens: {},
   programmableLockedLovelace: '0',
   programmableLockedLovelaceOutsideStake: '0',
+  listedListings: [],
+  listedLockedLovelace: '0',
   config: {
     tokenAllocationSort: {
       by: 'allocation',
@@ -244,7 +287,7 @@ const context = getContextType();
  * new contexts read at boot.
  */
 const BULK_FIELDS: (keyof WalletStore)[] = [
-  'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'rewards', 'keys',
+  'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'listedListings', 'rewards', 'keys',
 ];
 
 /**
@@ -511,6 +554,25 @@ export default {
     this.setAccount(walletStore.account);
   },
 
+  /**
+   * The wallet's own Gero listings and the lovelace they hold. Kept out of `utxos` and `tokens`
+   * for the same reason as the programmable tokens: only a surface that opts in sees them.
+   * A listing's output is immutable, so the same refs mean the same listings and nothing is
+   * written or broadcast for a repeat.
+   */
+  setListedListings(listedListings: OwnListing[], listedLockedLovelace = '0') {
+    const unchanged = walletStore.listedLockedLovelace === listedLockedLovelace
+      && walletStore.listedListings.length === listedListings.length
+      && listedListings.every((listing, i) => walletStore.listedListings[i]?.ref === listing.ref);
+    if (unchanged) return;
+    walletStore.listedListings = listedListings;
+    walletStore.listedLockedLovelace = listedLockedLovelace;
+    broadcastFromBackground({ listedListings, listedLockedLovelace });
+    // The account can land before the listings are known (one SYNC push carries both).
+    // Re-derive it against the share just set.
+    this.setAccount(walletStore.account);
+  },
+
   setConfig(config: {}) {
     walletStore.config = config;
     broadcastFromBackground({ config });
@@ -659,6 +721,8 @@ export default {
       programmableTokens: {},
       programmableLockedLovelace: '0',
       programmableLockedLovelaceOutsideStake: '0',
+      listedListings: [],
+      listedLockedLovelace: '0',
       config: {},
       rewards: [],
       connectedDapps: [],
@@ -695,6 +759,8 @@ export default {
       programmableTokens: {},
       programmableLockedLovelace: '0',
       programmableLockedLovelaceOutsideStake: '0',
+      listedListings: [],
+      listedLockedLovelace: '0',
       rewards: [],
       contacts: {},
       connectedDapps: [],

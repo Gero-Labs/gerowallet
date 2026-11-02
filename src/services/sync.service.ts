@@ -559,8 +559,9 @@ export class SyncService {
    * delegation. Preserves rewards/withdrawable/pool/drep from the previous account.
    *
    * The `account` row holds the stake-level total the provider would report, which the
-   * store then reduces by the CIP-113 locked share. `utxos` is already the spendable
-   * partition, so the locked lovelace is added back here to keep the row on that meaning.
+   * store then reduces by the CIP-113 locked share and by the deposits of the wallet's own
+   * Gero listings. `utxos` is already the spendable partition, so both are added back here to
+   * keep the row on that meaning.
    */
   private async reconcileControlledAmountFromUtxos(): Promise<void> {
     try {
@@ -570,7 +571,11 @@ export class SyncService {
         const coins = u?.[1]?.value?.coins;
         if (coins != null) sum += BigInt(coins);
       }
-      const controlled = (sum + BigInt(WalletStore.state.programmableLockedLovelace || '0')).toString();
+      const controlled = (
+        sum
+        + BigInt(WalletStore.state.programmableLockedLovelace || '0')
+        + BigInt(WalletStore.state.listedLockedLovelace || '0')
+      ).toString();
       const prev = (await this.walletBg.getAccountInfo()) || {};
       if (prev.controlled_amount === controlled) return; // no change — skip a redundant write
       await this.walletBg.setAccountInfo({

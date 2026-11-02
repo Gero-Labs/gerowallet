@@ -49,7 +49,15 @@ import {
   submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
-import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
+import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoPartition, type CachedUtxoRow } from '@/chrome/utxoCache';
+import {
+  listedLovelace,
+  ownListingIdentity,
+  verifyOwnListing,
+  type OwnListing,
+  type OwnListingIdentity,
+  type OwnListingRejection,
+} from '@/chrome/nftMarket/ownListings';
 import { SecretPurpose, decrypt, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
@@ -359,10 +367,10 @@ export class WalletBg {
    * Apply UTxOs: set on store, resolve assets, persist to DB.
    * Called on login (from DB) and when server UTxOs arrive.
    *
-   * @param partitionKnown whether this set accounts for BOTH halves of the CIP-113
-   *   partition. False only for a cache written before the programmable half was
-   *   persisted: aggregating from it would report zero locked lovelace and wipe the
-   *   refusal index loadProgrammableRefs() just restored.
+   * @param partitionKnown whether this set accounts for ALL halves of the partition
+   *   (spendable, CIP-113, the wallet's own Gero listings). False only for a cache written
+   *   before the programmable half was persisted: aggregating from it would report zero
+   *   locked lovelace and wipe the refusal index loadProgrammableRefs() just restored.
    */
   async applyUtxos(utxos: Cardano.Utxo[], persist = false, partitionKnown = true) {
     if (!utxos || utxos.length === 0) {
@@ -374,7 +382,8 @@ export class WalletBg {
       // behaviour and deliberately left alone.
       if (partitionKnown) {
         this.setProgrammableAssets([]);
-        if (persist) await this.clearPersistedProgrammableUtxos();
+        this.setListedUtxos([]);
+        if (persist) await this.clearPersistedPartitionRows(['programmable', 'listed']);
       }
       return;
     }
@@ -385,24 +394,35 @@ export class WalletBg {
     // ours to display, never ours to spend. Divert rather than drop. The spendable
     // branch is evaluated first, so nothing spendable can be demoted.
     const programmableBases = this.programmableBaseScriptHashes();
-    const programmableOwners = programmableBases.size > 0
+    // The Gero listing contract's UTxOs sit at a script address under the seller's own stake
+    // key, the same shape: the user's, never spendable. They are diverted too, and the ones the
+    // datum proves to be this wallet's own listings are kept (setListedUtxos below).
+    const listedBases = this.listedScriptHashes();
+    const programmableOwners = programmableBases.size > 0 || listedBases.size > 0
       ? this.programmableOwnerCredentials(myCredentials)
       : new Set<string>();
     const programmable: Cardano.Utxo[] = [];
+    const listedCandidates: Cardano.Utxo[] = [];
     // Tripwire: gero-sync scopes results to the subscribed stake address, so a
     // non-zero count means we are being sent holdings that are not ours.
     let programmableOther = 0;
+    let listedOther = 0;
     const filtered = utxos.filter(utxo => {
       const partition = classifyUtxoAddress(
         utxo[1].address as string,
         myCredentials,
         programmableBases,
         programmableOwners,
+        listedBases,
       );
       if (partition === 'programmable') {
         programmable.push(utxo);
       } else if (partition === 'programmable-other') {
         programmableOther++;
+      } else if (partition === 'listed') {
+        listedCandidates.push(utxo);
+      } else if (partition === 'listed-other') {
+        listedOther++;
       }
       return partition === 'spendable';
     });
@@ -414,10 +434,20 @@ export class WalletBg {
         `gero-sync is returning holdings that are not ours`
       );
     }
+    if (listedOther > 0) {
+      console.warn(
+        `NFT market: dropped ${listedOther} listing UTxO(s) under other stake keys — ` +
+        `gero-sync is returning listings that are not ours`
+      );
+    }
     if (filtered.length !== utxos.length) {
-      debugLog(`🔒 Credential filter: ${utxos.length} → ${filtered.length} UTxOs (${utxos.length - filtered.length} Franken removed, ${programmable.length} CIP-113)`);
+      debugLog(`🔒 Credential filter: ${utxos.length} → ${filtered.length} UTxOs (${utxos.length - filtered.length} Franken removed, ${programmable.length} CIP-113, ${listedCandidates.length} listed candidates)`);
     }
     utxos = filtered;
+
+    // Which candidates are really this wallet's own listings is decided from their datums.
+    // Not while only a stale cache is being read: that cache never held the listed half.
+    const listed = partitionKnown ? this.setListedUtxos(listedCandidates) : [];
 
     const uniqueAssets: Set<string> = new Set<string>();
     for (const [, txOut] of utxos) {
@@ -425,8 +455,9 @@ export class WalletBg {
         txOut.value.assets.keys().forEach((key: string) => uniqueAssets.add(key));
       }
     }
-    // Programmable tokens resolve their metadata through the same pipeline.
-    for (const [, txOut] of programmable) {
+    // Programmable tokens resolve their metadata through the same pipeline, and so do the
+    // NFTs the wallet has listed (the listings view shows them).
+    for (const [, txOut] of [...programmable, ...listed]) {
       if (txOut.value.assets) {
         txOut.value.assets.keys().forEach((key: string) => uniqueAssets.add(key));
       }
@@ -434,7 +465,8 @@ export class WalletBg {
 
     debugLog(
       `📦 applyUtxos: ${utxos.length} UTxOs, ${uniqueAssets.size} assets, persist=${persist}` +
-      ` | CIP-113: matched=${programmable.length} otherOwners=${programmableOther}`
+      ` | CIP-113: matched=${programmable.length} otherOwners=${programmableOther}` +
+      ` | listed: own=${listed.length} candidates=${listedCandidates.length} otherOwners=${listedOther}`
     );
 
     // Arm the signing guard before the syncAssets() await: until the set is installed
@@ -453,7 +485,7 @@ export class WalletBg {
       this.setProgrammableAssets(programmable);
     }
 
-    // Persist to per-wallet DB so UTxOs survive logout — both halves, tagged, so the
+    // Persist to per-wallet DB so UTxOs survive logout — every half, tagged, so the
     // locked lovelace is still known to be locked after a service-worker restart.
     if (persist) {
       try {
@@ -463,6 +495,7 @@ export class WalletBg {
         await table.bulkPut([
           ...serializeUtxoRows(utxos, 'spendable'),
           ...serializeUtxoRows(programmable, 'programmable'),
+          ...serializeUtxoRows(listed, 'listed'),
         ]);
       } catch (e) {
         // Half a partition is worse than none: a cache holding only the spendable rows
@@ -485,20 +518,22 @@ export class WalletBg {
   }
 
   /**
-   * Drop the cached programmable rows only. The spendable rows stay tagged, so the
-   * cache still reads as partition-aware — it now records an empty programmable half
-   * rather than an unknown one.
+   * Drop the cached rows of the named halves only. The spendable rows stay tagged, so the
+   * cache still reads as partition-aware — it now records empty halves rather than
+   * unknown ones.
    */
-  private async clearPersistedProgrammableUtxos() {
+  private async clearPersistedPartitionRows(partitions: readonly CachedUtxoPartition[]) {
     try {
       const db = await this.getDb();
       const table = db.table('utxos');
       const rows = await table.toArray();
-      const stale = rows.filter((row: CachedUtxoRow & { id?: number }) => row.partition === 'programmable');
+      const stale = rows.filter(
+        (row: CachedUtxoRow & { id?: number }) => row.partition != null && partitions.includes(row.partition),
+      );
       if (stale.length === 0) return;
       await table.bulkDelete(stale.map(row => row.id));
     } catch (e) {
-      debugLog('Failed to clear cached programmable UTxOs:', e);
+      debugLog('Failed to clear cached partition UTxOs:', e);
     }
   }
 
@@ -806,6 +841,77 @@ export class WalletBg {
       }
     }
     return hits;
+  }
+
+  // Gero NFT market — the wallet's own listings. Display and balance only, like the
+  // programmable tokens: the listing UTxOs never enter walletStore.utxos.
+
+  /**
+   * The script hashes of every deployed version of the Gero listing contract on this network:
+   * every version, not only the newest, so a listing made under a superseded deployment stays
+   * recognised (kept out of spending, shown, cancellable) until it drains. Empty where the
+   * market is unsupported, which disables the listed partition and leaves
+   * `subscriptionCredentials()` as it was. The gate is `NFT_MARKET_ALLOWED_NETWORKS` plus the
+   * network's deployment list (networks.resolveNftMarketDeployments); the `isNftMarketEnabled`
+   * flag is a UI gate only and has no say here.
+   */
+  listedScriptHashes(): Set<string> {
+    return new Set(networks.resolveNftMarketDeployments(this.chain, this.network).map((d) => d.scriptHash));
+  }
+
+  /**
+   * Who this wallet is, for deciding whether a listing datum names it: its key set (as gero-sync
+   * last reported it, or derived locally when none has landed yet) and the payment credentials
+   * derived from its xpub. The union, because the cache load and the key load race at login and a
+   * key set can lag a sync, while derivation never does.
+   */
+  private ownListingIdentity(): OwnListingIdentity {
+    const keys = WalletStore.state.keys
+      ?? (this.derivesOwnAddress() ? this.resolvePathsForMissingAddresses([]) : null);
+    return ownListingIdentity(keys, this.derivePaymentCredentials());
+  }
+
+  /**
+   * Decide which `listed` candidates are this wallet's own listings, publish them to the store
+   * and return their UTxOs (for the cache). A candidate counts only when its datum names this
+   * wallet as BOTH owner and seller and it holds exactly one NFT (ownListings.ts); everything
+   * else at the listing script under the wallet's stake key is treated as foreign: not listed,
+   * not subtracted from the balance, not shown. An empty list clears the store's listings.
+   */
+  private setListedUtxos(candidates: Cardano.Utxo[]): Cardano.Utxo[] {
+    const listings: OwnListing[] = [];
+    const kept: Cardano.Utxo[] = [];
+    const rejected: Partial<Record<OwnListingRejection, number>> = {};
+    const deployments = networks.resolveNftMarketDeployments(this.chain, this.network);
+    if (candidates.length > 0 && deployments.length > 0) {
+      const ctx = {
+        networkId: networks.resolveNetworkId(this.chain, this.network) as number,
+        deployments,
+        own: this.ownListingIdentity(),
+      };
+      for (const utxo of candidates) {
+        const verdict = verifyOwnListing(utxo, ctx);
+        if ('listing' in verdict) {
+          listings.push(verdict.listing);
+          kept.push(utxo);
+        } else {
+          rejected[verdict.rejected] = (rejected[verdict.rejected] ?? 0) + 1;
+        }
+      }
+    }
+    // The same refs in the same order are the same listings (an output never changes), so the
+    // store can tell a repeat push from a change.
+    const byRef = (a: OwnListing, b: OwnListing) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
+    const order = listings.map((l, i) => [l, kept[i]] as const).sort(([a], [b]) => byRef(a, b));
+    const sorted = order.map(([l]) => l);
+    WalletStore.setListedListings(sorted, listedLovelace(sorted).toString());
+    if (Object.keys(rejected).length > 0) {
+      // console.warn, not debugLog: debugLog no-ops in normal builds, and someone locking an NFT
+      // at the listing script under this wallet's stake key with a datum that is not this
+      // wallet's own is worth seeing.
+      console.warn('NFT market: treated listing-script UTxO(s) as foreign', rejected);
+    }
+    return order.map(([, utxo]) => utxo);
   }
 
   /**
@@ -1546,12 +1652,13 @@ export class WalletBg {
    *
    * A non-empty list is a strict allowlist: the server returns only UTxOs at addresses
    * whose payment credential is in it, and it never matches the CIP-113 script address
-   * (adding the script hash returns nothing — verified against the live endpoint). An
-   * empty list disables the filter so the server resolves by stake address instead, and
+   * (adding the script hash returns nothing — verified against the live endpoint), nor the
+   * Gero listing script's: so a network with either configured empties it. An empty list
+   * disables the filter so the server resolves by stake address instead, and
    * classifyUtxoAddress does the filtering client-side.
    *
-   * Networks without a deployment take the non-empty branch, so the server-side filter
-   * stays active there exactly as it does for any other credential list.
+   * Networks with neither a CIP-113 nor a market deployment take the non-empty branch, so the
+   * server-side filter stays active there exactly as it does for any other credential list.
    *
    * The empty list loses no UTxO the allowlist returned. Verified against mainnet gero-sync
    * on 2026-10-07: the allowlist only FILTERS the stake-anchored set and never reaches past
@@ -1574,6 +1681,10 @@ export class WalletBg {
    */
   subscriptionCredentials(): string[] {
     if (this.programmableBaseScriptHashes().size > 0) return [];
+    // The Gero listing contract is the same case: its script hash is never a payment key hash,
+    // so a payment-key allowlist can never return the user's own listings. With it configured,
+    // the server resolves by stake address and classifyUtxoAddress filters client-side.
+    if (this.listedScriptHashes().size > 0) return [];
     return this.derivePaymentCredentials();
   }
 

@@ -41,6 +41,7 @@ function resetStore() {
   walletStore.tokens = {};
   walletStore.programmableTokens = {};
   walletStore.programmableLockedLovelace = '0';
+  walletStore.listedLockedLovelace = '0';
   tokenMetadataStore.tokens = {};
 }
 
@@ -160,6 +161,56 @@ describe('useHoldingsValuation — CIP-113 holdings', () => {
       [PROGRAMMABLE_UNIT]: { unit: PROGRAMMABLE_UNIT, name: 'Test123', quantity: '0' },
     };
     expect(useHoldingsValuation().holdings.value.find(r => r.unit === PROGRAMMABLE_UNIT)).toBeUndefined();
+  });
+});
+
+// The wallet's own Gero NFT market listings hold lovelace too (the deposit that returns to the
+// seller): the user's, not Gero-spendable, inside no spendable figure. Like the locked CIP-113
+// ADA it is a row of its own, keyed apart from spendable ADA and from the CIP-113 row, priced at
+// the native rate and counted in the portfolio total.
+describe('useHoldingsValuation — own listing deposits', () => {
+  beforeEach(resetStore);
+
+  it('surfaces the listed lovelace as its own row, keyed apart from spendable ADA', () => {
+    walletStore.listedLockedLovelace = '3500000';
+
+    const rows = useHoldingsValuation().holdings.value.filter(r => r.unit === 'lovelace');
+    const listed = rows.find(r => r.isListed);
+
+    expect(listed, 'listed lovelace produced no row').toBeDefined();
+    expect(listed!.rowKey).toBe('lovelace#listed');
+    expect(listed!.balance).toBe(3.5);
+    expect(listed!.isProgrammable).toBe(false);
+  });
+
+  it('prices it at the native rate and counts it in the portfolio total', () => {
+    walletStore.listedLockedLovelace = '2500000';
+
+    const { holdings, totals } = useHoldingsValuation();
+    const listed = holdings.value.find(r => r.isListed);
+
+    expect(listed!.price).toBe(0.4);
+    expect(listed!.value).toBeCloseTo(1.0);
+    expect(totals.value.usd).toBeCloseTo(1.0);
+  });
+
+  it('keeps it apart from the locked CIP-113 ADA row', () => {
+    walletStore.programmableLockedLovelace = '2500000';
+    walletStore.listedLockedLovelace = '1000000';
+
+    const rows = useHoldingsValuation().holdings.value.filter(r => r.unit === 'lovelace');
+
+    expect(rows.map(r => r.rowKey).sort()).toEqual(['lovelace#listed', 'lovelace#locked']);
+    expect(rows.find(r => r.isListed)!.balance).toBe(1);
+    expect(rows.find(r => r.isProgrammable)!.balance).toBe(2.5);
+  });
+
+  it('renders no listed-ADA row when nothing is listed, or the stored value is unreadable', () => {
+    walletStore.listedLockedLovelace = '0';
+    expect(useHoldingsValuation().holdings.value.find(r => r.isListed)).toBeUndefined();
+
+    walletStore.listedLockedLovelace = 'not-a-number';
+    expect(useHoldingsValuation().holdings.value.find(r => r.isListed)).toBeUndefined();
   });
 });
 

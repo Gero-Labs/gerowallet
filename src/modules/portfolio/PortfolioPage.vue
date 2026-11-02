@@ -429,7 +429,7 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
-import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
+import { walletStore, hasLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
@@ -648,10 +648,11 @@ const isWalletEmpty = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
   }
-  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share is subtracted
-  // from it in the store — so a wallet holding nothing but programmable UTxOs reads
-  // exactly '0' here and would get the "no funds" hero over a funded portfolio.
-  if (hasProgrammableLockedLovelace()) return false;
+  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share and the deposits of
+  // the wallet's own Gero listings are subtracted from it in the store — so a wallet holding
+  // nothing but programmable UTxOs or listings reads exactly '0' here and would get the
+  // "no funds" hero over a funded portfolio.
+  if (hasLockedLovelace()) return false;
   return !account.value || account.value?.controlled_amount === '0';
 });
 
@@ -875,7 +876,7 @@ const displayedTokens = computed(() => {
   // too, or the locked row is dropped and the balance reads short.
   const seen = new Set<string>();
   tokens = tokens.filter(t => {
-    const key = tokenRowKey(t.unit, t.isProgrammable);
+    const key = tokenRowKey(t.unit, t.isProgrammable, t.isListed);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

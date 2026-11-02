@@ -229,18 +229,28 @@ export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: H
  * Which partition a UTxO belongs to. `programmable-other` is a programmable UTxO owned
  * by somebody else — dropped like `foreign`, but named separately so it can be counted:
  * the base script is shared network-wide, so a non-zero count means the data source is
- * returning other users' holdings.
+ * returning other users' holdings. `listed` and `listed-other` are the same pair for the
+ * Gero NFT market's listing contract: a UTxO at the listing script, under this wallet's
+ * stake key or under someone else's. `listed` is only a candidate: whether it really is the
+ * user's own listing is decided from its datum (nftMarket/ownListings.ts).
  */
-export type UtxoPartition = 'spendable' | 'programmable' | 'programmable-other' | 'foreign';
+export type UtxoPartition =
+  | 'spendable'
+  | 'programmable'
+  | 'programmable-other'
+  | 'listed'
+  | 'listed-other'
+  | 'foreign';
 
 /**
- * Classify a UTxO's address for the CIP-113 partition, kept standalone so the
- * security-critical branch is directly testable: a mistake either exposes a locked token
- * to spending, or makes ordinary funds invisible and unspendable.
+ * Classify a UTxO's address for the CIP-113 and Gero-listing partitions, kept standalone so the
+ * security-critical branches are directly testable: a mistake either exposes a locked token or
+ * a listed NFT to spending, or makes ordinary funds invisible and unspendable.
  *
  * Order matters — the spendable checks run first, including keeping non-base and
  * unparseable addresses spendable, so nothing spendable can be demoted by the
- * programmable branch below.
+ * programmable or listed branches below. The CIP-113 branch runs before the listed one, so a
+ * hash on both lists belongs to CIP-113.
  *
  * @param programmableBaseScriptHashes the deployments to recognise on this network (a
  *        set so a rollover can overlap; superseded deployments are removed on testnets
@@ -248,19 +258,24 @@ export type UtxoPartition = 'spendable' | 'programmable' | 'programmable-other' 
  *        the programmable branch.
  * @param programmableOwnerCredentials the wallet's payment credentials and its stake
  *        credential, since which one occupies the stake slot is a per-deployment choice.
+ *        The listed branch reads the same set for "own stake".
+ * @param listedScriptHashes the script hashes of every deployed version of the Gero listing
+ *        contract on this network (all versions, so old listings stay recognised). Empty
+ *        disables the listed branch and leaves every result as it was before it existed.
  */
 export function classifyUtxoAddress(
   address: string,
   ownPaymentCredentials: Set<string>,
   programmableBaseScriptHashes: Set<string>,
   programmableOwnerCredentials: Set<string>,
+  listedScriptHashes: Set<string> = new Set<string>(),
 ): UtxoPartition {
-  // With CIP-113 configured, walletBg sends an empty `credentials` list so gero-sync
-  // stops pre-filtering by payment credential — which makes these fallbacks the only
-  // gate, so it fails closed. With the gate shut (a network not allowlisted or without a
-  // deployment) the server-side filter stays on and this stays permissive, so an
+  // With CIP-113 or the listing contract configured, walletBg sends an empty `credentials`
+  // list so gero-sync stops pre-filtering by payment credential — which makes these fallbacks
+  // the only gate, so it fails closed. With the gate shut (a network not allowlisted or without
+  // a deployment) the server-side filter stays on and this stays permissive, so an
   // enterprise-address wallet keeps seeing its own non-base UTxOs.
-  const gateActive = programmableBaseScriptHashes.size > 0;
+  const gateActive = programmableBaseScriptHashes.size > 0 || listedScriptHashes.size > 0;
 
   let parsed: Cardano.Address | undefined;
   let baseAddr: Cardano.BaseAddress | undefined;
@@ -294,6 +309,21 @@ export function classifyUtxoAddress(
     }
     // Correct script, different owner — somebody else's holding.
     return 'programmable-other';
+  }
+
+  if (
+    paymentCred.type === Cardano.CredentialType.ScriptHash &&
+    listedScriptHashes.has(paymentCred.hash)
+  ) {
+    const stakeCred = baseAddr.getStakeCredential();
+    if (
+      stakeCred?.type === Cardano.CredentialType.KeyHash &&
+      programmableOwnerCredentials.has(stakeCred.hash)
+    ) {
+      return 'listed';
+    }
+    // The listing script under someone else's stake key — somebody else's listing.
+    return 'listed-other';
   }
 
   return 'foreign';
