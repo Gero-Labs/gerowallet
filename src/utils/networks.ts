@@ -15,6 +15,12 @@ import {
   CIP113_TRANSFER_PREPROD as CIP113_TRANSFER_DEPLOYMENTS_PREPROD,
   CIP113_TRANSFER_PREVIEW as CIP113_TRANSFER_DEPLOYMENTS_PREVIEW,
 } from '@/utils/cip113Deployments';
+import {
+  NFT_MARKET_ALLOWED_NETWORKS,
+  NFT_MARKET_DEPLOYMENTS_MAINNET as NFT_MARKET_LISTED_MAINNET,
+  NFT_MARKET_DEPLOYMENTS_PREPROD as NFT_MARKET_LISTED_PREPROD,
+  type NftMarketDeployment,
+} from '@/utils/nftMarketDeployments';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
@@ -76,6 +82,9 @@ export interface NetworkInfo {
   cip113GlobalScriptHashes?: string[];
   // CIP-113 core `transfer` stake scripts. Empty where Gero's Send is unsupported.
   cip113TransferScriptHashes?: string[];
+  // Gero NFT market listing-contract deployments, newest version first (see
+  // nftMarketDeployments.ts). Empty means the market is unavailable on this network.
+  nftMarketDeployments?: readonly NftMarketDeployment[];
   /**
    * RealFi Earn (USDr / sUSDr yield) availability for this network.
    *
@@ -117,6 +126,46 @@ const CIP113_GLOBAL_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_G
 const CIP113_TRANSFER_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_MAINNET);
 const CIP113_TRANSFER_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_PREPROD);
 const CIP113_TRANSFER_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_PREVIEW);
+
+// Deployments come from nftMarketDeployments.ts. Re-validated here for the same reason as the
+// CIP-113 hashes (the script hash and out-ref are taken as granted downstream), plus the
+// contract's parameter review rules from docs/rules.md, which the contract does not enforce
+// itself. An entry that fails any check is dropped, so a mistyped literal fails closed. The
+// result is a copy, newest version first, one entry per script hash.
+function normalizeNftMarketDeployments(
+  deployments: readonly NftMarketDeployment[],
+  feeAddressPattern: RegExp,
+): NftMarketDeployment[] {
+  const byScriptHash = new Map<string, NftMarketDeployment>();
+  for (const entry of deployments) {
+    const scriptHash = typeof entry.scriptHash === 'string' ? entry.scriptHash.trim().toLowerCase() : '';
+    const referenceScript = typeof entry.referenceScript === 'string' ? entry.referenceScript.trim().toLowerCase() : '';
+    const feeAddress = typeof entry.feeAddress === 'string' ? entry.feeAddress.trim() : '';
+    const { version, feeBps, minFeeLovelace, maxFeeLovelace } = entry;
+    if (
+      !/^[0-9a-f]{56}$/.test(scriptHash)
+      || !/^[0-9a-f]{64}#\d+$/.test(referenceScript)
+      || !feeAddressPattern.test(feeAddress)
+      || !Number.isInteger(version) || version < 1
+      || !Number.isInteger(feeBps) || feeBps <= 0 || feeBps > 1000
+      || typeof minFeeLovelace !== 'bigint' || minFeeLovelace < 0n
+      || !(maxFeeLovelace === null || (typeof maxFeeLovelace === 'bigint' && maxFeeLovelace >= minFeeLovelace))
+    ) {
+      continue;
+    }
+    if (!byScriptHash.has(scriptHash)) {
+      byScriptHash.set(scriptHash, { ...entry, scriptHash, referenceScript, feeAddress });
+    }
+  }
+  return Array.from(byScriptHash.values()).sort((a, b) => b.version - a.version);
+}
+
+// A bech32 base address of the deployment's own network: a mainnet list takes `addr1...`, the
+// testnet lists `addr_test1...`.
+const MAINNET_ADDRESS = /^addr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
+const TESTNET_ADDRESS = /^addr_test1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
+const NFT_MARKET_MAINNET: NftMarketDeployment[] = normalizeNftMarketDeployments(NFT_MARKET_LISTED_MAINNET, MAINNET_ADDRESS);
+const NFT_MARKET_PREPROD: NftMarketDeployment[] = normalizeNftMarketDeployments(NFT_MARKET_LISTED_PREPROD, TESTNET_ADDRESS);
 
 
 export default {
@@ -167,6 +216,7 @@ export default {
       cip113RegistryPolicyIds: CIP113_REGISTRY_MAINNET,
       cip113GlobalScriptHashes: CIP113_GLOBAL_MAINNET,
       cip113TransferScriptHashes: CIP113_TRANSFER_MAINNET,
+      nftMarketDeployments: NFT_MARKET_MAINNET,
       // RealFi launched on mainnet 2026-10-01. Still behind isRealFiEnabled: this says
       // the network CAN reach RealFi, the flag says whether it is switched on.
       realFiSupport: true,
@@ -219,6 +269,7 @@ export default {
       cip113RegistryPolicyIds: CIP113_REGISTRY_PREPROD,
       cip113GlobalScriptHashes: CIP113_GLOBAL_PREPROD,
       cip113TransferScriptHashes: CIP113_TRANSFER_PREPROD,
+      nftMarketDeployments: NFT_MARKET_PREPROD,
       // RealFi runs its public testnet on Cardano preprod; this is the only
       // network the Earn surface is reachable from today.
       realFiSupport: true,
@@ -782,6 +833,22 @@ export default {
   },
   resolveProgrammableTokenSupport(chain: string, network: string): boolean {
     return this.resolveProgrammableLogicBaseScriptHashes(chain, network).length > 0
+  },
+  // The Gero NFT market's listing-contract deployments, newest first: new listings use index 0,
+  // older ones stay listed until their listings drain. Support is derived from the list.
+  resolveNftMarketDeployments(chain: string, network: string): readonly NftMarketDeployment[] {
+    if (!chain || !network) {
+      return []
+    }
+    // Allowlist first, before the configured deployments are even consulted: a list on its own
+    // must never be enough to bring a network up. See NFT_MARKET_ALLOWED_NETWORKS.
+    if (!NFT_MARKET_ALLOWED_NETWORKS.includes(network)) {
+      return []
+    }
+    return this.resolveNetwork(chain, network)?.nftMarketDeployments || []
+  },
+  isNftMarketSupported(chain: string, network: string): boolean {
+    return this.resolveNftMarketDeployments(chain, network).length > 0
   },
   resolveDaoSupport(chain: string, network: string): boolean {
     if (!chain || !network) {
