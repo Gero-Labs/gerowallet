@@ -4,7 +4,9 @@ import type { Cardano } from '@cardano-sdk/core';
  * How long a submitted transaction's inputs count as spent while it waits for a
  * block. Nexus builds with a 7,200-slot (two-hour) validity window, so a
  * transaction that has not landed by then never will, and its inputs are
- * spendable again. Ten minutes over that, for clock skew.
+ * spendable again. That window starts when Nexus builds the transaction, before
+ * it is submitted, so counting from submission frees the inputs late rather than
+ * early; the extra ten minutes covers a change of the local clock.
  */
 export const PENDING_SPEND_WINDOW_MS = 130 * 60 * 1000;
 

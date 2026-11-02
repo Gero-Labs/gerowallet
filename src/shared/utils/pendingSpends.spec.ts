@@ -23,6 +23,15 @@ describe('withoutPendingSpends', () => {
     expect(kept.map(([txIn]) => txIn.index)).toEqual([0]);
   });
 
+  it('hides a UTxO whose pending input carries the index as a string', () => {
+    const kept = withoutPendingSpends(
+      [utxo(1, 0), utxo(2, 0)],
+      [{ pending: true, tx_timestamp: Math.floor((NOW - 60_000) / 1000), body: { inputs: [{ txId: txId(1), index: '0' }] } }],
+      NOW,
+    );
+    expect(kept.map(([txIn]) => txIn.txId)).toEqual([txId(2)]);
+  });
+
   it('ignores confirmed transactions', () => {
     const set = [utxo(1)];
     expect(withoutPendingSpends(set, [pendingTx([[1, 0]], NOW - 60_000, false)], NOW)).toBe(set);

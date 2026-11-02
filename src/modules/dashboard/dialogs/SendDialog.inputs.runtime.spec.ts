@@ -1,5 +1,4 @@
-// Which UTxOs Quick Send hands to Nexus: never one a submitted transaction already
-// spends, and (with a sweep, Task 11) every one the wallet holds.
+// Which UTxOs Quick Send hands to Nexus: never one a submitted transaction already spends.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { createTestVuetify } from '@test/helpers/vuetify';
