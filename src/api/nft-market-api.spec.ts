@@ -14,7 +14,13 @@ vi.mock('axios', async (importOriginal) => {
   return actual;
 });
 
+vi.mock('@/utils/debug', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/debug')>()),
+  debugLog: vi.fn(),
+}));
+
 import { Network } from '@/models/types';
+import { debugLog as debugLogImport } from '@/utils/debug';
 import {
   LISTINGS_MAX_LIMIT,
   nftMarketApi,
@@ -101,15 +107,18 @@ const sentTo = (call = 0) => {
   };
 };
 
+const debugLog = vi.mocked(debugLogImport);
+
 beforeEach(() => {
   adapter.mockReset();
+  debugLog.mockClear();
 });
 
 describe('nftMarketApi.listings: requests', () => {
   it("gets the policy's listings from the market route with the Nexus slug and every option", async () => {
     answer({ items: [LISTING], nextCursor: 'c2' });
     const page = await nftMarketApi.listings(POLICY, { sort: 'price', cursor: 'c1', limit: 25 }, Network.PREPROD);
-    expect(page).toEqual({ items: [LISTING], nextCursor: 'c2' });
+    expect(page).toEqual({ items: [LISTING], nextCursor: 'c2', dropped: 0 });
     expect(adapter).toHaveBeenCalledTimes(1);
     const sent = sentTo();
     expect(sent.method).toBe('get');
@@ -178,6 +187,53 @@ describe('nftMarketApi.listings: requests', () => {
   });
 });
 
+/** Listings that do not read back whole, as a patch over the good LISTING. */
+const MALFORMED_LISTINGS: [string, Record<string, unknown>][] = [
+  ['a short txHash', { txHash: TX.slice(2) }],
+  ['an upper-case txHash', { txHash: TX.toUpperCase() }],
+  ['no txHash', { txHash: undefined }],
+  ['a negative output index', { outputIndex: -1 }],
+  ['a fractional output index', { outputIndex: 1.5 }],
+  ['a string output index', { outputIndex: '3' }],
+  ['a negative version', { version: -1 }],
+  ['a fractional version', { version: 1.5 }],
+  ['a string version', { version: '1' }],
+  ['a short script hash', { scriptHash: SCRIPT.slice(2) }],
+  ['an upper-case script hash', { scriptHash: SCRIPT.toUpperCase() }],
+  ['a unit that is not hex', { unit: 'lovelace' }],
+  ['a unit that is not the policy and asset name', { unit: POLICY + '00' }],
+  ['a short policy id', { policyId: POLICY.slice(2), unit: POLICY.slice(2) + ASSET_NAME }],
+  ['an asset name of odd length', { assetName: ASSET_NAME + '0', unit: UNIT + '0' }],
+  ['an asset name that is not hex', { assetName: 'zz', unit: POLICY + 'zz' }],
+  ['an asset name over 32 bytes', { assetName: '00'.repeat(33), unit: POLICY + '00'.repeat(33) }],
+  ['a decimal price', { priceLovelace: '1.5' }],
+  ['a numeric price', { priceLovelace: 100000000 }],
+  ['a negative price', { priceLovelace: '-1' }],
+  ['an empty price', { priceLovelace: '' }],
+  ['a non-decimal fee', { feeLovelace: '1e6' }],
+  ['a numeric fee', { feeLovelace: 1500000 }],
+  ['a non-decimal deposit', { depositLovelace: '0x10' }],
+  ['a numeric deposit', { depositLovelace: 1800000 }],
+  ['royalties that are not a list', { royalties: { address: ROYALTY_ADDRESS, lovelace: '1' } }],
+  ['a royalty that is not an object', { royalties: [null] }],
+  ['a royalty with a non-decimal amount', { royalties: [{ address: ROYALTY_ADDRESS, lovelace: '5.0' }] }],
+  ['a royalty with a numeric amount', { royalties: [{ address: ROYALTY_ADDRESS, lovelace: 5 }] }],
+  ['a royalty with no address', { royalties: [{ lovelace: '5000000' }] }],
+  ['a royalty with an empty address', { royalties: [{ address: '', lovelace: '5000000' }] }],
+  ['an empty seller address', { sellerAddress: '' }],
+  ['a numeric seller address', { sellerAddress: 7 }],
+  ['a short owner key hash', { ownerPkh: OWNER.slice(2) }],
+  ['an upper-case owner key hash', { ownerPkh: OWNER.toUpperCase() }],
+  ['a negative slot', { listedSlot: -1 }],
+  ['a fractional slot', { listedSlot: 1.5 }],
+  ['a string slot', { listedSlot: '71234567' }],
+  ['a datum of odd length', { datumCbor: 'abc' }],
+  ['a datum that is not hex', { datumCbor: 'zz' }],
+  ['an upper-case datum', { datumCbor: DATUM.toUpperCase() }],
+  ['an empty datum', { datumCbor: '' }],
+  ['no datum', { datumCbor: undefined }],
+];
+
 describe('nftMarketApi.listings: responses', () => {
   const fetchPage = async (data: unknown) => {
     answer(data);
@@ -190,7 +246,7 @@ describe('nftMarketApi.listings: responses', () => {
       nextCursor: null,
       extra: true,
     });
-    expect(page).toEqual({ items: [LISTING], nextCursor: null });
+    expect(page).toEqual({ items: [LISTING], nextCursor: null, dropped: 0 });
   });
 
   it('keeps a listing with no royalties', async () => {
@@ -215,68 +271,64 @@ describe('nftMarketApi.listings: responses', () => {
     await expect(fetchPage(data)).rejects.toBeInstanceOf(NftMarketResponseError);
   });
 
-  it.each([
-    ['a short txHash', { txHash: TX.slice(2) }],
-    ['an upper-case txHash', { txHash: TX.toUpperCase() }],
-    ['no txHash', { txHash: undefined }],
-    ['a negative output index', { outputIndex: -1 }],
-    ['a fractional output index', { outputIndex: 1.5 }],
-    ['a string output index', { outputIndex: '3' }],
-    ['a negative version', { version: -1 }],
-    ['a fractional version', { version: 1.5 }],
-    ['a string version', { version: '1' }],
-    ['a short script hash', { scriptHash: SCRIPT.slice(2) }],
-    ['an upper-case script hash', { scriptHash: SCRIPT.toUpperCase() }],
-    ['a unit that is not hex', { unit: 'lovelace' }],
-    ['a unit that is not the policy and asset name', { unit: POLICY + '00' }],
-    ['a short policy id', { policyId: POLICY.slice(2), unit: POLICY.slice(2) + ASSET_NAME }],
-    ['an asset name of odd length', { assetName: ASSET_NAME + '0', unit: UNIT + '0' }],
-    ['an asset name that is not hex', { assetName: 'zz', unit: POLICY + 'zz' }],
-    ['an asset name over 32 bytes', { assetName: '00'.repeat(33), unit: POLICY + '00'.repeat(33) }],
-    ['a decimal price', { priceLovelace: '1.5' }],
-    ['a numeric price', { priceLovelace: 100000000 }],
-    ['a negative price', { priceLovelace: '-1' }],
-    ['an empty price', { priceLovelace: '' }],
-    ['a non-decimal fee', { feeLovelace: '1e6' }],
-    ['a numeric fee', { feeLovelace: 1500000 }],
-    ['a non-decimal deposit', { depositLovelace: '0x10' }],
-    ['a numeric deposit', { depositLovelace: 1800000 }],
-    ['royalties that are not a list', { royalties: { address: ROYALTY_ADDRESS, lovelace: '1' } }],
-    ['a royalty that is not an object', { royalties: [null] }],
-    ['a royalty with a non-decimal amount', { royalties: [{ address: ROYALTY_ADDRESS, lovelace: '5.0' }] }],
-    ['a royalty with a numeric amount', { royalties: [{ address: ROYALTY_ADDRESS, lovelace: 5 }] }],
-    ['a royalty with no address', { royalties: [{ lovelace: '5000000' }] }],
-    ['a royalty with an empty address', { royalties: [{ address: '', lovelace: '5000000' }] }],
-    ['an empty seller address', { sellerAddress: '' }],
-    ['a numeric seller address', { sellerAddress: 7 }],
-    ['a short owner key hash', { ownerPkh: OWNER.slice(2) }],
-    ['an upper-case owner key hash', { ownerPkh: OWNER.toUpperCase() }],
-    ['a negative slot', { listedSlot: -1 }],
-    ['a fractional slot', { listedSlot: 1.5 }],
-    ['a string slot', { listedSlot: '71234567' }],
-    ['a datum of odd length', { datumCbor: 'abc' }],
-    ['a datum that is not hex', { datumCbor: 'zz' }],
-    ['an upper-case datum', { datumCbor: DATUM.toUpperCase() }],
-    ['an empty datum', { datumCbor: '' }],
-    ['no datum', { datumCbor: undefined }],
-    ['a listing of another policy', { policyId: 'ab'.repeat(28), unit: 'ab'.repeat(28) + ASSET_NAME }],
-  ])('rejects a listing with %s', async (_, patch) => {
-    await expect(fetchPage({ items: [{ ...LISTING, ...patch }], nextCursor: null })).rejects.toBeInstanceOf(
-      NftMarketResponseError,
-    );
+  it.each(MALFORMED_LISTINGS)('drops a row with %s and counts it', async (_, patch) => {
+    expect(await fetchPage({ items: [{ ...LISTING, ...patch }], nextCursor: 'next' })).toEqual({
+      items: [],
+      nextCursor: 'next',
+      dropped: 1,
+    });
   });
 
-  it.each([null, 'x', 7, []])('rejects an entry that is not an object (%j)', async (entry) => {
-    await expect(fetchPage({ items: [entry], nextCursor: null })).rejects.toBeInstanceOf(NftMarketResponseError);
+  it.each([null, 'x', 7, []])('drops an entry that is not an object (%j)', async (entry) => {
+    expect(await fetchPage({ items: [entry], nextCursor: null })).toEqual({ items: [], nextCursor: null, dropped: 1 });
   });
 
-  it('returns nothing, not the good listings, when one in the page is malformed', async () => {
-    const failure = await fetchPage({
-      items: [LISTING, { ...LISTING, priceLovelace: 'free' }, { ...LISTING, outputIndex: 4 }],
+  it('keeps the good rows, in order, around a hostile one', async () => {
+    const first = { ...LISTING, outputIndex: 1 };
+    const last = { ...LISTING, outputIndex: 4 };
+    const page = await fetchPage({
+      items: [first, { ...LISTING, outputIndex: 2, priceLovelace: '-5' }, last],
+      nextCursor: 'c9',
+    });
+    expect(page).toEqual({ items: [first, last], nextCursor: 'c9', dropped: 1 });
+  });
+
+  it('counts every dropped row', async () => {
+    const page = await fetchPage({
+      items: [{ ...LISTING, priceLovelace: '-1' }, LISTING, null, { ...LISTING, datumCbor: 'xyz' }],
       nextCursor: null,
-    }).catch((e: unknown) => e);
+    });
+    expect(page).toEqual({ items: [LISTING], nextCursor: null, dropped: 3 });
+  });
+
+  it('logs the fields it dropped, never their values', async () => {
+    await fetchPage({
+      items: [{ ...LISTING, priceLovelace: '-98765' }, { ...LISTING, sellerAddress: 'addr_secret_value', datumCbor: 'zz' }],
+      nextCursor: null,
+    });
+    const logged = JSON.stringify(debugLog.mock.calls);
+    expect(logged).toContain('items[0].priceLovelace');
+    expect(logged).not.toContain('98765');
+    expect(logged).not.toContain('addr_secret_value');
+  });
+
+  it('does not log when nothing was dropped', async () => {
+    await fetchPage({ items: [LISTING], nextCursor: null });
+    expect(debugLog).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a well-formed row', {}],
+    ['a row that is also malformed', { priceLovelace: '-1' }],
+  ])('still rejects the page for %s of another policy', async (_, patch) => {
+    const other = { ...LISTING, ...patch, policyId: 'ab'.repeat(28), unit: 'ab'.repeat(28) + ASSET_NAME };
+    const failure = await fetchPage({ items: [LISTING, other, LISTING], nextCursor: null }).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(NftMarketResponseError);
-    expect((failure as NftMarketResponseError).field).toBe('items[1].priceLovelace');
+    expect((failure as NftMarketResponseError).field).toBe('items[1].policyId');
+  });
+
+  it('still rejects a bad nextCursor beside good rows', async () => {
+    await expect(fetchPage({ items: [LISTING], nextCursor: 7 })).rejects.toBeInstanceOf(NftMarketResponseError);
   });
 });
 
@@ -320,8 +372,13 @@ describe('nftMarketApi.listing', () => {
     await expect(nftMarketApi.listing(REF, Network.PREPROD)).rejects.toBeInstanceOf(NftMarketResponseError);
   });
 
-  it('rejects a malformed listing', async () => {
-    answer({ ...LISTING, datumCbor: 'xyz' });
+  it('rejects a listing with a negative price', async () => {
+    answer({ ...LISTING, priceLovelace: '-1' });
+    await expect(nftMarketApi.listing(REF, Network.PREPROD)).rejects.toBeInstanceOf(NftMarketResponseError);
+  });
+
+  it.each(MALFORMED_LISTINGS)('rejects a listing with %s, never dropping it', async (_, patch) => {
+    answer({ ...LISTING, ...patch });
     await expect(nftMarketApi.listing(REF, Network.PREPROD)).rejects.toBeInstanceOf(NftMarketResponseError);
   });
 

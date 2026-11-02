@@ -3,9 +3,11 @@ import { toNexusNetwork } from '@/api/nexus-tx-api';
 import {
   HASH28_BYTES,
   MAX_ASSET_NAME_BYTES,
+  NftMarketResponseError,
   ResponseReader,
   TX_HASH_BYTES,
 } from '@/api/nftMarketValidation';
+import { debugLog } from '@/utils/debug';
 
 export { NftMarketResponseError } from '@/api/nftMarketValidation';
 
@@ -17,9 +19,14 @@ export { NftMarketResponseError } from '@/api/nftMarketValidation';
  * still be spent between the answer and the click: the build (422 `LISTING_NOT_FOUND`) is
  * what settles that, not this list.
  *
- * Every answer is validated before it is returned. One malformed field, in one listing of a
- * page, fails the whole call with an NftMarketResponseError: the wallet never shows, prices
- * or builds from a half-read answer. Nexus failures (a 404 `LISTING_NOT_FOUND`, a 422
+ * Every answer is validated before it is returned, and a listing is never shown, priced or
+ * built from a half-read row. A single listing, a royalty read or a page whose body is not
+ * shaped as promised fails with an NftMarketResponseError. A page is the exception for its
+ * rows: anyone can lock an NFT at the listing script under a datum Nexus decodes but the
+ * wallet rejects (a negative price, say), so one such row must not blank the collection.
+ * `listings()` drops a malformed row, keeps the rest in order and counts what it dropped. A row
+ * of another policy than the one asked for is not that case: it is a server fault or an
+ * attack, and fails the page. Nexus failures (a 404 `LISTING_NOT_FOUND`, a 422
  * `NETWORK_UNSUPPORTED`) reach the caller as the axios error; nexusErrorCode() reads the code.
  */
 
@@ -71,9 +78,12 @@ export interface ListingsQuery {
 }
 
 export interface ListingsPage {
+  /** The well-formed listings of the page, in Nexus's order. */
   items: ListingDto[];
   /** Pass to the next call, or null on the last page. */
   nextCursor: string | null;
+  /** Rows of the page the wallet refused as malformed and left out. */
+  dropped: number;
 }
 
 export interface ListingRef {
@@ -168,7 +178,9 @@ function parseListing(r: ResponseReader, raw: unknown, path: string): ListingDto
 export const nftMarketApi = {
   /**
    * One page of a collection's open public listings (`GET /api/nft-market/listings`). Pass the
-   * returned `nextCursor` back for the next page. Every item must be of the policy asked for.
+   * returned `nextCursor` back for the next page. A row that does not read back whole is left
+   * out and counted in `dropped`; a body that is not a page, a bad `nextCursor` or a row of
+   * another policy than the one asked for throws an NftMarketResponseError.
    */
   async listings(policyId: string, options: ListingsQuery, network: string): Promise<ListingsPage> {
     const nexusNetwork = marketNetwork(network);
@@ -190,15 +202,28 @@ export const nftMarketApi = {
     const { data } = await marketClient.get<unknown>(route, { params });
     const r = new ResponseReader(route);
     const body = r.record(data, 'body');
-    const items = r.array(body['items'], 'items').map((raw, i) => {
-      const listing = parseListing(r, raw, `items[${i}]`);
-      if (listing.policyId !== policyId) r.fail(`items[${i}].policyId`);
-      return listing;
-    });
+    const rows = r.array(body['items'], 'items');
     const next = body['nextCursor'];
     // Absent reads as the last page, the same as null.
     const nextCursor = next === undefined || next === null ? null : r.string(next, 'nextCursor');
-    return { items, nextCursor };
+    const items: ListingDto[] = [];
+    const droppedFields: string[] = [];
+    rows.forEach((raw, i) => {
+      // A row naming another policy fails the page whatever else is wrong with it.
+      const claimed = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>)['policyId'] : undefined;
+      if (typeof claimed === 'string' && POLICY_ID.test(claimed) && claimed !== policyId) {
+        r.fail(`items[${i}].policyId`);
+      }
+      try {
+        items.push(parseListing(r, raw, `items[${i}]`));
+      } catch (e) {
+        if (!(e instanceof NftMarketResponseError)) throw e;
+        droppedFields.push(e.field);
+      }
+    });
+    // Field paths only, never a value.
+    if (droppedFields.length > 0) debugLog('NFT market: dropped malformed listing rows', droppedFields);
+    return { items, nextCursor, dropped: droppedFields.length };
   },
 
   /**
