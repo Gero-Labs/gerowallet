@@ -358,7 +358,17 @@ const sweepFeeLovelace = computed(() => Number(sweep.value?.mergeFee ?? BigInt(0
 /** Transactions the send goes out as. */
 const sweepSteps = computed(() => (sweep.value ? sweep.value.merges.length + 1 : 1));
 const sweepProgress = ref<SweepProgress | null>(null);
-/** Rebuild a sweep's merges after this: Nexus gives them two hours to land, and signing takes the rest. */
+/**
+ * The merge build in flight, keyed by the UTxO set it is for. A second caller for the
+ * same set awaits this one instead of building merges of its own (their ids would differ).
+ */
+let sweepBuild: { key: string; promise: Promise<BuiltSweep> } | null = null;
+/**
+ * Merges built longer ago than this are rebuilt the next time Max or a rebuild runs
+ * (nothing rebuilds on a timer). Nexus gives them two hours to land; the node refuses
+ * one signed after that, which the sweep reports as interrupted, and pressing Max
+ * again rebuilds them.
+ */
 const SWEEP_REBUILD_AFTER_MS = 60 * 60 * 1000;
 /** Max/sweep only reaches the candidates one request may carry: say so rather than silently leaving UTxOs behind. */
 const maxLimitNote = computed(() => {
@@ -532,6 +542,7 @@ const resetData = () => {
   buildError.value = null;
   inputSelection.value = null;
   sweep.value = null;
+  sweepBuild = null;
   sweepProgress.value = null;
   maxRecipientIds.value = new Set();
   recipients.value = [createEmptyRecipient()];
@@ -808,26 +819,47 @@ function utxoSetKey(list: Cardano.Utxo[]): string {
 
 /**
  * Max on a wallet holding more UTxOs than one Nexus request carries: build the merges
- * that bring them under the limit, once per UTxO set (rebuilt after an hour, so the
- * merges' two-hour validity never runs out before they are sent). Clears the sweep
+ * that bring them under the limit, once per UTxO set. They are rebuilt when Max or a
+ * rebuild runs more than SWEEP_REBUILD_AFTER_MS after they were built, never on a
+ * timer: a merge signed after its two-hour window is refused by the node, which the
+ * sweep reports as interrupted, and pressing Max again rebuilds it. Clears the sweep
  * when none is needed or this wallet cannot sign one.
  */
 async function ensureSweep(): Promise<void> {
+  if (!canSweep.value || maxRecipientIds.value.size === 0) {
+    sweep.value = null;
+    return;
+  }
   const available = spendableUtxos();
-  const plan = canSweep.value && maxRecipientIds.value.size > 0 ? planMerges(available) : null;
+  const key = utxoSetKey(available);
+  if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return;
+  const plan = planMerges(available);
   if (!plan) {
     sweep.value = null;
     return;
   }
-  const key = utxoSetKey(available);
-  if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return;
   sweep.value = null;
-  const built = await buildSweep(plan, {
-    ownAddress: keys.value.payment[0].address,
-    network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
-    walletNetwork: loggedWallet.value.network,
-  });
-  sweep.value = { ...built, key, builtAt: Date.now() };
+  // One build per UTxO set at a time: a concurrent caller waits for the same merges
+  // instead of building its own, whose ids would differ.
+  if (sweepBuild?.key !== key) {
+    sweepBuild = {
+      key,
+      promise: buildSweep(plan, {
+        ownAddress: keys.value.payment[0].address,
+        network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+        walletNetwork: loggedWallet.value.network,
+      }),
+    };
+  }
+  const pending = sweepBuild;
+  try {
+    const built = await pending.promise;
+    // The first awaiter publishes the result and clears the slot; a later awaiter of the
+    // same promise finds the slot empty and leaves that result in place.
+    if (sweepBuild === pending) sweep.value = { ...built, key, builtAt: Date.now() };
+  } finally {
+    if (sweepBuild === pending) sweepBuild = null;
+  }
 }
 
 /** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
@@ -901,6 +933,8 @@ function prevStep() {
  * 2. Read the actual fee from the response, adjust, rebuild once
  */
 async function setMax(recipientId: string, tokenIndex: number) {
+  // A Max already running owns the build (and any sweep it starts): a second click would race it.
+  if (isCalculatingMax.value) return;
   isCalculatingMax.value = true;
   // Invalidate any previously built tx so a stale one can't be submitted if
   // the new build fails (e.g. user came back from the summary step and

@@ -184,4 +184,59 @@ describe('Quick Send Max over the request limit', () => {
     expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
     expect(dialog().text()).toContain('send.inputLimitMaxNote');
   });
+
+  async function settle() {
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+  }
+
+  it('builds the merges once when Max is pressed twice', async () => {
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await Promise.all([dialog().get('[data-max]').trigger('click'), dialog().get('[data-max]').trigger('click')]);
+    await settle();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+  });
+
+  it('reuses the merges for the same UTxO set', async () => {
+    await pressMax();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    // Any change to the recipient rebuilds the payment; the merges stay as they are.
+    await dialog().get('[data-address]').trigger('click');
+    await settle();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    expect(requests().filter((request) => !isMerge(request)).length).toBeGreaterThan(1);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors.map((cbor) => JSON.parse(cbor).id)).toEqual(['merge-0000']);
+  });
+
+  it('drops the sweep when the amount is typed by hand', async () => {
+    await pressMax();
+    expect(dialog().text()).toContain('send.sweepPlanNote');
+    await dialog().get('[data-amount]').trigger('click');
+    await settle();
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+    expect(dialog().text()).not.toContain('send.sweepPlanNote');
+    const [request] = requests().slice(-1);
+    expect(isMerge(request)).toBe(false);
+    expect(request.utxos).toHaveLength(200);
+  });
+
+  it('shows the error when a merge cannot be built, and recovers on the next Max', async () => {
+    // The merge is the first build of a Max; the payment path keeps the default implementation.
+    mocks.build.mockRejectedValueOnce(new Error('nexus down'));
+    await pressMax();
+    expect(dialog().get('.global-total__error').text()).toContain('nexus down');
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+    expect(mocks.maxAda).not.toHaveBeenCalled();
+
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
+    expect(requests().filter(isMerge)).toHaveLength(2);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors.map((cbor) => JSON.parse(cbor).id)).toEqual(['merge-0000']);
+    expect(dialog().text()).toContain('send.sweepPlanNote');
+  });
 });
