@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Cardano } from '@cardano-sdk/core';
-import { chainedPrerequisites, ownOutputsAsUtxos, planMerges, SweepChainError } from './sweepPlan';
+import { chainedPrerequisites, ownOutputsAsUtxos, planMerges, SweepChainError, type DecodedMerge } from './sweepPlan';
 
 const txId = (n: number) => n.toString(16).padStart(64, '0');
 function utxo(n: number, lovelace: number, assets?: Map<string, bigint>): Cardano.Utxo {
@@ -74,18 +74,45 @@ describe('ownOutputsAsUtxos', () => {
 describe('chainedPrerequisites', () => {
   const tx = (id: string, spends: string[] = []) =>
     ({ id, body: { inputs: spends.map((spent) => ({ txId: spent, index: 0 })) } }) as unknown as Cardano.Tx;
-  const idOf = (cbor: string) => JSON.parse(cbor).id as string;
+  const decode = (cbor: string) => JSON.parse(cbor) as DecodedMerge;
+  const merge = (id: string, outputAddresses = ['own']) => JSON.stringify({ id, outputAddresses });
+  const output = (id: string, index = 0) =>
+    [{ txId: id, index, address: 'own' }, { address: 'own', value: { coins: 5n } }] as unknown as Cardano.Utxo;
+  const own = new Set(['own']);
 
-  it('returns each merge the payment spends, in order, with its bytes', () => {
-    expect(chainedPrerequisites(tx('pay', ['m1', 'm2']), ['{"id":"m1"}', '{"id":"m2"}'], idOf))
-      .toEqual([{ id: 'm1', cbor: '{"id":"m1"}' }, { id: 'm2', cbor: '{"id":"m2"}' }]);
+  it('returns the merges in order with their bytes', () => {
+    const cbors = [merge('m1'), merge('m2')];
+    expect(chainedPrerequisites(tx('pay', ['m1', 'm2']), { cbors, outputs: [output('m1'), output('m2')] }, decode, own))
+      .toEqual([{ id: 'm1', cbor: cbors[0] }, { id: 'm2', cbor: cbors[1] }]);
   });
 
   it('refuses a merge the payment does not spend', () => {
-    expect(() => chainedPrerequisites(tx('pay', ['m1']), ['{"id":"m1"}', '{"id":"m2"}'], idOf)).toThrow(SweepChainError);
+    const prerequisites = { cbors: [merge('m1'), merge('m2')], outputs: [output('m1'), output('m2')] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), prerequisites, decode, own)).toThrow(SweepChainError);
   });
 
   it('refuses the same merge twice', () => {
-    expect(() => chainedPrerequisites(tx('pay', ['m1']), ['{"id":"m1"}', '{"id":"m1"}'], idOf)).toThrow(SweepChainError);
+    const prerequisites = { cbors: [merge('m1'), merge('m1')], outputs: [output('m1')] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+
+  it('refuses a merge paying an address outside the wallet', () => {
+    const prerequisites = { cbors: [merge('m1', ['own', 'elsewhere'])], outputs: [output('m1')] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+
+  it('refuses an output that no merge made', () => {
+    const prerequisites = { cbors: [merge('m1')], outputs: [output('m1'), output('m2')] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1', 'm2']), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+
+  it('refuses an output the payment does not spend', () => {
+    const prerequisites = { cbors: [merge('m1')], outputs: [output('m1', 1)] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1']), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+
+  it('refuses a merge with no listed output', () => {
+    const prerequisites = { cbors: [merge('m1'), merge('m2')], outputs: [output('m1')] };
+    expect(() => chainedPrerequisites(tx('pay', ['m1', 'm2']), prerequisites, decode, own)).toThrow(SweepChainError);
   });
 });

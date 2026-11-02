@@ -236,11 +236,11 @@ describe('sweep prerequisites', () => {
     .filter(([message]) => message.method === method)
     .map(([message]) => JSON.parse(message.data.txCbor).id as string);
 
-  function sweeper(merges: string[], spends = merges) {
+  function sweeper(merges: string[], spends = merges, mergeOf = merge) {
     const scope = effectScope();
     scopes.push(scope);
     const tx = ref<Cardano.Tx | undefined>(payment(...spends));
-    const prerequisites = ref({ cbors: merges.map((id) => JSON.stringify(merge(id))), outputs: merges.map(output) });
+    const prerequisites = ref({ cbors: merges.map((id) => JSON.stringify(mergeOf(id))), outputs: merges.map(output) });
     const progress: unknown[] = [];
     const signing = scope.run(() => useTransactionSigning({
       tx, active: () => true, successMessageKey: 'success', prerequisites, onProgress: (step) => progress.push(step),
@@ -251,7 +251,10 @@ describe('sweep prerequisites', () => {
 
   beforeEach(() => {
     walletStore.utxos = [];
-    vi.mocked(Serialization.Transaction.fromCbor).mockImplementation(((cbor: string) => ({ getId: () => JSON.parse(cbor).id })) as never);
+    vi.mocked(Serialization.Transaction.fromCbor).mockImplementation(((cbor: string) => ({
+      getId: () => JSON.parse(cbor).id,
+      toCore: () => JSON.parse(cbor),
+    })) as never);
   });
 
   it('signs every merge and the payment after one password check, then submits them in order', async () => {
@@ -328,6 +331,64 @@ describe('sweep prerequisites', () => {
     await signing.handleSign();
     expect(mocks.ledger).not.toHaveBeenCalled();
     expect(mocks.error).toHaveBeenCalledWith('send.sweepSoftwareOnly');
+  });
+
+  it('refuses a merge that pays outside the wallet', async () => {
+    const stray = (id: string) => ({
+      id, body: { inputs: [{ txId: `in-${id}`, index: 0 }], outputs: [{ address: 'elsewhere', value: { coins: 1 } }], fee: 1 },
+    }) as unknown as Cardano.Tx;
+    const previousKeys = walletStore.keys;
+    walletStore.keys = { payment: [{ address: 'own' }], change: [] } as never;
+    try {
+      const { signing } = sweeper(['m1'], ['m1'], stray);
+      await signing.handleSign();
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(mocks.error).toHaveBeenCalledWith('txGuard.builtTxMismatch');
+    } finally {
+      walletStore.keys = previousKeys;
+    }
+  });
+
+  it('fails closed on an empty merge witness', async () => {
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return JSON.parse(data.txCbor).id === 'm1' ? { data: {} } : { data: { witnesses: 'witness' } };
+      return { data: { txId: 'submitted' } };
+    });
+    const { signing } = sweeper(['m1']);
+    await signing.handleSign();
+    await flushPromises();
+    expect(methods()).not.toContain(MessageTypes.SUBMIT_TX);
+    expect(mocks.error).toHaveBeenCalled();
+  });
+
+  it('hands the PassKey key to every SIGN_TX', async () => {
+    walletStore.loggedWallet.encryptionMethod = 'prf';
+    const { signing } = sweeper(['m1', 'm2']);
+    signing.privateKeyBytes.value = new Uint8Array([1, 2]);
+    await signing.handleSign();
+    await flushPromises();
+    expect(methods()).not.toContain(MessageTypes.VERIFY_SPENDING_PASSWORD);
+    const signs = mocks.send.mock.calls.filter(([message]) => message.method === MessageTypes.SIGN_TX);
+    expect(signs).toHaveLength(3);
+    for (const [message] of signs) expect(message.data.privateKeyBytes).toEqual([1, 2]);
+  });
+
+  it('gives up waiting after five minutes without resending', async () => {
+    vi.useFakeTimers();
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id === 'payment') return { data: { error: 'BadInputsUTxO' } };
+      return { data: { txId: 'submitted' } };
+    });
+    const { signing } = sweeper(['m1']);
+    const done = signing.handleSign();
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 2000);
+    await done;
+    expect(sentIds(MessageTypes.SUBMIT_TX).filter((id) => id === 'payment')).toHaveLength(1);
+    expect(mocks.error).toHaveBeenCalledWith('send.sweepInterrupted');
+    expect(mocks.success).not.toHaveBeenCalled();
   });
 });
 

@@ -21,10 +21,7 @@ export interface SweepPrerequisites {
   outputs: Cardano.Utxo[];
 }
 
-/**
- * Thrown when the merges sent with a payment are not exactly the ones it spends: one
- * whose output the payment does not spend, or the same merge twice.
- */
+/** Thrown when the merges sent with a payment do not hang together (see chainedPrerequisites). */
 export class SweepChainError extends Error {
   constructor() {
     super('The payment does not spend the output of every merge sent with it');
@@ -82,22 +79,40 @@ export function ownOutputsAsUtxos(tx: Cardano.Tx, ownAddress: string): Cardano.U
     : []));
 }
 
+/** What the signer needs to know about a merge, read from the bytes it signs. */
+export interface DecodedMerge {
+  id: string;
+  outputAddresses: string[];
+}
+
 /**
- * The merges a payment is sent with, in order, each with its id taken from the bytes
- * the signer will sign (`idOf`). The payment must spend an output of every one, and no
- * merge may appear twice: the approval covers the payment's bytes, and through its
- * inputs exactly these merges. Throws SweepChainError otherwise.
+ * The merges a payment is sent with, as the signer takes them, in order. Everything is
+ * read from the bytes that get signed (`decode`), and the set must hang together: every
+ * merge pays only `ownAddresses`, no merge repeats, the payment spends every merge, and
+ * every listed output belongs to a merge and is spent by the payment, one at least per
+ * merge. Throws SweepChainError otherwise.
  */
 export function chainedPrerequisites(
   payment: Cardano.Tx,
-  mergeCbors: string[],
-  idOf: (cbor: string) => string,
+  prerequisites: SweepPrerequisites,
+  decode: (cbor: string) => DecodedMerge,
+  ownAddresses: ReadonlySet<string>,
 ): { id: string; cbor: string }[] {
-  const spent = new Set(payment.body.inputs.map((input) => String(input.txId)));
-  const merges = mergeCbors.map((cbor) => ({ id: idOf(cbor), cbor }));
-  if (new Set(merges.map((merge) => merge.id)).size !== merges.length) throw new SweepChainError();
-  for (const merge of merges) {
-    if (!spent.has(merge.id)) throw new SweepChainError();
+  const spentRefs = new Set(payment.body.inputs.map((input) => `${input.txId}#${input.index}`));
+  const spentTxs = new Set(payment.body.inputs.map((input) => String(input.txId)));
+  const merges = prerequisites.cbors.map((cbor) => {
+    const { id, outputAddresses } = decode(cbor);
+    if (!spentTxs.has(id) || !outputAddresses.every((address) => ownAddresses.has(address))) throw new SweepChainError();
+    return { id, cbor };
+  });
+  const ids = new Set(merges.map(({ id }) => id));
+  if (ids.size !== merges.length) throw new SweepChainError();
+  const withOutput = new Set<string>();
+  for (const [txIn] of prerequisites.outputs) {
+    const id = String(txIn.txId);
+    if (!ids.has(id) || !spentRefs.has(`${id}#${txIn.index}`)) throw new SweepChainError();
+    withOutput.add(id);
   }
+  if (withOutput.size !== ids.size) throw new SweepChainError();
   return merges;
 }

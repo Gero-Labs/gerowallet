@@ -18,7 +18,7 @@ import rules from '@/utils/rules';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import snackbar from '@/plugins/snackbar';
 import { friendlyTxError, isMissingInputError } from '@/shared/utils/txErrors';
-import { chainedPrerequisites, SweepChainError, type SweepPrerequisites } from '@/api/sweepPlan';
+import { chainedPrerequisites, SweepChainError, type DecodedMerge, type SweepPrerequisites } from '@/api/sweepPlan';
 import type { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from './useTranslation';
 import { UR } from '@keystonehq/keystone-sdk';
@@ -65,8 +65,11 @@ export interface SweepProgress {
 const SWEEP_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const SWEEP_CONFIRM_POLL_MS = 2000;
 
-/** A transaction's id, from its own bytes. */
-const idOfCbor = (cbor: string): string => String(Serialization.Transaction.fromCbor(cbor as HexBlob).getId());
+/** A merge's id and where it pays, from its own bytes. */
+const decodeMerge = (cbor: string): DecodedMerge => {
+  const merge = Serialization.Transaction.fromCbor(cbor as HexBlob);
+  return { id: String(merge.getId()), outputAddresses: merge.toCore().body.outputs.map((output) => String(output.address)) };
+};
 
 export interface SigningForm {
   validate: () => Promise<{ valid: boolean }>;
@@ -172,6 +175,13 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
   if (getCurrentInstance()) provide(authorizationScopeKey, { capture: captureAuthorization });
 
+  /** The wallet's own payment and change addresses: the only places a merge may pay. */
+  const ownAddresses = (): Set<string> => new Set(
+    [...(keys.value?.payment ?? []), ...(keys.value?.change ?? [])]
+      .map((key) => key.address)
+      .filter((address): address is string => !!address),
+  );
+
   function beginAttempt(): SigningAttempt | null {
     if (loading.value || disposed || !(options.active?.() ?? true) || !options.tx.value) return null;
     // A manual attempt supersedes delayed autofill callbacks and any other
@@ -186,7 +196,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     let prerequisites: SigningAttempt['prerequisites'] = [];
     try {
       cbor = serializeCardanoJsSdkTx(tx);
-      if (sweep && sweep.cbors.length > 0) prerequisites = chainedPrerequisites(tx, sweep.cbors, idOfCbor);
+      if (sweep && sweep.cbors.length > 0) prerequisites = chainedPrerequisites(tx, sweep, decodeMerge, ownAddresses());
     }
     catch (error) {
       snackbar.setError(error instanceof SweepChainError ? t('txGuard.builtTxMismatch')
@@ -331,7 +341,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         options.onProgress?.({ phase: 'signing', step: index + 1, total });
         const witness = await requestWitnesses(attempt, prerequisite.cbor, utxos.value);
         if (!attempt.current()) return false;
-        witnesses.push(witness ?? '');
+        // SUBMIT_TX takes a falsy witness as "already signed": never let a merge go out unsigned.
+        if (!witness) throw new Error(t('errors.unknownError'));
+        witnesses.push(witness);
       }
       prerequisiteWitnesses = witnesses;
       if (total > 1) options.onProgress?.({ phase: 'signing', step: total, total });
