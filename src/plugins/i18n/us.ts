@@ -3366,6 +3366,7 @@ export default {
   'errors.txRequestRejected': 'The transaction request was rejected: {reason}',
   'errors.submitUnconfirmed': 'We could not confirm whether your transaction reached the network. It may still go through, so check your transaction history before sending it again.',
   'errors.collateralPoolEmpty': 'The shared collateral service is temporarily unavailable. Please try again in a moment.',
+  'errors.rateLimited': 'Gero\'s server is busy right now. Wait a minute, then try again.',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',
   // The single wrong-password message. Shown as an inline, persistent field
@@ -4719,6 +4720,7 @@ export default {
   'send.sweepPreparing': 'Preparing {steps} transactions',
   'send.sweepPreparingCount': '{built} of {total} merge | {built} of {total} merges',
   'send.sweepPreparingNote': 'Your ADA sits in {count} small pieces (UTxOs), more than one transaction can carry. Gero is merging them in your own wallet first, so the recipient still gets a single payment.',
+  'send.sweepPreparingWaiting': 'The server asked Gero to slow down. Preparing continues on its own in a moment.',
   'send.sweepPlanTitle': 'Sent as {steps} transactions',
   'send.sweepOneApproval': '1 approval',
   'send.sweepMergesLabel': '{merges} merge in your wallet | {merges} merges in your wallet',

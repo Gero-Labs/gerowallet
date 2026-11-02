@@ -4,6 +4,7 @@ import { DOMWrapper, enableAutoUnmount, flushPromises, mount } from '@vue/test-u
 import { createTestVuetify } from '@test/helpers/vuetify';
 import type { Cardano } from '@cardano-sdk/core';
 import type { TransactionSigningOptions } from '@/shared/composables/useTransactionSigning';
+import type { NexusCallOptions } from '@/api/nexus-tx-api';
 import { WalletType } from '@/models/types';
 
 interface NexusInput { txHash: string; outputIndex: number; address: string; lovelace: string }
@@ -427,5 +428,69 @@ describe('Quick Send Max over the request limit', () => {
     expect(mocks.signingOptions?.closeOnSuccess?.()).toBe(true);
     await flushPromises();
     expect(dialog().find('.sweep-done').exists()).toBe(false);
+  });
+
+  // gero-backend limits /api/tx/* per IP; a sweep's merges can run into its minute window.
+  // The wait-and-retry lives in buildTransferTx, which this spec mocks: the first merge
+  // build below stands in for it, with a post that is refused with a 429 once.
+  it('waits out the request limit on a merge build instead of failing, and says so meanwhile', async () => {
+    const released = deferred<void>();
+    const rateLimited = Object.assign(new Error('Too many requests — slow down'), { response: { status: 429 } });
+    const post = vi.fn().mockRejectedValueOnce(rateLimited).mockImplementation(async (request: BuildRequest) => buildResponse(request));
+    let options: NexusCallOptions | undefined;
+    mocks.build.mockImplementationOnce(async (request: BuildRequest, _network: string, callOptions?: NexusCallOptions) => {
+      options = callOptions;
+      try {
+        return await post(request);
+      } catch (error) {
+        if (!callOptions?.rateLimitRetry || (error as { response?: { status?: number } }).response?.status !== 429) throw error;
+        callOptions.onRateLimited?.(2000);
+        await released.promise;
+        return post(request);
+      }
+    });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    expect(options).toMatchObject({ rateLimitRetry: true, signal: expect.any(AbortSignal), onRateLimited: expect.any(Function) });
+    expect(dialog().text()).toContain('send.sweepPreparingWaiting');
+    expect(dialog().get('.sweep-plan__track').attributes('aria-valuenow')).toBe('0');
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
+
+    released.resolve();
+    await settle();
+    expect(dialog().text()).not.toContain('send.sweepPreparingWaiting');
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors.map((cbor) => JSON.parse(cbor).id)).toEqual(['merge-0000']);
+    expect(dialog().text()).toContain('send.sweepPlanNote');
+  });
+
+  it('gives up on the merges being built when the dialog is closed and reopened', async () => {
+    let signal: AbortSignal | undefined;
+    // Like the real build, the held merge rejects with the abort once the dialog gives it up.
+    mocks.build.mockImplementationOnce((_request: BuildRequest, _network: string, callOptions?: NexusCallOptions) =>
+      new Promise((_resolve, reject) => {
+        signal = callOptions?.signal;
+        signal?.addEventListener('abort', () => reject(signal?.reason));
+      }));
+    const wrapper = await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    expect(signal?.aborted).toBe(false);
+    expect(dialog().find('.sweep-plan__track').exists()).toBe(true);
+
+    await wrapper.setProps({ isOpen: false });
+    await wrapper.setProps({ isOpen: true });
+    await settle();
+    expect(signal?.aborted).toBe(true);
+    // The abort is not an error, and the abandoned Max does not go on in the fresh dialog.
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
+    expect(dialog().find('.sweep-plan').exists()).toBe(false);
+    expect(mocks.maxAda).not.toHaveBeenCalled();
   });
 });

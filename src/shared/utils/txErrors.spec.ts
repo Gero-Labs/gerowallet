@@ -195,6 +195,29 @@ describe('friendlyTxError: Submit API', () => {
   });
 });
 
+describe('friendlyTxError on the request rate limit', () => {
+  // gero-backend's Nexus proxy answers 429 `{"error":"rate_limit_exceeded","message":"Too many
+  // requests — slow down"}`; a sweep on a large wallet hit it (2026-11-02) and the dialog showed
+  // the raw text, em dash mangled. The status may come on the enriched error, the words in the
+  // message, or both.
+  it('localizes a 429 whichever way it arrives', () => {
+    const expected = i18n.t('errors.rateLimited');
+    const enriched = Object.assign(new Error('Too many requests — slow down'), {
+      response: { status: 429, data: { error: 'rate_limit_exceeded', message: 'Too many requests — slow down' } },
+    });
+    expect(friendlyTxError(enriched)).toBe(expected);
+    expect(friendlyTxError(Object.assign(new Error('Request failed with status code 429'), { response: { status: 429 } }))).toBe(expected);
+    expect(friendlyTxError(new Error('Too many requests — slow down'))).toBe(expected);
+    expect(friendlyTxError(new Error(JSON.stringify({ data: { error: 'rate_limit_exceeded', message: 'slow down' }, status: 429 })))).toBe(expected);
+  });
+
+  it('never shows the server text', () => {
+    const localized = friendlyTxError(new Error('Too many requests — slow down'));
+    expect(localized).not.toContain('slow down');
+    expect(localized).not.toBe('errors.rateLimited');
+  });
+});
+
 describe('isMissingInputError', () => {
   it.each([
     'BadInputsUTxO',

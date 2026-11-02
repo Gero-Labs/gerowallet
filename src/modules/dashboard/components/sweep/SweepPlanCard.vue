@@ -22,6 +22,8 @@
       >
         <div class="sweep-plan__fill" :style="{ width: fillWidth }"></div>
       </div>
+      <!-- A merge build is waiting out the server's request limit: the count stays, the wait is said. -->
+      <p v-if="preparing.waiting" class="t-caption sweep-plan__note">{{ t('send.sweepPreparingWaiting') }}</p>
       <p class="t-caption sweep-plan__note">{{ t('send.sweepPreparingNote', { count: utxoCount }) }}</p>
     </template>
 
@@ -61,8 +63,11 @@ const props = defineProps<{
   utxoCount: number;
   /** Merge transactions before the payment. */
   merges: number;
-  /** Set while the merges are being built: how many are done out of how many the plan has. */
-  preparing: { built: number; total: number } | null;
+  /**
+   * Set while the merges are being built: how many are done out of how many the plan
+   * has, and whether a build is waiting out the server's request limit.
+   */
+  preparing: { built: number; total: number; waiting?: boolean } | null;
 }>();
 
 const { t, tc } = useTranslation();

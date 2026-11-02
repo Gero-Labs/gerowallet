@@ -136,6 +136,12 @@ export function shortfallLovelaceFromMessage(message: string): bigint | undefine
   return undefined;
 }
 
+/** True for a 429 from gero-backend's request limiter, by status on the error or by the words in its message. */
+function isRateLimitError(raw: unknown, message: string): boolean {
+  const status = (raw as { response?: { status?: unknown } } | null)?.response?.status;
+  return status === 429 || /rate_limit_exceeded|too many requests/i.test(message);
+}
+
 /**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
@@ -162,6 +168,11 @@ export function friendlyTxError(raw: unknown): string {
     extractNexusErrorMessage(rawMessage),
   );
   const l = message.toLowerCase();
+
+  // gero-backend's per-IP request limit on /api/tx/*: a 429, kept on the enriched error
+  // by the Nexus client, or its body ("rate_limit_exceeded" / "Too many requests — slow
+  // down") when only the text reached the UI. Never shown raw.
+  if (isRateLimitError(raw, rawMessage)) return i18n.t('errors.rateLimited') as string;
 
   // The CIP-113 signing refusal is thrown from the background as a fixed English
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
