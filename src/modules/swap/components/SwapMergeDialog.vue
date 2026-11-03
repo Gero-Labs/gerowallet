@@ -72,6 +72,7 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { usePaymentSweep } from '@/shared/composables/usePaymentSweep';
+import type { SweepCache } from '@/api/sweepCache';
 import type { SweepProgress, SweepStop } from '@/shared/composables/useTransactionSigning';
 import { paymentUtxos } from '@/shared/utils/pendingSpends';
 import { formatAda } from '@/shared/utils/format';
@@ -81,7 +82,11 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import CardSignSection from '@/modules/wallet/components/ui/CardSignSection.vue';
 
-const props = defineProps<{ open: boolean }>();
+const props = defineProps<{
+  open: boolean;
+  /** Where built merges are kept, from the swap screen: opening the dialog again reuses them. */
+  cache?: SweepCache;
+}>();
 const emit = defineEmits<{
   (e: 'close'): void;
   /** The merge went out: its last transaction, which the wallet holds once it lands. */
@@ -90,7 +95,7 @@ const emit = defineEmits<{
 
 const { t, tc } = useTranslation();
 
-const paymentSweep = usePaymentSweep();
+const paymentSweep = usePaymentSweep({ cache: props.cache });
 const { preparing, prerequisites } = paymentSweep;
 const signSection = ref<{ reset: () => void; canSweep: boolean } | null>(null);
 const busy = ref(false);

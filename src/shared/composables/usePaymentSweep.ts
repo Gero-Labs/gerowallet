@@ -13,7 +13,8 @@ import {
 } from '@/api/nexus-tx-api';
 import type { InputSelection } from '@/api/nexusInputSelection';
 import { buildSweep, type BuiltSweep } from '@/api/sweepBuild';
-import { planMerges, shortOnlyByLimit, type SweepPrerequisites } from '@/api/sweepPlan';
+import { shortOnlyByLimit, type SweepPrerequisites } from '@/api/sweepPlan';
+import { combineSweeps, createSweepCache, type SweepCache } from '@/api/sweepCache';
 import { shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
 
 /** The payment a flow asks for: its outputs, and where its change goes. */
@@ -33,7 +34,14 @@ const SWEEP_FRESH_MS = 60 * 60 * 1000;
  * useTransactionSigning). Quick Send runs its own, for several recipients and live rebuilds;
  * this one serves a flow that pays one request.
  */
-export function usePaymentSweep() {
+export function usePaymentSweep(options: {
+  /**
+   * Where built merges are kept (see createSweepCache): they outlive reset(), so a dialog
+   * opened again does not rebuild them. Pass one that outlives the dialog to share them.
+   */
+  cache?: SweepCache;
+} = {}) {
+  const cache = options.cache ?? createSweepCache();
   const sweep = shallowRef<(BuiltSweep & { builtAt: number }) | null>(null);
   /** While the merges are built: how many of how many, and whether a build waits out the rate limit. */
   const preparing = ref<{ built: number; total: number; utxoCount: number; waiting: boolean } | null>(null);
@@ -58,24 +66,35 @@ export function usePaymentSweep() {
     return Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
   }
 
+  /** The merges for `utxos`: kept ones while they still apply, plus whatever is still to build. */
   async function buildMerges(utxos: Cardano.Utxo[], selection: InputSelection, controller: AbortController): Promise<void> {
-    const plan = planMerges(utxos);
+    const walletKey = `${walletStore.loggedWallet?.id ?? ''}:${walletStore.loggedWallet?.network ?? ''}`;
+    const step = cache.nextStep(walletKey, utxos, Date.now(), SWEEP_FRESH_MS);
     // Its token holders leave too few ADA-only UTxOs to merge: there is no sweep to offer.
-    if (!plan) throw fragmented(selection);
-    const utxoCount = plan.direct.length + plan.batches.reduce((sum, batch) => sum + batch.length, 0);
+    if (!step) throw fragmented(selection);
     const ours = () => abort === controller;
-    preparing.value = { built: 0, total: plan.batches.length, utxoCount, waiting: false };
+    const { kept, plan } = step;
+    if (!plan) {
+      if (ours() && kept) sweep.value = { ...kept.built, builtAt: kept.builtAt };
+      return;
+    }
+    const keptCount = kept?.built.merges.length ?? 0;
+    const utxoCount = utxos.length;
+    preparing.value = { built: keptCount, total: keptCount + plan.batches.length, utxoCount, waiting: false };
     try {
-      const built = await buildSweep(plan, {
+      const added = await buildSweep(plan, {
         ownAddress: walletStore.keys.payment[0].address,
         network: walletStore.loggedWallet.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
         walletNetwork: walletStore.loggedWallet.network,
         signal: controller.signal,
-        onMergeBuilt: (count, total) => { if (ours()) preparing.value = { built: count, total, utxoCount, waiting: false }; },
+        onMergeBuilt: (count, total) => { if (ours()) preparing.value = { built: keptCount + count, total: keptCount + total, utxoCount, waiting: false }; },
         // The server asked for a pause: the count stays, and the card says so until the next merge lands.
         onRateLimited: () => { if (ours() && preparing.value) preparing.value = { ...preparing.value, waiting: true }; },
       });
-      if (ours()) sweep.value = { ...built, builtAt: Date.now() };
+      const built = kept ? combineSweeps(kept.built, added, utxoCount) : added;
+      const builtAt = kept?.builtAt ?? Date.now();
+      cache.remember(walletKey, built, builtAt);
+      if (ours()) sweep.value = { ...built, builtAt };
     } finally {
       if (ours()) preparing.value = null;
     }

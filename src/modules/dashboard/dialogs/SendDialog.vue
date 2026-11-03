@@ -319,8 +319,10 @@ import {
   type NexusTxInput,
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
-import { planMerges, shortOnlyByLimit, type SweepPrerequisites } from '@/api/sweepPlan';
+import { shortOnlyByLimit, type SweepPrerequisites } from '@/api/sweepPlan';
 import { buildSweep, type BuiltSweep, type SweepBuildContext } from '@/api/sweepBuild';
+import { combineSweeps, createSweepCache } from '@/api/sweepCache';
+import { refOf } from '@/api/nexusInputSelection';
 import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
 import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -425,8 +427,20 @@ const sweepDone = ref<SweepDoneSummary | null>(null);
  * Its controller stops the build, and any rate-limit wait it is in, when the dialog
  * resets or a build for another UTxO set replaces it.
  */
-interface SweepBuildSlot { key: string; promise: Promise<BuiltSweep>; abort: AbortController }
+/**
+ * A sweep being built: the UTxO set it was planned for, the UTxOs its merges spend (it
+ * still serves a later set that holds all of them), and when its oldest merge was built.
+ */
+interface SweepBuildSlot { key: string; promise: Promise<BuiltSweep>; abort: AbortController; spends: Set<string>; builtAt: number }
 let sweepBuild: SweepBuildSlot | null = null;
+/**
+ * The last sweep built, kept for the life of the dialog (not its reset): pressing Max again,
+ * typing an amount or a payment arriving reuses its merges instead of rebuilding them, each
+ * build counting against the server's request limit.
+ */
+const sweepCache = createSweepCache();
+const sweepWalletKey = () => `${loggedWallet.value?.id ?? ''}:${loggedWallet.value?.network ?? ''}`;
+const spentByMerges = (merges: Cardano.Tx[]) => merges.flatMap((tx) => tx.body.inputs.map((input) => `${input.txId}#${input.index}`));
 /**
  * Merges built longer ago than this are rebuilt the next time Max or a rebuild runs
  * (nothing rebuilds on a timer). Nexus gives them two hours to land; the node refuses
@@ -897,14 +911,16 @@ function utxoSetKey(list: Cardano.Utxo[]): string {
 
 /**
  * Max, or a typed amount at or above `amountSweepFrom`, on a wallet holding more UTxOs
- * than one Nexus request carries: build the merges that bring them under the limit,
- * once per UTxO set. They are rebuilt when Max or a
- * rebuild runs more than SWEEP_REBUILD_AFTER_MS after they were built, never on a
- * timer: a merge signed after its two-hour window is refused by the node, which the
- * sweep reports as interrupted, and pressing Max again rebuilds it. Clears the sweep
- * when none is needed or this wallet cannot sign one. Resolves false when the attempt
- * was abandoned: the dialog reset while the merges were being built, so the caller
- * has nothing to go on with.
+ * than one Nexus request carries: the merges that bring them under the limit. Merges built
+ * before are kept while every UTxO they spend is still spendable (see createSweepCache):
+ * pressing Max again, typing an amount, reopening the dialog or a payment arriving costs no
+ * rebuild, and arrivals that push the payment past the limit cost one more merge. Merges
+ * built more than SWEEP_REBUILD_AFTER_MS ago are rebuilt the next time Max or a rebuild
+ * runs, never on a timer: a merge signed after its two-hour window is refused by the node,
+ * which the sweep reports as interrupted, and pressing Max again rebuilds it. Clears the
+ * sweep when none is needed or this wallet cannot sign one. Resolves false when the attempt
+ * was abandoned: the dialog reset while the merges were being built, so the caller has
+ * nothing to go on with.
  */
 async function ensureSweep(): Promise<boolean> {
   if (!canSweep.value || (maxRecipientIds.value.size === 0 && amountSweepFrom.value === null)) {
@@ -914,19 +930,26 @@ async function ensureSweep(): Promise<boolean> {
   const available = spendableUtxos();
   const key = utxoSetKey(available);
   if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return true;
-  const plan = planMerges(available);
-  if (!plan) {
-    sweep.value = null;
-    return true;
-  }
-  sweep.value = null;
-  // One build per UTxO set at a time: a concurrent caller waits for the same merges
-  // instead of building its own, whose ids would differ.
-  if (sweepBuild?.key !== key) {
-    // A build for another UTxO set is stale the moment this one starts: stop it now,
+  const spendable = new Set(available.map(refOf));
+  // One build at a time: a build in flight whose merges all still apply serves this UTxO set
+  // too, so a concurrent caller waits for it (and picks up what arrived since afterwards)
+  // instead of building merges of its own, whose ids would differ.
+  if (!sweepBuild || ![...sweepBuild.spends].every((ref) => spendable.has(ref))) {
+    const step = sweepCache.nextStep(sweepWalletKey(), available, Date.now(), SWEEP_REBUILD_AFTER_MS);
+    if (!step) {
+      sweep.value = null;
+      return true;
+    }
+    if (!step.plan) {
+      sweep.value = { ...step.kept!.built, key, builtAt: step.kept!.builtAt };
+      return true;
+    }
+    // A build whose merges no longer apply is stale the moment this one starts: stop it now,
     // rather than let it wait out a rate limit for merges nothing will use.
     sweepBuild?.abort.abort();
-    const utxoCount = plan.direct.length + plan.batches.reduce((sum, batch) => sum + batch.length, 0);
+    const { kept, plan } = step;
+    const keptCount = kept?.built.merges.length ?? 0;
+    const utxoCount = available.length;
     // The card counts this build's merges only while it owns the slot: a build for a
     // newer UTxO set takes the slot, and this one's late reports must not move its bar.
     let slot: SweepBuildSlot | null = null;
@@ -937,23 +960,33 @@ async function ensureSweep(): Promise<boolean> {
       walletNetwork: loggedWallet.value.network,
       signal: abort.signal,
       onMergeBuilt: (built, total) => {
-        if (slot && sweepBuild === slot) sweepPreparing.value = { built, total, utxoCount, waiting: false };
+        if (slot && sweepBuild === slot) sweepPreparing.value = { built: keptCount + built, total: keptCount + total, utxoCount, waiting: false };
       },
       // The server asked for a pause: the card keeps its count and says so until the next merge lands.
       onRateLimited: () => {
         if (slot && sweepBuild === slot && sweepPreparing.value) sweepPreparing.value = { ...sweepPreparing.value, waiting: true };
       },
     };
-    sweepPreparing.value = { built: 0, total: plan.batches.length, utxoCount, waiting: false };
-    slot = { key, promise: buildSweep(plan, context), abort };
+    sweepPreparing.value = { built: keptCount, total: keptCount + plan.batches.length, utxoCount, waiting: false };
+    slot = {
+      key,
+      promise: buildSweep(plan, context).then((added) => (kept ? combineSweeps(kept.built, added, utxoCount) : added)),
+      abort,
+      spends: new Set([...spentByMerges(kept?.built.merges ?? []), ...plan.batches.flat().map(refOf)]),
+      builtAt: kept?.builtAt ?? Date.now(),
+    };
     sweepBuild = slot;
   }
+  sweep.value = null;
   const pending = sweepBuild;
   try {
     const built = await pending.promise;
     // The first awaiter publishes the result and clears the slot; a later awaiter of the
     // same promise finds the slot empty and leaves that result in place.
-    if (sweepBuild === pending) sweep.value = { ...built, key, builtAt: Date.now() };
+    if (sweepBuild === pending) {
+      sweep.value = { ...built, key: pending.key, builtAt: pending.builtAt };
+      sweepCache.remember(sweepWalletKey(), built, pending.builtAt);
+    }
   } catch (error) {
     // An aborted build is not a failure: it was replaced by one for a newer UTxO set
     // (waited for below) or the dialog reset. Only a build that gave up on its own counts.
@@ -970,7 +1003,10 @@ async function ensureSweep(): Promise<boolean> {
   // than go on without one. This recurses only while such a build is pending, so it
   // ends with the first build to complete unsuperseded.
   if (sweepBuild !== null && sweepBuild !== pending) return ensureSweep();
-  return !pending.abort.signal.aborted;
+  if (pending.abort.signal.aborted) return false;
+  // Built for an earlier UTxO set that its merges still serve: bring it up to date with what
+  // arrived since. The merges are kept by now, so this builds one more at most.
+  return pending.key === key ? true : ensureSweep();
 }
 
 /**

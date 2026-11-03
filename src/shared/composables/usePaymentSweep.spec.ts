@@ -24,6 +24,7 @@ vi.mock('@/stores/walletStore', () => ({
 
 import i18n from '@/plugins/i18n';
 import { usePaymentSweep } from './usePaymentSweep';
+import { createSweepCache } from '@/api/sweepCache';
 
 const txId = (n: number) => n.toString(16).padStart(64, '0');
 const utxo = (n: number, coins: number) => [{ txId: txId(n), index: 0 }, { address: 'own', value: { coins } }] as unknown as Cardano.Utxo;
@@ -117,6 +118,41 @@ describe('usePaymentSweep', () => {
     expect(requests()[0]).toEqual(expect.objectContaining({ outputs: [{ address: 'own', lovelace: '0' }], selectAll: true }));
     expect(requests()[0].utxos).toHaveLength(150);
     expect(sweep.prerequisites.value).toBeNull();
+  });
+
+  // Each merge build counts against the server's request limit: built merges outlive a reset
+  // (a dialog closed and opened again), and a payment arriving costs one more merge, not all.
+  // A consolidation's last transaction also pays the wallet itself; its 200 candidates tell it apart.
+  const mergeBuilds = () => requests().filter((request) => isMerge(request) && request.utxos.length < 200);
+  /** Like likeNexus, with each merge's inputs in its body as Nexus returns them: what keeping a merge reads. */
+  async function withInputs(request: NexusRequest) {
+    const response = await likeNexus(request);
+    const tx = JSON.parse(response.tx_cbor);
+    tx.body.inputs = request.utxos.map((input) => ({ txId: input.txHash, index: input.outputIndex }));
+    return { tx_cbor: JSON.stringify(tx) };
+  }
+
+  it('keeps its merges across a reset, and merges only what arrived since', async () => {
+    mocks.build.mockImplementation(withInputs);
+    const sweep = usePaymentSweep();
+    await sweep.consolidate(wallet);
+    expect(mergeBuilds()).toHaveLength(1);
+    sweep.reset();
+    await sweep.consolidate([...wallet, utxo(999, 500_000)]);
+    // The first merge, then one more of two: the arrival and the smallest left.
+    expect(mergeBuilds()).toHaveLength(2);
+    expect(mergeBuilds()[1].utxos).toHaveLength(2);
+    expect(sweep.prerequisites.value?.cbors).toHaveLength(2);
+  });
+
+  it('shares its merges with another sweep handed the same cache', async () => {
+    mocks.build.mockImplementation(withInputs);
+    const cache = createSweepCache();
+    await usePaymentSweep({ cache }).consolidate(wallet);
+    const second = usePaymentSweep({ cache });
+    await second.consolidate(wallet);
+    expect(mergeBuilds()).toHaveLength(1);
+    expect(second.prerequisites.value?.cbors).toHaveLength(1);
   });
 
   it('counts the merges while they are built, and gives them up on reset', async () => {
