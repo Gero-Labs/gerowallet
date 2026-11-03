@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios, { AxiosError, AxiosHeaders, type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
 import vectors from '@/shared/utils/signedResponse.vectors.json';
 import { UnsignedResponseError, type KeyResolver } from '@/shared/utils/signedResponse';
-import { installSignedResponses, signedResponseMode, signedResponseReport } from './signedResponses';
+import {
+  SIGNED_PATH_PREFIXES,
+  installSignedResponses,
+  isSignedPath,
+  signedResponseMode,
+  signedResponseReport,
+} from './signedResponses';
 
 const BASE = 'https://api.gerowallet.io';
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
@@ -99,6 +105,30 @@ describe('installSignedResponses', () => {
       expect((after['gero-backend:body-digest-mismatch'] ?? 0) - (before['gero-backend:body-digest-mismatch'] ?? 0)).toBe(1);
       expect((after['gero-backend:verified'] ?? 0) - (before['gero-backend:verified'] ?? 0)).toBe(1);
     });
+  });
+
+  it('checks exactly the paths gero-backend signs, as the shared vectors pin them', () => {
+    expect(SIGNED_PATH_PREFIXES).toEqual(vectors.signedPathPrefixes);
+    expect(isSignedPath('/api/nexus/api/tx/build/delegation')).toBe(true);
+    expect(isSignedPath('/api/assets/handle')).toBe(true);
+    expect(isSignedPath('/api/pools')).toBe(true);
+    expect(isSignedPath('/api/pools/pool1abc/history')).toBe(true);
+    expect(isSignedPath('/api/mpc/login-share')).toBe(true);
+    expect(isSignedPath('/api/poolsfoo')).toBe(false);
+    expect(isSignedPath('/api/mpc')).toBe(false);
+    expect(isSignedPath('/api/account/info')).toBe(false);
+    expect(isSignedPath('/api/transactions/submit-tx')).toBe(false);
+    expect(isSignedPath('/api/tx/build')).toBe(false);
+  });
+
+  it('enforce: passes an unsigned answer on a path gero-backend does not sign', async () => {
+    const instance = axios.create({
+      baseURL: BASE,
+      adapter: async (config) => ({ data: '{"balance":"1"}', status: 200, statusText: '', headers: new AxiosHeaders(), config, request: {} }),
+    });
+    installSignedResponses(instance, 'gero-backend', { mode: 'enforce', keys, now });
+    const response = await instance.get('/api/account/info', { params: { stakeAddress: 'stake1u' } });
+    expect(response.data).toEqual({ balance: '1' });
   });
 
   it('runs before interceptors registered after it', async () => {

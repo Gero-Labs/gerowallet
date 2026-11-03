@@ -17,10 +17,12 @@
  * as the answer to another. `created` and `expires` bound how long it may be
  * replayed for the identical request.
  *
- * Only this exact form is accepted: any other component list, parameter order
- * or algorithm is refused, so the signature base rebuilt here is byte for byte
- * the one the server signed. The shared vectors in `signedResponse.vectors.json`
- * pin it across the wallet, Nexus and gero-backend.
+ * Only this exact form of the `gero` signature is accepted: any other component
+ * list, parameter order or algorithm is refused, so the signature base rebuilt
+ * here is byte for byte the one the server signed. Other labels in the same
+ * headers (a newer profile sent beside this one during a migration) are ignored.
+ * The shared vectors in `signedResponse.vectors.json` pin it across the wallet
+ * and gero-backend.
  *
  * This module decides nothing about keys. `KeyResolver` maps a key id and the
  * host that answered to a public key (`signedResponseRoots.ts` builds one from
@@ -110,9 +112,12 @@ export interface VerifyOptions {
 }
 
 const DIGEST_RE = /^sha-256=:([A-Za-z0-9+/]{43}=):$/;
-const SIGNATURE_RE = /^gero=:([A-Za-z0-9+/]{86}==):$/;
+/** The label this profile signs under. Other labels in the same headers belong to other profiles. */
+export const SIGNATURE_LABEL = 'gero';
+
+const SIGNATURE_RE = /^:([A-Za-z0-9+/]{86}==):$/;
 const SIGNATURE_INPUT_RE =
-  /^gero=\(([^()]*)\);created=(\d{1,12});expires=(\d{1,12});keyid="([A-Za-z0-9._-]{1,64})";alg="ed25519";tag="gero-v1"$/;
+  /^\(([^()]*)\);created=(\d{1,12});expires=(\d{1,12});keyid="([A-Za-z0-9._-]{1,64})";alg="ed25519";tag="gero-v1"$/;
 const CHAIN_TIP_RE = /^(\d{1,15}),([0-9a-f]{64})$/;
 
 export function bytesFromBase64(text: string): Uint8Array {
@@ -142,10 +147,65 @@ export interface ParsedSignatureInput {
   keyid: string;
 }
 
+/**
+ * Splits an RFC 8941 dictionary at its top-level commas, leaving commas inside inner lists and
+ * quoted strings alone. Null for unbalanced parentheses or an unterminated string.
+ */
+function splitDictionary(text: string): string[] | null {
+  const members: string[] = [];
+  let depth = 0;
+  let inString = false;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (c === '\\') i++;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '(') depth++;
+    else if (c === ')') {
+      depth--;
+      if (depth < 0) return null;
+    } else if (c === ',' && depth === 0) {
+      members.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  if (inString || depth !== 0) return null;
+  members.push(text.slice(start));
+  return members;
+}
+
+/**
+ * The value of member `label` in an RFC 8941 dictionary header (Signature, Signature-Input).
+ * Other members are ignored, so a server can send a newer profile's signature beside this one
+ * and released wallets keep verifying theirs. Undefined when the member is absent; null when
+ * the header does not parse or names the member twice (ambiguous, so never chosen between).
+ */
+export function dictionaryMember(header: string | undefined, label: string): string | null | undefined {
+  if (!header) return undefined;
+  const members = splitDictionary(header);
+  if (!members) return null;
+  let value: string | undefined;
+  let seen = 0;
+  for (const member of members) {
+    const eq = member.indexOf('=');
+    const key = (eq < 0 ? member : member.slice(0, eq)).trim();
+    if (key !== label) continue;
+    seen++;
+    value = eq < 0 ? '' : member.slice(eq + 1).trim();
+  }
+  if (seen > 1) return null;
+  return value;
+}
+
 /** Parses the one Signature-Input form this profile allows; undefined for anything else. */
 export function parseSignatureInput(value: string | undefined): ParsedSignatureInput | undefined {
-  if (!value) return undefined;
-  const match = SIGNATURE_INPUT_RE.exec(value.trim());
+  const member = dictionaryMember(value, SIGNATURE_LABEL);
+  if (!member) return undefined;
+  const match = SIGNATURE_INPUT_RE.exec(member);
   if (!match) return undefined;
   const [, items, created, expires, keyid] = match;
   const base = BASE_COMPONENTS.join(' ');
@@ -154,7 +214,7 @@ export function parseSignatureInput(value: string | undefined): ParsedSignatureI
   else if (items === `${base} ${TIP_COMPONENT}`) withChainTip = true;
   else return undefined;
   return {
-    params: value.trim().slice('gero='.length),
+    params: member,
     withChainTip,
     created: Number(created),
     expires: Number(expires),
@@ -208,10 +268,13 @@ async function verify(exchange: SignedExchange, options: VerifyOptions): Promise
   const { request, response } = exchange;
   const signatureHeader = response.header('signature');
   const inputHeader = response.header('signature-input');
-  if (!signatureHeader && !inputHeader) return { ok: false, reason: 'unsigned' };
+  const signatureMember = dictionaryMember(signatureHeader, SIGNATURE_LABEL);
+  const inputMember = dictionaryMember(inputHeader, SIGNATURE_LABEL);
+  // No `gero` signature at all (none, or only another profile's): unsigned for this profile.
+  if (signatureMember === undefined && inputMember === undefined) return { ok: false, reason: 'unsigned' };
 
   const input = parseSignatureInput(inputHeader);
-  const signatureMatch = signatureHeader ? SIGNATURE_RE.exec(signatureHeader.trim()) : null;
+  const signatureMatch = typeof signatureMember === 'string' ? SIGNATURE_RE.exec(signatureMember) : null;
   if (!input || !signatureMatch) return { ok: false, reason: 'malformed' };
 
   // Freshness before anything costly.

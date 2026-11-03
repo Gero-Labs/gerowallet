@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import vectors from './signedResponse.vectors.json';
 import {
   buildSignatureBase,
+  dictionaryMember,
   digestHeaderValue,
   parseSignatureInput,
   verifySignedResponse,
@@ -78,6 +79,47 @@ describe('signed responses (gero-v1)', () => {
         keyid: vectors.keyid,
         chainTip: { slot: 171234567, hash: '0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0' },
       });
+    });
+  });
+
+  describe('other signature labels (a newer profile sent beside gero-v1)', () => {
+    const v = vectors.cases[0];
+    const withOthers = (inputBefore: string, inputAfter: string, sigBefore: string, sigAfter: string) =>
+      exchange(v, {
+        headers: {
+          'signature-input': `${inputBefore}${v.expected.signatureInput}${inputAfter}`,
+          signature: `${sigBefore}${v.expected.signature}${sigAfter}`,
+        },
+      });
+    const other = 'gero2=("@method";req "@path";req);created=1;expires=2;keyid="next, key";alg="ed25519"';
+    const otherSig = `gero2=:${'A'.repeat(86)}==:`;
+
+    it('verifies the gero member whatever else the headers carry', async () => {
+      for (const ex of [
+        withOthers('', `, ${other}`, '', `, ${otherSig}`),
+        withOthers(`${other}, `, '', `${otherSig}, `, ''),
+        withOthers(`${other},`, `,${other.replace('gero2', 'gero3')}`, `${otherSig},`, ''),
+      ]) {
+        expect(await verifySignedResponse(ex, { keys, nowSeconds: NOW })).toMatchObject({ ok: true });
+      }
+    });
+
+    it('treats a response carrying only other labels as unsigned for this profile', async () => {
+      const ex = exchange(v, { headers: { 'signature-input': other, signature: otherSig } });
+      expect(await verifySignedResponse(ex, { keys, nowSeconds: NOW })).toEqual({ ok: false, reason: 'unsigned' });
+    });
+
+    it('refuses a gero member named twice instead of choosing one', async () => {
+      const ex = withOthers('', `, ${v.expected.signatureInput}`, '', '');
+      expect(await verifySignedResponse(ex, { keys, nowSeconds: NOW })).toEqual({ ok: false, reason: 'malformed' });
+    });
+
+    it('splits dictionaries only at top-level commas', () => {
+      expect(dictionaryMember('a=1, gero=("x" "y");k="p,q", b=2', 'gero')).toBe('("x" "y");k="p,q"');
+      expect(dictionaryMember('a="unterminated, gero=1', 'gero')).toBeNull();
+      expect(dictionaryMember('gero=(("x"), a=1', 'gero')).toBeNull();
+      expect(dictionaryMember('a=1', 'gero')).toBeUndefined();
+      expect(dictionaryMember(undefined, 'gero')).toBeUndefined();
     });
   });
 

@@ -85,8 +85,21 @@ const cases = [
   },
 ];
 
+// The request paths gero-backend signs (config.response-signing.path-prefixes). The wallet
+// checks exactly these (SIGNED_PATH_PREFIXES); both sides pin the list against this file.
+const SIGNED_PATH_PREFIXES = [
+  '/api/nexus/api/tx/',
+  '/api/nexus/api/collateral/',
+  '/api/nexus/api/aggregator/',
+  '/api/assets/handle',
+  '/api/pools',
+  '/api/dreps',
+  '/api/mpc/',
+];
+
 const out = {
   profile: 'gero-v1',
+  signedPathPrefixes: SIGNED_PATH_PREFIXES,
   note: 'TEST keys derived from public labels. Never pin or configure them anywhere real.',
   signingSeedHex: hex(SIGNING_SEED),
   signingPublicKeyHex: hex(SIGNING_PUB),
