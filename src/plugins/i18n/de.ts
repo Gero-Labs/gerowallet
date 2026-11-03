@@ -6143,6 +6143,7 @@ export default {
   'nftMarket.actions.list': 'Zum Verkauf anbieten',
   'nftMarket.actions.editPrice': 'Preis ändern',
   'nftMarket.actions.unlist': 'Angebot zurückziehen',
+  'nftMarket.unlistElsewhere': 'Ziehen Sie das Angebot in der App zurück, mit der Sie es erstellt haben.',
   'nftMarket.badge.listed': 'Angeboten · {price} ADA',
   'nftMarket.badge.listedCount': '{count} angeboten | {count} angeboten',
   'nftMarket.holdings.listedAda': 'ADA in Ihren Angeboten',

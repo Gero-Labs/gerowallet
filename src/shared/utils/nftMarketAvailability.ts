@@ -6,6 +6,7 @@ import networks from '@/utils/networks';
 import {
   CIP68_USER_TOKEN_LABEL,
   NFT_UNIT_PATTERN,
+  isHardwareWalletType,
   POLICY_ID_HEX_LENGTH,
   type NftMarketDeployment,
 } from '@/utils/nftMarketDeployments';
@@ -96,22 +97,43 @@ export function isListableNft(asset: { unit?: string; quantity?: number | string
   return label === null || label === CIP68_USER_TOKEN_LABEL;
 }
 
+/**
+ * A hardware wallet on a network with a market: the one wallet that can have a listing (made by a
+ * dApp) and no Unlist for it. A watch wallet signs nothing, so there is no "elsewhere" to point it to.
+ */
+function hardwareListingLocked(): boolean {
+  const wallet = walletStore.loggedWallet;
+  return !!wallet && isHardwareWalletType(wallet.type) && networks.isNftMarketSupported(wallet.chain, wallet.network);
+}
+
 export interface NftMarketActions {
   list: boolean;
   reprice: boolean;
   unlist: boolean;
+  /**
+   * The NFT is listed, and the wallet is a hardware wallet no device has signed a market
+   * transaction with, so it has no Unlist here (a dApp can have made the listing: Gero's own List
+   * is software-only too). The page says to unlist from the app that listed it, where Unlist would
+   * be. Hardware signing stays off; this is copy only.
+   */
+  unlistElsewhere: boolean;
 }
 
 /**
  * Which market actions an NFT's detail offers: List for one that can be listed and is not, Edit
  * price and Unlist for one the wallet has listed (`listing`, from `useMyListings().byUnit`).
  * List and Edit price follow `nftMarketAvailable()` (the flag is theirs); Unlist follows
- * `nftMarketCanUnlist()` and stays with the flag off (Ruling P41).
+ * `nftMarketCanUnlist()` and stays with the flag off (Ruling P41). A listing a hardware wallet
+ * cannot unlist here gets `unlistElsewhere` instead: a locked NFT is never left with no word on
+ * the way out.
  */
 export function nftMarketActionsFor(
   asset: { unit?: string; quantity?: number | string | bigint } | null | undefined,
   listing: OwnListing | undefined,
 ): NftMarketActions {
-  if (listing) return { list: false, reprice: nftMarketAvailable(), unlist: nftMarketCanUnlist() };
-  return { list: nftMarketAvailable() && isListableNft(asset), reprice: false, unlist: false };
+  if (listing) {
+    const unlist = nftMarketCanUnlist();
+    return { list: false, reprice: nftMarketAvailable(), unlist, unlistElsewhere: !unlist && hardwareListingLocked() };
+  }
+  return { list: nftMarketAvailable() && isListableNft(asset), reprice: false, unlist: false, unlistElsewhere: false };
 }

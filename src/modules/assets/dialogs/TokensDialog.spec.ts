@@ -200,6 +200,29 @@ describe('the actions of an NFT', () => {
     expect(actions(wrapper).exists()).toBe(false);
   });
 
+  it('tells a hardware wallet that has a listing where to unlist it, in place of the Unlist it cannot have', async () => {
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Ledger } as never;
+    const wrapper = render();
+    await open(wrapper, 'Listed');
+
+    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 ADA');
+    expect(wrapper.get('[data-testid="asset-unlist-elsewhere"]').text()).toBe('Unlist from the app you used to list it.');
+    expect(wrapper.find('[data-testid="asset-unlist"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="asset-edit-price"]').exists()).toBe(false);
+  });
+
+  it('does not say it to a wallet that has the Unlist button, or for an NFT that is not listed', async () => {
+    const software = render();
+    await open(software, 'Listed');
+    expect(software.find('[data-testid="asset-unlist-elsewhere"]').exists()).toBe(false);
+    expect(software.get('[data-testid="asset-unlist"]').exists()).toBe(true);
+
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Ledger } as never;
+    const hardware = render();
+    await open(hardware, 'Free');
+    expect(hardware.find('[data-testid="asset-unlist-elsewhere"]').exists()).toBe(false);
+  });
+
   it('offers nothing on a network with no reviewed deployment', async () => {
     walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
     const wrapper = render();

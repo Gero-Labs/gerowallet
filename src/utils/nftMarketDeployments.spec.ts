@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blockchain, Network } from '@/models/types';
 import {
   CIP68_USER_TOKEN_LABEL,
+  isHardwareWalletType,
   isNftMarketHardware,
   MAX_LIST_PRICE,
   MAX_LISTING_DEPOSIT,
@@ -121,6 +122,11 @@ describe('market hardware gate', () => {
     expect(isNftMarketHardware('Ledger', ['Ledger'])).toBe(true);
     expect(isNftMarketHardware('Trezor', ['Ledger'])).toBe(false);
     expect(isNftMarketHardware('Keystone', ['Ledger', 'Trezor', 'Keystone'])).toBe(true);
+  });
+
+  it('isHardwareWalletType is true for the three device types, listed for the market or not, and for nothing else', () => {
+    for (const type of ['Ledger', 'Trezor', 'Keystone']) expect(isHardwareWalletType(type), type).toBe(true);
+    for (const type of ['Normal', 'Google', 'Watch', 'ledger', '', null, undefined]) expect(isHardwareWalletType(type), String(type)).toBe(false);
   });
 
   it('never answers for a software, watch or unknown type, even when listed', () => {

@@ -27,6 +27,10 @@
       <GButton v-if="marketActions.unlist" tier="secondary" compact data-testid="asset-unlist" @click="emit('unlist')">
         {{ $t('nftMarket.actions.unlist') }}
       </GButton>
+      <!-- A hardware wallet cannot unlist here (a dApp made the listing): say where it can. -->
+      <span v-if="marketActions.unlistElsewhere" class="asset-market-actions__note t-caption" data-testid="asset-unlist-elsewhere">
+        {{ $t('nftMarket.unlistElsewhere') }}
+      </span>
     </div>
     <v-card-text class="pa-0">
       <v-tabs v-model="tab" fixed-tabs >
@@ -155,7 +159,7 @@ const { byUnit } = useMyListings();
 /** This NFT's own listing, where its network has a market (with the market switched off too: Ruling P41). */
 const listing = computed(() => (nftMarketListingsVisible() ? byUnit.value.get(String(props.asset.unit).toLowerCase()) : undefined));
 const marketActions = computed(() => nftMarketActionsFor(props.asset, listing.value));
-const hasMarketActions = computed(() => marketActions.value.list || marketActions.value.reprice || marketActions.value.unlist);
+const hasMarketActions = computed(() => marketActions.value.list || marketActions.value.reprice || marketActions.value.unlist || marketActions.value.unlistElsewhere);
 
 const autoGrowHack = ref<boolean>(false);
 const tab = ref(0);
@@ -243,7 +247,8 @@ watch(() => props.asset, () => { stopMedia(); selectedFile.value = 0; });
   padding: 0 var(--g-s-4) var(--g-s-3);
 }
 
-.asset-market-actions__status {
+.asset-market-actions__status,
+.asset-market-actions__note {
   color: var(--g-text-2);
 }
 

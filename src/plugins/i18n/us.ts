@@ -6250,6 +6250,7 @@ export default {
   'nftMarket.actions.list': 'List for sale',
   'nftMarket.actions.editPrice': 'Edit price',
   'nftMarket.actions.unlist': 'Unlist',
+  'nftMarket.unlistElsewhere': 'Unlist from the app you used to list it.',
   'nftMarket.badge.listed': 'Listed · {price} ADA',
   'nftMarket.badge.listedCount': '{count} listed | {count} listed',
   'nftMarket.holdings.listedAda': 'ADA in your listings',

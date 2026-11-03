@@ -6019,6 +6019,7 @@ export default {
   'nftMarket.actions.list': 'Publicar en venta',
   'nftMarket.actions.editPrice': 'Editar precio',
   'nftMarket.actions.unlist': 'Cancelar publicación',
+  'nftMarket.unlistElsewhere': 'Cancela la publicación desde la app con la que la creaste.',
   'nftMarket.badge.listed': 'Publicado · {price} ADA',
   'nftMarket.badge.listedCount': '{count} publicado | {count} publicados',
   'nftMarket.holdings.listedAda': 'ADA en tus publicaciones',

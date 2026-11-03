@@ -156,6 +156,11 @@ export const NFT_MARKET_HARDWARE_WALLET_TYPES: readonly string[] = [];
 
 const HARDWARE_WALLET_TYPES: readonly string[] = ['Ledger', 'Trezor', 'Keystone'];
 
+/** Whether this wallet type signs on a device (Ledger, Trezor, Keystone), cleared for the market or not. */
+export function isHardwareWalletType(walletType: string | null | undefined): boolean {
+  return typeof walletType === 'string' && HARDWARE_WALLET_TYPES.includes(walletType);
+}
+
 /** Whether the market may ask this hardware wallet type to sign. False for every software type. */
 export function isNftMarketHardware(
   walletType: string | null | undefined,
