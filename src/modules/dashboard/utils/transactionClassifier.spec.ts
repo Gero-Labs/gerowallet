@@ -448,6 +448,58 @@ describe('Gero NFT market activity tags', () => {
     });
   });
 
+  describe('the fee address tells a cancel from a buy, whoever signs (both shapes)', () => {
+    const ref = V1.referenceScript;
+
+    it('a third-party buy that names the buyer as a required signer is "bought", not "cancelled"', () => {
+      const outputs = [produce(BUYER), produce(FEE), produce(OWN)];
+      // History: the foreign listing input is known (another stake key). Live: its address is not.
+      expect(actions([hist(FOREIGN_LISTING), hist(OWN)], outputs, withBody({ references: [ref], gains: true, signers: [OWNER] }))).toEqual(['bought']);
+      expect(actions([live(), hist(OWN)], outputs, withBody({ references: [ref], gains: true, signers: [OWNER] }))).toEqual(['bought']);
+      // Without a body (a thin history record) the known address is enough.
+      expect(actions([hist(FOREIGN_LISTING), hist(OWN)], outputs)).toEqual(['bought']);
+    });
+
+    it('a cancel recorded without its owner\'s signature is "cancelled", not "bought", though it gains the NFT back', () => {
+      const outputs = [produce(OWN)];
+      // History: the own listing input is known. Live: unresolved, so the script reference and the missing fee decide.
+      expect(actions([hist(OWN_LISTING), hist(OWN)], outputs, withBody({ references: [ref], gains: true }))).toEqual(['cancelled']);
+      expect(actions([live(), hist(OWN)], outputs, withBody({ references: [ref], gains: true }))).toEqual(['cancelled']);
+      // With the signature, as a real cancel carries it, nothing changes.
+      expect(actions([live(), hist(OWN)], outputs, withBody({ references: [ref], gains: true, signers: [OWNER] }))).toEqual(['cancelled']);
+    });
+
+    it('a stranger\'s listing locked under the wallet\'s stake key and bought by the wallet is "bought", never "cancelled"', () => {
+      const outputs = [produce(BUYER), produce(FEE), produce(OWN)];
+      // History: the input is at the script under the wallet's own stake key, so it reads as an own listing; the fee address says buy.
+      expect(actions([hist(OWN_LISTING), hist(OWN)], outputs)).toEqual(['bought']);
+      expect(actions([hist(OWN_LISTING), hist(OWN)], outputs, withBody({ references: [ref], gains: true }))).toEqual(['bought']);
+      // Live: the same listing with its address unresolved.
+      expect(actions([live(), hist(OWN)], outputs, withBody({ references: [ref], gains: true }))).toEqual(['bought']);
+    });
+
+    it('paying the fee address is what makes a purchase: the same inputs without it are a cancel, on both shapes', () => {
+      const withFee = [produce(OWN), produce(FEE)];
+      const without = [produce(OWN)];
+      expect(actions([hist(OWN_LISTING), hist(OWN)], without)).toEqual(['cancelled']);
+      expect(actions([hist(OWN_LISTING), hist(OWN)], withFee)).toEqual(['bought']);
+      expect(actions([live(), hist(OWN)], without, withBody({ references: [ref], gains: true }))).toEqual(['cancelled']);
+      expect(actions([live(), hist(OWN)], withFee, withBody({ references: [ref], gains: true }))).toEqual(['bought']);
+    });
+
+    it('an output at some other address, a script of the network included, is not the fee address', () => {
+      const outputs = [produce(OWN), produce(UNRELATED_SCRIPT), produce(OWN_LISTING)];
+      expect(actions([hist(OWN_LISTING), hist(OWN)], [produce(OWN), produce(UNRELATED_SCRIPT)])).toEqual(['cancelled']);
+      expect(actions([live(), hist(OWN)], outputs.slice(0, 2), withBody({ references: [ref], gains: true }))).toEqual(['cancelled']);
+    });
+
+    it('a purchase still needs the wallet to fund it and, on a live record, the NFT to arrive', () => {
+      const outputs = [produce(BUYER), produce(FEE), produce(OWN)];
+      expect(actions([live(), live()], outputs, withBody({ references: [ref], gains: true }))).toEqual([]);
+      expect(actions([live(), hist(OWN)], outputs, withBody({ references: [ref], gains: false }))).toEqual([]);
+    });
+  });
+
   describe('the reviewer\'s realistic probes', () => {
     it('a real sale (history shape, seller payout carries the listing tag) is "sold"', () => {
       expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE), produce(BUYER)])).toEqual(['sold']);
@@ -458,7 +510,8 @@ describe('Gero NFT market activity tags', () => {
     });
 
     it('a live-synced buy (foreign listing input unresolved) is "bought"', () => {
-      expect(actions([live(), hist(OWN)], [produce(BUYER), produce(OWN)], withBody({ references: [V1.referenceScript], gains: true }))).toEqual(['bought']);
+      // A real purchase pays the deployment's fee address, which is what tells it from a cancel.
+      expect(actions([live(), hist(OWN)], [produce(BUYER), produce(FEE), produce(OWN)], withBody({ references: [V1.referenceScript], gains: true }))).toEqual(['bought']);
     });
   });
 
@@ -594,8 +647,10 @@ describe('Gero NFT market activity tags', () => {
 
     it('"sold" is not a transaction the wallet funds or signs: that is its own cancel or reprice, or a payment of its own', () => {
       const payout = [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)];
-      // The wallet's own cancel (it funds it) is a cancel, never also a sale, whatever datum the output carries.
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(OWN)], payout)).toEqual(['cancelled']);
+      // The wallet's own cancel (it funds it, no fee address is paid) is a cancel, never also a sale, whatever datum the output carries.
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(OWN)], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual(['cancelled']);
+      // Funded by the wallet and paying the fee address, it is a purchase it made, still never a sale.
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(OWN)], payout)).not.toContain('sold');
       // A transaction the wallet signs is not a buyer's, so a tagged output alone is not a sale.
       expect(actions([live(LISTING_TX, 0), live()], payout, withBody({ signers: [OWNER] }))).toEqual([]);
     });

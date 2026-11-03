@@ -694,13 +694,20 @@ function paidAsSeller(spent: readonly { tx_hash?: string; output_index?: number;
  *
  *   listed     the wallet funds a new listing of its own; nothing of the market's is spent
  *   repriced   its own listing is spent (or the market's script ran) and a listing of its own is created
- *   cancelled  its own listing is spent and none is created
+ *   cancelled  its own listing is spent (or the script ran with none known) and none is created, and the
+ *              deployment's fee address is not paid
  *   sold       one of its own outputs carries the tag of a spent input, the deployment's fee address is paid,
  *              and the wallet funds none of it and signs none of it
- *   bought     someone else's listing is spent (or the script ran and the wallet gained an NFT), no own listing
- *              is spent, and the wallet funds it
+ *   bought     a listing is spent (or the script ran and the wallet gained an NFT), the deployment's fee
+ *              address is paid, and the wallet funds it
  *   moved      a closed marketplace's listing is spent (its input, or its reference script) and a Gero listing
  *              of the wallet's is created
+ *
+ * The fee address tells a cancel from a buy: the contract makes a buy pay one combined fee output at the
+ * deployment's whole fee address and a cancel or reprice never does, so it decides between `cancelled`
+ * and `bought` whoever signs (a buy may name its buyer as a required signer; a cancel may be recorded
+ * without its owner's signature, and a listing locked under the wallet's stake key by a stranger and
+ * bought by the wallet still pays it).
  *
  * Every tag but `sold` is anchored by the wallet being a party to the transaction: an input at one of
  * its own addresses funds it, or its key is a required signer, which a stranger cannot fake. `sold`
@@ -723,19 +730,19 @@ export const geroMarketActions = (item: StoredTransaction, ctx: TxClassifyContex
   if ((walletFunds || walletSigns) && isGeroMarket(item, ctx)) {
     const geroIn = spent.filter((input) => atScript(input.address, hashes));
     const ownIn = geroIn.filter((input) => !!ctx.stakeKeyHash && stakeKeyHashOfAddress(input.address) === ctx.stakeKeyHash);
-    const foreignIn = geroIn.filter((input) => !ownIn.includes(input));
     const geroOut = created.filter((output) => atScript(output.address, hashes));
     const createsOwn = geroOut.some((output) => isOwnListingOutput(output, ctx));
     const refsGero = referencesAny(refs, ctx.marketReferenceScripts);
     const spendsLegacy = referencesAny(refs, LEGACY_REFERENCE_SCRIPTS) || spent.some((input) => LEGACY_SCRIPT_HASHES.has(paymentScriptHash(input.address ?? undefined) ?? ''));
     const gainsNft = (item.assets ?? []).some((asset) => asset.unit !== 'lovelace' && asset.quantity > 0);
+    // A purchase always pays the deployment's fee address; a cancel and a reprice never do.
+    const paysFee = !!ctx.marketFeeAddresses && created.some((output) => !!output.address && !!ctx.marketFeeAddresses?.has(output.address));
 
     if (spendsLegacy && createsOwn && geroIn.length === 0) actions.push('moved');
     else if (createsOwn && !spendsLegacy && geroIn.length === 0 && !refsGero) actions.push('listed');
     else if (createsOwn && !spendsLegacy && (ownIn.length > 0 || (refsGero && geroIn.length === 0))) actions.push('repriced');
-    else if (geroOut.length === 0 && (ownIn.length > 0 || (refsGero && geroIn.length === 0 && walletSigns))) actions.push('cancelled');
-    // The owner signs a cancel, a reprice and a move; a buyer signs for nothing of the contract's.
-    if (walletFunds && !walletSigns && ownIn.length === 0 && (foreignIn.length > 0 || (refsGero && gainsNft))) actions.push('bought');
+    else if (geroOut.length === 0 && !paysFee && (ownIn.length > 0 || (refsGero && geroIn.length === 0))) actions.push('cancelled');
+    if (walletFunds && paysFee && (geroIn.length > 0 || (refsGero && gainsNft))) actions.push('bought');
   }
   if (!walletFunds && !walletSigns && paidAsSeller(spent, created, ctx, hashes)) actions.push('sold');
   return actions;
