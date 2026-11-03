@@ -77,6 +77,7 @@ vi.mock('../components/SendRecipientCard.vue', () => ({ default: {
   props: ['recipient'], emits: ['update:recipient', 'setMax', 'sendEntireWallet'],
   template: `<div>
     <button data-amount @click="$emit('update:recipient', { ...recipient, address: 'external-address', selectedTokens: [{ ...recipient.selectedTokens[0], quantity: '2' }] })">Amount</button>
+    <button data-amount-large @click="$emit('update:recipient', { ...recipient, address: 'external-address', selectedTokens: [{ ...recipient.selectedTokens[0], quantity: '203' }] })">Large amount</button>
     <button data-address @click="$emit('update:recipient', { ...recipient, address: 'external-address' })">Address</button>
     <button data-max @click="$emit('setMax', { tokenIndex: 0 })">Max</button>
     <button data-entire @click="$emit('sendEntireWallet')">Entire</button>
@@ -238,6 +239,62 @@ describe('Quick Send Max over the request limit', () => {
     const [request] = requests().slice(-1);
     expect(isMerge(request)).toBe(false);
     expect(request.utxos).toHaveLength(200);
+  });
+
+  // A typed amount (no Max) that the 200 largest of the 205 UTxOs, about 200 ADA, cannot
+  // cover. Nexus refuses a payment its inputs fall short of, in its own words.
+  const lovelaceOfRequest = (request: BuildRequest) => request.utxos.reduce((sum, input) => sum + Number(input.lovelace), 0);
+  const likeNexus = async (request: BuildRequest) => {
+    if (isMerge(request)) return buildResponse(request);
+    const available = lovelaceOfRequest(request);
+    const required = request.outputs.reduce((sum, output) => sum + Number(output.lovelace), 0) + 200_000;
+    if (available < required) {
+      throw new Error(`Insufficient ADA. Required: ${required / 1e6} ADA (${required} lovelace), available: ${available / 1e6} ADA (${available} lovelace)`);
+    }
+    return buildResponse(request);
+  };
+
+  async function typeLargeAmount() {
+    mocks.build.mockImplementation(likeNexus);
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-amount-large]').trigger('click');
+    await settle();
+    await settle();
+  }
+
+  it('sends a typed amount the largest UTxOs cannot cover as merges and one payment', async () => {
+    await typeLargeAmount();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+    expect(dialog().text()).toContain('send.sweepPlanNote');
+    // The payment spends every merge output: Nexus is asked to use all the candidates.
+    const payment = requests().filter((request) => !isMerge(request)).at(-1)!;
+    expect(payment.selectAll).toBe(true);
+    expect(payment.utxos).toHaveLength(200);
+    expect(payment.outputs[0].lovelace).toBe('203000000');
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
+    expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
+  });
+
+  it('goes back to one transaction once the typed amount fits the largest UTxOs again', async () => {
+    await typeLargeAmount();
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+    await dialog().get('[data-amount]').trigger('click');
+    await settle();
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+    expect(dialog().text()).not.toContain('send.sweepPlanNote');
+    const [request] = requests().slice(-1);
+    expect(isMerge(request)).toBe(false);
+    expect(request.selectAll).toBeFalsy();
+  });
+
+  it('tells a wallet that cannot sweep that its balance is spread, not short', async () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, type: WalletType.Ledger };
+    await typeLargeAmount();
+    expect(requests().some(isMerge)).toBe(false);
+    expect(dialog().get('.global-total__error').text()).toContain('send.inputLimitFragmented');
   });
 
   it('shows the error when a merge cannot be built, and recovers on the next Max', async () => {

@@ -381,10 +381,24 @@ const inputSelection = ref<InputSelection | null>(null);
 /** A build failure the user has to act on, shown under the total. Null while nothing is wrong or a build is in flight. */
 const buildError = ref<string | null>(null);
 /**
- * A sweep: when Max needs more UTxOs than one Nexus request carries, the merges
- * (self-transfers) that bring them under the limit, and the UTxO set they came from.
+ * A sweep: when Max, or a typed amount, needs more UTxOs than one Nexus request carries,
+ * the merges (self-transfers) that bring them under the limit, and the UTxO set they came from.
  */
 const sweep = shallowRef<(BuiltSweep & { key: string; builtAt: number }) | null>(null);
+/**
+ * The ADA, in lovelace over all recipients, that a typed send asked for when the UTxOs
+ * one request carries first fell short of it while the whole wallet did not. At or above
+ * it the payment goes out as a sweep, as Max does; below it, as one transaction again.
+ */
+const amountSweepFrom = ref<bigint | null>(null);
+
+/** The ADA every recipient is sent, in lovelace. */
+function requestedLovelace(): bigint {
+  return recipients.value.reduce((sum: bigint, r: SendRecipient) => {
+    const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    return sum + decimalToBaseUnits(ada?.quantity, ada?.decimals ?? 6);
+  }, BigInt(0));
+}
 const sweepPrerequisites = computed<SweepPrerequisites | null>(() =>
   sweep.value ? { cbors: sweep.value.mergeCbors, outputs: sweep.value.mergeOutputs } : null);
 /** The merges' fees, which the user pays on top of the payment's. */
@@ -604,6 +618,7 @@ const resetData = () => {
   sweepStop.value = null;
   sweepDone.value = null;
   maxRecipientIds.value = new Set();
+  amountSweepFrom.value = null;
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
 };
@@ -877,8 +892,9 @@ function utxoSetKey(list: Cardano.Utxo[]): string {
 }
 
 /**
- * Max on a wallet holding more UTxOs than one Nexus request carries: build the merges
- * that bring them under the limit, once per UTxO set. They are rebuilt when Max or a
+ * Max, or a typed amount at or above `amountSweepFrom`, on a wallet holding more UTxOs
+ * than one Nexus request carries: build the merges that bring them under the limit,
+ * once per UTxO set. They are rebuilt when Max or a
  * rebuild runs more than SWEEP_REBUILD_AFTER_MS after they were built, never on a
  * timer: a merge signed after its two-hour window is refused by the node, which the
  * sweep reports as interrupted, and pressing Max again rebuilds it. Clears the sweep
@@ -887,7 +903,7 @@ function utxoSetKey(list: Cardano.Utxo[]): string {
  * has nothing to go on with.
  */
 async function ensureSweep(): Promise<boolean> {
-  if (!canSweep.value || maxRecipientIds.value.size === 0) {
+  if (!canSweep.value || (maxRecipientIds.value.size === 0 && amountSweepFrom.value === null)) {
     sweep.value = null;
     return true;
   }
@@ -1365,6 +1381,10 @@ async function runBuild(): Promise<void> {
     return;
   }
 
+  // A typed amount that needed a sweep, now lowered under the amount that did: try it as
+  // one transaction again. Raised, it still needs one, so the merges are kept.
+  if (amountSweepFrom.value !== null && requestedLovelace() < amountSweepFrom.value) amountSweepFrom.value = null;
+
   // A payment built from the previous sweep must not stay signable while the sweep is replaced.
   txValid.value = false;
   try {
@@ -1381,8 +1401,9 @@ async function runBuild(): Promise<void> {
     buildError.value = null;
     // When a MAX recipient is tracked, always force selectAll so Nexus uses
     // the same UTxO set as the auto-adjust path — prevents oscillation where
-    // plain build picks a different subset and fails differently.
-    const buildOpts = maxRecipientIds.value.size > 0 ? { selectAll: true } : undefined;
+    // plain build picks a different subset and fails differently. A sweep's payment
+    // takes every candidate too: the signer refuses one that leaves a merge unspent.
+    const buildOpts = maxRecipientIds.value.size > 0 || sweep.value ? { selectAll: true } : undefined;
     await buildTx(buildOpts);
     txValid.value = true;
     recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
@@ -1396,6 +1417,14 @@ async function runBuild(): Promise<void> {
     const shortfall = shortfallLovelaceFromMessage(msg);
     const outside = selection?.truncated ? lovelaceOf(spendableUtxos()) - lovelaceOf(selection.utxos) : BigInt(0);
     const fragmented = !!selection?.truncated && shortfall !== undefined && outside >= shortfall;
+    // The wallet holds the amount, only spread over more UTxOs than one request carries:
+    // send it as Max does, merges first, then one payment. This happens once: the sweep's
+    // payment is built from its own candidates (no truncated selection), so it never
+    // reads as fragmented and cannot come back here.
+    if (fragmented && canSweep.value && !sweep.value) {
+      amountSweepFrom.value = requestedLovelace();
+      return runBuild();
+    }
     if (e instanceof InputLimitError) {
       buildError.value = friendlyTxError(e);
     } else if (fragmented && selection) {
