@@ -1,6 +1,6 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { Network } from '@/models/types';
+import { KOIOS_URLS } from '@/api/spo-api';
 import { debugLog } from '@/utils/debug';
 import { canonicalAddress } from '@/shared/utils/txIntentGuard';
 
@@ -35,25 +35,44 @@ function parseRef(ref: OutputRef): { txHash: string; index: number } | null {
   return match ? { txHash: match[1], index: Number(match[2]) } : null;
 }
 
+/** Why a transaction's bytes did not give the output that was asked for. */
+export type ProvenOutputFailure =
+  /** The bytes are not a transaction. */
+  | 'undecodable'
+  /** A transaction, but not the one with that id: its body does not hash to it. */
+  | 'wrong-transaction'
+  /** The right transaction, which created no output at that index. */
+  | 'no-such-output';
+
+export type ProvenTxOutput =
+  | { output: Serialization.TransactionOutput; failure?: undefined }
+  | { output?: undefined; failure: ProvenOutputFailure };
+
 /**
- * Output `index` of transaction `txHash`, read from `cborHex` only if `cborHex`
- * really is that transaction (its body hashes to `txHash`). A transaction whose
- * scripts failed (`isValid` false) created no outputs but its collateral
- * return, which sits at index = number of outputs.
+ * Output `index` of transaction `txHash` as the serialized output, read from `cborHex` only if
+ * `cborHex` really is that transaction (its body hashes to `txHash`). The serialized form keeps
+ * the bytes the chain has (an inline datum's `toCbor()` is the datum exactly as it sits in the
+ * transaction), which Core's `toCore()` does not. A transaction whose scripts failed (`isValid`
+ * false) created no outputs but its collateral return, which sits at index = number of outputs.
  */
-export function provenOutput(cborHex: string, txHash: string, index: number): Cardano.TxOut | null {
+export function provenTxOutput(cborHex: string, txHash: string, index: number): ProvenTxOutput {
   let tx: Serialization.Transaction;
   try {
     tx = Serialization.Transaction.fromCbor(HexBlob(cborHex));
   } catch {
-    return null;
+    return { failure: 'undecodable' };
   }
-  if (String(tx.getId()).toLowerCase() !== txHash.toLowerCase()) return null;
-  const core = tx.toCore();
-  if (core.isValid === false) {
-    return index === core.body.outputs.length ? core.body.collateralReturn ?? null : null;
-  }
-  return core.body.outputs[index] ?? null;
+  if (String(tx.getId()).toLowerCase() !== txHash.toLowerCase()) return { failure: 'wrong-transaction' };
+  const body = tx.body();
+  const outputs = body.outputs();
+  const output = tx.isValid() ? outputs[index] : index === outputs.length ? body.collateralReturn() : undefined;
+  return output ? { output } : { failure: 'no-such-output' };
+}
+
+/** `provenTxOutput` as a Core output, or null when the bytes do not prove it. */
+export function provenOutput(cborHex: string, txHash: string, index: number): Cardano.TxOut | null {
+  const proven = provenTxOutput(cborHex, txHash, index);
+  return proven.output ? proven.output.toCore() : null;
 }
 
 export interface ProvenInputs {
@@ -108,12 +127,6 @@ export function historySource(transactions: readonly unknown[] | null | undefine
     return found;
   };
 }
-
-const KOIOS_URLS: Record<string, string> = {
-  [Network.MAINNET]: 'https://api.koios.rest/api/v1',
-  [Network.PREPROD]: 'https://preprod.koios.rest/api/v1',
-  [Network.PREVIEW]: 'https://preview.koios.rest/api/v1',
-};
 
 const KOIOS_BATCH = 50;
 const KOIOS_TIMEOUT_MS = 15_000;

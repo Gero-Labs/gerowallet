@@ -41,7 +41,8 @@
 // price, one extra royalty to an attacker): the contract ignores trailing outputs and accepts
 // overpayment, so such a buy SUCCEEDS on chain and Nexus keeps the difference. Ruling P28
 // (overriding R11) therefore makes the caller read the listing UTxO from a source independent of
-// Nexus (`listingChainUtxo.ts`, Koios) and `verifyBuy` refuses unless that UTxO is at the
+// Nexus (`listingChainUtxo.ts`: the bytes of the transaction that created it, proven against its
+// id, ruling P30) and `verifyBuy` refuses unless that UTxO is the listing's own out-ref, is at the
 // deployment's script, holds exactly the deposit and the one NFT, and carries an inline datum
 // equal to the one the row supplied, field by field. The balance equation then ties the same
 // deposit to the transaction: the ledger forces inputs to equal outputs plus the fee, so the
@@ -104,9 +105,9 @@ export interface BuyIntent {
   /** One of the wallet's own addresses (bech32): where the NFT goes. */
   buyerAddress: string;
   /**
-   * The listing UTxO as read from a source independent of Nexus (`fetchListingUtxoFromKoios`),
-   * for the same out-ref as `listing`. Required: without it a made-up datum cannot be told from
-   * the real one (ruling P28).
+   * The listing UTxO as read from a source independent of Nexus (`fetchListingUtxoProven`), for
+   * the same out-ref as `listing` (its `ref` is checked). Required: without it a made-up datum
+   * cannot be told from the real one (ruling P28).
    */
   chainUtxo: ListingChainUtxo;
 }
@@ -341,14 +342,18 @@ function listingFacts(listing: ListingDto, ctx: BuyVerifyContext): ListingFacts 
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Hold the row Nexus gave to the listing UTxO as an independent source read it (ruling P28): it is
- * at the deployment's script on this network, holds exactly the deposit and the one NFT, and its
- * inline datum is a Gero listing equal, field by field, to the datum the row supplied. A datum
+ * Hold the row Nexus gave to the listing UTxO as an independent source read it (ruling P28): it was
+ * read for this listing's out-ref (a UTxO read for another listing proves nothing about this one),
+ * it is at the deployment's script on this network, holds exactly the deposit and the one NFT, and
+ * its inline datum is a Gero listing equal, field by field, to the datum the row supplied. A datum
  * that differs (above all a superset with an extra royalty, which the contract would accept) is
  * the attack this refuses.
  */
 function checkChainUtxo(chain: ListingChainUtxo, listing: ListingFacts, ctx: BuyVerifyContext): void {
   if (typeof chain !== 'object' || chain === null) refuse('LISTING', 'the listing was not read from the chain');
+
+  // The out-ref: the chain read must be for the listing being bought, not a neighbour's.
+  if (chain.ref !== listing.ref) refuse('LISTING', 'the listing on chain was read for a different transaction output than the one being bought');
 
   // Address: the deployment's script.
   const address = typeof chain.address === 'string' ? chain.address : '';

@@ -317,13 +317,15 @@ const NFT_OUT = 3;
 const CHANGE_OUT = 4;
 
 /**
- * The listing UTxO as an independent source (Koios) would report it when Nexus tells the truth:
- * at the deployment's script, holding the deposit and the one NFT, with the row's own datum
- * inline. The tests of the chain check pass something else.
+ * The listing UTxO as an independent source (the hash-proven read of its creating transaction)
+ * would report it when Nexus tells the truth: for the listing's own out-ref, at the deployment's
+ * script, holding the deposit and the one NFT, with the row's own datum inline. The tests of the
+ * chain check pass something else.
  */
 function chainFrom(listing: ListingDto): ListingChainUtxo {
   try {
     return {
+      ref: `${listing.txHash}#${listing.outputIndex}`,
       address: baseAddress(TESTNET, listing.scriptHash, '2c'.repeat(28), true),
       lovelace: BigInt(listing.depositLovelace),
       assets: [{ unit: listing.unit, quantity: 1n }],
@@ -335,6 +337,7 @@ function chainFrom(listing: ListingDto): ListingChainUtxo {
   }
 }
 const CHAIN: ListingChainUtxo = {
+  ref: LISTING_REF,
   address: baseAddress(TESTNET, V1.scriptHash, '2c'.repeat(28), true),
   lovelace: DEPOSIT,
   assets: [{ unit: UNIT_222, quantity: 1n }],
@@ -941,7 +944,7 @@ describe('verifyBuy: signers, collateral, fee and the envelope', () => {
   });
 });
 
-describe('verifyBuy: the listing UTxO as the chain has it (ruling P28)', () => {
+describe('verifyBuy: the listing UTxO as the chain has it (rulings P28, P30)', () => {
   // The attack: Nexus supplies a datum that is a SUPERSET of the real one, same seller, the price
   // raised by 5 ADA and one extra royalty of 5 ADA to the attacker. The contract ignores trailing
   // outputs and accepts overpayment, so a buy paid out per the fake datum succeeds on chain.
@@ -1008,6 +1011,17 @@ describe('verifyBuy: the listing UTxO as the chain has it (ruling P28)', () => {
     refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: at(V1.scriptHash, false) })));
     refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: at(V1.scriptHash, true, MAINNET) })));
     refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: 'not an address' })));
+  });
+
+  it('refuses a chain read made for another out-ref than the listing being bought', () => {
+    // A UTxO that looks exactly right (script, deposit, NFT, datum), read for a neighbour.
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, ref: `${OTHER_LISTING_TX}#0` })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, ref: `${LISTING_TX}#1` })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, ref: LISTING_REF.toUpperCase() })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, ref: '' })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, ref: undefined as unknown as string })));
+    // The right ref is accepted.
+    expect(verify(buyTx(), intentOf(LISTING, { ...CHAIN, ref: LISTING_REF })).ref).toBe(LISTING_REF);
   });
 
   it('requires the on-chain read: without it nothing is bought', () => {
