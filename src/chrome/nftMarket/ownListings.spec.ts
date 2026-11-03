@@ -216,6 +216,12 @@ describe('listedLovelace and reviveOwnListings', () => {
     expect(listedLovelace([listing('a#0', '2000000'), listing('b#1', '1500000')])).toBe(3_500_000n);
   });
 
+  it('counts a listing whose deposit does not read as nothing, and never throws (the store is not a trust boundary)', () => {
+    expect(listedLovelace([listing('a#0', '2000000'), listing('b#1', 'lots')])).toBe(2_000_000n);
+    expect(listedLovelace([listing('a#0', '')])).toBe(0n);
+    expect(listedLovelace([{ ...listing('a#0', '1'), depositLovelace: undefined as never }])).toBe(0n);
+  });
+
   it('gets the bigints back after the store\'s JSON round trip', () => {
     const listings = [listing('a#0', '2000000'), { ...listing('b#1', '1500000'), datum: { ...listing('b#1', '1').datum, buyer: OWNER } }];
     const wire = JSON.parse(JSON.stringify(listings, wireReplacer));

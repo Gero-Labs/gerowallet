@@ -51,7 +51,6 @@ import {
 } from '@/chrome/serialization';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoPartition, type CachedUtxoRow } from '@/chrome/utxoCache';
 import {
-  listedLovelace,
   ownListingIdentity,
   verifyOwnListing,
   type OwnListing,
@@ -939,7 +938,7 @@ export class WalletBg {
     const byRef = (a: OwnListing, b: OwnListing) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
     const order = listings.map((l, i) => [l, kept[i]] as const).sort(([a], [b]) => byRef(a, b));
     const sorted = order.map(([l]) => l);
-    WalletStore.setListedListings(sorted, listedLovelace(sorted).toString());
+    WalletStore.setListedListings(sorted);
     if (Object.keys(rejected).length > 0) {
       // console.warn, not debugLog: debugLog no-ops in normal builds, and someone locking an NFT
       // at the listing script under this wallet's stake key with a datum that is not this

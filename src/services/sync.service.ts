@@ -13,7 +13,7 @@ import { notifyHooks } from '@/services/notify/notifyHooks';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { convertNexusUtxos } from '@/services/nexusUtxo';
-import WalletStore, { walletStore } from '@/stores/walletStore';
+import WalletStore, { totalListedLockedLovelace, walletStore } from '@/stores/walletStore';
 import type { BitcoinTip } from '@/stores/networkStore';
 import {
   convertBtcUtxos,
@@ -574,7 +574,7 @@ export class SyncService {
       const controlled = (
         sum
         + BigInt(WalletStore.state.programmableLockedLovelace || '0')
-        + BigInt(WalletStore.state.listedLockedLovelace || '0')
+        + totalListedLockedLovelace()
       ).toString();
       const prev = (await this.walletBg.getAccountInfo()) || {};
       if (prev.controlled_amount === controlled) return; // no change — skip a redundant write

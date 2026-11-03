@@ -172,10 +172,21 @@ export function verifyOwnListing([txIn, txOut]: Cardano.Utxo, ctx: OwnListingCon
   };
 }
 
-/** Total lovelace held by the listings' UTxOs (the deposits). */
+/**
+ * Total lovelace held by the listings' UTxOs (the deposits). The one place that figure is worked
+ * out: `walletStore` derives its locked-ADA total from its listings through this, and holds no
+ * second copy of it. A deposit that does not read counts as nothing, never as a throw: the list
+ * may come from the store, which a render must not fail on.
+ */
 export function listedLovelace(listings: readonly OwnListing[]): bigint {
   let total = 0n;
-  for (const listing of listings) total += BigInt(listing.depositLovelace);
+  for (const listing of listings) {
+    try {
+      total += BigInt(listing.depositLovelace);
+    } catch {
+      // Not a number: nothing locked by this entry.
+    }
+  }
   return total;
 }
 

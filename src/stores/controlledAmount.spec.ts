@@ -35,7 +35,7 @@ const account = (controlled: string) => ({ controlled_amount: controlled } as Ac
 describe('spendable controlled_amount', () => {
   beforeEach(() => {
     WalletStore.setProgrammableTokens({}, '0');
-    WalletStore.setListedListings([], '0');
+    WalletStore.setListedListings([]);
     WalletStore.setAccount(null);
   });
 
@@ -129,12 +129,12 @@ describe('spendable controlled_amount with own listings', () => {
 
   beforeEach(() => {
     WalletStore.setProgrammableTokens({}, '0');
-    WalletStore.setListedListings([], '0');
+    WalletStore.setListedListings([]);
     WalletStore.setAccount(null);
   });
 
   it('subtracts the listed lovelace when the listings are already known', () => {
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     WalletStore.setAccount(account('10000000'));
 
     expect(walletStore.account?.controlled_amount).toBe('8000000');
@@ -143,14 +143,14 @@ describe('spendable controlled_amount with own listings', () => {
 
   it('re-derives when the listings land after the account', () => {
     WalletStore.setAccount(account('10000000'));
-    WalletStore.setListedListings([listing(1), listing(2)], '4000000');
+    WalletStore.setListedListings([listing(1), listing(2)]);
 
     expect(walletStore.account?.controlled_amount).toBe('6000000');
   });
 
   it('subtracts the CIP-113 share and the listed share together', () => {
     WalletStore.setProgrammableTokens({}, '4000000');
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     WalletStore.setAccount(account('10000000'));
 
     expect(walletStore.account?.controlled_amount).toBe('4000000');
@@ -158,20 +158,20 @@ describe('spendable controlled_amount with own listings', () => {
 
   it('subtracts both whichever arrives last', () => {
     WalletStore.setAccount(account('10000000'));
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     WalletStore.setProgrammableTokens({}, '4000000');
     expect(walletStore.account?.controlled_amount).toBe('4000000');
 
     WalletStore.setAccount(null);
     WalletStore.setProgrammableTokens({}, '4000000');
     WalletStore.setAccount(account('10000000'));
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     expect(walletStore.account?.controlled_amount).toBe('4000000');
   });
 
   it('does not subtract twice when the same account is applied again', () => {
     WalletStore.setProgrammableTokens({}, '4000000');
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     WalletStore.setAccount(account('10000000'));
     WalletStore.setAccount(walletStore.account);
     WalletStore.setAccount(walletStore.account);
@@ -182,37 +182,53 @@ describe('spendable controlled_amount with own listings', () => {
 
   it('does not subtract twice when the same listings are applied again', () => {
     WalletStore.setAccount(account('10000000'));
-    WalletStore.setListedListings([listing(1)], '2000000');
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
+    WalletStore.setListedListings([listing(1)]);
 
     expect(walletStore.account?.controlled_amount).toBe('8000000');
   });
 
   it('restores the amount once the listings are gone', () => {
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     WalletStore.setAccount(account('10000000'));
-    WalletStore.setListedListings([], '0');
+    WalletStore.setListedListings([]);
 
     expect(walletStore.account?.controlled_amount).toBe('10000000');
   });
 
   it('floors at zero rather than reporting a negative balance', () => {
     WalletStore.setProgrammableTokens({}, '9000000');
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     WalletStore.setAccount(account('10000000'));
 
     expect(walletStore.account?.controlled_amount).toBe('0');
   });
 
-  it('passes an unparseable stored amount through as zero locked', () => {
-    WalletStore.setListedListings([listing(1)], 'not-a-number');
+  // One source of truth: the locked total is the deposits of `listedListings`, so it cannot drift
+  // from them (the store holds no second copy of it).
+  it('derives the locked lovelace from the listings: no second figure to keep in step', () => {
+    WalletStore.setListedListings([listing(1)]);
+    expect(totalListedLockedLovelace()).toBe(2_000_000n);
+    WalletStore.setListedListings([listing(1), listing(2)]);
+    expect(totalListedLockedLovelace()).toBe(4_000_000n);
+    expect(Object.keys(walletStore)).not.toContain('listedLockedLovelace');
 
+    // Whatever reaches the store's list is what counts, wherever it came from (a broadcast, a hydration).
+    walletStore.listedListings = [];
+    expect(totalListedLockedLovelace()).toBe(0n);
+    expect(hasListedLockedLovelace()).toBe(false);
+  });
+
+  it('reads a deposit that is not a number as nothing locked, never as an error', () => {
+    WalletStore.setListedListings([{ ...listing(1), depositLovelace: 'lots' }, listing(2)]);
+    expect(totalListedLockedLovelace()).toBe(2_000_000n);
+    WalletStore.setListedListings([{ ...listing(3), depositLovelace: 'lots' }]);
     expect(totalListedLockedLovelace()).toBe(0n);
     expect(hasListedLockedLovelace()).toBe(false);
   });
 
   it('counts the listed lovelace as locked holdings, apart from the CIP-113 helpers', () => {
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
 
     expect(totalListedLockedLovelace()).toBe(2_000_000n);
     expect(hasListedLockedLovelace()).toBe(true);
@@ -221,17 +237,17 @@ describe('spendable controlled_amount with own listings', () => {
   });
 
   it('keeps the listings in the store and clears them on logout and on a wallet switch', () => {
-    WalletStore.setListedListings([listing(1)], '2000000');
+    WalletStore.setListedListings([listing(1)]);
     expect(walletStore.listedListings).toHaveLength(1);
-    expect(walletStore.listedLockedLovelace).toBe('2000000');
+    expect(totalListedLockedLovelace()).toBe(2_000_000n);
 
     WalletStore.clearForWalletSwitch();
     expect(walletStore.listedListings).toEqual([]);
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace()).toBe(0n);
 
-    WalletStore.setListedListings([listing(2)], '2000000');
+    WalletStore.setListedListings([listing(2)]);
     WalletStore.logout();
     expect(walletStore.listedListings).toEqual([]);
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace()).toBe(0n);
   });
 });

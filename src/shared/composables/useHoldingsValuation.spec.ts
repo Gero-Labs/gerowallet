@@ -41,7 +41,7 @@ function resetStore() {
   walletStore.tokens = {};
   walletStore.programmableTokens = {};
   walletStore.programmableLockedLovelace = '0';
-  walletStore.listedLockedLovelace = '0';
+  walletStore.listedListings = [];
   tokenMetadataStore.tokens = {};
 }
 
@@ -171,8 +171,19 @@ describe('useHoldingsValuation — CIP-113 holdings', () => {
 describe('useHoldingsValuation — own listing deposits', () => {
   beforeEach(resetStore);
 
+  /** The wallet's own listings holding these deposits: the locked total is derived from them. */
+  const listedWith = (...deposits: string[]) => {
+    walletStore.listedListings = deposits.map((depositLovelace, i) => ({
+      ref: `${String(i + 1).repeat(64)}#0`,
+      unit: `${'a'.repeat(56)}${i.toString(16).padStart(2, '0')}`,
+      datum: { owner: '0'.repeat(56), sellerAddress: 'addr_test1seller', price: 100_000_000n, royalties: [], buyer: null },
+      depositLovelace,
+      deploymentVersion: 1,
+    }));
+  };
+
   it('surfaces the listed lovelace as its own row, keyed apart from spendable ADA', () => {
-    walletStore.listedLockedLovelace = '3500000';
+    listedWith('3500000');
 
     const rows = useHoldingsValuation().holdings.value.filter(r => r.unit === 'lovelace');
     const listed = rows.find(r => r.isListed);
@@ -184,7 +195,7 @@ describe('useHoldingsValuation — own listing deposits', () => {
   });
 
   it('prices it at the native rate and counts it in the portfolio total', () => {
-    walletStore.listedLockedLovelace = '2500000';
+    listedWith('2500000');
 
     const { holdings, totals } = useHoldingsValuation();
     const listed = holdings.value.find(r => r.isListed);
@@ -196,7 +207,7 @@ describe('useHoldingsValuation — own listing deposits', () => {
 
   it('keeps it apart from the locked CIP-113 ADA row', () => {
     walletStore.programmableLockedLovelace = '2500000';
-    walletStore.listedLockedLovelace = '1000000';
+    listedWith('1000000');
 
     const rows = useHoldingsValuation().holdings.value.filter(r => r.unit === 'lovelace');
 
@@ -206,7 +217,7 @@ describe('useHoldingsValuation — own listing deposits', () => {
   });
 
   it('names it "ADA in your listings", so it never reads as a second unlabeled ADA row', () => {
-    walletStore.listedLockedLovelace = '3500000';
+    listedWith('3500000');
     walletStore.programmableLockedLovelace = '2500000';
     walletStore.utxos = [];
 
@@ -220,11 +231,16 @@ describe('useHoldingsValuation — own listing deposits', () => {
     expect(rows.find(r => r.isProgrammable)!.name).not.toBe('ADA in your listings');
   });
 
+  it('sums the deposits of every listing into the one row', () => {
+    listedWith('2000000', '1500000');
+    expect(useHoldingsValuation().holdings.value.find(r => r.isListed)!.balance).toBe(3.5);
+  });
+
   it('renders no listed-ADA row when nothing is listed, or the stored value is unreadable', () => {
-    walletStore.listedLockedLovelace = '0';
+    listedWith('0');
     expect(useHoldingsValuation().holdings.value.find(r => r.isListed)).toBeUndefined();
 
-    walletStore.listedLockedLovelace = 'not-a-number';
+    listedWith('not-a-number');
     expect(useHoldingsValuation().holdings.value.find(r => r.isListed)).toBeUndefined();
   });
 });

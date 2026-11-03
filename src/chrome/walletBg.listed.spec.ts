@@ -21,7 +21,7 @@ vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconne
 vi.mock('@/api/cip113-registry-api', () => ({ fetchAllPolicyAssets: vi.fn(async () => []) }));
 
 import { WalletBg } from './walletBg';
-import WalletStore, { walletStore, type Account } from '@/stores/walletStore';
+import WalletStore, { totalListedLockedLovelace, walletStore, type Account } from '@/stores/walletStore';
 import { getAddress, getStakeKey } from './serialization';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import networks from '@/utils/networks';
@@ -263,7 +263,7 @@ describe('own listings: the partition', () => {
         deploymentVersion: 1,
       },
     ]);
-    expect(walletStore.listedLockedLovelace).toBe(DEPOSIT.toString());
+    expect(totalListedLockedLovelace().toString()).toBe(DEPOSIT.toString());
   });
 
   it('resolves the listed NFT\'s metadata through the same pipeline', async () => {
@@ -284,7 +284,7 @@ describe('own listings: the partition', () => {
       await bg.applyUtxos([spendableUtxo(), ownListingUtxo({ owner: STRANGER_PAYMENT })], true);
 
       expect(walletStore.listedListings).toEqual([]);
-      expect(walletStore.listedLockedLovelace).toBe('0');
+      expect(totalListedLockedLovelace().toString()).toBe('0');
       expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('NFT market'), { OWNER: 1 });
     });
@@ -296,7 +296,7 @@ describe('own listings: the partition', () => {
       await bg.applyUtxos([spendableUtxo(), ownListingUtxo({ sellerAddress: strangerAddress })], true);
 
       expect(walletStore.listedListings).toEqual([]);
-      expect(walletStore.listedLockedLovelace).toBe('0');
+      expect(totalListedLockedLovelace().toString()).toBe('0');
       expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
     });
 
@@ -334,7 +334,7 @@ describe('own listings: the partition', () => {
       WalletStore.setAccount(account(CONTROLLED_TOTAL));
 
       expect(walletStore.listedListings).toEqual([]);
-      expect(walletStore.listedLockedLovelace).toBe('0');
+      expect(totalListedLockedLovelace().toString()).toBe('0');
       expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
       expect(walletStore.account?.controlled_amount).toBe(CONTROLLED_TOTAL.toString());
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('other stake keys'));
@@ -357,7 +357,7 @@ describe('own listings: the partition', () => {
       await bg.applyUtxos([spendableUtxo(), candidate], true);
 
       expect(walletStore.listedListings).toEqual([]);
-      expect(walletStore.listedLockedLovelace).toBe('0');
+      expect(totalListedLockedLovelace().toString()).toBe('0');
       expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
     });
 
@@ -387,7 +387,7 @@ describe('own listings: the partition', () => {
       await bg.applyUtxos([spendableUtxo(), fake, ownListingUtxo()], true);
 
       expect(walletStore.listedListings.map((l) => l.unit)).toEqual([NFT]);
-      expect(walletStore.listedLockedLovelace).toBe(DEPOSIT.toString());
+      expect(totalListedLockedLovelace().toString()).toBe(DEPOSIT.toString());
     });
   });
 
@@ -404,7 +404,7 @@ describe('own listings: the partition', () => {
 
     expect(walletStore.listedListings.map((l) => [l.unit, l.deploymentVersion]).sort())
       .toEqual([[NFT, 1], [OTHER_NFT, 2]].sort());
-    expect(walletStore.listedLockedLovelace).toBe((DEPOSIT * 2n).toString());
+    expect(totalListedLockedLovelace().toString()).toBe((DEPOSIT * 2n).toString());
     expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
   });
 
@@ -473,7 +473,7 @@ describe('own listings: the partition', () => {
     await bg.applyUtxos([], true);
 
     expect(walletStore.listedListings).toEqual([]);
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace().toString()).toBe('0');
   });
 
   it('drops a listing that has been bought or cancelled when the next push omits it', async () => {
@@ -483,7 +483,7 @@ describe('own listings: the partition', () => {
     await bg.applyUtxos([spendableUtxo()], true);
 
     expect(walletStore.listedListings).toEqual([]);
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace().toString()).toBe('0');
   });
 });
 
@@ -533,7 +533,7 @@ describe('own listings: the balance', () => {
     WalletStore.setAccount(account(CONTROLLED_TOTAL + PLB_COINS));
 
     expect(walletStore.programmableLockedLovelace).toBe(PLB_COINS.toString());
-    expect(walletStore.listedLockedLovelace).toBe(DEPOSIT.toString());
+    expect(totalListedLockedLovelace().toString()).toBe(DEPOSIT.toString());
     expect(walletStore.account?.controlled_amount).toBe(SPENDABLE_COINS.toString());
     expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
   });
@@ -576,7 +576,7 @@ describe('own listings across a service-worker restart', () => {
   function simulateWorkerRestart() {
     WalletStore.clearForWalletSwitch();
     expect(walletStore.listedListings).toEqual([]);
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace().toString()).toBe('0');
   }
 
   it('persists the verified listing tagged `listed`, and nothing else from the listing script', async () => {
@@ -607,7 +607,7 @@ describe('own listings across a service-worker restart', () => {
     await loginFromCache(bootWallet(wallet));
 
     expect(walletStore.listedListings.map((l) => l.ref)).toEqual([`${LISTING_TX}#0`]);
-    expect(walletStore.listedLockedLovelace).toBe(DEPOSIT.toString());
+    expect(totalListedLockedLovelace().toString()).toBe(DEPOSIT.toString());
     expect(walletStore.account?.controlled_amount).toBe(SPENDABLE_COINS.toString());
     expect(refs(walletStore.utxos)).toEqual([`${SPENDABLE_TX}#0`]);
   });
@@ -622,7 +622,7 @@ describe('own listings across a service-worker restart', () => {
     await loginFromCache(bootWallet(wallet));
 
     expect(walletStore.listedListings).toEqual([]);
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace().toString()).toBe('0');
   });
 
   it('does not resurrect listings the wallet no longer holds after an empty push', async () => {
@@ -634,7 +634,7 @@ describe('own listings across a service-worker restart', () => {
     simulateWorkerRestart();
     await loginFromCache(bootWallet(wallet));
 
-    expect(walletStore.listedLockedLovelace).toBe('0');
+    expect(totalListedLockedLovelace().toString()).toBe('0');
   });
 
   it('still keeps the CIP-113 half and the listed half apart after a restart', async () => {
@@ -648,6 +648,6 @@ describe('own listings across a service-worker restart', () => {
     expect(Object.keys(walletStore.programmableTokens)).toEqual([PLB_TOKEN]);
     expect(walletStore.listedListings.map((l) => l.unit)).toEqual([NFT]);
     expect(walletStore.programmableLockedLovelace).toBe(PLB_COINS.toString());
-    expect(walletStore.listedLockedLovelace).toBe(DEPOSIT.toString());
+    expect(totalListedLockedLovelace().toString()).toBe(DEPOSIT.toString());
   });
 });

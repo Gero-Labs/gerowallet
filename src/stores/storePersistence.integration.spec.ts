@@ -330,7 +330,7 @@ describe('store persistence in the worker', () => {
 
     it('reads datum.price and royalty lovelace as bigint in the restarted worker', async () => {
       await seedWallet(w!, 9, 5);
-      w!.wallet.default.setListedListings([listing(REF)], '2000000');
+      w!.wallet.default.setListedListings([listing(REF)]);
       await settle(w!.wallet);
 
       w = await startWorker();
@@ -342,12 +342,13 @@ describe('store persistence in the worker', () => {
       expect(hydrated.datum.royalties[0].lovelace).toBe(1_500_000n);
       expect(hydrated.datum.buyer).toBeNull();
       expect(hydrated.depositLovelace).toBe('2000000');
-      expect(w.wallet.walletStore.listedLockedLovelace).toBe('2000000');
+      // The locked total is derived from the restored listings: there is no second copy to restore.
+      expect(w.wallet.totalListedLockedLovelace()).toBe(2_000_000n);
     });
 
     it('writes nothing new for the revival: the stored JSON is the same', async () => {
       await seedWallet(w!, 9, 5);
-      w!.wallet.default.setListedListings([listing(REF)], '2000000');
+      w!.wallet.default.setListedListings([listing(REF)]);
       await settle(w!.wallet);
 
       w = await startWorker();
@@ -377,7 +378,7 @@ describe('store persistence in the worker', () => {
       );
       expect(typeof w!.wallet.walletStore.listedListings[0].datum.price).toBe('string');
 
-      w!.wallet.default.setListedListings([listing(REF)], '0');
+      w!.wallet.default.setListedListings([listing(REF)]);
 
       expect(w!.wallet.walletStore.listedListings[0].datum.price).toBe(50_000_000n);
     });
