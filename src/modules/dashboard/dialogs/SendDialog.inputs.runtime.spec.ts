@@ -371,7 +371,8 @@ describe('Quick Send Max over the request limit', () => {
     expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
     expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
 
-    // The UTxO set changes before that rebuild fires, so it has to replace the merges: hold that build.
+    // The UTxO set changes before that rebuild fires, so it has to add a merge for the UTxO that
+    // arrived (the kept one no longer leaves room for it): hold that build.
     walletStore.utxos = [...fragmented(), utxo(999, 3_000_000)] as never;
     const held = deferred<{ tx_cbor: string }>();
     let heldRequest!: BuildRequest;
@@ -385,10 +386,10 @@ describe('Quick Send Max over the request limit', () => {
 
     held.resolve(buildResponse(heldRequest));
     await settle();
-    expect(requests().filter(isMerge).at(-1)?.utxos).toHaveLength(7);
-    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+    expect(requests().filter(isMerge).at(-1)?.utxos).toHaveLength(2);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(2);
     expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
-    expect(dialog().get('.global-total__fee').text()).toBe('- 0.4');
+    expect(dialog().get('.global-total__fee').text()).toBe('- 0.6');
   });
 
   /** Like pressMax, but hands back the wrapper for its emitted events. */
@@ -620,5 +621,90 @@ describe('Quick Send Max over the request limit', () => {
     expect(dialog().find('.global-total__error').exists()).toBe(false);
     expect(dialog().find('.sweep-plan').exists()).toBe(false);
     expect(mocks.maxAda).not.toHaveBeenCalled();
+  });
+
+  // Every merge build counts against the server's request limit, and a wallet that
+  // receives often would otherwise rebuild them all on almost every press of Max.
+  it('keeps the merges when Max is pressed again after an amount was typed', async () => {
+    await pressMax();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    await dialog().get('[data-amount]').trigger('click');
+    await settle();
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+  });
+
+  it('merges only what arrived since, when a payment lands between two presses of Max', async () => {
+    await pressMax();
+    walletStore.utxos = [...fragmented(), utxo(999, 500_000)] as never;
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    const merges = requests().filter(isMerge);
+    expect(merges).toHaveLength(2);
+    // The new UTxO and the smallest one the payment held: one more merge of two.
+    expect(merges[1].utxos).toHaveLength(2);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(2);
+    expect(requests().filter((request) => !isMerge(request)).at(-1)!.utxos).toHaveLength(200);
+  });
+
+  it('keeps the merges when the dialog is closed and opened again', async () => {
+    const wrapper = await openMax();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    await wrapper.setProps({ isOpen: false });
+    await wrapper.setProps({ isOpen: true });
+    await settle();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    expect(requests().filter(isMerge)).toHaveLength(1);
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+  });
+
+  it('stops a merge build whose input is spent meanwhile when the merges built before still serve', async () => {
+    // As in "the previous payment is not signable while the merges are rebuilt": a second Max
+    // builds the payment from one merge, then the rebuild the first Max scheduled adds a merge
+    // for a UTxO that arrived. Hold that merge.
+    mocks.maxAda.mockResolvedValueOnce({ max_lovelace: '0', estimated_fee: '0', change_min_utxo: '0', total_balance: '205020910' });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    const arrived = [...fragmented(), utxo(999, 3_000_000)];
+    walletStore.utxos = arrived as never;
+    let heldRequest!: BuildRequest;
+    let signal: AbortSignal | undefined;
+    let resolveHeld!: (value: { tx_cbor: string }) => void;
+    mocks.build.mockImplementationOnce((request: BuildRequest, _network: string, callOptions?: NexusCallOptions) =>
+      new Promise((resolve, reject) => {
+        heldRequest = request;
+        resolveHeld = resolve;
+        signal = callOptions?.signal;
+        signal?.addEventListener('abort', () => reject(signal?.reason));
+      }));
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+    expect(requests().filter(isMerge)).toHaveLength(2);
+
+    // One of the held merge's own inputs is spent elsewhere, which leaves the payment room for
+    // the rest beside the first merge: Max needs no new merge, and the held one is stopped.
+    const firstMerge = new Set(requests().filter(isMerge)[0].utxos.map((input) => input.txHash));
+    const gone = heldRequest.utxos.find((input) => !firstMerge.has(input.txHash))!.txHash;
+    walletStore.utxos = arrived.filter((entry) => (entry[0] as { txId: string }).txId !== gone) as never;
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    expect(signal?.aborted).toBe(true);
+
+    // Had it gone on, its merges, one spending the UTxO that is gone, would replace those that serve.
+    resolveHeld(buildResponse(heldRequest));
+    await settle();
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+    expect(requests().filter((request) => !isMerge(request)).at(-1)!.utxos.some((input) => input.txHash === gone)).toBe(false);
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
   });
 });
