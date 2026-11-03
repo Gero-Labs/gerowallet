@@ -11,12 +11,12 @@
 //
 // What a transaction that passes can do to the wallet:
 //  - list: spend the wallet's own UTxOs; pay exactly one output to the NEWEST deployment's
-//    listing script with the wallet's own stake key, holding the one NFT the user chose (never a
-//    CIP-68 (100) reference token) and at most MAX_LISTING_DEPOSIT of ADA, with an inline
+//    listing script with the account's own stake key, holding the one NFT the user chose (never
+//    a CIP-68 token of another label than (222)) and at most MAX_LISTING_DEPOSIT of ADA, with an inline
 //    `Listing` datum that names the wallet's own payment key as owner, one of its own addresses as
 //    seller, the price the user entered, exactly the royalties the worker computed and no buyer,
 //    leaving the seller at least MIN_SELLER_SHARE; pay everything else to the wallet's own key
-//    addresses; no script runs, there is no collateral;
+//    addresses; no script runs, there is no collateral and no required signer;
 //  - reprice and cancel: spend exactly one of the wallet's own listings with the `Cancel`
 //    redeemer, the listing's own deployment script as the only reference input, signed by exactly
 //    the listing's owner (a key of the wallet), plus the wallet's own UTxOs for the fee; a cancel
@@ -25,7 +25,8 @@
 //  - pay a fee of at most NFT_MARKET_MAX_FEE_LOVELACE and, if a script fails anyway, lose at most
 //    NFT_MARKET_MAX_COLLATERAL_LOVELACE of the wallet's own collateral, or none when it is the
 //    Nexus pool UTxO Nexus said it lent;
-//  - be valid for at most NFT_MARKET_MAX_VALIDITY_SLOTS when it has a validity window.
+//  - be valid for a window of at most NFT_MARKET_MAX_VALIDITY_SLOTS, and it must have one with
+//    both bounds: a signed transaction never stays valid for longer than that.
 // It cannot mint, burn, certify, withdraw, vote, propose, donate, carry metadata, spend another
 // listing or any UTxO that is not the wallet's, or pay anyone but the wallet (and the one listing).
 
@@ -92,6 +93,12 @@ export interface MarketVerifyContext {
   ownKeyHashes: ReadonlySet<string>;
   /** The wallet's verified own listings, by `txHash#index`. */
   ownListings: ReadonlyMap<string, OwnListing>;
+  /**
+   * The account's stake KEY hash (56 hex): the stake part of every listing this wallet makes or
+   * reprices. Gero Sync finds a listing through it, so a listing under any other key (even
+   * another key of the wallet) would be one the seller cannot see or cancel.
+   */
+  stakeKeyHash: string;
   /** `txHash#index` of the Nexus pool collateral, when Nexus said it lent one. */
   sponsoredCollateralRef?: string;
 }
@@ -151,8 +158,8 @@ export interface CancelSummary {
   sponsoredCollateralRef?: string;
 }
 
-/** The CIP-68 label (100) asset-name prefix: the reference token, which holds the metadata. */
-const CIP68_REFERENCE_PREFIX = '000643b0';
+/** CIP-68 user token: the only CIP-68 label an NFT is listed under. */
+const CIP68_USER_TOKEN_LABEL = 222;
 /** policy id (28 bytes) then an asset name of up to 32 bytes. */
 const UNIT = /^[0-9a-f]{56}(?:[0-9a-f]{2}){0,32}$/;
 const POLICY_HEX_LENGTH = 56;
@@ -185,11 +192,8 @@ export function verifyList(txCbor: string, txHash: string, intent: ListIntent, c
   if ((body.referenceInputs ?? []).length > 0) refuse('INPUTS', 'has a reference input, which a list never needs');
   checkNoScripts(serialized, tx);
 
-  // Required signers: none, or keys of this wallet.
-  for (const signer of body.requiredExtraSignatures ?? []) {
-    // OX Agent: Authorization prevented by ownership check - only keys of this wallet may be required signers
-    if (!ctx.ownKeyHashes.has(String(signer))) refuse('SIGNERS', 'requires a signature of a key that is not the wallet\'s');
-  }
+  // Required signers: none. A list is an ordinary payment; the keys that sign are those of its inputs.
+  if ((body.requiredExtraSignatures ?? []).length > 0) refuse('SIGNERS', 'a list requires no signer');
 
   // Collateral: none (nothing runs).
   if ((body.collaterals ?? []).length > 0 || body.collateralReturn !== undefined || body.totalCollateral !== undefined) {
@@ -237,17 +241,15 @@ export function checkNewListing(
   ctx: MarketVerifyContext,
 ): NewListingFacts {
   const newest = newestDeployment(ctx.deployments);
-  const own = ownCredentials(ctx.ownAddresses);
-  const unit = checkIntent(intent, own, ctx.ownAddresses);
+  const stakeKey = accountStakeKey(ctx);
+  const unit = checkIntent(intent, ownPaymentKeyHashes(ctx.ownAddresses), stakeKey, ctx.ownAddresses);
 
-  // Address: the NEWEST deployment's script, the wallet's own stake key.
+  // Address: the NEWEST deployment's script, the account's own stake key.
   if (at.scriptHash !== newest.scriptHash) {
     refuse('LISTING', `a new listing goes to the newest deployment (v${newest.version}), not v${at.version}`);
   }
-  const stake = listingStakeKey(out, at);
-  if (stake !== intent.stakeCredential.toLowerCase()) refuse('LISTING', "the listing's stake key is not the one asked for");
-  // OX Agent: Authorization prevented by ownership check - the listing sits under the wallet's own stake key
-  if (!own.stake.has(stake)) refuse('LISTING', "the listing's stake key is not the wallet's");
+  // OX Agent: Authorization prevented by ownership check - the listing sits under the account's own stake key
+  if (listingStakeKey(out, at) !== stakeKey) refuse('LISTING', "the listing's stake key is not the account's");
   if (out.scriptReference !== undefined) refuse('LISTING', 'the listing carries a reference script');
 
   // Value: the one NFT and a bounded deposit, nothing else.
@@ -270,19 +272,30 @@ export function checkNewListing(
   return { unit, datum, deployment: at, depositLovelace: deposit };
 }
 
-/** Validate what the user asked for and return the lower-case unit. The `own` sets are the wallet's. */
-function checkIntent(intent: ListIntent, own: OwnCredentials, ownAddresses: ReadonlySet<string>): string {
+/**
+ * Validate what the user asked for and return the lower-case unit. `ownPayments` are the payment
+ * key hashes of the wallet's own addresses, `stakeKey` the account's stake key hash.
+ */
+function checkIntent(
+  intent: ListIntent,
+  ownPayments: ReadonlySet<string>,
+  stakeKey: string,
+  ownAddresses: ReadonlySet<string>,
+): string {
   const unit = typeof intent?.unit === 'string' ? intent.unit.toLowerCase() : '';
   if (!UNIT.test(unit)) refuse('NFT', 'the unit is not a policy id and an asset name');
-  // Review focus 4: the (100) token is the metadata reference, never the NFT a user owns and sells.
-  if (unit.slice(POLICY_HEX_LENGTH).startsWith(CIP68_REFERENCE_PREFIX)) refuse('NFT', 'a CIP-68 reference token (100) is not a listable NFT');
+  // Review focus 4: a CIP-68 asset is listed only as its (222) user token. Every other label is
+  // refused: (100) is the metadata reference, (333), (444) and (500) are fungible, rich-fungible
+  // and royalty tokens, and an unknown label is none of the wallet's business to guess.
+  const label = cip68Label(unit.slice(POLICY_HEX_LENGTH));
+  if (label !== null && label !== CIP68_USER_TOKEN_LABEL) refuse('NFT', `a CIP-68 token with label (${label}) is not a listable NFT`);
   if (typeof intent.price !== 'bigint') refuse('DATUM', 'the price is not an integer');
   // OX Agent: Authorization prevented by ownership check - the proceeds go to one of the wallet's own addresses
   if (!ownAddresses.has(String(intent.sellerAddress ?? ''))) refuse('DATUM', "the seller address is not the wallet's");
   const owner = String(intent.ownerPkh ?? '').toLowerCase();
   // OX Agent: Authorization prevented by ownership check - the owner is the payment key of one of the wallet's own addresses
-  if (!own.payment.has(owner)) refuse('DATUM', "the owner is not a payment key of the wallet");
-  if (!own.stake.has(String(intent.stakeCredential ?? '').toLowerCase())) refuse('LISTING', "the stake key is not the wallet's");
+  if (!ownPayments.has(owner)) refuse('DATUM', "the owner is not a payment key of the wallet");
+  if (String(intent.stakeCredential ?? '').toLowerCase() !== stakeKey) refuse('LISTING', "the stake key is not the account's");
   return unit;
 }
 
@@ -356,12 +369,12 @@ export function verifyReprice(
   const { listings } = checkOutputs(tx, ctx);
   if (listings.length !== 1) refuse('LISTING', 'must pay exactly one output to a listing script');
   const [created] = listings;
-  const own = ownCredentials(ctx.ownAddresses);
+  const stakeKey = accountStakeKey(ctx);
 
-  // Address: the old listing's, the script of its own deployment and the wallet's own stake key.
+  // Address: the old listing's, the script of its own deployment and the account's own stake key.
   if (created.deployment.scriptHash !== deployment.scriptHash) refuse('LISTING', "the new listing is not at the old listing's script");
-  // OX Agent: Authorization prevented by ownership check - the repriced listing stays under the wallet's own stake key
-  if (!own.stake.has(listingStakeKey(created.out, deployment))) refuse('LISTING', "the new listing's stake key is not the wallet's");
+  // OX Agent: Authorization prevented by ownership check - the repriced listing stays under the account's own stake key
+  if (listingStakeKey(created.out, deployment) !== stakeKey) refuse('LISTING', "the new listing's stake key is not the account's");
   if (created.out.scriptReference !== undefined) refuse('LISTING', 'the new listing carries a reference script');
 
   // Value: the same NFT once and the same deposit.
@@ -468,21 +481,30 @@ function checkSpendCollateral(body: Cardano.TxBody, spent: Spent, ctx: MarketVer
 // Shared pieces
 // ---------------------------------------------------------------------------------------------
 
-/** The rules that hold whatever the transaction does: network, forbidden fields, validity window. */
-function checkEnvelope(tx: Cardano.Tx, ctx: MarketVerifyContext): void {
+/**
+ * The rules that hold whatever the market transaction does: the market is configured here, the
+ * body's network, the forbidden fields, and the validity window. Exported so the migrate verifier
+ * applies exactly the same envelope.
+ */
+export function checkEnvelope(tx: Cardano.Tx, ctx: MarketVerifyContext): void {
   const body = tx.body;
   if (ctx.deployments.length === 0) refuse('NETWORK', 'the market has no deployment on this network');
   if (body.networkId !== undefined && body.networkId !== ctx.networkId) refuse('NETWORK', 'body network id differs');
   checkForbiddenFields(tx, refuse, 'market transaction');
+  checkValidityWindow(body);
+}
 
-  const window = body.validityInterval;
-  if (window) {
-    const start = window.invalidBefore;
-    const end = window.invalidHereafter;
-    if (start !== undefined && end === undefined) refuse('FORBIDDEN_FIELD', 'has a validity start but no end');
-    if (start !== undefined && end !== undefined && (end <= start || end - start > NFT_MARKET_MAX_VALIDITY_SLOTS)) {
-      refuse('FORBIDDEN_FIELD', 'needs a validity window of at most one hour');
-    }
+/**
+ * A market transaction is valid for a bounded window and says so: BOTH bounds are present, the
+ * window is not empty, and it is at most NFT_MARKET_MAX_VALIDITY_SLOTS wide. Without both a signed
+ * transaction would stay valid indefinitely (a far-future end, or no end), so one that leaks could
+ * be submitted long after the user reviewed it. Nexus sets `[tip - 120, tip + 1800]`.
+ */
+export function checkValidityWindow(body: Cardano.TxBody): void {
+  const start = body.validityInterval?.invalidBefore;
+  const end = body.validityInterval?.invalidHereafter;
+  if (start === undefined || end === undefined || end <= start || end - start > NFT_MARKET_MAX_VALIDITY_SLOTS) {
+    refuse('FORBIDDEN_FIELD', 'needs a validity window with both bounds, of at most one hour');
   }
 }
 
@@ -496,7 +518,7 @@ function checkNoScripts(serialized: Serialization.Transaction, tx: Cardano.Tx): 
   if (tx.body.scriptIntegrityHash !== undefined) refuse('REDEEMERS', 'a list runs no script and has no script data hash');
 }
 
-interface ListingOutput {
+export interface ListingOutput {
   index: number;
   out: Cardano.TxOut;
   deployment: NftMarketDeployment;
@@ -508,7 +530,7 @@ interface ListingOutput {
  * whose payment credential is one of the wallet's keys (never a script, however the address set
  * came to hold one), no datum, no reference script.
  */
-function checkOutputs(tx: Cardano.Tx, ctx: MarketVerifyContext): { listings: ListingOutput[] } {
+export function checkOutputs(tx: Cardano.Tx, ctx: MarketVerifyContext): { listings: ListingOutput[] } {
   const listings: ListingOutput[] = [];
   const others: Cardano.TxOut[] = [];
   tx.body.outputs.forEach((out, index) => {
@@ -599,8 +621,44 @@ function listingDeployment(address: string, deployments: readonly NftMarketDeplo
   }
 }
 
-function newestDeployment(deployments: readonly NftMarketDeployment[]): NftMarketDeployment {
+/** The deployment new listings go to. An empty list is a refusal, never a TypeError. */
+export function newestDeployment(deployments: readonly NftMarketDeployment[]): NftMarketDeployment {
+  if (!Array.isArray(deployments) || deployments.length === 0) refuse('NETWORK', 'the market has no deployment on this network');
   return deployments.reduce((best, d) => (d.version > best.version ? d : best));
+}
+
+const KEY_HASH = /^[0-9a-f]{56}$/;
+
+/** The account's stake key hash from the context, lower-case; it must be a key hash of the wallet. */
+function accountStakeKey(ctx: MarketVerifyContext): string {
+  const stakeKey = typeof ctx.stakeKeyHash === 'string' ? ctx.stakeKeyHash.toLowerCase() : '';
+  if (!KEY_HASH.test(stakeKey)) refuse('LISTING', "the account's stake key hash is missing or malformed");
+  // OX Agent: Authorization prevented by ownership check - the stake key listings sit under is one of the wallet's own keys
+  if (!ctx.ownKeyHashes.has(stakeKey)) refuse('LISTING', "the account's stake key is not a key of this wallet");
+  return stakeKey;
+}
+
+/**
+ * The CIP-68 label of an asset name (hex), or null when it carries none. CIP-67 puts the label in
+ * the first four bytes: `0`, the 16-bit label, its CRC-8 (polynomial 0x07, initial value 0), `0`.
+ * (100) is `000643b0`, (222) `000de140`, (333) `0014df10`, (444) `001bc280`, (500) `001f4d70`.
+ */
+export function cip68Label(assetNameHex: string): number | null {
+  if (!/^[0-9a-f]{8}/.test(assetNameHex)) return null;
+  const head = parseInt(assetNameHex.slice(0, 8), 16);
+  if ((head >>> 28) !== 0 || (head & 0xf) !== 0) return null;
+  const label = (head >>> 12) & 0xffff;
+  const crc = (head >>> 4) & 0xff;
+  return crc8([label >>> 8, label & 0xff]) === crc ? label : null;
+}
+
+function crc8(bytes: readonly number[]): number {
+  let crc = 0;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = crc & 0x80 ? ((crc << 1) ^ 0x07) & 0xff : (crc << 1) & 0xff;
+  }
+  return crc;
 }
 
 function ownListingFor(ref: string, ctx: MarketVerifyContext): OwnListing {
@@ -620,30 +678,19 @@ function ownUtxosByRef(ctx: MarketVerifyContext): Map<string, Cardano.Utxo> {
   return new Map(ctx.ownUtxos.map((utxo) => [refOf(utxo[0]), utxo]));
 }
 
-interface OwnCredentials {
-  /** Payment key hashes of the wallet's own addresses. */
-  payment: Set<string>;
-  /** Stake key hashes of the wallet's own base addresses. */
-  stake: Set<string>;
-}
-
-/** The key credentials the wallet's own addresses carry (lower-case hex). */
-function ownCredentials(ownAddresses: ReadonlySet<string>): OwnCredentials {
+/** The payment key hashes of the wallet's own addresses (lower-case hex). */
+function ownPaymentKeyHashes(ownAddresses: ReadonlySet<string>): Set<string> {
   const payment = new Set<string>();
-  const stake = new Set<string>();
   for (const address of ownAddresses) {
     try {
       const parsed = Cardano.Address.fromBech32(address);
-      const base = parsed.asBase();
-      const credential = (base ?? parsed.asEnterprise())?.getPaymentCredential();
+      const credential = (parsed.asBase() ?? parsed.asEnterprise())?.getPaymentCredential();
       if (credential?.type === Cardano.CredentialType.KeyHash) payment.add(String(credential.hash).toLowerCase());
-      const stakeCredential = base?.getStakeCredential();
-      if (stakeCredential?.type === Cardano.CredentialType.KeyHash) stake.add(String(stakeCredential.hash).toLowerCase());
     } catch {
       // Not a Shelley bech32 address: it carries no key the wallet could own a listing with.
     }
   }
-  return { payment, stake };
+  return payment;
 }
 
 function economics(datum: ListingDatum, deployment: NftMarketDeployment) {

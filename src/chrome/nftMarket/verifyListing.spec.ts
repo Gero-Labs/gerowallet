@@ -25,6 +25,11 @@ import { decodeListingDatum, sellerShare, type ListingDatum, type Payee } from '
 import type { OwnListing } from './ownListings';
 import {
   MarketVerifyError,
+  checkEnvelope,
+  checkNewListing,
+  checkValidityWindow,
+  cip68Label,
+  newestDeployment,
   verifyCancel,
   verifyList,
   verifyReprice,
@@ -90,6 +95,9 @@ const OWNER_B = 'b551db0a6c4f3e1d2a90b7c85e4f13d6a7b8c9d0e1f2a3b4c5d6e7f8';
 const STAKE = '5ce6d8a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6071829';
 const OTHER_STAKE = '99'.repeat(28);
 const STRANGER = '77'.repeat(28);
+// A second stake key among the wallet's own addresses: the account's stake key is still STAKE.
+const SECOND_STAKE = '55'.repeat(28);
+const ALT_OWNER = '66'.repeat(28);
 
 function baseAddress(networkId: Cardano.NetworkId, payment: string, stake: string, paymentIsScript = false): string {
   return Cardano.BaseAddress.fromCredentials(
@@ -102,6 +110,7 @@ function baseAddress(networkId: Cardano.NetworkId, payment: string, stake: strin
 const RECEIVE = baseAddress(TESTNET, OWNER, STAKE);
 const CHANGE = baseAddress(TESTNET, OWNER_B, STAKE);
 const FOREIGN = baseAddress(TESTNET, STRANGER, OTHER_STAKE);
+const ALT_ADDRESS = baseAddress(TESTNET, ALT_OWNER, SECOND_STAKE);
 const MAINNET_RECEIVE = baseAddress(MAINNET, OWNER, STAKE);
 const ROYALTY_ADDRESS = baseAddress(TESTNET, '41'.repeat(28), '42'.repeat(28));
 const ROYALTY_ADDRESS_2 = baseAddress(TESTNET, '43'.repeat(28), '44'.repeat(28));
@@ -196,6 +205,7 @@ function context(overrides: Partial<MarketVerifyContext> = {}): MarketVerifyCont
     ownAddresses: new Set([RECEIVE, CHANGE]),
     ownKeyHashes: new Set([OWNER, OWNER_B, STAKE]),
     ownListings: new Map([[LISTING_REF, OWN_LISTING], [OTHER_LISTING_REF, OTHER_OWN_LISTING]]),
+    stakeKeyHash: STAKE,
     ...overrides,
   };
 }
@@ -247,6 +257,8 @@ const spend = (index: number, cbor: string) => redeemer(Cardano.RedeemerPurpose.
 const LISTING_SORTED = 1;
 
 /** The valid cancel: spend the v1 listing with Cancel, the NFT and the deposit back to RECEIVE. */
+const WINDOW = { invalidBefore: Cardano.Slot(1000), invalidHereafter: Cardano.Slot(1000 + 1920) };
+
 function validCancel(): Cardano.Tx {
   return {
     id: Cardano.TransactionId('00'.repeat(32)),
@@ -257,6 +269,7 @@ function validCancel(): Cardano.Tx {
         { address: Cardano.PaymentAddress(CHANGE), value: { coins: 9_600_000n } },
       ],
       fee: 400_000n,
+      validityInterval: WINDOW,
       collaterals: [FEE_IN],
       collateralReturn: { address: Cardano.PaymentAddress(CHANGE), value: { coins: 8_000_000n } },
       totalCollateral: 2_000_000n,
@@ -335,12 +348,10 @@ describe('verifyList: the valid list', () => {
     });
   });
 
-  it('accepts a plain (non CIP-68) NFT, no royalties, no validity window and a required signer of the wallet', () => {
+  it('accepts a plain (non CIP-68) NFT with no royalties', () => {
     const plain = { ...LIST_INTENT, unit: UNIT_PLAIN, royalties: [] };
     const tx = listTx((t) => {
       t.body.outputs[0] = listingOutput(LISTING_V2, listingDatumHex(withDatum({ royalties: [] })), UNIT_PLAIN);
-      delete t.body.validityInterval;
-      t.body.requiredExtraSignatures = [Ed25519KeyHashHex(OWNER)];
     });
     expect(verifyL(tx, plain).unit).toBe(UNIT_PLAIN);
   });
@@ -437,6 +448,31 @@ describe('verifyList: the listing output', () => {
     refusedBy('LISTING', () => verifyL(tx, { ...LIST_INTENT, stakeCredential: OTHER_STAKE }));
   });
 
+  it("refuses a stake key that is another key of the wallet's own addresses: it must be the account's", () => {
+    const altContext = () => context({
+      ownAddresses: new Set([RECEIVE, CHANGE, ALT_ADDRESS]),
+      ownKeyHashes: new Set([OWNER, OWNER_B, STAKE, ALT_OWNER, SECOND_STAKE]),
+    });
+    const tx = listTx((t) => { t.body.outputs[0].address = Cardano.PaymentAddress(listingAddressAt(V2, SECOND_STAKE)); });
+    // The transaction and the intent agree on a stake key the wallet owns, but it is not the account's.
+    refusedBy('LISTING', () => verifyL(tx, { ...LIST_INTENT, stakeCredential: SECOND_STAKE }, altContext()));
+    // The same wallet context lists fine at the account's own stake key.
+    expect(verifyL(listTx(), LIST_INTENT, altContext()).deploymentVersion).toBe(2);
+  });
+
+  it("refuses an intent that names a stake key other than the account's, even when the transaction is right", () => {
+    refusedBy('LISTING', () => verifyL(listTx(), { ...LIST_INTENT, stakeCredential: SECOND_STAKE }));
+    refusedBy('LISTING', () => verifyL(listTx(), { ...LIST_INTENT, stakeCredential: OTHER_STAKE }));
+  });
+
+  it("refuses a context with no usable account stake key, or one that is not a key of the wallet", () => {
+    refusedBy('LISTING', () => verifyL(listTx(), LIST_INTENT, context({ stakeKeyHash: '' })));
+    refusedBy('LISTING', () => verifyL(listTx(), LIST_INTENT, context({ stakeKeyHash: 'not hex' })));
+    refusedBy('LISTING', () => verifyL(listTx(), LIST_INTENT, context({ stakeKeyHash: 'not hex', ownKeyHashes: new Set([OWNER, OWNER_B, 'not hex']) })));
+    refusedBy('LISTING', () => verifyL(listTx((t) => { t.body.outputs[0].address = Cardano.PaymentAddress(listingAddressAt(V2, OTHER_STAKE)); }),
+      { ...LIST_INTENT, stakeCredential: OTHER_STAKE }, context({ stakeKeyHash: OTHER_STAKE })));
+  });
+
   it('refuses a deposit above the cap, or none', () => {
     refusedBy('LISTING', () => verifyL(listTx((tx) => { tx.body.outputs[0].value.coins = MAX_LISTING_DEPOSIT + 1n; })));
     expect(verifyL(listTx((tx) => { tx.body.outputs[0].value.coins = MAX_LISTING_DEPOSIT; })).depositLovelace).toBe('5000000');
@@ -460,6 +496,33 @@ describe('verifyList: the NFT', () => {
   it('refuses the CIP-68 (100) reference token, even when the transaction matches the intent', () => {
     const tx = listTx((t) => { t.body.outputs[0] = listingOutput(LISTING_V2, listingDatumHex(DATUM), UNIT_100); });
     refusedBy('NFT', () => verifyL(tx, { ...LIST_INTENT, unit: UNIT_100 }));
+  });
+
+  it.each<[string, string]>([
+    ['(333) fungible', '0014df10'],
+    ['(444) rich fungible', '001bc280'],
+    ['(500) royalty', '001f4d70'],
+    ['(1), a label this wallet has no name for', '00001070'],
+  ])('refuses a CIP-68 token with label %s, and accepts the (222) user token and look-alikes', (_name, prefix) => {
+    const unit = `${POLICY}${prefix}${NAME}`;
+    const tx = listTx((t) => { t.body.outputs[0] = listingOutput(LISTING_V2, listingDatumHex(DATUM), unit); });
+    refusedBy('NFT', () => verifyL(tx, { ...LIST_INTENT, unit }));
+  });
+
+  it('recognises CIP-67 labels by their checksum, so a name that only looks like one is a plain NFT', () => {
+    expect([100, 222, 333, 444, 500].map((label) => cip68Label(
+      { 100: '000643b0', 222: '000de140', 333: '0014df10', 444: '001bc280', 500: '001f4d70' }[label]! + NAME,
+    ))).toEqual([100, 222, 333, 444, 500]);
+    // Wrong checksum (right padding), wrong padding nibbles, too short, not hex.
+    expect(cip68Label('000643c0')).toBeNull();
+    expect(cip68Label('000643b1')).toBeNull();
+    expect(cip68Label('100643b0')).toBeNull();
+    expect(cip68Label('000643b8')).toBeNull();
+    expect(cip68Label('0006')).toBeNull();
+    expect(cip68Label(NAME)).toBeNull();
+    const lookAlike = `${POLICY}000643c0${NAME}`;
+    const tx = listTx((t) => { t.body.outputs[0] = listingOutput(LISTING_V2, listingDatumHex(DATUM), lookAlike); });
+    expect(verifyL(tx, { ...LIST_INTENT, unit: lookAlike }).unit).toBe(lookAlike);
   });
 
   it('refuses an intent unit that is no policy id and asset name', () => {
@@ -551,8 +614,10 @@ describe('verifyList: scripts, collateral and signers', () => {
     refusedBy('COLLATERAL', () => verifyL(listTx((tx) => { tx.body.totalCollateral = 1_000_000n; })));
   });
 
-  it('refuses a required signer that is not a key of the wallet', () => {
+  it('refuses any required signer: a list requires none, not even a key of the wallet', () => {
     refusedBy('SIGNERS', () => verifyL(listTx((tx) => { tx.body.requiredExtraSignatures = [Ed25519KeyHashHex(STRANGER)]; })));
+    refusedBy('SIGNERS', () => verifyL(listTx((tx) => { tx.body.requiredExtraSignatures = [Ed25519KeyHashHex(OWNER)]; })));
+    refusedBy('SIGNERS', () => verifyL(listTx((tx) => { tx.body.requiredExtraSignatures = [Ed25519KeyHashHex(STAKE)]; })));
   });
 });
 
@@ -598,15 +663,23 @@ describe('verifyList: fee, window and the rest of the body', () => {
     expect(verifyL(listTx((tx) => { tx.body.fee = NFT_MARKET_MAX_FEE_LOVELACE; })).networkFeeLovelace).toBe('2000000');
   });
 
-  it('refuses a validity window over an hour, an empty one and one with no end; accepts a time-to-live alone', () => {
+  it('needs a validity window with both bounds, at most an hour wide', () => {
     const window = (start: number, end: number) => (tx: Cardano.Tx) => {
       tx.body.validityInterval = { invalidBefore: Cardano.Slot(start), invalidHereafter: Cardano.Slot(end) };
     };
     refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx(window(1000, 1000 + NFT_MARKET_MAX_VALIDITY_SLOTS + 1))));
     expect(verifyL(listTx(window(1000, 1000 + NFT_MARKET_MAX_VALIDITY_SLOTS))).txId).toBeTruthy();
+    // Nexus's window: [tip - 120, tip + 1800].
+    expect(verifyL(listTx(window(5_000_000 - 120, 5_000_000 + 1800))).txId).toBeTruthy();
     refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx(window(1000, 1000))));
+    refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx(window(2000, 1000))));
+    // No window at all, a start with no end, and an end alone (a far-future time-to-live).
+    refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx((tx) => { delete tx.body.validityInterval; })));
     refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx((tx) => { tx.body.validityInterval = { invalidBefore: Cardano.Slot(1000) }; })));
-    expect(verifyL(listTx((tx) => { tx.body.validityInterval = { invalidHereafter: Cardano.Slot(5000) }; })).txId).toBeTruthy();
+    refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx((tx) => { tx.body.validityInterval = { invalidHereafter: Cardano.Slot(5000) }; })));
+    refusedBy('FORBIDDEN_FIELD', () => verifyL(listTx((tx) => { tx.body.validityInterval = { invalidHereafter: Cardano.Slot(4_000_000_000) }; })));
+    // A window that starts at slot 0 is a window.
+    expect(verifyL(listTx(window(0, 1800))).txId).toBeTruthy();
   });
 
   it.each<[string, (tx: Cardano.Tx) => void]>([
@@ -684,6 +757,9 @@ describe('verifyCancel: network and the body', () => {
     ['a validity window over an hour', (tx) => {
       tx.body.validityInterval = { invalidBefore: Cardano.Slot(1), invalidHereafter: Cardano.Slot(2 + NFT_MARKET_MAX_VALIDITY_SLOTS) };
     }],
+    ['no validity window', (tx) => { delete tx.body.validityInterval; }],
+    ['a far-future time-to-live alone', (tx) => { tx.body.validityInterval = { invalidHereafter: Cardano.Slot(4_000_000_000) }; }],
+    ['a validity start alone', (tx) => { tx.body.validityInterval = { invalidBefore: Cardano.Slot(1000) }; }],
   ])('refuses %s', (_name, edit) => {
     refusedBy('FORBIDDEN_FIELD', () => verifyC(cancelTx(edit)));
   });
@@ -870,6 +946,15 @@ describe('verifyReprice: the valid reprice', () => {
     refusedBy('COLLATERAL', () => verifyR(repriceTx((tx) => { delete tx.body.collaterals; })));
     refusedBy('FORBIDDEN_FIELD', () => verifyR(repriceTx((tx) => { tx.body.mint = assets(OTHER_UNIT); })));
   });
+
+  it('needs a validity window with both bounds, at most an hour wide', () => {
+    refusedBy('FORBIDDEN_FIELD', () => verifyR(repriceTx((tx) => { delete tx.body.validityInterval; })));
+    refusedBy('FORBIDDEN_FIELD', () => verifyR(repriceTx((tx) => { tx.body.validityInterval = { invalidHereafter: Cardano.Slot(4_000_000_000) }; })));
+    refusedBy('FORBIDDEN_FIELD', () => verifyR(repriceTx((tx) => { tx.body.validityInterval = { invalidBefore: Cardano.Slot(1000) }; })));
+    refusedBy('FORBIDDEN_FIELD', () => verifyR(repriceTx((tx) => {
+      tx.body.validityInterval = { invalidBefore: Cardano.Slot(1), invalidHereafter: Cardano.Slot(2 + NFT_MARKET_MAX_VALIDITY_SLOTS) };
+    })));
+  });
 });
 
 describe('verifyReprice: the new listing output', () => {
@@ -887,6 +972,18 @@ describe('verifyReprice: the new listing output', () => {
     refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].address = Cardano.PaymentAddress(LISTING_V2); })));
     refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].address = Cardano.PaymentAddress(listingAddressAt(V1, OTHER_STAKE)); })));
     refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].address = Cardano.PaymentAddress(listingAddressAt(V1, OWNER)); })));
+  });
+
+  it("refuses a stake key that is another key of the wallet's own addresses: it must be the account's", () => {
+    const altContext = context({
+      ownAddresses: new Set([RECEIVE, CHANGE, ALT_ADDRESS]),
+      ownKeyHashes: new Set([OWNER, OWNER_B, STAKE, ALT_OWNER, SECOND_STAKE]),
+    });
+    refusedBy('LISTING', () => verifyR(repriceTx((tx) => {
+      tx.body.outputs[0].address = Cardano.PaymentAddress(listingAddressAt(V1, SECOND_STAKE));
+    }), REPRICE_INTENT, altContext));
+    expect(verifyR(repriceTx(), REPRICE_INTENT, altContext).deploymentVersion).toBe(1);
+    refusedBy('LISTING', () => verifyR(repriceTx(), REPRICE_INTENT, context({ stakeKeyHash: SECOND_STAKE, ownKeyHashes: new Set([OWNER, OWNER_B, STAKE, SECOND_STAKE]) })));
   });
 
   it('refuses a value other than the NFT once plus the same deposit', () => {
@@ -947,5 +1044,27 @@ describe('verifyReprice: the new listing output', () => {
       tx.body.outputs.push({ address: Cardano.PaymentAddress(FOREIGN), value: { coins: 1_000_000n } });
     })));
     refusedBy('OUTPUTS', () => verifyR(repriceTx((tx) => { tx.body.outputs[1].datum = plutusData('d87980'); })));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+
+describe('the checks the migrate verifier reuses', () => {
+  const emptyContext = () => context({ deployments: [] });
+
+  it('refuse an empty deployment list with a MarketVerifyError, never a TypeError', () => {
+    refusedBy('NETWORK', () => newestDeployment([]));
+    expect(newestDeployment([V1, V2])).toBe(V2);
+    const serialized = Serialization.Transaction.fromCbor(HexBlob(listTx().cbor));
+    refusedBy('NETWORK', () => checkNewListing(serialized, 0, serialized.toCore().body.outputs[0], V2, LIST_INTENT, emptyContext()));
+    refusedBy('NETWORK', () => checkEnvelope(serialized.toCore(), emptyContext()));
+  });
+
+  it('apply the envelope, including the validity window, to any transaction', () => {
+    expect(() => checkEnvelope(Serialization.Transaction.fromCbor(HexBlob(listTx().cbor)).toCore(), context())).not.toThrow();
+    const open = Serialization.Transaction.fromCbor(HexBlob(listTx((tx) => { delete tx.body.validityInterval; }).cbor)).toCore();
+    refusedBy('FORBIDDEN_FIELD', () => checkEnvelope(open, context()));
+    refusedBy('FORBIDDEN_FIELD', () => checkValidityWindow(open.body));
+    expect(() => checkValidityWindow(validList().body)).not.toThrow();
   });
 });
