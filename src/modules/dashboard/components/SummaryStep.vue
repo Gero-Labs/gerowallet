@@ -285,7 +285,9 @@ watch(
 </script>
 
 <style scoped>
+/* App.vue paints every v-card's background and wins over `transparent`, so this card
+   shows as a panel behind the details and the timeline: inset them from its edges. */
 .summary-step {
-  padding: 8px 0;
+  padding: var(--g-s-2) var(--g-s-3);
 }
 </style>
