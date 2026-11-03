@@ -64,7 +64,11 @@ import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE, grantMarketSignAllowance, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
+import { marketPrepareHandler, type MarketHandlerDeps } from '@/chrome/nftMarket/marketPrepare';
+import { fetchListingUtxoProven } from '@/chrome/nftMarket/listingChainUtxo';
+import { nftMarketApi } from '@/api/nft-market-api';
+import NetworkStore from '@/stores/networkStore';
 import { openDappMarketPass } from '@/chrome/nftMarket/dappMarketPass';
 import { transactionFromSignRequest } from '@/chrome/signTxRequest';
 import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
@@ -1762,6 +1766,36 @@ function hardwareSignRefusal(txCbor: unknown): HardwareSignRefusal | null {
   return market ? { reason: market, message: NFT_MARKET_SIGN_REFUSAL_MESSAGE } : null;
 }
 
+// What the Gero NFT market's prepare handlers need from the worker. The page sends the NFT or the
+// listing and a price; everything else (the wallet's addresses, keys, UTxOs, listings and the
+// protocol parameter) is read here, never from the request.
+const marketPrepareDeps: MarketHandlerDeps = {
+  booted,
+  getWallet: () => walletManager.getWallet(),
+  // Cardano only: the handlers refuse any other chain.
+  getState: () => ({
+    utxos: (WalletStore.state.utxos ?? []) as Cardano.Utxo[],
+    keys: WalletStore.state.keys,
+    collateral: WalletStore.state.collateral,
+    listedListings: WalletStore.state.listedListings,
+    coinsPerUtxoByte: NetworkStore.state.epochParams?.coinsPerUtxoByte,
+  }),
+  deployments: (chain, network) => networks.resolveNftMarketDeployments(chain, network),
+  build: {
+    list: (buildRequest, network) => nexusTxApi.buildNftMarketList(buildRequest, network),
+    reprice: (buildRequest, network) => nexusTxApi.buildNftMarketReprice(buildRequest, network),
+    cancel: (buildRequest, network) => nexusTxApi.buildNftMarketCancel(buildRequest, network),
+    buy: (buildRequest, network) => nexusTxApi.buildNftMarketBuy(buildRequest, network),
+    migrate: (buildRequest, network) => nexusTxApi.buildNftMarketMigrate(buildRequest, network),
+  },
+  lookupListing: (ref, network) => nftMarketApi.listing(ref, network),
+  lookupChainUtxo: (ref, network) => fetchListingUtxoProven(ref, network),
+  lookupLegacy: (ownerPkhs, network) => fetchLegacyListings(ownerPkhs, network),
+  royalties: (policyId, network) => nftMarketApi.royalties(policyId, network),
+  markNexusLent,
+  grantAllowance: grantMarketSignAllowance,
+};
+
 // The same refusal for a signer outside the worker: Ledger, Keystone and Trezor over WebUSB
 // sign in a document (ledger.ts, keystone.ts, trezorDispatch.ts), which cannot read the
 // refusal index, so they ask here first.
@@ -1840,6 +1874,16 @@ app.addToOptions(MessageTypes.LEGACY_LISTING_PREPARE_CANCEL, legacyCancelPrepare
   build: (buildRequest, network) => nexusTxApi.buildLegacyCancel(buildRequest, network),
   markNexusLent,
 }));
+
+// Gero NFT market: list, reprice, cancel, buy and move a legacy listing. The worker chooses every
+// address, key and input, has Nexus build, verifies the CBOR (verifyListing, verifyBuy,
+// verifyMigrate), allows that exact transaction id to be signed once (marketAllowance) and
+// returns the bytes untouched for the page to sign. Extension pages only (senderTrust).
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_LIST, marketPrepareHandler('list', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_REPRICE, marketPrepareHandler('reprice', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_CANCEL, marketPrepareHandler('cancel', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_BUY, marketPrepareHandler('buy', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_MIGRATE, marketPrepareHandler('migrate', marketPrepareDeps));
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
   // Same consent re-check as signData before the witness set is released.

@@ -171,6 +171,66 @@ describe('NFT market signing wiring', () => {
     });
   });
 
+  describe('the prepare handlers', () => {
+    const kinds = [
+      ['LIST', 'list'],
+      ['REPRICE', 'reprice'],
+      ['CANCEL', 'cancel'],
+      ['BUY', 'buy'],
+      ['MIGRATE', 'migrate'],
+    ] as const;
+    // The object literal, up to its closing `};`.
+    const depsStart = bg.indexOf('const marketPrepareDeps: MarketHandlerDeps = {');
+    expect(depsStart).toBeGreaterThan(-1);
+    const deps = bg.slice(depsStart, bg.indexOf('\n};\n', depsStart));
+
+    it.each(kinds)('NFT_MARKET_PREPARE_%s is registered once, through the extension-pages channel, for its own action', (message, action) => {
+      const registration = `app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_${message}, marketPrepareHandler('${action}', marketPrepareDeps));`;
+      expect(bg.split(registration)).toHaveLength(2);
+      // Never the dApp channel, where a web page could reach it.
+      expect(bg).not.toMatch(new RegExp(`app\\.add\\(\\s*MessageTypes\\.NFT_MARKET_PREPARE_${message}`));
+    });
+
+    it('reads the wallet from the worker, never from a request', () => {
+      expect(deps).toContain('walletManager.getWallet()');
+      expect(deps).toContain('WalletStore.state.utxos');
+      expect(deps).toContain('WalletStore.state.keys');
+      expect(deps).toContain('WalletStore.state.collateral');
+      expect(deps).toContain('WalletStore.state.listedListings');
+      expect(deps).toContain('NetworkStore.state.epochParams?.coinsPerUtxoByte');
+      expect(deps).toContain('networks.resolveNftMarketDeployments(chain, network)');
+      expect(deps).not.toMatch(/request\.data/);
+    });
+
+    it('waits for the worker to boot, so the wallet and its listings are restored first', () => {
+      expect(deps).toMatch(/\n {2}booted,\n/);
+    });
+
+    it('builds through Nexus, reads the listing independently of it and grants the market allowance (not the CIP-113 one)', () => {
+      for (const call of [
+        'nexusTxApi.buildNftMarketList(',
+        'nexusTxApi.buildNftMarketReprice(',
+        'nexusTxApi.buildNftMarketCancel(',
+        'nexusTxApi.buildNftMarketBuy(',
+        'nexusTxApi.buildNftMarketMigrate(',
+        'nftMarketApi.listing(',
+        'nftMarketApi.royalties(',
+        'fetchListingUtxoProven(',
+        'fetchLegacyListings(',
+      ]) {
+        expect(deps, call).toContain(call);
+      }
+      expect(deps).toContain('grantAllowance: grantMarketSignAllowance');
+      expect(deps).toContain('markNexusLent');
+      expect(deps).not.toMatch(/Cip113/);
+    });
+
+    it('only the prepare handlers grant the page allowance', () => {
+      expect(bg.match(/grantMarketSignAllowance\b/g)).toHaveLength(2); // the import and the deps
+      expect(bg).not.toMatch(/grantMarketSignAllowance\(/);
+    });
+  });
+
   it('the preflight tells the page which refusal it is, and the TREZOR handler throws that message', () => {
     expect(bg).toContain('...(refusal ? { message: refusal.message } : {})');
     expect(bg).toContain('throw new Error(trezorRefusal.message)');
