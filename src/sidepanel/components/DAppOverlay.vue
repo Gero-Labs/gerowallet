@@ -1095,7 +1095,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network, Blockchain } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
-import { friendlyTxError } from '@/shared/utils/txErrors';
+import { friendlyDappTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -2243,7 +2243,7 @@ async function signNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Normal sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2309,7 +2309,7 @@ async function signPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2457,7 +2457,7 @@ async function signLedger() {
     if (e instanceof StaleApprovalError) return;
     ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] Ledger sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Ledger signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
@@ -2510,7 +2510,7 @@ async function signTrezor() {
     if (message.includes('Failure_ActionCancelled') || message.includes('cancelled')) {
       signError.value = 'Transaction cancelled on Trezor';
     } else {
-      signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Trezor signing failed';
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Trezor signing failed';
     }
   } finally {
     signing.value = false;
@@ -2549,7 +2549,7 @@ async function signKeystone() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Failed to create Keystone sign request';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Failed to create Keystone sign request';
   }
 
   });
@@ -2663,7 +2663,7 @@ async function signDataKeystone() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || t('wallet.keystoneSigningFailed');
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('wallet.keystoneSigningFailed');
   }
 
   });
@@ -2739,7 +2739,7 @@ async function signDataNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2821,7 +2821,7 @@ async function signDataPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2899,7 +2899,7 @@ async function signDataHw() {
     if (e instanceof StaleApprovalError) return;
     if (!isTrezor) ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] HW sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
@@ -2984,7 +2984,7 @@ async function signMidnightDataNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -3038,7 +3038,7 @@ async function signMidnightDataPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }

@@ -94,7 +94,8 @@ describe('transaction approval under asynchronous validation and authentication'
     const { signing } = signer();
     mocks.createQr.mockRejectedValueOnce(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
     await signing.handleSign();
-    expect(mocks.error).toHaveBeenCalledWith('This took too long. Start it again.');
+    // The wallet's own signing (Send, staking, ...): nothing expired, the transaction is not one to sign here.
+    expect(mocks.error).toHaveBeenCalledWith('This transaction touches an NFT listing, so it can only be signed from the market screens.');
     expect(mocks.error).not.toHaveBeenCalledWith(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
     expect(signing.overlay.value).toBe(false);
   });

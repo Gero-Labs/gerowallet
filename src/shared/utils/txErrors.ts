@@ -135,11 +135,19 @@ export function shortfallLovelaceFromMessage(message: string): bigint | undefine
   return undefined;
 }
 
+export interface FriendlyTxErrorOptions {
+  /**
+   * The screen is a dApp's market approval (the side panel overlay, the popup): the worker's market
+   * signing refusal means the approval the transaction was previewed under has run out.
+   */
+  marketApproval?: boolean;
+}
+
 /**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
-export function friendlyTxError(raw: unknown): string {
+export function friendlyTxError(raw: unknown, options: FriendlyTxErrorOptions = {}): string {
   // Raised by the wallet before any request goes out: the assets to send sit on
   // more UTxOs than one transaction may spend, so only consolidating helps.
   if (raw instanceof InputLimitError) {
@@ -153,7 +161,7 @@ export function friendlyTxError(raw: unknown): string {
   if (rawMessage === SUBMIT_API_HASH_MISMATCH_MESSAGE) return i18n.t('settings.submitApi.errors.hashMismatch') as string;
   if (rawMessage === SUBMIT_API_STORAGE_MESSAGE) return i18n.t('settings.submitApi.errors.storageUnavailable') as string;
   if (rawMessage.startsWith(SUBMIT_API_ENDPOINT_PREFIX)) {
-    const reason = friendlyTxError(rawMessage.slice(SUBMIT_API_ENDPOINT_PREFIX.length));
+    const reason = friendlyTxError(rawMessage.slice(SUBMIT_API_ENDPOINT_PREFIX.length), options);
     return i18n.t('settings.submitApi.errors.endpointFailed', { reason }) as string;
   }
 
@@ -167,9 +175,10 @@ export function friendlyTxError(raw: unknown): string {
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
 
   // The market's signing refusal is the same kind of fixed string. A dApp's market transaction
-  // reaches it when the approval it was previewed under has run out (useNftMarketFlow maps the
-  // same text for Gero's own market flows).
-  const marketRefusal = marketSignRefusalKey(message);
+  // reaches it when the approval it was previewed under has run out (`marketApproval`; useNftMarketFlow
+  // maps the same text for Gero's own market flows). Any other screen (a plain Send to a listing
+  // script, staking, ...) gets the honest "only from the market screens".
+  const marketRefusal = marketSignRefusalKey(message, options.marketApproval ? 'market' : 'other');
   if (marketRefusal) return i18n.t(marketRefusal) as string;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
@@ -189,3 +198,9 @@ export function friendlyTxError(raw: unknown): string {
 
   return message;
 }
+
+/**
+ * `friendlyTxError` for the dApp approval screens (the side panel overlay and the popup), where the
+ * worker's market signing refusal means a dApp's market approval ran out.
+ */
+export const friendlyDappTxError = (raw: unknown): string => friendlyTxError(raw, { marketApproval: true });

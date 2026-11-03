@@ -6243,6 +6243,7 @@ export default {
   'nftMarket.error.invalidRequest': 'That request is not valid. Check the details and start again.',
   'nftMarket.error.failed': 'We could not prepare this transaction. Try again.',
   'nftMarket.error.expired': 'This took too long. Start it again.',
+  'nftMarket.error.signFromMarket': 'This transaction touches an NFT listing, so it can only be signed from the market screens.',
   'nftMarket.error.signFailed': 'We could not sign this transaction. Try again.',
   'nftMarket.error.maybeSent': 'This may have been sent. Check your activity before you try again.',
   'nftMarket.actions.list': 'List for sale',

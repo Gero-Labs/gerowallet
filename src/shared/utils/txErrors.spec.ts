@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import i18n from '@/plugins/i18n';
-import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
+import { extractNexusErrorMessage, friendlyDappTxError, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
 import {
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
@@ -103,10 +105,29 @@ describe('friendlyTxError on submit failures', () => {
   // A dApp's market transaction is signable only under the approval it was previewed with; once
   // that runs out the worker refuses with a fixed English string, which has to read as a sentence
   // the user can act on, in their own language.
-  it('localizes the market signing refusal', () => {
-    const localized = friendlyTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+  it('localizes the market signing refusal for a dApp approval, where an approval ran out', () => {
+    const localized = friendlyDappTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
     expect(localized).toBe('This took too long. Start it again.');
     expect(localized).not.toContain('Gero cannot sign');
+    expect(friendlyTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE), { marketApproval: true })).toBe(localized);
+  });
+
+  // A plain Gero Send (or any other flow of the wallet's own) to a listing-script address meets the
+  // same refusal. Nothing there took too long: the transaction is simply not one to sign from there.
+  it('says so honestly for every other caller: the transaction can only be signed from the market screens', () => {
+    const localized = friendlyTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    expect(localized).toBe('This transaction touches an NFT listing, so it can only be signed from the market screens.');
+    expect(localized).not.toMatch(/took too long|start it again/i);
+    expect(localized).not.toContain('Gero cannot sign');
+    expect(friendlyTxError(NFT_MARKET_SIGN_REFUSAL_MESSAGE)).toBe(localized);
+  });
+
+  it('keeps the market copy for the dApp approval screens only: every friendlyTxError call there is the dApp one', () => {
+    for (const file of ['../../sidepanel/components/DAppOverlay.vue', '../../popup/modules/views/SignTx.vue']) {
+      const source = readFileSync(join(__dirname, file), 'utf8');
+      expect(source, file).toContain('friendlyDappTxError(');
+      expect(source.replace(/friendlyDappTxError/g, ''), file).not.toMatch(/friendlyTxError\(/);
+    }
   });
 
   it('drops our prefix from a plain-text node rejection', () => {

@@ -6012,6 +6012,7 @@ export default {
   'nftMarket.error.invalidRequest': 'Esa solicitud no es válida. Revisa los datos y empieza de nuevo.',
   'nftMarket.error.failed': 'No pudimos preparar esta transacción. Inténtalo de nuevo.',
   'nftMarket.error.expired': 'Esto tardó demasiado. Empieza de nuevo.',
+  'nftMarket.error.signFromMarket': 'Esta transacción afecta una publicación de NFT, así que solo se puede firmar desde las pantallas del mercado.',
   'nftMarket.error.signFailed': 'No pudimos firmar esta transacción. Inténtalo de nuevo.',
   'nftMarket.error.maybeSent': 'Es posible que ya se haya enviado. Revisa tu actividad antes de intentarlo de nuevo.',
   'nftMarket.actions.list': 'Publicar en venta',

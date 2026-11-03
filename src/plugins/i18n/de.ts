@@ -6136,6 +6136,7 @@ export default {
   'nftMarket.error.invalidRequest': 'Diese Anfrage ist ungültig. Prüfen Sie die Angaben und beginnen Sie von vorn.',
   'nftMarket.error.failed': 'Die Transaktion konnte nicht vorbereitet werden. Versuchen Sie es erneut.',
   'nftMarket.error.expired': 'Das hat zu lange gedauert. Beginnen Sie von vorn.',
+  'nftMarket.error.signFromMarket': 'Diese Transaktion betrifft ein NFT-Angebot und kann deshalb nur im NFT-Markt signiert werden.',
   'nftMarket.error.signFailed': 'Die Transaktion konnte nicht signiert werden. Versuchen Sie es erneut.',
   'nftMarket.error.maybeSent': 'Dies wurde möglicherweise bereits gesendet. Prüfen Sie Ihre Aktivität, bevor Sie es erneut versuchen.',
   'nftMarket.actions.list': 'Zum Verkauf anbieten',

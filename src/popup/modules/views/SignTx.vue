@@ -252,7 +252,7 @@ import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { DappRisk, DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { friendlyTxError } from '@/shared/utils/txErrors';
+import { friendlyDappTxError } from '@/shared/utils/txErrors';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
@@ -785,8 +785,8 @@ const sign = () => approval.run(async () => {
         } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
           debugLog('[KEYSTONE-SIGN] Error:', e);
-          // friendlyTxError: the worker's fixed English refusals (a market transaction whose approval ran out) read in the user's language.
-          snackbar.setError(friendlyTxError(getErrorMessage(e, '')) || t('wallet.keystoneSigningFailed'));
+          // friendlyDappTxError: the worker's fixed English refusals (a market transaction whose approval ran out) read in the user's language.
+          snackbar.setError(friendlyDappTxError(getErrorMessage(e, '')) || t('wallet.keystoneSigningFailed'));
         }
       }
     } catch (e: unknown) {
@@ -804,7 +804,7 @@ const sign = () => approval.run(async () => {
         }
       } else {
         debugLog('[SIGN] Transaction error:', e);
-        snackbar.setError(friendlyTxError(getErrorMessage(e)));
+        snackbar.setError(friendlyDappTxError(getErrorMessage(e)));
       }
     } finally {
       txSignLoading.value = false;
