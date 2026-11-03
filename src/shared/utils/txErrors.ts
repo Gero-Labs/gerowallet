@@ -18,6 +18,7 @@ import {
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -164,6 +165,11 @@ export function friendlyTxError(raw: unknown): string {
   // The CIP-113 signing refusal is thrown from the background as a fixed English
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+
+  // The market's signing refusal is the same kind of fixed string. A dApp's market transaction
+  // reaches it when the approval it was previewed under has run out (useNftMarketFlow maps the
+  // same text for Gero's own market flows).
+  if (message === NFT_MARKET_SIGN_REFUSAL_MESSAGE) return i18n.t('nftMarket.error.expired') as string;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
   // same as it being rejected -- the localized copy has to keep that uncertainty.

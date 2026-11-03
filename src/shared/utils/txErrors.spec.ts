@@ -9,6 +9,7 @@ import {
   SUBMIT_API_STORAGE_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
 
 describe('isCollateralError', () => {
   it('matches a genuine missing-collateral error', () => {
@@ -97,6 +98,15 @@ describe('friendlyTxError on submit failures', () => {
     expect(localized).not.toContain(TX_SUBMIT_UNCONFIRMED_MESSAGE);
     expect(localized.toLowerCase()).toContain('could not confirm');
     expect(localized.toLowerCase()).not.toContain('was not sent');
+  });
+
+  // A dApp's market transaction is signable only under the approval it was previewed with; once
+  // that runs out the worker refuses with a fixed English string, which has to read as a sentence
+  // the user can act on, in their own language.
+  it('localizes the market signing refusal', () => {
+    const localized = friendlyTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    expect(localized).toBe('This took too long. Start it again.');
+    expect(localized).not.toContain('Gero cannot sign');
   });
 
   it('drops our prefix from a plain-text node rejection', () => {

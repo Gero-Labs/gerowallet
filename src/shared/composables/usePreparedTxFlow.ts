@@ -59,6 +59,13 @@ export interface PreparedTxFlowOptions<TFailure extends PreparedTxFailure = Prep
    */
   refusalMessage?: string;
   /**
+   * Reads the text of a failed SUBMIT_TX. A code returned means the network refused the
+   * transaction for that stated reason (a spent input, say): it was not sent, so the failure
+   * carries that code instead of "may have been sent", and the prepared transaction is dropped.
+   * Left out, or when it returns nothing, a failed submit stays unconfirmed.
+   */
+  submitRefusalCode?: (message: string) => string | undefined;
+  /**
    * Extra string fields of the worker's failure reply to copy onto `failure` beside the code
    * (the caller's own `TFailure` fields, e.g. a limit the user can act on).
    */
@@ -198,7 +205,14 @@ export function usePreparedTxFlow<
         method: MessageTypes.SUBMIT_TX,
         data: { txCbor: transaction.txCbor, witnessHex },
       })) as Reply<{ txId?: string; error?: string }>;
-      if (!submitted?.data?.txId) return unconfirmed();
+      if (!submitted?.data?.txId) {
+        const refused = typeof submitted?.data?.error === 'string' ? options.submitRefusalCode?.(submitted.data.error) : undefined;
+        if (!refused) return unconfirmed();
+        // The network said no, for a reason the caller recognised: nothing is on its way.
+        prepared.value = null;
+        stage.value = 'idle';
+        return fail(refused);
+      }
       submittedTxId.value = submitted.data.txId;
       stage.value = 'done';
       return true;
