@@ -288,6 +288,32 @@ describe('sweep prerequisites', () => {
     expect(progress.at(-1)).toBeNull();
   });
 
+  // runtime.sendMessage sends JSON: one bigint fails the whole message, as the merge
+  // outputs' coins (decoded from CBOR) did for every sweep signed in the extension.
+  it('sends the payment\'s signer the merge outputs as a runtime message can carry them', async () => {
+    const { signing } = sweeper(['m1']);
+    await signing.handleSign();
+    await flushPromises();
+    for (const [message] of mocks.send.mock.calls) expect(() => JSON.stringify(message)).not.toThrow();
+    const paymentSign = mocks.send.mock.calls.filter(([message]) => message.method === MessageTypes.SIGN_TX).at(-1)![0];
+    expect(paymentSign.data.utxos[0][1].value.coins).toBe('5');
+    expect(mocks.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a SIGN_TX the runtime could not send as its error, and sends nothing', async () => {
+    mocks.send.mockImplementation(async ({ method }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      // What Messaging resolves when runtime.sendMessage throws: no `data`.
+      if (method === MessageTypes.SIGN_TX) return { error: 'Could not serialize message.' };
+      return { data: { txId: 'submitted' } };
+    });
+    const { signing } = sweeper(['m1']);
+    await signing.handleSign();
+    await flushPromises();
+    expect(methods()).not.toContain(MessageTypes.SUBMIT_TX);
+    expect(mocks.error).toHaveBeenCalledWith('Could not serialize message.');
+  });
+
   it('refuses a merge the payment does not spend, before asking for the password', async () => {
     const { signing } = sweeper(['m1', 'm2'], ['m1']);
     await signing.handleSign();

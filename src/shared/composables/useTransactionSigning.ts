@@ -28,6 +28,20 @@ interface PasswordFieldRef {
   showError?: (message: string) => void;
 }
 
+/**
+ * A value as runtime messages carry it, which is as JSON: one bigint fails the whole send
+ * ("Could not serialize message") and a Map arrives empty. Bigints become strings and Maps
+ * objects, as the stores broadcast them.
+ */
+function messageSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value, (_key, item: unknown) => {
+    if (typeof item === 'bigint') return item.toString();
+    if (item instanceof Map) return Object.fromEntries(item);
+    if (item instanceof Set) return Array.from(item);
+    return item;
+  })) as T;
+}
+
 /** Payload for MessageTypes.SIGN_TX — assembled field by field below. */
 interface SignTxRequestData {
   txCbor: string;
@@ -311,7 +325,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: signingData,
-    })) as { data: { witnesses?: string; error?: string } };
+    })) as { data?: { witnesses?: string; error?: string }; error?: string } | undefined;
+    // A message the runtime could not send resolves as `{ error }`, with no `data`.
+    if (!witnessResult?.data) throw new Error(witnessResult?.error || t('errors.unknownError'));
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
     return witnessResult.data.witnesses;
   };
@@ -362,9 +378,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
       if (!attempt.current()) return false;
       // The payment spends the merges' outputs, which the wallet's UTxO list does not
-      // hold yet: the worker needs them to tell which key signs those inputs.
+      // hold yet: the worker needs them to tell which key signs those inputs. They are
+      // decoded from the merges' CBOR, bigint coins and all, so they go as the wallet's
+      // own UTxOs arrive from the store.
       const signingUtxos = attempt.prerequisiteOutputs.length > 0
-        ? [...(utxos.value as Cardano.Utxo[]), ...attempt.prerequisiteOutputs]
+        ? [...(utxos.value as Cardano.Utxo[]), ...messageSafe(attempt.prerequisiteOutputs)]
         : utxos.value;
       const paymentWitnesses = await requestWitnesses(attempt, attempt.cbor, signingUtxos);
       if (!attempt.current()) return false;
