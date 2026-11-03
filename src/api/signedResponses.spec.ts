@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios, { AxiosError, AxiosHeaders, type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
 import vectors from '@/shared/utils/signedResponse.vectors.json';
@@ -9,6 +10,8 @@ import {
   signedResponseMode,
   signedResponseReport,
 } from './signedResponses';
+import { STORE_KEY, SigningKeys, resetSigningKeysForTest } from './signingKeys';
+import { resetPrivateStoreForTest, setPrivate } from '@/utils/privateStore';
 
 const BASE = 'https://api.gerowallet.io';
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
@@ -49,7 +52,10 @@ function client(v: Vector, mode: 'off' | 'shadow' | 'enforce', change?: Paramete
 const call = (instance: ReturnType<typeof axios.create>, v: Vector) =>
   instance.request({ method: v.request.method, url: v.request.path, params: v.request.query ? Object.fromEntries(new URLSearchParams(v.request.query)) : undefined, data: v.request.body || undefined });
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  resetSigningKeysForTest();
+});
 
 describe('installSignedResponses', () => {
   it('reads the mode from the build only, defaulting to off', () => {
@@ -129,6 +135,31 @@ describe('installSignedResponses', () => {
     installSignedResponses(instance, 'gero-backend', { mode: 'enforce', keys, now });
     const response = await instance.get('/api/account/info', { params: { stakeAddress: 'stake1u' } });
     expect(response.data).toEqual({ balance: '1' });
+  });
+
+  it('enforce: resolves keys from root-signed delegations, fetching again for a key it does not know', async () => {
+    resetPrivateStoreForTest();
+    // A fresh stored copy that does not know the key yet: only the unknown key id fetches.
+    await setPrivate(STORE_KEY, { fetchedAt: vectors.created * 1000, delegations: [], revoked: [] });
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ version: 1, delegations: [vectors.root.delegation], revocations: [] })));
+    resetSigningKeysForTest(
+      new SigningKeys({ roots: [hexToBytes(vectors.root.publicKeyHex)], baseUrl: BASE, fetchImpl, bundled: [], nowMs: () => vectors.created * 1000 }),
+    );
+    const instance = axios.create({ baseURL: BASE, adapter: serve(build), headers: { 'Content-Type': 'application/json' } });
+    installSignedResponses(instance, 'gero-backend', { mode: 'enforce', now });
+    const response = await call(instance, build);
+    expect(response.data).toEqual({ cbor: '84a400', estimated_fee: '171045' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('enforce: refuses an answer whose key no root approved', async () => {
+    resetPrivateStoreForTest();
+    await setPrivate(STORE_KEY, { fetchedAt: vectors.created * 1000, delegations: [], revoked: [] });
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ delegations: [vectors.root.delegation] })));
+    resetSigningKeysForTest(new SigningKeys({ roots: [new Uint8Array(32).fill(1)], baseUrl: BASE, fetchImpl, bundled: [], nowMs: () => vectors.created * 1000 }));
+    const instance = axios.create({ baseURL: BASE, adapter: serve(build), headers: { 'Content-Type': 'application/json' } });
+    installSignedResponses(instance, 'gero-backend', { mode: 'enforce', now });
+    await expect(call(instance, build)).rejects.toMatchObject({ reason: 'unknown-key' });
   });
 
   it('runs before interceptors registered after it', async () => {

@@ -27,8 +27,9 @@ import {
   type SignedResponseFailure,
   type SignedResponseResult,
 } from '@/shared/utils/signedResponse';
-import { delegationResolver, type SigningService } from '@/shared/utils/signedResponseRoots';
+import type { SigningService } from '@/shared/utils/signedResponseRoots';
 import { debugLog } from '@/utils/debug';
+import { signingKeys } from './signingKeys';
 
 export type SignedResponseMode = 'off' | 'shadow' | 'enforce';
 
@@ -75,16 +76,12 @@ function requestPath(instance: AxiosInstance, response: AxiosResponse): string {
 const RAW_BODY = Symbol('geroRawResponseBody');
 type ConfigWithRaw = InternalAxiosRequestConfig & { [RAW_BODY]?: unknown };
 
-// Delegations are not fetched yet (no signing key exists): every service resolves
-// nothing, so a check can only fail. `setSignedResponseKeys` installs real ones.
+// The keys come from root-signed delegations (signingKeys.ts); until a root is pinned
+// none resolve, so a check can only fail. `setSignedResponseKeys` overrides one service.
 const resolvers = new Map<SigningService, KeyResolver>();
 
 export function setSignedResponseKeys(service: SigningService, resolver: KeyResolver): void {
   resolvers.set(service, resolver);
-}
-
-function resolverFor(service: SigningService): KeyResolver {
-  return resolvers.get(service) ?? delegationResolver(service, []);
 }
 
 type Outcome = 'verified' | SignedResponseFailure;
@@ -173,10 +170,25 @@ export function installSignedResponses(
     ...rest,
   ];
 
+  const verify = async (response: AxiosResponse): Promise<SignedResponseResult> => {
+    const fixed = options.keys ?? resolvers.get(service);
+    if (fixed) return checkAxiosResponse(instance, response, fixed, now());
+    const keys = signingKeys();
+    const result = await checkAxiosResponse(instance, response, await keys.resolver(service), now());
+    // A key approved since the last fetch: fetch again (rate-limited) and check once more.
+    if (failureReason(result) !== 'unknown-key') return result;
+    return checkAxiosResponse(instance, response, await keys.refetchForUnknownKey(service), now());
+  };
+
   const check = async (response: AxiosResponse): Promise<SignedResponseFailure | undefined> => {
     // A path gero-backend does not sign is never checked, in any mode.
     if (!isSignedPath(requestPath(instance, response))) return undefined;
-    const result = await checkAxiosResponse(instance, response, options.keys ?? resolverFor(service), now());
+    let result: SignedResponseResult;
+    try {
+      result = await verify(response);
+    } catch {
+      result = { ok: false, reason: 'unknown-key' };
+    }
     const reason = failureReason(result);
     record(service, reason ?? 'verified');
     if (reason) debugLog('[signed-responses]', service, mode, (response.config.method ?? 'get').toUpperCase(), reason);

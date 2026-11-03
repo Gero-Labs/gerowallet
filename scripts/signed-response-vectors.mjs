@@ -138,32 +138,31 @@ for (const c of cases) {
   });
 }
 
-// A root-signed delegation for the test signing key, shaped like the CIP-8
-// (COSE_Sign1) signature a Ledger, Trezor or Keystone returns from signData.
-const statement =
-  'gero-delegation-v1\n' +
-  JSON.stringify({
-    kid: KEYID,
-    pub: hex(SIGNING_PUB),
-    service: 'gero-backend',
-    hosts: ['api.gerowallet.io'],
-    notBefore: '2025-10-01T00:00:00Z',
-    notAfter: '2026-04-01T00:00:00Z',
-  });
+// Root statements (see signedResponseRoots.ts): one line, at most 197 bytes so a Ledger
+// shows the whole text and signs it unhashed. Each is signed as the CIP-8 COSE_Sign1 a
+// Ledger, Trezor or Keystone returns from signData.
 const rewardAddress = new Uint8Array([0xe1, ...blake2b(ROOT_PUB, { dkLen: 28 })]);
-const protectedMap = MS.HeaderMap.new();
-protectedMap.set_algorithm_id(MS.Label.from_algorithm_id(MS.AlgorithmId.EdDSA));
-protectedMap.set_header(MS.Label.new_text('address'), MS.CBORValue.new_bytes(rewardAddress));
-const unprotectedMap = MS.HeaderMap.new();
-unprotectedMap.set_header(MS.Label.new_text('hashed'), MS.CBORValue.new_special(MS.CBORSpecial.new_bool(false)));
-const headers = MS.Headers.new(MS.ProtectedHeaderMap.new(protectedMap), unprotectedMap);
-const builder = MS.COSESign1Builder.new(headers, utf8(statement), false);
-const coseSign1 = builder.build(ed.sign(builder.make_data_to_sign().to_bytes(), ROOT_SEED));
+
+function cip8(statement) {
+  if (utf8(statement).length > 197) throw new Error(`statement too long for a Ledger: ${statement}`);
+  const protectedMap = MS.HeaderMap.new();
+  protectedMap.set_algorithm_id(MS.Label.from_algorithm_id(MS.AlgorithmId.EdDSA));
+  protectedMap.set_header(MS.Label.new_text('address'), MS.CBORValue.new_bytes(rewardAddress));
+  const headers = MS.Headers.new(MS.ProtectedHeaderMap.new(protectedMap), MS.HeaderMap.new());
+  const builder = MS.COSESign1Builder.new(headers, utf8(statement), false);
+  const coseSign1 = builder.build(ed.sign(builder.make_data_to_sign().to_bytes(), ROOT_SEED));
+  return { statement, coseSign1: hex(coseSign1.to_bytes()) };
+}
 
 out.root = {
   seedHex: hex(ROOT_SEED),
   publicKeyHex: hex(ROOT_PUB),
-  delegation: { statement, coseSign1: hex(coseSign1.to_bytes()) },
+  // Covers CREATED: valid from the start of 2025-10-01 until the start of 2025-12-30 (90 days).
+  delegation: cip8(
+    `gero-signing/v1|delegation|kid=${KEYID}|service=gero-backend|hosts=api.gerowallet.io` +
+      `|from=2025-10-01|until=2025-12-30|key=${hex(SIGNING_PUB)}`,
+  ),
+  revocation: cip8('gero-signing/v1|revocation|issued=2025-11-15|revoked=backend-2025-08,backend-2025-05'),
 };
 
 process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
