@@ -55,6 +55,8 @@ const walletState = vi.hoisted(() => ({
   utxos: [],
 }));
 const allowedHardware = vi.hoisted(() => ({ types: [] as string[] }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('vue-router', () => ({ useRouter: () => router }));
 
 vi.mock('@/shared/composables/useNftMarketFlow', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/shared/composables/useNftMarketFlow')>();
@@ -200,6 +202,7 @@ describe('BuyNftDialog', () => {
     flow.prepare.mockReset();
     flow.signAndSubmit.mockReset();
     flow.reset.mockClear();
+    router.push.mockClear();
     store.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: 'Normal' };
     allowedHardware.types = [];
     prepareSucceeds();
@@ -355,6 +358,12 @@ describe('BuyNftDialog', () => {
       expect(byId(wrapper, 'policy').text()).toContain(LISTING.policyId);
     });
 
+    it('can break inside the 56-character policy ID it names', async () => {
+      const wrapper = render({ lookalike });
+      await flushPromises();
+      expect(byId(wrapper, 'lookalike').classes()).toContain('buy-nft__lookalike');
+    });
+
     it('is shown on the review as well as while the worker builds', async () => {
       const wrapper = render({ lookalike });
       await flushPromises();
@@ -385,8 +394,13 @@ describe('BuyNftDialog', () => {
       expect(byId(wrapper, 'done').text()).toContain('Your purchase is on its way. The NFT shows in your wallet once the transaction is confirmed.');
       expect(byId(wrapper, 'done').text()).toContain(TX_ID);
       expect(wrapper.emitted('sent')).toEqual([[LISTING_REF]]);
+      // The explorer link is a button of the house kind, not a bare Vuetify one.
+      expect(byId(wrapper, 'explorer').classes()).toContain('g-btn');
+      expect(byId(wrapper, 'explorer').attributes('href')).toBe(`https://explorer.example/${TX_ID}`);
       await byId(wrapper, 'done-button').trigger('click');
       expect(wrapper.emitted('close')).toHaveLength(1);
+      // A purchase that went out is not a changed listing: nothing to reload.
+      expect(wrapper.emitted('refresh')).toBeUndefined();
     });
 
     it('a wrong password stays on the review and says so', async () => {
@@ -432,6 +446,57 @@ describe('BuyNftDialog', () => {
       expect(flow.prepare).toHaveBeenCalledTimes(1);
       expect(wrapper.emitted('refresh')).toHaveLength(1);
       expect(wrapper.emitted('close')).toHaveLength(1);
+    });
+
+    it('tells the page to reload its list when a sheet that said the listing changed is closed, by Close or by the X, so the sold row loses its Buy', async () => {
+      prepareFails('LISTING_NOT_FOUND');
+      const byClose = render();
+      await flushPromises();
+      await byId(byClose, 'close').trigger('click');
+      expect(byClose.emitted('refresh')).toHaveLength(1);
+      expect(byClose.emitted('close')).toHaveLength(1);
+      byClose.unmount();
+
+      const byX = render();
+      await flushPromises();
+      await byX.get('[data-test="dialog-close"]').trigger('click');
+      expect(byX.emitted('refresh')).toHaveLength(1);
+      expect(byX.emitted('close')).toHaveLength(1);
+    });
+
+    it('does so for a listing spent between the review and the signature as well', async () => {
+      flow.signAndSubmit.mockImplementation(async () => {
+        flow.prepared.value = null;
+        flow.failure.value = { code: 'INPUT_SPENT' };
+        flow.stage.value = 'idle';
+        return false;
+      });
+      const wrapper = render();
+      await flushPromises();
+      await wrapper.get('[data-test="password"]').setValue('hunter2');
+      await byId(wrapper, 'confirm').trigger('click');
+      await flushPromises();
+      await byId(wrapper, 'close').trigger('click');
+      expect(wrapper.emitted('refresh')).toHaveLength(1);
+    });
+
+    it('asks for no reload when the sheet is closed for any other reason', async () => {
+      // A failure that is not a changed listing.
+      for (const code of ['BUILD_FAILED', 'VERIFY_FAILED', 'PRIVATE_LISTING']) {
+        prepareFails(code);
+        const wrapper = render();
+        await flushPromises();
+        await byId(wrapper, 'close').trigger('click');
+        expect(wrapper.emitted('refresh'), code).toBeUndefined();
+        wrapper.unmount();
+      }
+      // The review, cancelled.
+      prepareSucceeds();
+      const review = render();
+      await flushPromises();
+      await byId(review, 'cancel').trigger('click');
+      expect(review.emitted('refresh')).toBeUndefined();
+      expect(review.emitted('close')).toHaveLength(1);
     });
 
     it('a listing spent between the review and the signature reads as sold or delisted, with Refresh', async () => {
@@ -500,6 +565,26 @@ describe('BuyNftDialog', () => {
       expect(has(wrapper, 'refresh')).toBe(false);
       expect(flow.prepare).toHaveBeenCalledTimes(1);
       expect(wrapper.emitted('sent')).toEqual([[LISTING_REF]]);
+
+      // View activity opens the wallet's activity; it never builds or sends anything again.
+      expect(byId(wrapper, 'activity').text()).toBe('View activity');
+      flow.prepare.mockClear();
+      flow.signAndSubmit.mockClear();
+      await byId(wrapper, 'activity').trigger('click');
+      expect(router.push).toHaveBeenCalledWith({ path: '/transactions' });
+      expect(wrapper.emitted('close')).toHaveLength(1);
+      expect(flow.prepare).not.toHaveBeenCalled();
+      expect(flow.signAndSubmit).not.toHaveBeenCalled();
+    });
+
+    it('offers View activity for a submit that may have gone through, and for nothing else', async () => {
+      for (const code of ['BUILD_FAILED', 'LISTING_NOT_FOUND', 'VERIFY_FAILED', 'PRIVATE_LISTING']) {
+        prepareFails(code);
+        const wrapper = render();
+        await flushPromises();
+        expect(has(wrapper, 'activity'), code).toBe(false);
+        wrapper.unmount();
+      }
     });
 
     it('never shows a string from the worker or Nexus, only the copy for its code', async () => {

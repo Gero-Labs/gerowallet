@@ -6172,7 +6172,6 @@ export default {
   'nftMarket.browse.empty': 'Aktuell steht kein NFT dieser Sammlung zum Verkauf.',
   'nftMarket.browse.dropped': '{count} Angebot konnte nicht angezeigt werden. | {count} Angebote konnten nicht angezeigt werden.',
   'nftMarket.browse.loadFailed': 'Die Angebote konnten nicht geladen werden. Versuchen Sie es erneut.',
-  'nftMarket.browse.own': 'Ihr Angebot',
   'nftMarket.browse.pending': 'Kauf gesendet',
   'nftMarket.browse.viewOnly': 'Mit dieser Wallet können Sie Angebote nur ansehen. Zum Kaufen benötigen Sie eine Wallet, die signieren kann.',
   'nftMarket.browse.lookalikeChip': 'Mögliche Nachahmung',

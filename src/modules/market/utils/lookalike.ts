@@ -5,8 +5,9 @@
  * popular collection and list it; the policy id is the only thing that tells them apart, so the
  * page also shows it on every listing, and the warning never hides it.
  *
- * Names are compared case-insensitively with the ends trimmed. Nothing else is folded: another
- * spelling is not a match, so the warning does not cry wolf at a mere resemblance.
+ * Names are compared case-insensitively with the ends trimmed, after the forms that look the same
+ * on screen are folded (see normalizeCollectionName). Another spelling is not a match, so the
+ * warning does not cry wolf at a mere resemblance.
  */
 
 /** A top collection as far as this check needs it (an `NftCollectionStats`). */
@@ -23,9 +24,24 @@ export interface Lookalike {
   policyId: string;
 }
 
-/** What a name compares as: trimmed and lower-cased. Empty for anything that is not text. */
+/**
+ * Characters that show nothing and so can sit inside a name unseen: zero-width space, non-joiner
+ * and joiner (U+200B to U+200D), word joiner (U+2060), the byte order mark (U+FEFF) and the
+ * bidi marks and overrides (U+200E, U+200F, U+202A to U+202E).
+ */
+const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g;
+
+/**
+ * What a name compares as: its compatibility forms folded (NFKC: fullwidth letters, ligatures),
+ * the characters that show nothing removed, the ends trimmed and lower-cased. Empty for anything
+ * that is not text.
+ *
+ * Letters of ANOTHER SCRIPT that merely look alike (a Cyrillic "a" for a Latin one) are not
+ * folded: that needs a confusables table, which is a different feature. The policy ID the page
+ * shows on every listing and in the buy sheet is the protection against what this does not catch.
+ */
 export function normalizeCollectionName(name: unknown): string {
-  return typeof name === 'string' ? name.trim().toLowerCase() : '';
+  return typeof name === 'string' ? name.normalize('NFKC').replace(INVISIBLE, '').trim().toLowerCase() : '';
 }
 
 /**

@@ -22,6 +22,29 @@ describe('normalizeCollectionName', () => {
     expect(normalizeCollectionName('Space  Budz')).toBe('space  budz');
   });
 
+  it('folds compatibility forms: a name in fullwidth letters, or with a ligature, is the name', () => {
+    expect(normalizeCollectionName('\uFF33\uFF50\uFF41\uFF43\uFF45\uFF22\uFF55\uFF44\uFF5A')).toBe('spacebudz');
+    expect(normalizeCollectionName('Of\uFB01ce Cats')).toBe('office cats');
+  });
+
+  it('drops the characters that show nothing: zero-width, word joiner, BOM and the bidi controls', () => {
+    for (const hidden of ['\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF', '\u200E', '\u200F', '\u202A', '\u202B', '\u202C', '\u202D', '\u202E']) {
+      expect(normalizeCollectionName(`Space${hidden}Budz`), `U+${hidden.charCodeAt(0).toString(16)}`).toBe('spacebudz');
+      expect(normalizeCollectionName(`${hidden}SpaceBudz${hidden}`)).toBe('spacebudz');
+    }
+  });
+
+  it('still trims the ends, after the hidden characters are gone', () => {
+    expect(normalizeCollectionName(' \u200B SpaceBudz \uFEFF ')).toBe('spacebudz');
+  });
+
+  // Not folded, on purpose: a Cyrillic "a" looks like a Latin one and is a different letter. A
+  // confusable table is a different feature; the policy ID shown beside every name is the
+  // protection against what this does not catch.
+  it('does not fold letters of another script that only look alike', () => {
+    expect(normalizeCollectionName('Sp\u0430ceBudz')).not.toBe('spacebudz');
+  });
+
   it('is empty for anything that is not text', () => {
     for (const value of [undefined, null, 4, {}]) expect(normalizeCollectionName(value)).toBe('');
   });
@@ -84,6 +107,16 @@ describe('candidateNames', () => {
 describe('findLookalike', () => {
   it('finds the popular collection a name copies, with its policy id', () => {
     expect(findLookalike(['SpaceBudz'], COPY, TOP)).toEqual({ name: 'SpaceBudz', policyId: REAL });
+  });
+
+  it('finds a copy whose name hides a zero-width character, is typed in fullwidth letters or starts with a BOM', () => {
+    for (const name of ['Space\u200BBudz', '\uFF33\uFF50\uFF41\uFF43\uFF45\uFF22\uFF55\uFF44\uFF5A', '\uFEFFSpaceBudz', 'Space\u202EBudz']) {
+      expect(findLookalike([name], COPY, TOP), JSON.stringify(name)).toEqual({ name: 'SpaceBudz', policyId: REAL });
+    }
+  });
+
+  it('finds the copy through the stem of an NFT name that hides a zero-width character', () => {
+    expect(findLookalike(candidateNames({ items: [{ name: 'Space\u200BBudz #12' }] }), COPY, TOP)).toEqual({ name: 'SpaceBudz', policyId: REAL });
   });
 
   it('ignores case and the spaces around the name', () => {

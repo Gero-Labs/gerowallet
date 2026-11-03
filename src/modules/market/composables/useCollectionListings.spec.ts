@@ -106,6 +106,42 @@ describe('the first page', () => {
   });
 });
 
+describe('loaded: a read that can be taken for the collection as it stands', () => {
+  it('is false until a page has been read, true after one (even an empty one), and false again while the list starts over', async () => {
+    const d = deferred<ListingsPage>();
+    const second = deferred<ListingsPage>();
+    listings.mockReturnValueOnce(d.promise).mockReturnValueOnce(second.promise);
+    const c = mountComposable();
+    await settle();
+    expect(c.loaded.value).toBe(false);
+    d.resolve(page(rows(0, 2)));
+    await settle();
+    expect(c.loaded.value).toBe(true);
+
+    c.setSort('recent');
+    await settle();
+    expect(c.loaded.value).toBe(false);
+    second.resolve(page([]));
+    await settle();
+    expect(c.loaded.value).toBe(true);
+  });
+
+  it('stays false when the first page cannot be read, and stays true when only a next page cannot', async () => {
+    listings.mockRejectedValueOnce(new Error('502'));
+    const failed = mountComposable();
+    await settle();
+    expect(failed.loaded.value).toBe(false);
+    scope.stop();
+
+    listings.mockResolvedValueOnce(page(rows(0, 1), 'c1')).mockRejectedValueOnce(new Error('timeout'));
+    const partial = mountComposable();
+    await settle();
+    await partial.loadMore();
+    expect(partial.loaded.value).toBe(true);
+    expect(partial.hasMore.value).toBe(true);
+  });
+});
+
 describe('paging', () => {
   it('passes the cursor of a page back to Nexus unchanged', async () => {
     const cursor = 'eyJwIjoxMjAwMDAwMDAsInQiOiJhYiJ9_-Zz';

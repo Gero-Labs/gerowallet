@@ -13,7 +13,8 @@ import { Blockchain, Network, WalletType } from '@/models/types';
 import { i18nPlugin } from '@/plugins/i18n';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
-import { listingRow, preprodAddress, refOf, STRANGER_KEY } from '../utils/__fixtures__/listingFixtures';
+import { listingRow, preprodAddress, refOf, STRANGER_KEY, STRANGER_STAKE } from '../utils/__fixtures__/listingFixtures';
+import { isPendingBuy, PENDING_BUY_TTL_MS, resetPendingBuys } from '../composables/usePendingBuys';
 
 const listings = vi.hoisted(() => vi.fn());
 vi.mock('@/api/nft-market-api', async (importOriginal) => {
@@ -81,6 +82,7 @@ const login = (fields: Record<string, unknown> = {}) => {
 };
 
 beforeEach(() => {
+  resetPendingBuys();
   listings.mockReset();
   topCollections.mockReset();
   topCollections.mockResolvedValue([]);
@@ -105,8 +107,9 @@ afterEach(() => {
 
 describe('the rows', () => {
   it('shows each listing\'s picture, name and price, and the policy ID on every one', async () => {
-    const [a, b] = rows(0, 2);
-    listings.mockResolvedValue(page([a, { ...b, priceLovelace: '1234567891' }]));
+    const a = listingRow({ index: 0 });
+    const b = listingRow({ index: 1, priceLovelace: '1234567891' });
+    listings.mockResolvedValue(page([a, b]));
     metaState.meta.value = new Map([
       [a.unit, { name: 'Cool Cat #0', image: 'https://img.example/0.png' }],
       [b.unit, { name: 'Cool Cat #1' }],
@@ -278,8 +281,8 @@ describe('who may buy what', () => {
     expect(has(wrapper, 'collection-view-only')).toBe(false);
   });
 
-  describe('the wallet\'s own listing is never offered for buy', () => {
-    it('by an owner that is one of the account\'s keys', async () => {
+  describe('the wallet\'s own listing is marked as its own and never offered for buy', () => {
+    it('by a datum that names the account as owner AND as seller', async () => {
       const own = listingRow({ index: 1, owner: MY_PAYMENT, stake: MY_STAKE });
       listings.mockResolvedValue(page([listingRow({ index: 0 }), own]));
       const wrapper = render();
@@ -287,6 +290,7 @@ describe('who may buy what', () => {
 
       const [other, mine] = rowEls(wrapper);
       expect(other.find('[data-testid="listing-buy"]').exists()).toBe(true);
+      expect(other.find('[data-testid="listing-own"]').exists()).toBe(false);
       expect(mine.find('[data-testid="listing-buy"]').exists()).toBe(false);
       expect(mine.get('[data-testid="listing-own"]').text()).toBe('Your listing');
     });
@@ -302,14 +306,38 @@ describe('who may buy what', () => {
       expect(has(wrapper, 'listing-buy')).toBe(false);
       expect(has(wrapper, 'listing-own')).toBe(true);
     });
+  });
 
-    it('by a seller address of the account, whatever the row says the owner is', async () => {
-      const row = { ...listingRow({ index: 3 }), sellerAddress: MY_ADDRESS };
-      listings.mockResolvedValue(page([row]));
+  describe('a listing that names the account on one side only gets no "Your listing" mark and no Buy', () => {
+    it('the owner is the account\'s and the seller is an attacker\'s', async () => {
+      const bait = listingRow({ index: 3, owner: MY_PAYMENT, sellerAddress: preprodAddress(STRANGER_KEY, STRANGER_STAKE) });
+      listings.mockResolvedValue(page([bait]));
       const wrapper = render();
       await flushPromises();
+      expect(rowEls(wrapper)).toHaveLength(1);
+      expect(has(wrapper, 'listing-own')).toBe(false);
       expect(has(wrapper, 'listing-buy')).toBe(false);
-      expect(has(wrapper, 'listing-own')).toBe(true);
+    });
+
+    it('the seller address is the account\'s and the owner is somebody else\'s', async () => {
+      listings.mockResolvedValue(page([listingRow({ index: 3, owner: STRANGER_KEY, sellerAddress: MY_ADDRESS })]));
+      const wrapper = render();
+      await flushPromises();
+      expect(rowEls(wrapper)).toHaveLength(1);
+      expect(has(wrapper, 'listing-own')).toBe(false);
+      expect(has(wrapper, 'listing-buy')).toBe(false);
+    });
+  });
+
+  describe('a row that contradicts its datum is not shown and not offered, and is counted among the listings that could not be shown', () => {
+    it('a bait price: the list says 10 ADA and the datum 120', async () => {
+      const bait = { ...listingRow({ index: 4 }), priceLovelace: (10n * 1_000_000n).toString() };
+      listings.mockResolvedValue(page([listingRow({ index: 0 }), bait]));
+      const wrapper = render();
+      await flushPromises();
+      expect(rowEls(wrapper)).toHaveLength(1);
+      expect(rowEls(wrapper)[0].attributes('data-ref')).toBe(refOf(listingRow({ index: 0 })));
+      expect(byId(wrapper, 'collection-dropped').text()).toBe('1 listing could not be shown.');
     });
   });
 
@@ -328,6 +356,18 @@ describe('who may buy what', () => {
       expect(rowEls(wrapper)[0].attributes('data-ref')).toBe(refOf(listingRow({ index: 0 })));
     });
 
+    it('the account\'s own private listing is hidden too', async () => {
+      const own = listingRow({ index: 5, owner: MY_PAYMENT, stake: MY_STAKE, buyer: STRANGER_KEY });
+      walletStore.listedListings = [
+        { ref: refOf(own), unit: own.unit, datum: { owner: MY_PAYMENT, sellerAddress: MY_ADDRESS, price: '120000000', royalties: [], buyer: STRANGER_KEY }, depositLovelace: '1550000', deploymentVersion: 1 } as unknown as OwnListing,
+      ];
+      listings.mockResolvedValue(page([own, listingRow({ index: 0 })]));
+      const wrapper = render();
+      await flushPromises();
+      expect(rowEls(wrapper)).toHaveLength(1);
+      expect(has(wrapper, 'listing-own')).toBe(false);
+    });
+
     it('and is not counted among the listings that could not be shown: it is hidden on purpose', async () => {
       listings.mockResolvedValue(page([listingRow({ index: 1, buyer: STRANGER_KEY })]));
       const wrapper = render();
@@ -339,13 +379,24 @@ describe('who may buy what', () => {
   });
 
   describe('where the wallet cannot buy at all, it can still browse', () => {
+    it('a watch wallet is told it can only look', async () => {
+      login({ type: WalletType.Watch });
+      listings.mockResolvedValue(page(rows(0, 2)));
+      const wrapper = render();
+      await flushPromises();
+
+      expect(rowEls(wrapper)).toHaveLength(2);
+      expect(has(wrapper, 'listing-buy')).toBe(false);
+      expect(byId(wrapper, 'collection-view-only').text()).toBe('This wallet can only look at listings. To buy, use a wallet that can sign.');
+      expect(has(wrapper, 'collection-hardware-soon')).toBe(false);
+    });
+
     for (const [what, type] of [
-      ['a watch wallet', WalletType.Watch],
-      ['a Ledger, while no device has signed a market transaction', WalletType.Ledger],
+      ['a Ledger', WalletType.Ledger],
       ['a Trezor', WalletType.Trezor],
       ['a Keystone', WalletType.Keystone],
     ] as const) {
-      it(what, async () => {
+      it(`${what}, while no device has signed a market transaction, is told it is coming and not that it can only look`, async () => {
         login({ type });
         listings.mockResolvedValue(page(rows(0, 2)));
         const wrapper = render();
@@ -353,16 +404,21 @@ describe('who may buy what', () => {
 
         expect(rowEls(wrapper)).toHaveLength(2);
         expect(has(wrapper, 'listing-buy')).toBe(false);
-        expect(byId(wrapper, 'collection-view-only').text()).toBe('This wallet can only look at listings. To buy, use a wallet that can sign.');
+        expect(byId(wrapper, 'collection-hardware-soon').text()).toBe('Coming soon for hardware wallets');
+        expect(has(wrapper, 'collection-view-only')).toBe(false);
       });
     }
 
     it('says nothing about buying while there is nothing to buy', async () => {
-      login({ type: WalletType.Watch });
-      listings.mockResolvedValue(page([]));
-      const wrapper = render();
-      await flushPromises();
-      expect(has(wrapper, 'collection-view-only')).toBe(false);
+      for (const type of [WalletType.Watch, WalletType.Ledger]) {
+        login({ type });
+        listings.mockResolvedValue(page([]));
+        const wrapper = render();
+        await flushPromises();
+        expect(has(wrapper, 'collection-view-only'), type).toBe(false);
+        expect(has(wrapper, 'collection-hardware-soon'), type).toBe(false);
+        wrapper.unmount();
+      }
     });
   });
 });
@@ -400,6 +456,83 @@ describe('buying', () => {
     expect(first.find('[data-testid="listing-buy"]').exists()).toBe(true);
     expect(second.find('[data-testid="listing-buy"]').exists()).toBe(false);
     expect(second.get('[data-testid="listing-pending"]').text()).toBe('Purchase sent');
+  });
+
+  describe('the lock on a listing whose purchase went out survives leaving the collection page', () => {
+    async function sentOn(second: number) {
+      const items = rows(0, 2);
+      listings.mockResolvedValue(page(items));
+      const wrapper = render();
+      await flushPromises();
+      await rowEls(wrapper)[second].get('[data-testid="listing-buy"]').trigger('click');
+      await byId(wrapper, 'buy-dialog-sent').trigger('click');
+      await byId(wrapper, 'buy-dialog-close').trigger('click');
+      return { wrapper, items };
+    }
+
+    it('the toggle to "In your wallet" and back unmounts the page and mounts it again: the Buy stays gone', async () => {
+      const { wrapper, items } = await sentOn(1);
+      wrapper.unmount();
+
+      const again = render();
+      await flushPromises();
+      const [first, second] = rowEls(again);
+      expect(first.find('[data-testid="listing-buy"]').exists()).toBe(true);
+      expect(second.find('[data-testid="listing-buy"]').exists()).toBe(false);
+      expect(second.get('[data-testid="listing-pending"]').text()).toBe('Purchase sent');
+      expect(isPendingBuy(1, refOf(items[1]))).toBe(true);
+    });
+
+    it('is not another wallet\'s: the same listing is offered to it', async () => {
+      await sentOn(1);
+      login({ id: 2 });
+      const other = render();
+      await flushPromises();
+      expect(rowEls(other).every((el) => el.find('[data-testid="listing-buy"]').exists())).toBe(true);
+    });
+
+    it('lets go after ten minutes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const { wrapper } = await sentOn(1);
+        wrapper.unmount();
+        vi.setSystemTime(Date.now() + PENDING_BUY_TTL_MS + 1000);
+        const again = render();
+        await flushPromises();
+        expect(rowEls(again).every((el) => el.find('[data-testid="listing-buy"]').exists())).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('is forgotten once the listing is gone from a read of the whole collection', async () => {
+      const { wrapper, items } = await sentOn(1);
+      // The purchase landed: Nexus no longer lists it, and the page reads the collection again.
+      listings.mockResolvedValue(page([items[0]]));
+      await wrapper.unmount();
+      const again = render();
+      await flushPromises();
+      expect(rowEls(again)).toHaveLength(1);
+      expect(isPendingBuy(1, refOf(items[1]))).toBe(false);
+    });
+
+    it('is kept while the collection is only partly read: the listing may be on a page not loaded yet', async () => {
+      const { wrapper, items } = await sentOn(1);
+      wrapper.unmount();
+      listings.mockResolvedValue(page([items[0]], 'c1'));
+      render();
+      await flushPromises();
+      expect(isPendingBuy(1, refOf(items[1]))).toBe(true);
+    });
+
+    it('is kept while the list is read again and still holds the listing', async () => {
+      const { wrapper, items } = await sentOn(1);
+      listings.mockResolvedValue(page(items));
+      await byId(wrapper, 'collection-sort-recent').trigger('click');
+      await flushPromises();
+      expect(isPendingBuy(1, refOf(items[1]))).toBe(true);
+      expect(rowEls(wrapper)[1].find('[data-testid="listing-buy"]').exists()).toBe(false);
+    });
   });
 
   it('reads the list again when the sheet says the listing changed', async () => {

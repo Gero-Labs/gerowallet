@@ -6279,7 +6279,6 @@ export default {
   'nftMarket.browse.empty': 'No NFTs of this collection are for sale right now.',
   'nftMarket.browse.dropped': '{count} listing could not be shown. | {count} listings could not be shown.',
   'nftMarket.browse.loadFailed': 'We could not load the listings. Try again.',
-  'nftMarket.browse.own': 'Your listing',
   'nftMarket.browse.pending': 'Purchase sent',
   'nftMarket.browse.viewOnly': 'This wallet can only look at listings. To buy, use a wallet that can sign.',
   'nftMarket.browse.lookalikeChip': 'Possible lookalike',

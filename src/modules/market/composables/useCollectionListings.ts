@@ -38,6 +38,12 @@ export function useCollectionListings(policyId: () => string): {
   error: Ref<'first' | 'more' | null>;
   /** Rows of the pages read so far that the wallet left out as malformed. */
   dropped: Ref<number>;
+  /**
+   * A first page has been read for the collection as it stands now (even an empty one): false before
+   * that, while the list starts over and after a first page that could not be read. With `hasMore`
+   * false it means the whole collection is in `items`.
+   */
+  loaded: Ref<boolean>;
   /** Nexus has another page after the last one read. */
   hasMore: ComputedRef<boolean>;
   setSort: (next: ListingSort) => void;
@@ -51,6 +57,7 @@ export function useCollectionListings(policyId: () => string): {
   const loadingMore = ref(false);
   const error = ref<'first' | 'more' | null>(null);
   const dropped = ref(0);
+  const loaded = ref(false);
   const nextCursor = ref<string | null>(null);
   const hasMore = computed(() => nextCursor.value !== null);
 
@@ -69,6 +76,7 @@ export function useCollectionListings(policyId: () => string): {
   function reset(): void {
     generation += 1;
     items.value = [];
+    loaded.value = false;
     nextCursor.value = null;
     dropped.value = 0;
     error.value = null;
@@ -88,6 +96,7 @@ export function useCollectionListings(policyId: () => string): {
     if (added.length > 0) items.value = [...items.value, ...added];
     dropped.value += page.dropped;
     nextCursor.value = page.nextCursor;
+    loaded.value = true;
   }
 
   async function refresh(): Promise<void> {
@@ -133,5 +142,5 @@ export function useCollectionListings(policyId: () => string): {
   watch(() => target.value?.key ?? null, () => { void refresh(); }, { immediate: true });
   if (getCurrentScope()) onScopeDispose(() => { generation += 1; });
 
-  return { items, sort, loading, loadingMore, error, dropped, hasMore, setSort, loadMore, refresh };
+  return { items, sort, loading, loadingMore, error, dropped, loaded, hasMore, setSort, loadMore, refresh };
 }

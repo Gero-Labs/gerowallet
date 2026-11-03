@@ -44,10 +44,14 @@ export interface RowOptions {
   owner?: string;
   /** Stake key hash of the seller address. */
   stake?: string;
+  /** The seller address (bech32) when it is not the one the owner and stake keys make. */
+  sellerAddress?: string;
   /** The datum's `buyer` (56 hex), or null for a public listing. */
   buyer?: string | null;
   /** Price in ADA (whole). */
   priceAda?: number;
+  /** Price in lovelace (decimal text), when it is not a whole number of ADA. Wins over `priceAda`. */
+  priceLovelace?: string;
   policyId?: string;
   /** ASCII asset name. */
   assetName?: string;
@@ -68,10 +72,10 @@ export function listingRow(options: RowOptions = {}): ListingDto {
   const index = options.index ?? 0;
   const owner = options.owner ?? STRANGER_KEY;
   const stake = options.stake ?? STRANGER_STAKE;
-  const priceLovelace = BigInt(options.priceAda ?? 120) * 1_000_000n;
+  const priceLovelace = options.priceLovelace !== undefined ? BigInt(options.priceLovelace) : BigInt(options.priceAda ?? 120) * 1_000_000n;
   const policyId = options.policyId ?? DEFAULT_POLICY;
   const assetName = asciiHex(options.assetName ?? `Cat${index}`);
-  const sellerAddress = preprodAddress(owner, stake);
+  const sellerAddress = options.sellerAddress ?? preprodAddress(owner, stake);
   const buyer = options.buyer ?? null;
   const datumCbor =
     options.datumCbor ??

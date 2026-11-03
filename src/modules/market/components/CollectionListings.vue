@@ -18,7 +18,7 @@
 
     <!-- No NFT verified flag exists in any data source (ruling R8): a collection that has the name
          of a popular one under another policy ID is flagged, and every listing shows its policy ID. -->
-    <v-alert v-if="lookalike" type="warning" variant="tonal" density="compact" class="mb-3" data-testid="collection-lookalike">
+    <v-alert v-if="lookalike" type="warning" variant="tonal" density="compact" class="collection-listings__lookalike mb-3" data-testid="collection-lookalike">
       {{ t('nftMarket.browse.lookalike', { name: lookalike.name, policyId: lookalike.policyId }) }}
     </v-alert>
     <p v-else-if="lookalikeUnchecked" class="collection-listings__note t-caption" data-testid="collection-lookalike-unchecked">
@@ -66,7 +66,7 @@
               <ExplorerLink type="policy" :id="row.listing.policyId" x-small />
             </p>
             <p v-if="row.own || row.pending || lookalike" class="collection-listings__chips">
-              <v-chip v-if="row.own" size="x-small" label data-testid="listing-own">{{ t('nftMarket.browse.own') }}</v-chip>
+              <v-chip v-if="row.own" size="x-small" label data-testid="listing-own">{{ t('nftMarket.list.review') }}</v-chip>
               <v-chip v-if="row.pending" size="x-small" label data-testid="listing-pending">{{ t('nftMarket.browse.pending') }}</v-chip>
               <v-chip v-if="lookalike" size="x-small" label color="warning" data-testid="listing-lookalike">
                 {{ t('nftMarket.browse.lookalikeChip') }}
@@ -76,7 +76,7 @@
           <div class="collection-listings__buy">
             <p class="t-body-sm g-num" data-testid="listing-price">{{ row.price }} ADA</p>
             <GButton
-              v-if="canBuy && !row.own && !row.pending"
+              v-if="canBuy && row.buyable && !row.pending"
               tier="secondary"
               compact
               data-testid="listing-buy"
@@ -91,7 +91,12 @@
       <p v-if="droppedTotal > 0" class="collection-listings__note t-caption" data-testid="collection-dropped">
         {{ tc('nftMarket.browse.dropped', droppedTotal, { count: droppedTotal }) }}
       </p>
-      <p v-if="rows.length > 0 && !canBuy" class="collection-listings__note t-caption" data-testid="collection-view-only">
+      <!-- A wallet that signs on a device is not allowed to buy yet (no device has signed a market
+           transaction); one that signs nothing (a watch wallet) can only look. -->
+      <p v-if="rows.length > 0 && !canBuy && signsOnADevice" class="collection-listings__note t-caption" data-testid="collection-hardware-soon">
+        {{ t('legacyListings.hardwareSoon') }}
+      </p>
+      <p v-else-if="rows.length > 0 && !canBuy" class="collection-listings__note t-caption" data-testid="collection-view-only">
         {{ t('nftMarket.browse.viewOnly') }}
       </p>
 
@@ -131,9 +136,11 @@ import type { ListingDto, ListingSort } from '@/api/nft-market-api';
 import { useCollectionListings } from '@/modules/market/composables/useCollectionListings';
 import { useListingNftMeta } from '@/modules/market/composables/useListingNftMeta';
 import { loadTopNftCollections } from '@/modules/market/composables/useTopNftCollections';
+import { isPendingBuy, markPendingBuy, prunePendingBuys } from '@/modules/market/composables/usePendingBuys';
 import { buyerIdentity, listingBuyState } from '@/modules/market/utils/listingBuyability';
 import { candidateNames, findLookalike, type Lookalike, type TopCollectionRef } from '@/modules/market/utils/lookalike';
 import { collectibleCollectionsNow } from '@/shared/composables/useCollectibleCollections';
+import { signsOnDevice } from '@/shared/composables/useHardwareTxSigner';
 import { useMyListings } from '@/shared/composables/useMyListings';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
@@ -155,12 +162,17 @@ import { walletStore } from '@/stores/walletStore';
  * Who may buy what (listingBuyability.ts):
  *  - Buy is offered only where the worker would build one: a wallet that can sign
  *    (`nftMarketAvailable`: the flag, a reviewed deployment, `canUseNftMarketWallet`). A watch
- *    wallet, or a hardware wallet no device has signed a market transaction with, can browse.
- *  - The wallet's own listings carry "Your listing" and no Buy.
- *  - A private listing (a `buyer` set in its datum) is never shown (ruling R2: public listings only):
- *    hidden on purpose, so not counted in the note about listings that could not be shown.
- *  - A listing whose datum is not a Gero listing cannot be bought, and is left out and counted in
- *    that note, as the rows the page validation drops are.
+ *    wallet can browse and is told it can only look; a hardware wallet no device has signed a
+ *    market transaction with can browse and is told it is coming.
+ *  - The wallet's own listings carry "Your listing" and no Buy: those the wallet verified itself,
+ *    and those whose datum names the account as owner AND as seller. A listing that names the
+ *    account on one side only (the fake "your listing" that pays an attacker) gets neither the
+ *    mark nor a Buy.
+ *  - A private listing (a `buyer` set in its datum) is never shown, the account's own included
+ *    (rulings R2 and P43: public listings only): hidden on purpose, so not counted in the note
+ *    about listings that could not be shown.
+ *  - A listing whose datum is not a Gero listing, or that its row contradicts (a bait price), cannot
+ *    be bought: it is left out and counted in that note, as the rows the page validation drops are.
  *
  * A page that left rows out is never an empty collection: it says some listings could not be shown,
  * and keeps offering the next page.
@@ -173,7 +185,10 @@ const available = computed(() => nftMarketBrowseAvailable());
 /** Whether this wallet may be offered Buy at all. */
 const canBuy = computed(() => nftMarketAvailable());
 
-const { items, sort, loading, loadingMore, error, dropped, hasMore, setSort, loadMore, refresh } = useCollectionListings(() => props.policyId);
+const { items, sort, loading, loadingMore, error, dropped, loaded, hasMore, setSort, loadMore, refresh } = useCollectionListings(() => props.policyId);
+
+/** Whether the wallet signs on a device (Ledger, Trezor, Keystone): what it is told when it cannot buy. */
+const signsOnADevice = computed(() => signsOnDevice(walletStore.loggedWallet?.type));
 
 function onSort(next: unknown): void {
   if (next === 'price' || next === 'recent') setSort(next as ListingSort);
@@ -221,12 +236,12 @@ function adaOf(listing: ListingDto): string {
   }
 }
 
-/** Refs of listings a purchase of went out, or may have: no Buy for them for as long as this page is open. */
-const pending = ref(new Set<string>());
+const walletId = computed(() => walletStore.loggedWallet?.id);
 
 const rows = computed(() =>
   classified.value
-    .filter((c) => c.state.kind === 'buyable' || c.state.kind === 'own')
+    // Private and unreadable listings are not shown (the unreadable ones are counted above).
+    .filter((c) => c.state.kind === 'buyable' || c.state.kind === 'own' || c.state.kind === 'contested')
     .map(({ listing, state }) => {
       const ref = refOf(listing);
       return {
@@ -237,7 +252,10 @@ const rows = computed(() =>
         price: adaOf(listing),
         policyShort: filters.truncate(listing.policyId),
         own: state.kind === 'own',
-        pending: pending.value.has(ref),
+        buyable: state.kind === 'buyable',
+        // A purchase of it went out, or may have: no Buy while it can still be on its way, also after
+        // the page was left and opened again (usePendingBuys).
+        pending: isPendingBuy(walletId.value, ref),
       };
     }),
 );
@@ -280,13 +298,21 @@ function startBuying(listing: ListingDto): void {
 }
 
 function onSent(ref: string): void {
-  pending.value = new Set(pending.value).add(ref);
+  markPendingBuy(walletId.value, props.policyId, ref);
 }
 
-// Another collection or another wallet: nothing of the last one's purchases stays on screen.
-watch([() => props.policyId, () => walletStore.loggedWallet?.id], () => {
+// A listing that is gone from a read of the whole collection was bought or taken down: its lock lets go.
+watch(
+  () => loaded.value && !hasMore.value && !loading.value && !loadingMore.value && error.value === null,
+  (whole) => {
+    if (whole) prunePendingBuys(walletId.value, props.policyId, new Set(items.value.map(refOf)));
+  },
+  { immediate: true, flush: 'post' },
+);
+
+// Another collection or another wallet: the sheet of the last one does not stay on screen.
+watch([() => props.policyId, walletId], () => {
   buying.value = null;
-  pending.value = new Set();
 });
 </script>
 
@@ -392,6 +418,11 @@ watch([() => props.policyId, () => walletStore.loggedWallet?.id], () => {
     margin: 0;
     color: var(--g-text-1);
   }
+}
+
+.collection-listings__lookalike {
+  // The text names a 56-character policy ID, which has no place to break.
+  overflow-wrap: anywhere;
 }
 
 .collection-listings__note {

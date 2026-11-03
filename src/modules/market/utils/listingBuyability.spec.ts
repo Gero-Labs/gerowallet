@@ -56,38 +56,45 @@ describe('listingBuyState', () => {
     expect(listingBuyState(listingRow(), TESTNET, own())).toEqual({ kind: 'buyable' });
   });
 
-  describe('the wallet\'s own listings are never offered', () => {
+  describe('the wallet\'s own listing is shown as its own, and never offered', () => {
     it('by the wallet\'s own listing refs (useMyListings)', () => {
       const row = listingRow({ index: 4 });
       expect(listingBuyState(row, TESTNET, own([{ ref: refOf(row) } as OwnListing]))).toEqual({ kind: 'own' });
     });
 
-    it('by an owner that is one of the account\'s payment or change keys', () => {
-      expect(listingBuyState(listingRow({ owner: MY_PAYMENT }), TESTNET, own())).toEqual({ kind: 'own' });
-      expect(listingBuyState(listingRow({ owner: MY_CHANGE }), TESTNET, own())).toEqual({ kind: 'own' });
-    });
-
-    it('by an owner that is the account\'s stake key, as the worker counts it', () => {
-      expect(listingBuyState(listingRow({ owner: MY_STAKE }), TESTNET, own())).toEqual({ kind: 'own' });
-    });
-
-    it('by a seller address that is one of the account\'s addresses', () => {
-      const row = { ...listingRow(), sellerAddress: MY_CHANGE_ADDRESS };
-      expect(listingBuyState(row, TESTNET, own())).toEqual({ kind: 'own' });
-    });
-
-    it('by the DATUM when the row says otherwise: the row is Nexus\'s word', () => {
-      const row = { ...listingRow({ owner: MY_PAYMENT }), ownerPkh: STRANGER_KEY, sellerAddress: preprodAddress(STRANGER_KEY, STRANGER_STAKE) };
-      expect(listingBuyState(row, TESTNET, own())).toEqual({ kind: 'own' });
+    it('by the datum: owner AND seller are both the account\'s (a payment or change key and its own address)', () => {
+      expect(listingBuyState(listingRow({ owner: MY_PAYMENT, stake: MY_STAKE }), TESTNET, own())).toEqual({ kind: 'own' });
+      expect(listingBuyState(listingRow({ owner: MY_CHANGE, stake: MY_STAKE }), TESTNET, own())).toEqual({ kind: 'own' });
     });
 
     it('whatever the datum is: an unreadable datum under an own ref is still the wallet\'s own', () => {
       const row = listingRow({ datumCbor: '00' });
       expect(listingBuyState(row, TESTNET, own([{ ref: refOf(row) } as OwnListing]))).toEqual({ kind: 'own' });
     });
+
+    it('whatever the row says: an own ref is the wallet\'s own', () => {
+      const row = { ...listingRow({ index: 6 }), priceLovelace: '1' };
+      expect(listingBuyState(row, TESTNET, own([{ ref: refOf(row) } as OwnListing]))).toEqual({ kind: 'own' });
+    });
   });
 
-  describe('a private listing (buyer set) is never offered, whoever the buyer is', () => {
+  describe('a listing that names the account on only one side is not marked as its own, and is never offered', () => {
+    it('the owner is the account\'s and the seller is somebody else\'s: the fake "your listing" that pays an attacker', () => {
+      for (const owner of [MY_PAYMENT, MY_CHANGE, MY_STAKE]) {
+        expect(listingBuyState(listingRow({ owner }), TESTNET, own()), owner).toEqual({ kind: 'contested' });
+      }
+      // The seller is an attacker's address, whoever the owner key is.
+      const bait = listingRow({ owner: MY_PAYMENT, sellerAddress: preprodAddress(STRANGER_KEY, STRANGER_STAKE) });
+      expect(listingBuyState(bait, TESTNET, own())).toEqual({ kind: 'contested' });
+    });
+
+    it('the seller address is the account\'s and the owner is somebody else\'s', () => {
+      expect(listingBuyState(listingRow({ owner: STRANGER_KEY, sellerAddress: MY_CHANGE_ADDRESS }), TESTNET, own())).toEqual({ kind: 'contested' });
+      expect(listingBuyState(listingRow({ owner: STRANGER_KEY, sellerAddress: MY_ADDRESS }), TESTNET, own())).toEqual({ kind: 'contested' });
+    });
+  });
+
+  describe('a private listing (buyer set) is never shown, so never offered, whoever the buyer or the seller is', () => {
     it('a key that is not the account\'s', () => {
       expect(listingBuyState(listingRow({ buyer: STRANGER_KEY }), TESTNET, own())).toEqual({ kind: 'private' });
     });
@@ -98,8 +105,32 @@ describe('listingBuyState', () => {
       }
     });
 
-    it('but a private listing of the account\'s own is the account\'s own first', () => {
-      expect(listingBuyState(listingRow({ owner: MY_PAYMENT, buyer: STRANGER_KEY }), TESTNET, own())).toEqual({ kind: 'own' });
+    it('the account\'s own private listing is hidden too (by owner and seller, and by an own ref)', () => {
+      expect(listingBuyState(listingRow({ owner: MY_PAYMENT, stake: MY_STAKE, buyer: STRANGER_KEY }), TESTNET, own())).toEqual({ kind: 'private' });
+      const row = listingRow({ index: 8, buyer: STRANGER_KEY });
+      expect(listingBuyState(row, TESTNET, own([{ ref: refOf(row) } as OwnListing]))).toEqual({ kind: 'private' });
+    });
+  });
+
+  describe('a row that contradicts its own datum is not read, and is never offered', () => {
+    it('a bait price: the row says 10 ADA and the datum 120', () => {
+      const row = { ...listingRow(), priceLovelace: (10n * 1_000_000n).toString() };
+      expect(listingBuyState(row, TESTNET, own())).toEqual({ kind: 'unreadable' });
+    });
+
+    it('a different owner, or a different seller address', () => {
+      expect(listingBuyState({ ...listingRow(), ownerPkh: '55'.repeat(28) }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+      expect(listingBuyState({ ...listingRow(), sellerAddress: MY_ADDRESS }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+    });
+
+    it('a price that is not a number, and a row whose owner is not text', () => {
+      expect(listingBuyState({ ...listingRow(), priceLovelace: 'lots' }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+      expect(listingBuyState({ ...listingRow(), ownerPkh: undefined as never }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+    });
+
+    it('ignores the case of a hash or an address, which is not a contradiction', () => {
+      const row = listingRow();
+      expect(listingBuyState({ ...row, ownerPkh: row.ownerPkh.toUpperCase() }, TESTNET, own())).toEqual({ kind: 'buyable' });
     });
   });
 
@@ -117,6 +148,10 @@ describe('listingBuyState', () => {
 
     it('a row with no datum at all', () => {
       expect(listingBuyState({ ...listingRow(), datumCbor: undefined as never }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+    });
+
+    it('even when the row says it is the account\'s own: nothing is marked as its own on a row that cannot be read', () => {
+      expect(listingBuyState({ ...listingRow({ datumCbor: '182a' }), ownerPkh: MY_PAYMENT, sellerAddress: MY_ADDRESS }, TESTNET, own())).toEqual({ kind: 'unreadable' });
     });
   });
 });

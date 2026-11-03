@@ -22,7 +22,7 @@
         </span>
       </div>
 
-      <v-alert v-if="lookalike" type="warning" variant="tonal" density="compact" class="mt-3" data-testid="buy-nft-lookalike">
+      <v-alert v-if="lookalike" type="warning" variant="tonal" density="compact" class="buy-nft__lookalike mt-3" data-testid="buy-nft-lookalike">
         {{ t('nftMarket.browse.lookalike', { name: lookalike.name, policyId: lookalike.policyId }) }}
       </v-alert>
 
@@ -117,9 +117,9 @@
             {{ flow.submittedTxId.value }}
             <CopyButton x-small :value="flow.submittedTxId.value ?? ''" class="ml-1" />
           </p>
-          <v-btn v-if="txExplorerUrl" variant="text" size="small" :href="txExplorerUrl" target="_blank" rel="noopener noreferrer">
+          <GButton v-if="txExplorerUrl" tier="tertiary" compact :href="txExplorerUrl" target="_blank" rel="noopener noreferrer" data-testid="buy-nft-explorer">
             {{ t('market.viewOnExplorer') }}
-          </v-btn>
+          </GButton>
         </div>
         <div class="buy-nft__actions">
           <GButton tier="primary" block data-testid="buy-nft-done-button" @click="close()">{{ t('common.done') }}</GButton>
@@ -134,10 +134,13 @@
         <div class="buy-nft__actions">
           <GButton tier="secondary" data-testid="buy-nft-close" @click="close()">{{ t('common.close') }}</GButton>
           <!-- Only a failure that something can fix offers a way on: building again, or reloading
-               the list to see what changed. A refusal that would fail the same way, and a signed
-               purchase that may be on chain, offer neither. -->
+               the list to see what changed (closing the sheet does that). A refusal that would fail
+               the same way offers neither, and a signed purchase that may be on chain offers a look
+               at the activity, never a rebuild. -->
           <GButton v-if="canRetry" tier="primary" data-testid="buy-nft-retry" @click="start()">{{ t('common.tryAgain') }}</GButton>
-          <GButton v-else-if="failureKind === 'changed'" tier="primary" data-testid="buy-nft-refresh" @click="refreshList()">{{ t('common.refresh') }}</GButton>
+          <GButton v-else-if="failureKind === 'changed'" tier="primary" data-testid="buy-nft-refresh" @click="close()">{{ t('common.refresh') }}</GButton>
+          <!-- Signed, and the network did not confirm: it may be on chain. Look, never rebuild. -->
+          <GButton v-else-if="failureKind === 'maybeSent'" tier="primary" data-testid="buy-nft-activity" @click="viewActivity()">{{ t('nftMarket.actions.viewActivity') }}</GButton>
         </div>
       </template>
     </v-card-text>
@@ -157,6 +160,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -194,9 +198,10 @@ import { isNftMarketHardware } from '@/utils/nftMarketDeployments';
  * The NFT's policy ID is always shown whole (ruling R8), and a lookalike warning from the
  * collection page is shown with the real collection's policy ID beside it.
  *
- * A listing that changed (bought, delisted, repriced) offers Refresh, which has the page read its
- * list again; a signed purchase whose submit was not confirmed may be on chain, so the buyer is
- * sent to their activity and never offered a rebuild. The page is told (`sent`) when a purchase
+ * A listing that changed (bought, delisted, repriced) offers Refresh, and closing the sheet in any
+ * way after that has the page read its list again; a signed purchase whose submit was not confirmed
+ * may be on chain, so the buyer is sent to their activity (View activity) and never offered a
+ * rebuild. The page is told (`sent`) when a purchase
  * was submitted or may have been, so it stops offering Buy for that listing.
  */
 const props = defineProps<{
@@ -223,6 +228,7 @@ const { t } = useTranslation();
 const isBT = ref(false);
 const flow = useNftMarketFlow('buy', { getIsBT: () => isBT.value });
 const { explorerUrl } = useExplorer();
+const router = useRouter();
 
 const listingRef = computed(() => `${props.listing.txHash}#${props.listing.outputIndex}`);
 const stage = computed(() => flow.stage.value);
@@ -310,16 +316,23 @@ function start(): void {
   void flow.prepare({ ref: listingRef.value });
 }
 
+/**
+ * Leave the sheet. When it last said the listing changed (bought, delisted, repriced), the page is
+ * asked to read its list again on the way out, whichever way it is closed (Refresh, Close or the
+ * X): the row it showed is stale, and must lose its Buy. Nothing is built again here.
+ */
 function close(): void {
   if (busy.value) return;
+  const changed = failureKind.value === 'changed';
   credentials.clearPassword();
+  if (changed) emit('refresh');
   emit('close');
 }
 
-/** The listing changed: have the page read its list again, and leave. Nothing is built again here. */
-function refreshList(): void {
-  emit('refresh');
+/** The signed purchase may be on chain: take the buyer to their activity. Nothing is rebuilt or re-sent. */
+function viewActivity(): void {
   close();
+  void router?.push({ path: '/transactions' });
 }
 
 // The page stops offering Buy for a listing once a purchase of it went out or may have: it is
@@ -347,6 +360,11 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
   flex-direction: column;
   gap: var(--g-s-1);
   color: var(--g-text-2);
+}
+
+.buy-nft__lookalike {
+  // The text names a 56-character policy ID, which has no place to break.
+  overflow-wrap: anywhere;
 }
 
 .buy-nft__policy-id {

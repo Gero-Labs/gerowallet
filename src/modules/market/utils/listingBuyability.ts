@@ -9,19 +9,32 @@ import type { Keys } from '@/models/types';
  * button that leads to a refusal it could have seen coming.
  *
  *   buyable     a public listing that is somebody else's.
- *   own         one of this account's own listings: it is cancelled, not bought (`OWN_LISTING`).
- *   private     a `buyer` is set in the datum, whoever it names: not shown and never bought.
- *               Ruling R2: phase 1 buys PUBLIC listings only. The Nexus buy builder and the
- *               worker (`verifyBuy`) refuse every listing with a `buyer` (`PRIVATE_LISTING`),
- *               this account's own keys included, and browse hides them. Private buying is
- *               phase 1b, which lifts the refusal on both sides.
- *   unreadable  the datum is not exactly a Gero listing (`DATUM`): it can never be bought.
+ *   own         one of this account's own listings: marked "Your listing", never bought (it is
+ *               cancelled, `OWN_LISTING`). Only what the wallet itself verified (`useMyListings`)
+ *               or a datum naming this account as owner AND as seller.
+ *   contested   the datum names this account on ONE side only: as owner but with somebody else's
+ *               address as seller (the fake "your listing" that pays an attacker), or the other
+ *               way round. Not marked as the account's own, and never offered (the worker refuses
+ *               either, `isOwnRow`).
+ *   private     a `buyer` is set in the datum, whoever it names and whoever lists it: not shown
+ *               and never bought. Ruling R2 (and P43): phase 1 buys PUBLIC listings only. The Nexus
+ *               buy builder and the worker (`verifyBuy`) refuse every listing with a `buyer`
+ *               (`PRIVATE_LISTING`), this account's own keys included, and browse hides them.
+ *               Private buying is phase 1b, which lifts the refusal on both sides.
+ *   unreadable  the datum is not exactly a Gero listing (`DATUM`), or the row contradicts it (its
+ *               price, owner or seller is not the datum's): it can never be bought, and the page
+ *               counts it among the listings it could not show.
  *
  * The datum is read here from the row's own bytes, strictly, the way the worker reads it (R11):
- * the row's other fields are Nexus's word, and a row that says "owned by a stranger" over a datum
- * that names this wallet is the wallet's.
+ * the row's other fields are Nexus's word, and a row that shows one price over a datum that holds
+ * another is not a listing to put in front of a buyer.
  */
-export type ListingBuyState = { kind: 'buyable' } | { kind: 'own' } | { kind: 'private' } | { kind: 'unreadable' };
+export type ListingBuyState =
+  | { kind: 'buyable' }
+  | { kind: 'own' }
+  | { kind: 'contested' }
+  | { kind: 'private' }
+  | { kind: 'unreadable' };
 
 /** What identifies this account: the worker's own key set, read from the page's store. */
 export interface BuyerIdentity {
@@ -63,18 +76,35 @@ function readDatum(row: ListingDto, networkId: number): ListingDatum | null {
 
 const lower = (value: unknown): string => String(value ?? '').toLowerCase();
 
+/** Whether the row says what its datum says: the same price, owner and seller address. */
+function rowMatchesDatum(row: ListingDto, datum: ListingDatum): boolean {
+  try {
+    return (
+      BigInt(row.priceLovelace) === datum.price &&
+      typeof row.ownerPkh === 'string' &&
+      lower(row.ownerPkh) === lower(datum.owner) &&
+      typeof row.sellerAddress === 'string' &&
+      lower(row.sellerAddress) === lower(datum.sellerAddress)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * What the wallet may do with one row of a collection's list. `networkId` is the wallet's own
  * (0 for a testnet, 1 for mainnet): the datum's addresses are rendered for it.
  */
 export function listingBuyState(row: ListingDto, networkId: number, who: BuyerIdentity): ListingBuyState {
   const datum = readDatum(row, networkId);
-  const isOwn =
-    who.listingRefs.has(`${row.txHash}#${row.outputIndex}`) ||
-    who.keyHashes.has(lower(row.ownerPkh)) ||
-    who.addresses.has(lower(row.sellerAddress)) ||
-    (datum !== null && (who.keyHashes.has(lower(datum.owner)) || who.addresses.has(lower(datum.sellerAddress))));
-  if (isOwn) return { kind: 'own' };
-  if (datum === null) return { kind: 'unreadable' };
-  return datum.buyer === null ? { kind: 'buyable' } : { kind: 'private' };
+  // A private listing is never shown, the account's own included.
+  if (datum !== null && datum.buyer !== null) return { kind: 'private' };
+  // What the wallet verified itself is its own, whatever Nexus's row or datum bytes look like.
+  if (who.listingRefs.has(`${row.txHash}#${row.outputIndex}`)) return { kind: 'own' };
+  if (datum === null || !rowMatchesDatum(row, datum)) return { kind: 'unreadable' };
+  const ownerIsMine = who.keyHashes.has(lower(datum.owner));
+  const sellerIsMine = who.addresses.has(lower(datum.sellerAddress));
+  if (ownerIsMine && sellerIsMine) return { kind: 'own' };
+  if (ownerIsMine || sellerIsMine) return { kind: 'contested' };
+  return { kind: 'buyable' };
 }

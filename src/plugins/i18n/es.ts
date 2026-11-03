@@ -6048,7 +6048,6 @@ export default {
   'nftMarket.browse.empty': 'Ahora mismo no hay NFT de esta colección en venta.',
   'nftMarket.browse.dropped': '{count} publicación no se pudo mostrar. | {count} publicaciones no se pudieron mostrar.',
   'nftMarket.browse.loadFailed': 'No pudimos cargar las publicaciones. Inténtalo de nuevo.',
-  'nftMarket.browse.own': 'Tu publicación',
   'nftMarket.browse.pending': 'Compra enviada',
   'nftMarket.browse.viewOnly': 'Con esta billetera solo puedes ver las publicaciones. Para comprar, usa una billetera que pueda firmar.',
   'nftMarket.browse.lookalikeChip': 'Posible imitación',
