@@ -53,3 +53,18 @@ export function withoutPendingSpends(
   if (spent.size === 0) return utxos;
   return utxos.filter(([txIn]) => !spent.has(`${txIn.txId}#${txIn.index}`));
 }
+
+/**
+ * The UTxOs a payment may spend: none a pending transaction already spends, and not the
+ * collateral, which stays set aside for script transactions unless it is all the wallet has.
+ */
+export function paymentUtxos(
+  utxos: Cardano.Utxo[],
+  collateral: Cardano.Utxo | null | undefined,
+  transactions: ReadonlyArray<PendingTxRecord | null> | null | undefined,
+  nowMs: number = Date.now(),
+): Cardano.Utxo[] {
+  const ref = (utxo: Cardano.Utxo) => `${utxo[0].txId}#${utxo[0].index}`;
+  const withoutCollateral = collateral ? utxos.filter((utxo) => ref(utxo) !== ref(collateral)) : utxos;
+  return withoutPendingSpends(withoutCollateral.length > 0 ? withoutCollateral : utxos, transactions, nowMs);
+}

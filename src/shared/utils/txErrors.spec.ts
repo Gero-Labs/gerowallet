@@ -153,6 +153,13 @@ describe('shortfallLovelaceFromMessage', () => {
       .toBe(BigInt(400_000));
   });
 
+  // Nexus's transfer builder, when the inputs it was offered hold less than the outputs:
+  // the case a wallet spread over more UTxOs than one request carries runs into.
+  it('reads required minus available from a transfer build short of ADA', () => {
+    expect(shortfallLovelaceFromMessage('Insufficient ADA. Required: 15000.170000 ADA (15000170000 lovelace), available: 9112.400000 ADA (9112400000 lovelace)'))
+      .toBe(BigInt(5_887_770_000));
+  });
+
   it('returns undefined for anything else', () => {
     expect(shortfallLovelaceFromMessage('Validation failed')).toBeUndefined();
     expect(shortfallLovelaceFromMessage('')).toBeUndefined();

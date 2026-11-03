@@ -42,7 +42,9 @@ export type TxIntentViolation =
   /** An input or collateral whose value could not be proven from its creating transaction. */
   | 'unprovenInput'
   /** The UTxO list describes an input differently from the transaction that created it. */
-  | 'misreportedInput';
+  | 'misreportedInput'
+  /** Larger than the protocol's transaction size limit: every node would refuse it. */
+  | 'txTooLarge';
 
 /**
  * Upper bound for the network fee of a transaction built for the wallet. The

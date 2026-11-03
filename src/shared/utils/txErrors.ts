@@ -123,16 +123,19 @@ export function isInsufficientAdaError(message: string): boolean {
 }
 
 /**
- * How much lovelace a rejected build was short, read from the two Nexus shortfall
+ * How much lovelace a rejected build was short, read from the three Nexus shortfall
  * messages the send flow parses: "{ada in inputs: X, ada in outputs: Y, fee Z"
- * (outputs plus fee, minus inputs) and "Available: X lovelace, required: Y lovelace"
- * (required minus available). Undefined for anything else.
+ * (outputs plus fee, minus inputs), "Available: X lovelace, required: Y lovelace"
+ * (required minus available), and the transfer builder's "Required: … ADA (Y lovelace),
+ * available: … ADA (X lovelace)" (required minus available). Undefined for anything else.
  */
 export function shortfallLovelaceFromMessage(message: string): bigint | undefined {
   const inputs = message.match(/ada in inputs:\s*(\d+),\s*ada in outputs:\s*(\d+),\s*fee\s*(\d+)/);
   if (inputs) return BigInt(inputs[2]) + BigInt(inputs[3]) - BigInt(inputs[1]);
   const change = message.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
   if (change) return BigInt(change[2]) - BigInt(change[1]);
+  const transfer = message.match(/Required:\s*[\d.]+\s*ADA\s*\((\d+)\s*lovelace\),\s*available:\s*[\d.]+\s*ADA\s*\((\d+)\s*lovelace\)/);
+  if (transfer) return BigInt(transfer[1]) - BigInt(transfer[2]);
   return undefined;
 }
 
