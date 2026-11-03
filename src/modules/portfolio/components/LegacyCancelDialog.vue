@@ -200,7 +200,7 @@ const ITEM_FAILURES: ReadonlySet<string> = new Set([
   'TOO_MANY_LISTINGS',
 ]);
 
-type FailureKind = 'gone' | 'maybeSent' | 'item' | 'wrongPassword' | 'retry';
+type FailureKind = 'gone' | 'maybeSent' | 'item' | 'wrongPassword' | 'noCollateral' | 'retry';
 
 const failureKind = computed<FailureKind | null>(() => {
   const code = flow.failure.value?.code;
@@ -209,10 +209,11 @@ const failureKind = computed<FailureKind | null>(() => {
   if (code === PREPARED_TX_SUBMIT_FAILED) return 'maybeSent';
   if (ITEM_FAILURES.has(code)) return 'item';
   if (code === PREPARED_TX_WRONG_PASSWORD) return 'wrongPassword';
+  if (code === 'NO_COLLATERAL') return 'noCollateral';
   return 'retry';
 });
 const isGone = computed(() => failureKind.value === 'gone');
-const canRetry = computed(() => failureKind.value === 'retry');
+const canRetry = computed(() => failureKind.value === 'retry' || failureKind.value === 'noCollateral');
 /** The message for each kind of failure; anything not named here is the general one, with a retry. */
 const failureText = computed(() => {
   switch (failureKind.value) {
@@ -220,6 +221,7 @@ const failureText = computed(() => {
     case 'maybeSent': return t('legacyListings.maybeSent');
     case 'item': return tc('legacyListings.itemFailed', props.refs.length);
     case 'wrongPassword': return t('errors.wrongPassword');
+    case 'noCollateral': return t('errors.noCollateral');
     case 'retry': return t('legacyListings.failed');
     default: return '';
   }

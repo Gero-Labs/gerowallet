@@ -284,6 +284,22 @@ describe('LegacyCancelDialog', () => {
     expect(wrapper.find('[data-testid="legacy-cancel-confirm"]').exists()).toBe(true);
   });
 
+  it('NO_COLLATERAL says how to make collateral, and trying again builds again', async () => {
+    prepareFails('NO_COLLATERAL');
+    const wrapper = render();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="legacy-cancel-error"]').text()).toContain('Send about 6 ADA to your own wallet address');
+    expect(wrapper.get('[data-testid="legacy-cancel-error"]').text()).not.toContain('Could not get these items back');
+
+    prepareSucceeds();
+    await wrapper.get('[data-testid="legacy-cancel-retry"]').trigger('click');
+    await flushPromises();
+
+    expect(flow.prepare).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('[data-testid="legacy-cancel-confirm"]').exists()).toBe(true);
+  });
+
   it.each(['BUILD_FAILED', 'NETWORK_UNSUPPORTED', 'WALLET_UNSUPPORTED', 'NOT_OWNED', 'EXPIRED', 'SOMETHING_NEW'])(
     'a %s failure keeps the general message and its retry, and closing does not refresh',
     async (code) => {
