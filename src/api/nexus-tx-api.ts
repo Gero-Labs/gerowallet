@@ -13,6 +13,7 @@
  */
 
 import axios, { AxiosError } from 'axios';
+import { installSignedResponses } from './signedResponses';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import i18n from '@/plugins/i18n';
@@ -267,6 +268,8 @@ const nexusTxClient = axios.create({
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
+// gero-backend relays Nexus and signs what it relays (build-time mode; off by default).
+installSignedResponses(nexusTxClient, 'gero-backend');
 
 /**
  * The message a Nexus error body carries, with the field-level reasons a bean

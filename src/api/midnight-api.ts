@@ -21,7 +21,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import i18n from '@/plugins/i18n';
 import { parseHttpError } from '@/shared/utils/parser';
 import { registrationNftOf, verifyDustMappingTx, type DustTxExpectation } from '@/shared/utils/dustTxGuard';
-import { koiosSource, proveOutputs, type TxCborSource } from '@/shared/utils/provenInputs';
+import { backendSource, proveOutputs, type TxCborSource } from '@/shared/utils/provenInputs';
 import { TxIntentMismatchError, type TxIntentViolation } from '@/shared/utils/txIntentGuard';
 import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
@@ -417,7 +417,7 @@ export interface DustBuildContext {
   /**
    * Where to fetch the transaction that created the registration UTxO, to prove
    * which mapping NFT it holds (provenInputs.ts). The wallet's history first,
-   * when the caller has it; Koios is always tried after.
+   * when the caller has it; gero-backend is always tried after.
    */
   proofSources?: TxCborSource[];
 }
@@ -657,9 +657,9 @@ export class MidnightApi {
   private readonly nexusBaseUrl: string;
   private readonly axiosInstance: AxiosInstance;
 
-  /** The caller's CBOR sources, then Koios on the Cardano network this Midnight network anchors to. */
+  /** The caller's CBOR sources, then gero-backend on the Cardano network this Midnight network anchors to. */
   private dustProofSources(context: DustBuildContext): TxCborSource[] {
-    return [...(context.proofSources ?? []), koiosSource(cardanoTwinNetwork(this.network))];
+    return [...(context.proofSources ?? []), backendSource(cardanoTwinNetwork(this.network))];
   }
 
   constructor(network: string) {

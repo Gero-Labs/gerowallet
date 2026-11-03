@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { installSignedResponses } from './signedResponses';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
@@ -8,6 +9,7 @@ const axiosInstance = axios.create({
     'Access-Control-Allow-Origin': '*',
   },
 });
+installSignedResponses(axiosInstance, 'gero-backend');
 
 export default {
   async resolve(handle: string) {

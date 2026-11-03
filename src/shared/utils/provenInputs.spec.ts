@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { historySource, koiosSource, outputRef, proveOutputs, provenOutput, sameOutput } from './provenInputs';
+import { backendSource, historySource, outputRef, proveOutputs, provenOutput, sameOutput } from './provenInputs';
 
 const keyCred = (c: string) => ({ type: Cardano.CredentialType.KeyHash, hash: c.repeat(56) as Cardano.Credential['hash'] });
 const base = (pay: string, stake: string) =>
@@ -92,27 +92,39 @@ describe('proveOutputs', () => {
   });
 });
 
-describe('koiosSource', () => {
-  it('asks Koios tx_cbor for the hashes, on the wallet\'s network', async () => {
+describe('backendSource', () => {
+  const BACKEND = 'https://api.gero.test';
+
+  it('asks gero-backend transactions/cbor for the hashes, on the wallet\'s network', async () => {
     const a = creatingTx(3n, { seed: '6' });
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([{ tx_hash: a.hash.toUpperCase(), cbor: a.cbor }]), { status: 200 }));
-    const found = await koiosSource('Preprod', fetchImpl as unknown as typeof fetch)([a.hash]);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([{ tx_hash: a.hash.toUpperCase(), cbor: a.cbor, block_height: '1' }]), { status: 200 }));
+    const found = await backendSource('Preprod', fetchImpl as unknown as typeof fetch, BACKEND)([a.hash]);
     expect(found.get(a.hash)).toBe(a.cbor);
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://preprod.koios.rest/api/v1/tx_cbor');
-    expect(JSON.parse(String(init.body))).toEqual({ _tx_hashes: [a.hash] });
+    expect(url).toBe(`${BACKEND}/api/transactions/cbor?chain=CARDANO&network=PREPROD`);
+    expect(JSON.parse(String(init.body))).toEqual([a.hash]);
     expect(init.credentials).toBe('omit');
   });
 
-  it('has nothing for a network Koios does not serve', async () => {
+  it('has nothing for a network the backend does not serve, or without a backend', async () => {
     const fetchImpl = vi.fn();
-    expect((await koiosSource('Stagenet', fetchImpl as unknown as typeof fetch)(['a'.repeat(64)])).size).toBe(0);
+    expect((await backendSource('Stagenet', fetchImpl as unknown as typeof fetch, BACKEND)(['a'.repeat(64)])).size).toBe(0);
+    expect((await backendSource('Mainnet', fetchImpl as unknown as typeof fetch, '')(['a'.repeat(64)])).size).toBe(0);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('fails on an error answer, so the next source is tried', async () => {
     const fetchImpl = vi.fn(async () => new Response('busy', { status: 429 }));
-    await expect(koiosSource('Mainnet', fetchImpl as unknown as typeof fetch)(['a'.repeat(64)])).rejects.toThrow('429');
+    await expect(backendSource('Mainnet', fetchImpl as unknown as typeof fetch, BACKEND)(['a'.repeat(64)])).rejects.toThrow('429');
+  });
+
+  it('proves nothing with CBOR that does not hash to the id asked for, whoever serves it', async () => {
+    const real = creatingTx(5_000_000n, { seed: '7' });
+    const forged = creatingTx(1n, { seed: '8' });
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([{ tx_hash: real.hash, cbor: forged.cbor }]), { status: 200 }));
+    const { proven, unproven } = await proveOutputs([`${real.hash}#0`], [backendSource('Mainnet', fetchImpl as unknown as typeof fetch, BACKEND)]);
+    expect(proven.size).toBe(0);
+    expect(unproven).toEqual([`${real.hash}#0`]);
   });
 });
 
