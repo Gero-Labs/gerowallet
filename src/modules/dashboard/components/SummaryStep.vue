@@ -10,14 +10,16 @@
       :cbor-hex="getCborHex()"
       class="mb-3"
     />
-    <SweepTimeline
-      v-if="tx && steps > 1"
-      :steps="steps"
-      :utxo-count="utxoCount"
-      :merge-fee="mergeFeeAda"
-      :payment-fee="paymentFeeAda"
-      class="mb-3"
-    />
+    <!-- A sweep's stages, in a drawer beside the dialog so the details above never scroll. -->
+    <DialogDrawer :open="!!tx && steps > 1 && active" :label="t('send.sweepHowItGoesOut')">
+      <SweepTimeline
+        v-if="tx && steps > 1"
+        :steps="steps"
+        :utxo-count="utxoCount"
+        :merge-fee="mergeFeeAda"
+        :payment-fee="paymentFeeAda"
+      />
+    </DialogDrawer>
   </v-card>
 </template>
 <script setup lang="ts">
@@ -37,6 +39,8 @@ import TransactionDetailsCard, {
   type TxDetailsRiskBadge,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import SweepTimeline from './sweep/SweepTimeline.vue';
+import DialogDrawer from '@/shared/dialogs/DialogDrawer.vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 // The timeline shows each stage's fee on its own, symbol included (the details card adds
 // the unit to its figures itself, hence the symbol-less formatAda below).
 import { formatAda as formatAdaWithSymbol } from '@/shared/utils/format';
@@ -56,6 +60,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), { active: true, additionalFeeLovelace: 0, steps: 1, utxoCount: 0 });
+const { t } = useTranslation();
 defineExpose({ isReadyFor });
 
 const loading = ref<boolean>(false);

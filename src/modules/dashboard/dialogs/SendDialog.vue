@@ -85,7 +85,7 @@
           <!-- Step 1: Recipients -->
           <v-stepper-window-item :value="1">
             <div class="step-recipients-wrapper">
-              <div class="step-recipients-inner" :class="{ 'step-recipients-inner--sweep': sweepPreparing || sweep }">
+              <div class="step-recipients-inner">
                 <SendRecipientCard
                   v-for="(recipient, idx) in recipients"
                   :key="recipient.id"
@@ -114,14 +114,17 @@
                 </div>
 
                 <!-- Max over the request limit: the merges being built, then the plan; or,
-                     when this wallet cannot sweep, what Max sends and what stays behind. -->
-                <SweepPlanCard
-                  v-if="sweepPreparing || sweep"
-                  :utxo-count="sweepPreparing?.utxoCount ?? sweep?.utxoCount ?? 0"
-                  :merges="sweepPreparing?.total ?? sweep?.merges.length ?? 0"
-                  :preparing="sweepPreparing ? { built: sweepPreparing.built, total: sweepPreparing.total, waiting: sweepPreparing.waiting } : null"
-                />
-                <MaxLimitNote v-else-if="maxLimit" v-bind="maxLimit" />
+                     when this wallet cannot sweep, what Max sends and what stays behind. In a
+                     drawer beside the dialog, so the recipients never scroll for it. -->
+                <DialogDrawer :open="currentStep === 1 && !!(sweepPreparing || sweep || maxLimit)" :label="t('send.sweepHowItGoesOut')">
+                  <SweepPlanCard
+                    v-if="sweepPreparing || sweep"
+                    :utxo-count="sweepPreparing?.utxoCount ?? sweep?.utxoCount ?? 0"
+                    :merges="sweepPreparing?.total ?? sweep?.merges.length ?? 0"
+                    :preparing="sweepPreparing ? { built: sweepPreparing.built, total: sweepPreparing.total, waiting: sweepPreparing.waiting } : null"
+                  />
+                  <MaxLimitNote v-else-if="maxLimit" v-bind="maxLimit" />
+                </DialogDrawer>
 
                 <!-- Global total: always in the layout so the dialog keeps its height. Empty
                      (dashes) until there is something to build, a shimmer while the fee is
@@ -286,6 +289,7 @@ import TransactionAuthSection from '@/shared/components/TransactionAuthSection.v
 import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
 import SweepPlanCard from '../components/sweep/SweepPlanCard.vue';
+import DialogDrawer from '@/shared/dialogs/DialogDrawer.vue';
 import MaxLimitNote from '../components/sweep/MaxLimitNote.vue';
 import SweepProgressPanel from '../components/sweep/SweepProgressPanel.vue';
 import SweepDone from '../components/sweep/SweepDone.vue';
@@ -1633,10 +1637,12 @@ onMounted(() => {
 });
 </script>
 <style scoped>
-/* ─── Content area ─── */
+/* ─── Content area ───
+   No height of its own: the dialog grows with its content up to the window, and only a
+   window too short for it makes this area scroll. What only some sends need (a sweep's plan,
+   the note on what Max leaves behind) sits in a drawer beside the dialog instead. */
 .send-dialog-content {
   z-index: 1;
-  max-height: 500px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1658,16 +1664,6 @@ onMounted(() => {
 .step-recipients-inner {
   width: 100%;
   min-width: 340px;
-  max-height: 480px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-/* A sweep fills the step to about its cap anyway, and the dialog is centred: held at
-   the cap from the first merge to the plan, the dialog stops growing and shrinking as
-   rows arrive (the plan's legend, the fee split, the ADA kept for tokens). */
-.step-recipients-inner--sweep {
-  min-height: 480px;
 }
 
 .add-recipient-link {
