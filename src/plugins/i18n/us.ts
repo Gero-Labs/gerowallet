@@ -4424,6 +4424,7 @@ export default {
   'signTx.listingTooManyRoyalties': 'More than {max} royalty payees',
   'signTx.listingHighRoyalties': 'Royalties take more than {percent}% of the price',
   'signTx.listingLowShare': 'Almost nothing is left for the seller after the fee and royalties',
+  'signTx.listingRoyaltiesChanged': 'The royalties on this listing change.',
   'signTx.listingNeverSells': 'This listing can never be bought: nothing is left for the seller after the fee and royalties. The NFT stays stuck until the listing is cancelled.',
   'signTx.listingHoldsMore': 'It does not hold exactly one NFT. Whoever buys it gets everything in it.',
   'signTx.listingDepositHigh': 'It locks {amount} ADA as a deposit, far more than the {max} ADA a listing needs',

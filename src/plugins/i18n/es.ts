@@ -4309,6 +4309,7 @@ export default {
   'signTx.listingTooManyRoyalties': 'Más de {max} beneficiarios de regalías',
   'signTx.listingHighRoyalties': 'Las regalías son más del {percent}% del precio',
   'signTx.listingLowShare': 'Casi no le queda nada al vendedor después de la comisión y las regalías',
+  'signTx.listingRoyaltiesChanged': 'Las regalías de esta publicación cambian.',
   'signTx.listingNeverSells': 'Esta publicación nunca se podrá comprar: no le queda nada al vendedor después de la comisión y las regalías. El NFT queda atascado hasta que se cancele la publicación.',
   'signTx.listingHoldsMore': 'No contiene exactamente un NFT. Quien la compre se queda con todo lo que haya dentro.',
   'signTx.listingDepositHigh': 'Bloquea {amount} ADA como depósito, mucho más que los {max} ADA que necesita una publicación',

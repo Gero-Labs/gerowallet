@@ -4744,6 +4744,7 @@ export default {
   'signTx.listingTooManyRoyalties': 'Mehr als {max} Royalty-Empfänger',
   'signTx.listingHighRoyalties': 'Die Royalties betragen mehr als {percent}% des Preises',
   'signTx.listingLowShare': 'Nach Gebühr und Royalties bleibt für den Verkäufer fast nichts übrig',
+  'signTx.listingRoyaltiesChanged': 'Die Royalties dieses Angebots ändern sich.',
   'signTx.listingNeverSells': 'Dieses Angebot kann nie gekauft werden: Nach Gebühr und Royalties bleibt für den Verkäufer nichts übrig. Das NFT sitzt fest, bis das Angebot zurückgezogen wird.',
   'signTx.listingHoldsMore': 'Es enthält nicht genau ein NFT. Wer es kauft, erhält alles, was darin ist.',
   'signTx.listingDepositHigh': 'Es sperrt {amount} ADA als Kaution, weit mehr als die {max} ADA, die ein Angebot braucht',

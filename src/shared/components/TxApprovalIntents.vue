@@ -59,6 +59,7 @@
             <div v-if="listing.tooManyRoyalties" class="error--text text-caption" data-testid="tx-intent-listing-too-many-royalties">{{ $t('signTx.listingTooManyRoyalties', { max: MAX_ROYALTIES }) }}</div>
             <div v-if="listing.highRoyalties" class="error--text text-caption" data-testid="tx-intent-listing-high-royalties">{{ $t('signTx.listingHighRoyalties', { percent: ROYALTY_CAP_PERCENT }) }}</div>
             <div v-if="listing.lowSellerShare && !neverSells(listing)" class="error--text text-caption" data-testid="tx-intent-listing-low-share">{{ $t('signTx.listingLowShare') }}</div>
+            <div v-if="listing.royaltiesChanged" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-royalties-changed">{{ $t('signTx.listingRoyaltiesChanged') }}</div>
           </template>
           <div v-else class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-datum-problem">{{ $t(DATUM_PROBLEM_KEYS[listing.datum]) }}</div>
           <!-- What the output holds is judged whatever its datum says. -->

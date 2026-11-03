@@ -55,6 +55,7 @@ const createdListing = (over: Partial<ApprovalCreatedListing> = {}): ApprovalCre
   depositLovelace: 2_000_000n,
   depositTooHigh: false,
   untrackedByGero: false,
+  royaltiesChanged: false,
   ...over,
 });
 
@@ -197,11 +198,25 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
     expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(false);
   });
 
+  it('says the royalties change when a reprice rewrites who is paid or how much, and asks for the acknowledgement', () => {
+    const changed = mountWith(withMarket([createdListing({ royaltyCount: 1, royaltyTotalLovelace: 3_000_000n, royaltiesChanged: true })], [SPEND()]));
+    const line = changed.find('[data-testid="tx-intent-listing-royalties-changed"]');
+    expect(line.text()).toBe('signTx.listingRoyaltiesChanged');
+    expect(line.classes()).toContain('error--text');
+    expect(changed.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
+    // The row is drawn as a warning, and the "nothing unusual" hint is not shown.
+    expect(changed.find('[data-testid="tx-intent-creates-listing-hint"]').exists()).toBe(false);
+
+    const same = mountWith(withMarket([createdListing({ royaltyCount: 1, royaltyTotalLovelace: 3_000_000n })], [SPEND()]));
+    expect(same.find('[data-testid="tx-intent-listing-royalties-changed"]').exists()).toBe(false);
+    expect(same.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(false);
+  });
+
   it('shows no royalty line for none', () => {
     expect(mountWith(withMarket([createdListing()])).find('[data-testid="tx-intent-listing-royalties"]').exists()).toBe(false);
   });
 
-  it('warns about too many payees, royalties above the cap, and a seller share at the floor', () => {
+  it('warns about too many payees, royalties above the cap, and a seller share under the floor', () => {
     const tooMany = mountWith(withMarket([createdListing({ royaltyCount: 4, royaltyTotalLovelace: 4_000_000n, tooManyRoyalties: true })]));
     expect(tooMany.find('[data-testid="tx-intent-listing-too-many-royalties"]').text()).toBe('signTx.listingTooManyRoyalties|{"max":3}');
     expect(tooMany.find('[data-testid="tx-intent-listing-royalties"]').classes()).toContain('error--text');

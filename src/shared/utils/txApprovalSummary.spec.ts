@@ -545,6 +545,7 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
         depositLovelace: 2_000_000n,
         depositTooHigh: false,
         untrackedByGero: false,
+        royaltiesChanged: false,
       }]);
       expect(s.requiresMarketAck).toBe(false);
     });
@@ -840,6 +841,82 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
     expect(s.createsListing).toBe(true);
     expect(s.createdListingCount).toBe(1);
     expect(s.createdListings[0].priceLovelace).toBe(30_000_000n);
+  });
+
+  describe('a reprice that changes the royalties', () => {
+    // The stored own listing pays one 3 ADA royalty; the contract lets a dApp's replacement pay
+    // anyone anything, and the seller's own price check does not look at who the royalties go to.
+    const ROYALTY_A: [string, bigint] = [ROYALTY_ADDR, 3n * ADA];
+    const ROYALTY_B: [string, bigint] = [keyAddress('99'.repeat(28)), 2n * ADA];
+    const storedWith = (...royalties: Array<[string, bigint]>): OwnListing => {
+      const base = ownListing(OWN_REF, NFT, 25_000_000n);
+      return { ...base, datum: { ...base.datum, royalties: royalties.map(([address, lovelace]) => ({ address, lovelace })) } };
+    };
+    const repriceTo = (stored: OwnListing, ...royalties: Array<[string, bigint]>) => buildTxApprovalSummary(tx({
+      inputs: [{ txId: TX_ID, index: 0 }, { txId: LISTING_TX, index: 0 }],
+      // 100 ADA, so no royalty set here is above the 10% cap: only the change is under test.
+      outputs: [listedOut(datumHex({ price: 100n * ADA, royalties })), out(CHANGE_ADDR, 9_000_000n)],
+    }), market({ ownListings: new Map([[OWN_REF, stored]]) }));
+
+    it('is not flagged when the replacement pays the same royalties, in the same order', () => {
+      const s = repriceTo(storedWith(ROYALTY_A, ROYALTY_B), ROYALTY_A, ROYALTY_B);
+      expect(s.createdListings[0].royaltiesChanged).toBe(false);
+      expect(s.requiresMarketAck).toBe(false);
+    });
+
+    it('is not flagged for a reprice with no royalties on either side', () => {
+      const s = repriceTo(storedWith());
+      expect(s.createdListings[0].royaltiesChanged).toBe(false);
+      expect(s.requiresMarketAck).toBe(false);
+    });
+
+    it.each([
+      ['a bigger amount', [[ROYALTY_ADDR, 3n * ADA + 1n]] as Array<[string, bigint]>],
+      ['a smaller amount', [[ROYALTY_ADDR, 2n * ADA]] as Array<[string, bigint]>],
+      ['another address', [[ROYALTY_B[0], 3n * ADA]] as Array<[string, bigint]>],
+      ['an extra royalty', [ROYALTY_A, ROYALTY_B] as Array<[string, bigint]>],
+      ['no royalty at all', [] as Array<[string, bigint]>],
+    ])('is flagged, and blocks until acknowledged, when it pays %s', (_what, royalties) => {
+      const s = repriceTo(storedWith(ROYALTY_A), ...royalties);
+      expect(s.createdListings[0]).toMatchObject({ datum: 'ok', paysSomeoneElse: false, royaltiesChanged: true });
+      expect(createdListingWarns(s.createdListings[0])).toBe(true);
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('is flagged when a royalty appears where there was none', () => {
+      const s = repriceTo(storedWith(), ROYALTY_A);
+      expect(s.createdListings[0].royaltiesChanged).toBe(true);
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('is flagged when the same royalties come in another order', () => {
+      const s = repriceTo(storedWith(ROYALTY_A, ROYALTY_B), ROYALTY_B, ROYALTY_A);
+      expect(s.createdListings[0].royaltiesChanged).toBe(true);
+    });
+
+    it('is not about a listing of another NFT, or a new listing: there is nothing of the wallet\'s to compare it with', () => {
+      const other = created(listedOut(datumHex({ price: 100n * ADA, royalties: [ROYALTY_A] }), OTHER_NFT), { ownListings: new Map([[OWN_REF, storedWith()]]) });
+      expect(other.createdListings[0].royaltiesChanged).toBe(false);
+      const fresh = created(listedOut(datumHex({ price: 100n * ADA, royalties: [ROYALTY_A] })));
+      expect(fresh.createdListings[0].royaltiesChanged).toBe(false);
+      expect(fresh.requiresMarketAck).toBe(false);
+    });
+
+    it('compares the stored listing as the store broadcast it: amounts as decimal text, addresses in any case', () => {
+      const stored = storedWith(ROYALTY_A);
+      const broadcast = { ...stored, datum: { ...stored.datum, royalties: stored.datum.royalties.map((r) => ({ address: r.address.toUpperCase(), lovelace: r.lovelace.toString() })) } } as unknown as OwnListing;
+      const s = repriceTo(broadcast, ROYALTY_A);
+      expect(s.createdListings[0].royaltiesChanged).toBe(false);
+    });
+
+    it('an unreadable replacement is already flagged as such, and is not also called a royalty change', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: TX_ID, index: 0 }, { txId: LISTING_TX, index: 0 }],
+        outputs: [listedOut('182a'), out(CHANGE_ADDR, 9_000_000n)],
+      }), market({ ownListings: new Map([[OWN_REF, storedWith(ROYALTY_A)]]) }));
+      expect(s.createdListings[0]).toMatchObject({ datum: 'undecodable', royaltiesChanged: false, paysSomeoneElse: true });
+      expect(s.requiresMarketAck).toBe(true);
+    });
   });
 
   it('reads the same from real CBOR: input refs, addresses and the inline datum as the signer decodes them', () => {

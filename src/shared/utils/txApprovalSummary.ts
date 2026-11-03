@@ -1,5 +1,5 @@
 import { Cardano } from '@cardano-sdk/core';
-import { decodeListingDatum, sellerShare, type ListingFeeParams } from '@/chrome/nftMarket/listingDatum';
+import { decodeListingDatum, sellerShare, type ListingFeeParams, type Payee } from '@/chrome/nftMarket/listingDatum';
 import { paymentScriptHash } from '@/chrome/nftMarket/marketGuard';
 import { reviveOwnListings, singleNftUnit, verifyOwnListing, type OwnListing } from '@/chrome/nftMarket/ownListings';
 import { classifyUtxoAddress } from '@/chrome/serialization';
@@ -236,12 +236,21 @@ export interface ApprovalCreatedListing {
    * the one NFT): the user could not cancel it from Gero.
    */
   untrackedByGero: boolean;
+  /**
+   * The same transaction spends one of the wallet's own listings of this very NFT, and this
+   * listing's royalties are not that one's (another payee, another amount, another order, one more
+   * or fewer): a "reprice" that rewrites who is paid. Gero's own reprice never does. False when
+   * nothing of the wallet's is spent for this NFT (a new listing has nothing to compare with) and
+   * when the datum is unreadable (that is warned about as such).
+   */
+  royaltiesChanged: boolean;
 }
 
 /** Whether a created listing needs the user's explicit acknowledgement before Sign unlocks. */
 export function createdListingWarns(listing: ApprovalCreatedListing): boolean {
   return listing.paysSomeoneElse || listing.tooManyRoyalties || listing.highRoyalties || listing.lowSellerShare
-    || listing.buyerIsOther || listing.holdsOtherAssets || listing.depositTooHigh || listing.untrackedByGero;
+    || listing.buyerIsOther || listing.holdsOtherAssets || listing.depositTooHigh || listing.untrackedByGero
+    || listing.royaltiesChanged;
 }
 
 export interface TxApprovalSummary {
@@ -301,7 +310,8 @@ export interface TxApprovalSummary {
   createdListings: ApprovalCreatedListing[];
   /**
    * A created listing warns (it pays someone else, its terms cannot be read, its royalties or
-   * the seller's share are off) or a spent own listing's NFT leaves the wallet. Sign waits for an
+   * the seller's share are off, or a reprice changes its royalties) or a spent own listing's NFT
+   * leaves the wallet. Sign waits for an
    * explicit acknowledgement, as for `requiresForeignValueAck`.
    */
   requiresMarketAck: boolean;
@@ -463,6 +473,7 @@ function unreadableListing(
     highRoyalties: false,
     lowSellerShare: false,
     untrackedByGero: false,
+    royaltiesChanged: false,
     ...value,
   };
 }
@@ -535,6 +546,7 @@ function inspectCreatedListing(
   scriptHash: string,
   ctx: ApprovalContext,
   ownAddresses: ReadonlySet<string>,
+  spentRoyalties: ReadonlyMap<string, ReadonlyArray<Payee[]>>,
 ): ApprovalCreatedListing {
   const value = listingValue(output);
   try {
@@ -571,11 +583,36 @@ function inspectCreatedListing(
       // A listing that already pays someone else says so; "Gero will not show it" is for the ones
       // that name the wallet and still would not be tracked.
       untrackedByGero: !paysSomeoneElse && !geroTracksListing(tx, outputIndex, output, ctx, ownAddresses),
+      royaltiesChanged: royaltiesDifferFromSpent(output, datum.royalties, spentRoyalties),
       ...value,
     };
   } catch {
     return unreadableListing(outputIndex, 'undecodable', value);
   }
+}
+
+/**
+ * Whether `royalties` (a created listing's) differ from those of every own listing of the same NFT
+ * this transaction spends (`spentRoyalties`, by lower-case unit): that is a reprice that rewrites
+ * who is paid. False when the output does not hold exactly the one NFT, or when no own listing of
+ * it is spent: there is nothing of the wallet's to compare against.
+ */
+function royaltiesDifferFromSpent(
+  output: Cardano.TxOut,
+  royalties: readonly Payee[],
+  spentRoyalties: ReadonlyMap<string, ReadonlyArray<Payee[]>>,
+): boolean {
+  const unit = singleNftUnit(output.value);
+  const before = unit === null ? undefined : spentRoyalties.get(unit.toLowerCase());
+  if (!before || before.length === 0) return false;
+  return !before.some((old) => sameRoyalties(old, royalties));
+}
+
+/** The same payees, each with the same amount, in the same order (addresses by their text, case aside). */
+function sameRoyalties(a: readonly Payee[], b: readonly Payee[]): boolean {
+  return a.length === b.length && a.every((payee, i) => (
+    payee.address.toLowerCase() === b[i].address.toLowerCase() && payee.lovelace === b[i].lovelace
+  ));
 }
 
 /** The quantity of `unit` in a value's assets, whatever form the map takes. */
@@ -605,18 +642,6 @@ function marketEffects(
   outputs: readonly ApprovalOutput[],
   ctx: ApprovalContext,
 ): { listedInputs: ApprovalListedInput[]; createdListings: ApprovalCreatedListing[] } {
-  const createdListings: ApprovalCreatedListing[] = [];
-  if (ctx.listingScriptHashes.size > 0) {
-    const ownAddresses = new Set([...ctx.paymentAddresses, ...ctx.changeAddresses]);
-    const txOutputs = tx.body.outputs ?? [];
-    outputs.forEach((output, index) => {
-      const hash = paymentScriptHash(output.address)?.toLowerCase();
-      if (hash && ctx.listingScriptHashes.has(hash)) {
-        createdListings.push(inspectCreatedListing(tx, index, txOutputs[index], hash, ctx, ownAddresses));
-      }
-    });
-  }
-
   const ownByRef = new Map<string, OwnListing>();
   for (const [ref, listing] of ctx.ownListings) ownByRef.set(ref.toLowerCase(), listing);
   const spent: Array<[string, OwnListing]> = [];
@@ -627,6 +652,27 @@ function marketEffects(
     if (!listing || seen.has(ref)) continue;
     seen.add(ref);
     spent.push([ref, listing]);
+  }
+
+  // The royalties of each spent own listing, by its NFT: what a created listing of the same NFT is
+  // compared with (a "reprice" that changes who is paid). From the store's own copy, never the transaction's.
+  const spentRoyalties = new Map<string, Payee[][]>();
+  for (const [, listing] of spent) {
+    const unit = listing.unit.toLowerCase();
+    const royalties = listing.datum.royalties.map((royalty) => ({ address: String(royalty.address), lovelace: BigInt(royalty.lovelace) }));
+    spentRoyalties.set(unit, [...(spentRoyalties.get(unit) ?? []), royalties]);
+  }
+
+  const createdListings: ApprovalCreatedListing[] = [];
+  if (ctx.listingScriptHashes.size > 0) {
+    const ownAddresses = new Set([...ctx.paymentAddresses, ...ctx.changeAddresses]);
+    const txOutputs = tx.body.outputs ?? [];
+    outputs.forEach((output, index) => {
+      const hash = paymentScriptHash(output.address)?.toLowerCase();
+      if (hash && ctx.listingScriptHashes.has(hash)) {
+        createdListings.push(inspectCreatedListing(tx, index, txOutputs[index], hash, ctx, ownAddresses, spentRoyalties));
+      }
+    });
   }
 
   // Net flow of each spent listing's NFT: it leaves the wallet when less of it reaches the wallet's
