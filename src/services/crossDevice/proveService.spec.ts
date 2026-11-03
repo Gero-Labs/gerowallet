@@ -243,6 +243,31 @@ describe('createProveService — happy path', () => {
     expect(states).toEqual(['queued', 'proving']);
     svc.dispose();
   });
+
+  // The phone sends its chunks as soon as it holds PROVE_ACCEPT, which can be
+  // before this desktop has signed 'queued'. Both status frames are then being
+  // signed at once, and WebCrypto may finish either first. Delivering the chunks
+  // from inside the ACCEPT send is the earliest a phone could possibly answer.
+  it('keeps queued before proving when the chunks arrive the moment ACCEPT is sent', async () => {
+    const { t, deps } = makeDeps();
+    const phone = await makePhone();
+    const send = deps.transport.send;
+    deps.transport = {
+      ...deps.transport,
+      send: (msg) => {
+        send(msg);
+        if (msg.type !== 'PROVE_ACCEPT') return;
+        phone.onAccept(msg);
+        for (const c of phone.chunks()) t.deliver(c);
+      },
+    };
+    const svc = createProveService(deps);
+    t.deliver(phone.init);
+    await t.waitUntilSent('PROVE_RESULT');
+    const states = t.sent.filter((m) => m.type === 'PROVE_STATUS').map((m) => (m as { state: string }).state);
+    expect(states).toEqual(['queued', 'proving']);
+    svc.dispose();
+  });
 });
 
 describe('gate order', () => {
