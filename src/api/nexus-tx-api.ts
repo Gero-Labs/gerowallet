@@ -345,7 +345,9 @@ function retryAfterMs(error: unknown): number {
     | { get?: (name: string) => unknown; [name: string]: unknown }
     | undefined;
   if (!headers) return 0;
-  const raw = typeof headers.get === 'function' ? headers.get('retry-after') : headers['retry-after'] ?? headers['Retry-After'];
+  // Axios hands every response, a failed one included, an AxiosHeaders whose `get` ignores case;
+  // the plain-object branch only serves a hand-built response with lower-cased keys.
+  const raw = typeof headers.get === 'function' ? headers.get('retry-after') : headers['retry-after'];
   const seconds = Number(raw);
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
 }
