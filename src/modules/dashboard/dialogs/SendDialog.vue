@@ -315,7 +315,7 @@ import {
   type NexusTxInput,
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
-import { planMerges, type SweepPrerequisites } from '@/api/sweepPlan';
+import { planMerges, shortOnlyByLimit, type SweepPrerequisites } from '@/api/sweepPlan';
 import { buildSweep, type BuiltSweep, type SweepBuildContext } from '@/api/sweepBuild';
 import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
 import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
@@ -969,17 +969,6 @@ async function ensureSweep(): Promise<boolean> {
   return !pending.abort.signal.aborted;
 }
 
-/** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
-function lovelaceOf(list: Cardano.Utxo[]): bigint {
-  let total = BigInt(0);
-  for (const utxo of list) {
-    try {
-      total += BigInt(String(utxo[1].value.coins ?? 0));
-    } catch { /* an unparseable coin field holds nothing */ }
-  }
-  return total;
-}
-
 /**
  * The max-ada and payment calls that follow a sweep's merges can land in the same
  * request-limit window the merges filled: they wait it out as the merges did. A
@@ -1414,9 +1403,7 @@ async function runBuild(): Promise<void> {
     // problem is fragmentation, and a "need X more ADA" hint would contradict the
     // balance on screen. A wallet short even as a whole gets the real shortfall.
     const selection = inputSelection.value;
-    const shortfall = shortfallLovelaceFromMessage(msg);
-    const outside = selection?.truncated ? lovelaceOf(spendableUtxos()) - lovelaceOf(selection.utxos) : BigInt(0);
-    const fragmented = !!selection?.truncated && shortfall !== undefined && outside >= shortfall;
+    const fragmented = shortOnlyByLimit(shortfallLovelaceFromMessage(msg), selection, spendableUtxos());
     // The wallet holds the amount, only spread over more UTxOs than one request carries:
     // send it as Max does, merges first, then one payment. This happens once: the sweep's
     // payment is built from its own candidates (no truncated selection), so it never

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Cardano } from '@cardano-sdk/core';
-import { chainedPrerequisites, ownOutputsAsUtxos, planMerges, SweepChainError, type DecodedMerge } from './sweepPlan';
+import { chainedPrerequisites, ownOutputsAsUtxos, planMerges, shortOnlyByLimit, SweepChainError, type DecodedMerge } from './sweepPlan';
 
 const txId = (n: number) => n.toString(16).padStart(64, '0');
 function utxo(n: number, lovelace: number, assets?: Map<string, bigint>): Cardano.Utxo {
@@ -127,5 +127,24 @@ describe('chainedPrerequisites', () => {
   it('refuses an output index the merge does not have', () => {
     const prerequisites = { cbors: [merge('m1')], outputs: [output('m1', 1)] };
     expect(() => chainedPrerequisites(tx('pay', [['m1', 1]]), prerequisites, decode, own)).toThrow(SweepChainError);
+  });
+});
+
+describe('shortOnlyByLimit', () => {
+  const wallet = Array.from({ length: 6 }, (_, n) => utxo(n, 10));
+  const candidates = { utxos: wallet.slice(0, 4), truncated: true, total: 6, limit: 4 };
+
+  it('is true when the UTxOs left out hold at least the shortfall', () => {
+    expect(shortOnlyByLimit(BigInt(20), candidates, wallet)).toBe(true);
+  });
+
+  it('is false when even the whole wallet falls short', () => {
+    expect(shortOnlyByLimit(BigInt(21), candidates, wallet)).toBe(false);
+  });
+
+  it('is false when the request carried the whole wallet, or the shortfall is unknown', () => {
+    expect(shortOnlyByLimit(BigInt(1), { utxos: wallet, truncated: false, total: 6, limit: 10 }, wallet)).toBe(false);
+    expect(shortOnlyByLimit(undefined, candidates, wallet)).toBe(false);
+    expect(shortOnlyByLimit(BigInt(1), null, wallet)).toBe(false);
   });
 });

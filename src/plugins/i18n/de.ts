@@ -687,6 +687,7 @@ export default {
   'card.expressWorldwide': 'Express (weltweit)',
   'card.failedToGetPaymentDetails': 'Zahlungsdetails konnten nicht abgerufen werden. Bitte versuchen Sie es erneut.',
   'card.paymentDetailsRefreshed': 'Ihre Zahlungsdetails wurden aktualisiert. Prüfen Sie den neuen Betrag und die Adresse und bestätigen Sie erneut.',
+  'card.topUpSweepReview': 'Diese Aufladung wird in mehreren Transaktionen gesendet. Prüfen Sie den Plan oben und bestätigen Sie erneut.',
   'card.failedToLoadOrderDetails': 'Bestelldetails konnten nicht geladen werden.',
   'card.failedToOrderCard': 'Bestellung der Karte fehlgeschlagen.',
   'card.fee': 'Gebühr',

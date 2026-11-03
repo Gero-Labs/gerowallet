@@ -644,6 +644,7 @@ export default {
   'card.missingPaymentAddress': 'Dirección de pago no disponible. Inténtalo de nuevo.',
   'card.failedToGetPaymentDetails': 'No se pudieron obtener los datos del pago. Inténtalo de nuevo.',
   'card.paymentDetailsRefreshed': 'Se actualizaron tus datos de pago. Revisa el nuevo monto y la dirección, y vuelve a confirmar.',
+  'card.topUpSweepReview': 'Esta recarga se envía en varias transacciones. Revisa el plan de arriba y vuelve a confirmar.',
   'card.processingOrder': 'Procesando pedido',
   'card.pleaseWait': 'Espera mientras procesamos tu pedido...',
   'card.confirmingPayment': 'Confirmando tu pago...',

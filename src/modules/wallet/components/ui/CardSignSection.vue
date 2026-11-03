@@ -49,7 +49,8 @@
 import { computed, onBeforeUnmount, ref, toRefs, watch } from 'vue';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
+import { useTransactionSigning, type SweepProgress, type SweepStop } from '@/shared/composables/useTransactionSigning';
+import type { SweepPrerequisites } from '@/api/sweepPlan';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
@@ -66,11 +67,17 @@ const props = withDefaults(defineProps<{
    */
   prepare: () => Promise<Cardano.Tx>;
   disabled?: boolean;
-}>(), { disabled: false });
+  /** A sweep's merges, signed with and sent before the payment `prepare` builds (see usePaymentSweep). */
+  prerequisites?: SweepPrerequisites | null;
+}>(), { disabled: false, prerequisites: null });
 
 const emit = defineEmits<{
   (e: 'submitted', txId: string): void;
   (e: 'busy', value: boolean): void;
+  /** Where a sweep is while it signs and sends; null once it ends. */
+  (e: 'progress', value: SweepProgress | null): void;
+  /** Where a sweep stopped. */
+  (e: 'interrupted', value: SweepStop): void;
 }>();
 
 const { t } = useTranslation();
@@ -92,6 +99,7 @@ const {
   overlay,
   keystoneType,
   keystoneCbor,
+  requiresRemoteForSend,
   handleSign,
   captureAuthorization,
   resetState,
@@ -106,7 +114,15 @@ const {
   tx: txRef,
   successMessageKey: 'notifications.transactionSubmitted',
   onSuccess: (txId: string) => emit('submitted', txId),
+  prerequisites: computed(() => props.prerequisites),
+  onProgress: (progress) => emit('progress', progress),
+  onInterrupted: (stop) => emit('interrupted', stop),
 });
+
+/** A sweep is signed under one approval: only signers that give one (password, PassKey, Google), never under a remote-only policy. */
+const canSweep = computed(() =>
+  (loggedWallet.value?.type === WalletType.Normal || loggedWallet.value?.type === WalletType.Google) &&
+  !requiresRemoteForSend.value);
 
 const busy = computed(() => loading.value || preparing.value);
 const isPasswordWallet = computed(() => loggedWallet.value?.type === WalletType.Normal && !isPrfWallet.value);
@@ -168,7 +184,7 @@ function reset(): void {
   tx.value = undefined;
 }
 
-defineExpose({ reset });
+defineExpose({ reset, canSweep });
 </script>
 
 <style lang="scss" scoped>

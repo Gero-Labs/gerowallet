@@ -1,5 +1,5 @@
 import type { Cardano } from '@cardano-sdk/core';
-import { forEachAsset, lovelaceOf, NEXUS_MAX_INPUTS, refOf } from './nexusInputSelection';
+import { forEachAsset, lovelaceOf, NEXUS_MAX_INPUTS, refOf, type InputSelection } from './nexusInputSelection';
 
 /**
  * How Max reaches a wallet holding more UTxOs than one Nexus request may carry:
@@ -70,6 +70,17 @@ export function planMerges(utxos: Cardano.Utxo[], limit: number = NEXUS_MAX_INPU
     start += size;
   }
   return { batches, direct: [...holders, ...adaOnly.slice(start)] };
+}
+
+/**
+ * True when a build Nexus refused, `shortfall` lovelace short, was offered only part of the
+ * wallet (`selection` stopped at the request limit) and the UTxOs left out of it hold at least
+ * that much: the wallet has the amount, spread over more UTxOs than one request carries.
+ */
+export function shortOnlyByLimit(shortfall: bigint | undefined, selection: InputSelection | null | undefined, available: Cardano.Utxo[]): boolean {
+  if (!selection?.truncated || shortfall === undefined) return false;
+  const total = (list: Cardano.Utxo[]) => list.reduce((sum, utxo) => sum + lovelaceOf(utxo), BigInt(0));
+  return total(available) - total(selection.utxos) >= shortfall;
 }
 
 /** A built merge's outputs at the wallet's own address, as UTxOs the payment spends before the merge is in a block. */
