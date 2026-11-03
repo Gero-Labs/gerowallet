@@ -31,7 +31,7 @@ import {
 } from './marketAllowance';
 import { findMarketTouch } from './marketGuard';
 import type { OwnListing } from './ownListings';
-import { marketPrepareHandler, royaltyOutputMinUtxo, type MarketAction, type MarketHandlerDeps } from './marketPrepare';
+import { MarketPrepareError, marketPrepareHandler, royaltyOutputMinUtxo, type MarketAction, type MarketHandlerDeps } from './marketPrepare';
 import { verifyCancel, verifyList, verifyReprice } from './verifyListing';
 import { verifyBuy } from './verifyBuy';
 import { verifyMigrate } from './verifyMigrate';
@@ -708,8 +708,10 @@ describe('every kind replies once, with the verified transaction', () => {
       dropped: [],
       invalidRecipients: 0,
     });
+    // The wallet's payment and change keys, and nothing else: never the stake key.
     const owners = vi.mocked(deps.lookupLegacy).mock.calls[0][0];
-    expect(owners).toEqual(expect.arrayContaining([OWNER, OWNER_B]));
+    expect([...owners].sort()).toEqual([OWNER, OWNER_B].sort());
+    expect(owners).not.toContain(STAKE);
     expect(vi.mocked(deps.lookupLegacy).mock.calls[0][1]).toBe(Network.MAINNET);
     const [request, network] = calls.migrate.mock.calls[0] as [Record<string, unknown>, string];
     expect(network).toBe(Network.MAINNET);
@@ -837,14 +839,41 @@ describe('a Nexus 422 is passed through with its code', () => {
     const { deps } = rig({ ...extra, buildError: nexusError('LISTING_NOT_FOUND', 'No such listing') });
     const replies = await run(kind, request, deps);
     expect(replies).toHaveLength(1);
-    expect(replies[0].data).toMatchObject({ success: false, errorCode: 'LISTING_NOT_FOUND' });
+    expect(replies[0].data).toMatchObject({ success: false, errorCode: 'LISTING_NOT_FOUND', error: 'The transaction could not be built' });
+    // The code is Nexus's; its words are not: nothing it said comes back to the page.
+    expect(JSON.stringify(replies[0].data)).not.toContain('No such listing');
     expect(deps.grantAllowance).not.toHaveBeenCalled();
     expect(deps.markNexusLent).not.toHaveBeenCalled();
   });
 
-  it('an error that carries no code is BUILD_FAILED', async () => {
+  it('an error that carries no code is BUILD_FAILED, with a fixed message', async () => {
     const { deps } = rig({ buildError: new Error('socket hang up') });
-    expect((await reply('list', LIST_REQUEST, deps)).errorCode).toBe('BUILD_FAILED');
+    const data = await reply('list', LIST_REQUEST, deps);
+    expect(data).toMatchObject({ errorCode: 'BUILD_FAILED', error: 'The transaction could not be built' });
+    expect(JSON.stringify(data)).not.toContain('socket hang up');
+  });
+
+  it('a failure of the worker itself says nothing of what it threw', async () => {
+    const { deps } = rig({ booted: () => Promise.reject(new Error('IndexedDB exploded at /secret/path')) });
+    const data = await reply('cancel', CANCEL_REQUEST, deps);
+    expect(data).toMatchObject({ errorCode: 'BUILD_FAILED', error: 'The transaction could not be prepared' });
+    expect(JSON.stringify(data)).not.toContain('IndexedDB');
+  });
+
+  it('a Nexus message with a code is not forwarded either when the read of the listing or the royalties fails', async () => {
+    const royalty = rig({ royalties: nexusError('NETWORK_UNSUPPORTED', 'Leaky royalty text') });
+    expect(JSON.stringify(await reply('list', LIST_REQUEST, royalty.deps))).not.toContain('Leaky');
+    const buy = rig({ state: { utxos: [BUYER_UTXO], keys: KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 }, listing: nexusError('LISTING_NOT_FOUND', 'Leaky listing text') });
+    expect(JSON.stringify(await reply('buy', BUY_REQUEST, buy.deps))).not.toContain('Leaky');
+  });
+
+  it('no detail of an error can overwrite success, error or errorCode', async () => {
+    const { deps } = rig();
+    deps.deployments = () => {
+      throw new MarketPrepareError('REAL_CODE', 'real message', { success: 'true', error: 'forged', errorCode: 'FORGED', extra: 'kept' });
+    };
+    const data = await reply('list', LIST_REQUEST, deps);
+    expect(data).toEqual({ success: false, error: 'real message', errorCode: 'REAL_CODE', extra: 'kept' });
   });
 });
 
@@ -937,8 +966,20 @@ describe('the context the verifiers are given comes from the logged account and 
     expect([...ctx.ownListings.keys()]).toEqual([LISTING_REF]);
     // The listing is the store's, with bigints (the verifiers compare prices as bigints).
     expect(ctx.ownListings.get(LISTING_REF)?.datum.price).toBe(PRICE);
-    expect(refsOf(ctx.ownUtxos)).toEqual(refsOf([NFT_UTXO, FEE_UTXO, RESERVED]));
+    // The reserved dApp collateral is neither offered to Nexus nor the wallet's own to the verifier.
+    expect(refsOf(ctx.ownUtxos)).toEqual(refsOf([NFT_UTXO, FEE_UTXO]));
     expect(ctx.sponsoredCollateralRef).toBeUndefined();
+  });
+
+  it('a transaction that spends the reserved dApp collateral is refused, though it is the wallet\'s own UTxO', async () => {
+    const reservedIn = txIn('99'.repeat(32), 0);
+    const tx = listTx(DATUM, (t) => { t.body.inputs = [NFT_IN, FEE_IN, reservedIn]; });
+    const { deps } = rig({
+      built: response(tx),
+      state: { utxos: [NFT_UTXO, FEE_UTXO, RESERVED], keys: KEYS, collateral: RESERVED, listedListings: [], coinsPerUtxoByte: 4310 },
+    });
+    expect(await reply('list', LIST_REQUEST, deps)).toMatchObject({ errorCode: 'VERIFY_FAILED', error: 'INPUTS' });
+    expect(deps.grantAllowance).not.toHaveBeenCalled();
   });
 
   it('works for an added account: nothing is account 0\'s', async () => {
@@ -1240,6 +1281,38 @@ describe('list', () => {
     expect(inputs.some((i) => i.txHash === NFT_TX)).toBe(true);
   });
 
+  describe('the protocol parameter of the royalty minimum', () => {
+    // 1.1% of 100 ADA: 1.1 ADA, between the minimum at 4000 (1.072 ADA) and at 4310 (1.155 ADA).
+    const ONE_POINT_ONE: RoyaltyInfo = {
+      source: 'cip27',
+      rate: 0.011,
+      recipients: [{ address: ROYALTY_ADDRESS, rate: 0.011, minFeeLovelace: null, maxFeeLovelace: null }],
+    };
+    const stateWith = (coinsPerUtxoByte: unknown): State =>
+      ({ utxos: [NFT_UTXO, FEE_UTXO], keys: KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: coinsPerUtxoByte as number });
+
+    it('an inflated store value does not drop every royalty: it is capped at 4310 as verifyBuy caps it', async () => {
+      for (const inflated of [100_000, 4311, 1_000_000_000]) {
+        const r = rig({ royalties: FIVE_PERCENT, state: stateWith(inflated) });
+        const data = await reply('list', LIST_REQUEST, r.deps);
+        expect(data.success, String(inflated)).toBe(true);
+        expect(data.result?.summary).toMatchObject({ dropped: [], royaltiesLovelace: '5000000' });
+      }
+    });
+
+    it('a 1.1 ADA royalty is dropped at 4310 and kept at a lower figure, which is used as it is', async () => {
+      const at4310 = rig({ royalties: ONE_POINT_ONE, state: stateWith(4310), built: response(listTx({ ...DATUM, royalties: [] })) });
+      const dropped = await reply('list', LIST_REQUEST, at4310.deps);
+      expect(dropped.result?.summary).toMatchObject({ dropped: [{ address: ROYALTY_ADDRESS, lovelace: '1100000' }] });
+
+      const datum: ListingDatum = { ...DATUM, royalties: [{ address: ROYALTY_ADDRESS, lovelace: 1_100_000n }] };
+      const at4000 = rig({ royalties: ONE_POINT_ONE, state: stateWith(4000), built: response(listTx(datum)) });
+      const kept = await reply('list', LIST_REQUEST, at4000.deps);
+      expect(kept.success).toBe(true);
+      expect(kept.result?.summary).toMatchObject({ dropped: [], royaltiesLovelace: '1100000' });
+    });
+  });
+
   describe('royalties', () => {
     // 12% to one recipient: above the 10% cap.
     const TWELVE: RoyaltyInfo = {
@@ -1494,12 +1567,20 @@ describe('migrate', () => {
     expect(r.deps.royalties).toHaveBeenCalledWith(V3_NFT.slice(0, 56), Network.MAINNET);
   });
 
-  it('lists under one of the account\'s payment keys when the legacy owner is not one', async () => {
-    // The legacy owner is the wallet's stake key (a key hash of the wallet, but no payment key).
-    const odd = itemOf({ ownerPkh: STAKE });
-    const r = setup({ legacy: [odd] });
+  it('lists under one of the account\'s payment keys when the legacy owner is one of its keys without an address', async () => {
+    // A payment key of the key set that has no address yet: the wallet's own, but not a key of any own address.
+    const quiet = 'cc'.repeat(28);
+    const keys = { ...M_KEYS, payment: [...M_KEYS.payment, { cred: quiet, path: "m/1852'/1815'/0'/0/7" }] };
+    const r = setup({ legacy: [itemOf({ ownerPkh: quiet })], state: { ...state, keys } });
     await reply('migrate', MIGRATE_REQUEST, r.deps);
+    expect(vi.mocked(r.deps.lookupLegacy).mock.calls[0][0]).toContain(quiet);
     expect((r.calls.migrate.mock.calls[0][0] as Record<string, unknown>)['ownerPkh']).toBe(OWNER);
+  });
+
+  it('an item under the wallet\'s stake key is not the wallet\'s: the stake key is no owner', async () => {
+    const r = setup({ legacy: [itemOf({ ownerPkh: STAKE })] });
+    expect((await reply('migrate', MIGRATE_REQUEST, r.deps)).errorCode).toBe('NOT_OWNED');
+    expect(r.calls.migrate).not.toHaveBeenCalled();
   });
 
   it('a price under the minimum is PRICE_TOO_LOW', async () => {

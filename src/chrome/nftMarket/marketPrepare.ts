@@ -240,11 +240,13 @@ export function marketPrepareHandler(kind: MarketAction, deps: MarketHandlerDeps
       const known = error instanceof MarketPrepareError ? error : null;
       const code = known?.code ?? 'BUILD_FAILED';
       debugLog('NFT market prepare refused:', kind, code);
+      // The message is ours and fixed, whatever failed: what Nexus or a library said is never
+      // echoed back. `details` come first so no detail key can overwrite the three below.
       data = {
-        success: false,
-        error: known ? known.message : getErrorMessage(error, 'The transaction could not be prepared'),
-        errorCode: code,
         ...(known?.details ?? {}),
+        success: false,
+        error: known ? known.message : 'The transaction could not be prepared',
+        errorCode: code,
       };
     }
     // Once, and outside the try: a reply that throws must not be answered with a second one.
@@ -289,13 +291,22 @@ interface Session {
   own: { addresses: Set<string>; keyHashes: Set<string> };
   /** The payment key hashes of the wallet's own addresses. */
   paymentKeys: ReadonlySet<string>;
+  /**
+   * The wallet's payment and change key hashes (the key set's own entries, even one without an
+   * address yet): who may own a legacy listing, and the only hashes sent to a lookup. Never the
+   * stake key.
+   */
+  ownerKeys: ReadonlySet<string>;
   /** The account's receive address (the record's, never the request's). */
   baseAddress: string;
   /** The account's stake KEY hash (56 hex, lower case): the stake part of every listing it makes. */
   stakeKeyHash: string;
-  /** The wallet's UTxOs at key addresses: never a script UTxO (a listing, a programmable base). */
+  /**
+   * The wallet's UTxOs at key addresses: never a script UTxO (a listing, a programmable base) and
+   * never the reserved dApp collateral. What Nexus is offered and what the verifier calls the
+   * wallet's own are this one set, so a transaction that spends the reserved UTxO is refused.
+   */
   keyUtxos: Cardano.Utxo[];
-  reservedCollateral: Cardano.Utxo | null | undefined;
   /** The wallet's own verified listings by `txHash#index`, bigints revived. */
   ownListings: Map<string, OwnListing>;
   coinsPerUtxoByte: bigint | undefined;
@@ -340,13 +351,32 @@ function openSession(kind: MarketAction, deps: MarketHandlerDeps, wallet: Market
     newest: newestDeployment(deployments),
     own,
     paymentKeys,
+    ownerKeys: ownerKeyHashes(state.keys),
     baseAddress: wallet.baseAddress,
     stakeKeyHash,
-    keyUtxos: keyAddressUtxos(state.utxos, own.addresses),
-    reservedCollateral: state.collateral,
+    keyUtxos: withoutReserved(keyAddressUtxos(state.utxos, own.addresses), state.collateral),
     ownListings: new Map(reviveOwnListings(state.listedListings).map((listing) => [listing.ref, listing])),
     coinsPerUtxoByte: protocolParameter(state.coinsPerUtxoByte),
   };
+}
+
+/** The key hashes of the key set's payment and change entries (lower case), never its stake or other keys. */
+function ownerKeyHashes(keys: Partial<Keys> | null | undefined): Set<string> {
+  const hashes = new Set<string>();
+  for (const kind of ['payment', 'change'] as const) {
+    for (const key of keys?.[kind] ?? []) {
+      if (typeof key?.cred === 'string' && /^[0-9a-f]{56}$/.test(key.cred)) hashes.add(key.cred);
+    }
+  }
+  return hashes;
+}
+
+/** `utxos` without the UTxO the wallet keeps aside as dApp collateral (matched by out-ref). */
+function withoutReserved(utxos: Cardano.Utxo[], reserved: Cardano.Utxo | null | undefined): Cardano.Utxo[] {
+  const txId = reserved?.[0]?.txId;
+  if (!txId) return utxos;
+  const index = reserved?.[0]?.index;
+  return utxos.filter((utxo) => !(utxo[0].txId === txId && utxo[0].index === index));
 }
 
 /** Throws WALLET_CHANGED unless the logged wallet is still the one the request started with. */
@@ -405,7 +435,8 @@ function verifyContext(s: Session, sponsoredCollateralRef?: string): MarketVerif
 
 /** The UTxOs a build may spend: the plain key UTxOs, the reserved collateral left out. */
 function feeInputs(s: Session, requiredAssets?: ReadonlyMap<string, bigint>) {
-  return walletUtxosToNexusInputs(s.keyUtxos, s.reservedCollateral, true, { limit: MARKET_MAX_FEE_INPUTS, requiredAssets });
+  // The reserved collateral is already out of the set.
+  return walletUtxosToNexusInputs(s.keyUtxos, null, true, { limit: MARKET_MAX_FEE_INPUTS, requiredAssets });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -432,7 +463,8 @@ async function buildAndVerify<S>(
   try {
     built = await build();
   } catch (e) {
-    throw new MarketPrepareError(nexusErrorCode(e) ?? 'BUILD_FAILED', getErrorMessage(e, 'The transaction could not be built'));
+    // Nexus's code is passed through; its message never is (it is text from outside the wallet).
+    throw new MarketPrepareError(nexusErrorCode(e) ?? 'BUILD_FAILED', 'The transaction could not be built');
   }
   unchanged(s);
   if (typeof built?.tx_cbor !== 'string' || typeof built?.tx_hash !== 'string') {
@@ -586,7 +618,10 @@ async function chooseRoyalties(s: Session, unit: string, price: bigint, confirmA
   }
   unchanged(s);
 
-  const minUtxo = royaltyOutputMinUtxo(s.coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE);
+  // Capped at the reviewed ceiling, as verifyBuy does: an inflated figure in the store must not
+  // make every royalty look too small to keep.
+  const live = s.coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE;
+  const minUtxo = royaltyOutputMinUtxo(live < DEFAULT_COINS_PER_UTXO_BYTE ? live : DEFAULT_COINS_PER_UTXO_BYTE);
   let computed: ReturnType<typeof computeRoyalties>;
   let preview: ReturnType<typeof computeRoyalties> | null = null;
   try {
@@ -813,15 +848,16 @@ async function prepareBuy(s: Session, request: unknown): Promise<MarketPrepared>
 // ---------------------------------------------------------------------------------------------
 
 /**
- * The wallet's legacy UTxOs by `txHash#index`: what the lookup returns for the wallet's key
- * hashes, minus anything whose owner is not one of them (the lookup is asked about the wallet's
- * keys, so another owner in its answer is a fault, not an item to move). Those are kept apart so
+ * The wallet's legacy UTxOs by `txHash#index`: what the lookup returns for the wallet's payment
+ * and change key hashes (never its stake key), minus anything whose owner is not one of them
+ * (the lookup is asked about the wallet's keys, so another owner in its answer is a fault, not
+ * an item to move). Those are kept apart so
  * a ref among them is refused as not the wallet's rather than as gone.
  */
 async function lookUpOwnItems(s: Session): Promise<{ items: Map<string, LegacyListingItem>; foreign: Set<string> }> {
   let listed: LegacyListingItem[];
   try {
-    listed = await s.deps.lookupLegacy([...s.own.keyHashes], s.network);
+    listed = await s.deps.lookupLegacy([...s.ownerKeys], s.network);
   } catch (e) {
     throw new MarketPrepareError(nexusErrorCode(e) ?? 'LISTING_UNREADABLE', "The wallet's listings could not be looked up");
   }
@@ -830,7 +866,7 @@ async function lookUpOwnItems(s: Session): Promise<{ items: Map<string, LegacyLi
   const foreign = new Set<string>();
   for (const item of Array.isArray(listed) ? listed : []) {
     if (!item || typeof item !== 'object') continue;
-    if (s.own.keyHashes.has(item.ownerPkh)) items.set(legacyRef(item), item);
+    if (s.ownerKeys.has(item.ownerPkh)) items.set(legacyRef(item), item);
     else foreign.add(legacyRef(item));
   }
   return { items, foreign };
