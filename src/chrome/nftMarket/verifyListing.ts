@@ -118,7 +118,7 @@ export interface ListIntent {
   stakeCredential: string;
 }
 
-interface PricedSummary {
+export interface PricedSummary {
   priceLovelace: string;
   marketFeeLovelace: string;
   royaltiesLovelace: string;
@@ -693,7 +693,7 @@ function ownPaymentKeyHashes(ownAddresses: ReadonlySet<string>): Set<string> {
   return payment;
 }
 
-function economics(datum: ListingDatum, deployment: NftMarketDeployment) {
+export function economics(datum: ListingDatum, deployment: NftMarketDeployment) {
   return {
     marketFee: listingFee(datum.price, deployment),
     royalties: datum.royalties.reduce((sum, r) => sum + r.lovelace, 0n),
@@ -701,7 +701,7 @@ function economics(datum: ListingDatum, deployment: NftMarketDeployment) {
   };
 }
 
-function priced(
+export function priced(
   price: bigint,
   deposit: bigint,
   networkFee: bigint,

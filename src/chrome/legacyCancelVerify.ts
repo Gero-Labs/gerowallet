@@ -30,7 +30,6 @@ import {
   paysOwnKey,
   readTransaction,
   refOf,
-  type Refuse,
 } from '@/chrome/txVerifyCommon';
 import {
   LEGACY_CANCEL_MAX,
@@ -59,10 +58,13 @@ export class LegacyCancelVerifyError extends Error {
   }
 }
 
-/** The shared checks (txVerifyCommon.ts) refuse through this, so their rules throw this error. */
-const refuse: Refuse = (code, detail) => {
+/**
+ * The shared checks (txVerifyCommon.ts and `checkLegacySpend` below) refuse through this, so their
+ * rules throw this error. A declaration, so control-flow analysis sees it never returns.
+ */
+function refuse(code: LegacyCancelVerifyCode, detail: string): never {
   throw new LegacyCancelVerifyError(code, detail);
-};
+}
 
 export interface LegacyCancelVerifyContext {
   /** Must be mainnet: the legacy contracts exist nowhere else. */
@@ -113,8 +115,7 @@ export function verifyLegacyCancel(
 ): LegacyCancelSummary {
   const { serialized, tx, txId } = readTransaction(txCbor, txHash, refuse);
   const body = tx.body;
-  const items = requestedItems(refs, ctx.items);
-  const requested = new Map(items.map((item) => [itemRefOf(item), item]));
+  const items = requestedItems(refs, ctx.items, refuse);
 
   // Network.
   if (ctx.networkId !== Cardano.NetworkId.Mainnet) throw new LegacyCancelVerifyError('NETWORK', 'the legacy contracts are mainnet only');
@@ -125,47 +126,8 @@ export function verifyLegacyCancel(
   // Nothing but the cancel.
   checkForbiddenFields(tx, refuse, 'cancel');
 
-  // Inputs: every requested legacy UTxO, and otherwise only the wallet's own.
-  const inputRefs = new Set(body.inputs.map(refOf));
-  if (inputRefs.size !== body.inputs.length) throw new LegacyCancelVerifyError('INPUTS', 'repeats an input');
-  if (ctx.sponsoredCollateralRef && inputRefs.has(ctx.sponsoredCollateralRef)) {
-    throw new LegacyCancelVerifyError('INPUTS', 'spends the lent pool collateral');
-  }
-  for (const ref of requested.keys()) {
-    if (!inputRefs.has(ref)) throw new LegacyCancelVerifyError('INPUTS', `does not spend ${ref}`);
-  }
-  const ownByRef = new Map(ctx.ownUtxos.map((utxo) => [refOf(utxo[0]), utxo]));
-  // OX Agent: Authorization prevented by ownership check - only requested legacy UTxOs and the wallet's own are spent
-  for (const ref of inputRefs) {
-    if (requested.has(ref)) continue;
-    if (ctx.items.has(ref)) throw new LegacyCancelVerifyError('INPUTS', `spends ${ref}, a legacy UTxO that was not asked for`);
-    if (!ownByRef.has(ref)) throw new LegacyCancelVerifyError('INPUTS', `spends ${ref}, which is not the wallet's`);
-  }
-
-  // Reference inputs: exactly the reference scripts of the contracts used.
-  const scriptRefs = new Set(items.map((item) => scriptOf(item).referenceScript));
-  const referenceInputs = (body.referenceInputs ?? []).map(refOf);
-  if (
-    new Set(referenceInputs).size !== referenceInputs.length
-    || referenceInputs.length !== scriptRefs.size
-    || referenceInputs.some((ref) => !scriptRefs.has(ref))
-  ) {
-    throw new LegacyCancelVerifyError('REFERENCE_INPUTS', 'is not exactly the reference scripts of the contracts used');
-  }
-
-  // Redeemers: one cancel per legacy input, nothing else.
-  checkRedeemers(serialized, body.inputs, requested);
-
-  // Required signers: exactly the items' owners, each a key of this wallet.
-  const owners = new Set(items.map((item) => item.ownerPkh));
-  const signers = (body.requiredExtraSignatures ?? []).map(String);
-  if (new Set(signers).size !== signers.length || signers.length !== owners.size || signers.some((s) => !owners.has(s))) {
-    throw new LegacyCancelVerifyError('SIGNERS', "must require exactly the items' owners");
-  }
-  // OX Agent: Authorization prevented by ownership check - every signing owner is a key of this wallet
-  for (const owner of owners) {
-    if (!ctx.ownKeyHashes.has(owner)) throw new LegacyCancelVerifyError('SIGNERS', 'an owner is not a key of this wallet');
-  }
+  // Inputs, reference inputs, redeemers and required signers: the legacy spend itself.
+  const { inputRefs, ownByRef } = checkLegacySpend(serialized, tx, items, ctx, refuse);
 
   // Outputs: plain payments to the wallet, every legacy asset to the return address.
   if (!ctx.ownAddresses.has(ctx.returnAddress)) throw new LegacyCancelVerifyError('OUTPUTS', "the return address is not the wallet's");
@@ -210,16 +172,29 @@ export function verifyLegacyCancel(
   };
 }
 
-/** The items for `refs`, in order: 1 to LEGACY_CANCEL_MAX distinct refs, each a known legacy item. */
-function requestedItems(refs: readonly string[], known: ReadonlyMap<string, LegacyListingItem>): LegacyListingItem[] {
+/** The rules the legacy spend checks refuse with; both the cancel's and the market's error codes cover them. */
+export type LegacySpendRule = 'INPUTS' | 'REFERENCE_INPUTS' | 'REDEEMERS' | 'SIGNERS';
+
+/** Throws the caller's error. Typed as a value so control-flow analysis sees it never returns. */
+export type RefuseLegacySpend = (rule: LegacySpendRule, detail: string) => never;
+
+/**
+ * The items for `refs`, in order: 1 to LEGACY_CANCEL_MAX distinct refs, each a known legacy item.
+ * Exported so the market's migrate (one listing at a time) resolves its item the same way.
+ */
+export function requestedItems(
+  refs: readonly string[],
+  known: ReadonlyMap<string, LegacyListingItem>,
+  refuse: RefuseLegacySpend,
+): LegacyListingItem[] {
   if (!Array.isArray(refs) || refs.length === 0 || refs.length > LEGACY_CANCEL_MAX) {
-    throw new LegacyCancelVerifyError('INPUTS', `must cancel 1 to ${LEGACY_CANCEL_MAX} legacy UTxOs`);
+    return refuse('INPUTS', `must cancel 1 to ${LEGACY_CANCEL_MAX} legacy UTxOs`);
   }
-  if (new Set(refs).size !== refs.length) throw new LegacyCancelVerifyError('INPUTS', 'asks for a UTxO twice');
+  if (new Set(refs).size !== refs.length) return refuse('INPUTS', 'asks for a UTxO twice');
   return refs.map((ref) => {
     const item = known.get(ref);
     if (!item || itemRefOf(item) !== ref || !scriptOf(item) || item.assets.some((asset) => !DECIMAL.test(asset.quantity))) {
-      throw new LegacyCancelVerifyError('INPUTS', `${ref} is not a known legacy UTxO`);
+      return refuse('INPUTS', `${ref} is not a known legacy UTxO`);
     }
     return item;
   });
@@ -227,6 +202,80 @@ function requestedItems(refs: readonly string[], known: ReadonlyMap<string, Lega
 
 function scriptOf(item: LegacyListingItem): LegacyScript | undefined {
   return Object.prototype.hasOwnProperty.call(LEGACY_SCRIPTS, item.contract) ? LEGACY_SCRIPTS[item.contract] : undefined;
+}
+
+/** What `checkLegacySpend` reads from the wallet's side. */
+export type LegacySpendContext = Pick<LegacyCancelVerifyContext, 'items' | 'ownUtxos' | 'ownKeyHashes' | 'sponsoredCollateralRef'>;
+
+/** What the later checks (outputs, fee, collateral) need from the verified spend. */
+export interface LegacySpend {
+  /** Every input of the transaction, `txHash#index`. */
+  inputRefs: ReadonlySet<string>;
+  /** The wallet's own spendable UTxOs, by `txHash#index`. */
+  ownByRef: ReadonlyMap<string, Cardano.Utxo>;
+}
+
+/**
+ * The part of a legacy transaction that spends the `items`, whatever it then does with their
+ * value: the inputs are exactly those items plus the wallet's own UTxOs; the reference inputs are
+ * exactly the reference scripts of the contracts used; one cancel redeemer per legacy input and
+ * nothing else; the required signers are exactly the items' owners, each a key of this wallet.
+ * Shared by the rescue's cancel (every item's value returns to the wallet) and the market's
+ * migrate (the NFT goes into a Gero listing), so both hold the legacy side to the same rules.
+ */
+export function checkLegacySpend(
+  serialized: Serialization.Transaction,
+  tx: Cardano.Tx,
+  items: readonly LegacyListingItem[],
+  ctx: LegacySpendContext,
+  refuse: RefuseLegacySpend,
+): LegacySpend {
+  const body = tx.body;
+  const requested = new Map(items.map((item) => [itemRefOf(item), item]));
+
+  // Inputs: every requested legacy UTxO, and otherwise only the wallet's own.
+  const inputRefs = new Set(body.inputs.map(refOf));
+  if (inputRefs.size !== body.inputs.length) refuse('INPUTS', 'repeats an input');
+  if (ctx.sponsoredCollateralRef && inputRefs.has(ctx.sponsoredCollateralRef)) {
+    refuse('INPUTS', 'spends the lent pool collateral');
+  }
+  for (const ref of requested.keys()) {
+    if (!inputRefs.has(ref)) refuse('INPUTS', `does not spend ${ref}`);
+  }
+  const ownByRef = new Map(ctx.ownUtxos.map((utxo) => [refOf(utxo[0]), utxo]));
+  // OX Agent: Authorization prevented by ownership check - only requested legacy UTxOs and the wallet's own are spent
+  for (const ref of inputRefs) {
+    if (requested.has(ref)) continue;
+    if (ctx.items.has(ref)) refuse('INPUTS', `spends ${ref}, a legacy UTxO that was not asked for`);
+    if (!ownByRef.has(ref)) refuse('INPUTS', `spends ${ref}, which is not the wallet's`);
+  }
+
+  // Reference inputs: exactly the reference scripts of the contracts used.
+  const scriptRefs = new Set(items.map((item) => scriptOf(item).referenceScript));
+  const referenceInputs = (body.referenceInputs ?? []).map(refOf);
+  if (
+    new Set(referenceInputs).size !== referenceInputs.length
+    || referenceInputs.length !== scriptRefs.size
+    || referenceInputs.some((ref) => !scriptRefs.has(ref))
+  ) {
+    refuse('REFERENCE_INPUTS', 'is not exactly the reference scripts of the contracts used');
+  }
+
+  // Redeemers: one cancel per legacy input, nothing else.
+  checkRedeemers(serialized, body.inputs, requested, refuse);
+
+  // Required signers: exactly the items' owners, each a key of this wallet.
+  const owners = new Set(items.map((item) => item.ownerPkh));
+  const signers = (body.requiredExtraSignatures ?? []).map(String);
+  if (new Set(signers).size !== signers.length || signers.length !== owners.size || signers.some((s) => !owners.has(s))) {
+    refuse('SIGNERS', "must require exactly the items' owners");
+  }
+  // OX Agent: Authorization prevented by ownership check - every signing owner is a key of this wallet
+  for (const owner of owners) {
+    if (!ctx.ownKeyHashes.has(owner)) refuse('SIGNERS', 'an owner is not a key of this wallet');
+  }
+
+  return { inputRefs, ownByRef };
 }
 
 /**
@@ -238,6 +287,7 @@ function checkRedeemers(
   serialized: Serialization.Transaction,
   inputs: readonly Cardano.TxIn[],
   requested: ReadonlyMap<string, LegacyListingItem>,
+  refuse: RefuseLegacySpend,
 ): void {
   const cancelAt = new Map<bigint, string>();
   [...inputs].sort(compareInputs).forEach((input, index) => {
@@ -245,17 +295,17 @@ function checkRedeemers(
     if (item) cancelAt.set(BigInt(index), scriptOf(item).cancelRedeemerCbor);
   });
   const redeemers = serialized.witnessSet().redeemers()?.values() ?? [];
-  if (redeemers.length !== cancelAt.size) throw new LegacyCancelVerifyError('REDEEMERS', 'needs exactly one redeemer per legacy input');
+  if (redeemers.length !== cancelAt.size) refuse('REDEEMERS', 'needs exactly one redeemer per legacy input');
   const seen = new Set<bigint>();
   for (const redeemer of redeemers) {
     const index = redeemer.index();
     const cancel = cancelAt.get(index);
     if (redeemer.tag() !== Serialization.RedeemerTag.Spend || cancel === undefined || seen.has(index)) {
-      throw new LegacyCancelVerifyError('REDEEMERS', 'a redeemer is not the spend of a legacy input');
+      refuse('REDEEMERS', 'a redeemer is not the spend of a legacy input');
     }
     seen.add(index);
     if (redeemer.data().toCbor() !== cancel) {
-      throw new LegacyCancelVerifyError('REDEEMERS', "a legacy input is not spent with its contract's cancel redeemer");
+      refuse('REDEEMERS', "a legacy input is not spent with its contract's cancel redeemer");
     }
   }
 }
