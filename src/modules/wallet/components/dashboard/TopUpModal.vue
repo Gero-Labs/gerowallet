@@ -79,8 +79,7 @@ import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import cardStore from '@/stores/modules/card';
 import { walletStore } from '@/stores/walletStore';
 import { NEXUS_MAX_INPUTS, txOutToNexusOutput } from '@/api/nexus-tx-api';
-import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
-import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
+import { paymentUtxos } from '@/shared/utils/pendingSpends';
 import { formatAda } from '@/shared/utils/format';
 import { debugLog } from '@/utils/debug';
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
@@ -204,11 +203,7 @@ function amountLovelace(): Cardano.Lovelace | null {
 
 /** The wallet's UTxOs a top-up may spend: not its collateral, nor any a submitted transaction already spends. */
 function spendableUtxos(): Cardano.Utxo[] {
-  const utxos = (walletStore.utxos ?? []) as Cardano.Utxo[];
-  const collateral = walletStore.collateral as Cardano.Utxo | null | undefined;
-  const withoutCollateral = collateral ? filterOutCollateralFromUTxOs(utxos, collateral) : utxos;
-  // A wallet whose only UTxO is its collateral still pays from it, as before.
-  return withoutPendingSpends(withoutCollateral.length > 0 ? withoutCollateral : utxos, walletStore.transactions);
+  return paymentUtxos((walletStore.utxos ?? []) as Cardano.Utxo[], walletStore.collateral as Cardano.Utxo | null | undefined, walletStore.transactions);
 }
 
 function topUpRequest(address: Cardano.PaymentAddress, lovelace: Cardano.Lovelace): PaymentRequest {

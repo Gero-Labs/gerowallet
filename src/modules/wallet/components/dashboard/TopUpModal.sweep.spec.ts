@@ -44,7 +44,6 @@ vi.mock('@/stores/modules/card', () => ({ default: {
   fetchCardHistory: vi.fn(async () => undefined),
 } }));
 vi.mock('@/modules/wallet/utils/cardDepositAddress', () => ({ isCardDepositAddress: () => true, networkIdOfAddress: () => 0 }));
-vi.mock('@/chrome/serialization', () => ({ filterOutCollateralFromUTxOs: (utxos: unknown[]) => utxos }));
 vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({ default: { render(this: { $slots: { default?: () => Vue.VNode[] } }) { return Vue.h('div', this.$slots.default?.()); } } }));
 vi.mock('@/shared/components/iso/IsoScene.vue', () => ({ default: { render: () => Vue.h('div') } }));
 vi.mock('@/shared/components/GButton/GButton.vue', () => ({ default: {

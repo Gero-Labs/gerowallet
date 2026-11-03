@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Cardano } from '@cardano-sdk/core';
-import { PENDING_SPEND_WINDOW_MS, pendingSpentRefs, withoutPendingSpends } from './pendingSpends';
+import { paymentUtxos, PENDING_SPEND_WINDOW_MS, pendingSpentRefs, withoutPendingSpends } from './pendingSpends';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0, 0);
 const txId = (n: number) => n.toString(16).padStart(64, '0');
@@ -54,5 +54,22 @@ describe('withoutPendingSpends', () => {
       { pending: true, tx_timestamp: NOW / 1000, body: { inputs: [null, { txId: 'x' }] } },
     ];
     expect(pendingSpentRefs(records as never, NOW).size).toBe(0);
+  });
+});
+
+describe('paymentUtxos', () => {
+  it('leaves out the collateral and what a pending transaction spends', () => {
+    const kept = paymentUtxos([utxo(1), utxo(2), utxo(3)], utxo(3), [pendingTx([[1, 0]])], NOW);
+    expect(kept.map(([txIn]) => txIn.txId)).toEqual([txId(2)]);
+  });
+
+  it('pays from the collateral when it is all the wallet has', () => {
+    const kept = paymentUtxos([utxo(1)], utxo(1), [], NOW);
+    expect(kept).toHaveLength(1);
+  });
+
+  it('keeps everything with no collateral and nothing pending', () => {
+    const all = [utxo(1), utxo(2)];
+    expect(paymentUtxos(all, null, [], NOW)).toBe(all);
   });
 });

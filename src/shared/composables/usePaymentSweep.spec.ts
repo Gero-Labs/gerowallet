@@ -95,6 +95,30 @@ describe('usePaymentSweep', () => {
     expect(requests().some(isMerge)).toBe(false);
   });
 
+  // Merging the whole wallet into itself, as a swap needs before it can take a large amount.
+  it('consolidates the wallet: the merges, then everything to its own address, once', async () => {
+    const sweep = usePaymentSweep();
+    const tx = await sweep.consolidate(wallet);
+    const [merge, final] = requests();
+    expect(requests()).toHaveLength(2);
+    expect(merge.selectAll).toBe(true);
+    expect(final).toEqual(expect.objectContaining({ outputs: [{ address: 'own', lovelace: '0' }], changeAddress: 'own', selectAll: true }));
+    expect(final.utxos).toHaveLength(200);
+    expect(final.utxos.some((input) => input.txHash.startsWith('merge-'))).toBe(true);
+    expect(sweep.prerequisites.value?.cbors).toHaveLength(1);
+    expect(await sweep.consolidate(wallet)).toBe(tx);
+    expect(requests()).toHaveLength(2);
+  });
+
+  it('consolidates a wallet one request carries in a single transaction', async () => {
+    const sweep = usePaymentSweep();
+    await sweep.consolidate(wallet.slice(0, 150));
+    expect(requests()).toHaveLength(1);
+    expect(requests()[0]).toEqual(expect.objectContaining({ outputs: [{ address: 'own', lovelace: '0' }], selectAll: true }));
+    expect(requests()[0].utxos).toHaveLength(150);
+    expect(sweep.prerequisites.value).toBeNull();
+  });
+
   it('counts the merges while they are built, and gives them up on reset', async () => {
     let release!: () => void;
     mocks.build.mockImplementation(async (request: NexusRequest) => {

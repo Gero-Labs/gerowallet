@@ -89,14 +89,35 @@ export function usePaymentSweep() {
    * transaction and a retry after an interrupted sweep signs it again, skipping the merges
    * already sent. Any other refusal is passed on as Nexus gave it.
    */
+  /** A kept sweep payment for `key`, after dropping a sweep too old to sign. */
+  function keptPayment(key: string): Cardano.Tx | null {
+    if (sweep.value && Date.now() - sweep.value.builtAt > SWEEP_FRESH_MS) reset();
+    return sweep.value && payment.value?.key === key ? payment.value.tx : null;
+  }
+
+  /** Starts a build, giving up the one before it. */
+  function startBuild(): AbortController {
+    abort?.abort();
+    abort = new AbortController();
+    return abort;
+  }
+
+  /** The payment from the sweep's candidates, every one of them spent, kept for `key`. */
+  async function payFromSweep(request: PaymentRequest, key: string, controller: AbortController): Promise<Cardano.Tx> {
+    const built = sweep.value;
+    if (!built || abort !== controller) throw controller.signal.reason ?? new Error(i18n.t('errors.buildTransactionFailed') as string);
+    const tx = await buildPayment(request, [...built.direct, ...built.mergeOutputs], true, { rateLimitRetry: true, signal: controller.signal });
+    if (abort !== controller) throw controller.signal.reason;
+    payment.value = { key, tx };
+    return tx;
+  }
+
   async function build(request: PaymentRequest, utxos: Cardano.Utxo[], canSweep: boolean): Promise<Cardano.Tx> {
     const key = JSON.stringify(request);
-    if (sweep.value && Date.now() - sweep.value.builtAt > SWEEP_FRESH_MS) reset();
-    if (sweep.value && payment.value?.key === key) return payment.value.tx;
+    const kept = keptPayment(key);
+    if (kept) return kept;
 
-    abort?.abort();
-    const controller = new AbortController();
-    abort = controller;
+    const controller = startBuild();
     if (!sweep.value) {
       const selection = selectInputCandidates(utxos, { requiredAssets: requiredAssetsFromOutputs(request.outputs) });
       try {
@@ -108,12 +129,29 @@ export function usePaymentSweep() {
         await buildMerges(utxos, selection, controller);
       }
     }
-    const built = sweep.value;
-    if (!built || abort !== controller) throw controller.signal.reason ?? new Error(i18n.t('errors.buildTransactionFailed') as string);
-    const tx = await buildPayment(request, [...built.direct, ...built.mergeOutputs], true, { rateLimitRetry: true, signal: controller.signal });
-    if (abort !== controller) throw controller.signal.reason;
-    payment.value = { key, tx };
-    return tx;
+    return payFromSweep(request, key, controller);
+  }
+
+  /**
+   * Merges the whole wallet into its own address, as a swap needs before it can take an amount
+   * spread over more UTxOs than one transaction holds: a wallet one request carries in a single
+   * transaction, a larger one as merges and then a payment of every candidate to itself
+   * (`lovelace: '0'` with selectAll puts all of it there). Kept like a sweep's payment.
+   */
+  async function consolidate(utxos: Cardano.Utxo[]): Promise<Cardano.Tx> {
+    const own = walletStore.keys.payment[0].address;
+    const request: PaymentRequest = { outputs: [{ address: own, lovelace: '0' }], changeAddress: own };
+    const key = JSON.stringify(request);
+    const kept = keptPayment(key);
+    if (kept) return kept;
+
+    const controller = startBuild();
+    if (!sweep.value) {
+      const selection = selectInputCandidates(utxos);
+      if (!selection.truncated) return buildPayment(request, utxos, true, { rateLimitRetry: true, signal: controller.signal });
+      await buildMerges(utxos, selection, controller);
+    }
+    return payFromSweep(request, key, controller);
   }
 
   /** Forget the sweep and its payment, and give up a build in progress. */
@@ -125,5 +163,5 @@ export function usePaymentSweep() {
     payment.value = null;
   }
 
-  return { sweep, preparing, payment, prerequisites, build, reset };
+  return { sweep, preparing, payment, prerequisites, build, consolidate, reset };
 }

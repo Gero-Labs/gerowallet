@@ -46,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, toRefs, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, toRefs, watch } from 'vue';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning, type SweepProgress, type SweepStop } from '@/shared/composables/useTransactionSigning';
@@ -83,7 +83,10 @@ const emit = defineEmits<{
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 
-const tx = ref<Cardano.Tx | undefined>(undefined);
+// Shallow: the transaction is only ever replaced whole, and a deep ref types it as
+// UnwrapRef<Cardano.Tx>, which the compiler must then compare with Cardano.Tx itself;
+// checked from the swap screen, that ran past its instantiation limit (TS2589).
+const tx = shallowRef<Cardano.Tx | undefined>(undefined);
 const txRef = computed(() => tx.value);
 const preparing = ref(false);
 
