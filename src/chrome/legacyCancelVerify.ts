@@ -20,9 +20,18 @@
 // datum makes the ledger refuse the transaction before anything moves.
 
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { HexBlob } from '@cardano-sdk/util';
 import { forEachAsset } from '@/api/nexusInputSelection';
 import type { LegacyListingItem } from '@/api/legacy-listings-api';
+import {
+  checkCollateral,
+  checkForbiddenFields,
+  compareInputs,
+  outputNetwork,
+  paysOwnKey,
+  readTransaction,
+  refOf,
+  type Refuse,
+} from '@/chrome/txVerifyCommon';
 import {
   LEGACY_CANCEL_MAX,
   LEGACY_CANCEL_MAX_COLLATERAL,
@@ -49,6 +58,11 @@ export class LegacyCancelVerifyError extends Error {
     this.name = 'LegacyCancelVerifyError';
   }
 }
+
+/** The shared checks (txVerifyCommon.ts) refuse through this, so their rules throw this error. */
+const refuse: Refuse = (code, detail) => {
+  throw new LegacyCancelVerifyError(code, detail);
+};
 
 export interface LegacyCancelVerifyContext {
   /** Must be mainnet: the legacy contracts exist nowhere else. */
@@ -84,7 +98,6 @@ export interface LegacyCancelSummary {
 
 const DECIMAL = /^[0-9]+$/;
 
-const refOf = (input: { txId: string; index: number }) => `${input.txId}#${input.index}`;
 const itemRefOf = (item: LegacyListingItem) => `${item.txHash}#${item.outputIndex}`;
 
 /**
@@ -98,19 +111,7 @@ export function verifyLegacyCancel(
   refs: readonly string[],
   ctx: LegacyCancelVerifyContext,
 ): LegacyCancelSummary {
-  let serialized: Serialization.Transaction;
-  let tx: Cardano.Tx;
-  let txId: string;
-  try {
-    serialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
-    tx = serialized.toCore();
-    txId = serialized.getId();
-  } catch (e) {
-    throw new LegacyCancelVerifyError('TX_ID', `unreadable transaction: ${(e as Error)?.message ?? e}`);
-  }
-  if (txId !== tx.id || txId !== String(txHash ?? '').toLowerCase()) {
-    throw new LegacyCancelVerifyError('TX_ID', 'the transaction id does not match the one Nexus reported');
-  }
+  const { serialized, tx, txId } = readTransaction(txCbor, txHash, refuse);
   const body = tx.body;
   const items = requestedItems(refs, ctx.items);
   const requested = new Map(items.map((item) => [itemRefOf(item), item]));
@@ -122,7 +123,7 @@ export function verifyLegacyCancel(
   }
 
   // Nothing but the cancel.
-  checkForbiddenFields(tx);
+  checkForbiddenFields(tx, refuse, 'cancel');
 
   // Inputs: every requested legacy UTxO, and otherwise only the wallet's own.
   const inputRefs = new Set(body.inputs.map(refOf));
@@ -193,7 +194,12 @@ export function verifyLegacyCancel(
   if (body.fee > LEGACY_CANCEL_MAX_FEE) throw new LegacyCancelVerifyError('FEE', 'is above the cap');
 
   // Collateral.
-  const sponsored = checkCollateral(body, inputRefs, ownByRef, ctx);
+  const sponsored = checkCollateral(body, inputRefs, ownByRef, {
+    ownAddresses: ctx.ownAddresses,
+    ownKeyHashes: ctx.ownKeyHashes,
+    sponsoredCollateralRef: ctx.sponsoredCollateralRef,
+    maxAtRiskLovelace: LEGACY_CANCEL_MAX_COLLATERAL,
+  }, refuse);
 
   return {
     txId,
@@ -221,34 +227,6 @@ function requestedItems(refs: readonly string[], known: ReadonlyMap<string, Lega
 
 function scriptOf(item: LegacyListingItem): LegacyScript | undefined {
   return Object.prototype.hasOwnProperty.call(LEGACY_SCRIPTS, item.contract) ? LEGACY_SCRIPTS[item.contract] : undefined;
-}
-
-function checkForbiddenFields(tx: Cardano.Tx): void {
-  const body = tx.body;
-  const refuse = (detail: string) => {
-    throw new LegacyCancelVerifyError('FORBIDDEN_FIELD', detail);
-  };
-  if (tx.isValid === false) refuse('marked invalid, which forfeits collateral');
-  if (tx.auxiliaryData !== undefined || body.auxiliaryDataHash !== undefined) refuse('carries auxiliary data');
-  if (body.mint?.size) refuse('mints or burns');
-  if (body.certificates?.length) refuse('has certificates');
-  if (body.withdrawals?.length) refuse('withdraws');
-  if (body.votingProcedures?.length) refuse('votes');
-  if (body.proposalProcedures?.length) refuse('proposes');
-  if (body.donation !== undefined || body.treasuryValue !== undefined) refuse('touches the treasury');
-  if (body.update !== undefined) refuse('updates protocol parameters');
-  // Fields of later eras: none belongs in a cancel.
-  if (body.guards?.length || body.directDeposits?.length || body.accountBalanceIntervals?.length || body.subTransactions?.length) {
-    refuse('has fields a cancel never needs');
-  }
-}
-
-/** The ledger's order of a transaction's inputs: by transaction id bytes, then output index. */
-function compareInputs(a: Cardano.TxIn, b: Cardano.TxIn): number {
-  const left = String(a.txId).toLowerCase();
-  const right = String(b.txId).toLowerCase();
-  if (left !== right) return left < right ? -1 : 1;
-  return a.index - b.index;
 }
 
 /**
@@ -279,80 +257,5 @@ function checkRedeemers(
     if (redeemer.data().toCbor() !== cancel) {
       throw new LegacyCancelVerifyError('REDEEMERS', "a legacy input is not spent with its contract's cancel redeemer");
     }
-  }
-}
-
-/**
- * Exactly one collateral input: either the wallet's own ADA-only UTxO that the transaction
- * also spends, with any change going back to the wallet as plain ADA and at most
- * LEGACY_CANCEL_MAX_COLLATERAL forfeit; or the Nexus pool UTxO Nexus said it lent, which is
- * not the wallet's to lose. Returns true for the lent pool UTxO.
- */
-function checkCollateral(
-  body: Cardano.TxBody,
-  inputRefs: ReadonlySet<string>,
-  ownByRef: ReadonlyMap<string, Cardano.Utxo>,
-  ctx: LegacyCancelVerifyContext,
-): boolean {
-  const collaterals = body.collaterals ?? [];
-  if (collaterals.length !== 1) throw new LegacyCancelVerifyError('COLLATERAL', 'needs exactly one collateral input');
-  const ref = refOf(collaterals[0]);
-  const own = ownByRef.get(ref);
-  if (own) {
-    let assets = 0;
-    forEachAsset(own[1], () => assets++);
-    if (assets > 0 || !inputRefs.has(ref)) {
-      throw new LegacyCancelVerifyError('COLLATERAL', 'own collateral must be an ADA-only input it spends');
-    }
-    const returned = body.collateralReturn;
-    if (returned) {
-      const address = String(returned.address);
-      // OX Agent: Authorization prevented by ownership check - the collateral return pays one of the wallet's addresses, at one of its own keys
-      if (!ctx.ownAddresses.has(address) || !paysOwnKey(address, ctx.ownKeyHashes)) {
-        throw new LegacyCancelVerifyError('COLLATERAL', 'returns collateral elsewhere');
-      }
-      let returnedAssets = 0;
-      forEachAsset(returned, () => returnedAssets++);
-      if (returnedAssets > 0 || returned.datum !== undefined || returned.datumHash !== undefined || returned.scriptReference !== undefined) {
-        throw new LegacyCancelVerifyError('COLLATERAL', 'the collateral return is not plain ADA');
-      }
-    }
-    const atRisk = own[1].value.coins - (returned?.value.coins ?? 0n);
-    if (atRisk < 0n || atRisk > LEGACY_CANCEL_MAX_COLLATERAL) {
-      throw new LegacyCancelVerifyError('COLLATERAL', 'puts too much collateral at risk');
-    }
-    if (body.totalCollateral !== undefined && body.totalCollateral !== atRisk) {
-      throw new LegacyCancelVerifyError('COLLATERAL', 'total collateral disagrees with the return');
-    }
-    return false;
-  }
-  if (ctx.sponsoredCollateralRef && ref === ctx.sponsoredCollateralRef && !inputRefs.has(ref)) return true;
-  throw new LegacyCancelVerifyError('COLLATERAL', "the collateral is neither the wallet's nor the lent pool UTxO");
-}
-
-/**
- * Whether `address` pays a key of this wallet: its payment credential (base, enterprise or
- * pointer address) is a key hash among `ownKeyHashes`. A script credential, an address with no
- * payment credential and one that cannot be read do not.
- *
- * A second guard only: callers first require the exact address in `ownAddresses`, which pins the
- * stake part. Pointer addresses are accepted on purpose (they carry a payment key credential);
- * `cip113VerifyTransfer.ts` reads base and enterprise only because it resolves a recipient's owner.
- */
-function paysOwnKey(address: string, ownKeyHashes: ReadonlySet<string>): boolean {
-  try {
-    const parsed = Cardano.Address.fromBech32(address);
-    const credential = (parsed.asBase() ?? parsed.asEnterprise() ?? parsed.asPointer())?.getPaymentCredential();
-    return credential?.type === Cardano.CredentialType.KeyHash && ownKeyHashes.has(String(credential.hash));
-  } catch {
-    return false;
-  }
-}
-
-function outputNetwork(address: string): Cardano.NetworkId | null {
-  try {
-    return Cardano.Address.fromBech32(address).getNetworkId();
-  } catch {
-    return null;
   }
 }
