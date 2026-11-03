@@ -1,11 +1,12 @@
 /**
  * Source tripwires for the market signing guard in background.ts and walletBg.ts, which unit
  * tests cannot load. The pieces are tested on their own (marketGuard, marketAllowance,
- * marketSign.walletBg); these pin where the guard sits: beside the CIP-113 checks in
- * WalletBg.signTx, in the hardware refusal, and nowhere on a dApp's way in.
+ * marketSign.walletBg, dappMarketPass); these pin where the guard sits: beside the CIP-113 checks
+ * in WalletBg.signTx, in the hardware refusal, and that a dApp's signing entry opens a pass
+ * (never refuses) and nothing else can.
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Normalize CRLF (Windows checkouts) before slicing on newline delimiters.
@@ -23,10 +24,10 @@ describe('NFT market signing wiring', () => {
   const signTx = walletBg.slice(walletBg.indexOf('  async signTx('), walletBg.indexOf('  async submitTx('));
 
   it('WalletBg.signTx checks the market allowance before decrypting and uses it up before signing', () => {
-    const check = signTx.indexOf('hasMarketSignAllowance(this.id, transaction.id, marketHits)');
+    const check = signTx.indexOf('hasMarketAuthorization(this.id, transaction.id, marketHits)');
     const decrypt = signTx.indexOf('this.decryptRootPrivateKey(password)');
     const authorized = signTx.indexOf('assertAuthorized?.()');
-    const consume = signTx.indexOf('consumeMarketSignAllowance(this.id, transaction.id, marketHits)');
+    const consume = signTx.indexOf('consumeMarketAuthorization(this.id, transaction.id, marketHits)');
     const sign = signTx.indexOf('.sign(HexBlob(transaction.id))');
     expect(check).toBeGreaterThan(-1);
     expect(check).toBeLessThan(decrypt);
@@ -36,9 +37,9 @@ describe('NFT market signing wiring', () => {
 
   it('the market check sits beside, and after, the CIP-113 check', () => {
     const cip113Check = signTx.indexOf('hasCip113SignAllowance(this.id, transaction.id, programmableInputs)');
-    const marketCheck = signTx.indexOf('hasMarketSignAllowance(this.id, transaction.id, marketHits)');
+    const marketCheck = signTx.indexOf('hasMarketAuthorization(this.id, transaction.id, marketHits)');
     const cip113Consume = signTx.indexOf('consumeCip113SignAllowance(this.id, transaction.id, programmableInputs)');
-    const marketConsume = signTx.indexOf('consumeMarketSignAllowance(this.id, transaction.id, marketHits)');
+    const marketConsume = signTx.indexOf('consumeMarketAuthorization(this.id, transaction.id, marketHits)');
     expect(cip113Check).toBeGreaterThan(-1);
     expect(marketCheck).toBeGreaterThan(cip113Check);
     expect(marketConsume).toBeGreaterThan(cip113Consume);
@@ -52,11 +53,12 @@ describe('NFT market signing wiring', () => {
     expect(body).not.toMatch(/isNftMarketEnabled/);
   });
 
-  it('only the hardware refusal reads the market allowance in the worker, and nothing there uses it up', () => {
-    // The grant belongs to the prepare handlers (later); here, one read and no consume.
-    expect(bg.match(/hasMarketSignAllowance\(/g)).toHaveLength(1);
-    expect(bg).not.toMatch(/consumeMarketSignAllowance\(/);
-    expect(functionBody(bg, 'function marketSignRefusal(')).toContain('hasMarketSignAllowance(');
+  it('only the hardware refusal reads the market authorization in background.ts, and nothing there uses it up', () => {
+    expect(bg.match(/hasMarketAuthorization\(/g)).toHaveLength(1);
+    expect(functionBody(bg, 'function marketSignRefusal(')).toContain('hasMarketAuthorization(');
+    expect(bg).not.toMatch(/consumeMarketAuthorization\(|consumeMarketSignAllowance\(|consumeDappMarketPass\(/);
+    // Nor does it read either half on its own.
+    expect(bg).not.toMatch(/hasMarketSignAllowance\(|hasDappMarketPass\(/);
   });
 
   it('the hardware refusal includes the market refusal, with its own message', () => {
@@ -66,12 +68,107 @@ describe('NFT market signing wiring', () => {
     expect(body).toContain('CIP113_SIGN_REFUSAL_MESSAGE');
   });
 
-  it('no dApp entry refuses a market touch up front: the dApp refusal never reads the market guard', () => {
+  it('the dApp refusal of programmable inputs never reads the market guard', () => {
     const body = functionBody(bg, 'function refusalForProgrammableInputs(');
     expect(body).not.toMatch(/Market/);
     expect(bg.match(/refusalForProgrammableInputs\(/g)!.length).toBeGreaterThan(4);
-    // The market refusal is not used on any of those paths.
-    expect(bg.match(/marketSignRefusal\(/g)).toHaveLength(2); // its definition and the hardware refusal
+    // The market refusal is used by the hardware refusal only (its definition and that call).
+    expect(bg.match(/marketSignRefusal\(/g)).toHaveLength(2);
+  });
+
+  describe('the dApp signing entries open a pass instead of refusing', () => {
+    /** The registration a call at `index` sits in: the nearest handler marker before it. */
+    function enclosing(src: string, index: number): string {
+      const markers = ['\napp.add(', '\napp.addToOptions(', '  wcService.onSessionRequest = '];
+      const at = Math.max(...markers.map((marker) => src.lastIndexOf(marker, index)));
+      return src.slice(at, src.indexOf('\n', at + 1)).trim();
+    }
+    const calls = [...bg.matchAll(/openDappMarketPass\(/g)].map((match) => match.index!);
+
+    it('CIP-30 signTx opens it after the whitelist and CIP-113 checks, and drops it when the request is answered', () => {
+      const entry = bg.slice(bg.indexOf('app.add(METHOD.signTx,'), bg.indexOf('app.add(METHOD.submitTx,'));
+      const whitelist = entry.indexOf('WalletStore.isWhitelisted(request.origin)');
+      const cip113 = entry.indexOf('refusalForProgrammableInputs(request.data?.tx)');
+      const open = entry.indexOf('openDappMarketPass(walletManager.getWallet(), request.data?.tx)');
+      const firstPrompt = entry.indexOf('const handleMiniGeroSignTx');
+      expect(whitelist).toBeGreaterThan(-1);
+      expect(cip113).toBeGreaterThan(whitelist);
+      expect(open).toBeGreaterThan(cip113);
+      expect(open).toBeLessThan(firstPrompt);
+      // Every later answer goes through the wrapper that drops the pass first.
+      expect(entry).toContain('let signTxReply = guardedSignReply(request, sendResponse);');
+      expect(entry).toMatch(/signTxReply = \(opts\) => \{\n\s+dropMarketPass\(\);\n\s+answerSignTx\(opts\);/);
+      // The pass is made from the CBOR the dApp sent and from nothing else the request carries.
+      expect(entry.slice(open, entry.indexOf(';', open))).not.toMatch(/origin|embeddedIn|partialSign/);
+    });
+
+    it('CIP-45 signTx opens it after its CIP-113 refusal and drops it however the request ends', () => {
+      const entry = bg.slice(bg.indexOf("      case 'signTx': {\n        // The same entry refusal as CIP-30"), bg.indexOf("      case 'signData': {\n        if (reservedSigningDomain(params.payload))"));
+      const cip113 = entry.indexOf('refusalForProgrammableInputs(params.tx)');
+      const open = entry.indexOf('openDappMarketPass(walletManager.getWallet(), params.tx)');
+      expect(cip113).toBeGreaterThan(-1);
+      expect(open).toBeGreaterThan(cip113);
+      expect(entry).toMatch(/\} finally \{\n\s+dropMarketPass\(\);/);
+    });
+
+    it('WalletConnect cardano_signTx opens it after its CIP-113 refusal and drops it however the request ends', () => {
+      const start = bg.indexOf("case 'cardano_signTx': {");
+      const entry = bg.slice(start, bg.indexOf("case 'cardano_signData': {", start));
+      const cip113 = entry.indexOf('refusalForProgrammableInputs(wcTx)');
+      const open = entry.indexOf('openDappMarketPass(walletManager.getWallet(), wcTx)');
+      expect(cip113).toBeGreaterThan(-1);
+      expect(open).toBeGreaterThan(cip113);
+      expect(entry).toMatch(/\} finally \{\n\s+dropMarketPass\(\);/);
+    });
+
+    it('those three are the only places a pass is opened', () => {
+      expect(calls).toHaveLength(3);
+      expect(calls.map((index) => enclosing(bg, index)).sort()).toEqual([
+        'app.add(METHOD.signTx, async (request, sendResponse) => {',
+        'app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {',
+        'wcService.onSessionRequest = async (event) => {',
+      ]);
+    });
+
+    // CIP45_INVOKE is the one of the three that an extension page can reach (it is the bridge
+    // page's channel, bound to a cip45 authorization it must present); the other two are the dApp
+    // channel and WalletConnect's internal callback. No other message handler (SIGN_TX included,
+    // which the approval pages call) can open a pass.
+    it('no other registered message handler opens a pass', () => {
+      const pageReachable = calls
+        .map((index) => enclosing(bg, index))
+        .filter((line) => line.startsWith('app.addToOptions('))
+        .map((line) => /MessageTypes\.(\w+)/.exec(line)![1]);
+      expect(pageReachable).toEqual(['CIP45_INVOKE']);
+    });
+
+    it('nothing outside the pass helper grants one', () => {
+      const files: string[] = [];
+      const walk = (dir: string) => {
+        for (const name of readdirSync(dir)) {
+          const full = join(dir, name);
+          if (statSync(full).isDirectory()) walk(full);
+          else if (/\.(ts|vue)$/.test(name) && !/\.(spec|test)\.ts$/.test(name)) files.push(full);
+        }
+      };
+      walk(join(__dirname, '..', '..'));
+      const granting = files
+        .filter((file) => /grantDappMarketPass\(/.test(readFileSync(file, 'utf8')))
+        .map((file) => file.slice(file.lastIndexOf('src/')));
+      expect(granting.sort()).toEqual(['src/chrome/nftMarket/dappMarketPass.ts', 'src/chrome/nftMarket/marketAllowance.ts']);
+    });
+  });
+
+  describe('SIGN_TX signs the transaction its CBOR describes', () => {
+    const start = bg.indexOf('const transaction = transactionFromSignRequest(request.data);');
+    const handler = bg.slice(bg.lastIndexOf('\napp.addToOptions(MessageTypes.SIGN_TX,', start), bg.indexOf('\napp.addToOptions(', start));
+
+    it('parses it from txCbor only', () => {
+      expect(start).toBeGreaterThan(-1);
+      expect(handler).toContain('transactionFromSignRequest(request.data)');
+      expect(handler).not.toMatch(/request\.data\.tx(?!Cbor)\b/);
+      expect(handler).not.toContain('legacy transaction object');
+    });
   });
 
   it('the preflight tells the page which refusal it is, and the TREZOR handler throws that message', () => {

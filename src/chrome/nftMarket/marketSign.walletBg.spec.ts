@@ -22,11 +22,16 @@ import { clearCip113SignAllowance, grantCip113SignAllowance } from '@/chrome/cip
 import { NFT_MARKET_DEPLOYMENTS_PREPROD } from '@/utils/nftMarketDeployments';
 import { Blockchain, CoinTypes, HARDENED, Network, WalletType, WalletTypePurpose } from '@/models/types';
 import {
+  DAPP_MARKET_PASS_TTL_MS,
   NFT_MARKET_SIGN_REFUSAL_MESSAGE,
+  clearDappMarketPasses,
   clearMarketSignAllowance,
+  grantDappMarketPass,
   grantMarketSignAllowance,
+  hasDappMarketPass,
   hasMarketSignAllowance,
 } from './marketAllowance';
+import { openDappMarketPass } from './dappMarketPass';
 import { findMarketTouch } from './marketGuard';
 import type { OwnListing } from './ownListings';
 
@@ -135,6 +140,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
   beforeEach(() => {
     WalletStore.clearForWalletSwitch();
     clearMarketSignAllowance();
+    clearDappMarketPasses();
     clearCip113SignAllowance();
   });
 
@@ -240,6 +246,124 @@ describe('WalletBg.signTx with the NFT market guard', () => {
       WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
       // Someone else's listing, bought through a dApp: previewed there, not refused here.
       const { txCbor, utxos, keys } = marketTx(bg, { spend: `${OTHER_LISTING_TX}#0` });
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
+    });
+  });
+
+  // A dApp's own signing request is previewed at its approval screen; the worker, which saw the
+  // request arrive, opens a pass for the exact CBOR the dApp sent (openDappMarketPass, called by
+  // the CIP-30, CIP-45 and WalletConnect entries), and the approval page then sends that CBOR as
+  // SIGN_TX. These drive that pair: the entry's call, then the page's signTx.
+  describe('a dApp signing request', () => {
+    it('creating a listing reaches signing with the pass the entry opened, once', async () => {
+      const bg = await bootWallet();
+      const { txCbor, utxos, keys } = marketTx(bg, { create: true });
+      // Without the entry having seen it, a page SIGN_TX is refused.
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+
+      openDappMarketPass(bg, txCbor);
+      const { witnesses } = await bg.signTx(txCbor, '', utxos, keys, rootKeyBytes);
+      expect(signingKeys(witnesses)).toEqual([OWN_PAYMENT_KEY_HEX()]);
+      // Single use.
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    });
+
+    it('cancelling the wallet\'s own listing through a dApp signs with the pass', async () => {
+      const bg = await bootWallet();
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      const { txCbor, utxos, keys } = marketTx(bg, { spend: LISTING_REF });
+      openDappMarketPass(bg, txCbor);
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
+    });
+
+    it('the pass is bound to the transaction: another market transaction is still refused', async () => {
+      const bg = await bootWallet();
+      const approved = marketTx(bg, { create: true });
+      const other = marketTx(bg, { create: true, programmable: false, spend: `${OTHER_LISTING_TX}#0` });
+      expect(other.txId).not.toBe(approved.txId);
+
+      openDappMarketPass(bg, approved.txCbor);
+      await expect(bg.signTx(other.txCbor, '', other.utxos, other.keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+      // The refused attempt did not use the pass up.
+      await expect(bg.signTx(approved.txCbor, '', approved.utxos, approved.keys, rootKeyBytes)).resolves.toBeTruthy();
+    });
+
+    it('the pass is bound to the wallet', async () => {
+      const bg = await bootWallet();
+      const { txCbor, txId, core, utxos, keys } = marketTx(bg, { create: true });
+      grantDappMarketPass(bg.id + 1, txId, findMarketTouch(core, NFT_MARKET_DEPLOYMENTS_PREPROD, new Set()));
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    });
+
+    it('expires', async () => {
+      const bg = await bootWallet();
+      const { txCbor, txId, core, utxos, keys } = marketTx(bg, { create: true });
+      const hits = findMarketTouch(core, NFT_MARKET_DEPLOYMENTS_PREPROD, new Set());
+      grantDappMarketPass(bg.id, txId, hits, Date.now() - DAPP_MARKET_PASS_TTL_MS - 1);
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    });
+
+    it('is dropped when the request is answered (rejected, approved elsewhere or timed out)', async () => {
+      const bg = await bootWallet();
+      const { txCbor, txId, core, utxos, keys } = marketTx(bg, { create: true });
+      const hits = findMarketTouch(core, NFT_MARKET_DEPLOYMENTS_PREPROD, new Set());
+      const drop = openDappMarketPass(bg, txCbor);
+      expect(hasDappMarketPass(bg.id, txId, hits)).toBe(true);
+
+      drop();
+
+      expect(hasDappMarketPass(bg.id, txId, hits)).toBe(false);
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    });
+
+    it('opens no pass for a transaction that touches no market script or own listing', async () => {
+      const bg = await bootWallet();
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      const { txCbor, txId } = marketTx(bg);
+      const drop = openDappMarketPass(bg, txCbor);
+      expect(hasDappMarketPass(bg.id, txId, ['creates-listing:0'])).toBe(false);
+      expect(() => drop()).not.toThrow();
+    });
+
+    it('opens no pass for CBOR that does not parse, or for no wallet', async () => {
+      const bg = await bootWallet();
+      expect(() => openDappMarketPass(bg, 'not cbor')()).not.toThrow();
+      expect(() => openDappMarketPass(bg, undefined)()).not.toThrow();
+      expect(() => openDappMarketPass(null, marketTx(bg, { create: true }).txCbor)()).not.toThrow();
+    });
+
+    it('does not use the pass up when the signer is not authorized', async () => {
+      const bg = await bootWallet();
+      const { txCbor, utxos, keys } = marketTx(bg, { create: true });
+      openDappMarketPass(bg, txCbor);
+      const unauthorized = () => { throw new Error('session ended'); };
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes, unauthorized)).rejects.toThrow('session ended');
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
+    });
+
+    it('using a pass leaves a page flow\'s allowance for another transaction alone', async () => {
+      const bg = await bootWallet();
+      const dApp = marketTx(bg, { create: true });
+      grantMarketSignAllowance(bg.id, 'cd'.repeat(32), ['creates-listing:1']);
+      openDappMarketPass(bg, dApp.txCbor);
+
+      await expect(bg.signTx(dApp.txCbor, '', dApp.utxos, dApp.keys, rootKeyBytes)).resolves.toBeTruthy();
+      expect(hasMarketSignAllowance(bg.id, 'cd'.repeat(32), ['creates-listing:1'])).toBe(true);
+    });
+
+    it('the CIP-113 refusal still comes first: a pass does not lift it', async () => {
+      const bg = await bootWallet();
+      const { txCbor, utxos, keys } = marketTx(bg, { create: true, programmable: true });
+      openDappMarketPass(bg, txCbor);
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(CIP113_SIGN_REFUSAL_MESSAGE);
+    });
+
+    it('a pass is no substitute for the CIP-113 allowance, and the CIP-113 allowance none for the pass', async () => {
+      const bg = await bootWallet();
+      const { txCbor, txId, utxos, keys } = marketTx(bg, { create: true, programmable: true });
+      grantCip113SignAllowance(bg.id, txId, [`${PROGRAMMABLE_TX}#0`]);
+      await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+      openDappMarketPass(bg, txCbor);
       await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
     });
   });
