@@ -34,22 +34,34 @@ export interface SweepBuildContext {
   walletNetwork: string;
   /** Called after each merge is built and checked, with how many are built so far and how many the plan has. */
   onMergeBuilt?: (built: number, total: number) => void;
+  /** Gives the build up: the merges in flight are aborted, no other starts, and the sweep rejects with the abort. */
+  signal?: AbortSignal;
+  /** Called when a merge build is waiting out the request rate limit, with how long the wait is. */
+  onRateLimited?: (waitMs: number) => void;
 }
 
 /**
  * Build a plan's merges through Nexus. Each spends one batch, all of it (`selectAll`),
  * into one output at the wallet's own address; buildTransferTx refuses any result that
- * pays elsewhere or spends a UTxO outside the batch. The first failure stops the
+ * pays elsewhere or spends a UTxO outside the batch. Every build waits out the proxy's
+ * request rate limit (a 429 refuses the burst a sweep sends, not a merge), so a failure
+ * is a refusal of another kind, a wait that ran out, or the abort. The first stops the
  * remaining builds and rejects the whole sweep.
  */
 export async function buildSweep(plan: MergePlan, context: SweepBuildContext): Promise<BuiltSweep> {
   const merges: Cardano.Tx[] = new Array(plan.batches.length);
   const mergeCbors: string[] = new Array(plan.batches.length);
+  const { signal, onRateLimited } = context;
   let next = 0;
   let built = 0;
   let failed = false;
   const worker = async (): Promise<void> => {
     while (!failed && next < plan.batches.length) {
+      // A build in flight when the dialog gives up rejects on its own; none may start after.
+      if (signal?.aborted) {
+        failed = true;
+        throw signal.reason ?? new DOMException('The sweep build was aborted', 'AbortError');
+      }
       const index = next++;
       try {
         const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx({
@@ -58,7 +70,7 @@ export async function buildSweep(plan: MergePlan, context: SweepBuildContext): P
           utxos: plan.batches[index].map(cardanoUtxoToNexusInput),
           network: context.network,
           selectAll: true,
-        }, context.walletNetwork);
+        }, context.walletNetwork, { rateLimitRetry: true, signal, onRateLimited });
         const tx = Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
         // A merge pays its whole batch to one output. A second (change) output would add
         // an input to the payment and push it over the request limit.

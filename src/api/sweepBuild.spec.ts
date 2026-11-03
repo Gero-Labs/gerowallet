@@ -40,7 +40,7 @@ describe('buildSweep', () => {
       utxos: [{ txHash: 'a', outputIndex: 0, lovelace: '100' }, { txHash: 'b', outputIndex: 0, lovelace: '200' }],
       network: 'PREPROD',
       selectAll: true,
-    }, 'Preprod']);
+    }, 'Preprod', expect.objectContaining({ rateLimitRetry: true })]);
   });
 
   it('returns the merges in plan order with their outputs, total fee and UTxO count', async () => {
@@ -115,5 +115,44 @@ describe('buildSweep', () => {
     const onMergeBuilt = vi.fn();
     await expect(buildSweep(plan, { ...context, onMergeBuilt })).rejects.toThrow(String(i18n.t('txGuard.builtTxMismatch')));
     expect(onMergeBuilt.mock.calls).toEqual([[1, 2]]);
+  });
+});
+
+// The merges go to gero-backend's rate-limited /api/tx/* in a burst: each build waits
+// out a 429 instead of failing the sweep, and stops when the dialog gives up on it.
+describe('buildSweep under the request rate limit', () => {
+  const plan: MergePlan = {
+    batches: [[utxo('a', 100), utxo('b', 200)], [utxo('c', 300), utxo('d', 400)]],
+    direct: [],
+  };
+
+  it('asks every merge build to wait out a 429, with the abort signal and the waiting callback', async () => {
+    const controller = new AbortController();
+    const onRateLimited = vi.fn();
+    await buildSweep(plan, { ...context, signal: controller.signal, onRateLimited });
+    expect(mocks.build).toHaveBeenCalledTimes(2);
+    for (const call of mocks.build.mock.calls) {
+      expect(call[2]).toEqual({ rateLimitRetry: true, signal: controller.signal, onRateLimited });
+    }
+  });
+
+  it('starts no build once the signal is aborted, and rejects with the abort', async () => {
+    const controller = new AbortController();
+    // The first merge answers normally but the dialog gave up meanwhile: the builds in
+    // flight finish, no worker picks up another batch, and the sweep is not returned.
+    mocks.build
+      .mockImplementation(async (request: { utxos: { txHash: string }[] }) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return merged(`merge-${request.utxos[0].txHash}`, 1);
+      })
+      .mockImplementationOnce(async (request: { utxos: { txHash: string }[] }) => {
+        controller.abort();
+        return merged(`merge-${request.utxos[0].txHash}`, 1);
+      });
+    const batches = Array.from({ length: 10 }, (_, n) => [utxo(`x${n}`, 5), utxo(`y${n}`, 5)]);
+    await expect(buildSweep({ batches, direct: [] }, { ...context, signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mocks.build.mock.calls.length).toBeLessThanOrEqual(3);
   });
 });

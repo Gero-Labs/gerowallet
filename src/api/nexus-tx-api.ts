@@ -315,6 +315,102 @@ nexusTxClient.interceptors.response.use(
   }
 );
 
+// ── Rate limit ──
+
+/**
+ * Per-call options of the build calls a sweep makes (buildTransferTx, calculateMaxAda).
+ * None of them changes a call that does not pass them.
+ */
+export interface NexusCallOptions {
+  /** Wait out a 429 and ask again, instead of failing on it. The call is an unsigned build, so asking twice has no effect. */
+  rateLimitRetry?: boolean;
+  /** Aborts the request in flight, and a wait between attempts; the call rejects with the abort reason. */
+  signal?: AbortSignal;
+  /** Called with how long the next wait is, just before it starts. */
+  onRateLimited?: (waitMs: number) => void;
+}
+
+/** First wait after a 429; doubles on each further one. */
+const RATE_LIMIT_BACKOFF_MS = 2_000;
+/** Longest single wait. */
+const RATE_LIMIT_MAX_WAIT_MS = 15_000;
+/** All the waits of one call together may not pass this: it outlasts a whole minute window. */
+const RATE_LIMIT_WAIT_BUDGET_MS = 90_000;
+
+function responseStatus(error: unknown): number | undefined {
+  const status = (error as { response?: { status?: unknown } } | null)?.response?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/** The `Retry-After` seconds of a 429, as the interceptor keeps the response on the error. Zero when absent or not a number. */
+function retryAfterMs(error: unknown): number {
+  const headers = (error as { response?: { headers?: unknown } } | null)?.response?.headers as
+    | { get?: (name: string) => unknown; [name: string]: unknown }
+    | undefined;
+  if (!headers) return 0;
+  // Axios hands every response, a failed one included, an AxiosHeaders whose `get` ignores case;
+  // the plain-object branch only serves a hand-built response with lower-cased keys.
+  const raw = typeof headers.get === 'function' ? headers.get('retry-after') : headers['retry-after'];
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('The request was aborted', 'AbortError');
+}
+
+/** Resolves after `ms`, or rejects with the abort reason as soon as `signal` aborts. */
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!signal) {
+      setTimeout(resolve, ms);
+      return;
+    }
+    if (signal.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Run `send` and, with `rateLimitRetry`, wait out a 429 and run it again.
+ *
+ * gero-backend's Nexus proxy puts every /api/tx/* request in a per-IP write bucket: 3 a
+ * second and 20 a minute, both fixed windows (the minute starts at its first hit). Over
+ * either it answers 429 with `Retry-After: 1`, which understates a spent minute window
+ * by up to 59 s, so the wait is the larger of Retry-After and a doubling back-off
+ * (2, 4, 8 s, then 15 s), and the waits of one call may add up to 90 s before it gives
+ * up and rethrows the last 429. A sweep needs merges + 2 such requests, more than one
+ * window holds for a wallet of a few thousand UTxOs. Nothing but a 429 is retried.
+ */
+export async function postWithRateLimitRetry<T>(send: () => Promise<T>, options: NexusCallOptions | undefined): Promise<T> {
+  const signal = options?.signal;
+  let waited = 0;
+  for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) throw abortReason(signal);
+    try {
+      return await send();
+    } catch (error) {
+      if (!options?.rateLimitRetry || responseStatus(error) !== 429) throw error;
+      const waitMs = Math.min(RATE_LIMIT_MAX_WAIT_MS, Math.max(retryAfterMs(error), RATE_LIMIT_BACKOFF_MS * 2 ** attempt));
+      if (waited + waitMs > RATE_LIMIT_WAIT_BUDGET_MS) throw error;
+      options.onRateLimited?.(waitMs);
+      await wait(waitMs, signal);
+      waited += waitMs;
+    }
+  }
+}
+
 // ── Helpers ──
 
 /**
@@ -528,18 +624,23 @@ export interface MaxAdaResponse {
 export const nexusTxApi = {
   /**
    * Build an unsigned transfer transaction (ADA + optional native tokens) via nexus.
-   * Returns the tx CBOR ready for client-side signing and submission.
+   * Returns the tx CBOR ready for client-side signing and submission. `options` lets
+   * a sweep wait out the proxy's rate limit (see postWithRateLimitRetry).
    */
   async buildTransferTx(
     request: BuildTxRequest,
-    network?: string
+    network?: string,
+    options?: NexusCallOptions,
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/build?network=${nexusNetwork}` : '/api/tx/build';
     // The body's `network` must be Nexus's enum keyName ('cardano-mainnet'), NOT the
     // wallet's 'MAINNET'/'PREPROD' — the Network @JsonCreator rejects the latter and
     // Spring returns "Malformed request body". Override with the resolved slug.
-    const { data } = await nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork });
+    const { data } = await postWithRateLimitRetry(
+      () => nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork }, { signal: options?.signal }),
+      options,
+    );
     return verifyBuilt(data, () => ({
       outputs: request.outputs.map((o) => intendedOutputOf(o, !!request.selectAll)),
       ownAddresses: ownAddressesOf(request),
@@ -555,12 +656,16 @@ export const nexusTxApi = {
    */
   async calculateMaxAda(
     request: MaxAdaRequest,
-    network?: string
+    network?: string,
+    options?: NexusCallOptions,
   ): Promise<MaxAdaResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
     // Body `network` must be the slug ('cardano-mainnet'), not 'MAINNET' — see buildTransferTx.
-    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork });
+    const { data } = await postWithRateLimitRetry(
+      () => nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork }, { signal: options?.signal }),
+      options,
+    );
     return data;
   },
 

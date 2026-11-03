@@ -119,7 +119,7 @@
                   v-if="sweepPreparing || sweep"
                   :utxo-count="sweepPreparing?.utxoCount ?? sweep?.utxoCount ?? 0"
                   :merges="sweepPreparing?.total ?? sweep?.merges.length ?? 0"
-                  :preparing="sweepPreparing ? { built: sweepPreparing.built, total: sweepPreparing.total } : null"
+                  :preparing="sweepPreparing ? { built: sweepPreparing.built, total: sweepPreparing.total, waiting: sweepPreparing.waiting } : null"
                 />
                 <MaxLimitNote v-else-if="maxLimit" v-bind="maxLimit" />
 
@@ -304,6 +304,7 @@ import {
   InputLimitError,
   type InputSelection,
   type MaxAdaRequest,
+  type NexusCallOptions,
   nexusTxApi,
   type NexusTxAsset,
   type NexusTxInput,
@@ -386,8 +387,11 @@ const sweepFeeLovelace = computed(() => Number(sweep.value?.mergeFee ?? BigInt(0
 /** Transactions the send goes out as. */
 const sweepSteps = computed(() => (sweep.value ? sweep.value.merges.length + 1 : 1));
 const sweepProgress = ref<SweepProgress | null>(null);
-/** The merges being built: how many are done, how many the plan has, and the UTxOs it spends. Null when none is building. */
-const sweepPreparing = ref<{ built: number; total: number; utxoCount: number } | null>(null);
+/**
+ * The merges being built: how many are done, how many the plan has, the UTxOs it spends,
+ * and whether a build is waiting out the server's request limit. Null when none is building.
+ */
+const sweepPreparing = ref<{ built: number; total: number; utxoCount: number; waiting: boolean } | null>(null);
 /** Where the last sweep stopped, until the next attempt starts or the dialog resets. */
 const sweepStop = ref<SweepStop | null>(null);
 /** A sweep whose payment went out: the dialog shows this instead of closing. */
@@ -395,8 +399,11 @@ const sweepDone = ref<SweepDoneSummary | null>(null);
 /**
  * The merge build in flight, keyed by the UTxO set it is for. A second caller for the
  * same set awaits this one instead of building merges of its own (their ids would differ).
+ * Its controller stops the build, and any rate-limit wait it is in, when the dialog
+ * resets or a build for another UTxO set replaces it.
  */
-let sweepBuild: { key: string; promise: Promise<BuiltSweep> } | null = null;
+interface SweepBuildSlot { key: string; promise: Promise<BuiltSweep>; abort: AbortController }
+let sweepBuild: SweepBuildSlot | null = null;
 /**
  * Merges built longer ago than this are rebuilt the next time Max or a rebuild runs
  * (nothing rebuilds on a timer). Nexus gives them two hours to land; the node refuses
@@ -584,6 +591,8 @@ const resetData = () => {
   buildError.value = null;
   inputSelection.value = null;
   sweep.value = null;
+  // Merges still being built are for a dialog that is gone: stop them, waits included.
+  sweepBuild?.abort.abort();
   sweepBuild = null;
   sweepProgress.value = null;
   sweepPreparing.value = null;
@@ -868,39 +877,50 @@ function utxoSetKey(list: Cardano.Utxo[]): string {
  * rebuild runs more than SWEEP_REBUILD_AFTER_MS after they were built, never on a
  * timer: a merge signed after its two-hour window is refused by the node, which the
  * sweep reports as interrupted, and pressing Max again rebuilds it. Clears the sweep
- * when none is needed or this wallet cannot sign one.
+ * when none is needed or this wallet cannot sign one. Resolves false when the attempt
+ * was abandoned: the dialog reset while the merges were being built, so the caller
+ * has nothing to go on with.
  */
-async function ensureSweep(): Promise<void> {
+async function ensureSweep(): Promise<boolean> {
   if (!canSweep.value || maxRecipientIds.value.size === 0) {
     sweep.value = null;
-    return;
+    return true;
   }
   const available = spendableUtxos();
   const key = utxoSetKey(available);
-  if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return;
+  if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return true;
   const plan = planMerges(available);
   if (!plan) {
     sweep.value = null;
-    return;
+    return true;
   }
   sweep.value = null;
   // One build per UTxO set at a time: a concurrent caller waits for the same merges
   // instead of building its own, whose ids would differ.
   if (sweepBuild?.key !== key) {
+    // A build for another UTxO set is stale the moment this one starts: stop it now,
+    // rather than let it wait out a rate limit for merges nothing will use.
+    sweepBuild?.abort.abort();
     const utxoCount = plan.direct.length + plan.batches.reduce((sum, batch) => sum + batch.length, 0);
     // The card counts this build's merges only while it owns the slot: a build for a
     // newer UTxO set takes the slot, and this one's late reports must not move its bar.
-    let slot: { key: string; promise: Promise<BuiltSweep> } | null = null;
+    let slot: SweepBuildSlot | null = null;
+    const abort = new AbortController();
     const context: SweepBuildContext = {
       ownAddress: keys.value.payment[0].address,
       network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
       walletNetwork: loggedWallet.value.network,
+      signal: abort.signal,
       onMergeBuilt: (built, total) => {
-        if (slot && sweepBuild === slot) sweepPreparing.value = { built, total, utxoCount };
+        if (slot && sweepBuild === slot) sweepPreparing.value = { built, total, utxoCount, waiting: false };
+      },
+      // The server asked for a pause: the card keeps its count and says so until the next merge lands.
+      onRateLimited: () => {
+        if (slot && sweepBuild === slot && sweepPreparing.value) sweepPreparing.value = { ...sweepPreparing.value, waiting: true };
       },
     };
-    sweepPreparing.value = { built: 0, total: plan.batches.length, utxoCount };
-    slot = { key, promise: buildSweep(plan, context) };
+    sweepPreparing.value = { built: 0, total: plan.batches.length, utxoCount, waiting: false };
+    slot = { key, promise: buildSweep(plan, context), abort };
     sweepBuild = slot;
   }
   const pending = sweepBuild;
@@ -909,6 +929,10 @@ async function ensureSweep(): Promise<void> {
     // The first awaiter publishes the result and clears the slot; a later awaiter of the
     // same promise finds the slot empty and leaves that result in place.
     if (sweepBuild === pending) sweep.value = { ...built, key, builtAt: Date.now() };
+  } catch (error) {
+    // An aborted build is not a failure: it was replaced by one for a newer UTxO set
+    // (waited for below) or the dialog reset. Only a build that gave up on its own counts.
+    if (!pending.abort.signal.aborted) throw error;
   } finally {
     // Whichever way it ended, the build that owns the slot takes its card down with it.
     if (sweepBuild === pending) {
@@ -921,6 +945,7 @@ async function ensureSweep(): Promise<void> {
   // than go on without one. This recurses only while such a build is pending, so it
   // ends with the first build to complete unsuperseded.
   if (sweepBuild !== null && sweepBuild !== pending) return ensureSweep();
+  return !pending.abort.signal.aborted;
 }
 
 /** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
@@ -932,6 +957,15 @@ function lovelaceOf(list: Cardano.Utxo[]): bigint {
     } catch { /* an unparseable coin field holds nothing */ }
   }
   return total;
+}
+
+/**
+ * The max-ada and payment calls that follow a sweep's merges can land in the same
+ * request-limit window the merges filled: they wait it out as the merges did. A
+ * single send passes nothing, as before.
+ */
+function sweepCallOptions(): NexusCallOptions | undefined {
+  return sweep.value ? { rateLimitRetry: true } : undefined;
 }
 
 /**
@@ -957,7 +991,8 @@ async function buildTx(options?: { selectAll?: boolean }) {
   try {
     const { tx_cbor: txCborHex, estimated_fee } = await nexusTxApi.buildTransferTx(
       request,
-      loggedWallet.value.network
+      loggedWallet.value.network,
+      sweepCallOptions(),
     );
 
     // Reconstruct the Cardano.Tx from CBOR for the signing composable
@@ -1070,7 +1105,11 @@ async function setMax(recipientId: string, tokenIndex: number) {
     });
 
   try {
-    await ensureSweep();
+    if (!(await ensureSweep())) {
+      // The dialog reset while the merges were being built: this Max is over.
+      isCalculatingMax.value = false;
+      return;
+    }
   } catch (e) {
     // The merges could not be built: nothing to compute the max from.
     buildError.value = friendlyTxError(e);
@@ -1096,7 +1135,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
   try {
     // Step 1: get the max amount preview from /api/tx/max-ada (for UI display)
-    const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
+    const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network, sweepCallOptions());
     const maxLovelace = BigInt(maxResult.max_lovelace);
     const changeMinUtxo = BigInt(maxResult.change_min_utxo);
 
@@ -1148,7 +1187,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
         selectAll: true,
         withdrawals: currentRewardWithdrawals(),
       };
-      const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network);
+      const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network, sweepCallOptions());
       const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
       tx.value = transaction.toCore();
       txValid.value = true;
@@ -1324,7 +1363,8 @@ async function runBuild(): Promise<void> {
   // A payment built from the previous sweep must not stay signable while the sweep is replaced.
   txValid.value = false;
   try {
-    await ensureSweep();
+    // A reset while the merges were being built leaves nothing to build for.
+    if (!(await ensureSweep())) return;
   } catch (e) {
     buildError.value = friendlyTxError(e);
     txValid.value = false;
@@ -1453,7 +1493,7 @@ async function runBuild(): Promise<void> {
               utxos: nexusInputs(),
               network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
               withdrawals: currentRewardWithdrawals(),
-            }, loggedWallet.value.network);
+            }, loggedWallet.value.network, sweepCallOptions());
             const maxLovelace = BigInt(maxResult.max_lovelace);
             if (maxLovelace > BigInt(0)) {
               const maxQty = Number(maxLovelace) / 1_000_000;

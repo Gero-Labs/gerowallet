@@ -60,4 +60,18 @@ describe('SweepPlanCard', () => {
     expect(wrapper.get('.sweep-plan__segments').attributes('style')).toContain('3fr 1fr');
     expect(wrapper.text()).toContain('send.sweepPlanTitle{"steps":41}');
   });
+
+  it('says the server asked Gero to wait, only while a merge build is waiting', () => {
+    const waiting = mountCard({ utxoCount: 2144, merges: 10, preparing: { built: 4, total: 10, waiting: true } });
+    expect(waiting.text()).toContain('send.sweepPreparingWaiting');
+    // The count and bar stay as they were: the wait is a note under them, not a new state.
+    expect(waiting.text()).toContain('send.sweepPreparingCount{"built":4,"total":10}');
+    expect(waiting.get('.sweep-plan__track').attributes('aria-valuenow')).toBe('4');
+    expect(waiting.find('.v-progress-circular').exists()).toBe(true);
+
+    const building = mountCard({ utxoCount: 2144, merges: 10, preparing: { built: 4, total: 10, waiting: false } });
+    expect(building.text()).not.toContain('send.sweepPreparingWaiting');
+    const planned = mountCard({ utxoCount: 2144, merges: 10, preparing: null });
+    expect(planned.text()).not.toContain('send.sweepPreparingWaiting');
+  });
 });
