@@ -49,8 +49,10 @@
       <p class="t-caption sweep-plan__note" :class="{ 'sweep-plan__hidden': !preparing || preparing.waiting }">{{ t('send.sweepPreparingNote', { count: utxoCount }) }}</p>
       <p class="t-caption sweep-plan__note" :class="{ 'sweep-plan__hidden': !!preparing }">{{ t('send.sweepPlanNote', { count: utxoCount }) }}</p>
       <!-- A merge build is waiting out the server's request limit: the count stays, and the
-           wait takes the explanation's place until the next merge lands. -->
+           wait takes the explanation's place until the next merge lands. Mounted only then,
+           so the live region announces it; the sizer below reserves its size meanwhile. -->
       <p v-if="preparing?.waiting" class="t-caption sweep-plan__note">{{ t('send.sweepPreparingWaiting') }}</p>
+      <span class="t-caption sweep-plan__note sweep-plan__sizer" :data-sizer="t('send.sweepPreparingWaiting')" aria-hidden="true"></span>
     </div>
   </section>
 </template>
@@ -135,6 +137,15 @@ const fillWidth = computed(() => {
 /* Out of sight and out of the accessibility tree, but still sizing its cell. */
 .sweep-plan__hidden {
   visibility: hidden;
+}
+
+/* Sizes its cell to a text drawn from an attribute, so the text never sits in the DOM. */
+.sweep-plan__sizer {
+  visibility: hidden;
+}
+
+.sweep-plan__sizer::before {
+  content: attr(data-sizer);
 }
 
 .sweep-plan__aside {

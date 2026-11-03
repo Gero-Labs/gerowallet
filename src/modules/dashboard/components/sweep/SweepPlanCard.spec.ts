@@ -117,6 +117,18 @@ describe('SweepPlanCard', () => {
     expect(visible(planned)).toEqual(['send.sweepPlanNote{"count":2144}']);
   });
 
+  // The wait message is only mounted while a build waits, so it is announced as it appears.
+  // A sizer carries its text in an attribute, drawn by CSS, so the notes cell is sized for it
+  // in every state without the text being in the card until the wait happens.
+  it('reserves the wait message\'s size in every state', () => {
+    for (const props of [PREPARING, WAITING, PLANNED]) {
+      const sizer = mountCard(props).get('.sweep-plan__notes .sweep-plan__sizer');
+      expect(sizer.attributes('data-sizer')).toBe('send.sweepPreparingWaiting');
+      expect(sizer.attributes('aria-hidden')).toBe('true');
+      expect(sizer.text()).toBe('');
+    }
+  });
+
   it('keeps the count and the approval pill in one cell of the head', () => {
     const aside = (wrapper: ReturnType<typeof mountCard>) => wrapper.get('.sweep-plan__aside');
 
