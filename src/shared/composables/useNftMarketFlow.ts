@@ -225,6 +225,9 @@ export function describeNftMarketFailure(
       // The contract refused the listing as it now stands (a price or datum that moved): refresh first.
       return is('changed', 'nftMarket.error.rejected');
     case 'INVALID_REQUEST':
+    case 'TOO_MANY_LISTINGS':
+      // Nexus's "more listings than one transaction takes": a market request names one listing, so
+      // this can only mean the request is wrong, and asking again cannot change it.
       return is('refused', 'nftMarket.error.invalidRequest');
 
     // The page's own codes: the signature and the submit.

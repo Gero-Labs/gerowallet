@@ -225,7 +225,9 @@ describe('failure states', () => {
     ['WRONG_PASSWORD', 'wrongPassword', 'errors.wrongPassword'],
     // A code nobody here knows (a Nexus code added later, a typo) is the general retry, never raw text.
     ['SOMETHING_NEW', 'retry', 'nftMarket.error.failed'],
-    ['TOO_MANY_LISTINGS', 'retry', 'nftMarket.error.failed'],
+    // A market request names one listing, so Nexus's "more listings than one transaction takes" can
+    // only mean the request itself is wrong: a refusal, in the invalid-request words.
+    ['TOO_MANY_LISTINGS', 'refused', 'nftMarket.error.invalidRequest'],
   ];
 
   // The page's own codes come from signing and submitting, never from a prepare: a prepare reply
