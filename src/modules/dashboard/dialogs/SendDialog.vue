@@ -85,7 +85,7 @@
           <!-- Step 1: Recipients -->
           <v-stepper-window-item :value="1">
             <div class="step-recipients-wrapper">
-              <div class="step-recipients-inner">
+              <div class="step-recipients-inner" :class="{ 'step-recipients-inner--sweep': sweepPreparing || sweep }">
                 <SendRecipientCard
                   v-for="(recipient, idx) in recipients"
                   :key="recipient.id"
@@ -133,8 +133,13 @@
                     <span v-else-if="globalTotal.formattedFee && txValid" class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
                     <span v-else class="global-total__fee-label g-num">—</span>
                   </div>
-                  <div v-if="sweepFeeBreakdownText && !feePending" class="global-total__row global-total__breakdown">
-                    <span class="t-caption g-num">{{ sweepFeeBreakdownText }}</span>
+                  <!-- A sweep's fee split. It keeps its row while that fee is worked out, as a
+                       shimmer on a caption line, so the box does not grow when the figures land. -->
+                  <div v-if="(sweepPreparing || sweep) && (feePending || sweepFeeBreakdownText)" class="global-total__row global-total__breakdown">
+                    <span class="t-caption g-num">
+                      <span v-if="feePending" class="g-skeleton global-total__skeleton global-total__skeleton--breakdown" aria-hidden="true"></span>
+                      <template v-else>{{ sweepFeeBreakdownText }}</template>
+                    </span>
                   </div>
                   <div v-if="globalTotal.formattedWithdrawal && !feePending" class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
@@ -1642,6 +1647,13 @@ onMounted(() => {
   overflow-x: hidden;
 }
 
+/* A sweep fills the step to about its cap anyway, and the dialog is centred: held at
+   the cap from the first merge to the plan, the dialog stops growing and shrinking as
+   rows arrive (the plan's legend, the fee split, the ADA kept for tokens). */
+.step-recipients-inner--sweep {
+  min-height: 480px;
+}
+
 .add-recipient-link {
   text-align: center;
   padding: 4px 0 2px;
@@ -1699,6 +1711,10 @@ onMounted(() => {
 .global-total__skeleton--total {
   height: 16px;
   width: 128px;
+}
+.global-total__skeleton--breakdown {
+  width: 176px;
+  vertical-align: middle;
 }
 
 /* Separator + its breathing room only when there ARE rows above Total (fee /

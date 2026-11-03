@@ -16,11 +16,13 @@
       </div>
     </div>
 
+    <!-- While it runs, the title, count, row details and caption change with the phase.
+         Each is a stacked slot sized to its longest text, so the panel keeps one height. -->
     <section class="glass-tier sweep-progress__panel" :aria-label="headline" aria-live="polite">
       <div v-if="view.title" class="sweep-progress__head">
         <v-progress-circular indeterminate size="20" width="2" color="var(--g-accent)" aria-hidden="true" />
-        <span class="t-body sweep-progress__title">{{ tt(view.title) }}</span>
-        <span v-if="view.count" class="t-caption g-num sweep-progress__count">{{ tt(view.count) }}</span>
+        <SweepStackedText class="t-body sweep-progress__title" :shown="view.title" :options="view.titles" />
+        <SweepStackedText v-if="view.count" class="t-caption g-num sweep-progress__count" :shown="view.count" :options="view.counts" />
       </div>
 
       <!-- One cell per transaction; past 24 of them a single bar says how many are out. -->
@@ -53,12 +55,12 @@
           </span>
           <div class="sweep-progress__text">
             <div class="t-body-sm sweep-progress__label" :class="{ 'sweep-progress__label--pending': row.state === 'pending' }">{{ tt(row.label) }}</div>
-            <div class="t-caption g-num sweep-progress__detail">{{ tt(row.detail) }}</div>
+            <SweepStackedText class="t-caption g-num sweep-progress__detail" :shown="row.detail" :options="row.details" />
           </div>
         </li>
       </ol>
 
-      <p v-if="view.caption" class="t-caption sweep-progress__caption">{{ tt(view.caption) }}</p>
+      <SweepStackedText v-if="view.caption" class="t-caption sweep-progress__caption" :shown="view.caption" :options="view.captions" />
       <p v-else-if="view.stop" class="t-caption sweep-progress__caption">{{ tt(view.stop.tryAgain) }}</p>
     </section>
   </div>
@@ -68,6 +70,7 @@
 import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { SweepProgress, SweepStop } from '@/shared/composables/useTransactionSigning';
+import SweepStackedText from './SweepStackedText.vue';
 import { sweepProgressView, type SweepText } from './sweepProgressView';
 
 /** Cells drawn one per transaction; above this a single bar stands for them all. */

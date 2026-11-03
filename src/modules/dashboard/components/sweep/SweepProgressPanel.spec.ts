@@ -76,4 +76,43 @@ describe('SweepProgressPanel', () => {
     expect(rows[2].text()).toContain('send.sweepPaymentNotSent');
     expect(wrapper.text()).toContain('send.sweepTryAgainNote{"step":4}');
   });
+
+  // Texts differ in length per phase; laying each slot's alternatives in one cell keeps the
+  // panel, and so the centred dialog, at one height from signing to sending to waiting.
+  it('lays each slot\'s texts for every phase in one cell, showing the current one', () => {
+    /** The visible text of a stacked slot, and the hidden ones sizing it. */
+    const children = (wrapper: ReturnType<typeof mountPanel>, selector: string) => Array.from(wrapper.get(selector).element.children);
+    const slot = (wrapper: ReturnType<typeof mountPanel>, selector: string) => {
+      const all = children(wrapper, selector);
+      const text = (child: Element) => child.textContent?.trim() ?? '';
+      return {
+        shown: all.filter((child) => !child.classList.contains('sweep-stacked__sizer')).map(text),
+        sizers: all.filter((child) => child.classList.contains('sweep-stacked__sizer')).map(text),
+      };
+    };
+    const phases = [
+      { progress: { phase: 'signing' as const, step: 2, total: 11 }, caption: 'send.sweepSigningNote', title: 'send.sweepSigning{"step":2,"total":11}' },
+      { progress: { phase: 'sending' as const, step: 7, total: 11 }, caption: 'send.sweepKeepOpen', title: 'send.sweepSending{"step":7,"total":11}' },
+      { progress: { phase: 'waiting' as const, step: 11, total: 11 }, caption: 'send.sweepWaitingNote', title: 'send.sweepWaiting' },
+    ];
+    for (const { progress, caption, title } of phases) {
+      const wrapper = mountPanel({ progress, stop: null });
+
+      const captions = slot(wrapper, '.sweep-progress__caption');
+      expect(captions.shown).toEqual([caption]);
+      expect([...captions.shown, ...captions.sizers].sort()).toEqual(['send.sweepKeepOpen', 'send.sweepSigningNote', 'send.sweepWaitingNote']);
+
+      const titles = slot(wrapper, '.sweep-progress__title');
+      expect(titles.shown).toEqual([title]);
+      expect(titles.sizers).toHaveLength(2);
+
+      expect(slot(wrapper, '.sweep-progress__count').sizers).toHaveLength(1);
+
+      // The payment row's longest detail ("waiting for the merges") sizes it in every phase.
+      const payment = wrapper.findAll('.sweep-progress__row')[2];
+      const details = Array.from(payment.get('.sweep-progress__detail').element.children).map((child) => child.textContent?.trim());
+      expect(details).toContain('send.sweepPaymentWaiting');
+      expect(details).toHaveLength(4);
+    }
+  });
 });
