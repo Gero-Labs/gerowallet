@@ -15,7 +15,7 @@ import { Blockchain, Network } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { SENDER, TARGET } from '@/chrome/config';
 import type { LegacyListingItem } from '@/api/legacy-listings-api';
-import type { NftMarketBuildResponse } from '@/api/nexus-tx-api';
+import { NFT_MARKET_NEXUS_ERROR_CODES, type NftMarketBuildResponse } from '@/api/nexus-tx-api';
 import type { ListingDto, RoyaltyInfo } from '@/api/nft-market-api';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import { LEGACY_SCRIPTS } from '@/utils/legacyMarketScripts';
@@ -938,6 +938,73 @@ describe('a Nexus 422 is passed through with its code', () => {
     expect(JSON.stringify(await reply('list', LIST_REQUEST, royalty.deps))).not.toContain('Leaky');
     const buy = rig({ state: { utxos: [BUYER_UTXO], keys: KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 }, listing: nexusError('LISTING_NOT_FOUND', 'Leaky listing text') });
     expect(JSON.stringify(await reply('buy', BUY_REQUEST, buy.deps))).not.toContain('Leaky');
+  });
+
+  describe('only the codes Nexus raises for the market (NftMarketException) are passed through', () => {
+    // The 422 codes of io.gerowallet.exception.NftMarketException. Anything else a response says is
+    // not a market code: it may be one the PAGE uses for a later stage (a failed submit, a wrong
+    // password, an expired signature), and passed through it would show a re-prompt or "may have
+    // been sent" when nothing was signed at all.
+    const MARKET_CODES = [
+      'NETWORK_UNSUPPORTED', 'LISTING_NOT_FOUND', 'NOT_GERO_LISTING', 'PRIVATE_LISTING', 'DATUM_UNREADABLE',
+      'NFT_NOT_FOUND', 'PRICE_TOO_LOW', 'SELLER_SHARE_TOO_LOW', 'TOO_MANY_ROYALTIES', 'OFFER_NOT_MOVABLE',
+      'TOO_MANY_LISTINGS', 'EVALUATION_FAILED', 'INSUFFICIENT_ADA', 'NO_COLLATERAL', 'FEE_INPUT_SPENT',
+    ];
+    const NOT_MARKET_CODES = [
+      // The page's own: the signature and the submit.
+      'SUBMIT_FAILED', 'WRONG_PASSWORD', 'EXPIRED', 'SIGN_FAILED', 'INPUT_SPENT',
+      // The worker's own: it says these, Nexus does not.
+      'VERIFY_FAILED', 'WALLET_CHANGED', 'ROYALTY_CONFIRMATION_REQUIRED', 'OWN_LISTING', 'INVALID_REQUEST', 'WALLET_UNSUPPORTED', 'BUILD_FAILED',
+      // Another module's code, and one nobody knows.
+      'MODULE_UNSUPPORTED', 'SOMETHING_NEW',
+    ];
+
+    it('the allowlist is exactly the codes Nexus raises', () => {
+      expect([...NFT_MARKET_NEXUS_ERROR_CODES].sort()).toEqual([...MARKET_CODES].sort());
+    });
+
+    it.each(MARKET_CODES)('a build that fails with %s keeps it', async (code) => {
+      const { deps } = rig({ buildError: nexusError(code) });
+      expect(await reply('list', LIST_REQUEST, deps)).toMatchObject({ success: false, errorCode: code });
+    });
+
+    it.each(NOT_MARKET_CODES)('a build that fails with %s is BUILD_FAILED, with nothing signed or granted', async (code) => {
+      const { deps } = rig({ buildError: nexusError(code) });
+      const data = await reply('list', LIST_REQUEST, deps);
+      expect(data).toMatchObject({ success: false, errorCode: 'BUILD_FAILED', error: 'The transaction could not be built' });
+      expect(deps.grantAllowance).not.toHaveBeenCalled();
+    });
+
+    it('a failed royalty read says ROYALTIES_UNREADABLE for any other code, and keeps a market one', async () => {
+      for (const code of NOT_MARKET_CODES) {
+        const r = rig({ royalties: nexusError(code) });
+        expect((await reply('list', LIST_REQUEST, r.deps)).errorCode, code).toBe('ROYALTIES_UNREADABLE');
+        expect(r.calls.list).not.toHaveBeenCalled();
+      }
+      expect((await reply('list', LIST_REQUEST, rig({ royalties: nexusError('NETWORK_UNSUPPORTED') }).deps)).errorCode).toBe('NETWORK_UNSUPPORTED');
+    });
+
+    it('a failed listing read says LISTING_UNREADABLE for any other code, and keeps a market one', async () => {
+      const buyState: State = { utxos: [BUYER_UTXO], keys: KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 };
+      for (const code of NOT_MARKET_CODES) {
+        const r = rig({ state: buyState, listing: nexusError(code) });
+        expect((await reply('buy', BUY_REQUEST, r.deps)).errorCode, code).toBe('LISTING_UNREADABLE');
+        expect(r.calls.buy).not.toHaveBeenCalled();
+      }
+      const gone = rig({ state: buyState, listing: nexusError('LISTING_NOT_FOUND') });
+      expect((await reply('buy', BUY_REQUEST, gone.deps)).errorCode).toBe('LISTING_NOT_FOUND');
+    });
+
+    it('a failed lookup of the wallet\'s legacy listings says LISTING_UNREADABLE for any other code, and keeps a market one', async () => {
+      const state: State = { utxos: [M_FEE_UTXO], keys: M_KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 };
+      for (const code of NOT_MARKET_CODES) {
+        const r = rig({ wallet: MAINNET_WALLET, state, royalties: M_FIVE_PERCENT, legacy: nexusError(code) });
+        expect((await reply('migrate', MIGRATE_REQUEST, r.deps)).errorCode, code).toBe('LISTING_UNREADABLE');
+        expect(r.calls.migrate).not.toHaveBeenCalled();
+      }
+      const gone = rig({ wallet: MAINNET_WALLET, state, royalties: M_FIVE_PERCENT, legacy: nexusError('NETWORK_UNSUPPORTED') });
+      expect((await reply('migrate', MIGRATE_REQUEST, gone.deps)).errorCode).toBe('NETWORK_UNSUPPORTED');
+    });
   });
 
   it('no detail of an error can overwrite success, error or errorCode', async () => {

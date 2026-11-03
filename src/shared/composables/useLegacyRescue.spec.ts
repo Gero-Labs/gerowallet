@@ -112,6 +112,17 @@ describe('useLegacyRescue', () => {
     },
   );
 
+  it.each(['WRONG_PASSWORD', 'EXPIRED', 'SIGN_FAILED', 'SUBMIT_FAILED'])(
+    'a prepare reply that carries %s, a code the flow uses for signing and submitting, is a failed build',
+    async (code) => {
+      respond({ [MessageTypes.LEGACY_LISTING_PREPARE_CANCEL]: () => ({ success: false, error: 'no', errorCode: code }) });
+      const flow = useLegacyRescue();
+
+      expect(await flow.prepare(REFS)).toBe(false);
+      expect(flow.failure.value?.code).toBe('BUILD_FAILED');
+    },
+  );
+
   it('treats a missing or malformed prepare reply as a failed build', async () => {
     send.mockRejectedValueOnce(new Error('port closed'));
     const flow = useLegacyRescue();

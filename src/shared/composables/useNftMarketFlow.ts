@@ -312,6 +312,7 @@ export function useNftMarketFlow<A extends MarketAction>(action: A, options: Nft
     getIsBT: options.getIsBT,
     refusalMessage: NFT_MARKET_SIGN_REFUSAL_MESSAGE,
     submitRefusalCode: (text) => (isInputAlreadySpentError(text) ? NFT_MARKET_INPUT_SPENT : undefined),
+    ownCodes: [NFT_MARKET_INPUT_SPENT],
     failureFields: ['error', 'effectiveRoyaltyLovelace', 'effectiveRoyaltyRate', 'royaltyRate'],
   });
 

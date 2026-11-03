@@ -418,6 +418,38 @@ export function nexusErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/.test(code) ? code : undefined;
 }
 
+/**
+ * The `errorCode`s Nexus raises for the Gero NFT market (its `NftMarketException`, HTTP 422), the
+ * only ones the wallet believes from a market build or read. Any other code in a response is not a
+ * market code: it may be one the wallet itself uses for another stage (`SUBMIT_FAILED`,
+ * `WRONG_PASSWORD`, `EXPIRED`, `INPUT_SPENT`, `VERIFY_FAILED`, ...), and passed through it would
+ * make a prepare that signed nothing read as a password prompt or a transaction that may have been
+ * sent. Keep it equal to Nexus's list; a code Nexus adds is unknown here until it is added.
+ */
+export const NFT_MARKET_NEXUS_ERROR_CODES: ReadonlySet<string> = new Set([
+  'NETWORK_UNSUPPORTED',
+  'LISTING_NOT_FOUND',
+  'NOT_GERO_LISTING',
+  'PRIVATE_LISTING',
+  'DATUM_UNREADABLE',
+  'NFT_NOT_FOUND',
+  'PRICE_TOO_LOW',
+  'SELLER_SHARE_TOO_LOW',
+  'TOO_MANY_ROYALTIES',
+  'OFFER_NOT_MOVABLE',
+  'TOO_MANY_LISTINGS',
+  'EVALUATION_FAILED',
+  'INSUFFICIENT_ADA',
+  'NO_COLLATERAL',
+  'FEE_INPUT_SPENT',
+]);
+
+/** `nexusErrorCode`, but only for a code in NFT_MARKET_NEXUS_ERROR_CODES; undefined for any other. */
+export function nexusMarketErrorCode(error: unknown): string | undefined {
+  const code = nexusErrorCode(error);
+  return code !== undefined && NFT_MARKET_NEXUS_ERROR_CODES.has(code) ? code : undefined;
+}
+
 // Surface the Nexus error body's message so callers can parse it
 // (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
 // The backend proxy forwards the upstream status + JSON body verbatim.

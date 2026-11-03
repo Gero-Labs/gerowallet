@@ -29,7 +29,8 @@
 // transaction). Cardano on a network with a reviewed deployment list (mainnet's is empty in
 // phase 1); migrate also needs mainnet, where the legacy contracts are.
 //
-// Error codes (`errorCode`; a Nexus 422's own code is passed through as it is):
+// Error codes (`errorCode`; the code of a Nexus 422 is passed through when it is one Nexus raises for
+// the market (NFT_MARKET_NEXUS_ERROR_CODES), and is BUILD_FAILED, or the read's own code, otherwise):
 //   INVALID_REQUEST             the body is not what the kind takes
 //   WALLET_UNSUPPORTED          no wallet, not Cardano, a type that may not sign, or keys not loaded
 //   NETWORK_UNSUPPORTED         no deployment on this network (or migrate off mainnet)
@@ -61,7 +62,7 @@ import { SENDER, TARGET } from '@/chrome/config';
 import { forEachAsset } from '@/api/nexusInputSelection';
 import { legacyRef, type LegacyListingItem } from '@/api/legacy-listings-api';
 import {
-  nexusErrorCode,
+  nexusMarketErrorCode,
   walletUtxosToNexusInputs,
   type NftMarketBuildResponse,
   type NftMarketBuyBuildRequest,
@@ -467,8 +468,9 @@ async function buildAndVerify<S>(
   try {
     built = await build();
   } catch (e) {
-    // Nexus's code is passed through; its message never is (it is text from outside the wallet).
-    throw new MarketPrepareError(nexusErrorCode(e) ?? 'BUILD_FAILED', 'The transaction could not be built');
+    // Nexus's market code is passed through; its message never is (it is text from outside the wallet), and a code
+    // that is not a market one (a page's own, say) is a build that failed.
+    throw new MarketPrepareError(nexusMarketErrorCode(e) ?? 'BUILD_FAILED', 'The transaction could not be built');
   }
   unchanged(s);
   if (typeof built?.tx_cbor !== 'string' || typeof built?.tx_hash !== 'string') {
@@ -594,7 +596,7 @@ async function chooseRoyalties(s: Session, unit: string, price: bigint, confirmA
     info = await s.deps.royalties(unit.slice(0, POLICY_HEX_LENGTH), s.network);
   } catch (e) {
     // Never a listing without its royalty terms: the creators would be paid nothing, for good.
-    throw new MarketPrepareError(nexusErrorCode(e) ?? 'ROYALTIES_UNREADABLE', "The collection's royalty terms could not be read");
+    throw new MarketPrepareError(nexusMarketErrorCode(e) ?? 'ROYALTIES_UNREADABLE', "The collection's royalty terms could not be read");
   }
   unchanged(s);
 
@@ -802,7 +804,7 @@ async function prepareBuy(s: Session, request: unknown): Promise<MarketPrepared>
   try {
     row = await s.deps.lookupListing(listingRef, s.network);
   } catch (e) {
-    throw new MarketPrepareError(nexusErrorCode(e) ?? 'LISTING_UNREADABLE', 'The listing could not be read');
+    throw new MarketPrepareError(nexusMarketErrorCode(e) ?? 'LISTING_UNREADABLE', 'The listing could not be read');
   }
   unchanged(s);
   if (!row || `${row.txHash}#${row.outputIndex}` !== ref) {
@@ -858,7 +860,7 @@ async function lookUpOwnItems(s: Session): Promise<{ items: Map<string, LegacyLi
   try {
     listed = await s.deps.lookupLegacy([...s.ownerKeys], s.network);
   } catch (e) {
-    throw new MarketPrepareError(nexusErrorCode(e) ?? 'LISTING_UNREADABLE', "The wallet's listings could not be looked up");
+    throw new MarketPrepareError(nexusMarketErrorCode(e) ?? 'LISTING_UNREADABLE', "The wallet's listings could not be looked up");
   }
   unchanged(s);
   const items = new Map<string, LegacyListingItem>();

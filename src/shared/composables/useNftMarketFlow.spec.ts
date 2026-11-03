@@ -228,7 +228,11 @@ describe('failure states', () => {
     ['TOO_MANY_LISTINGS', 'retry', 'nftMarket.error.failed'],
   ];
 
-  it.each(TABLE)('%s is %s with %s', async (code, kind, key) => {
+  // The page's own codes come from signing and submitting, never from a prepare: a prepare reply
+  // that carries one is a failed build (below). Their copy is pinned by describeNftMarketFailure.
+  const SIGNING_CODES = ['EXPIRED', 'SIGN_FAILED', 'SUBMIT_FAILED', 'WRONG_PASSWORD'];
+
+  it.each(TABLE.filter(([code]) => !SIGNING_CODES.includes(code)))('%s is %s with %s', async (code, kind, key) => {
     respond({ [MessageTypes.NFT_MARKET_PREPARE_LIST]: refusal(code) });
     const flow = useNftMarketFlow('list');
 
@@ -291,6 +295,21 @@ describe('failure states', () => {
       params: { min: '1.5' },
     });
   });
+
+  it.each(['WRONG_PASSWORD', 'EXPIRED', 'SIGN_FAILED', 'SUBMIT_FAILED', 'INPUT_SPENT'])(
+    'a prepare reply that carries %s, a code the page uses for signing and submitting, is a failed build: nothing was signed',
+    async (code) => {
+      respond({ [MessageTypes.NFT_MARKET_PREPARE_BUY]: () => ({ success: false, error: 'x', errorCode: code }) });
+      const flow = useNftMarketFlow('buy');
+
+      expect(await flow.prepare({ ref: REF })).toBe(false);
+
+      // Not a password re-prompt, not "may have been sent", not "sold or delisted".
+      expect(flow.failure.value?.code).toBe('BUILD_FAILED');
+      expect(flow.failureKind.value).toBe('retry');
+      expect(flow.failureMessage.value).toEqual({ key: 'nftMarket.error.failed' });
+    },
+  );
 
   it('VERIFY_FAILED is the same fixed message whatever rule refused, and the rule is only logged', async () => {
     respond({
