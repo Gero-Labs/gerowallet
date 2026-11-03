@@ -7,6 +7,7 @@
  * device reported, so a signature the wallet would refuse (a hashed payload, another
  * text) is never handed to the backend.
  */
+import { BigNum, COSEKey, Int, Label } from '@emurgo/cardano-message-signing-browser';
 import { PINNED_ROOT_KEYS, bytesToHex, daySeconds, hexToBytes, rootSigning } from '@/shared/utils/signedResponseRoots';
 import type { SignedStatement } from '@/api/signingKeys';
 
@@ -31,11 +32,10 @@ export function splitList(text: string): string[] {
 export async function coseKeyPublicKey(coseKeyHex: string): Promise<Uint8Array | undefined> {
   const bytes = hexToBytes(coseKeyHex);
   if (!bytes || bytes.length === 0) return undefined;
-  const MS = await import('@emurgo/cardano-message-signing-browser');
-  let key: InstanceType<typeof MS.COSEKey> | undefined;
+  let key: COSEKey | undefined;
   try {
-    key = MS.COSEKey.from_bytes(bytes);
-    const x = key.header(MS.Label.new_int(MS.Int.new_negative(MS.BigNum.from_str('2'))))?.as_bytes();
+    key = COSEKey.from_bytes(bytes);
+    const x = key.header(Label.new_int(Int.new_negative(BigNum.from_str('2'))))?.as_bytes();
     return x?.length === 32 ? x : undefined;
   } catch {
     return undefined;

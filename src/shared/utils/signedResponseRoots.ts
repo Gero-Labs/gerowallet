@@ -27,6 +27,9 @@
  * wallet would sign it.
  */
 import * as ed25519 from '@noble/ed25519';
+// Static on purpose: the background is one iife, where a dynamic import is inlined and can
+// be read before it is declared (scripts/check-bundle-tdz.mjs).
+import { COSESign1, Label } from '@emurgo/cardano-message-signing-browser';
 import type { KeyResolver } from './signedResponse';
 
 /**
@@ -201,14 +204,13 @@ export interface CoseSign1Parts {
 export async function openCoseSign1(coseSign1Hex: string): Promise<CoseSign1Parts | undefined> {
   const coseBytes = hexToBytes(coseSign1Hex);
   if (!coseBytes || coseBytes.length === 0) return undefined;
-  const MS = await import('@emurgo/cardano-message-signing-browser');
-  let sign1: InstanceType<typeof MS.COSESign1> | undefined;
+  let sign1: COSESign1 | undefined;
   try {
-    sign1 = MS.COSESign1.from_bytes(coseBytes);
+    sign1 = COSESign1.from_bytes(coseBytes);
     const headers = sign1.headers();
     const algorithm = headers.protected().deserialized_headers().algorithm_id()?.as_int()?.as_i32();
     if (algorithm !== COSE_ALG_EDDSA) return undefined;
-    const hashed = headers.unprotected().header(MS.Label.new_text('hashed'))?.as_special()?.as_bool();
+    const hashed = headers.unprotected().header(Label.new_text('hashed'))?.as_special()?.as_bool();
     if (hashed === true) return undefined;
     const payload = sign1.payload();
     if (!payload) return undefined;
