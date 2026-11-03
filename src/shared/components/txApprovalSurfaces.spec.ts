@@ -57,6 +57,25 @@ describe('signTx approval surfaces share one summary', () => {
     expect(src).toMatch(/foreignValueAck\.value = false;\s*marketAck\.value = false;/);
   });
 
+  // The Sign button is disabled while any gate holds, but Enter in the password field and the PassKey,
+  // Ledger, Trezor and Keystone entry points are not the button: each tx signer checks the same gate
+  // itself, before it awaits anything.
+  it('every side-panel tx signer checks signTxBlocked before anything is awaited', () => {
+    const src = read('sidepanel/components/DAppOverlay.vue');
+    for (const name of ['signNormal', 'signPrf', 'signLedger', 'signTrezor', 'signKeystone']) {
+      const at = src.indexOf(`async function ${name}() {`);
+      expect(at, name).toBeGreaterThan(-1);
+      const head = src.slice(at, src.indexOf('await ', at));
+      expect(head, name).toMatch(/if \(signTxBlocked\.value\) return;\s*return approval\.run/);
+    }
+  });
+
+  it('the popup holds Sign for a transaction it sent but could not summarise, until acknowledged', () => {
+    const src = read('popup/modules/views/SignTx.vue');
+    expect(src).toMatch(/txDecodeFailed = computed\(\(\) => !!request\.value\?\.data\?\.tx && !approvalSummary\.value\)/);
+    expect(src).toMatch(/txDecodeFailed\.value && !decodeFailedAck\.value/);
+  });
+
   it('the approval context takes its market part as required (no empty default that fails open)', () => {
     const src = read('shared/utils/txApprovalSummary.ts');
     expect(src).toMatch(/extras: \{[^}]*market: ApprovalMarketContext \}\s*,?\s*\): ApprovalContext/);

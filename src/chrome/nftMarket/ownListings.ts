@@ -106,6 +106,18 @@ export function ownListingIdentity(
   return { paymentKeyHashes, addresses };
 }
 
+/**
+ * The unit of the one NFT a listing UTxO holds: exactly one non-ADA asset, quantity 1. Null for
+ * anything else (no asset, two assets, the NFT twice). The wallet's own listing is exactly this, and
+ * the dApp approval preview asks the same question of a listing a transaction creates.
+ */
+export function singleNftUnit(value: Cardano.Value): string | null {
+  const assets = value.assets;
+  if (!assets || assets.size !== 1) return null;
+  const [unit, quantity] = [...assets.entries()][0];
+  return quantity === 1n ? unit : null;
+}
+
 /** The payment script hash of a base address, or null for any other shape (never throws). */
 function paymentScriptHash(address: string): string | null {
   try {
@@ -143,10 +155,8 @@ export function verifyOwnListing([txIn, txOut]: Cardano.Utxo, ctx: OwnListingCon
   // OX Agent: Authorization prevented by requiring the datum's seller address to be one of this wallet's own addresses
   if (!ctx.own.addresses.has(datum.sellerAddress)) return { rejected: 'SELLER' };
 
-  const assets = txOut.value.assets;
-  if (!assets || assets.size !== 1) return { rejected: 'VALUE' };
-  const [unit, quantity] = [...assets.entries()][0];
-  if (quantity !== 1n) return { rejected: 'VALUE' };
+  const unit = singleNftUnit(txOut.value);
+  if (!unit) return { rejected: 'VALUE' };
 
   return {
     listing: {

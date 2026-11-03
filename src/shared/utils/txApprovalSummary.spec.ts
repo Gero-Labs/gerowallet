@@ -4,8 +4,10 @@ import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
+import { MAX_LISTING_DEPOSIT, NFT_MARKET_DEPLOYMENTS_PREPROD, type NftMarketDeployment } from '@/utils/nftMarketDeployments';
 import {
   approvalContextFromKeys,
+  createdListingWarns,
   approvalMarketContext,
   buildTxApprovalSummary,
   formatLovelace,
@@ -40,6 +42,7 @@ const ctx = (over: Partial<ApprovalContext> = {}): ApprovalContext => ({
   ownListings: new Map(),
   listingScriptHashes: new Set(),
   listingFees: new Map(),
+  listingDeployments: [],
   ...over,
 });
 
@@ -333,10 +336,16 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
     depositLovelace: '2000000',
     deploymentVersion: 1,
   });
+  /** A deployment of the listing contract at `scriptHash` (the preprod v1 parameters). */
+  const deploymentAt = (scriptHash: string, over: Partial<NftMarketDeployment> = {}): NftMarketDeployment =>
+    ({ ...NFT_MARKET_DEPLOYMENTS_PREPROD[0], scriptHash, ...over });
   const market = (over: Partial<ApprovalContext> = {}) => ctx({
+    // The wallet's own stake key is STAKE_A: the key a listing of its own sits under.
+    ownStakeKeyHashes: new Set([OWN_STAKE_HASH, STAKE_A]),
     ownListings: new Map([[OWN_REF, ownListing(OWN_REF, NFT, 25_000_000n)]]),
     listingScriptHashes: new Set([LISTING_SCRIPT]),
     listingFees: new Map([[LISTING_SCRIPT, FEES]]),
+    listingDeployments: [deploymentAt(LISTING_SCRIPT)],
     resolveAsset: (unit) => ({ name: unit === NFT ? 'Gero Cat #7' : 'Token', decimals: 0 }),
     ...over,
   });
@@ -527,10 +536,15 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
         ownerIsOwn: true,
         sellerIsOwn: true,
         hasBuyer: false,
+        buyerIsOther: false,
         paysSomeoneElse: false,
         tooManyRoyalties: false,
         highRoyalties: false,
         lowSellerShare: false,
+        holdsOtherAssets: false,
+        depositLovelace: 2_000_000n,
+        depositTooHigh: false,
+        untrackedByGero: false,
       }]);
       expect(s.requiresMarketAck).toBe(false);
     });
@@ -635,10 +649,27 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
       expect(s.requiresMarketAck).toBe(true);
     });
 
-    it('notes a private listing (a named buyer) without blocking', () => {
-      const s = created(listedOut(datumHex({ buyer: STRANGER_KEY })));
-      expect(s.createdListings[0]).toMatchObject({ hasBuyer: true, paysSomeoneElse: false });
+    it('notes a private listing for one of the wallet\'s own keys without blocking', () => {
+      const s = created(listedOut(datumHex({ buyer: OWN_PAYMENT_HASH })));
+      expect(s.createdListings[0]).toMatchObject({ hasBuyer: true, buyerIsOther: false, paysSomeoneElse: false });
       expect(s.requiresMarketAck).toBe(false);
+    });
+
+    it('warns, and blocks, for a private listing only another wallet can buy', () => {
+      const s = created(listedOut(datumHex({ buyer: STRANGER_KEY })));
+      expect(s.createdListings[0]).toMatchObject({ hasBuyer: true, buyerIsOther: true, paysSomeoneElse: false });
+      expect(createdListingWarns(s.createdListings[0])).toBe(true);
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('asks about a "reprice" that turns the wallet\'s own listing into a private one for a stranger', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }],
+        outputs: [listedOut(datumHex({ price: 4n * ADA, buyer: STRANGER_KEY }))],
+      }), market());
+      expect(s.listedInputs[0].nftLeavesWallet).toBe(false);
+      expect(s.createdListings[0].buyerIsOther).toBe(true);
+      expect(s.requiresMarketAck).toBe(true);
     });
 
     it('judges each created listing on its own datum', () => {
@@ -648,6 +679,151 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
       }), market({ ownListings: new Map() }));
       expect(s.createdListings.map((l) => [l.outputIndex, l.paysSomeoneElse])).toEqual([[0, false], [1, true]]);
       expect(s.requiresMarketAck).toBe(true);
+    });
+  });
+
+  // A listing the datum says is the wallet's own, but which the wallet's own-listing discovery would
+  // never show (so the user could not cancel it from Gero), or which locks more than the one NFT.
+  describe('a created listing Gero would not track, or that locks more than the NFT', () => {
+    const track = (output: Record<string, unknown>, over: Partial<ApprovalContext> = {}) => created(output, over);
+
+    it('tracks (and does not warn about) a plain own listing: the script, the wallet\'s stake key, one NFT', () => {
+      const s = track(listedOut(datumHex()));
+      expect(s.createdListings[0]).toMatchObject({ untrackedByGero: false, holdsOtherAssets: false, depositTooHigh: false });
+      expect(s.requiresMarketAck).toBe(false);
+    });
+
+    it('warns when the listing sits under a stake key that is not the wallet\'s', () => {
+      const s = track(listedOut(datumHex(), NFT, baseAt(LISTING_SCRIPT, STAKE_B)));
+      expect(s.createdListings[0]).toMatchObject({ datum: 'ok', ownerIsOwn: true, sellerIsOwn: true, paysSomeoneElse: false, untrackedByGero: true });
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('warns when the listing has no stake part (an enterprise script address) or a pointer', () => {
+      for (const address of [enterpriseAt(LISTING_SCRIPT), pointerAt(LISTING_SCRIPT)]) {
+        const s = track(listedOut(datumHex(), NFT, address));
+        expect(s.createdListings[0].untrackedByGero).toBe(true);
+        expect(s.requiresMarketAck).toBe(true);
+      }
+    });
+
+    it('warns when the stake part is a script rather than a key', () => {
+      const scriptStake = Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Testnet, script(LISTING_SCRIPT), script(STAKE_A)).toAddress().toBech32();
+      const s = track(listedOut(datumHex(), NFT, scriptStake));
+      expect(s.createdListings[0].untrackedByGero).toBe(true);
+    });
+
+    it('warns, and says everything goes to the buyer, when the value holds more than the one NFT', () => {
+      const s = track({
+        address: baseAt(LISTING_SCRIPT),
+        value: { coins: 2_000_000n, assets: new Map([[NFT, 1n], [OTHER_NFT, 5n]]) },
+        datum: inlineDatumFromCbor(HexBlob(datumHex())),
+      });
+      expect(s.createdListings[0]).toMatchObject({ holdsOtherAssets: true, untrackedByGero: true, depositTooHigh: false });
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('warns for the NFT held twice, and for a listing that holds no NFT at all', () => {
+      const twice = track({ address: baseAt(LISTING_SCRIPT), value: { coins: 2_000_000n, assets: new Map([[NFT, 2n]]) }, datum: inlineDatumFromCbor(HexBlob(datumHex())) });
+      expect(twice.createdListings[0].holdsOtherAssets).toBe(true);
+      const none = track({ address: baseAt(LISTING_SCRIPT), value: { coins: 2_000_000n }, datum: inlineDatumFromCbor(HexBlob(datumHex())) });
+      expect(none.createdListings[0]).toMatchObject({ holdsOtherAssets: true, untrackedByGero: true });
+      expect(none.requiresMarketAck).toBe(true);
+    });
+
+    it('reports a deposit above MAX_LISTING_DEPOSIT, and accepts exactly the cap', () => {
+      const big = track({ ...listedOut(datumHex()), value: { coins: 500n * ADA, assets: new Map([[NFT, 1n]]) } });
+      expect(big.createdListings[0]).toMatchObject({ depositLovelace: 500_000_000n, depositTooHigh: true, holdsOtherAssets: false });
+      expect(big.requiresMarketAck).toBe(true);
+      const atCap = track({ ...listedOut(datumHex()), value: { coins: MAX_LISTING_DEPOSIT, assets: new Map([[NFT, 1n]]) } });
+      expect(atCap.createdListings[0]).toMatchObject({ depositTooHigh: false });
+      expect(atCap.requiresMarketAck).toBe(false);
+      const over = track({ ...listedOut(datumHex()), value: { coins: MAX_LISTING_DEPOSIT + 1n, assets: new Map([[NFT, 1n]]) } });
+      expect(over.createdListings[0].depositTooHigh).toBe(true);
+    });
+
+    it('judges the value even when the terms cannot be read', () => {
+      const s = track({ address: baseAt(LISTING_SCRIPT), value: { coins: 2_000_000n, assets: new Map([[NFT, 1n], [OTHER_NFT, 1n]]) }, datumHash: '3'.repeat(64) });
+      expect(s.createdListings[0]).toMatchObject({ datum: 'datumHash', holdsOtherAssets: true });
+    });
+
+    it('does not add a "Gero will not show it" note to a listing that already pays someone else', () => {
+      const s = track(listedOut(datumHex({ owner: STRANGER_KEY }), NFT, baseAt(LISTING_SCRIPT, STAKE_B)));
+      expect(s.createdListings[0]).toMatchObject({ paysSomeoneElse: true, untrackedByGero: false });
+    });
+
+    it('fails closed when the script is configured but its deployment is not known to the discovery', () => {
+      const s = track(listedOut(datumHex()), { listingDeployments: [] });
+      expect(s.createdListings[0].untrackedByGero).toBe(true);
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('fails closed when the wallet has no stake key to anchor a listing to', () => {
+      const s = track(listedOut(datumHex()), { ownStakeKeyHashes: new Set() });
+      expect(s.createdListings[0].untrackedByGero).toBe(true);
+    });
+  });
+
+  // Net flow: the NFT leaves the wallet when less of it comes back to the wallet's own outputs than
+  // went in from the wallet's own inputs (a spent own listing counted as the wallet's).
+  describe('where a spent listing\'s NFT goes, by net flow', () => {
+    const ownUtxo = (index: number, assets: Array<[string, bigint]>): Cardano.Utxo =>
+      [{ txId: TX_ID, index }, { address: OWN_ADDR, value: { coins: 5_000_000n, assets: new Map(assets) } }] as unknown as Cardano.Utxo;
+    const secondCopyInput = { txId: TX_ID, index: 3 };
+
+    it('flags a second copy that masks a leak: the wallet puts one in with the listing, one goes to a stranger', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }, secondCopyInput],
+        outputs: [nftOut(OWN_ADDR), nftOut(keyAddress(STRANGER_KEY))],
+      }), market({ ownUtxos: [ownUtxo(3, [[NFT, 1n]])] }));
+      expect(s.listedInputs[0].nftLeavesWallet).toBe(true);
+      expect(s.requiresMarketAck).toBe(true);
+    });
+
+    it('is fine when every copy that went in comes back to the wallet', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }, secondCopyInput],
+        outputs: [nftOut(OWN_ADDR), nftOut(CHANGE_ADDR)],
+      }), market({ ownUtxos: [ownUtxo(3, [[NFT, 1n]])] }));
+      expect(s.listedInputs[0].nftLeavesWallet).toBe(false);
+      expect(s.requiresMarketAck).toBe(false);
+    });
+
+    it('counts several copies sent to one own output', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }, secondCopyInput],
+        outputs: [{ address: OWN_ADDR, value: { coins: 2_000_000n, assets: new Map([[NFT, 2n]]) } }],
+      }), market({ ownUtxos: [ownUtxo(3, [[NFT, 1n]])] }));
+      expect(s.listedInputs[0].nftLeavesWallet).toBe(false);
+    });
+
+    it('does not count another unit, or an input the wallet does not hold, toward the listing\'s NFT', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }, secondCopyInput],
+        outputs: [nftOut(OWN_ADDR, OTHER_NFT), nftOut(keyAddress(STRANGER_KEY))],
+      }), market({ ownUtxos: [ownUtxo(3, [[OTHER_NFT, 1n]])] }));
+      expect(s.listedInputs[0].nftLeavesWallet).toBe(true);
+    });
+
+    it('with the wallet\'s UTxOs unknown, counts the spent listing alone', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }],
+        outputs: [nftOut(OWN_ADDR)],
+      }), market());
+      expect(s.listedInputs[0].nftLeavesWallet).toBe(false);
+    });
+
+    it('counts a created listing of the wallet\'s own as the wallet\'s output, and a stranger\'s as not', () => {
+      const own = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }, secondCopyInput],
+        outputs: [listedOut(datumHex()), listedOut(datumHex({ price: 9n * ADA }))],
+      }), market({ ownUtxos: [ownUtxo(3, [[NFT, 1n]])] }));
+      expect(own.listedInputs[0].nftLeavesWallet).toBe(false);
+      const other = buildTxApprovalSummary(tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }, secondCopyInput],
+        outputs: [listedOut(datumHex()), listedOut(datumHex({ owner: STRANGER_KEY }))],
+      }), market({ ownUtxos: [ownUtxo(3, [[NFT, 1n]])] }));
+      expect(other.listedInputs[0].nftLeavesWallet).toBe(true);
     });
   });
 
@@ -704,7 +880,7 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
   });
 
   describe('approvalMarketContext', () => {
-    const deployment = (scriptHash: string, over: Partial<typeof FEES> = {}) => ({ scriptHash, ...FEES, ...over });
+    const deployment = (scriptHash: string, over: Partial<NftMarketDeployment> = {}) => deploymentAt(scriptHash, { ...FEES, ...over });
 
     it('revives the store\'s decimal-string bigints and keys the listings by lower-case reference', () => {
       const stored = [{
@@ -720,6 +896,11 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
       expect(listing?.datum.price).toBe(25_000_000n);
       expect(listing?.datum.royalties[0].lovelace).toBe(500_000n);
       expect([...result.listingScriptHashes]).toEqual([LISTING_SCRIPT]);
+    });
+
+    it('carries the deployments themselves, for the discovery\'s own predicates', () => {
+      const deployments = [deployment(LISTING_SCRIPT), deployment(OTHER_SCRIPT, { version: 2 })];
+      expect(approvalMarketContext([], deployments).listingDeployments).toEqual(deployments);
     });
 
     it('carries each deployment\'s fee parameters, by lower-case script hash', () => {
@@ -738,6 +919,7 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
         expect(result.ownListings.size).toBe(0);
         expect(result.listingScriptHashes.size).toBe(0);
         expect(result.listingFees.size).toBe(0);
+        expect(result.listingDeployments).toEqual([]);
       }
       expect(approvalMarketContext([{ ref: 'x' }], []).ownListings.size).toBe(0);
     });

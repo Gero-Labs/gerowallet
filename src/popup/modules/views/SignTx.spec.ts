@@ -55,7 +55,7 @@ import { TxSignError } from '@/chrome/config';
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.summary.mockReset().mockReturnValue(null);
+  mocks.summary.mockReset().mockReturnValue({});
   mocks.request.mockResolvedValue({ data: { tx: 'synthetic-cbor-decoder-fixture' } });
   mocks.returnData.mockResolvedValue(undefined);
   mocks.authorize.mockReset().mockResolvedValue(undefined);
@@ -71,7 +71,11 @@ async function render(device: typeof devices[number]) {
   walletStore.loggedWallet.type = device === 'ledger' ? WalletType.Ledger : WalletType.Trezor;
   featureFlagsStore.state.flags.isTrezorWebUsbEnabled = device === 'trezor-webusb';
   const view = mount(SignTx, { global: {
-    stubs: { ...dialogControls(async () => ({ valid: true, errors: [] })), 'v-card-subtitle': true, 'v-progress-circular': true, 'v-tooltip': true },
+    stubs: {
+      ...dialogControls(async () => ({ valid: true, errors: [] })), 'v-card-subtitle': true, 'v-progress-circular': true, 'v-tooltip': true,
+      // A checkbox that reports what the user does, as Vuetify's would.
+      'v-checkbox': { props: ['modelValue'], emits: ['update:modelValue'], template: '<input type="checkbox" data-testid="decode-ack" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />' },
+    },
     config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key, $route: { query: {} } }) },
   } });
   await flushPromises();
@@ -136,6 +140,30 @@ describe('Cardano signing: a Gero listing the transaction creates', () => {
   it('does not hold Sign for a transaction with nothing to acknowledge', async () => {
     mocks.summary.mockReturnValue({ requiresMarketAck: false });
     const view = await render('ledger');
+    expect(signButton(view).attributes('disabled')).toBeUndefined();
+  });
+});
+
+// The summary is the user's only view of what they sign. When it cannot be built from a transaction
+// that was sent, Sign waits for the same explicit acknowledgement the side panel asks for.
+describe('Cardano signing: a transaction whose summary cannot be built', () => {
+  const signButton = (view: View) => view.findAll('button').find(entry => entry.text() === 'wallet.sign')!;
+
+  it('holds Sign behind the decode-failed acknowledgement, and lets it through once ticked', async () => {
+    mocks.summary.mockReturnValue(null);
+    const view = await render('ledger');
+    expect(view.find('[data-testid="tx-decode-failed-banner"]').text()).toContain('signTx.decodeFailedTitle');
+    expect(signButton(view).attributes('disabled')).toBeDefined();
+    await signButton(view).trigger('click');
+    expect(mocks.ledger).not.toHaveBeenCalled();
+    await view.find('[data-testid="decode-ack"]').setValue(true);
+    expect(signButton(view).attributes('disabled')).toBeUndefined();
+  });
+
+  it('shows no banner and holds nothing when the summary builds', async () => {
+    mocks.summary.mockReturnValue({});
+    const view = await render('ledger');
+    expect(view.find('[data-testid="tx-decode-failed-banner"]').exists()).toBe(false);
     expect(signButton(view).attributes('disabled')).toBeUndefined();
   });
 });

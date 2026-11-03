@@ -46,19 +46,25 @@
               :class="listing.tooManyRoyalties || listing.highRoyalties ? 'error--text' : 'grey--text'"
               data-testid="tx-intent-listing-royalties"
             >{{ $t('signTx.listingRoyalties', { count: listing.royaltyCount, total: formatLovelace(listing.royaltyTotalLovelace) }, listing.royaltyCount) }}</div>
+            <div v-if="neverSells(listing)" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-never-sells">{{ $t('signTx.listingNeverSells') }}</div>
             <div
-              v-if="listing.sellerShareLovelace !== null"
+              v-else-if="listing.sellerShareLovelace !== null"
               class="text-caption"
               :class="listing.lowSellerShare ? 'error--text' : 'grey--text'"
             >{{ $t('signTx.listingSellerReceives', { amount: formatLovelace(listing.sellerShareLovelace) }) }}</div>
-            <div v-if="listing.hasBuyer" class="grey--text text-caption" data-testid="tx-intent-listing-private">{{ $t('signTx.listingPrivate') }}</div>
+            <div v-if="listing.buyerIsOther" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-buyer-other">{{ $t('signTx.listingBuyerOther') }}</div>
+            <div v-else-if="listing.hasBuyer" class="grey--text text-caption" data-testid="tx-intent-listing-private">{{ $t('signTx.listingPrivate') }}</div>
             <div v-if="!listing.ownerIsOwn" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-owner-not-you">{{ $t('signTx.listingOwnerNotYou') }}</div>
             <div v-if="!listing.sellerIsOwn" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-seller-not-you">{{ $t('signTx.listingSellerNotYou') }}</div>
             <div v-if="listing.tooManyRoyalties" class="error--text text-caption" data-testid="tx-intent-listing-too-many-royalties">{{ $t('signTx.listingTooManyRoyalties', { max: MAX_ROYALTIES }) }}</div>
             <div v-if="listing.highRoyalties" class="error--text text-caption" data-testid="tx-intent-listing-high-royalties">{{ $t('signTx.listingHighRoyalties', { percent: ROYALTY_CAP_PERCENT }) }}</div>
-            <div v-if="listing.lowSellerShare" class="error--text text-caption" data-testid="tx-intent-listing-low-share">{{ $t('signTx.listingLowShare') }}</div>
+            <div v-if="listing.lowSellerShare && !neverSells(listing)" class="error--text text-caption" data-testid="tx-intent-listing-low-share">{{ $t('signTx.listingLowShare') }}</div>
           </template>
           <div v-else class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-datum-problem">{{ $t(DATUM_PROBLEM_KEYS[listing.datum]) }}</div>
+          <!-- What the output holds is judged whatever its datum says. -->
+          <div v-if="listing.holdsOtherAssets" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-holds-more">{{ $t('signTx.listingHoldsMore') }}</div>
+          <div v-if="listing.depositTooHigh" class="error--text text-caption" data-testid="tx-intent-listing-deposit-high">{{ $t('signTx.listingDepositHigh', { amount: formatLovelace(listing.depositLovelace), max: formatLovelace(MAX_LISTING_DEPOSIT) }) }}</div>
+          <div v-if="listing.untrackedByGero" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-not-tracked">{{ $t('signTx.listingNotTracked') }}</div>
           <div v-if="!listingWarns(listing)" class="grey--text text-caption" data-testid="tx-intent-creates-listing-hint">{{ $t('signTx.createsMarketListingHint') }}</div>
         </div>
       </div>
@@ -251,7 +257,7 @@ import { Cardano } from '@cardano-sdk/core';
 import filters from '@/shared/utils/filters';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { createdListingWarns, formatLovelace, type ApprovalCreatedListing, type ApprovalListingDatumStatus, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
-import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
+import { MAX_LISTING_DEPOSIT, MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
 
 const props = withDefaults(defineProps<{
   summary: TxApprovalSummary;
@@ -280,6 +286,8 @@ const collateralAtRisk = computed(() => props.summary.collateralAtRiskAda ?? pro
 // A spent listing's NFT leaves the wallet: the reassuring hint would be false for the group.
 const nftLeaves = computed(() => props.summary.listedInputs.some((listed) => listed.nftLeavesWallet));
 const listingWarns = (listing: ApprovalCreatedListing) => createdListingWarns(listing);
+// Nothing is left for the seller: the contract can never be satisfied, so no one can buy it.
+const neverSells = (listing: ApprovalCreatedListing) => listing.sellerShareLovelace !== null && listing.sellerShareLovelace <= 0n;
 // The royalty cap in percent for the copy, so the number is never baked into a translation.
 const ROYALTY_CAP_PERCENT = Math.round(ROYALTY_RATE_CAP * 100);
 const DATUM_PROBLEM_KEYS: Record<ApprovalListingDatumStatus, string> = {

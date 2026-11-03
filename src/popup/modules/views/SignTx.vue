@@ -49,6 +49,28 @@
         <!-- Same effects list and network guard as the side panel: certificates,
              withdrawals, votes, proposals, mint/burn, collateral, reference
              inputs, required signers, validity, and a blocking network banner. -->
+        <!-- The summary could not be built from the transaction (blocking): Sign waits for the same
+             explicit acknowledgement the side panel asks for. -->
+        <v-alert
+          v-if="txDecodeFailed"
+          type="error"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+          data-testid="tx-decode-failed-banner"
+        >
+          <div class="font-weight-bold">{{ $t('signTx.decodeFailedTitle') }}</div>
+          <div class="text-caption">{{ $t('signTx.decodeFailedBody') }}</div>
+          <v-checkbox
+            v-model="decodeFailedAck"
+            color="error"
+            hide-details
+            theme="dark"
+            density="compact"
+            class="mt-2"
+            :label="$t('signTx.decodeFailedAck')"
+          />
+        </v-alert>
         <TxApprovalIntents
           v-if="approvalSummary"
           class="mt-2"
@@ -368,14 +390,20 @@ const foreignValueAck = ref(false);
 // off), or a spent listing whose NFT does not come back to the wallet.
 const marketAck = ref(false);
 const inputsMisreportedAck = ref(false);
+// A transaction was sent but its summary could not be built (a decode failure): the user would be
+// signing blind, so Sign waits for an explicit acknowledgement, as in the side panel.
+const txDecodeFailed = computed(() => !!request.value?.data?.tx && !approvalSummary.value);
+const decodeFailedAck = ref(false);
 // Sign is blocked until a network mismatch, a deposit refund or collateral return
-// to someone else, a risky Gero listing, and a misstated input are explicitly acknowledged.
+// to someone else, a risky Gero listing, and a misstated input are explicitly acknowledged,
+// and until an undecodable transaction is.
 const signBlocked = computed(() =>
-  !!approvalSummary.value
-  && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
-    || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
-    || (approvalSummary.value.requiresMarketAck && !marketAck.value)
-    || (inputsMisreported.value && !inputsMisreportedAck.value)),
+  (txDecodeFailed.value && !decodeFailedAck.value)
+  || (!!approvalSummary.value
+    && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
+      || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
+      || (approvalSummary.value.requiresMarketAck && !marketAck.value)
+      || (inputsMisreported.value && !inputsMisreportedAck.value))),
 );
 
 const txAutoSubmit = computed(() => {

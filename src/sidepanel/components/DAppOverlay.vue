@@ -2207,6 +2207,9 @@ function rejectSign() {
 // MPC (Google) wallets reach here too — they carry no spending password (the
 // background resolves the session-cached key), so only require one for non-MPC.
 async function signNormal() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2250,6 +2253,9 @@ async function signNormal() {
 
 // ── PRF wallet: PassKey signing ──
 async function signPrf() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2406,6 +2412,9 @@ async function signLedgerViaBleWindow(txCbor: string, cip45Authorization?: Cip45
 
 // ── Ledger wallet signing ──
 async function signLedger() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2459,6 +2468,9 @@ async function signLedger() {
 
 // ── Trezor wallet signing ──
 async function signTrezor() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2510,6 +2522,9 @@ async function signTrezor() {
 
 // ── Keystone wallet signing ──
 async function signKeystone() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();

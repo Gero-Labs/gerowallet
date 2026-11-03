@@ -1,9 +1,10 @@
 import { Cardano } from '@cardano-sdk/core';
 import { decodeListingDatum, sellerShare, type ListingFeeParams } from '@/chrome/nftMarket/listingDatum';
 import { paymentScriptHash } from '@/chrome/nftMarket/marketGuard';
-import { reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
+import { reviveOwnListings, singleNftUnit, verifyOwnListing, type OwnListing } from '@/chrome/nftMarket/ownListings';
+import { classifyUtxoAddress } from '@/chrome/serialization';
 import { inlineDatumCbor } from '@/shared/utils/utxoCbor';
-import { MAX_ROYALTIES, MIN_SELLER_SHARE, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
+import { MAX_LISTING_DEPOSIT, MAX_ROYALTIES, MIN_SELLER_SHARE, ROYALTY_RATE_CAP, type NftMarketDeployment } from '@/utils/nftMarketDeployments';
 import { inputRefOf, scriptSpentInputRefs } from './txIntentGuard';
 
 /**
@@ -67,6 +68,12 @@ export interface ApprovalContext {
    * script hash missing here has no known fee, so its share cannot be shown and is warned about.
    */
   listingFees: ReadonlyMap<string, ListingFeeParams>;
+  /**
+   * The deployments themselves, newest first (`networks.resolveNftMarketDeployments`): what the
+   * wallet's own-listing discovery (`verifyOwnListing`) is run with, to tell a created listing Gero
+   * would show and let the user cancel from one it would not. Empty means none is tracked.
+   */
+  listingDeployments: readonly NftMarketDeployment[];
 }
 
 /**
@@ -74,7 +81,7 @@ export interface ApprovalContext {
  * their fees. Required wherever a context is built (no empty default): a surface that forgot it
  * would show a created listing as nothing at all.
  */
-export type ApprovalMarketContext = Pick<ApprovalContext, 'ownListings' | 'listingScriptHashes' | 'listingFees'>;
+export type ApprovalMarketContext = Pick<ApprovalContext, 'ownListings' | 'listingScriptHashes' | 'listingFees' | 'listingDeployments'>;
 
 export interface ApprovalDeposits {
   /** keyDeposit, for the pre-Conway stake (de)registration certificates. */
@@ -201,6 +208,8 @@ export interface ApprovalCreatedListing {
   sellerIsOwn: boolean;
   /** A named buyer: only that key can buy it. */
   hasBuyer: boolean;
+  /** The named buyer is not one of the wallet's own keys: only another wallet can buy it, at this price. */
+  buyerIsOther: boolean;
   /**
    * The datum is not readable, or names an owner or a seller that is not the wallet: whoever it
    * does name cancels it or is paid for it, not the user.
@@ -212,11 +221,27 @@ export interface ApprovalCreatedListing {
   highRoyalties: boolean;
   /** The seller's share is at or below MIN_SELLER_SHARE, or cannot be worked out. */
   lowSellerShare: boolean;
+  /**
+   * The output does not hold exactly the one NFT: whatever else it holds (other tokens, the NFT
+   * twice, no NFT at all) goes to whoever buys it. Judged from the output's value, whatever its datum says.
+   */
+  holdsOtherAssets: boolean;
+  /** The ADA locked in the output (the deposit that returns to the seller). */
+  depositLovelace: bigint;
+  /** The deposit is above MAX_LISTING_DEPOSIT, which no listing of Gero's ever locks. */
+  depositTooHigh: boolean;
+  /**
+   * The datum names the wallet as owner and seller, yet Gero's own-listing discovery would never
+   * show this listing (a stake part that is not the wallet's stake key, no stake part, more than
+   * the one NFT): the user could not cancel it from Gero.
+   */
+  untrackedByGero: boolean;
 }
 
 /** Whether a created listing needs the user's explicit acknowledgement before Sign unlocks. */
 export function createdListingWarns(listing: ApprovalCreatedListing): boolean {
-  return listing.paysSomeoneElse || listing.tooManyRoyalties || listing.highRoyalties || listing.lowSellerShare;
+  return listing.paysSomeoneElse || listing.tooManyRoyalties || listing.highRoyalties || listing.lowSellerShare
+    || listing.buyerIsOther || listing.holdsOtherAssets || listing.depositTooHigh || listing.untrackedByGero;
 }
 
 export interface TxApprovalSummary {
@@ -409,8 +434,19 @@ function voteChoice(vote: Cardano.Vote): ApprovalVoteChoice {
 /** ROYALTY_RATE_CAP in basis points (0.1 is 1000), for bigint arithmetic. */
 const ROYALTY_CAP_BPS = BigInt(Math.round(ROYALTY_RATE_CAP * 10_000));
 
+/** What an output's own value says about a listing, whatever its datum says. */
+interface ListingValue {
+  holdsOtherAssets: boolean;
+  depositLovelace: bigint;
+  depositTooHigh: boolean;
+}
+
 /** A created listing whose terms cannot be read: every flag that matters is on. */
-function unreadableListing(outputIndex: number, datum: Exclude<ApprovalListingDatumStatus, 'ok'>): ApprovalCreatedListing {
+function unreadableListing(
+  outputIndex: number,
+  datum: Exclude<ApprovalListingDatumStatus, 'ok'>,
+  value: ListingValue,
+): ApprovalCreatedListing {
   return {
     outputIndex,
     datum,
@@ -421,11 +457,68 @@ function unreadableListing(outputIndex: number, datum: Exclude<ApprovalListingDa
     ownerIsOwn: false,
     sellerIsOwn: false,
     hasBuyer: false,
+    buyerIsOther: false,
     paysSomeoneElse: true,
     tooManyRoyalties: false,
     highRoyalties: false,
     lowSellerShare: false,
+    untrackedByGero: false,
+    ...value,
   };
+}
+
+/**
+ * The output's value against what a Gero listing holds: exactly the one NFT (`singleNftUnit`, the
+ * wallet's own-listing predicate) and at most MAX_LISTING_DEPOSIT of ADA (the cap `checkNewListing`
+ * holds the wallet's own listings to). Never throws: an unreadable value is "other assets".
+ */
+function listingValue(output: Cardano.TxOut): ListingValue {
+  let depositLovelace = 0n;
+  try {
+    depositLovelace = BigInt(output.value?.coins ?? 0n);
+    return {
+      holdsOtherAssets: singleNftUnit(output.value) === null,
+      depositLovelace,
+      depositTooHigh: depositLovelace > MAX_LISTING_DEPOSIT,
+    };
+  } catch {
+    return { holdsOtherAssets: true, depositLovelace, depositTooHigh: false };
+  }
+}
+
+/**
+ * Whether Gero would show this created listing as the wallet's own, so the user could cancel it
+ * from Gero. It runs the wallet's own discovery on the output as the worker does on a synced UTxO:
+ * `classifyUtxoAddress` (a base address at a listing script under the wallet's STAKE key) and then
+ * `verifyOwnListing` (a deployed script, a strict datum naming the wallet as owner and seller, one
+ * NFT). Anything that throws is "not tracked".
+ */
+function geroTracksListing(
+  tx: Cardano.Tx,
+  index: number,
+  output: Cardano.TxOut,
+  ctx: ApprovalContext,
+  ownAddresses: ReadonlySet<string>,
+): boolean {
+  try {
+    if (ctx.walletNetworkId === null) return false;
+    const partition = classifyUtxoAddress(
+      String(output.address),
+      new Set(ctx.ownPaymentKeyHashes),
+      new Set(),
+      new Set(),
+      new Set(ctx.listingScriptHashes),
+      new Set(ctx.ownStakeKeyHashes),
+    );
+    if (partition !== 'listed') return false;
+    const verdict = verifyOwnListing(
+      [{ txId: tx.id, index, address: output.address } as Cardano.HydratedTxIn, output],
+      { networkId: ctx.walletNetworkId, deployments: ctx.listingDeployments, own: { paymentKeyHashes: ctx.ownPaymentKeyHashes, addresses: ownAddresses } },
+    );
+    return 'listing' in verdict;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -436,16 +529,18 @@ function unreadableListing(outputIndex: number, datum: Exclude<ApprovalListingDa
  * about, never skipped.
  */
 function inspectCreatedListing(
+  tx: Cardano.Tx,
   outputIndex: number,
   output: Cardano.TxOut,
   scriptHash: string,
   ctx: ApprovalContext,
   ownAddresses: ReadonlySet<string>,
 ): ApprovalCreatedListing {
+  const value = listingValue(output);
   try {
-    if (output.datum == null) return unreadableListing(outputIndex, output.datumHash ? 'datumHash' : 'missing');
+    if (output.datum == null) return unreadableListing(outputIndex, output.datumHash ? 'datumHash' : 'missing', value);
     const cbor = inlineDatumCbor(output.datum);
-    if (!cbor || ctx.walletNetworkId === null) return unreadableListing(outputIndex, 'undecodable');
+    if (!cbor || ctx.walletNetworkId === null) return unreadableListing(outputIndex, 'undecodable', value);
     const datum = decodeListingDatum(cbor, ctx.walletNetworkId);
 
     const royaltyTotal = datum.royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
@@ -453,6 +548,7 @@ function inspectCreatedListing(
     const share = fees ? sellerShare(datum, fees) : null;
     const ownerIsOwn = ctx.ownPaymentKeyHashes.has(datum.owner.toLowerCase());
     const sellerIsOwn = ownAddresses.has(datum.sellerAddress);
+    const paysSomeoneElse = !ownerIsOwn || !sellerIsOwn;
     return {
       outputIndex,
       datum: 'ok',
@@ -463,16 +559,31 @@ function inspectCreatedListing(
       ownerIsOwn,
       sellerIsOwn,
       hasBuyer: datum.buyer !== null,
-      paysSomeoneElse: !ownerIsOwn || !sellerIsOwn,
+      buyerIsOther: datum.buyer !== null && !ctx.ownPaymentKeyHashes.has(datum.buyer.toLowerCase()),
+      paysSomeoneElse,
       tooManyRoyalties: datum.royalties.length > MAX_ROYALTIES,
       // Strictly above the cap (exactly 10% is what a collection may ask for); a negative royalty
       // is not a royalty and would hide the real total, so it counts as too high.
       highRoyalties: royaltyTotal * 10_000n > datum.price * ROYALTY_CAP_BPS || datum.royalties.some((royalty) => royalty.lovelace < 0n),
       lowSellerShare: share === null || share <= MIN_SELLER_SHARE,
+      // A listing that already pays someone else says so; "Gero will not show it" is for the ones
+      // that name the wallet and still would not be tracked.
+      untrackedByGero: !paysSomeoneElse && !geroTracksListing(tx, outputIndex, output, ctx, ownAddresses),
+      ...value,
     };
   } catch {
-    return unreadableListing(outputIndex, 'undecodable');
+    return unreadableListing(outputIndex, 'undecodable', value);
   }
+}
+
+/** The quantity of `unit` in a value's assets, whatever form the map takes. */
+function quantityOf(assets: unknown, unit: string): bigint {
+  const wanted = unit.toLowerCase();
+  let total = 0n;
+  for (const [held, quantity] of entries(assets)) {
+    if (held.toLowerCase() === wanted) total += BigInt(String(quantity));
+  }
+  return total;
 }
 
 /**
@@ -499,40 +610,56 @@ function marketEffects(
     outputs.forEach((output, index) => {
       const hash = paymentScriptHash(output.address)?.toLowerCase();
       if (hash && ctx.listingScriptHashes.has(hash)) {
-        createdListings.push(inspectCreatedListing(index, txOutputs[index], hash, ctx, ownAddresses));
+        createdListings.push(inspectCreatedListing(tx, index, txOutputs[index], hash, ctx, ownAddresses));
       }
     });
   }
 
-  // Outputs where a spent listing's NFT is still the wallet's: one of its own addresses, or a
-  // listing the wallet is both owner and seller of (a reprice puts the NFT back at the script).
+  const ownByRef = new Map<string, OwnListing>();
+  for (const [ref, listing] of ctx.ownListings) ownByRef.set(ref.toLowerCase(), listing);
+  const spent: Array<[string, OwnListing]> = [];
+  const seen = new Set<string>();
+  for (const input of tx.body.inputs ?? []) {
+    const ref = inputRefOf(input);
+    const listing = ownByRef.get(ref);
+    if (!listing || seen.has(ref)) continue;
+    seen.add(ref);
+    spent.push([ref, listing]);
+  }
+
+  // Net flow of each spent listing's NFT: it leaves the wallet when less of it reaches the wallet's
+  // own outputs than the wallet's own inputs put in. Own inputs are the spent listings themselves
+  // (each holds exactly one) and the wallet's own UTxOs the transaction spends; own outputs are
+  // outputs at one of its addresses and created listings it is both owner and seller of (a reprice
+  // puts the NFT back at the script). Presence in some own output is not enough: a second copy
+  // coming back would hide the first one leaving.
   const ownListingOutputs = new Set(
     createdListings.filter((l) => l.datum === 'ok' && l.ownerIsOwn && l.sellerIsOwn).map((l) => l.outputIndex),
   );
-  const landsWithWallet = (unit: string): boolean =>
-    outputs.some((output, index) =>
-      (output.isOwn || ownListingOutputs.has(index))
-      && output.assets.some((asset) => asset.unit === unit && BigInt(asset.quantity) > 0n));
-
-  const listedInputs: ApprovalListedInput[] = [];
-  if (ctx.ownListings.size > 0) {
-    const ownByRef = new Map<string, OwnListing>();
-    for (const [ref, listing] of ctx.ownListings) ownByRef.set(ref.toLowerCase(), listing);
-    const seen = new Set<string>();
+  const ownUtxoByRef = new Map<string, Cardano.TxOut>();
+  for (const [txIn, txOut] of ctx.ownUtxos ?? []) ownUtxoByRef.set(inputRefOf(txIn), txOut);
+  const ownInputsOf = (unit: string): bigint => {
+    let total = spent.reduce((sum, [, listing]) => (listing.unit.toLowerCase() === unit.toLowerCase() ? sum + 1n : sum), 0n);
     for (const input of tx.body.inputs ?? []) {
-      const ref = inputRefOf(input);
-      const listing = ownByRef.get(ref);
-      if (!listing || seen.has(ref)) continue;
-      seen.add(ref);
-      listedInputs.push({
-        ref,
-        unit: listing.unit,
-        label: ctx.resolveAsset(listing.unit).name,
-        priceLovelace: BigInt(listing.datum.price),
-        nftLeavesWallet: !landsWithWallet(listing.unit),
-      });
+      const held = ownUtxoByRef.get(inputRefOf(input));
+      if (held) total += quantityOf(held.value?.assets, unit);
     }
-  }
+    return total;
+  };
+  const ownOutputsOf = (unit: string): bigint => outputs.reduce(
+    (sum, output, index) => (output.isOwn || ownListingOutputs.has(index)
+      ? sum + output.assets.reduce((held, asset) => (asset.unit.toLowerCase() === unit.toLowerCase() ? held + BigInt(asset.quantity) : held), 0n)
+      : sum),
+    0n,
+  );
+
+  const listedInputs: ApprovalListedInput[] = spent.map(([ref, listing]) => ({
+    ref,
+    unit: listing.unit,
+    label: ctx.resolveAsset(listing.unit).name,
+    priceLovelace: BigInt(listing.datum.price),
+    nftLeavesWallet: ownOutputsOf(listing.unit) < ownInputsOf(listing.unit),
+  }));
   return { listedInputs, createdListings };
 }
 
@@ -793,6 +920,7 @@ export function approvalContextFromKeys(
     ownListings: extras.market.ownListings,
     listingScriptHashes: extras.market.listingScriptHashes,
     listingFees: extras.market.listingFees,
+    listingDeployments: extras.market.listingDeployments,
   };
 }
 
@@ -807,7 +935,7 @@ export function approvalContextFromKeys(
  */
 export function approvalMarketContext(
   listedListings: unknown,
-  deployments: ReadonlyArray<{ scriptHash: string } & ListingFeeParams>,
+  deployments: readonly NftMarketDeployment[],
 ): ApprovalMarketContext {
   return {
     ownListings: new Map(reviveOwnListings(listedListings).map((listing) => [listing.ref.toLowerCase(), listing])),
@@ -816,6 +944,7 @@ export function approvalMarketContext(
       deployment.scriptHash.toLowerCase(),
       { feeBps: deployment.feeBps, minFeeLovelace: deployment.minFeeLovelace, maxFeeLovelace: deployment.maxFeeLovelace },
     ])),
+    listingDeployments: deployments,
   };
 }
 

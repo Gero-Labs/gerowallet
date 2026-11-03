@@ -27,7 +27,7 @@ function summaryWith(over: Partial<TxApprovalSummary> = {}): TxApprovalSummary {
   const base = buildTxApprovalSummary(tx, {
     paymentAddresses: new Set(), changeAddresses: new Set(), ownPaymentKeyHashes: new Set(), ownStakeKeyHashes: new Set(),
     ownRewardAccounts: new Set(), ownDrepKeyHashes: new Set(), ownCcHotKeyHashes: new Set(), walletNetworkId: Cardano.NetworkId.Testnet,
-    resolveAsset: () => ({ name: 'Token', decimals: 0 }), ownListings: new Map(), listingScriptHashes: new Set(), listingFees: new Map(),
+    resolveAsset: () => ({ name: 'Token', decimals: 0 }), ownListings: new Map(), listingScriptHashes: new Set(), listingFees: new Map(), listingDeployments: [],
   });
   return { ...base, ...over };
 }
@@ -46,10 +46,15 @@ const createdListing = (over: Partial<ApprovalCreatedListing> = {}): ApprovalCre
   ownerIsOwn: true,
   sellerIsOwn: true,
   hasBuyer: false,
+  buyerIsOther: false,
   paysSomeoneElse: false,
   tooManyRoyalties: false,
   highRoyalties: false,
   lowSellerShare: false,
+  holdsOtherAssets: false,
+  depositLovelace: 2_000_000n,
+  depositTooHigh: false,
+  untrackedByGero: false,
   ...over,
 });
 
@@ -216,6 +221,74 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
     const w = mountWith(withMarket([createdListing({ hasBuyer: true })]));
     expect(w.find('[data-testid="tx-intent-listing-private"]').text()).toBe('signTx.listingPrivate');
     expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(false);
+  });
+
+  it('never shows a negative or zero share as what the seller keeps: it says the listing can never be bought', () => {
+    for (const share of [0n, -3_500_000n]) {
+      const w = mountWith(withMarket([createdListing({ sellerShareLovelace: share, lowSellerShare: true })]));
+      const row = w.find('[data-testid="tx-intent-creates-listing"]');
+      const never = row.find('[data-testid="tx-intent-listing-never-sells"]');
+      expect(never.text()).toBe('signTx.listingNeverSells');
+      expect(never.classes()).toContain('error--text');
+      expect(row.text()).not.toContain('signTx.listingSellerReceives');
+      expect(row.text()).not.toContain('-3.50');
+      expect(row.find('[data-testid="tx-intent-listing-low-share"]').exists()).toBe(false);
+      expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
+    }
+  });
+
+  it('shows what the seller keeps, and the low-share warning, for a positive share at or below the floor', () => {
+    const w = mountWith(withMarket([createdListing({ sellerShareLovelace: 1_500_000n, lowSellerShare: true })]));
+    const row = w.find('[data-testid="tx-intent-creates-listing"]');
+    expect(row.text()).toContain('signTx.listingSellerReceives|{"amount":"1.50"}');
+    expect(row.find('[data-testid="tx-intent-listing-low-share"]').exists()).toBe(true);
+    expect(row.find('[data-testid="tx-intent-listing-never-sells"]').exists()).toBe(false);
+  });
+
+  it('warns, without a share, when the share could not be worked out', () => {
+    const w = mountWith(withMarket([createdListing({ sellerShareLovelace: null, lowSellerShare: true })]));
+    const row = w.find('[data-testid="tx-intent-creates-listing"]');
+    expect(row.find('[data-testid="tx-intent-listing-low-share"]').exists()).toBe(true);
+    expect(row.text()).not.toContain('signTx.listingSellerReceives');
+    expect(row.find('[data-testid="tx-intent-listing-never-sells"]').exists()).toBe(false);
+  });
+
+  it('says everything else locked in the listing goes to whoever buys it, whatever the datum says', () => {
+    const w = mountWith(withMarket([createdListing({ holdsOtherAssets: true, untrackedByGero: true })]));
+    const line = w.find('[data-testid="tx-intent-listing-holds-more"]');
+    expect(line.text()).toBe('signTx.listingHoldsMore');
+    expect(line.classes()).toContain('error--text');
+    expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
+    const hashed = mountWith(withMarket([{ ...createdListing({ holdsOtherAssets: true }), datum: 'datumHash', priceLovelace: null, paysSomeoneElse: true }]));
+    expect(hashed.find('[data-testid="tx-intent-listing-holds-more"]').exists()).toBe(true);
+    expect(hashed.find('[data-testid="tx-intent-listing-datum-problem"]').exists()).toBe(true);
+  });
+
+  it('names the deposit when it is above what a listing locks', () => {
+    const w = mountWith(withMarket([createdListing({ depositLovelace: 500_000_000n, depositTooHigh: true })]));
+    const line = w.find('[data-testid="tx-intent-listing-deposit-high"]');
+    expect(line.text()).toBe('signTx.listingDepositHigh|{"amount":"500.00","max":"5.00"}');
+    expect(line.classes()).toContain('error--text');
+    expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
+    expect(mountWith(withMarket([createdListing()])).find('[data-testid="tx-intent-listing-deposit-high"]').exists()).toBe(false);
+  });
+
+  it('says Gero will not show a listing it would not track, so it cannot be cancelled from Gero', () => {
+    const w = mountWith(withMarket([createdListing({ untrackedByGero: true })]));
+    const line = w.find('[data-testid="tx-intent-listing-not-tracked"]');
+    expect(line.text()).toBe('signTx.listingNotTracked');
+    expect(line.classes()).toContain('error--text');
+    expect(w.find('[data-testid="tx-intent-creates-listing-hint"]').exists()).toBe(false);
+    expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
+  });
+
+  it('says only another wallet can buy a private listing for a stranger, instead of the neutral private note', () => {
+    const w = mountWith(withMarket([createdListing({ hasBuyer: true, buyerIsOther: true })]));
+    const line = w.find('[data-testid="tx-intent-listing-buyer-other"]');
+    expect(line.text()).toBe('signTx.listingBuyerOther');
+    expect(line.classes()).toContain('error--text');
+    expect(w.find('[data-testid="tx-intent-listing-private"]').exists()).toBe(false);
+    expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
   });
 
   it('shows one block per created listing, each judged on its own terms', () => {

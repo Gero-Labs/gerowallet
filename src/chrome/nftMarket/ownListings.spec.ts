@@ -11,6 +11,7 @@ import {
   listedLovelace,
   ownListingIdentity,
   reviveOwnListings,
+  singleNftUnit,
   verifyOwnListing,
   type OwnListing,
   type OwnListingContext,
@@ -230,5 +231,23 @@ describe('listedLovelace and reviveOwnListings', () => {
     expect(reviveOwnListings([null, 5, { ref: 'x' }, ...good])).toEqual([listing('a#0', '2000000')]);
     expect(reviveOwnListings(undefined)).toEqual([]);
     expect(reviveOwnListings({})).toEqual([]);
+  });
+});
+
+// The one-NFT question verifyOwnListing asks of a listing UTxO, shared with the dApp approval
+// preview, which asks it of a listing a transaction creates.
+describe('singleNftUnit', () => {
+  const value = (assets?: Array<[string, bigint]>): Cardano.Value =>
+    ({ coins: 2_000_000n, assets: assets ? new Map(assets.map(([unit, quantity]) => [Cardano.AssetId(unit), quantity])) : undefined });
+
+  it('is the unit of exactly one asset held once', () => {
+    expect(singleNftUnit(value([[NFT, 1n]]))).toBe(NFT);
+  });
+
+  it('is null for no asset, the NFT twice, or a second asset', () => {
+    expect(singleNftUnit(value())).toBeNull();
+    expect(singleNftUnit(value([]))).toBeNull();
+    expect(singleNftUnit(value([[NFT, 2n]]))).toBeNull();
+    expect(singleNftUnit(value([[NFT, 1n], [`${'c'.repeat(56)}${Buffer.from('X').toString('hex')}`, 1n]]))).toBeNull();
   });
 });

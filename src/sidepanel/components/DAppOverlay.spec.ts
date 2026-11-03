@@ -552,7 +552,9 @@ describe('dApp signTx: a Gero listing the transaction creates', () => {
     WalletStore.state.loggedWallet = {
       ...WalletStore.state.loggedWallet, network: Network.PREPROD, encryptionMethod: 'prf',
     } as never;
-    WalletStore.state.keys = { payment: [{ address: OWN, cred: OWN_PAYMENT }], change: [], stake: [] } as never;
+    // The wallet's stake key is what a listing of its own sits under.
+    const rewardAddress = Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Testnet, key(STAKE)).toAddress().toBech32();
+    WalletStore.state.keys = { payment: [{ address: OWN, cred: OWN_PAYMENT }], change: [], stake: [{ address: rewardAddress, cred: STAKE }] } as never;
     expect(networks.resolveNftMarketDeployments(Blockchain.CARDANO, Network.PREPROD)).toEqual([V1]);
   });
 
@@ -579,6 +581,50 @@ describe('dApp signTx: a Gero listing the transaction creates', () => {
     const wrapper = render();
     await flushPromises();
     expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+  });
+
+  // Enter in the password field, and every other way into a signer, must wait for the same gate the
+  // Sign button does: the button is disabled, but the field's own handler is not the button.
+  const signTxCalls = () => mocks.send.mock.calls.filter(([message]) => message?.method === MessageTypes.SIGN_TX);
+
+  it('does not sign on Enter in the password field until the market acknowledgement is ticked', async () => {
+    WalletStore.state.loggedWallet = { ...WalletStore.state.loggedWallet, encryptionMethod: 'password' } as never;
+    mocks.send.mockResolvedValue({ data: { witnesses: 'a100' } });
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    const input = wrapper.find('[data-label="miniGero.spendingPassword"]');
+    await input.setValue('password');
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
+
+    await input.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(mocks.validate).not.toHaveBeenCalled();
+    expect(signTxCalls()).toHaveLength(0);
+    expect(mocks.approve).not.toHaveBeenCalled();
+
+    await wrapper.find('[data-testid="ack-market"]').trigger('click');
+    await input.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(signTxCalls()).toHaveLength(1);
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith('a100');
+  });
+
+  it('starts none of the signers (password, PassKey, Ledger, Trezor, Keystone) while the gate holds', async () => {
+    WalletStore.state.loggedWallet = { ...WalletStore.state.loggedWallet, encryptionMethod: 'password' } as never;
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    const signers = wrapper.vm as unknown as Record<'signNormal' | 'signPrf' | 'signLedger' | 'signTrezor' | 'signKeystone', () => Promise<unknown>>;
+    for (const name of ['signNormal', 'signPrf', 'signLedger', 'signTrezor', 'signKeystone'] as const) {
+      await signers[name]();
+      await flushPromises();
+    }
+    expect(mocks.validate).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
   });
 
   it('asks again for the next request: an acknowledgement is not carried over', async () => {
