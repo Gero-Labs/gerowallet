@@ -28,6 +28,8 @@ export class NftMarketResponseError extends Error {
 
 const HEX = /^(?:[0-9a-f]{2})*$/;
 const DECIMAL = /^[0-9]+$/;
+/** A decimal with no sign, no fraction and no leading zero ("0" is the only one that starts with 0). */
+const CANONICAL_DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 
 /** `txHash#outputIndex` as a collateral reference travels. */
 const COLLATERAL_REF = /^([0-9a-f]{64})#([0-9]+)$/;
@@ -85,6 +87,17 @@ export class ResponseReader {
   decimal(value: unknown, field: string): string {
     if (typeof value !== 'string' || !DECIMAL.test(value)) return this.fail(field);
     return value;
+  }
+
+  /**
+   * A non-negative integer in canonical decimal digits, as a bigint, for a field that is absent
+   * or null when there is none (null then). Anything else, including a leading zero or a number,
+   * is refused: the value is lovelace that gets compared and summed exactly.
+   */
+  optionalCanonicalDecimal(value: unknown, field: string): bigint | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string' || !CANONICAL_DECIMAL.test(value)) return this.fail(field);
+    return BigInt(value);
   }
 
   /** A non-negative integer JSON number. */

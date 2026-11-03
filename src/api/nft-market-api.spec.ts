@@ -72,6 +72,16 @@ const ROYALTIES: RoyaltyInfo = {
   source: 'cip102',
   rate: 0.05,
   recipients: [
+    { address: ROYALTY_ADDRESS, rate: 0.03, minFeeLovelace: null, maxFeeLovelace: null },
+    { address: SELLER, rate: 0.02, minFeeLovelace: null, maxFeeLovelace: null },
+  ],
+};
+
+/** The same terms as they travel: the CIP-102 fee bounds are decimal strings or null. */
+const ROYALTIES_WIRE = {
+  source: 'cip102',
+  rate: 0.05,
+  recipients: [
     { address: ROYALTY_ADDRESS, rate: 0.03 },
     { address: SELLER, rate: 0.02 },
   ],
@@ -413,8 +423,113 @@ describe('nftMarketApi.royalties', () => {
   });
 
   it('copies only the contract fields', async () => {
-    answer({ ...ROYALTIES, injected: 1, recipients: [{ ...ROYALTIES.recipients[0], extra: 1 }, ROYALTIES.recipients[1]] });
+    answer({ ...ROYALTIES_WIRE, injected: 1, recipients: [{ ...ROYALTIES_WIRE.recipients[0], extra: 1 }, ROYALTIES_WIRE.recipients[1]] });
     expect(await nftMarketApi.royalties(POLICY, Network.PREPROD)).toEqual(ROYALTIES);
+  });
+
+  describe('CIP-102 fee bounds', () => {
+    const one = (bounds: Record<string, unknown>) => ({
+      source: 'cip102',
+      rate: 0.05,
+      recipients: [{ address: ROYALTY_ADDRESS, rate: 0.05, ...bounds }],
+    });
+    const read = async () => (await nftMarketApi.royalties(POLICY, Network.PREPROD)).recipients[0];
+
+    it('reads absent bounds as null', async () => {
+      answer(one({}));
+      const recipient = await read();
+      expect(recipient.minFeeLovelace).toBeNull();
+      expect(recipient.maxFeeLovelace).toBeNull();
+    });
+
+    it('reads null bounds as null', async () => {
+      answer(one({ minFeeLovelace: null, maxFeeLovelace: null }));
+      const recipient = await read();
+      expect(recipient.minFeeLovelace).toBeNull();
+      expect(recipient.maxFeeLovelace).toBeNull();
+    });
+
+    it('reads decimal-string bounds as bigint', async () => {
+      answer(one({ minFeeLovelace: '1000000', maxFeeLovelace: '10000000' }));
+      const recipient = await read();
+      expect(recipient.minFeeLovelace).toBe(1_000_000n);
+      expect(recipient.maxFeeLovelace).toBe(10_000_000n);
+    });
+
+    it('reads one bound without the other', async () => {
+      answer(one({ maxFeeLovelace: '10000000' }));
+      expect(await read()).toMatchObject({ minFeeLovelace: null, maxFeeLovelace: 10_000_000n });
+      answer(one({ minFeeLovelace: '5000000', maxFeeLovelace: null }));
+      expect(await read()).toMatchObject({ minFeeLovelace: 5_000_000n, maxFeeLovelace: null });
+    });
+
+    it('reads bounds beyond 2^53 without rounding', async () => {
+      answer(one({ minFeeLovelace: '9007199254740993', maxFeeLovelace: '18446744073709551615' }));
+      const recipient = await read();
+      expect(recipient.minFeeLovelace).toBe(9_007_199_254_740_993n);
+      expect(recipient.maxFeeLovelace).toBe(18_446_744_073_709_551_615n);
+    });
+
+    it('accepts zero and a min equal to the max', async () => {
+      answer(one({ minFeeLovelace: '0', maxFeeLovelace: '0' }));
+      expect(await read()).toMatchObject({ minFeeLovelace: 0n, maxFeeLovelace: 0n });
+      answer(one({ minFeeLovelace: '3000000', maxFeeLovelace: '3000000' }));
+      expect(await read()).toMatchObject({ minFeeLovelace: 3_000_000n, maxFeeLovelace: 3_000_000n });
+    });
+
+    it('reads each recipient on its own', async () => {
+      answer({
+        source: 'cip102',
+        rate: 0.05,
+        recipients: [
+          { address: ROYALTY_ADDRESS, rate: 0.03, minFeeLovelace: '1000000', maxFeeLovelace: null },
+          { address: SELLER, rate: 0.02 },
+        ],
+      });
+      const { recipients } = await nftMarketApi.royalties(POLICY, Network.PREPROD);
+      expect(recipients[0]).toMatchObject({ minFeeLovelace: 1_000_000n, maxFeeLovelace: null });
+      expect(recipients[1]).toMatchObject({ minFeeLovelace: null, maxFeeLovelace: null });
+    });
+
+    it.each([
+      ['a min above the max', { minFeeLovelace: '10000001', maxFeeLovelace: '10000000' }],
+      ['a number', { minFeeLovelace: 1_000_000 }],
+      ['a number for the max', { maxFeeLovelace: 10_000_000 }],
+      ['a bigint-looking string with a sign', { minFeeLovelace: '-1' }],
+      ['a plus sign', { maxFeeLovelace: '+5' }],
+      ['a fraction', { minFeeLovelace: '1.5' }],
+      ['a zero fraction', { maxFeeLovelace: '5.0' }],
+      ['an exponent', { maxFeeLovelace: '1e7' }],
+      ['hex', { minFeeLovelace: '0x10' }],
+      ['an empty string', { minFeeLovelace: '' }],
+      ['padding spaces', { maxFeeLovelace: ' 5' }],
+      ['a trailing space', { maxFeeLovelace: '5 ' }],
+      ['a leading zero', { minFeeLovelace: '05' }],
+      ['a double zero', { maxFeeLovelace: '00' }],
+      ['an Arabic-Indic digit', { minFeeLovelace: '\u0665' }],
+      ['an object', { minFeeLovelace: {} }],
+      ['a boolean', { maxFeeLovelace: false }],
+      ['an array', { maxFeeLovelace: ['5'] }],
+    ])('rejects %s', async (_, bounds) => {
+      answer(one(bounds));
+      await expect(nftMarketApi.royalties(POLICY, Network.PREPROD)).rejects.toBeInstanceOf(NftMarketResponseError);
+    });
+
+    it('names the failing recipient field and never its value', async () => {
+      answer({
+        source: 'cip102',
+        rate: 0.05,
+        recipients: [
+          { address: ROYALTY_ADDRESS, rate: 0.03 },
+          { address: SELLER, rate: 0.02, minFeeLovelace: '90000007', maxFeeLovelace: '30000007' },
+        ],
+      });
+      const failure = await nftMarketApi.royalties(POLICY, Network.PREPROD).catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(NftMarketResponseError);
+      expect((failure as NftMarketResponseError).field).toBe('recipients[1].minFeeLovelace');
+      expect((failure as Error).message).not.toContain('90000007');
+      expect((failure as Error).message).not.toContain('30000007');
+    });
   });
 
   it('refuses a network Nexus has no slug for, without a request', async () => {

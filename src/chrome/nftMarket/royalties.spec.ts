@@ -21,11 +21,31 @@ const CREATOR_C = 'addr1qxcreatorc0000000000000000000000000000000000000000000000
 const CREATOR_D = 'addr1qxcreatord0000000000000000000000000000000000000000000000000000000000000000000000';
 const CREATOR_E = 'addr1qxcreatore0000000000000000000000000000000000000000000000000000000000000000000000';
 
-/** A CIP-27 or CIP-102 answer whose total is the sum of its recipients (as Nexus sends it). */
-function info(recipients: { address: string; rate: number }[], total?: number, source: RoyaltyInfo['source'] = 'cip27'): RoyaltyInfo {
-  const sum = recipients.reduce((s, r) => s + r.rate, 0);
-  return { source, rate: total ?? sum, recipients };
+/** A recipient as the test writes it: the CIP-102 fee bounds are optional and default to none. */
+interface Terms {
+  address: string;
+  rate: number;
+  min?: bigint | null;
+  max?: bigint | null;
 }
+
+/** A CIP-27 or CIP-102 answer whose total is the sum of its recipients (as Nexus sends it). */
+function info(recipients: Terms[], total?: number, source: RoyaltyInfo['source'] = 'cip27'): RoyaltyInfo {
+  const sum = recipients.reduce((s, r) => s + r.rate, 0);
+  return {
+    source,
+    rate: total ?? sum,
+    recipients: recipients.map((r) => ({
+      address: r.address,
+      rate: r.rate,
+      minFeeLovelace: r.min ?? null,
+      maxFeeLovelace: r.max ?? null,
+    })),
+  };
+}
+
+/** CIP-102 terms: the same, with the source set. */
+const cip102 = (recipients: Terms[], total?: number): RoyaltyInfo => info(recipients, total, 'cip102');
 
 describe('computeRoyalties: amounts', () => {
   it('pays 5% of 100 ADA to one recipient, exactly 5 ADA', () => {
@@ -133,9 +153,7 @@ describe('computeRoyalties: none and empty terms', () => {
 
   it('treats a none source that carries a rate or recipients as malformed', () => {
     expect(computeRoyalties(100n * ADA, { source: 'none', rate: 0.05, recipients: [] }, OPTS).malformed).toBe(true);
-    expect(
-      computeRoyalties(100n * ADA, { source: 'none', rate: 0, recipients: [{ address: CREATOR_A, rate: 0.05 }] }, OPTS).malformed,
-    ).toBe(true);
+    expect(computeRoyalties(100n * ADA, info([{ address: CREATOR_A, rate: 0.05 }], 0, 'none'), OPTS).malformed).toBe(true);
   });
 });
 
@@ -372,7 +390,17 @@ describe('computeRoyalties: malformed terms give no royalty and a flag', () => {
   });
 
   it('flags a source it does not know and a recipients list that is not a list', () => {
-    none(computeRoyalties(100n * ADA, { source: 'cip99' as RoyaltyInfo['source'], rate: 0.05, recipients: [{ address: CREATOR_A, rate: 0.05 }] }, OPTS));
+    none(
+      computeRoyalties(
+        100n * ADA,
+        {
+          source: 'cip99' as RoyaltyInfo['source'],
+          rate: 0.05,
+          recipients: [{ address: CREATOR_A, rate: 0.05, minFeeLovelace: null, maxFeeLovelace: null }],
+        },
+        OPTS,
+      ),
+    );
     none(computeRoyalties(100n * ADA, { source: 'cip27', rate: 0.05, recipients: null as unknown as RoyaltyInfo['recipients'] }, OPTS));
   });
 
@@ -421,5 +449,267 @@ describe('computeRoyalties: unusable addresses', () => {
     expect(r.needsConfirmation).toBe(true);
     expect(r.invalidRecipients).toBe(1);
     expect(r.royalties).toEqual([]);
+  });
+});
+
+describe('computeRoyalties: CIP-102 fee bounds', () => {
+  // CIP-102: royalty = max(min_fee, min(max_fee, floor(price x rate))), a bound that is absent is ignored.
+  const one = (min: bigint | null, max: bigint | null, rate = 0.05) => cip102([{ address: CREATOR_A, rate, min, max }]);
+
+  it('caps a 5% royalty on a 10 000 ADA sale at the 10 ADA maximum, not 500 ADA', () => {
+    const r = computeRoyalties(10_000n * ADA, one(null, 10n * ADA), OPTS);
+    expect(r.royalties).toEqual([{ address: CREATOR_A, lovelace: 10_000_000n }]);
+    expect(r.needsConfirmation).toBe(false);
+    expect(r.malformed).toBe(false);
+    // The collection's rate is still reported as it is.
+    expect(r.rate).toBe(0.05);
+  });
+
+  it('leaves the rate amount alone when it is under the maximum', () => {
+    const r = computeRoyalties(100n * ADA, one(null, 10n * ADA), OPTS);
+    expect(r.royalties).toEqual([{ address: CREATOR_A, lovelace: 5_000_000n }]);
+  });
+
+  it('raises a small royalty to the minimum: 1% of 100 ADA with a 5 ADA floor pays 5 ADA', () => {
+    const r = computeRoyalties(100n * ADA, one(5n * ADA, null, 0.01), OPTS);
+    expect(r.royalties).toEqual([{ address: CREATOR_A, lovelace: 5_000_000n }]);
+    // 5 ADA is 5% of 100 ADA: under the cap, so no question for the seller.
+    expect(r.needsConfirmation).toBe(false);
+  });
+
+  it('leaves the rate amount alone when it is over the minimum', () => {
+    const r = computeRoyalties(100n * ADA, one(2n * ADA, null, 0.05), OPTS);
+    expect(r.royalties).toEqual([{ address: CREATOR_A, lovelace: 5_000_000n }]);
+  });
+
+  it('applies both bounds: under the floor, between them and over the cap', () => {
+    const bounded = (price: bigint) => computeRoyalties(price, one(2n * ADA, 10n * ADA), OPTS).royalties[0].lovelace;
+    expect(bounded(30n * ADA)).toBe(2_000_000n); // 1.5 ADA -> minimum 2 ADA
+    expect(bounded(100n * ADA)).toBe(5_000_000n); // 5 ADA, between
+    expect(bounded(10_000n * ADA)).toBe(10_000_000n); // 500 ADA -> cap 10 ADA
+  });
+
+  it('switches from the minimum to the rate amount exactly where the rate amount reaches it', () => {
+    // 5% of 40 ADA is exactly 2 ADA, the minimum.
+    const paid = (price: bigint) => computeRoyalties(price, one(2n * ADA, null), OPTS).royalties[0].lovelace;
+    expect(paid(39_999_999n)).toBe(2_000_000n); // rate amount 1 999 999 -> raised to the minimum
+    expect(paid(40n * ADA)).toBe(2_000_000n);
+    expect(paid(40_000_020n)).toBe(2_000_001n); // rate amount 2 000 001 is over it
+    expect(paid(60n * ADA)).toBe(3_000_000n);
+  });
+
+  it('switches from the rate amount to the maximum exactly where the rate amount passes it', () => {
+    const paid = (price: bigint) => computeRoyalties(price, one(null, 10n * ADA), OPTS).royalties[0].lovelace;
+    expect(paid(199_999_980n)).toBe(9_999_999n); // rate amount 9 999 999
+    expect(paid(200n * ADA)).toBe(10_000_000n);
+    expect(paid(200_000_020n)).toBe(10_000_000n); // rate amount 10 000 001 -> capped
+  });
+
+  it('ignores null bounds: the amount is floor(price x rate), as for CIP-27', () => {
+    const withNulls = computeRoyalties(100n * ADA, one(null, null), OPTS);
+    const plain = computeRoyalties(100n * ADA, info([{ address: CREATOR_A, rate: 0.05 }]), OPTS);
+    expect(withNulls).toEqual(plain);
+    expect(withNulls.royalties).toEqual([{ address: CREATOR_A, lovelace: 5_000_000n }]);
+  });
+
+  it('ignores bounds that are missing altogether (a recipient from before the fields existed)', () => {
+    const legacy: RoyaltyInfo = { source: 'cip27', rate: 0.05, recipients: [{ address: CREATOR_A, rate: 0.05 } as RoyaltyInfo['recipients'][number]] };
+    expect(computeRoyalties(100n * ADA, legacy, OPTS).royalties).toEqual([{ address: CREATOR_A, lovelace: 5_000_000n }]);
+  });
+
+  it('leaves CIP-27 terms unchanged', () => {
+    const terms = info([
+      { address: CREATOR_A, rate: 0.05 },
+      { address: CREATOR_B, rate: 0.025 },
+    ]);
+    expect(computeRoyalties(10_000n * ADA, terms, OPTS).royalties).toEqual([
+      { address: CREATOR_A, lovelace: 500_000_000n },
+      { address: CREATOR_B, lovelace: 250_000_000n },
+    ]);
+  });
+
+  it('bounds each recipient on its own', () => {
+    const r = computeRoyalties(
+      1_000n * ADA,
+      cip102([
+        { address: CREATOR_A, rate: 0.05, max: 10n * ADA }, // 50 ADA -> 10 ADA
+        { address: CREATOR_B, rate: 0.02 }, // 20 ADA, no bounds
+        { address: CREATOR_C, rate: 0.001, min: 3n * ADA }, // 1 ADA -> 3 ADA
+      ]),
+      OPTS,
+    );
+    expect(r.royalties).toEqual([
+      { address: CREATOR_A, lovelace: 10_000_000n },
+      { address: CREATOR_B, lovelace: 20_000_000n },
+      { address: CREATOR_C, lovelace: 3_000_000n },
+    ]);
+  });
+
+  it('keeps the exact bigint math beyond 2^53 lovelace', () => {
+    const odd = 9_007_199_254_740_993n; // not representable as a double
+    const capped = computeRoyalties(odd * 1000n, one(null, odd), OPTS);
+    expect(capped.royalties[0].lovelace).toBe(odd);
+    const raised = computeRoyalties(10n ** 20n, one(odd, null, 0.00001), OPTS); // rate amount 10^15 is under the minimum
+    expect(raised.royalties[0].lovelace).toBe(odd);
+  });
+
+  describe('the 10% question is about what is actually paid', () => {
+    it('asks when a minimum pushes the effective royalty above 10% though the rate is 1%', () => {
+      // 1% of 100 ADA with a 20 ADA floor is 20 ADA: 20%.
+      const terms = one(20n * ADA, null, 0.01);
+      const asked = computeRoyalties(100n * ADA, terms, OPTS);
+      expect(asked.needsConfirmation).toBe(true);
+      expect(asked.royalties).toEqual([]);
+      expect(asked.dropped).toEqual([]);
+      expect(asked.malformed).toBe(false);
+      expect(asked.rate).toBe(0.01);
+      const confirmed = computeRoyalties(100n * ADA, terms, { ...OPTS, confirmAboveCap: true });
+      expect(confirmed.needsConfirmation).toBe(false);
+      expect(confirmed.royalties).toEqual([{ address: CREATOR_A, lovelace: 20_000_000n }]);
+    });
+
+    it('still asks when the rate total is above 10% and the bounds leave the effective royalty above 10% too', () => {
+      const r = computeRoyalties(100n * ADA, one(null, 50n * ADA, 0.12), OPTS);
+      expect(r.needsConfirmation).toBe(true);
+      expect(r.royalties).toEqual([]);
+    });
+
+    it('asks when the RATE total is above 10% even if a maximum brings the effective royalty under it', () => {
+      // Either test is enough: 12% of 100 ADA capped at 2 ADA is 2% effective, but the collection's
+      // rate is over the line, so the seller is still asked, and once confirmed pays the clamped 2 ADA.
+      const terms = one(null, 2n * ADA, 0.12);
+      const asked = computeRoyalties(100n * ADA, terms, OPTS);
+      expect(asked.needsConfirmation).toBe(true);
+      expect(asked.royalties).toEqual([]);
+      expect(asked.rate).toBe(0.12);
+      const confirmed = computeRoyalties(100n * ADA, terms, { ...OPTS, confirmAboveCap: true });
+      expect(confirmed.needsConfirmation).toBe(false);
+      expect(confirmed.royalties).toEqual([{ address: CREATOR_A, lovelace: 2_000_000n }]);
+    });
+
+    it('does not ask when both the rate total and the effective royalty are at or under 10%', () => {
+      const r = computeRoyalties(100n * ADA, one(null, 8n * ADA, 0.1), OPTS);
+      expect(r.needsConfirmation).toBe(false);
+      expect(r.royalties).toEqual([{ address: CREATOR_A, lovelace: 8_000_000n }]);
+    });
+
+    it('does not ask at exactly 10% effective, and asks one lovelace above', () => {
+      // 10% of 100 ADA is 10 ADA. A floor of exactly 10 ADA on a 1% rate: 10% effective.
+      const exact = computeRoyalties(100n * ADA, one(10n * ADA, null, 0.01), OPTS);
+      expect(exact.needsConfirmation).toBe(false);
+      expect(exact.royalties).toEqual([{ address: CREATOR_A, lovelace: 10_000_000n }]);
+      const above = computeRoyalties(100n * ADA, one(10_000_001n, null, 0.01), OPTS);
+      expect(above.needsConfirmation).toBe(true);
+    });
+
+    it('is exact on odd prices: the effective total x 10 against the price, no rounding', () => {
+      // price 100_000_001: 10% is 10_000_000.1, so a total of 10_000_000 passes and 10_000_001 asks.
+      const price = 100_000_001n;
+      expect(computeRoyalties(price, one(10_000_000n, null, 0.01), OPTS).needsConfirmation).toBe(false);
+      expect(computeRoyalties(price, one(10_000_001n, null, 0.01), OPTS).needsConfirmation).toBe(true);
+    });
+
+    it('adds the effective royalties of all recipients: 6 ADA + 6 ADA of 100 ADA is 12%', () => {
+      const terms = cip102([
+        { address: CREATOR_A, rate: 0.01, min: 6n * ADA },
+        { address: CREATOR_B, rate: 0.01, min: 6n * ADA },
+      ]);
+      expect(computeRoyalties(100n * ADA, terms, OPTS).needsConfirmation).toBe(true);
+    });
+
+    it('counts an entry that gets dropped, and one with an unusable address, toward the effective total', () => {
+      const dropped = cip102([
+        { address: CREATOR_A, rate: 0.03 },
+        { address: CREATOR_B, rate: 0.03 },
+        { address: CREATOR_C, rate: 0.03 },
+        { address: CREATOR_D, rate: 0.01, min: 2n * ADA }, // 4 entries: the smallest is left out for the count
+      ]);
+      // 3 + 3 + 3 + 2 = 11 ADA of 100 ADA: over the line although no rate total is above 10%.
+      expect(computeRoyalties(100n * ADA, dropped, OPTS).needsConfirmation).toBe(true);
+      const unusable = cip102([
+        { address: '', rate: 0.01, min: 11n * ADA },
+        { address: CREATOR_A, rate: 0.01 },
+      ]);
+      const r = computeRoyalties(100n * ADA, unusable, OPTS);
+      expect(r.needsConfirmation).toBe(true);
+      expect(r.invalidRecipients).toBe(1);
+    });
+
+    it('flags royalties that would cost more than the whole price, even once confirmed', () => {
+      const r = computeRoyalties(10n * ADA, one(11n * ADA, null, 0.01), { ...OPTS, confirmAboveCap: true });
+      expect(r.malformed).toBe(true);
+      expect(r.royalties).toEqual([]);
+      expect(r.needsConfirmation).toBe(false);
+    });
+  });
+
+  describe('dropped, min-UTxO and the royalty count follow the clamp', () => {
+    it('keeps an entry the minimum raised over min-UTxO although its rate amount was under it', () => {
+      // 0.5% of 100 ADA is 0.5 ADA (dropped on its own); a 1.5 ADA minimum makes it 1.5 ADA.
+      const r = computeRoyalties(100n * ADA, one(1_500_000n, null, 0.005), OPTS);
+      expect(r.royalties).toEqual([{ address: CREATOR_A, lovelace: 1_500_000n }]);
+      expect(r.dropped).toEqual([]);
+    });
+
+    it('drops an entry the maximum pulled under min-UTxO', () => {
+      // 5% of 1000 ADA is 50 ADA, capped at 1 ADA, under the 1.2 ADA an output needs.
+      const r = computeRoyalties(1_000n * ADA, one(null, 1n * ADA), OPTS);
+      expect(r.royalties).toEqual([]);
+      expect(r.dropped).toEqual([{ address: CREATOR_A, lovelace: 1_000_000n }]);
+    });
+
+    it('keeps the three largest CLAMPED amounts, ties broken by address', () => {
+      const r = computeRoyalties(
+        1_000n * ADA,
+        cip102([
+          { address: CREATOR_A, rate: 0.05, max: 2n * ADA }, // 50 -> 2 ADA
+          { address: CREATOR_B, rate: 0.01 }, // 10 ADA
+          { address: CREATOR_C, rate: 0.001, min: 3n * ADA }, // 1 -> 3 ADA
+          { address: CREATOR_D, rate: 0.002 }, // 2 ADA
+        ]),
+        OPTS,
+      );
+      // Largest first: B 10, C 3, then A and D tie at 2 ADA and A (the smaller address) wins.
+      expect(r.royalties).toEqual([
+        { address: CREATOR_A, lovelace: 2_000_000n },
+        { address: CREATOR_B, lovelace: 10_000_000n },
+        { address: CREATOR_C, lovelace: 3_000_000n },
+      ]);
+      expect(r.dropped).toEqual([{ address: CREATOR_D, lovelace: 2_000_000n }]);
+    });
+
+    it('never keeps a zero amount: a 0 maximum pays nothing', () => {
+      const r = computeRoyalties(100n * ADA, one(null, 0n), OPTS);
+      expect(r.royalties).toEqual([]);
+      expect(r.dropped).toEqual([{ address: CREATOR_A, lovelace: 0n }]);
+    });
+
+    it('owes the minimum even at a 0% rate, and nothing when there is no minimum', () => {
+      const owed = computeRoyalties(100n * ADA, cip102([{ address: CREATOR_A, rate: 0, min: 2n * ADA }], 0), OPTS);
+      expect(owed.royalties).toEqual([{ address: CREATOR_A, lovelace: 2_000_000n }]);
+      const free = computeRoyalties(100n * ADA, cip102([{ address: CREATOR_A, rate: 0, min: 0n }], 0), OPTS);
+      expect(free.royalties).toEqual([]);
+      expect(free.dropped).toEqual([]);
+    });
+  });
+
+  describe('malformed bounds', () => {
+    it.each([
+      ['a min above the max', 5n * ADA, 1n * ADA],
+      ['a negative min', -1n, null],
+      ['a negative max', null, -1n],
+    ])('flags %s', (_, min, max) => {
+      const r = computeRoyalties(100n * ADA, one(min, max), OPTS);
+      expect(r).toEqual({ royalties: [], dropped: [], rate: 0, needsConfirmation: false, malformed: true, invalidRecipients: 0 });
+    });
+
+    it('flags a bound that is not a bigint', () => {
+      const terms = one(null, null);
+      (terms.recipients[0] as { maxFeeLovelace: unknown }).maxFeeLovelace = '10000000';
+      expect(computeRoyalties(100n * ADA, terms, OPTS).malformed).toBe(true);
+      const numeric = one(null, null);
+      (numeric.recipients[0] as { minFeeLovelace: unknown }).minFeeLovelace = 5_000_000;
+      expect(computeRoyalties(100n * ADA, numeric, OPTS).malformed).toBe(true);
+    });
   });
 });

@@ -7,18 +7,27 @@
 // here is what the seller, every buyer and the verifier of the built transaction will hold the
 // listing to (spec 5.7 "Royalties").
 //
-// Rules (spec 5.7):
+// Rules (spec 5.7, Ruling P27):
 //  - the amount of each entry is floor(price x rate), in lovelace, exact. A rate arrives as a JS
 //    number and is converted to an exact fraction of 10^12 from its decimal text before it meets a
 //    lovelace amount, so no float multiplication touches money (100 ADA x 0.0157 must be
 //    1_570_000, not the 1_569_999 that Math.floor(1e8 * 0.0157) gives);
-//  - the TOTAL rate across recipients is capped at ROYALTY_RATE_CAP: above it nothing is computed
-//    until the seller confirms, and then the rate is applied as it is;
+//  - a CIP-102 recipient may carry a minimum and a maximum fee, and the amount is then
+//    max(min, min(max, floor(price x rate))) (CIP-102), an absent bound ignored. Without the clamp
+//    a 5% royalty with a 10 ADA maximum would write 500 ADA into a 10 000 ADA listing instead of
+//    10. Everything below (the cap question, min-UTxO, the royalty count) works on the clamped
+//    amounts;
+//  - the 10% cap is judged twice: on the TOTAL rate across recipients and on the EFFECTIVE total
+//    (the sum of the clamped amounts, as a share of the price, compared exactly in bigint). Either
+//    one above ROYALTY_RATE_CAP means nothing is computed until the seller confirms, and then the
+//    entries are applied as they are. A minimum can push a 1% royalty far above 10%; a maximum can
+//    bring a 12% rate under it, and the rate total still asks;
 //  - an entry under the output's min-UTxO is left out (`dropped`, for the list sheet to show the
 //    seller), because the builder would otherwise raise it and the buyer would pay the gap;
 //  - at most MAX_ROYALTIES entries are kept: the largest by amount, ties broken by address so the
 //    same terms always keep the same entries, in the order the collection gave them;
-//  - terms that contradict themselves produce no royalty and a flag, never a guess.
+//  - terms that contradict themselves (including a minimum above a maximum, or royalties that cost
+//    more than the whole price) produce no royalty and a flag, never a guess.
 //
 // Addresses pass through unchanged. Checking an address's shape and network belongs to whoever
 // turns the result into a list intent; only an entry with no address at all is dropped here.
@@ -41,15 +50,21 @@ export interface RoyaltyComputation {
   dropped: Payee[];
   /**
    * The total rate the collection asks for, a fraction from 0 to 1: the sum of its recipients'
-   * rates, including entries that were dropped. 0 when the terms are malformed.
+   * rates, including entries that were dropped. It is the rate, not what is paid: fee bounds can
+   * make the royalties cost more or less. 0 when the terms are malformed.
    */
   rate: number;
-  /** The total is above ROYALTY_RATE_CAP and the seller has not confirmed: nothing was computed. */
+  /**
+   * The total rate, or the total the clamped royalties actually cost, is above ROYALTY_RATE_CAP
+   * (of the price) and the seller has not confirmed: nothing was computed.
+   */
   needsConfirmation: boolean;
   /**
    * The terms contradict themselves (a rate outside 0..1, a total that is not the sum of its
-   * recipients, a `none` source that carries a rate, an unknown source): no royalty was computed
-   * and the caller should say the collection's royalty terms could not be read.
+   * recipients, a `none` source that carries a rate, an unknown source, a fee bound that is not a
+   * non-negative bigint or a minimum above its maximum, royalties that add up to more than the
+   * price): no royalty was computed and the caller should say the collection's royalty terms could
+   * not be read.
    */
   malformed: boolean;
   /** Entries dropped because they had no usable address (not in `dropped`: there is no address to show). */
@@ -103,6 +118,8 @@ interface Entry {
   index: number;
   address: string;
   units: bigint;
+  minFee: bigint | null;
+  maxFee: bigint | null;
 }
 
 interface PricedEntry extends Entry {
@@ -111,6 +128,23 @@ interface PricedEntry extends Entry {
 
 function usableAddress(address: unknown): address is string {
   return typeof address === 'string' && address.trim().length > 0;
+}
+
+/**
+ * A fee bound: a non-negative bigint, or null when the collection sets none (a recipient from
+ * before the bounds existed has the field missing, which reads as none). `false` for anything else.
+ */
+function feeBound(value: unknown): bigint | null | false {
+  if (value === undefined || value === null) return null;
+  return typeof value === 'bigint' && value >= 0n ? value : false;
+}
+
+/** CIP-102: max(min, min(max, floor(price x rate))), a null bound ignored. Exact, all bigint. */
+function clamped(price: bigint, units: bigint, minFee: bigint | null, maxFee: bigint | null): bigint {
+  let lovelace = (price * units) / RATE_SCALE;
+  if (maxFee !== null && lovelace > maxFee) lovelace = maxFee;
+  if (minFee !== null && lovelace < minFee) lovelace = minFee;
+  return lovelace;
 }
 
 /**
@@ -129,20 +163,27 @@ export function computeRoyalties(price: bigint, info: RoyaltyInfo, opts: Royalty
   const claimed = rateUnits(info.rate);
   if (claimed === null) return malformedTerms();
 
-  // Every recipient's rate, valid or not, counts toward the total.
+  // Every recipient's rate and clamped amount, valid address or not, counts toward the totals.
   const entries: Entry[] = [];
   let total = 0n;
+  let effective = 0n;
   let invalidRecipients = 0;
   for (const [index, raw] of info.recipients.entries()) {
     const units = rateUnits(raw?.rate);
     if (units === null) return malformedTerms();
+    const minFee = feeBound(raw.minFeeLovelace);
+    const maxFee = feeBound(raw.maxFeeLovelace);
+    if (minFee === false || maxFee === false) return malformedTerms();
+    if (minFee !== null && maxFee !== null && minFee > maxFee) return malformedTerms();
     total += units;
-    if (units === 0n) continue; // a 0% entry owes nothing: it is not a royalty to leave out
+    effective += clamped(price, units, minFee, maxFee);
+    // A 0% entry with no minimum owes nothing: it is not a royalty to leave out.
+    if (units === 0n && (minFee === null || minFee === 0n)) continue;
     if (!usableAddress(raw.address)) {
       invalidRecipients++;
       continue;
     }
-    entries.push({ index, address: raw.address, units });
+    entries.push({ index, address: raw.address, units, minFee, maxFee });
   }
 
   // The collection's own total must be what its recipients add up to, and a `none` source must
@@ -151,12 +192,19 @@ export function computeRoyalties(price: bigint, info: RoyaltyInfo, opts: Royalty
   if (gap > RATE_TOLERANCE) return malformedTerms();
   if (info.source === 'none' && (total !== 0n || claimed !== 0n)) return malformedTerms();
 
+  // Royalties that cost more than the whole price leave the seller nothing to be paid out of: the
+  // terms cannot be honoured, confirmed or not (the amount analogue of a total rate above 1).
+  if (effective > price) return malformedTerms();
+
   const rate = unitsToRate(total);
-  if (total > CAP_UNITS && !opts.confirmAboveCap) {
+  // effective / price > CAP_UNITS / RATE_SCALE, cross-multiplied so nothing is rounded (for the
+  // 10% cap this is effective x 10 > price).
+  const overCap = total > CAP_UNITS || effective * RATE_SCALE > price * CAP_UNITS;
+  if (overCap && !opts.confirmAboveCap) {
     return { royalties: [], dropped: [], rate, needsConfirmation: true, malformed: false, invalidRecipients };
   }
 
-  const priced: PricedEntry[] = entries.map((e) => ({ ...e, lovelace: (price * e.units) / RATE_SCALE }));
+  const priced: PricedEntry[] = entries.map((e) => ({ ...e, lovelace: clamped(price, e.units, e.minFee, e.maxFee) }));
   const keep = new Set(
     priced
       .filter((e) => e.lovelace > 0n && e.lovelace >= opts.minUtxo)

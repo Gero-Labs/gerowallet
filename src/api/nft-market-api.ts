@@ -91,12 +91,32 @@ export interface ListingRef {
   outputIndex: number;
 }
 
-/** A collection's royalty terms, read from its policy's own on-chain metadata. */
+/** One royalty recipient of a collection. */
+export interface RoyaltyRecipient {
+  address: string;
+  /** This recipient's share, a fraction from 0 to 1. */
+  rate: number;
+  /**
+   * CIP-102 minimum fee, lovelace: the royalty is never less than this. `null` when the collection
+   * sets none (always for CIP-27).
+   */
+  minFeeLovelace: bigint | null;
+  /**
+   * CIP-102 maximum fee, lovelace: the royalty is never more than this. `null` when the collection
+   * sets none (always for CIP-27). Never below `minFeeLovelace` when both are set.
+   */
+  maxFeeLovelace: bigint | null;
+}
+
+/**
+ * A collection's royalty terms, read from its policy's own on-chain metadata. Each recipient's
+ * royalty is `max(minFee, min(maxFee, floor(price x rate)))` with an absent bound ignored.
+ */
 export interface RoyaltyInfo {
   source: 'cip27' | 'cip102' | 'none';
   /** The total, a fraction from 0 to 1. */
   rate: number;
-  recipients: { address: string; rate: number }[];
+  recipients: RoyaltyRecipient[];
 }
 
 /** Most listings Nexus returns in one page. */
@@ -246,7 +266,8 @@ export const nftMarketApi = {
   /**
    * The royalty terms of a policy (`GET /api/nft-market/royalties/{policyId}`), from the
    * policy's own on-chain metadata (CIP-27 or CIP-102), `none` when it has none. Rates are
-   * fractions from 0 to 1.
+   * fractions from 0 to 1. A CIP-102 recipient may carry `minFeeLovelace` / `maxFeeLovelace`
+   * (canonical decimal strings; absent or null reads as `null`, as does every CIP-27 recipient).
    */
   async royalties(policyId: string, network: string): Promise<RoyaltyInfo> {
     const nexusNetwork = marketNetwork(network);
@@ -260,9 +281,17 @@ export const nftMarketApi = {
       rate: r.rate(body['rate'], 'rate'),
       recipients: r.array(body['recipients'], 'recipients').map((raw, i) => {
         const recipient = r.record(raw, `recipients[${i}]`);
+        const minFeeLovelace = r.optionalCanonicalDecimal(recipient['minFeeLovelace'], `recipients[${i}].minFeeLovelace`);
+        const maxFeeLovelace = r.optionalCanonicalDecimal(recipient['maxFeeLovelace'], `recipients[${i}].maxFeeLovelace`);
+        // A minimum above the maximum has no royalty to give: the terms cannot be read.
+        if (minFeeLovelace !== null && maxFeeLovelace !== null && minFeeLovelace > maxFeeLovelace) {
+          r.fail(`recipients[${i}].minFeeLovelace`);
+        }
         return {
           address: r.string(recipient['address'], `recipients[${i}].address`),
           rate: r.rate(recipient['rate'], `recipients[${i}].rate`),
+          minFeeLovelace,
+          maxFeeLovelace,
         };
       }),
     };
