@@ -32,7 +32,7 @@
 // Addresses pass through unchanged. Checking an address's shape and network belongs to whoever
 // turns the result into a list intent; only an entry with no address at all is dropped here.
 
-import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Cardano } from '@cardano-sdk/core';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
@@ -40,6 +40,7 @@ import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
 import type { Payee } from './listingDatum';
+import { effectiveCoinsPerUtxoByte, minUtxoOf } from './minUtxo';
 
 export interface RoyaltyOptions {
   /** The seller has accepted a total above ROYALTY_RATE_CAP. */
@@ -258,8 +259,7 @@ export function royaltyOutputMinUtxo(coinsPerUtxoByte: bigint): bigint {
     value: { coins: SAMPLE_COINS },
     datum: inlineDatumFromCbor(HexBlob(TAG_DATUM_SAMPLE)),
   };
-  const size = BigInt(Serialization.TransactionOutput.fromCore(output).toCbor().length / 2);
-  return (160n + size) * coinsPerUtxoByte;
+  return minUtxoOf(output, coinsPerUtxoByte);
 }
 
 /** A protocol parameter from the store: a positive whole number as a number, a bigint or decimal text; else none. */
@@ -274,11 +274,10 @@ export function protocolParameter(raw: unknown): bigint | undefined {
 /**
  * The least a royalty output may hold at the network's `coinsPerUtxoByte` (`protocolParameter`'s
  * answer: a positive whole number, or undefined for an unusable one), capped at the reviewed
- * ceiling (DEFAULT_COINS_PER_UTXO_BYTE, as verifyBuy does): an inflated figure in the store must
+ * ceiling (`effectiveCoinsPerUtxoByte`, as verifyBuy does): an inflated figure in the store must
  * not make every royalty look too small to keep, and none is the ceiling itself. The one
  * threshold of the worker's royalty choice and of the list sheet's preview.
  */
 export function royaltyMinUtxoFor(coinsPerUtxoByte: bigint | undefined): bigint {
-  const live = coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE;
-  return royaltyOutputMinUtxo(live < DEFAULT_COINS_PER_UTXO_BYTE ? live : DEFAULT_COINS_PER_UTXO_BYTE);
+  return royaltyOutputMinUtxo(effectiveCoinsPerUtxoByte(coinsPerUtxoByte) ?? DEFAULT_COINS_PER_UTXO_BYTE);
 }

@@ -219,7 +219,7 @@ export interface ApprovalCreatedListing {
   tooManyRoyalties: boolean;
   /** Royalties above the rate cap (10%) of the price, or a negative royalty. */
   highRoyalties: boolean;
-  /** The seller's share is at or below MIN_SELLER_SHARE, or cannot be worked out. */
+  /** The seller's share is below MIN_SELLER_SHARE (exactly it is what the worker lists), or cannot be worked out. */
   lowSellerShare: boolean;
   /**
    * The output does not hold exactly the one NFT: whatever else it holds (other tokens, the NFT
@@ -565,7 +565,9 @@ function inspectCreatedListing(
       // Strictly above the cap (exactly 10% is what a collection may ask for); a negative royalty
       // is not a royalty and would hide the real total, so it counts as too high.
       highRoyalties: royaltyTotal * 10_000n > datum.price * ROYALTY_CAP_BPS || datum.royalties.some((royalty) => royalty.lovelace < 0n),
-      lowSellerShare: share === null || share <= MIN_SELLER_SHARE,
+      // Strictly below: the worker (checkSellerShare, verifyList) accepts exactly MIN_SELLER_SHARE, so
+      // a listing at the floor is one Gero itself would write and must not read as a warning here.
+      lowSellerShare: share === null || share < MIN_SELLER_SHARE,
       // A listing that already pays someone else says so; "Gero will not show it" is for the ones
       // that name the wallet and still would not be tracked.
       untrackedByGero: !paysSomeoneElse && !geroTracksListing(tx, outputIndex, output, ctx, ownAddresses),

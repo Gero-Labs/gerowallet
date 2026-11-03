@@ -211,7 +211,7 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
     expect(high.find('[data-testid="tx-intent-listing-high-royalties"]').text()).toBe('signTx.listingHighRoyalties|{"percent":10}');
     expect(high.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
 
-    const low = mountWith(withMarket([createdListing({ sellerShareLovelace: 1_500_000n, lowSellerShare: true })]));
+    const low = mountWith(withMarket([createdListing({ sellerShareLovelace: 1_490_000n, lowSellerShare: true })]));
     expect(low.find('[data-testid="tx-intent-listing-low-share"]').text()).toBe('signTx.listingLowShare');
     expect(low.find('[data-testid="tx-intent-listing-low-share"]').classes()).toContain('error--text');
     expect(low.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
@@ -237,10 +237,10 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
     }
   });
 
-  it('shows what the seller keeps, and the low-share warning, for a positive share at or below the floor', () => {
-    const w = mountWith(withMarket([createdListing({ sellerShareLovelace: 1_500_000n, lowSellerShare: true })]));
+  it('shows what the seller keeps, and the low-share warning, for a positive share below the floor', () => {
+    const w = mountWith(withMarket([createdListing({ sellerShareLovelace: 1_490_000n, lowSellerShare: true })]));
     const row = w.find('[data-testid="tx-intent-creates-listing"]');
-    expect(row.text()).toContain('signTx.listingSellerReceives|{"amount":"1.50"}');
+    expect(row.text()).toContain('signTx.listingSellerReceives|{"amount":"1.49"}');
     expect(row.find('[data-testid="tx-intent-listing-low-share"]').exists()).toBe(true);
     expect(row.find('[data-testid="tx-intent-listing-never-sells"]').exists()).toBe(false);
   });

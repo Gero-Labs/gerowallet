@@ -56,7 +56,6 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { forEachAsset } from '@/api/nexusInputSelection';
 import type { ListingDto } from '@/api/nft-market-api';
 import type { ListingChainUtxo } from '@/chrome/nftMarket/listingChainUtxo';
-import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
 import {
   checkCollateral,
   compareInputs,
@@ -65,6 +64,7 @@ import {
   readTransaction,
   refOf,
 } from '@/chrome/txVerifyCommon';
+import { effectiveCoinsPerUtxoByte, minUtxoOf } from '@/chrome/nftMarket/minUtxo';
 import {
   decodeListingDatum,
   listingFee,
@@ -94,12 +94,8 @@ import {
 export interface BuyVerifyContext extends MarketVerifyContext {
   /**
    * `coinsPerUtxoByte` of the current epoch (`NetworkStore.state.epochParams`). It sets the
-   * min-UTxO of the payee and fee outputs. Defaults to 4310, the value on mainnet, preprod and
-   * preview since Babbage, and is CAPPED at it: a larger value would make the verifier demand
-   * more than the ledger does, so an inflated figure could talk it into accepting overpayment. A
-   * lower value only makes a buy built under the real one fail the check (and, were it signed,
-   * the ledger's own min-UTxO rule), which is safe. A buy built under a different value than the
-   * one used here is refused, never accepted.
+   * min-UTxO of the payee and fee outputs. Defaults to 4310 and is CAPPED at it (minUtxo.ts says
+   * why). A buy built under a different value than the one used here is refused, never accepted.
    */
   coinsPerUtxoByte?: bigint;
 }
@@ -148,8 +144,6 @@ function refuse(rule: MarketVerifyRule, detail: string): never {
 const TX_HASH = /^[0-9a-f]{64}$/;
 const HASH28 = /^[0-9a-f]{56}$/;
 const DECIMAL = /^[0-9]+$/;
-/** The ledger charges 160 bytes of overhead per output on top of its serialised size (Babbage). */
-const MIN_UTXO_OVERHEAD_BYTES = 160;
 
 /** The listing the user asked to buy, cross-checked, with the reviewed deployment it sits at. */
 interface ListingFacts {
@@ -261,11 +255,11 @@ export function verifyBuy(txCbor: string, txHash: string, intent: BuyIntent, ctx
   };
 }
 
-/** The protocol parameter min-UTxO is measured with: the context's, never above the reviewed ceiling. */
+/** The protocol parameter min-UTxO is measured with (minUtxo.ts): the context's, never above the reviewed ceiling. */
 function coinsPerUtxoByte(ctx: BuyVerifyContext): bigint {
-  const cpb = ctx.coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE;
-  if (typeof cpb !== 'bigint' || cpb <= 0n) refuse('OUTPUTS', 'the protocol parameter that sets min-UTxO is unusable');
-  return cpb > DEFAULT_COINS_PER_UTXO_BYTE ? DEFAULT_COINS_PER_UTXO_BYTE : cpb;
+  const cpb = effectiveCoinsPerUtxoByte(ctx.coinsPerUtxoByte);
+  if (cpb === null) refuse('OUTPUTS', 'the protocol parameter that sets min-UTxO is unusable');
+  return cpb;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -510,7 +504,7 @@ function checkBuyOutputs(
     if (!sameAddress(String(out.address), payee.address)) refuse('OUTPUTS', `the ${payee.name} output does not pay the address in the datum`);
     if (!isAdaOnly(out) || out.scriptReference !== undefined) refuse('OUTPUTS', `the ${payee.name} output is not plain ADA`);
     if (out.datumHash !== undefined || !hasTag(raw[index], tag)) refuse('OUTPUTS', `the ${payee.name} output does not carry this listing's tag`);
-    const min = minUtxo(out, cpb);
+    const min = minUtxoOf(out, cpb);
     const required = payee.due >= min ? payee.due : min;
     if (out.value.coins !== required) {
       refuse('OUTPUTS', `the ${payee.name} output pays ${out.value.coins} lovelace, not the ${required} the listing requires`);
@@ -553,7 +547,7 @@ function checkBuyOutputs(
   if (!isAdaOnly(feeOut) || feeOut.datum !== undefined || feeOut.datumHash !== undefined || feeOut.scriptReference !== undefined) {
     refuse('OUTPUTS', 'the fee output is not plain ADA with no datum');
   }
-  const feeMin = minUtxo(feeOut, cpb);
+  const feeMin = minUtxoOf(feeOut, cpb);
   const feeCeiling = fee >= feeMin ? fee : feeMin;
   if (feeOut.value.coins < fee) refuse('OUTPUTS', 'the fee output pays less than the market fee');
   if (feeOut.value.coins > feeCeiling) refuse('OUTPUTS', 'the fee output pays more than the market fee and its own min-UTxO');
@@ -579,21 +573,6 @@ function isAdaOnly(out: Cardano.TxOut): boolean {
 function hasTag(out: Serialization.TransactionOutput, tag: string): boolean {
   const bytes = out.datum()?.asInlineData()?.asBoundedBytes();
   return bytes !== undefined && bytesToHex(bytes) === tag;
-}
-
-/**
- * The minimum ADA the wallet allows an output to be raised to: `(160 + size) * coinsPerUtxoByte`
- * over the CANONICAL encoding of the output, its coin included (ruling P29). Not over the bytes
- * the builder wrote: a datum padded with empty chunks of an indefinite-length byte string means
- * the same value, costs the buyer thousands of lovelace per byte, and would turn a "min-UTxO
- * top-up" into a payment of tens of ADA to a payee. Re-encoding drops the padding, a
- * non-minimal integer head and any other non-canonical form. The honest case is unchanged: a
- * seller output with a 32-byte tag is 108 bytes, 268 * 4310 = 1,155,080 lovelace. A builder whose
- * encoding is larger than canonical is refused here (a false refusal that fails closed).
- */
-function minUtxo(out: Cardano.TxOut, cpb: bigint): bigint {
-  const canonical = Serialization.TransactionOutput.fromCore(out).toCbor();
-  return BigInt(MIN_UTXO_OVERHEAD_BYTES + canonical.length / 2) * cpb;
 }
 
 const sameAddress = (a: unknown, b: unknown) => String(a).toLowerCase() === String(b).toLowerCase();

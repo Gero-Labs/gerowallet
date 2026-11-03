@@ -4,7 +4,7 @@ import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
-import { MAX_LISTING_DEPOSIT, NFT_MARKET_DEPLOYMENTS_PREPROD, type NftMarketDeployment } from '@/utils/nftMarketDeployments';
+import { MAX_LISTING_DEPOSIT, MIN_SELLER_SHARE, NFT_MARKET_DEPLOYMENTS_PREPROD, type NftMarketDeployment } from '@/utils/nftMarketDeployments';
 import {
   approvalContextFromKeys,
   createdListingWarns,
@@ -630,12 +630,16 @@ describe('buildTxApprovalSummary: Gero market listings', () => {
       expect(over.requiresMarketAck).toBe(true);
     });
 
-    it('warns, and blocks, when the seller\'s share is at or below the minimum', () => {
-      // 100 ADA at 98.5% is a 98.5 ADA fee: the seller keeps exactly 1.5 ADA.
+    it('warns, and blocks, when the seller\'s share is below the minimum (exactly the minimum is what the worker accepts, so no warning)', () => {
+      // 100 ADA at 98.5% is a 98.5 ADA fee: the seller keeps exactly 1.5 ADA, the least Gero itself lists.
       const fees = new Map([[LISTING_SCRIPT, { feeBps: 9850, minFeeLovelace: 0n, maxFeeLovelace: null }]]);
       const atFloor = created(listedOut(datumHex({ price: 100n * ADA })), { listingFees: fees });
-      expect(atFloor.createdListings[0]).toMatchObject({ sellerShareLovelace: 1_500_000n, lowSellerShare: true, highRoyalties: false });
-      expect(atFloor.requiresMarketAck).toBe(true);
+      expect(atFloor.createdListings[0]).toMatchObject({ sellerShareLovelace: MIN_SELLER_SHARE, lowSellerShare: false, highRoyalties: false });
+      expect(atFloor.requiresMarketAck).toBe(false);
+      // Under the floor (a 98.51 ADA fee leaves 1.49 ADA) warns.
+      const under = created(listedOut(datumHex({ price: 100n * ADA })), { listingFees: new Map([[LISTING_SCRIPT, { feeBps: 9851, minFeeLovelace: 0n, maxFeeLovelace: null }]]) });
+      expect(under.createdListings[0]).toMatchObject({ sellerShareLovelace: 1_490_000n, lowSellerShare: true });
+      expect(under.requiresMarketAck).toBe(true);
       const above = created(listedOut(datumHex({ price: 100n * ADA })), { listingFees: new Map([[LISTING_SCRIPT, { feeBps: 9849, minFeeLovelace: 0n, maxFeeLovelace: null }]]) });
       expect(above.createdListings[0]).toMatchObject({ sellerShareLovelace: 1_510_000n, lowSellerShare: false });
       // A share below nothing (royalties and fee above the price) is below the floor too.
