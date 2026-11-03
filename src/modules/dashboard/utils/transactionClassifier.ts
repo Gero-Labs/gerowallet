@@ -45,6 +45,12 @@ export interface TxClassifyContext {
    * record whose input addresses are not known (a live one) still shows it ran the market's script.
    */
   marketReferenceScripts?: ReadonlySet<string>;
+  /**
+   * The fee address of every Gero deployment of the network, in full. A purchase always pays it:
+   * the contract requires one combined fee output at the deployment's whole fee address (rules.md),
+   * so a sale the wallet made as seller shows an output there.
+   */
+  marketFeeAddresses?: ReadonlySet<string>;
   /** The wallet's own stake KEY hash (56 lower-case hex), read from its reward address; null when unreadable. */
   stakeKeyHash?: string | null;
   /** The wallet's payment and change key hashes: who may own a listing of its. */
@@ -95,6 +101,7 @@ export function buildClassifyContext(
     contacts: contactMap,
     marketScriptHashes: new Set(deployments.map((deployment) => deployment.scriptHash.toLowerCase())),
     marketReferenceScripts: new Set(deployments.map((deployment) => deployment.referenceScript.toLowerCase())),
+    marketFeeAddresses: new Set(deployments.map((deployment) => deployment.feeAddress)),
     stakeKeyHash: stakeKeyHashOfReward(wallet?.stakeAddress),
     paymentKeyHashes,
   };
@@ -639,13 +646,19 @@ function tagDatumOf(raw: unknown): string | null {
 }
 
 /**
- * The wallet sold something: one of its own outputs carries, as its inline datum, the tag of an
- * input the transaction spends. The contract makes a buy pay the seller with the listing's tag as
- * the datum (rules.md G1, verifyBuy `hasTag`), and the tag is a hash of that exact input's
- * reference, so it binds the payout to the listing that was spent. The listing's own datum is on
- * no record (an input carries only its reference, address and amount), so the input is judged by
- * its address when that is known (at a deployment's script under the wallet's stake key) and by the
- * tag alone when it is not (a live record: the buyer's side of the chain is not synced locally).
+ * The wallet sold something. Three things, all read from the record:
+ *  (a) one of its own outputs carries, as its inline datum, the tag of an input the transaction
+ *      spends. The contract makes a buy pay the seller with the listing's tag as the datum
+ *      (rules.md G1, verifyBuy `hasTag`), and the tag is a hash of that exact input's reference, so
+ *      it binds the payout to the listing that was spent;
+ *  (b) some output of the same transaction pays the network deployment's fee address, in full. A
+ *      real purchase always does (one combined fee output, required by the contract), while the tag
+ *      alone is a public hash anyone can write into an output they send to the wallet;
+ *  (c) the wallet neither funds nor signs it (the caller checks this).
+ * The listing's own datum is on no record (an input carries only its reference, address and amount),
+ * so the input is judged by its address when that is known (at a deployment's script under the
+ * wallet's stake key) and by the tag alone when it is not (a live record: the buyer's side of the
+ * chain is not synced locally); (b) is what keeps the latter from being a forged label.
  */
 function paidAsSeller(spent: readonly { tx_hash?: string; output_index?: number; address?: string | null }[], created: readonly { address?: string; inline_datum?: unknown }[], ctx: TxClassifyContext, hashes: ReadonlySet<string>): boolean {
   const payouts = new Set<string>();
@@ -655,6 +668,9 @@ function paidAsSeller(spent: readonly { tx_hash?: string; output_index?: number;
     if (datum) payouts.add(datum);
   }
   if (payouts.size === 0) return false;
+  // (b) The fee address of a deployment of this network is paid: no purchase omits it.
+  const feeAddresses = ctx.marketFeeAddresses;
+  if (!feeAddresses || feeAddresses.size === 0 || !created.some((output) => !!output.address && feeAddresses.has(output.address))) return false;
   return spent.some((input) => {
     if (input.address) {
       // A known address must be a listing of this wallet's: at a deployment's script, under its stake key.
@@ -679,7 +695,8 @@ function paidAsSeller(spent: readonly { tx_hash?: string; output_index?: number;
  *   listed     the wallet funds a new listing of its own; nothing of the market's is spent
  *   repriced   its own listing is spent (or the market's script ran) and a listing of its own is created
  *   cancelled  its own listing is spent and none is created
- *   sold       one of its own outputs carries the tag of a spent input and the wallet funds none of it
+ *   sold       one of its own outputs carries the tag of a spent input, the deployment's fee address is paid,
+ *              and the wallet funds none of it and signs none of it
  *   bought     someone else's listing is spent (or the script ran and the wallet gained an NFT), no own listing
  *              is spent, and the wallet funds it
  *   moved      a closed marketplace's listing is spent (its input, or its reference script) and a Gero listing

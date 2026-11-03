@@ -372,8 +372,8 @@ describe('Gero NFT market activity tags', () => {
     });
 
     it('sold at a listing output index above 0, which the tag covers too', () => {
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 3), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 3)), produce(BUYER)])).toEqual(['sold']);
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 3), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(BUYER)])).toEqual([]);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 3), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 3)), produce(FEE), produce(BUYER)])).toEqual(['sold']);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 3), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE), produce(BUYER)])).toEqual([]);
     });
 
     it('bought: the wallet funds a transaction that spends someone else\'s listing', () => {
@@ -400,9 +400,9 @@ describe('Gero NFT market activity tags', () => {
     });
 
     it('sold: a listing input whose address the wallet did resolve must be its own, at a deployment script', () => {
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), live()], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual(['sold']);
-      expect(actions([hist(FOREIGN_LISTING, LISTING_TX, 0), live()], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual([]);
-      expect(actions([hist(BUYER, LISTING_TX, 0), live()], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual([]);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), live()], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual(['sold']);
+      expect(actions([hist(FOREIGN_LISTING, LISTING_TX, 0), live()], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual([]);
+      expect(actions([hist(BUYER, LISTING_TX, 0), live()], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual([]);
     });
 
     it('moved: the legacy input is unresolved, but the closed marketplace\'s pinned reference script is among the reference inputs', () => {
@@ -444,13 +444,13 @@ describe('Gero NFT market activity tags', () => {
     it('a reference input that also appears in the input list is not a spend or funding', () => {
       // The deployment\'s reference UTxO sits at one of the wallet\'s own addresses, say: referencing it funds nothing.
       const referenced = hist(OWN, V1.referenceScript.split('#')[0], 0);
-      expect(actions([referenced, live(LISTING_TX, 0)], [produce(OWN, tagDatum(LISTING_TX, 0))], withBody({ references: [`${V1.referenceScript.split('#')[0]}#0`] }))).toEqual(['sold']);
+      expect(actions([referenced, live(LISTING_TX, 0)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)], withBody({ references: [`${V1.referenceScript.split('#')[0]}#0`] }))).toEqual(['sold']);
     });
   });
 
   describe('the reviewer\'s realistic probes', () => {
     it('a real sale (history shape, seller payout carries the listing tag) is "sold"', () => {
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(BUYER)])).toEqual(['sold']);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE), produce(BUYER)])).toEqual(['sold']);
     });
 
     it('a live-synced move (legacy input unresolved) is "moved", not "listed"', () => {
@@ -501,12 +501,15 @@ describe('Gero NFT market activity tags', () => {
     it('reads the hashes and reference scripts from the deployments of the wallet\'s network: preprod has v1, mainnet has none yet', () => {
       expect([...(market.marketScriptHashes ?? [])]).toEqual([V1.scriptHash]);
       expect([...(market.marketReferenceScripts ?? [])]).toEqual([V1.referenceScript]);
+      // The fee address comes from the deployment too, in full.
+      expect([...(market.marketFeeAddresses ?? [])]).toEqual([V1.feeAddress]);
       const mainnet = buildClassifyContext({ stakeAddress: market.stakeAddress, network: 'Mainnet' }, null, null);
       expect(mainnet.marketScriptHashes?.size ?? 0).toBe(0);
+      expect(mainnet.marketFeeAddresses?.size ?? 0).toBe(0);
       // A transaction at the preprod script means nothing on a network that configures no deployment.
       expect(isGeroMarket(record([hist(OWN)], [produce(OWN_LISTING)]), mainnet)).toBe(false);
       expect(geroMarketActions(record([hist(OWN)], [produce(OWN_LISTING, OWN_DATUM)]), mainnet)).toEqual([]);
-      expect(geroMarketActions(record([live(LISTING_TX, 0)], [produce(OWN, tagDatum(LISTING_TX, 0))]), mainnet)).toEqual([]);
+      expect(geroMarketActions(record([live(LISTING_TX, 0)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)]), mainnet)).toEqual([]);
     });
 
     it('a Bitcoin wallet has no market scripts', () => {
@@ -562,15 +565,35 @@ describe('Gero NFT market activity tags', () => {
       const buyerFunded = [hist(BUYER)];
       // No datum, the wrong tag, a datum that is not a tag, a tag of another listing, a payout to someone else.
       expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN), produce(FEE)])).toEqual([]);
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN, tagDatum(OTHER_LISTING_TX, 0))])).toEqual([]);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN, tagDatum(OTHER_LISTING_TX, 0)), produce(FEE)])).toEqual([]);
       expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN, OWN_DATUM)])).toEqual([]);
       expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN, 'zz')])).toEqual([]);
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(BUYER, tagDatum(LISTING_TX, 0))])).toEqual([]);
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual(['sold']);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(BUYER, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual([]);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), ...buyerFunded], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual(['sold']);
+    });
+
+    it('a forged tag with no payment to the deployment\'s fee address is not a sale, on either shape', () => {
+      // Anyone can send the wallet an output whose datum is the tag of one of their own inputs; a purchase also pays the fee address.
+      const forged = [{ ...produce(OWN, tagDatum(LISTING_TX, 0)) }, produce(BUYER)];
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], forged)).toEqual([]);
+      expect(actions([live(LISTING_TX, 0), live()], forged)).toEqual([]);
+      expect(actions([live(LISTING_TX, 0), live()], forged, withBody({ references: [V1.referenceScript] }))).toEqual([]);
+      // Paying some other address, a script of the network included, is not paying the fee address.
+      expect(actions([live(LISTING_TX, 0), live()], [...forged, produce(UNRELATED_SCRIPT), produce(OWN_CHANGE)])).toEqual([]);
+      expect(actions([live(LISTING_TX, 0), live()], [...forged, produce(OWN_LISTING)])).toEqual([]);
+      // With the fee address paid it is the same transaction a real sale is.
+      expect(actions([live(LISTING_TX, 0), live()], [...forged, produce(FEE)])).toEqual(['sold']);
+    });
+
+    it('a real-shaped sale is "sold" on both shapes: tagged payout, fee address paid, a buyer funding it', () => {
+      const outputs = [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE), produce(BUYER)];
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], outputs)).toEqual(['sold']);
+      expect(actions([live(LISTING_TX, 0), live()], outputs)).toEqual(['sold']);
+      expect(actions([live(LISTING_TX, 0), live()], outputs, withBody({ references: [V1.referenceScript] }))).toEqual(['sold']);
     });
 
     it('"sold" is not a transaction the wallet funds or signs: that is its own cancel or reprice, or a payment of its own', () => {
-      const payout = [produce(OWN, tagDatum(LISTING_TX, 0))];
+      const payout = [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)];
       // The wallet's own cancel (it funds it) is a cancel, never also a sale, whatever datum the output carries.
       expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(OWN)], payout)).toEqual(['cancelled']);
       // A transaction the wallet signs is not a buyer's, so a tagged output alone is not a sale.
@@ -579,11 +602,11 @@ describe('Gero NFT market activity tags', () => {
 
     it('a stranger cannot pass a payment off as a sale by tagging an output with an input\'s tag from nowhere known', () => {
       // An address known not to be a listing of the wallet\'s is refused even with a matching tag.
-      expect(actions([hist(UNRELATED_SCRIPT, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual([]);
+      expect(actions([hist(UNRELATED_SCRIPT, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual([]);
     });
 
     it('a reference input at the script is not a spend of the listing', () => {
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0))], withBody({ references: [`${LISTING_TX}#0`] }))).toEqual([]);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)], withBody({ references: [`${LISTING_TX}#0`] }))).toEqual([]);
     });
 
     it('"bought" needs the wallet to fund the transaction', () => {
@@ -597,10 +620,10 @@ describe('Gero NFT market activity tags', () => {
 
     it('a wallet whose stake address cannot be read gets no wallet-side tag, and nothing throws', () => {
       const unreadable = buildClassifyContext({ stakeAddress: 'stake_test1me', network: 'Preprod' }, { payment: [{ address: OWN, cred: OWNER }], change: [] }, {});
-      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0))], {}, unreadable)).toEqual([]);
+      expect(actions([hist(OWN_LISTING, LISTING_TX, 0), hist(BUYER)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)], {}, unreadable)).toEqual([]);
       expect(actions([hist(OWN)], [produce(OWN_LISTING, OWN_DATUM)], {}, unreadable)).toEqual([]);
       // Unknown inputs are judged by the tag alone, which needs no stake key.
-      expect(actions([live(LISTING_TX, 0)], [produce(OWN, tagDatum(LISTING_TX, 0))], {}, unreadable)).toEqual(['sold']);
+      expect(actions([live(LISTING_TX, 0)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)], {}, unreadable)).toEqual(['sold']);
       const none = buildClassifyContext(undefined, undefined, undefined);
       expect(actions([hist(OWN)], [produce(OWN_LISTING, OWN_DATUM)], {}, none)).toEqual([]);
     });
@@ -611,8 +634,8 @@ describe('Gero NFT market activity tags', () => {
     });
 
     it('blank and malformed inputs never throw', () => {
-      expect(actions([{ tx_hash: 'nothex', output_index: 0, address: null, amount: [] }, hist(OWN)], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual([]);
-      expect(actions([{ tx_hash: LISTING_TX, output_index: -1, address: null, amount: [] }], [produce(OWN, tagDatum(LISTING_TX, 0))])).toEqual([]);
+      expect(actions([{ tx_hash: 'nothex', output_index: 0, address: null, amount: [] }, hist(OWN)], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual([]);
+      expect(actions([{ tx_hash: LISTING_TX, output_index: -1, address: null, amount: [] }], [produce(OWN, tagDatum(LISTING_TX, 0)), produce(FEE)])).toEqual([]);
       expect(actions([{ address: undefined }, hist(OWN)], [produce(OWN)])).toEqual([]);
     });
   });
