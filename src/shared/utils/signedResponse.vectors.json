@@ -1,5 +1,14 @@
 {
   "profile": "gero-v1",
+  "signedPathPrefixes": [
+    "/api/nexus/api/tx/",
+    "/api/nexus/api/collateral/",
+    "/api/nexus/api/aggregator/",
+    "/api/assets/handle",
+    "/api/pools",
+    "/api/dreps",
+    "/api/mpc/"
+  ],
   "note": "TEST keys derived from public labels. Never pin or configure them anywhere real.",
   "signingSeedHex": "6aacc3c7b192c3ae7d7b93135d59dcd6adf3f469bed9c9fbf8716d6eafa30984",
   "signingPublicKeyHex": "1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0",

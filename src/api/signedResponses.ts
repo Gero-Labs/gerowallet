@@ -11,6 +11,9 @@
  *  - `enforce`: a response that fails the check never reaches the caller; the call
  *    rejects with `UnsignedResponseError`.
  *
+ * Only paths gero-backend signs are checked (`SIGNED_PATH_PREFIXES`); the others pass
+ * untouched whatever the mode.
+ *
  * The check needs the body exactly as received, before JSON parsing. A
  * `transformResponse` step placed first keeps the raw text on the request config
  * and passes it on unchanged, so parsing stays what it was.
@@ -31,6 +34,42 @@ export type SignedResponseMode = 'off' | 'shadow' | 'enforce';
 
 export function signedResponseMode(value: unknown = import.meta.env['VITE_SIGNED_RESPONSES']): SignedResponseMode {
   return value === 'shadow' || value === 'enforce' ? value : 'off';
+}
+
+/**
+ * The request paths gero-backend signs, the same list as its
+ * `config.response-signing.path-prefixes` default. Only these are checked; every other path
+ * passes untouched in every mode, so an enforcing build never refuses an answer the server was
+ * never asked to sign. A prefix ending in `/` covers everything below it; any other prefix covers
+ * that exact path and the paths below it (`/api/pools` covers `/api/pools/{id}`, not
+ * `/api/poolsfoo`), as on the server.
+ *
+ * Compatibility: a path joins this list only after gero-backend signs it in production, and the
+ * server never stops signing a path an enforcing release checks. The shared vectors pin the list
+ * (`signedPathPrefixes`), so the wallet and gero-backend cannot drift apart unnoticed.
+ */
+export const SIGNED_PATH_PREFIXES: readonly string[] = [
+  '/api/nexus/api/tx/',
+  '/api/nexus/api/collateral/',
+  '/api/nexus/api/aggregator/',
+  '/api/assets/handle',
+  '/api/pools',
+  '/api/dreps',
+  '/api/mpc/',
+];
+
+export function isSignedPath(path: string, prefixes: readonly string[] = SIGNED_PATH_PREFIXES): boolean {
+  return prefixes.some((prefix) =>
+    prefix.endsWith('/') ? path.startsWith(prefix) : path === prefix || path.startsWith(`${prefix}/`),
+  );
+}
+
+function requestPath(instance: AxiosInstance, response: AxiosResponse): string {
+  try {
+    return new URL(instance.getUri(response.config)).pathname;
+  } catch {
+    return '';
+  }
 }
 
 const RAW_BODY = Symbol('geroRawResponseBody');
@@ -135,6 +174,8 @@ export function installSignedResponses(
   ];
 
   const check = async (response: AxiosResponse): Promise<SignedResponseFailure | undefined> => {
+    // A path gero-backend does not sign is never checked, in any mode.
+    if (!isSignedPath(requestPath(instance, response))) return undefined;
     const result = await checkAxiosResponse(instance, response, options.keys ?? resolverFor(service), now());
     const reason = failureReason(result);
     record(service, reason ?? 'verified');
