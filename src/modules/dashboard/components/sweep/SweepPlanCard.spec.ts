@@ -74,4 +74,70 @@ describe('SweepPlanCard', () => {
     const planned = mountCard({ utxoCount: 2144, merges: 10, preparing: null });
     expect(planned.text()).not.toContain('send.sweepPreparingWaiting');
   });
+
+  // The dialog is centred, so any change in the card's height moves the whole dialog. Every
+  // state therefore has the same rows, and the texts that change share one cell each.
+  const PREPARING = { utxoCount: 2144, merges: 10, preparing: { built: 4, total: 10 } };
+  const WAITING = { utxoCount: 2144, merges: 10, preparing: { built: 4, total: 10, waiting: true } };
+  const PLANNED = { utxoCount: 2144, merges: 10, preparing: null };
+
+  /** The card's rows, by each one's first class. */
+  function rowClasses(wrapper: ReturnType<typeof mountCard>): string[] {
+    return Array.from(wrapper.get('.sweep-plan').element.children).map((child) => child.className.split(' ')[0]);
+  }
+
+  it('has the same rows while preparing, while waiting and once planned', () => {
+    const preparing = rowClasses(mountCard(PREPARING));
+    expect(preparing).toEqual(['sweep-plan__head', 'sweep-plan__track', 'sweep-plan__legend', 'sweep-plan__notes']);
+    expect(rowClasses(mountCard(WAITING))).toEqual(preparing);
+    expect(rowClasses(mountCard(PLANNED))).toEqual(['sweep-plan__head', 'sweep-plan__segments', 'sweep-plan__legend', 'sweep-plan__notes']);
+  });
+
+  it('shows the plan legend while preparing too', () => {
+    const legend = mountCard(PREPARING).get('.sweep-plan__legend');
+    expect(legend.text()).toContain('send.sweepMergesLabel{"merges":10}');
+    expect(legend.text()).toContain('send.sweepPaymentLabel');
+  });
+
+  it('keeps both explanations in one cell and shows the one for the state', () => {
+    const visible = (wrapper: ReturnType<typeof mountCard>) =>
+      wrapper.get('.sweep-plan__notes').findAll('p').filter((p) => !p.classes('sweep-plan__hidden')).map((p) => p.text());
+
+    const preparing = mountCard(PREPARING);
+    expect(preparing.get('.sweep-plan__notes').text()).toContain('send.sweepPlanNote{"count":2144}');
+    expect(visible(preparing)).toEqual(['send.sweepPreparingNote{"count":2144}']);
+
+    // The wait takes the explanation's place instead of adding a paragraph under it.
+    const waiting = mountCard(WAITING);
+    expect(waiting.get('.sweep-plan__notes').text()).toContain('send.sweepPreparingWaiting');
+    expect(visible(waiting)).toEqual(['send.sweepPreparingWaiting']);
+
+    const planned = mountCard(PLANNED);
+    expect(planned.get('.sweep-plan__notes').text()).toContain('send.sweepPreparingNote{"count":2144}');
+    expect(visible(planned)).toEqual(['send.sweepPlanNote{"count":2144}']);
+  });
+
+  // The wait message is only mounted while a build waits, so it is announced as it appears.
+  // A sizer carries its text in an attribute, drawn by CSS, so the notes cell is sized for it
+  // in every state without the text being in the card until the wait happens.
+  it('reserves the wait message\'s size in every state', () => {
+    for (const props of [PREPARING, WAITING, PLANNED]) {
+      const sizer = mountCard(props).get('.sweep-plan__notes .sweep-plan__sizer');
+      expect(sizer.attributes('data-sizer')).toBe('send.sweepPreparingWaiting');
+      expect(sizer.attributes('aria-hidden')).toBe('true');
+      expect(sizer.text()).toBe('');
+    }
+  });
+
+  it('keeps the count and the approval pill in one cell of the head', () => {
+    const aside = (wrapper: ReturnType<typeof mountCard>) => wrapper.get('.sweep-plan__aside');
+
+    const preparing = aside(mountCard(PREPARING));
+    expect(preparing.get('.sweep-plan__pill').classes()).toContain('sweep-plan__hidden');
+    expect(preparing.get('.sweep-plan__count').classes()).not.toContain('sweep-plan__hidden');
+
+    const planned = aside(mountCard(PLANNED));
+    expect(planned.get('.sweep-plan__pill').classes()).not.toContain('sweep-plan__hidden');
+    expect(planned.get('.sweep-plan__count').classes()).toContain('sweep-plan__hidden');
+  });
 });

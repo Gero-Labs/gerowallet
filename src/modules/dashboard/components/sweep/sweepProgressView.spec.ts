@@ -87,4 +87,33 @@ describe('sweepProgressView', () => {
     expect(rows(view).merges).toEqual({ state: 'done', detail: { key: 'send.sweepMergesSentCount', params: { sent: 10, merges: 10 } } });
     expect(rows(view).payment).toEqual({ state: 'error', detail: { key: 'send.sweepPaymentNotSent' } });
   });
+
+  // The panel lays every text a slot can show in one cell, so it keeps its height as the
+  // sweep moves from signing to sending to waiting: each phase lists the same alternatives.
+  it('lists, in every phase, all the texts each slot shows while the sweep runs', () => {
+    const keys = (texts: readonly { key: string }[] | undefined) => (texts ?? []).map((text) => text.key);
+    for (const phase of ['signing', 'sending', 'waiting'] as const) {
+      const view = sweepProgressView({ phase, step: phase === 'signing' ? 3 : 11, total: 11 }, null)!;
+      expect(keys(view.titles)).toEqual(['send.sweepSigning', 'send.sweepSending', 'send.sweepWaiting']);
+      expect(keys(view.counts)).toEqual(['send.sweepNothingSent', 'send.sweepSentCount']);
+      expect(keys(view.captions)).toEqual(['send.sweepSigningNote', 'send.sweepKeepOpen', 'send.sweepWaitingNote']);
+      const details = (id: SweepChecklistRow['id']) => keys(view.rows.find((row) => row.id === id)?.details);
+      expect(details('merges')).toEqual(['send.sweepNotSentYet', 'send.sweepMergesSentCount']);
+      expect(details('payment')).toEqual(['send.sweepNotSentYet', 'send.sweepPaymentAfterMerges', 'send.sweepPaymentGoingOut', 'send.sweepPaymentWaiting']);
+      // What each slot shows now is always one of its alternatives.
+      expect(keys(view.titles)).toContain(view.title!.key);
+      expect(keys(view.counts)).toContain(view.count!.key);
+      expect(keys(view.captions)).toContain(view.caption!.key);
+      for (const row of view.rows) {
+        if (row.details) expect(keys(row.details)).toContain(row.detail.key);
+      }
+    }
+  });
+
+  it('lists no alternatives once the sweep stopped', () => {
+    const view = sweepProgressView(null, { step: 4, total: 11, mergesSent: 3, reason: 'x' })!;
+    expect(view.titles).toEqual([]);
+    expect(view.counts).toEqual([]);
+    expect(view.captions).toEqual([]);
+  });
 });

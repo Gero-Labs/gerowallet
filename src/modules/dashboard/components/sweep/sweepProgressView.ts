@@ -20,6 +20,8 @@ export interface SweepChecklistRow {
   state: SweepMarkState;
   label: SweepText;
   detail: SweepText;
+  /** Every detail the row shows while the sweep runs, `detail` among them: the panel sizes the row to the longest. */
+  details?: SweepText[];
 }
 
 export interface SweepStopView {
@@ -42,6 +44,14 @@ export interface SweepProgressView {
   rows: SweepChecklistRow[];
   caption: SweepText | null;
   stop: SweepStopView | null;
+  /**
+   * Every title, count and caption a running sweep shows across its phases, the current
+   * ones among them. The panel lays each set in one cell, sized to the longest, so it
+   * keeps its height as the phase changes. Empty once the sweep stopped.
+   */
+  titles: SweepText[];
+  counts: SweepText[];
+  captions: SweepText[];
 }
 
 const text = (key: string, params?: Record<string, number | string>): SweepText => (params ? { key, params } : { key });
@@ -76,23 +86,38 @@ function runningView(progress: SweepProgress): SweepProgressView {
         ? { id: 'payment', state: 'pending', label: text('send.sweepPaymentLabel'), detail: text('send.sweepPaymentAfterMerges') }
         : { id: 'payment', state: 'active', label: text('send.sweepPaymentLabel'), detail: text('send.sweepPaymentGoingOut') };
 
+  // What each slot shows in each phase (signing, sending, waiting for the merges). The
+  // panel gets the whole set, so the slot keeps the size of the longest from phase to phase.
+  const phaseIndex = signing ? 0 : sending ? 1 : 2;
+  const titles = [text('send.sweepSigning', { step, total }), text('send.sweepSending', { step, total }), text('send.sweepWaiting')];
+  const counts = [text('send.sweepNothingSent'), text('send.sweepSentCount', { sent, total })];
+  const captions = [text('send.sweepSigningNote'), text('send.sweepKeepOpen'), text('send.sweepWaitingNote')];
+  const mergesDetails = [text('send.sweepNotSentYet'), text('send.sweepMergesSentCount', { sent: merges, merges })];
+  const paymentDetails = [
+    text('send.sweepNotSentYet'),
+    text('send.sweepPaymentAfterMerges'),
+    text('send.sweepPaymentGoingOut'),
+    text('send.sweepPaymentWaiting'),
+  ];
+
   return {
     total,
     merges,
-    title: signing ? text('send.sweepSigning', { step, total })
-      : sending ? text('send.sweepSending', { step, total })
-        : text('send.sweepWaiting'),
-    count: signing ? text('send.sweepNothingSent') : text('send.sweepSentCount', { sent, total }),
+    title: titles[phaseIndex],
+    count: counts[signing ? 0 : 1],
     segments,
     rows: [
       signing
         ? { id: 'sign', state: 'active', label: text('send.sweepSignStep'), detail: text('send.sweepSignedCount', { signed: step - 1, total }) }
         : { id: 'sign', state: 'done', label: text('send.sweepSignStep'), detail: text('send.sweepSignedCount', { signed: total, total }) },
-      mergesRow,
-      paymentRow,
+      { ...mergesRow, details: mergesDetails },
+      { ...paymentRow, details: paymentDetails },
     ],
-    caption: signing ? text('send.sweepSigningNote') : sending ? text('send.sweepKeepOpen') : text('send.sweepWaitingNote'),
+    caption: captions[phaseIndex],
     stop: null,
+    titles,
+    counts,
+    captions,
   };
 }
 
@@ -123,6 +148,9 @@ function stoppedView(stop: SweepStop): SweepProgressView {
       reason: stop.reason,
       tryAgain: text('send.sweepTryAgainNote', { step }),
     },
+    titles: [],
+    counts: [],
+    captions: [],
   };
 }
 

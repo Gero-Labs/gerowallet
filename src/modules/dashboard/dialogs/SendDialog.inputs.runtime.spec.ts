@@ -346,6 +346,33 @@ describe('Quick Send Max over the request limit', () => {
     expect(dialog().get('.global-total__fee').text()).toBe('- 0.6');
   });
 
+  // The dialog is centred: any row that comes or goes moves all of it. While a sweep is in
+  // play the fee split keeps its row (a shimmer until the figures arrive) and the step keeps
+  // one height, so preparing, waiting and the plan all take the same room.
+  it('keeps the fee split row and the step height from the first merge to the plan', async () => {
+    walletStore.utxos = Array.from({ length: 400 }, (_, n) => utxo(n, 1_000_000 + n)) as never;
+    const held = deferred<{ tx_cbor: string }>();
+    let heldRequest!: BuildRequest;
+    mocks.build.mockImplementationOnce((request: BuildRequest) => { heldRequest = request; return held.promise; });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(dialog().get('.step-recipients-inner').classes()).not.toContain('step-recipients-inner--sweep');
+    expect(dialog().find('.global-total__breakdown').exists()).toBe(false);
+
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    expect(dialog().get('.step-recipients-inner').classes()).toContain('step-recipients-inner--sweep');
+    expect(dialog().get('.global-total__breakdown').find('.g-skeleton').exists()).toBe(true);
+
+    held.resolve(buildResponse(heldRequest));
+    await settle();
+    expect(dialog().get('.step-recipients-inner').classes()).toContain('step-recipients-inner--sweep');
+    const breakdown = dialog().get('.global-total__breakdown');
+    expect(breakdown.find('.g-skeleton').exists()).toBe(false);
+    expect(breakdown.text()).toContain('send.sweepFeeBreakdown');
+  });
+
   it('takes the preparing card down when a merge cannot be built', async () => {
     mocks.build.mockRejectedValueOnce(new Error('nexus down'));
     await pressMax();
