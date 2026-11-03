@@ -33,6 +33,8 @@ import { validateShieldedTokenType } from './midnightTokenCapabilities';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
 import { debugLog } from '@/utils/debug';
+import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
+import { describeWalletProving, walletProvingProvider } from '@/chains/midnight/midnightWalletProver';
 import {
   loadWalletState,
   saveWalletState,
@@ -70,13 +72,14 @@ export interface BuildAndSignShieldedTransferArgs {
   /** Single-recipient v1; multi-recipient is a follow-up. */
   readonly outputs: readonly BuildAndSignShieldedTransferOutput[];
   /**
-   * When present, prove (and bind) the transfer against a native-API proof
-   * server at {@code url} before returning, instead of leaving it unproven
-   * for Gero Cloud — self-hosted docker, or Arkhia zkPaaS with its
+   * When present, prove (and bind) the transfer before returning, instead of
+   * leaving it unproven for Gero Cloud: on this device (`{ device: true }`,
+   * the off-by-default shielded flag), or against a native-API proof server
+   * at {@code url} — self-hosted docker, or Arkhia zkPaaS with its
    * {@code x-api-key}/{@code x-api-secret} auth in {@code headers}. See
    * {@link BuildAndSignShieldedTransferResult.proven}.
    */
-  readonly proving?: { readonly url: string; readonly headers?: Record<string, string> };
+  readonly proving?: WalletProvingRequest;
 }
 
 /** Result of {@link buildAndSignShieldedTransfer}. */
@@ -219,12 +222,11 @@ export async function buildAndSignShieldedTransfer(
           Promise<{ bind: () => { serialize: () => Uint8Array } }>;
       };
       // URL only — never the auth header values (file-header privacy note).
-      debugLog('🌙 shielded tx: proving wallet-side', { url: args.proving.url });
+      debugLog('🌙 shielded tx: proving wallet-side', { prover: describeWalletProving(args.proving) });
       const proveStartMs = Date.now();
       let proven: { bind: () => { serialize: () => Uint8Array } };
       try {
-        const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-        const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers });
+        const provider = await walletProvingProvider(args.proving, { sdkNetworkId: args.sdkNetworkId, shielded: true });
         proven = await (unprovenTx as unknown as ProvableTx).prove(
           provider, ledgerMod.CostModel.initialCostModel(),
         );

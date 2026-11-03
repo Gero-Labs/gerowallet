@@ -373,7 +373,7 @@
                 {{ t('midnight.proofServer.openSettings') }}
               </v-btn>
               <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="useCloudForThisTransaction">
-                {{ t('midnight.proofServer.useCloudOnce') }}
+                {{ fallbackOnDevice ? t('midnight.proofServer.useDeviceOnce') : t('midnight.proofServer.useCloudOnce') }}
               </v-btn>
             </div>
           </div>
@@ -453,7 +453,8 @@ import {
   midnightStore,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
-import type { ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
+import { walletProverFor, type ProvingUnconfiguredTarget, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { isLedger9Network } from '@/chains/midnight/midnightConfig';
@@ -738,7 +739,7 @@ const sendDispatched = computed(() => sending.value && sendStage.value !== 'idle
 // occupy the same position in every send's stage sequence — authorize →
 // (build →) working-or-proving → submit → done.
 const STAGE_RANK: Record<SendStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, done: 5,
+  idle: 0, authorizing: 1, building: 2, working: 3, provingDevice: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, done: 5,
 };
 
 interface TimelineNode {
@@ -755,9 +756,12 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   const rank = STAGE_RANK[s] ?? 0;
   const prog = midnightStore.sendProgress;
   const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
+  // A public send proving its DUST fee on this device (after signing, inside
+  // the same BG call): the sign node carries it, with an indeterminate bar.
+  const feeProving = s === 'working' && prog?.phase === 'proving';
   // Within the single BG `working` stage: sync is active until the ledger
   // replay hits 100%, then sign takes over until the call resolves.
-  const syncDone = pct != null && pct >= 100;
+  const syncDone = feeProving || (pct != null && pct >= 100);
   const syncActive = s === 'working' && !syncDone;
   const signActive = s === 'working' && syncDone;
   // Wallet-side shielded sends (WP-P5 local; zkPaaS hosted): the BG round
@@ -765,10 +769,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   // gets a single indeterminate-bar node (staged copy, not a fake
   // percentage — rule 14) rather
   // than the sync/sign split above, which is specific to DUST-balance sync.
-  const provingActive = s === 'provingLocal' || s === 'provingZkpaas';
+  const provingActive = s === 'provingDevice' || s === 'provingLocal' || s === 'provingZkpaas';
   const provingLabel = s === 'provingZkpaas'
     ? t('midnight.send.stageProvingZkpaas')
-    : t('midnight.send.stageProvingLocal');
+    : s === 'provingDevice' ? t('midnight.send.stageProvingDevice') : t('midnight.send.stageProvingLocal');
 
   return [
     {
@@ -795,8 +799,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sign',
-      label: t('midnight.send.stageSign'),
+      label: feeProving ? t('midnight.send.stageProvingDevice') : t('midnight.send.stageSign'),
       state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
+      showBar: feeProving || undefined,
+      percent: feeProving ? null : undefined,
     },
     {
       key: 'submit',
@@ -871,6 +877,23 @@ const localProverUnavailable = ref(false);
 // reads it.
 const forceRemoteForNextSend = ref(false);
 let pendingAuthorization: (() => boolean) | null = null;
+
+/**
+ * Who would prove this send (the same rule as midnight-tx.service's
+ * `walletProverForSend`): decides whether a consent notice is needed. In Gero
+ * Cloud mode a public send proves its fee on this device and needs none.
+ * `forceRemote` is the one-off fallback from a proof server that did not answer.
+ */
+function sendProver(forceRemote = false): WalletProver {
+  return walletProverFor(
+    loggedWallet.value?.network ?? '',
+    { mode: forceRemote ? 'remote' : midnightStore.proofServer.mode },
+    isShielded.value ? 'shielded' : 'unshielded',
+    { shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled() },
+  );
+}
+// The one-off fallback proves on this device rather than on Gero Cloud.
+const fallbackOnDevice = computed(() => sendProver(true) === 'device');
 const approval = useApprovalFreshness(
   () => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked,
     recipient.value, amount.value, selectedToken.value, activeTab.value, sponsorWalletId.value, midnightStore.proofServer],
@@ -1062,19 +1085,23 @@ function onPasskeyError(error: Error) {
 
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   if (!current()) { credentials.prfSecret?.fill(0); return; }
-  const mode = midnightStore.proofServer.mode;
-  // Local proof-server mode never needs cloud consent — witness data stays
-  // on the user's machine — so it skips the consent dialog entirely and
-  // goes straight to a health preflight (WP-P5, plan section "WP-P5 - Consent
-  // dialog + send-flow integration"). Arkhia zkPaaS ships the witness to a
-  // third party, so it is consent-gated exactly like Gero Cloud and THEN
+  const prover = sendProver();
+  // This device and a local proof server never need a consent notice —
+  // witness data stays on the user's machine. The device needs no preflight;
+  // a local server gets a health preflight (WP-P5, plan section "WP-P5 -
+  // Consent dialog + send-flow integration"). Arkhia zkPaaS ships the witness
+  // to a third party, so it is consent-gated exactly like Gero Cloud and THEN
   // preflighted like local.
-  if (mode === 'local') {
+  if (prover === 'device') {
+    await dispatchSend(credentials, current);
+    return;
+  }
+  if (prover === 'local') {
     await routeWalletProvedShielded(credentials, current);
     return;
   }
-  if (hasFreshConsent(mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
-    if (mode === 'zkpaas') {
+  if (hasFreshConsent(prover)) {
+    if (prover === 'zkpaas') {
       await routeWalletProvedShielded(credentials, current);
       return;
     }
@@ -1082,7 +1109,7 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     return;
   }
   rememberCredentials(credentials, current);
-  consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
+  consentProvider.value = prover;
   consentDialogOpen.value = true;
 }
 
@@ -1102,7 +1129,7 @@ async function routeWalletProvedShielded(credentials: { password?: string; prfSe
   try {
     const { checkWalletProvingPreflight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
     const network = loggedWallet.value?.network ?? '';
-    const ok = await awaitFreshApproval(() => checkWalletProvingPreflight(network), current);
+    const ok = await awaitFreshApproval(() => checkWalletProvingPreflight(network, isShielded.value ? 'shielded' : 'unshielded'), current);
     if (!ok) {
       // The preflight collapses "unconfigured" and "unreachable" into one
       // boolean; recover the reason so the fallback can name the actual
@@ -1130,11 +1157,13 @@ function openProofServerSettings() {
 }
 
 /**
- * "Use Gero Cloud for this transaction" fallback action — sends this one
- * shielded transfer via the remote path without changing the user's stored
- * `proofServer.mode`. Reuses the already-entered credentials from the failed
- * local attempt (`pendingCredentials`) rather than asking the user to
- * re-authenticate. Still gated on cloud consent like any other remote send.
+ * One-off fallback action — sends this one transfer as Gero Cloud mode would,
+ * without changing the user's stored `proofServer.mode`: a public send proves
+ * its fee on this device ("Prove on this device instead"), a private one goes
+ * to Gero Cloud ("Use Gero Cloud for this transaction"). Reuses the
+ * already-entered credentials from the failed local attempt
+ * (`pendingCredentials`) rather than asking the user to re-authenticate. The
+ * Gero Cloud branch is still gated on cloud consent like any other remote send.
  */
 function useCloudForThisTransaction() {
   const credentials = pendingCredentials.value;
@@ -1142,7 +1171,7 @@ function useCloudForThisTransaction() {
   if (!credentials || !current?.()) return;
   localProverUnavailable.value = false;
   forceRemoteForNextSend.value = true;
-  if (hasFreshConsent('cloud')) {
+  if (sendProver(true) === 'device' || hasFreshConsent('cloud')) {
     pendingCredentials.value = null;
     void approval.run(() => dispatchSend(credentials, current));
     return;
@@ -1167,16 +1196,17 @@ async function onConsentAccepted() {
   const current = pendingAuthorization;
   pendingCredentials.value = null;
   if (!credentials || !current?.()) return;
-  const mode = midnightStore.proofServer.mode;
-  const recipient = forceRemoteForNextSend.value || mode !== 'zkpaas' ? 'cloud' : 'zkpaas';
-  if (!forceRemoteForNextSend.value && mode !== 'local' && recipient !== consentProvider.value) {
+  // The prover may have changed while the notice was open (a setting, the
+  // flag): if it is no longer the one the user just allowed, decide again.
+  const prover = sendProver(forceRemoteForNextSend.value);
+  if (!forceRemoteForNextSend.value && prover !== consentProvider.value) {
     await approval.run(() => routeSend(credentials, current));
     return;
   }
   // A freshly-consented zkPaaS send still needs its preflight; the one-off
   // "use Gero Cloud" fallback (forceRemoteForNextSend) goes straight to the
   // remote path instead — sendShielded consumes that flag.
-  if (!forceRemoteForNextSend.value && midnightStore.proofServer.mode === 'zkpaas') {
+  if (!forceRemoteForNextSend.value && prover === 'zkpaas') {
     await approval.run(() => routeWalletProvedShielded(credentials, current));
     return;
   }

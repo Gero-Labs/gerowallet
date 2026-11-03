@@ -124,8 +124,11 @@ export interface MidnightPrivateSyncProgress {
 }
 
 export interface MidnightSendProgress {
-  /** Which background phase this refers to (e.g. 'syncingDust'). */
-  phase: 'syncingDust';
+  /**
+   * Which background phase this refers to: 'syncingDust', or 'proving' while
+   * the wallet proves the signed tx itself (no percentage; `percent` is -1).
+   */
+  phase: 'syncingDust' | 'proving';
   /** 0-100 within the phase; -1 = indeterminate (highest not known yet). */
   percent: number;
   /** Optional human detail, e.g. "1,259,015 / 1,261,599 events". */
@@ -216,9 +219,12 @@ export interface MidnightStore {
   shieldedProvingConsent: MidnightProvingConsent | null;
 
   /**
-   * Where shielded-tx ZK proofs are generated. {@code remote} (default)
-   * proves through Gero Cloud and requires {@code shieldedProvingConsent}
-   * before the first shielded send. {@code local} proves against a
+   * Where ZK proofs are generated. {@code remote} (default, "Gero Cloud")
+   * proves a public send's DUST fee on this device (midnightDeviceProver.ts)
+   * and a shielded send through Gero Cloud, which requires
+   * {@code shieldedProvingConsent} before the first shielded send (unless the
+   * {@code isMidnightShieldedDeviceProvingEnabled} flag proves it here too;
+   * see {@code walletProverFor}). {@code local} proves against a
    * self-hosted docker proof server at {@code localUrl} so witness data
    * never leaves the machine. {@code zkpaas} proves against the Midnight
    * ecosystem's hosted Arkhia zkPaaS (BCW-run, TEE-backed) using the

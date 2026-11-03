@@ -12,7 +12,7 @@ import {
 } from './midnightProvingTarget';
 import type { ProofServerPreference } from './midnightProvingTarget';
 
-const CONSENT = { version: 3, provider: 'zkpaas', acceptedAt: 1 };
+const CONSENT = { version: 4, provider: 'zkpaas', acceptedAt: 1 };
 
 const base: ProofServerPreference = {
   mode: 'remote',
@@ -188,7 +188,7 @@ describe('PRIV-01 proving boundaries', () => {
   it('requires zkPaaS consent before a dapp proof goes to Arkhia', () => {
     const ps = { ...base, mode: 'zkpaas' as const, zkpaasApiKey: 'key' };
     expect(() => resolveDappProvingTarget(Network.MAINNET, ps, null)).toThrow(DappProvingUnavailableError);
-    expect(() => resolveDappProvingTarget(Network.MAINNET, ps, { version: 3, provider: 'cloud', acceptedAt: 1 })).toThrow(/Arkhia/);
+    expect(() => resolveDappProvingTarget(Network.MAINNET, ps, { version: 4, provider: 'cloud', acceptedAt: 1 })).toThrow(/Arkhia/);
     expect(resolveDappProvingTarget(Network.MAINNET, ps, CONSENT).source).toBe('zkpaas');
   });
 });

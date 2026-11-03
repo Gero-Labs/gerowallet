@@ -6,13 +6,18 @@
  *  - Unshielded NIGHT transfer: Nexus builds the unproven tx (NIGHT UTxO
  *    selection + offer + change — public data, indexer view is canonical).
  *    BG then DUST-balances + signs (needs the user's real dust secret +
- *    NightExternal key). Nexus's `/tx/submit` relay forwards the signed-
- *    but-unproven hex to the sidecar's `/tx/finalize`, which proves + binds
- *    + submits via `midnight.sendMnTransaction`.
+ *    NightExternal key) and proves the one proof it needs, the DUST fee: on
+ *    this device in Gero Cloud mode (midnightDeviceProver.ts), else on the
+ *    user's proof server. Nexus's `/tx/submit-proven` relays the finished,
+ *    witness-free tx. (Gero Cloud's `/tx/submit` → sidecar `/tx/finalize`,
+ *    which receives the DUST secret, is left only for an unsealed tx a dapp
+ *    submits itself.)
  *
- *  - Shielded NIGHT transfer (future): wallet owns the entire pre-prove
- *    pipeline (notes are encrypted to the user's Zswap key; nobody else can
- *    see them). BG builds + balances + signs; Nexus proves + submits.
+ *  - Shielded transfer: wallet owns the entire pre-prove pipeline (notes are
+ *    encrypted to the user's Zswap key; nobody else can see them). BG builds
+ *    + balances + signs; in Gero Cloud mode Nexus proves + submits
+ *    (`/tx/prove-and-submit`, consent-gated) unless the
+ *    `isMidnightShieldedDeviceProvingEnabled` flag proves it here.
  *
  *  - DUST registration (Path A — NIGHT-for-DUST): server builds with a
  *    throwaway dust secret (first-time registration is fee-free), BG signs
@@ -26,7 +31,14 @@ import { StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
-import { resolveProvingTarget, type ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
+import {
+  resolveProvingTarget,
+  walletProverFor,
+  type ProvingUnconfiguredTarget,
+  type WalletProver,
+  type WalletProvingRequest,
+} from '@/chains/midnight/midnightProvingTarget';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import type {
   BuildMidnightTxRequest,
@@ -67,17 +79,18 @@ function backgroundError(error: string | undefined, fallback: string): Error {
  * balance+sign round-trip; the dialog splits it into "sync DUST" vs "sign"
  * using the live `midnightStore.sendProgress` percentage the BG broadcasts.
  *
- * `provingLocal` / `provingZkpaas` are shielded-only: emitted instead of
- * `working` when `midnightStore.proofServer.mode` is `local` (WP-P2) or
- * `zkpaas` respectively, since in those modes the single BG round-trip is
- * dominated by the wallet-side ZK-proving step (10-25s+) rather than the
- * comparatively fast build+sign. Two distinct stages so the timeline can
- * honestly say WHERE the proof is being generated.
+ * `provingDevice` / `provingLocal` / `provingZkpaas` follow `working` when
+ * the wallet proves the tx itself: on this device (Gero Cloud mode), on the
+ * local proof server (WP-P2) or via Arkhia zkPaaS. The single BG round-trip
+ * then includes the ZK-proving step (6-25 s for a DUST fee, a minute or more
+ * for a private send) rather than only the comparatively fast build+sign.
+ * Distinct stages so the timeline can honestly say WHERE the proof is made.
  */
 export type MidnightSendStage =
   | 'authorizing'
   | 'building'
   | 'working'
+  | 'provingDevice'
   | 'provingLocal'
   | 'provingZkpaas'
   | 'submitting'
@@ -160,8 +173,8 @@ async function balanceAndSignInBg(
   intendedOutputs: readonly MidnightTxOutput[],
   credentials: MidnightSendCredentials,
   sponsor?: MidnightSponsor,
-  proving?: { url: string; headers?: Record<string, string> },
-): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
+  proving?: WalletProvingRequest,
+): Promise<SignedInBg> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
     data: {
@@ -182,27 +195,51 @@ async function balanceAndSignInBg(
         }
         : undefined,
     },
-  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; ledgerTxHash?: string; error?: string } };
+  }) as { data: SignedInBgReply };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
     throw backgroundError(response?.data?.error, 'Midnight balance/sign failed');
   }
   if (proving && !response.data.proven) throw new Error('Wallet-side proving requested but BG returned an unproven tx');
-  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven, ledgerTxHash: response.data.ledgerTxHash };
+  return signedInBg(response.data);
+}
+
+/** What the background hands back for a built, signed (and maybe proven) tx. */
+interface SignedInBg {
+  signedTxHex: string;
+  proven: boolean;
+  ledgerTxHash?: string;
+  /** Ledger identifiers, to find the tx on chain if the submit reply is lost. */
+  txIdentifiers?: string[];
+}
+
+type SignedInBgReply = Partial<SignedInBg> & { success: boolean; error?: string };
+
+function signedInBg(data: SignedInBgReply): SignedInBg {
+  return {
+    signedTxHex: data.signedTxHex ?? '',
+    proven: !!data.proven,
+    ledgerTxHash: data.ledgerTxHash,
+    txIdentifiers: Array.isArray(data.txIdentifiers) ? data.txIdentifiers.filter((id) => typeof id === 'string') : undefined,
+  };
 }
 
 /**
- * Step 4: POST the signed-but-unproven tx to Nexus's `/tx/submit` relay.
- * Nexus forwards to the sidecar's `/tx/finalize` which proves + binds +
- * submits via `midnight.sendMnTransaction` and returns `{txHash, status}`.
+ * Step 4: POST the tx to Nexus. A proven tx goes to `/tx/submit-proven`
+ * (relayed as is); a signed-but-unproven one (the one-off Gero Cloud
+ * fallback) to `/tx/submit`, whose sidecar `/tx/finalize` proves + binds +
+ * submits. Either way a lost reply is settled by finding the tx on chain.
  */
 async function submitSignedTx(
   network: string,
-  signedTxHex: string,
+  signed: SignedInBg,
   waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
 ): Promise<SubmitMidnightTxResponse> {
   const api = getMidnightApi(network);
-  return api.submitMidnightTx({ signedTxHex, waitFor });
+  const watch = { identifiers: signed.txIdentifiers };
+  return signed.proven
+    ? api.submitProvenMidnightTx({ signedTxHex: signed.signedTxHex, waitFor }, watch)
+    : api.submitMidnightTx({ signedTxHex: signed.signedTxHex, waitFor }, watch);
 }
 
 /**
@@ -222,8 +259,9 @@ function withLedgerTxHash(result: SubmitMidnightTxResponse, local: string | unde
  * Orchestrate the four-step unshielded NIGHT transfer:
  *   1. getWalletKeys      → publicKeyHex + addressHex
  *   2. buildUnshielded    → Nexus builds unproven NIGHT tx
- *   3. balanceAndSignInBg → BG adds DUST fee inputs + signs each input
- *   4. submitSignedTx     → Nexus relays to sidecar /tx/finalize (prove + submit)
+ *   3. balanceAndSignInBg → BG adds DUST fee inputs, signs each input and
+ *                           proves the fee (this device / the user's server)
+ *   4. submitSignedTx     → Nexus relays the finished tx (/tx/submit-proven)
  */
 /**
  * Another wallet the user owns, paying this transaction's DUST fee.
@@ -247,15 +285,9 @@ export async function sendUnshieldedNight(
   current: () => boolean = () => true,
 ): Promise<SubmitMidnightTxResponse> {
   assertCurrentApproval(current);
-  const target = forceRemote ? null : resolveWalletProvingTarget(network);
+  const target = resolveWalletProvingTarget(network, 'unshielded', forceRemote);
   assertWalletProving(target);
-  if (target) {
-    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-    assertCurrentApproval(current);
-    if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
-      throw new ProofServerUnreachableError(target.url);
-    }
-  }
+  if (target && target.prover !== 'device') await assertProverReachable(target, current);
   assertCurrentApproval(current);
   onStage?.('authorizing');
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
@@ -264,30 +296,30 @@ export async function sendUnshieldedNight(
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   assertCurrentApproval(current);
   onStage?.('working');
-  if (target) onStage?.(target.stage);
-  const { signedTxHex, proven, ledgerTxHash } = await balanceAndSignInBg(
-    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, sponsor,
-    target ? { url: target.url, headers: target.headers } : undefined,
+  // On this device the fee proof follows the DUST sync and signing inside the
+  // same BG call, which reports it through `sendProgress` (phase 'proving'),
+  // so the timeline keeps its sync and sign steps.
+  if (target && target.prover !== 'device') onStage?.(target.stage);
+  const signed = await balanceAndSignInBg(
+    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, sponsor, target?.request,
   );
   assertCurrentApproval(current);
   onStage?.('submitting');
-  const result = proven
-    ? await getMidnightApi(network).submitProvenMidnightTx({ signedTxHex, waitFor: 'InBlock' })
-    : await submitSignedTx(network, signedTxHex);
+  const result = await submitSignedTx(network, signed);
   onStage?.('done');
-  return withLedgerTxHash(result, ledgerTxHash);
+  return withLedgerTxHash(result, signed.ledgerTxHash);
 }
 
 /**
  * DApp-connector `makeTransfer`: build, DUST-balance and sign the unshielded
  * transfer, and do NOT submit. Proving follows the user's own preference,
- * exactly like a dashboard send:
- *   - local / zkPaaS: the wallet proves and seals it here, so the dapp gets a
- *     sealed tx and its `submitTransaction` goes to `/tx/submit-proven`. No
- *     proving data reaches Gero.
- *   - remote (Gero Cloud): returned signed-but-unproven; `submitTransaction`
- *     relays it to Nexus `/tx/submit`, which proves, binds and submits. The
- *     approval UI requires the user's Gero Cloud consent first.
+ * exactly like a dashboard send, and the wallet always seals the tx here:
+ *   - Gero Cloud mode: the DUST fee is proven on this device.
+ *   - local / zkPaaS: proven on that server.
+ * The dapp gets a sealed tx and its `submitTransaction` goes to
+ * `/tx/submit-proven`; no proving data reaches Gero. (On Stagenet, which this
+ * device cannot prove, Gero Cloud mode still returns an unproven tx and the
+ * approval UI requires the user's Gero Cloud consent first.)
  * An unusable local/zkPaaS preference throws ProofServerUnreachableError
  * rather than silently falling back to Gero Cloud.
  */
@@ -300,23 +332,16 @@ export async function buildAndSignUnshieldedTransfer(
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
   assertCurrentApproval(current);
-  const target = resolveWalletProvingTarget(network);
+  const target = resolveWalletProvingTarget(network, 'unshielded');
   assertWalletProving(target, expectedProver);
-  if (target) {
-    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-    assertCurrentApproval(current);
-    if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
-      throw new ProofServerUnreachableError(target.url);
-    }
-  }
+  if (target && target.prover !== 'device') await assertProverReachable(target, current);
   assertCurrentApproval(current);
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
   assertCurrentApproval(current);
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   assertCurrentApproval(current);
   const { signedTxHex } = await balanceAndSignInBg(
-    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, undefined,
-    target ? { url: target.url, headers: target.headers } : undefined,
+    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, undefined, target?.request,
   );
   assertCurrentApproval(current);
   return { tx: signedTxHex };
@@ -400,9 +425,9 @@ export interface ShieldedTransferOutput {
 async function buildAndSignShieldedInBg(
   outputs: ReadonlyArray<ShieldedTransferOutput>,
   credentials: MidnightSendCredentials,
-  proving?: { url: string; headers?: Record<string, string> },
+  proving?: WalletProvingRequest,
   sponsor?: MidnightSponsor,
-): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
+): Promise<SignedInBg> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
     data: {
@@ -419,12 +444,12 @@ async function buildAndSignShieldedInBg(
         prfSecret: sponsor.prfSecret ? Array.from(sponsor.prfSecret) : undefined,
       } : undefined,
     },
-  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; ledgerTxHash?: string; error?: string } };
+  }) as { data: SignedInBgReply };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
     throw new Error(response?.data?.error || 'Midnight shielded build/sign failed');
   }
-  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven, ledgerTxHash: response.data.ledgerTxHash };
+  return signedInBg(response.data);
 }
 
 /**
@@ -457,11 +482,43 @@ export class ProofServerUnreachableError extends Error {
   }
 }
 
+/** A resolved wallet-side prover: what the background is asked to prove with. */
+type WalletProvingTarget =
+  | { prover: 'device'; request: { device: true }; stage: 'provingDevice' }
+  | {
+    prover: 'local' | 'zkpaas';
+    request: { url: string; headers?: Record<string, string> };
+    stage: 'provingLocal' | 'provingZkpaas';
+    lenientHealth: boolean;
+  };
+
 /**
- * Resolve the user's proof-server preference into a wallet-side proving
- * target: the base URL (+ Arkhia auth headers for zkPaaS), which progress
- * stage to surface, and how strict the health preflight should be. `null`
- * means "prove remotely via Gero Cloud" (mode `remote`).
+ * Whether private (shielded) sends prove on this device in Gero Cloud mode.
+ * Off by default; read in the page, where the flag store lives.
+ */
+export function shieldedOnDevice(): boolean {
+  return featureFlagsStore.isMidnightShieldedDeviceProvingEnabled();
+}
+
+/**
+ * Which prover a send of `kind` uses right now (`walletProverFor` with the
+ * stored preference and the shielded flag). The send dialogs ask this to
+ * decide whether a consent notice is needed, so they and the send path can
+ * never disagree. `forceRemote` is the one-off fallback from a local or zkPaaS
+ * server that did not answer: the send proves as in Gero Cloud mode, which for
+ * a public send still means this device.
+ */
+export function walletProverForSend(network: string, kind: 'unshielded' | 'shielded', forceRemote = false): WalletProver {
+  const mode = forceRemote ? 'remote' : midnightStore.proofServer.mode;
+  return walletProverFor(network, { mode }, kind, { shieldedOnDevice: shieldedOnDevice() });
+}
+
+/**
+ * Resolve the send's prover into what the background proves with: this
+ * device, or a proof server's base URL (+ Arkhia auth headers for zkPaaS)
+ * with the progress stage to surface and how strict the health preflight
+ * is. `null` means "prove remotely via Gero Cloud": a private send without
+ * the shielded flag, or Stagenet, which this device cannot prove.
  *
  * zkPaaS health is lenient about 404 — the Arkhia gateway relays the
  * native `/prove`/`/check` endpoints but `/health` isn't a documented part
@@ -472,28 +529,48 @@ export class ProofServerUnreachableError extends Error {
  */
 function resolveWalletProvingTarget(
   network: string,
-): { url: string; headers?: Record<string, string>; stage: MidnightSendStage; lenientHealth: boolean } | null {
+  kind: 'unshielded' | 'shielded',
+  forceRemote = false,
+): WalletProvingTarget | null {
+  const prover = walletProverForSend(network, kind, forceRemote);
+  if (prover === 'device') return { prover, request: { device: true }, stage: 'provingDevice' };
+  if (prover === 'cloud') return null;
   // `unconfigured` covers both zkPaaS-without-a-key and a local server whose
   // circuit family doesn't match the network (see resolveProvingTarget).
   const target = resolveProvingTarget(network, midnightStore.proofServer);
   if (target.kind === 'unconfigured') {
     throw new ProofServerUnreachableError(target.url, target.reason);
   }
-  if (target.kind === 'cloud') return null;
+  if (target.kind !== 'server') return null;
   return {
-    url: target.url,
-    headers: target.headers,
+    prover: target.mode,
+    request: { url: target.url, headers: target.headers },
     stage: target.mode === 'zkpaas' ? 'provingZkpaas' : 'provingLocal',
     lenientHealth: target.lenientHealth,
   };
 }
 
-/** Which prover a resolved wallet-side target is (null target = Gero Cloud). */
-export type WalletProver = 'local' | 'zkpaas' | 'cloud';
+export type { WalletProver };
 
-function proverOf(target: ReturnType<typeof resolveWalletProvingTarget>): WalletProver {
-  if (!target) return 'cloud';
-  return target.stage === 'provingZkpaas' ? 'zkpaas' : 'local';
+function proverOf(target: WalletProvingTarget | null): WalletProver {
+  return target ? target.prover : 'cloud';
+}
+
+/**
+ * Health preflight for a proof server; the device needs none. Callers skip
+ * the call (not just its body) when there is nothing to check, so a Gero
+ * Cloud or device send reaches the background without an extra await.
+ */
+async function assertProverReachable(target: WalletProvingTarget | null, current: () => boolean): Promise<void> {
+  if (!target || target.prover === 'device') return;
+  const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+  assertCurrentApproval(current);
+  const healthy = await checkProofServerHealth(target.request.url, {
+    headers: target.request.headers,
+    acceptNotFound: target.lenientHealth,
+  });
+  assertCurrentApproval(current);
+  if (!healthy) throw new ProofServerUnreachableError(target.request.url);
 }
 
 /** A remote prover would receive proof inputs the user has not agreed to send it. */
@@ -520,36 +597,37 @@ export class ProvingPreferenceChangedError extends Error {
  * would actually use:
  *   - `expected` (what the user approved) must still be the prover;
  *   - a remote prover (Gero Cloud, Arkhia zkPaaS) needs its recorded consent.
+ *     This device and a local server see nothing leave the machine.
  */
-function assertWalletProving(target: ReturnType<typeof resolveWalletProvingTarget>, expected?: WalletProver): void {
+function assertWalletProving(target: WalletProvingTarget | null, expected?: WalletProver): void {
   const prover = proverOf(target);
   if (expected && expected !== prover) throw new ProvingPreferenceChangedError();
-  if (prover !== 'local' && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) {
+  if ((prover === 'cloud' || prover === 'zkpaas') && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) {
     throw new ProvingConsentRequiredError(prover);
   }
 }
 
 /**
  * Fast pre-auth preflight for the send/convert dialogs (WP-P5 pattern):
- * `true` when the current proof-server preference can accept a send right
- * now — remote always can (Gero Cloud isn't wallet-checked), local/zkpaas
- * must answer their health check and zkPaaS must be configured at all.
+ * `true` when the current proof-server preference can accept a send of `kind`
+ * right now — Gero Cloud and this device always can, local/zkpaas must answer
+ * their health check and zkPaaS must be configured at all.
  * Never throws; the dialogs turn `false` into the two-action fallback
  * ("Open settings" / "Use Gero Cloud for this transaction") without
  * flashing the full progress timeline for a doomed send.
  */
-export async function checkWalletProvingPreflight(network: string): Promise<boolean> {
-  let target: ReturnType<typeof resolveWalletProvingTarget>;
+export async function checkWalletProvingPreflight(network: string, kind: 'unshielded' | 'shielded'): Promise<boolean> {
+  let target: WalletProvingTarget | null;
   try {
-    target = resolveWalletProvingTarget(network);
+    target = resolveWalletProvingTarget(network, kind);
   } catch {
     // zkPaaS selected but not configured (no key, no override URL).
     return false;
   }
-  if (!target) return true;
+  if (!target || target.prover === 'device') return true;
   const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-  return checkProofServerHealth(target.url, {
-    headers: target.headers,
+  return checkProofServerHealth(target.request.url, {
+    headers: target.request.headers,
     acceptNotFound: target.lenientHealth,
   });
 }
@@ -558,7 +636,7 @@ export async function checkWalletProvingPreflight(network: string): Promise<bool
  * Shielded NIGHT transfer, branching on the user's proof-server preference
  * (`midnightStore.proofServer`, WP-P1):
  *
- *   Remote (default): unchanged path.
+ *   Remote (default, Gero Cloud; the consent notice names the coin secret key).
  *     1. buildAndSignShieldedInBg → BG produces signed-but-unproven tx hex.
  *        (The "build" step lives in the wallet because shielded notes are
  *        encrypted to the user's Zswap key — no server can see them.)
@@ -568,6 +646,11 @@ export async function checkWalletProvingPreflight(network: string): Promise<bool
  *     dialog (Step 5) before invoking. By the time this function runs, the
  *     user has already accepted that witness data ships to Gero Cloud for
  *     proving.
+ *
+ *   This device (remote mode with the off-by-default
+ *   `isMidnightShieldedDeviceProvingEnabled` flag): as below, minus the
+ *   health check; the BG proves the Zswap and DUST circuits here
+ *   (midnightDeviceProver.ts), so Gero receives no secret.
  *
  *   Local / zkPaaS (wallet-side proving, see resolveWalletProvingTarget):
  *     1. Preflight the proof server's health; throws
@@ -607,23 +690,13 @@ export async function sendShieldedNight(
   for (const output of outputs) validateShieldedTokenType(output.tokenType ?? '');
   const api = getMidnightApi(network);
 
-  const target = forceRemote ? null : resolveWalletProvingTarget(network);
+  const target = resolveWalletProvingTarget(network, 'shielded', forceRemote);
   assertWalletProving(target);
   if (target) {
-    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-    assertCurrentApproval(current);
-    const healthy = await checkProofServerHealth(target.url, {
-      headers: target.headers,
-      acceptNotFound: target.lenientHealth,
-    });
-    assertCurrentApproval(current);
-    if (!healthy) {
-      throw new ProofServerUnreachableError(target.url);
-    }
+    await assertProverReachable(target, current);
     onStage?.(target.stage);
-    const { signedTxHex, proven, ledgerTxHash } = await buildAndSignShieldedInBg(
-      outputs, credentials, { url: target.url, headers: target.headers }, sponsor,
-    );
+    const signed = await buildAndSignShieldedInBg(outputs, credentials, target.request, sponsor);
+    const { signedTxHex, proven, ledgerTxHash } = signed;
     assertCurrentApproval(current);
     if (!proven) {
       // Defensive: the BG only skips proving when `proving` is absent from
@@ -633,16 +706,16 @@ export async function sendShieldedNight(
       throw new Error('Wallet-side proving requested but BG returned an unproven tx');
     }
     onStage?.('submitting');
-    const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor });
+    const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor }, { identifiers: signed.txIdentifiers });
     onStage?.('done');
     return withLedgerTxHash(result, ledgerTxHash);
   }
 
   onStage?.('working');
-  const { signedTxHex } = await buildAndSignShieldedInBg(outputs, credentials, undefined, sponsor);
+  const { signedTxHex, txIdentifiers } = await buildAndSignShieldedInBg(outputs, credentials, undefined, sponsor);
   assertCurrentApproval(current);
   onStage?.('submitting');
-  const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
+  const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor }, { identifiers: txIdentifiers });
   onStage?.('done');
   return result;
 }

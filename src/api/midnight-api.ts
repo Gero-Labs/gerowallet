@@ -26,6 +26,7 @@ import { TxIntentMismatchError, type TxIntentViolation } from '@/shared/utils/tx
 import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
+import { recoverLostSubmit, type MidnightSubmitWatch } from './midnightSubmitRecovery';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -648,6 +649,9 @@ export interface SubmitNightDustRegistrationResponse {
   status: 'Submitted' | 'InBlock' | 'Finalized';
 }
 
+// Cloudflare in front of Nexus gives up at 100 s, so the edge's 524 normally arrives before this fires.
+const MIDNIGHT_SUBMIT_TIMEOUT_MS = 110_000;
+
 /**
  * Single shared axios instance — uses the Midnight network's Nexus URL from config.
  * Caller passes the `network` per call so we can reuse one instance across sessions.
@@ -1131,6 +1135,11 @@ export class MidnightApi {
     }
   }
 
+  /** A lost reply becomes a lookup of the transaction by `watch.identifiers`; a real failure throws as it always did. */
+  private resolveSubmitError(error: unknown, watch?: MidnightSubmitWatch): Promise<SubmitMidnightTxResponse> {
+    return recoverLostSubmit(error, watch, { graphql: (query, variables) => this.graphql(query, variables) });
+  }
+
   // ─── Native send: build / submit ──────────────────────────────────────────
 
   /**
@@ -1196,15 +1205,23 @@ export class MidnightApi {
    *
    * **Endpoint contract (Nexus-side TBD)**:
    * `POST /api/midnight/{network}/tx/submit`
+   *
+   * `watch` (all three submit methods): when the reply is lost, the indexer is
+   * polled for these ledger identifiers instead of reporting a failed send.
    */
-  async submitMidnightTx(request: SubmitMidnightTxRequest): Promise<SubmitMidnightTxResponse> {
+  async submitMidnightTx(
+    request: SubmitMidnightTxRequest,
+    watch?: MidnightSubmitWatch,
+  ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/submit');
-      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
+        timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
+      });
       if (status !== 200) throw parseHttpError(data);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      return this.resolveSubmitError(error, watch);
     }
   }
 
@@ -1227,14 +1244,17 @@ export class MidnightApi {
    */
   async proveAndSubmitMidnightTx(
     request: { signedTxHex: string; waitFor?: 'Submitted' | 'InBlock' | 'Finalized' },
+    watch?: MidnightSubmitWatch,
   ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/prove-and-submit');
-      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
+        timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
+      });
       if (status !== 200) throw parseHttpError(data);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      return this.resolveSubmitError(error, watch);
     }
   }
 
@@ -1255,14 +1275,17 @@ export class MidnightApi {
    */
   async submitProvenMidnightTx(
     request: SubmitMidnightTxRequest,
+    watch?: MidnightSubmitWatch,
   ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/submit-proven');
-      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
+        timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
+      });
       if (status !== 200) throw parseHttpError(data);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      return this.resolveSubmitError(error, watch);
     }
   }
 

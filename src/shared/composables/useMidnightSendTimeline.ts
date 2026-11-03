@@ -32,6 +32,7 @@ export const STAGE_RANK: Record<string, number> = {
   authorizing: 1,
   building: 2,
   working: 3,
+  provingDevice: 3,
   provingLocal: 3,
   provingZkpaas: 3,
   submitting: 4,
@@ -44,6 +45,7 @@ export interface SendTimelineLabels {
   sync: string;
   sign: string;
   submit: string;
+  provingDevice: string;
   provingLocal: string;
   provingZkpaas: string;
 }
@@ -62,15 +64,19 @@ export function useMidnightSendTimeline(
     const rank = STAGE_RANK[s] ?? 0;
     const prog = midnightStore.sendProgress;
     const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
+    // A public send proving its DUST fee on this device: after signing, inside
+    // the same BG call. The sign node carries it, with an indeterminate bar.
+    const feeProving = s === 'working' && prog?.phase === 'proving';
     // Within the single BG `working` stage: sync is active until the ledger
     // replay hits 100%, then signing takes over until the call resolves.
-    const syncDone = pct != null && pct >= 100;
+    const syncDone = feeProving || (pct != null && pct >= 100);
     const syncActive = s === 'working' && !syncDone;
     const signActive = s === 'working' && syncDone;
     // Wallet-side shielded sends are one opaque proving call with no percent
     // signal, so that node gets an indeterminate bar rather than a fake number.
-    const provingActive = s === 'provingLocal' || s === 'provingZkpaas';
-    const provingLabel = s === 'provingZkpaas' ? labels.value.provingZkpaas : labels.value.provingLocal;
+    const provingActive = s === 'provingDevice' || s === 'provingLocal' || s === 'provingZkpaas';
+    const provingLabel = s === 'provingZkpaas' ? labels.value.provingZkpaas
+      : s === 'provingDevice' ? labels.value.provingDevice : labels.value.provingLocal;
 
     return [
       {
@@ -93,8 +99,10 @@ export function useMidnightSendTimeline(
       },
       {
         key: 'sign',
-        label: labels.value.sign,
+        label: feeProving ? labels.value.provingDevice : labels.value.sign,
         state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
+        showBar: feeProving || undefined,
+        percent: feeProving ? null : undefined,
       },
       {
         key: 'submit',
