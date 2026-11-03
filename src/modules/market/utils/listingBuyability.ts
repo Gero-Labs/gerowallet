@@ -2,6 +2,7 @@ import type { ListingDto } from '@/api/nft-market-api';
 import { decodeListingDatum, type ListingDatum } from '@/chrome/nftMarket/listingDatum';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import type { Keys } from '@/models/types';
+import { MAX_ROYALTIES } from '@/utils/nftMarketDeployments';
 
 /**
  * What the wallet may do with a listing in a collection's list, so Buy is offered only where the
@@ -22,8 +23,10 @@ import type { Keys } from '@/models/types';
  *               (`PRIVATE_LISTING`), this account's own keys included, and browse hides them.
  *               Private buying is phase 1b, which lifts the refusal on both sides.
  *   unreadable  the datum is not exactly a Gero listing (`DATUM`), or the row contradicts it (its
- *               price, owner or seller is not the datum's): it can never be bought, and the page
- *               counts it among the listings it could not show.
+ *               price, owner, seller or royalties are not the datum's), or the datum carries more
+ *               royalties than the wallet ever writes (MAX_ROYALTIES): `verifyBuy` refuses each of
+ *               these, so it can never be bought, and the page counts it among the listings it
+ *               could not show.
  *
  * The datum is read here from the row's own bytes, strictly, the way the worker reads it (R11):
  * the row's other fields are Nexus's word, and a row that shows one price over a datum that holds
@@ -76,15 +79,22 @@ function readDatum(row: ListingDto, networkId: number): ListingDatum | null {
 
 const lower = (value: unknown): string => String(value ?? '').toLowerCase();
 
-/** Whether the row says what its datum says: the same price, owner and seller address. */
+/**
+ * Whether the row says what its datum says: the same price, owner, seller address and royalties
+ * (each payee's address and amount, in order). The royalties are compared as `verifyBuy` compares
+ * them (a missing list is none), so a row that shows others never gets a Buy the worker refuses.
+ */
 function rowMatchesDatum(row: ListingDto, datum: ListingDatum): boolean {
   try {
+    const rows = Array.isArray(row.royalties) ? row.royalties : [];
     return (
       BigInt(row.priceLovelace) === datum.price &&
       typeof row.ownerPkh === 'string' &&
       lower(row.ownerPkh) === lower(datum.owner) &&
       typeof row.sellerAddress === 'string' &&
-      lower(row.sellerAddress) === lower(datum.sellerAddress)
+      lower(row.sellerAddress) === lower(datum.sellerAddress) &&
+      rows.length === datum.royalties.length &&
+      rows.every((royalty, i) => lower(royalty?.address) === lower(datum.royalties[i].address) && String(royalty?.lovelace) === datum.royalties[i].lovelace.toString())
     );
   } catch {
     return false;
@@ -102,6 +112,8 @@ export function listingBuyState(row: ListingDto, networkId: number, who: BuyerId
   // What the wallet verified itself is its own, whatever Nexus's row or datum bytes look like.
   if (who.listingRefs.has(`${row.txHash}#${row.outputIndex}`)) return { kind: 'own' };
   if (datum === null || !rowMatchesDatum(row, datum)) return { kind: 'unreadable' };
+  // More royalties than the wallet itself writes: each is a min-UTxO top-up at the buyer's expense, and verifyBuy refuses it.
+  if (datum.royalties.length > MAX_ROYALTIES) return { kind: 'unreadable' };
   const ownerIsMine = who.keyHashes.has(lower(datum.owner));
   const sellerIsMine = who.addresses.has(lower(datum.sellerAddress));
   if (ownerIsMine && sellerIsMine) return { kind: 'own' };

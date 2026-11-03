@@ -57,6 +57,8 @@ export interface RowOptions {
   assetName?: string;
   /** Lovelace deposit. */
   deposit?: string;
+  /** The royalties the datum pays, in order, and the row reports (lovelace as decimal text). Default: none. */
+  royalties?: { address: string; lovelace: string }[];
   /** Replaces the datum bytes entirely (an unreadable datum). */
   datumCbor?: string;
 }
@@ -77,13 +79,14 @@ export function listingRow(options: RowOptions = {}): ListingDto {
   const assetName = asciiHex(options.assetName ?? `Cat${index}`);
   const sellerAddress = options.sellerAddress ?? preprodAddress(owner, stake);
   const buyer = options.buyer ?? null;
+  const royalties = options.royalties ?? [];
   const datumCbor =
     options.datumCbor ??
     constr(0, [
       bstr(owner),
       addressData(sellerAddress),
       uint(priceLovelace),
-      '9fff',
+      `9f${royalties.map((r) => constr(0, [addressData(r.address), uint(BigInt(r.lovelace))])).join('')}ff`,
       buyer === null ? NONE : constr(0, [bstr(buyer)]),
     ]);
   const deployment = NFT_MARKET_DEPLOYMENTS_PREPROD[0];
@@ -97,7 +100,7 @@ export function listingRow(options: RowOptions = {}): ListingDto {
     assetName,
     priceLovelace: priceLovelace.toString(),
     feeLovelace: '1500000',
-    royalties: [],
+    royalties: royalties.map((r) => ({ ...r })),
     depositLovelace: options.deposit ?? '1550000',
     sellerAddress,
     ownerPkh: owner,

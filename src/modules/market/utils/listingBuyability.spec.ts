@@ -5,6 +5,7 @@
 // a Gero listing. The datum is read here the way the worker reads
 // it, from the row's own bytes, because the row's other fields are Nexus's word.
 import { describe, expect, it } from 'vitest';
+import { MAX_ROYALTIES } from '@/utils/nftMarketDeployments';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import type { Keys } from '@/models/types';
 import { listingRow, preprodAddress, refOf, STRANGER_KEY, STRANGER_STAKE } from './__fixtures__/listingFixtures';
@@ -131,6 +132,54 @@ describe('listingBuyState', () => {
     it('ignores the case of a hash or an address, which is not a contradiction', () => {
       const row = listingRow();
       expect(listingBuyState({ ...row, ownerPkh: row.ownerPkh.toUpperCase() }, TESTNET, own())).toEqual({ kind: 'buyable' });
+    });
+
+    // verifyBuy holds the row's royalties to the datum's (the contract pays the datum's), so a row
+    // that shows others is not one Buy may be offered on: the worker would refuse it.
+    describe('royalties', () => {
+      const CREATOR_A = preprodAddress('c1'.repeat(28), 'c2'.repeat(28));
+      const CREATOR_B = preprodAddress('c3'.repeat(28), 'c4'.repeat(28));
+      const ROYALTIES = [{ address: CREATOR_A, lovelace: '5000000' }, { address: CREATOR_B, lovelace: '2000000' }];
+      const withRoyalties = listingRow({ royalties: ROYALTIES });
+
+      it('a row that reports the datum\'s royalties is buyable', () => {
+        expect(listingBuyState(withRoyalties, TESTNET, own())).toEqual({ kind: 'buyable' });
+      });
+
+      it('ignores the case of a royalty address, which is not a contradiction', () => {
+        const row = { ...withRoyalties, royalties: ROYALTIES.map((r) => ({ ...r, address: r.address.toUpperCase() })) };
+        expect(listingBuyState(row, TESTNET, own())).toEqual({ kind: 'buyable' });
+      });
+
+      it.each([
+        ['a lower amount', [{ ...ROYALTIES[0], lovelace: '4000000' }, ROYALTIES[1]]],
+        ['a higher amount', [{ ...ROYALTIES[0], lovelace: '5000001' }, ROYALTIES[1]]],
+        ['another address', [{ ...ROYALTIES[0], address: CREATOR_B }, ROYALTIES[1]]],
+        ['the same royalties in another order', [ROYALTIES[1], ROYALTIES[0]]],
+        ['one royalty left out', [ROYALTIES[0]]],
+        ['no royalties at all', []],
+        ['an extra royalty', [...ROYALTIES, { address: CREATOR_A, lovelace: '1000000' }]],
+        ['no list at all', undefined],
+        ['a list that is not one', 'five' as never],
+      ])('a row that shows %s is not read', (_what, royalties) => {
+        expect(listingBuyState({ ...withRoyalties, royalties: royalties as never }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+      });
+
+      it('a row that hides royalties the datum pays is not read (the bait: a cheaper-looking listing)', () => {
+        expect(listingBuyState({ ...withRoyalties, royalties: [] }, TESTNET, own())).toEqual({ kind: 'unreadable' });
+      });
+
+      it('a listing with no royalty in its datum and none on its row is buyable', () => {
+        expect(listingBuyState(listingRow(), TESTNET, own())).toEqual({ kind: 'buyable' });
+      });
+
+      it('a datum with more than MAX_ROYALTIES royalties is not offered, though its row agrees: the worker refuses it', () => {
+        const payee = (i: number) => ({ address: preprodAddress(`d${i}`.repeat(28), 'd9'.repeat(28)), lovelace: '100000' });
+        const many = Array.from({ length: MAX_ROYALTIES + 1 }, (_, i) => payee(i));
+        expect(listingBuyState(listingRow({ royalties: many }), TESTNET, own())).toEqual({ kind: 'unreadable' });
+        const atLimit = Array.from({ length: MAX_ROYALTIES }, (_, i) => payee(i));
+        expect(listingBuyState(listingRow({ royalties: atLimit }), TESTNET, own())).toEqual({ kind: 'buyable' });
+      });
     });
   });
 
