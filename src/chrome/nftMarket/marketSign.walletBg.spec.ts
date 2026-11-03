@@ -201,7 +201,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
   describe('a transaction that spends one of the wallet\'s own listings', () => {
     it('is refused without an allowance, and signed once with one', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       const { txCbor, txId, core, utxos, keys } = marketTx(bg, { spend: LISTING_REF });
       await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
 
@@ -214,7 +214,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
 
     it('a reprice-shaped transaction needs an allowance covering both the spend and the new output', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       const { txCbor, txId, utxos, keys } = marketTx(bg, { spend: LISTING_REF, create: true });
 
       grantMarketSignAllowance(bg.id, txId, [`spends-listing:${LISTING_REF}`]);
@@ -226,7 +226,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
 
     it('an allowance for another transaction does not help', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       const { txCbor, utxos, keys } = marketTx(bg, { spend: LISTING_REF });
       grantMarketSignAllowance(bg.id, 'cd'.repeat(32), [`spends-listing:${LISTING_REF}`]);
       await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).rejects.toThrow(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
@@ -234,15 +234,15 @@ describe('WalletBg.signTx with the NFT market guard', () => {
 
     it('stops guarding a listing once the store no longer holds it', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
-      WalletStore.setListedListings([], '0');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
+      WalletStore.setListedListings([]);
       const { txCbor, utxos, keys } = marketTx(bg, { spend: LISTING_REF });
       await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
     });
 
     it('does not guard the spend of a listing that is not the wallet\'s own', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       // Someone else's listing, bought through a dApp: previewed there, not refused here.
       const { txCbor, utxos, keys } = marketTx(bg, { spend: `${OTHER_LISTING_TX}#0` });
       await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
@@ -269,7 +269,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
 
     it('cancelling the wallet\'s own listing through a dApp signs with the pass', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       const { txCbor, utxos, keys } = marketTx(bg, { spend: LISTING_REF });
       openDappMarketPass(bg, txCbor);
       await expect(bg.signTx(txCbor, '', utxos, keys, rootKeyBytes)).resolves.toBeTruthy();
@@ -317,7 +317,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
 
     it('opens no pass for a transaction that touches no market script or own listing', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       const { txCbor, txId } = marketTx(bg);
       const drop = openDappMarketPass(bg, txCbor);
       expect(hasDappMarketPass(bg.id, txId, ['creates-listing:0'])).toBe(false);
@@ -370,7 +370,7 @@ describe('WalletBg.signTx with the NFT market guard', () => {
   describe('everything else', () => {
     it('an unrelated transaction is signed with no allowance, and leaves a grant alone', async () => {
       const bg = await bootWallet();
-      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())], '2000000');
+      WalletStore.setListedListings([ownListing(LISTING_REF, ownerHash())]);
       const { txCbor, utxos, keys } = marketTx(bg);
       const other = marketTx(bg, { create: true });
       grantMarketSignAllowance(bg.id, other.txId, ['creates-listing:1']);

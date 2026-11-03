@@ -215,7 +215,7 @@ describe('the actions of an NFT', () => {
     const software = render();
     await open(software, 'Listed');
     expect(software.find('[data-testid="asset-unlist-elsewhere"]').exists()).toBe(false);
-    expect(software.get('[data-testid="asset-unlist"]').exists()).toBe(true);
+    expect(software.find('[data-testid="asset-unlist"]').exists()).toBe(true);
 
     walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Ledger } as never;
     const hardware = render();
