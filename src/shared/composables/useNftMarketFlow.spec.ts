@@ -37,12 +37,13 @@ import {
   NFT_MARKET_INPUT_SPENT,
   describeNftMarketFailure,
   isInputAlreadySpentError,
-  marketSignRefusalKey,
   useNftMarketFlow,
   type NftMarketFailureKind,
 } from './useNftMarketFlow';
 import type { MarketAction } from '@/chrome/nftMarket/marketPrepare';
 import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { describeSubmitFailure } from '@/chrome/submitErrors';
+import i18n from '@/plugins/i18n';
 import { MessageTypes } from '@/models/MessageTypes';
 
 const TX_CBOR = '84a400d9010281825820bb';
@@ -208,11 +209,13 @@ describe('failure states', () => {
     ['OFFER_NOT_MOVABLE', 'refused', 'nftMarket.error.offerNotMovable'],
     ['NOT_OWNED', 'refused', 'nftMarket.error.notOwned'],
     ['INSUFFICIENT_ADA', 'refused', 'nftMarket.error.insufficientAda'],
-    ['NO_COLLATERAL', 'refused', 'nftMarket.error.noCollateral'],
+    // The shared collateral pool may only be empty for now.
+    ['NO_COLLATERAL', 'retry', 'nftMarket.error.noCollateral'],
     ['FEE_INPUT_SPENT', 'retry', 'nftMarket.error.feeInputSpent'],
     ['NOT_GERO_LISTING', 'refused', 'nftMarket.error.notListing'],
     ['DATUM_UNREADABLE', 'refused', 'nftMarket.error.notListing'],
-    ['EVALUATION_FAILED', 'refused', 'nftMarket.error.rejected'],
+    // The contract refused the listing as it now stands: refresh, then start again.
+    ['EVALUATION_FAILED', 'changed', 'nftMarket.error.rejected'],
     ['INVALID_REQUEST', 'refused', 'nftMarket.error.invalidRequest'],
     ['BUILD_FAILED', 'retry', 'nftMarket.error.failed'],
     ['EXPIRED', 'retry', 'nftMarket.error.expired'],
@@ -256,6 +259,14 @@ describe('failure states', () => {
     },
   );
 
+  it('a "refused" message never tells the user to try again, and a "retry" or "changed" one may', () => {
+    // The kind and the copy must agree: a refusal has no Try again button, so its sentence must not offer one.
+    for (const [code, kind, key] of TABLE) {
+      if (kind !== 'refused') continue;
+      expect(i18n.t(key, 'us', { min: '5' }), `${code} is refused, so its copy cannot say "try again"`).not.toMatch(/try again/i);
+    }
+  });
+
   it('a missing or malformed prepare reply is a failed build to retry', async () => {
     send.mockRejectedValueOnce(new Error('port closed'));
     const flow = useNftMarketFlow('buy');
@@ -292,6 +303,7 @@ describe('failure states', () => {
     expect(flow.failureMessage.value).toEqual({ key: 'nftMarket.error.verifyFailed' });
     expect(debugLog).toHaveBeenCalledWith('NFT market verify refused:', 'buy', 'OUTPUTS');
     // The rule never reaches the page's state: a dialog cannot show what it is not given.
+    expect(flow.failure.value).toEqual({ code: 'VERIFY_FAILED' });
     expect(JSON.stringify(flow.failure.value)).not.toContain('OUTPUTS');
     expect(JSON.stringify(flow.failureMessage.value)).not.toContain('OUTPUTS');
   });
@@ -332,6 +344,34 @@ describe('failure states', () => {
       });
       // The sentence has no placeholder: the dialog shows the amounts above beside it.
       expect(flow.failureMessage.value).toEqual({ key: 'nftMarket.error.royaltyConfirmation' });
+    });
+
+    it.each([
+      ['us', '12.81'],
+      ['de', '12,81'],
+    ])('reads the percent in the active language (%s: %s)', async (locale, percent) => {
+      const before = i18n.locale;
+      i18n.locale = locale;
+      try {
+        respond({
+          [MessageTypes.NFT_MARKET_PREPARE_LIST]: refusal('ROYALTY_CONFIRMATION_REQUIRED', {
+            effectiveRoyaltyLovelace: '5125000',
+            effectiveRoyaltyRate: '0.128125',
+            royaltyRate: '0.130000',
+          }),
+        });
+        const flow = useNftMarketFlow('list');
+        await flow.prepare(PAYLOADS.list);
+        expect(flow.royaltyConfirmation.value?.percent).toBe(percent);
+        // The raw fraction the worker sent stays as it is, for the dialog's own maths.
+        expect(flow.royaltyConfirmation.value?.effectiveRoyaltyRate).toBe('0.128125');
+
+        // It follows a language switch while the dialog is open.
+        i18n.locale = locale === 'us' ? 'de' : 'us';
+        expect(flow.royaltyConfirmation.value?.percent).toBe(locale === 'us' ? '12,81' : '12.81');
+      } finally {
+        i18n.locale = before;
+      }
     });
 
     it('shows a fractional percent, and sends the confirmation on the next prepare', async () => {
@@ -486,7 +526,9 @@ describe('signing and submitting', () => {
   });
 
   describe('the node refusing a spent input on submit', () => {
-    const BAD_INPUTS = 'Transaction submission failed. Ogmios rejected tx: BadInputsUTxO (ConwayUtxoFailure)';
+    // The text SUBMIT_TX really answers with: the worker's own prefix (submitErrors.ts) and the node's reason.
+    const submitText = (reason: string) => describeSubmitFailure(400, reason);
+    const BAD_INPUTS = submitText('Ogmios rejected tx: BadInputsUTxO (ConwayUtxoFailure)');
 
     async function submitRefused(action: MarketAction, message = BAD_INPUTS) {
       respond({
@@ -526,20 +568,20 @@ describe('signing and submitting', () => {
 
     it.each([
       'Ogmios rejected tx: BadInputsUTxO',
-      'Transaction submission failed. Transaction contains unknown UTxO references as inputs. This can either be because the specified references do not exist, or because they have already been spent.',
+      'Ogmios rejected tx: Transaction contains unknown UTxO references as inputs. This can either be because the specified references do not exist, or because they have already been spent.',
       'Ogmios rejected tx: {"error":{"data":{"unknownOutputReferences":[{"transaction":{"id":"ab"},"index":1}]}}}',
-    ])('recognises the rejection: %s', async (message) => {
-      const { flow } = await submitRefused('buy', message);
+    ])('recognises the rejection: %s', async (reason) => {
+      const { flow } = await submitRefused('buy', submitText(reason));
       expect(flow.failure.value?.code).toBe(NFT_MARKET_INPUT_SPENT);
     });
 
     it('does not read other refusals as a spent input', async () => {
-      for (const message of [
+      for (const reason of [
         'Ogmios rejected tx: ValueNotConservedUTxO',
-        'Transaction submission failed. fee 3117 is too small',
-        'Transaction submission failed.',
+        'Ogmios rejected tx: fee 3117 is too small',
+        '',
       ]) {
-        const { flow } = await submitRefused('buy', message);
+        const { flow } = await submitRefused('buy', submitText(reason));
         expect(flow.failure.value?.code).toBe('SUBMIT_FAILED');
         expect(flow.failureKind.value).toBe('maybeSent');
       }
@@ -580,15 +622,6 @@ describe('signing and submitting', () => {
       expect(flow.failure.value?.code).toBe('SIGN_FAILED');
       expect(flow.stage.value).toBe('review');
     });
-  });
-});
-
-describe('the signing refusal, for the dApp approval screens', () => {
-  it('maps the worker refusal text to the expired copy and nothing else', () => {
-    expect(marketSignRefusalKey(NFT_MARKET_SIGN_REFUSAL_MESSAGE)).toBe('nftMarket.error.expired');
-    expect(marketSignRefusalKey('Gero cannot sign something else')).toBeNull();
-    expect(marketSignRefusalKey(undefined)).toBeNull();
-    expect(marketSignRefusalKey(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE))).toBe('nftMarket.error.expired');
   });
 });
 

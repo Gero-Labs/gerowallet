@@ -129,6 +129,15 @@ export function formatSats(sats: number | bigint): string {
   return Number(sats).toLocaleString('en-US');
 }
 
+/**
+ * A fraction of one as a percent number for a locale code ("en-US", "de-DE"): at most two
+ * decimals, no trailing zeros, the locale's own decimal separator (0.128125 → "12.81", and
+ * "12,81" in de-DE). No % sign: the caller's copy carries it.
+ */
+export function formatPercentOfFraction(fraction: number, localeCode: string = 'en-US'): string {
+  return (fraction * 100).toLocaleString(localeCode, { maximumFractionDigits: 2 });
+}
+
 /** Format a percentage change (absolute value + %) */
 export function formatChange(change: number): string {
   return Math.abs(change).toFixed(1) + '%';

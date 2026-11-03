@@ -1,5 +1,6 @@
-import { computed, type ComputedRef } from 'vue';
+import { computed, type ComputedRef, type Ref } from 'vue';
 import { MessageTypes } from '@/models/MessageTypes';
+import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
 import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
 import type { MarketAction, RoyaltyNotes } from '@/chrome/nftMarket/marketPrepare';
@@ -15,7 +16,8 @@ import {
   type PreparedTxFailure,
   type PreparedTxFlowOptions,
 } from '@/shared/composables/usePreparedTxFlow';
-import { formatTokenQuantity } from '@/shared/utils/format';
+import { formatPercentOfFraction, formatTokenQuantity } from '@/shared/utils/format';
+import { NFT_MARKET_EXPIRED_KEY } from '@/shared/utils/nftMarketSignRefusal';
 import { MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
 
 /**
@@ -64,17 +66,21 @@ export interface NftMarketMessage {
 }
 
 export interface NftMarketFailure extends PreparedTxFailure {
-  /**
-   * The worker's fixed note on a failed prepare; for VERIFY_FAILED, the rule that refused. Read
-   * only to be logged, then dropped: it is not copy and a dialog never sees it.
-   */
-  error?: string;
   /** ROYALTY_CONFIRMATION_REQUIRED: the royalties that would be paid, in lovelace (decimal text). */
   effectiveRoyaltyLovelace?: string;
   /** ROYALTY_CONFIRMATION_REQUIRED: that sum over the price, as a fraction with six digits ("0.150000"). */
   effectiveRoyaltyRate?: string;
   /** ROYALTY_CONFIRMATION_REQUIRED: the collection's own total rate, as a fraction with six digits. */
   royaltyRate?: string;
+}
+
+/**
+ * The failure as `usePreparedTxFlow` reads it off the worker's reply: the public fields plus the
+ * worker's own `error` note. The note is read only to be logged (the rule of a VERIFY_FAILED) and
+ * is dropped before the page sees it: it is not copy, and it is not part of `NftMarketFailure`.
+ */
+interface NftMarketFailureReply extends NftMarketFailure {
+  error?: string;
 }
 
 /** What the seller is asked to confirm when the royalties pass the usual limit. */
@@ -84,7 +90,7 @@ export interface RoyaltyConfirmation {
   royaltyRate?: string;
   /** The sum in ADA, as it reads on screen ("3.75"). */
   ada: string;
-  /** The sum as a percent of the price, at most two decimals ("15", "12.81"). */
+  /** The sum as a percent of the price in the active language, at most two decimals ("15", "12.81", "12,81" in German). */
   percent: string;
 }
 
@@ -117,19 +123,6 @@ export type NftMarketFlowOptions = Pick<PreparedTxFlowOptions, 'getIsBT'>;
  */
 export const NFT_MARKET_INPUT_SPENT = 'INPUT_SPENT';
 
-/** The message the worker's signing refusal (its allowance ran out) is shown as. */
-export const NFT_MARKET_EXPIRED_KEY = 'nftMarket.error.expired';
-
-/**
- * The i18n key for the worker's market signing refusal, or null for any other text. Gero's own
- * flows reach it as `EXPIRED`; a dApp approval screen sees the refusal text itself when the
- * transaction's pass has run out (friendlyTxError maps it there).
- */
-export function marketSignRefusalKey(message: unknown): string | null {
-  const text = message instanceof Error ? message.message : message;
-  return text === NFT_MARKET_SIGN_REFUSAL_MESSAGE ? NFT_MARKET_EXPIRED_KEY : null;
-}
-
 /**
  * Whether a failed submit says an input of the transaction is gone: the ledger's
  * `BadInputsUTxO`, or Ogmios's unknown-output-references rejection (code 3117, spent or never
@@ -142,9 +135,6 @@ export function isInputAlreadySpentError(message: string): boolean {
 
 /** Lovelace as ADA, the way amounts read in the wallet: up to six decimals, no trailing zeros. */
 const adaText = (lovelace: bigint): string => formatTokenQuantity(Number(lovelace) / 1_000_000, 6);
-
-/** A fraction of the price as a percent with at most two decimals ("0.128125" → "12.81"). */
-const percentText = (fraction: number): string => String(Math.round(fraction * 10_000) / 100);
 
 const msg = (key: string, params?: Record<string, string>): NftMarketMessage => (params ? { key, params } : { key });
 
@@ -212,13 +202,15 @@ export function describeNftMarketFailure(
     case 'INSUFFICIENT_ADA':
       return is('refused', 'nftMarket.error.insufficientAda');
     case 'NO_COLLATERAL':
-      return is('refused', 'nftMarket.error.noCollateral');
+      // The shared collateral pool may only be empty for now.
+      return is('retry', 'nftMarket.error.noCollateral');
     case 'FEE_INPUT_SPENT':
       return is('retry', 'nftMarket.error.feeInputSpent');
 
     // The builder.
     case 'EVALUATION_FAILED':
-      return is('refused', 'nftMarket.error.rejected');
+      // The contract refused the listing as it now stands (a price or datum that moved): refresh first.
+      return is('changed', 'nftMarket.error.rejected');
     case 'INVALID_REQUEST':
       return is('refused', 'nftMarket.error.invalidRequest');
 
@@ -239,7 +231,7 @@ export function describeNftMarketFailure(
 }
 
 /** The amounts of a royalty confirmation from a failure, or null when it is not one or has no usable amounts. */
-function royaltyConfirmationOf(failure: NftMarketFailure | null): RoyaltyConfirmation | null {
+function royaltyConfirmationOf(failure: NftMarketFailure | null, localeCode: string): RoyaltyConfirmation | null {
   if (failure?.code !== 'ROYALTY_CONFIRMATION_REQUIRED') return null;
   const { effectiveRoyaltyLovelace, effectiveRoyaltyRate, royaltyRate } = failure;
   if (!effectiveRoyaltyLovelace || !/^\d+$/.test(effectiveRoyaltyLovelace)) return null;
@@ -250,7 +242,7 @@ function royaltyConfirmationOf(failure: NftMarketFailure | null): RoyaltyConfirm
     effectiveRoyaltyRate,
     ...(royaltyRate ? { royaltyRate } : {}),
     ada: adaText(BigInt(effectiveRoyaltyLovelace)),
-    percent: percentText(rate),
+    percent: formatPercentOfFraction(rate, localeCode),
   };
 }
 
@@ -292,17 +284,19 @@ function requestFor(action: MarketAction, payload: NftMarketPayloads[MarketActio
 }
 
 export function useNftMarketFlow<A extends MarketAction>(action: A, options: NftMarketFlowOptions = {}) {
-  const flow = usePreparedTxFlow<NftMarketSummary<A>, NftMarketFailure>({
+  const flow = usePreparedTxFlow<NftMarketSummary<A>, NftMarketFailureReply>({
     getIsBT: options.getIsBT,
     refusalMessage: NFT_MARKET_SIGN_REFUSAL_MESSAGE,
     submitRefusalCode: (text) => (isInputAlreadySpentError(text) ? NFT_MARKET_INPUT_SPENT : undefined),
     failureFields: ['error', 'effectiveRoyaltyLovelace', 'effectiveRoyaltyRate', 'royaltyRate'],
   });
 
-  const described = computed(() => (flow.failure.value ? describeNftMarketFailure(action, flow.failure.value) : null));
+  // What a dialog reads is the public failure: the reply's own note is dropped in `prepare`.
+  const failure = flow.failure as Ref<NftMarketFailure | null>;
+  const described = computed(() => (failure.value ? describeNftMarketFailure(action, failure.value) : null));
   const failureKind: ComputedRef<NftMarketFailureKind | null> = computed(() => described.value?.kind ?? null);
   const failureMessage: ComputedRef<NftMarketMessage | null> = computed(() => described.value?.message ?? null);
-  const royaltyConfirmation: ComputedRef<RoyaltyConfirmation | null> = computed(() => royaltyConfirmationOf(flow.failure.value));
+  const royaltyConfirmation: ComputedRef<RoyaltyConfirmation | null> = computed(() => royaltyConfirmationOf(failure.value, getLocaleCode(i18n.locale)));
 
   /**
    * Have the worker build and verify this action. True when a summary is ready to review. On a
@@ -311,14 +305,14 @@ export function useNftMarketFlow<A extends MarketAction>(action: A, options: Nft
    */
   async function prepare(payload: NftMarketPayloads[A]): Promise<boolean> {
     const prepared = await flow.prepare(PREPARE_MESSAGE[action], requestFor(action, payload));
-    const failure = flow.failure.value;
-    if (!prepared && failure && failure.error !== undefined) {
-      if (failure.code === 'VERIFY_FAILED') debugLog('NFT market verify refused:', action, failure.error);
-      const { error: _note, ...rest } = failure;
+    const reply = flow.failure.value;
+    if (!prepared && reply && reply.error !== undefined) {
+      if (reply.code === 'VERIFY_FAILED') debugLog('NFT market verify refused:', action, reply.error);
+      const { error: _note, ...rest } = reply;
       flow.failure.value = rest;
     }
     return prepared;
   }
 
-  return { ...flow, prepare, failureKind, failureMessage, royaltyConfirmation };
+  return { ...flow, failure, prepare, failureKind, failureMessage, royaltyConfirmation };
 }

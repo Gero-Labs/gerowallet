@@ -39,6 +39,7 @@ vi.mock('@/shared/utils/witnessSets', () => ({
 vi.mock('@/plugins/hardwareLoading', () => ({ default: prompt }));
 
 import { useLegacyRescue } from './useLegacyRescue';
+import { describeSubmitFailure } from '@/chrome/submitErrors';
 import { MessageTypes } from '@/models/MessageTypes';
 
 const TX_CBOR = '84a400d9010281825820bb';
@@ -195,6 +196,25 @@ describe('useLegacyRescue', () => {
     await flow.prepare(REFS);
 
     expect(await flow.signAndSubmit()).toBe(false);
+    expect(flow.failure.value?.code).toBe('SUBMIT_FAILED');
+    expect(flow.prepared.value).toBeNull();
+    expect(flow.stage.value).toBe('idle');
+  });
+
+  // usePreparedTxFlow reads a node refusal of a spent input only for a caller that opts in
+  // (`submitRefusalCode`, as the NFT market flow does). The rescue does not, so a BadInputs text
+  // from the real submit path stays what it always was: a signed transaction that may be on chain.
+  it('keeps a spent-input submit error unconfirmed when the caller has not opted in', async () => {
+    respond({
+      [MessageTypes.LEGACY_LISTING_PREPARE_CANCEL]: prepared(),
+      [MessageTypes.SIGN_TX]: () => ({ witnesses: 'WITNESSES' }),
+      [MessageTypes.SUBMIT_TX]: () => ({ error: describeSubmitFailure(400, 'Ogmios rejected tx: BadInputsUTxO (ConwayUtxoFailure)') }),
+    });
+    const flow = useLegacyRescue();
+    await flow.prepare(REFS);
+
+    expect(await flow.signAndSubmit()).toBe(false);
+
     expect(flow.failure.value?.code).toBe('SUBMIT_FAILED');
     expect(flow.prepared.value).toBeNull();
     expect(flow.stage.value).toBe('idle');

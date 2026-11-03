@@ -51,6 +51,7 @@ import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { TxSignError } from '@/chrome/config';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
 
 enableAutoUnmount(afterEach);
 beforeEach(() => {
@@ -67,8 +68,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 const devices = ['ledger', 'trezor-bridge', 'trezor-webusb'] as const;
-async function render(device: typeof devices[number]) {
-  walletStore.loggedWallet.type = device === 'ledger' ? WalletType.Ledger : WalletType.Trezor;
+async function render(device: typeof devices[number] | 'keystone') {
+  walletStore.loggedWallet.type = device === 'ledger' ? WalletType.Ledger : device === 'keystone' ? WalletType.Keystone : WalletType.Trezor;
   featureFlagsStore.state.flags.isTrezorWebUsbEnabled = device === 'trezor-webusb';
   const view = mount(SignTx, { global: {
     stubs: {
@@ -105,6 +106,17 @@ describe.each(devices)('Cardano %s signing busy state', device => {
     expect(window.close).toHaveBeenCalledTimes(1);
   });
 
+  // The worker refuses a market transaction in fixed English once its dApp approval has run out;
+  // the popup must show that in the user's language, as the side panel does.
+  it('shows the worker\'s market signing refusal in the user\'s language, not as raw English', async () => {
+    signer().mockRejectedValueOnce(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    const view = await render(device);
+    await button(view, 'wallet.sign').trigger('click');
+    await vi.waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    expect(mocks.error).toHaveBeenCalledWith('This took too long. Start it again.');
+    expect(mocks.error).not.toHaveBeenCalledWith(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+  });
+
   it.each(['wallet', 'network', 'lock', 'unmount'] as const)('still discards a late hardware response after %s changes', async change => {
     const pending = deferred<unknown>();
     signer().mockReturnValueOnce(pending.promise);
@@ -121,6 +133,17 @@ describe.each(devices)('Cardano %s signing busy state', device => {
     expect(mocks.error).not.toHaveBeenCalled();
     expect(window.close).not.toHaveBeenCalled();
     expect(mocks.end).toHaveBeenCalled();
+  });
+});
+
+describe('Cardano Keystone signing: the worker\'s market signing refusal', () => {
+  it('shows the refusal in the user\'s language, not as raw English', async () => {
+    // The first authorization is the gate of sign(); the Keystone branch asks again, and is refused.
+    mocks.authorize.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    const view = await render('keystone');
+    await button(view, 'wallet.sign').trigger('click');
+    await vi.waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    expect(mocks.error).toHaveBeenCalledWith('This took too long. Start it again.');
   });
 });
 

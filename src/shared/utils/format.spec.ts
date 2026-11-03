@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatTokenQuantity } from './format';
+import { formatPercentOfFraction, formatTokenQuantity } from './format';
 
 describe('formatTokenQuantity', () => {
   // The CIP-113 preprod holdings a tester reported as "2" and "2.57".
@@ -31,5 +31,19 @@ describe('formatTokenQuantity', () => {
   it('reads zero and non-numbers as 0', () => {
     expect(formatTokenQuantity(0, 6)).toBe('0');
     expect(formatTokenQuantity(Number.NaN, 6)).toBe('0');
+  });
+});
+
+describe('formatPercentOfFraction', () => {
+  it('shows a fraction as a percent with at most two decimals and no trailing zeros', () => {
+    expect(formatPercentOfFraction(0.15)).toBe('15');
+    expect(formatPercentOfFraction(0.128125)).toBe('12.81');
+    expect(formatPercentOfFraction(0.1)).toBe('10');
+    expect(formatPercentOfFraction(0)).toBe('0');
+  });
+
+  it("uses the locale's own decimal separator", () => {
+    expect(formatPercentOfFraction(0.128125, 'de-DE')).toBe('12,81');
+    expect(formatPercentOfFraction(0.128125, 'en-US')).toBe('12.81');
   });
 });

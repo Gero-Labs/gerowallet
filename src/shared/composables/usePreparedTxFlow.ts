@@ -11,8 +11,11 @@ import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHard
 import hardwareLoading from '@/plugins/hardwareLoading';
 
 /**
- * The page side of a transaction the background worker prepares: Gero's own Send of a
- * programmable token and the rescue of a closed marketplace's listings both run it.
+ * The page side of a transaction the background worker prepares. Three flows run it:
+ * Gero's own Send of a programmable token (its own wrapper composable, which keeps that
+ * protocol's names out of this file), the rescue of a closed marketplace's listings
+ * (`useLegacyRescue`) and the Gero NFT market's list, reprice, cancel, buy and move
+ * (`useNftMarketFlow`).
  *
  * The page never builds or handles inputs. It asks the worker to prepare (the caller picks the
  * message and its data: the worker chooses the inputs, has Nexus build, verifies the CBOR
