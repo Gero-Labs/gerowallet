@@ -662,4 +662,49 @@ describe('Quick Send Max over the request limit', () => {
     expect(requests().filter(isMerge)).toHaveLength(1);
     expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
   });
+
+  it('stops a merge build whose input is spent meanwhile when the merges built before still serve', async () => {
+    // As in "the previous payment is not signable while the merges are rebuilt": a second Max
+    // builds the payment from one merge, then the rebuild the first Max scheduled adds a merge
+    // for a UTxO that arrived. Hold that merge.
+    mocks.maxAda.mockResolvedValueOnce({ max_lovelace: '0', estimated_fee: '0', change_min_utxo: '0', total_balance: '205020910' });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    const arrived = [...fragmented(), utxo(999, 3_000_000)];
+    walletStore.utxos = arrived as never;
+    let heldRequest!: BuildRequest;
+    let signal: AbortSignal | undefined;
+    let resolveHeld!: (value: { tx_cbor: string }) => void;
+    mocks.build.mockImplementationOnce((request: BuildRequest, _network: string, callOptions?: NexusCallOptions) =>
+      new Promise((resolve, reject) => {
+        heldRequest = request;
+        resolveHeld = resolve;
+        signal = callOptions?.signal;
+        signal?.addEventListener('abort', () => reject(signal?.reason));
+      }));
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+    expect(requests().filter(isMerge)).toHaveLength(2);
+
+    // One of the held merge's own inputs is spent elsewhere, which leaves the payment room for
+    // the rest beside the first merge: Max needs no new merge, and the held one is stopped.
+    const firstMerge = new Set(requests().filter(isMerge)[0].utxos.map((input) => input.txHash));
+    const gone = heldRequest.utxos.find((input) => !firstMerge.has(input.txHash))!.txHash;
+    walletStore.utxos = arrived.filter((entry) => (entry[0] as { txId: string }).txId !== gone) as never;
+    await dialog().get('[data-max]').trigger('click');
+    await settle();
+    expect(signal?.aborted).toBe(true);
+
+    // Had it gone on, its merges, one spending the UTxO that is gone, would replace those that serve.
+    resolveHeld(buildResponse(heldRequest));
+    await settle();
+    expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
+    expect(requests().filter((request) => !isMerge(request)).at(-1)!.utxos.some((input) => input.txHash === gone)).toBe(false);
+    expect(dialog().find('.global-total__error').exists()).toBe(false);
+  });
 });

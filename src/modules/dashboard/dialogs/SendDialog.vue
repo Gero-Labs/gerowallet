@@ -422,16 +422,14 @@ const sweepStop = ref<SweepStop | null>(null);
 /** A sweep whose payment went out: the dialog shows this instead of closing. */
 const sweepDone = ref<SweepDoneSummary | null>(null);
 /**
- * The merge build in flight, keyed by the UTxO set it is for. A second caller for the
- * same set awaits this one instead of building merges of its own (their ids would differ).
- * Its controller stops the build, and any rate-limit wait it is in, when the dialog
- * resets or a build for another UTxO set replaces it.
+ * The merge build in flight: the UTxO set it was planned for, the UTxOs its merges spend (it
+ * still serves a later set that holds all of them, so a second caller awaits it instead of
+ * building merges of its own, whose ids would differ), and when its oldest merge was built.
+ * Its controller stops the build, and any rate-limit wait it is in, when the dialog resets or
+ * its merges stop applying. `superseded` marks the second case: its callers go on with the
+ * sweep that replaced it instead of giving up.
  */
-/**
- * A sweep being built: the UTxO set it was planned for, the UTxOs its merges spend (it
- * still serves a later set that holds all of them), and when its oldest merge was built.
- */
-interface SweepBuildSlot { key: string; promise: Promise<BuiltSweep>; abort: AbortController; spends: Set<string>; builtAt: number }
+interface SweepBuildSlot { key: string; promise: Promise<BuiltSweep>; abort: AbortController; spends: Set<string>; builtAt: number; superseded: boolean }
 let sweepBuild: SweepBuildSlot | null = null;
 /**
  * The last sweep built, kept for the life of the dialog (not its reset): pressing Max again,
@@ -935,6 +933,15 @@ async function ensureSweep(): Promise<boolean> {
   // too, so a concurrent caller waits for it (and picks up what arrived since afterwards)
   // instead of building merges of its own, whose ids would differ.
   if (!sweepBuild || ![...sweepBuild.spends].every((ref) => spendable.has(ref))) {
+    // A build whose merges no longer apply is stale whatever this call settles on, a new build
+    // or merges kept from before: stop it now, rather than let it wait out a rate limit for
+    // merges nothing will use, then publish them over the sweep that replaced it.
+    if (sweepBuild) {
+      sweepBuild.superseded = true;
+      sweepBuild.abort.abort();
+      sweepBuild = null;
+      sweepPreparing.value = null;
+    }
     const step = sweepCache.nextStep(sweepWalletKey(), available, Date.now(), SWEEP_REBUILD_AFTER_MS);
     if (!step) {
       sweep.value = null;
@@ -944,9 +951,6 @@ async function ensureSweep(): Promise<boolean> {
       sweep.value = { ...step.kept!.built, key, builtAt: step.kept!.builtAt };
       return true;
     }
-    // A build whose merges no longer apply is stale the moment this one starts: stop it now,
-    // rather than let it wait out a rate limit for merges nothing will use.
-    sweepBuild?.abort.abort();
     const { kept, plan } = step;
     const keptCount = kept?.built.merges.length ?? 0;
     const utxoCount = available.length;
@@ -974,6 +978,7 @@ async function ensureSweep(): Promise<boolean> {
       abort,
       spends: new Set([...spentByMerges(kept?.built.merges ?? []), ...plan.batches.flat().map(refOf)]),
       builtAt: kept?.builtAt ?? Date.now(),
+      superseded: false,
     };
     sweepBuild = slot;
   }
@@ -988,8 +993,8 @@ async function ensureSweep(): Promise<boolean> {
       sweepCache.remember(sweepWalletKey(), built, pending.builtAt);
     }
   } catch (error) {
-    // An aborted build is not a failure: it was replaced by one for a newer UTxO set
-    // (waited for below) or the dialog reset. Only a build that gave up on its own counts.
+    // An aborted build is not a failure: it was superseded (its replacement is taken up
+    // below) or the dialog reset. Only a build that gave up on its own counts.
     if (!pending.abort.signal.aborted) throw error;
   } finally {
     // Whichever way it ended, the build that owns the slot takes its card down with it.
@@ -999,10 +1004,11 @@ async function ensureSweep(): Promise<boolean> {
     }
   }
   // The slot never holds `pending` past the finally, so a build still in it is a newer
-  // one for another UTxO set, started while this one ran: wait for that sweep rather
-  // than go on without one. This recurses only while such a build is pending, so it
-  // ends with the first build to complete unsuperseded.
-  if (sweepBuild !== null && sweepBuild !== pending) return ensureSweep();
+  // one for another UTxO set, started while this one ran; a superseded build was replaced
+  // by that one or by merges kept from before. Go on with that sweep rather than without
+  // one. This recurses only while such a build is pending, so it ends with the first build
+  // to complete unsuperseded.
+  if (pending.superseded || (sweepBuild !== null && sweepBuild !== pending)) return ensureSweep();
   if (pending.abort.signal.aborted) return false;
   // Built for an earlier UTxO set that its merges still serve: bring it up to date with what
   // arrived since. The merges are kept by now, so this builds one more at most.
