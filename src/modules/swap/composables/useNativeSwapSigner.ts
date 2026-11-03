@@ -8,7 +8,7 @@ import i18n from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
 import { TxIntentMismatchError, canonicalAddress, scriptSpentInputRefs, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
 import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
-import { historySource, koiosSource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
+import { backendSource, historySource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
 import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHardwareTxSigner';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
 import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
@@ -158,7 +158,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
       ];
       const { proven, unproven } = await proveOutputs(refs, [
         historySource(walletStore.transactions as unknown[]),
-        koiosSource(walletStore.loggedWallet?.network),
+        backendSource(walletStore.loggedWallet?.network),
       ]);
       const collateral = walletStore.collateral as Cardano.Utxo | null | undefined;
       const claimed = [...cardanoUtxos(), ...(collateral ? [collateral] : [])];

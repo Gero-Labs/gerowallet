@@ -574,7 +574,7 @@ import {
   type Cip119Profile,
   type Cip119Verification,
 } from '@/shared/utils/cip119';
-import { anchorIdentity, isRegisteredDRep } from '@/modules/governance/views/becomeDRep.state';
+import { anchorIdentity, isRegisteredDRep, signedFeeLovelace } from '@/modules/governance/views/becomeDRep.state';
 
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -997,7 +997,7 @@ async function buildTx(overrides: Partial<BuildDRepRegistrationTxRequest>): Prom
     );
     if (!response.tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
     txData.value = Serialization.Transaction.fromCbor(HexBlob(response.tx_cbor)).toCore();
-    estimatedFee.value = response.estimated_fee ?? '';
+    estimatedFee.value = signedFeeLovelace(txData.value);
   } catch (error) {
     debugLog('BecomeDRep: build failed', error);
     buildError.value = `${t('errors.buildTransactionFailed')}: ${

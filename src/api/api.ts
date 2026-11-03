@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { installSignedResponses } from './signedResponses';
 import { parseHttpError } from '@/shared/utils/parser';
 import { Blockchain, Network, Provider } from '@/models/types';
 
@@ -20,6 +21,7 @@ export class Api {
         'Access-Control-Allow-Origin': '*',
       },
     });
+    installSignedResponses(this.axiosInstance, 'gero-backend');
   }
 
   async getAccountInfo(rewardAddress: string, allowUnregistered = false) {

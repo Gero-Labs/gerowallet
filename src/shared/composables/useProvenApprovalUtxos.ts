@@ -1,7 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue';
 import type { Cardano } from '@cardano-sdk/core';
 import { canonicalAddress } from '@/shared/utils/txIntentGuard';
-import { historySource, koiosSource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
+import { backendSource, historySource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
 
 /**
  * The wallet UTxOs a dApp approval summary counts as "You pay", checked against
@@ -13,7 +13,7 @@ import { historySource, koiosSource, outputRef, proveOutputs, sameOutput } from 
  * from the proven outputs (an input that turns out not to be the wallet's is
  * dropped, so the total becomes an estimate) and `misreported` asks the approval
  * to hold Sign for an explicit acknowledgement. An input that cannot be proven
- * (no history, Koios unreachable) changes nothing: it never blocks an approval.
+ * (no history, the backend unreachable) changes nothing: it never blocks an approval.
  */
 export function useProvenApprovalUtxos(
   tx: Ref<Cardano.Tx | null | undefined>,
@@ -53,7 +53,7 @@ export function useProvenApprovalUtxos(
     if (claims.size === 0) return;
     let result;
     try {
-      result = await proveOutputs(claims.keys(), [historySource(transactions()), koiosSource(network.value)]);
+      result = await proveOutputs(claims.keys(), [historySource(transactions()), backendSource(network.value)]);
     } catch {
       return;
     }
