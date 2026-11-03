@@ -162,6 +162,41 @@ describe('makePinnedKeyMaterial', () => {
     console.info(`[midnight-prove] dust/spend ms (cold, warm, warm): ${timings.join(', ')}`);
   }, 180_000);
 
+  // The ledger verifies a Zswap output proof without chain state, so this is the
+  // end-to-end check that zkir 2.1.0, the pinned keys and the SRS make proofs the
+  // ledger accepts. A DUST spend cannot be checked this way: on a blank state
+  // `wellFormed` accepts even a corrupted DUST proof, so only a live send verifies it.
+  it.runIf(env['MIDNIGHT_PROVE'] === '1' && !!HOSTED_DIR)('makes proofs the ledger verifies, and the ledger rejects a corrupted one', async () => {
+    const keys = ledger.ZswapSecretKeys.fromSeed(SEED);
+    const type = ledger.shieldedToken().raw;
+    const outputTx = () => ledger.Transaction.fromParts('preprod', ledger.ZswapOffer.fromOutput(
+      ledger.ZswapOutput.new(ledger.createShieldedCoinInfo(type, 1_000_000n), 0, keys.coinPublicKey, keys.encryptionPublicKey),
+      type, 1_000_000n,
+    ));
+    const strictness = new ledger.WellFormedStrictness();
+    strictness.enforceBalancing = false;
+    strictness.verifyNativeProofs = true;
+    strictness.verifyContractProofs = false;
+    strictness.enforceLimits = false;
+    strictness.verifySignatures = false;
+    const verify = (tx: { wellFormed(state: ledger.LedgerState, strictness: ledger.WellFormedStrictness, tblock: Date): unknown }) =>
+      tx.wellFormed(ledger.LedgerState.blank('preprod'), strictness, new Date());
+
+    const provider = zkir.provingProvider(makePinnedKeyMaterial(fetchFromDisk, zkir, { shielded: true }));
+    const good = await outputTx().prove(provider, ledger.CostModel.initialCostModel());
+    expect(() => verify(good)).not.toThrow();
+    const corrupting: ledger.ProvingProvider = {
+      check: provider.check,
+      prove: async (preimage, keyLocation, overwrite) => {
+        const proof = await provider.prove(preimage, keyLocation, overwrite);
+        proof[proof.length - 40] ^= 0xff;
+        return proof;
+      },
+    };
+    const corrupted = await outputTx().prove(corrupting, ledger.CostModel.initialCostModel());
+    expect(() => verify(corrupted)).toThrow(/Invalid proof/);
+  }, 300_000);
+
   it.runIf(env['MIDNIGHT_PROVE'] === '1' && !!HOSTED_DIR)('proves a Zswap spend with the shielded scope', async () => {
     const km = makePinnedKeyMaterial(fetchFromDisk, zkir, { shielded: true });
     const started = performance.now();
