@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, type Ref } from 'vue';
+import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
@@ -18,6 +19,7 @@ import {
 } from '@/shared/composables/usePreparedTxFlow';
 import { formatPercentOfFraction, formatTokenQuantity } from '@/shared/utils/format';
 import { NFT_MARKET_EXPIRED_KEY } from '@/shared/utils/nftMarketSignRefusal';
+import { walletStore } from '@/stores/walletStore';
 import { MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
 
 /**
@@ -55,6 +57,14 @@ import { MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
  *   refused         the same request fails the same way (a rule, a price, a wallet that is not
  *                   allowed): say why, offer no retry.
  *   retry           building or signing again can work: offer "Try again" (it prepares again).
+ *
+ * THE SALE ALERT. A list, reprice or move that went through registers its new listing with
+ * gero-sync (NOTIFY_WATCH_LISTINGS), so the wallet is told when it sells. Once per submitted
+ * transaction, with the listing output the worker's verified summary names (never an assumed 0),
+ * fire-and-forget: the done screen never waits for it, and no answer (not registered for
+ * notifications, a limit, a refusal, a worker that did not reply) is shown to anyone. The page sends
+ * the wallet id and the ref only; the worker uses the logged wallet, a listing it verified itself
+ * and that listing's own datum owner (listingWatch.ts), so nothing here is trusted by it.
  */
 
 export type NftMarketFailureKind = 'changed' | 'maybeSent' | 'wrongPassword' | 'confirmRoyalty' | 'refused' | 'retry';
@@ -283,6 +293,17 @@ function requestFor(action: MarketAction, payload: NftMarketPayloads[MarketActio
   }
 }
 
+/** The actions that create a listing of the wallet's, which a sale alert can watch. */
+const SALE_ALERT_ACTIONS: ReadonlySet<MarketAction> = new Set<MarketAction>(['list', 'reprice', 'migrate']);
+
+/** A transaction id and the index of the listing output, from a verified summary: both well-formed, or null. */
+function listingRefOf(summary: unknown): string | null {
+  const { txId, listingOutputIndex } = (summary ?? {}) as { txId?: unknown; listingOutputIndex?: unknown };
+  if (typeof txId !== 'string' || !/^[0-9a-f]{64}$/.test(txId)) return null;
+  if (typeof listingOutputIndex !== 'number' || !Number.isSafeInteger(listingOutputIndex) || listingOutputIndex < 0) return null;
+  return `${txId}#${listingOutputIndex}`;
+}
+
 export function useNftMarketFlow<A extends MarketAction>(action: A, options: NftMarketFlowOptions = {}) {
   const flow = usePreparedTxFlow<NftMarketSummary<A>, NftMarketFailureReply>({
     getIsBT: options.getIsBT,
@@ -314,5 +335,35 @@ export function useNftMarketFlow<A extends MarketAction>(action: A, options: Nft
     return prepared;
   }
 
-  return { ...flow, failure, prepare, failureKind, failureMessage, royaltyConfirmation };
+  /** Transactions whose listing was already sent for the alert: once per submit, however often a result is read. */
+  const alerted = new Set<string>();
+
+  /** Tell the worker to have gero-sync watch the listing. Never awaited, never throws, never shown. */
+  function registerSaleAlert(ref: string, walletId: number | undefined): void {
+    const txId = ref.split('#')[0];
+    if (alerted.has(txId)) return;
+    alerted.add(txId);
+    void Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.NOTIFY_WATCH_LISTINGS,
+      data: { ...(walletId !== undefined ? { walletId } : {}), listingRefs: [ref] },
+    }).then(
+      (reply) => {
+        const result = (reply as { data?: { result?: { result?: string } } } | undefined)?.data?.result?.result;
+        if (result !== 'ok') debugLog('NFT market: sale alert not registered:', result ?? 'no answer');
+      },
+      (e: unknown) => debugLog('NFT market: sale alert not registered:', e instanceof Error ? e.name : 'error'),
+    );
+  }
+
+  /** Sign and submit, then (for a list, reprice or move that went through) register the sale alert. */
+  async function signAndSubmit(credentials?: Parameters<typeof flow.signAndSubmit>[0]): Promise<boolean> {
+    // Read before signing: a reset or a wallet switch afterwards must not change what was submitted.
+    const ref = SALE_ALERT_ACTIONS.has(action) ? listingRefOf(flow.prepared.value?.summary) : null;
+    const walletId = walletStore.loggedWallet?.id;
+    const submitted = await flow.signAndSubmit(credentials);
+    if (submitted && ref) registerSaleAlert(ref, typeof walletId === 'number' ? walletId : undefined);
+    return submitted;
+  }
+
+  return { ...flow, failure, prepare, signAndSubmit, failureKind, failureMessage, royaltyConfirmation };
 }

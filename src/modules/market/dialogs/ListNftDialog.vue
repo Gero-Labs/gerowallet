@@ -226,16 +226,8 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ListingBreakdown from '@/modules/market/components/ListingBreakdown.vue';
 import ListingNftLine from '@/modules/market/components/ListingNftLine.vue';
-import { useListingMarketInfo } from '@/modules/market/composables/useListingMarketInfo';
-import {
-  adaInputText,
-  pageRoyaltyMinUtxo,
-  parseAdaPrice,
-  previewNewListing,
-  previewRepricedListing,
-  type ListingPreview,
-} from '@/modules/market/utils/listingPreview';
-import i18n, { getLocaleCode } from '@/plugins/i18n';
+import { useListingPriceForm, verifiedFigures } from '@/modules/market/composables/useListingPriceForm';
+import { adaInputText } from '@/modules/market/utils/listingPreview';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { resolveNftUnit } from '@/shared/composables/useCollectibleCollections';
 import { useExplorer } from '@/shared/composables/useExplorer';
@@ -243,16 +235,8 @@ import { useNftMarketFlow } from '@/shared/composables/useNftMarketFlow';
 import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCredentials';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
-import { formatLovelaceAsAda, formatPercentOfFraction } from '@/shared/utils/format';
-import { nftMarketDeploymentFor, nftMarketNewestDeployment } from '@/shared/utils/nftMarketAvailability';
-import { networkStore } from '@/stores/networkStore';
-import {
-  MAX_LIST_PRICE,
-  MIN_LIST_PRICE,
-  MIN_SELLER_SHARE,
-  POLICY_ID_HEX_LENGTH,
-  isNftMarketHardware,
-} from '@/utils/nftMarketDeployments';
+import { formatLovelaceAsAda } from '@/shared/utils/format';
+import { POLICY_ID_HEX_LENGTH, isNftMarketHardware } from '@/utils/nftMarketDeployments';
 
 /**
  * Lists an NFT for sale, or (given `existing`) changes the price of a listing the wallet already
@@ -262,13 +246,13 @@ import {
  *   price (live breakdown, the limits, the royalty confirmation) -> Continue
  *     -> preparing -> review (the worker's verified figures) -> credentials -> done  |  a failure
  *
- * The seller types a price in ADA; it becomes an exact lovelace amount (never through a float)
- * and the sheet refuses what the worker would refuse: under MIN_LIST_PRICE, above MAX_LIST_PRICE,
- * a price that leaves the seller less than MIN_SELLER_SHARE after the fee and royalties. The
- * breakdown under it is a preview from the same arithmetic; the worker re-derives everything
- * (NFT_MARKET_PREPARE_LIST / _REPRICE) and the review shows ITS figures, plus the deposit that
- * comes back and the network fee. A collection whose royalties pass the usual 10% (judged on the
- * effective amount) needs the seller's agreement before anything is built.
+ * The price half (the typed price as an exact lovelace amount, the preview, the limits, the royalty
+ * confirmation, the worker's figures for the review) is useListingPriceForm, which the move-to-Gero
+ * sheet shares. The seller types a price in ADA and the sheet refuses what the worker would refuse;
+ * the worker re-derives everything (NFT_MARKET_PREPARE_LIST / _REPRICE) and the review shows ITS
+ * figures, plus the deposit that comes back and the network fee. A collection whose royalties pass
+ * the usual 10% (judged on the effective amount) needs the seller's agreement before anything is
+ * built.
  *
  * The page names only the NFT (or the listing) and the price: the worker chooses the owner, the
  * seller address, the royalties, the inputs. A hardware wallet no device has signed a market
@@ -290,13 +274,23 @@ const isReprice = props.existing !== undefined;
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
 const isBT = ref(false);
 const flow = useNftMarketFlow(isReprice ? 'reprice' : 'list', { getIsBT: () => isBT.value });
-const market = useListingMarketInfo(() => props.unit, { royalties: !isReprice });
-const { royaltiesState, floorLovelace, lastSaleLovelace } = market;
 const { explorerUrl } = useExplorer();
 
 const stage = computed(() => flow.stage.value);
 const failureKind = computed(() => flow.failureKind.value);
 const summary = computed(() => flow.prepared.value?.summary ?? null);
+
+const form = useListingPriceForm({
+  unit: () => props.unit,
+  existing: () => props.existing,
+  failureKind: () => flow.failureKind.value,
+  royaltyConfirmation: () => flow.royaltyConfirmation.value,
+});
+const {
+  market, royaltiesState, floorLovelace, lastSaleLovelace,
+  priceText, confirmed, price, minUtxo, preview, priceErrors, termsErrorText, unavailableText,
+  needsConfirmation, confirmation, onPriceInput,
+} = form;
 
 const view = computed<'price' | 'preparing' | 'review' | 'done' | 'failed'>(() => {
   if (stage.value === 'done') return 'done';
@@ -331,116 +325,17 @@ const shownUnit = computed(() => summary.value?.unit ?? props.unit);
 const nft = computed(() => resolveNftUnit(shownUnit.value));
 const policyCaption = computed(() => filters.truncate(shownUnit.value.slice(0, POLICY_ID_HEX_LENGTH)));
 
-// ---- The price -----------------------------------------------------------------------------
+const canContinue = computed(() => !busy.value && !credentials.deviceBlocked.value && form.ready.value);
 
-const priceText = ref('');
-/** The seller has edited the field: an opening price (a reprice starts on the current one) is not an error to show. */
-const priceTouched = ref(false);
-const confirmed = ref(false);
-
-const parsed = computed(() => parseAdaPrice(priceText.value));
-const price = computed<bigint | null>(() => (parsed.value.ok ? parsed.value.lovelace : null));
-const samePrice = computed(() => isReprice && price.value !== null && price.value === props.existing?.datum.price);
-
-/** The deployment this price is held to: the newest for a new listing, the listing's own for a reprice. */
-const deployment = computed(() => (props.existing ? nftMarketDeploymentFor(props.existing.deploymentVersion) : nftMarketNewestDeployment()));
-const minUtxo = computed(() => pageRoyaltyMinUtxo(networkStore.epochParams?.coinsPerUtxoByte));
-
-const preview = computed<ListingPreview | null>(() => {
-  const amount = price.value;
-  const d = deployment.value;
-  if (amount === null || !d) return null;
-  if (props.existing) return previewRepricedListing(amount, props.existing.datum.royalties, d);
-  const terms = market.royalties.value;
-  return terms ? previewNewListing(amount, terms, d, { minUtxo: minUtxo.value }) : null;
-});
-
-/** The limits that need no royalty terms, so they show while those are still loading. */
-const limitIssue = computed(() => {
-  const amount = price.value;
-  if (amount === null) return null;
-  if (amount < MIN_LIST_PRICE) return 'PRICE_TOO_LOW' as const;
-  if (amount > MAX_LIST_PRICE) return 'PRICE_TOO_HIGH' as const;
-  return null;
-});
-const issue = computed(() => limitIssue.value ?? preview.value?.issue ?? null);
-
-/** What is wrong with the price itself, under the field. */
-const priceErrors = computed<string[]>(() => {
-  const result = parsed.value;
-  if ('reason' in result) return result.reason === 'invalid' ? [t('nftMarket.list.priceInvalid')] : [];
-  // Continue stays off while the price is the current one (Nexus would build a fee-only no-op), but
-  // the sheet opens on that price: say it only once the seller has edited the field.
-  if (samePrice.value) return priceTouched.value ? [t('nftMarket.reprice.samePrice')] : [];
-  switch (issue.value) {
-    case 'PRICE_TOO_LOW': return [t('nftMarket.error.priceTooLow', { min: ada(MIN_LIST_PRICE) })];
-    case 'PRICE_TOO_HIGH': return [t('nftMarket.list.priceTooHigh', { max: ada(MAX_LIST_PRICE) })];
-    case 'SELLER_SHARE_TOO_LOW': return [t('nftMarket.error.sellerShareTooLow', { min: ada(MIN_SELLER_SHARE) })];
-    default: return [];
-  }
-});
-/** What is wrong with the listing rather than the price: royalty terms that cannot be used. */
-const termsErrorText = computed(() => (issue.value === 'ROYALTIES_MALFORMED' ? t('nftMarket.error.royaltiesMalformed') : ''));
-/** No deployment for this listing or network: the market has nothing to price against. */
-const unavailableText = computed(() => {
-  if (deployment.value) return '';
-  return t(isReprice ? 'nftMarket.error.notListing' : 'nftMarket.error.networkUnsupported');
-});
-
-// ---- Royalties above the usual limit -------------------------------------------------------
-
-/** Above the cap on the preview, or the worker says so itself (it re-derives and may disagree). */
-const needsConfirmation = computed(() => !isReprice && (preview.value?.overCap === true || failureKind.value === 'confirmRoyalty'));
-/** What the seller agrees to: the worker's own figures when it asked, else the preview's effective amount. */
-const confirmation = computed(() => {
-  if (flow.royaltyConfirmation.value) return flow.royaltyConfirmation.value;
-  const p = preview.value;
-  return p ? { ada: ada(p.royaltiesTotal), percent: formatPercentOfFraction(p.royaltyFraction, getLocaleCode(i18n.locale)) } : null;
-});
-
-const canContinue = computed(() =>
-  !busy.value
-  && !credentials.deviceBlocked.value
-  && price.value !== null
-  && preview.value !== null
-  && issue.value === null
-  && !samePrice.value
-  && (isReprice || royaltiesState.value === 'ready')
-  && (!needsConfirmation.value || confirmed.value),
-);
-
-// A changed price is a different agreement, and a failure was about the last one.
+// A failure was about the last price: a changed one starts the sheet over.
 watch(priceText, () => {
-  confirmed.value = false;
   if (flow.failure.value) flow.reset();
 });
-watch(() => market.royalties.value, () => { confirmed.value = false; });
 
 // ---- The review ----------------------------------------------------------------------------
 
-const lovelaceOf = (value: string): bigint => BigInt(value);
-
 /** The worker's verified figures, as the breakdown reads them. Null if a figure does not read back. */
-const verified = computed(() => {
-  const s = summary.value;
-  if (!s) return null;
-  try {
-    const royalties = 'royalties' in s ? s.royalties.map((r) => ({ address: r.address, lovelace: lovelaceOf(r.lovelace) })) : [...(props.existing?.datum.royalties ?? [])];
-    return {
-      price: lovelaceOf(s.priceLovelace),
-      fee: lovelaceOf(s.marketFeeLovelace),
-      royalties,
-      sellerReceives: lovelaceOf(s.sellerReceivesLovelace),
-      deposit: lovelaceOf(s.depositLovelace),
-      networkFee: lovelaceOf(s.networkFeeLovelace),
-      dropped: 'dropped' in s ? s.dropped.map((r) => ({ address: r.address, lovelace: lovelaceOf(r.lovelace) })) : [],
-      invalidRecipients: 'invalidRecipients' in s ? s.invalidRecipients : 0,
-      oldPrice: 'oldPriceLovelace' in s ? lovelaceOf(s.oldPriceLovelace) : null,
-    };
-  } catch {
-    return null;
-  }
-});
+const verified = computed(() => verifiedFigures(summary.value, props.existing));
 
 const failureText = computed(() => {
   const message = flow.failureMessage.value;
@@ -495,20 +390,11 @@ function viewActivity(): void {
   void router?.push({ path: '/transactions' });
 }
 
-function onPriceInput(value: string): void {
-  priceTouched.value = true;
-  priceText.value = value;
-}
-
 /** Start over: a clean flow and a fresh price. */
 function start(): void {
   credentials.clearPassword();
   flow.reset();
-  confirmed.value = false;
-  priceTouched.value = false;
-  priceText.value = props.existing ? adaInputText(props.existing.datum.price) : '';
-  market.reset();
-  void market.load();
+  form.restart(props.existing ? adaInputText(props.existing.datum.price) : '');
 }
 
 function close(): void {

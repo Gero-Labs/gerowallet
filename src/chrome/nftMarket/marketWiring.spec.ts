@@ -236,3 +236,29 @@ describe('NFT market signing wiring', () => {
     expect(bg).toContain('throw new Error(trezorRefusal.message)');
   });
 });
+
+describe('NFT market sale-alert registration wiring', () => {
+  it('NOTIFY_WATCH_LISTINGS is registered once, on the extension-pages channel, through the worker-side handler', () => {
+    expect(bg).toContain('app.addToOptions(MessageTypes.NOTIFY_WATCH_LISTINGS, watchListingsHandler(listingWatchDeps));');
+    // The dApp-facing registry (`app.add`) never carries it: the only mention is that registration.
+    expect(bg.match(/MessageTypes\.NOTIFY_WATCH_LISTINGS/g)).toHaveLength(1);
+  });
+
+  it('the handler reads the wallet, the key set and the verified listings from the worker, and registers through the notify actions', () => {
+    const start = bg.indexOf('const listingWatchDeps: ListingWatchDeps = {');
+    expect(start).toBeGreaterThan(-1);
+    const deps = bg.slice(start, bg.indexOf('\n};', start));
+    expect(deps).toContain('getWallet: () => walletManager.getWallet()');
+    expect(deps).toContain('keys: WalletStore.state.keys');
+    expect(deps).toContain('listedListings: WalletStore.state.listedListings');
+    expect(deps).toContain('watch: (input) => notifyActions.watchListings(input)');
+    // A guard, not UI: the feature flag has no say.
+    expect(deps).not.toMatch(/isNftMarketEnabled/);
+  });
+
+  it('the prepare handlers hand their verified listings to the same memory the watch handler reads', () => {
+    const start = bg.indexOf('const marketPrepareDeps: MarketHandlerDeps = {');
+    const deps = bg.slice(start, bg.indexOf('\n};', start));
+    expect(deps).toContain('rememberListing: rememberVerifiedListing');
+  });
+});

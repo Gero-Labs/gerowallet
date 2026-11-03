@@ -1,6 +1,11 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { decodeListingDatum } from '@/chrome/nftMarket/listingDatum';
+import { Blockchain, Network } from '@/models/types';
 import { isCardanoTx, StoredTransaction } from '@/models/transaction.types';
 import { DUST_MAPPING_VALIDATOR } from '@/shared/composables/useCnightDustRegistration';
+import { inlineDatumCbor } from '@/shared/utils/utxoCbor';
+import { LEGACY_SCRIPTS } from '@/utils/legacyMarketScripts';
+import networks from '@/utils/networks';
 import { getCertificateBaseStatus } from '@/modules/dashboard/utils/transactionStatus';
 
 /**
@@ -28,11 +33,34 @@ export interface TxClassifyContext {
   walletAddresses: Set<string>;
   /** Contact address → display label. */
   contacts: Map<string, TxContact>;
+  /**
+   * The script hashes of every Gero NFT market deployment of the wallet's network (a superseded
+   * one stays until its listings drain), from `networks.resolveNftMarketDeployments`. Empty where
+   * the market is not configured (mainnet, for now), so nothing is tagged there.
+   */
+  marketScriptHashes?: ReadonlySet<string>;
+  /** The wallet's own stake KEY hash (56 lower-case hex), read from its reward address; null when unreadable. */
+  stakeKeyHash?: string | null;
+  /** The wallet's payment and change key hashes: who may own a listing of its. */
+  paymentKeyHashes?: ReadonlySet<string>;
 }
 
-interface WalletLike { stakeAddress?: string; network?: string }
-interface KeysLike { payment?: { address?: string }[]; change?: { address?: string }[] }
+interface WalletLike { stakeAddress?: string; network?: string; chain?: string }
+interface KeysLike { payment?: { address?: string; cred?: string }[]; change?: { address?: string; cred?: string }[] }
 interface ContactLike { address?: string; name?: string; handle?: string }
+
+const KEY_HASH = /^[0-9a-f]{56}$/;
+
+/** The stake KEY hash of a reward address, lower case; null for anything else (a script, a malformed string). */
+function stakeKeyHashOfReward(stakeAddress: string | undefined): string | null {
+  if (!stakeAddress) return null;
+  try {
+    const credential = Cardano.Address.fromBech32(stakeAddress).asReward()?.getPaymentCredential();
+    return credential?.type === Cardano.CredentialType.KeyHash ? String(credential.hash).toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
 
 export function buildClassifyContext(
   wallet: WalletLike | null | undefined,
@@ -40,8 +68,10 @@ export function buildClassifyContext(
   contacts: Record<string, ContactLike> | null | undefined,
 ): TxClassifyContext {
   const walletAddresses = new Set<string>();
+  const paymentKeyHashes = new Set<string>();
   for (const key of [...(keys?.payment ?? []), ...(keys?.change ?? [])]) {
     if (key.address) walletAddresses.add(key.address);
+    if (typeof key.cred === 'string' && KEY_HASH.test(key.cred.toLowerCase())) paymentKeyHashes.add(key.cred.toLowerCase());
   }
   const contactMap = new Map<string, TxContact>();
   for (const contact of Object.values(contacts ?? {})) {
@@ -49,7 +79,18 @@ export function buildClassifyContext(
       contactMap.set(contact.address, { label: contact.handle || contact.name, isHandle: !!contact.handle });
     }
   }
-  return { stakeAddress: wallet?.stakeAddress, network: wallet?.network, walletAddresses, contacts: contactMap };
+  // The market's scripts of this wallet's network. Only Cardano has them (a Bitcoin record's addresses never parse as one).
+  const chain = wallet?.chain ?? Blockchain.CARDANO;
+  const deployments = chain === Blockchain.CARDANO && wallet?.network ? networks.resolveNftMarketDeployments(chain, wallet.network) : [];
+  return {
+    stakeAddress: wallet?.stakeAddress,
+    network: wallet?.network,
+    walletAddresses,
+    contacts: contactMap,
+    marketScriptHashes: new Set(deployments.map((deployment) => deployment.scriptHash.toLowerCase())),
+    stakeKeyHash: stakeKeyHashOfReward(wallet?.stakeAddress),
+    paymentKeyHashes,
+  };
 }
 
 /** Bitcoin records carry a `type`; Cardano records do not. */
@@ -502,6 +543,108 @@ export const isStakeDeRegistration = (item: StoredTransaction): boolean => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Gero NFT market: what a transaction did to the wallet's listings
+// ---------------------------------------------------------------------------
+
+/** The market actions a transaction can be tagged with: the suffix of `nftMarket.activity.<action>`. */
+export type GeroMarketAction = 'listed' | 'repriced' | 'cancelled' | 'sold' | 'bought' | 'moved';
+
+const LEGACY_SCRIPT_HASHES: ReadonlySet<string> = new Set(Object.values(LEGACY_SCRIPTS).map((script) => script.scriptHash));
+
+/** The stake KEY hash of a base address, lower case; null for any other shape (a script, a pointer, unreadable). */
+function stakeKeyHashOfAddress(address: string | undefined): string | null {
+  if (!address) return null;
+  try {
+    const stake = Cardano.Address.fromBech32(address).asBase()?.getStakeCredential();
+    return stake?.type === Cardano.CredentialType.KeyHash ? String(stake.hash).toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+const marketHashesOf = (ctx: TxClassifyContext): ReadonlySet<string> => ctx.marketScriptHashes ?? new Set<string>();
+const atScript = (address: string | undefined, hashes: ReadonlySet<string>): boolean => hashes.has(paymentScriptHash(address) ?? '');
+
+/**
+ * Whether a transaction touches a Gero market listing script (an input or an output at any
+ * configured deployment of the wallet's network). Matched on the payment credential, as a
+ * listing's address carries its seller's own stake key, so no single bech32 string covers every
+ * listing. The hashes come from the reviewed deployments (nftMarketDeployments.ts), never from here.
+ */
+export const isGeroMarket = (item: StoredTransaction, ctx: TxClassifyContext): boolean => {
+  const hashes = marketHashesOf(ctx);
+  return hashes.size > 0 && addressesOf(item).some((address) => atScript(address, hashes));
+};
+
+type ListingOwnership = 'own' | 'foreign' | 'unknown';
+
+/**
+ * Whether the listing a UTxO (an input spent or an output created) holds is the wallet's own: its
+ * address carries the wallet's stake key, and its inline datum, when the record has one, names the
+ * wallet as owner (a payment key) AND seller (an address), both halves, as the wallet's own listings
+ * are recognised (ownListings.ts). Anyone can lock anything at the script under any stake key with
+ * any datum, so a datum that does not read, or names someone else, is `foreign`. No datum in the
+ * record leaves it `unknown`: decided by what else the transaction shows.
+ */
+function listingOwnership(utxo: { address?: string; inline_datum?: unknown }, ctx: TxClassifyContext): ListingOwnership {
+  if (!ctx.stakeKeyHash || stakeKeyHashOfAddress(utxo.address) !== ctx.stakeKeyHash) return 'foreign';
+  if (utxo.inline_datum === null || utxo.inline_datum === undefined || utxo.inline_datum === '') return 'unknown';
+  try {
+    const cbor = inlineDatumCbor(utxo.inline_datum);
+    if (!cbor) return 'unknown';
+    const datum = decodeListingDatum(cbor, ctx.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet);
+    return ctx.paymentKeyHashes?.has(datum.owner) && ctx.walletAddresses.has(datum.sellerAddress) ? 'own' : 'foreign';
+  } catch {
+    return 'foreign';
+  }
+}
+
+/**
+ * What a transaction did with the wallet's Gero market listings, from which side the wallet is on
+ * (read-only, on the stored record, no service called):
+ *
+ *   listed     the wallet's inputs fund a new listing of its own; no listing is spent
+ *   repriced   its own listing is spent and a listing of its own is created
+ *   cancelled  its own listing is spent, its inputs fund it, no listing is created
+ *   sold       its own listing is spent and none of the funding is the wallet's: a buyer's
+ *   bought     someone else's listing is spent and the wallet funds it
+ *   moved      a closed marketplace's listing is spent and a Gero listing of the wallet's is created
+ *
+ * Every tag but `sold` is anchored by the wallet funding the transaction (an input at one of its
+ * own addresses), which a stranger cannot fake; `sold` has no wallet input, so it needs the spent
+ * listing's datum to name the wallet as owner and seller. Only a confirmed record has input
+ * addresses to read, so a pending one gets no tag until it confirms.
+ */
+export const geroMarketActions = (item: StoredTransaction, ctx: TxClassifyContext): GeroMarketAction[] => {
+  const hashes = marketHashesOf(ctx);
+  if (hashes.size === 0 || !item.utxo) return [];
+  const spent = (item.utxo.inputs ?? []).filter((input) => !input.collateral && !input.reference);
+  const created = item.utxo.outputs ?? [];
+  if (spent.length === 0) return [];
+
+  const geroIn = spent.filter((input) => atScript(input.address, hashes));
+  const geroOut = created.filter((output) => atScript(output.address, hashes));
+  const legacyIn = spent.some((input) => LEGACY_SCRIPT_HASHES.has(paymentScriptHash(input.address) ?? ''));
+  const walletFunds = spent.some((input) => !!input.address && ctx.walletAddresses.has(input.address));
+
+  const ownersIn = geroIn.map((input) => listingOwnership(input, ctx));
+  const spendsOwn = ownersIn.some((owner) => owner === 'own' || owner === 'unknown');
+  const spendsOwnVerified = ownersIn.includes('own');
+  const spendsForeign = ownersIn.includes('foreign');
+  // A created listing counts as the wallet's when it sits under its stake key and no datum says otherwise.
+  const createsOwn = geroOut.some((output) => listingOwnership(output, ctx) !== 'foreign');
+
+  const actions: GeroMarketAction[] = [];
+  if (walletFunds && legacyIn && createsOwn && geroIn.length === 0) actions.push('moved');
+  else if (walletFunds && createsOwn && geroIn.length === 0 && !legacyIn) actions.push('listed');
+  else if (walletFunds && createsOwn && spendsOwn) actions.push('repriced');
+  else if (walletFunds && spendsOwn && geroOut.length === 0) actions.push('cancelled');
+  if (!walletFunds && spendsOwnVerified && geroOut.length === 0) actions.push('sold');
+  if (walletFunds && spendsForeign && !spendsOwn) actions.push('bought');
+  return actions;
+};
+
 /** Any recognised DEX/aggregator interaction — titles the tx "DEX Order". */
 export const isDexTransaction = (item: StoredTransaction): boolean =>
   isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item) || isSteelSwap(item) || isGeroSwap(item);
@@ -724,6 +867,9 @@ export const buildTxTags = (item: StoredTransaction, ctx: TxClassifyContext, t: 
   if (isVyFi(item)) tags.push({ key: 'vyfi', label: 'VyFi' });
   if (isSundaeSwap(item)) tags.push({ key: 'sundaeswap', label: t('transactions.sundaeswap') });
   if (isSplash(item)) tags.push({ key: 'splash', label: t('transactions.splash') });
+  for (const action of geroMarketActions(item, ctx)) {
+    tags.push({ key: `gero-market-${action}`, label: t(`nftMarket.activity.${action}`) });
+  }
   return tags;
 };
 

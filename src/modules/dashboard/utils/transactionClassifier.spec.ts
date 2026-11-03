@@ -5,12 +5,18 @@ vi.mock('@/shared/composables/useCnightDustRegistration', () => ({
   DUST_MAPPING_VALIDATOR: { Preprod: { scriptHash: '', address: 'addr_test1dustvalidator' } },
 }));
 
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import type { StoredTransaction } from '@/models/transaction.types';
+import { LEGACY_SCRIPTS } from '@/utils/legacyMarketScripts';
+import { NFT_MARKET_DEPLOYMENTS_PREPROD } from '@/utils/nftMarketDeployments';
+import { listingRow, preprodAddress } from '@/modules/market/utils/__fixtures__/listingFixtures';
 import {
   buildClassifyContext,
   buildTxTags,
   buildTxTitle,
   classifyTxKind,
+  geroMarketActions,
+  isGeroMarket,
   isDexOrderCancellation,
   isDexTransaction,
   isInternalTransfer,
@@ -258,5 +264,220 @@ describe('withMinusSign', () => {
   it('swaps the leading hyphen for a real minus sign and leaves positives alone', () => {
     expect(withMinusSign('- ₳1.00')).toBe('− ₳1.00');
     expect(withMinusSign('+ ₳1.00')).toBe('+ ₳1.00');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gero NFT market: activity tags (nftMarket.activity.*)
+// ---------------------------------------------------------------------------
+
+describe('Gero NFT market activity tags', () => {
+  const V1 = NFT_MARKET_DEPLOYMENTS_PREPROD[0];
+  const OWNER = '18'.repeat(28);
+  const OWNER_B = 'b5'.repeat(28);
+  const STAKE = '5c'.repeat(28);
+  const OTHER_STAKE = '88'.repeat(28);
+  const STRANGER = '77'.repeat(28);
+
+  const scriptAddress = (scriptHash: string, stake: string) =>
+    Cardano.BaseAddress.fromCredentials(
+      Cardano.NetworkId.Testnet,
+      { hash: Hash28ByteBase16(scriptHash), type: Cardano.CredentialType.ScriptHash },
+      { hash: Hash28ByteBase16(stake), type: Cardano.CredentialType.KeyHash },
+    ).toAddress().toBech32();
+
+  const OWN = preprodAddress(OWNER, STAKE);
+  const OWN_CHANGE = preprodAddress(OWNER_B, STAKE);
+  const BUYER = preprodAddress('99'.repeat(28), 'aa'.repeat(28));
+  const OWN_LISTING = scriptAddress(V1.scriptHash, STAKE);
+  const FOREIGN_LISTING = scriptAddress(V1.scriptHash, OTHER_STAKE);
+  const LEGACY = scriptAddress(LEGACY_SCRIPTS.legacy_v3.scriptHash, STAKE);
+  const UNRELATED_SCRIPT = scriptAddress('ab'.repeat(28), STAKE);
+  const FEE = V1.feeAddress;
+
+  /** The datum a listing of this wallet carries: its payment key as owner and its own address as seller. */
+  const OWN_DATUM = listingRow({ owner: OWNER, stake: STAKE }).datumCbor;
+  /** A fake "your listing": the wallet as owner, someone else as seller. */
+  const FAKE_DATUM = listingRow({ owner: OWNER, stake: STAKE, sellerAddress: BUYER }).datumCbor;
+  /** A listing of a stranger's, sitting under this wallet's stake key. */
+  const STRANGER_DATUM = listingRow({ owner: STRANGER, stake: STAKE, sellerAddress: preprodAddress(STRANGER, STAKE) }).datumCbor;
+
+  const amount = [{ unit: 'lovelace', quantity: '2000000' }];
+  const spend = (address: string, inline_datum: string | null = null) => ({
+    address, amount, tx_hash: 'aa'.repeat(32), output_index: 0, data_hash: null, inline_datum, reference_script_hash: null, collateral: false, reference: false,
+  });
+  const produce = (address: string, inline_datum: string | null = null) => ({
+    address, amount, output_index: 0, data_hash: null, inline_datum, collateral: false, reference_script_hash: null, consumed_by_tx: null,
+  });
+
+  const market = buildClassifyContext(
+    { stakeAddress: Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Testnet, { hash: Hash28ByteBase16(STAKE), type: Cardano.CredentialType.KeyHash }).toAddress().toBech32(), network: 'Preprod' },
+    { payment: [{ address: OWN, cred: OWNER }], change: [{ address: OWN_CHANGE, cred: OWNER_B }] },
+    {},
+  );
+
+  const actions = (inputs: unknown[], outputs: unknown[], context = market) =>
+    geroMarketActions(tx({ utxo: { inputs, outputs } }), context);
+
+  const tagsOf = (inputs: unknown[], outputs: unknown[], context = market) => {
+    const item = tx({ utxo: { inputs, outputs } });
+    return buildTxTags(item, context, t, classifyTxKind(item, context)).filter((tag) => tag.key.startsWith('gero-market-'));
+  };
+
+  describe('the six actions, from which side the wallet is on', () => {
+    it('listed: the wallet funds a transaction that creates a listing under its own stake key', () => {
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, OWN_DATUM), produce(OWN_CHANGE)])).toEqual(['listed']);
+      expect(tagsOf([spend(OWN)], [produce(OWN_LISTING, OWN_DATUM), produce(OWN_CHANGE)])).toEqual([{ key: 'gero-market-listed', label: 'nftMarket.activity.listed' }]);
+    });
+
+    it('repriced: the wallet spends its own listing and creates one under its own stake key', () => {
+      expect(actions([spend(OWN_LISTING, OWN_DATUM), spend(OWN)], [produce(OWN_LISTING, OWN_DATUM), produce(OWN_CHANGE)])).toEqual(['repriced']);
+      expect(tagsOf([spend(OWN_LISTING, OWN_DATUM), spend(OWN)], [produce(OWN_LISTING, OWN_DATUM)])).toEqual([{ key: 'gero-market-repriced', label: 'nftMarket.activity.repriced' }]);
+    });
+
+    it('cancelled: the wallet spends its own listing, funds the transaction and creates no listing', () => {
+      expect(actions([spend(OWN_LISTING, OWN_DATUM), spend(OWN)], [produce(OWN), produce(OWN_CHANGE)])).toEqual(['cancelled']);
+      expect(tagsOf([spend(OWN_LISTING, OWN_DATUM), spend(OWN)], [produce(OWN)])).toEqual([{ key: 'gero-market-cancelled', label: 'nftMarket.activity.cancelled' }]);
+    });
+
+    it('sold: a buyer spends the wallet\'s own listing, and none of the funding is the wallet\'s', () => {
+      expect(actions([spend(OWN_LISTING, OWN_DATUM), spend(BUYER)], [produce(OWN), produce(FEE), produce(BUYER)])).toEqual(['sold']);
+      expect(tagsOf([spend(OWN_LISTING, OWN_DATUM), spend(BUYER)], [produce(OWN), produce(FEE), produce(BUYER)])).toEqual([{ key: 'gero-market-sold', label: 'nftMarket.activity.sold' }]);
+    });
+
+    it('bought: the wallet funds a transaction that spends someone else\'s listing', () => {
+      expect(actions([spend(FOREIGN_LISTING, 'd8799f00ff'), spend(OWN)], [produce(BUYER), produce(FEE), produce(OWN)])).toEqual(['bought']);
+      expect(tagsOf([spend(FOREIGN_LISTING), spend(OWN)], [produce(OWN), produce(FEE)])).toEqual([{ key: 'gero-market-bought', label: 'nftMarket.activity.bought' }]);
+    });
+
+    it('moved: a closed marketplace\'s listing is spent and a Gero listing is created, in one transaction (not also "listed")', () => {
+      expect(actions([spend(LEGACY), spend(OWN)], [produce(OWN_LISTING, OWN_DATUM), produce(OWN_CHANGE)])).toEqual(['moved']);
+      expect(tagsOf([spend(LEGACY), spend(OWN)], [produce(OWN_LISTING, OWN_DATUM)])).toEqual([{ key: 'gero-market-moved', label: 'nftMarket.activity.moved' }]);
+    });
+
+    it('a move of an item whose legacy owner is another key of the wallet is still moved', () => {
+      expect(actions([spend(LEGACY), spend(OWN_CHANGE)], [produce(OWN_LISTING, OWN_DATUM)])).toEqual(['moved']);
+    });
+  });
+
+  describe('nothing for what is not a Gero market transaction', () => {
+    it('an unrelated script, and plain transfers, get no market tag', () => {
+      expect(actions([spend(OWN)], [produce(UNRELATED_SCRIPT, OWN_DATUM), produce(OWN_CHANGE)])).toEqual([]);
+      expect(actions([spend(UNRELATED_SCRIPT), spend(OWN)], [produce(OWN)])).toEqual([]);
+      expect(actions([spend(OWN)], [produce(BUYER), produce(OWN_CHANGE)])).toEqual([]);
+      expect(actions([], [])).toEqual([]);
+      expect(tagsOf([spend(UNRELATED_SCRIPT)], [produce(OWN)])).toEqual([]);
+    });
+
+    it('a legacy spend with no Gero listing created is a rescue (Get back), not a move', () => {
+      expect(actions([spend(LEGACY), spend(OWN)], [produce(OWN)])).toEqual([]);
+    });
+
+    it('the Minswap order address used by other specs is not a market script', () => {
+      expect(actions([spend(OWN)], [produce(MINSWAP_V2_ORDER_STAKED)])).toEqual([]);
+    });
+  });
+
+  describe('isGeroMarket matches the network\'s deployment script hashes and nothing else', () => {
+    it('is true for any input or output at a configured deployment, and false for another script', () => {
+      expect(isGeroMarket(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(OWN_LISTING)] } }), market)).toBe(true);
+      expect(isGeroMarket(tx({ utxo: { inputs: [spend(FOREIGN_LISTING)], outputs: [produce(OWN)] } }), market)).toBe(true);
+      expect(isGeroMarket(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(UNRELATED_SCRIPT)] } }), market)).toBe(false);
+      expect(isGeroMarket(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(BUYER)] } }), market)).toBe(false);
+    });
+
+    it('reads the hashes from the deployments of the wallet\'s network: preprod has v1, mainnet has none yet', () => {
+      expect([...(market.marketScriptHashes ?? [])]).toEqual([V1.scriptHash]);
+      const mainnet = buildClassifyContext({ stakeAddress: market.stakeAddress, network: 'Mainnet' }, null, null);
+      expect(mainnet.marketScriptHashes?.size ?? 0).toBe(0);
+      // A transaction at the preprod script means nothing on a network that configures no deployment.
+      expect(isGeroMarket(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(OWN_LISTING)] } }), mainnet)).toBe(false);
+      expect(geroMarketActions(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(OWN_LISTING, OWN_DATUM)] } }), mainnet)).toEqual([]);
+    });
+
+    it('a Bitcoin wallet has no market scripts', () => {
+      const bitcoin = buildClassifyContext({ stakeAddress: undefined, network: 'Mainnet', chain: 'Bitcoin' }, null, null);
+      expect(bitcoin.marketScriptHashes?.size ?? 0).toBe(0);
+    });
+
+    it('follows every deployment of the network: a superseded script still tags its listings', () => {
+      const v2Hash = 'c2'.repeat(28);
+      const both = { ...market, marketScriptHashes: new Set([V1.scriptHash, v2Hash]) };
+      expect(geroMarketActions(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(scriptAddress(v2Hash, STAKE), OWN_DATUM)] } }), both)).toEqual(['listed']);
+    });
+
+    it('a context built by hand for a mainnet deployment (none is configured yet) classifies the same way', () => {
+      const hash = 'd3'.repeat(28);
+      const mainnetLike = { ...market, network: 'Mainnet', marketScriptHashes: new Set([hash]) };
+      expect(geroMarketActions(tx({ utxo: { inputs: [spend(OWN)], outputs: [produce(scriptAddress(hash, STAKE))] } }), mainnetLike)).toEqual(['listed']);
+    });
+  });
+
+  describe('a transaction cannot be made to look like the wallet\'s own', () => {
+    it('a stranger\'s listing locked under the wallet\'s stake key is not "listed" (no input of the wallet funds it)', () => {
+      expect(actions([spend(BUYER)], [produce(OWN_LISTING, STRANGER_DATUM)])).toEqual([]);
+    });
+
+    it('not even a listing whose datum names the wallet: a transaction the wallet did not fund is not one it made', () => {
+      // Someone else locks an NFT for the wallet (owner and seller both the wallet's): it is the wallet's to cancel, but not its listing action.
+      expect(actions([spend(BUYER)], [produce(OWN_LISTING, OWN_DATUM)])).toEqual([]);
+      expect(actions([spend(BUYER)], [produce(OWN_LISTING)])).toEqual([]);
+      expect(actions([spend(LEGACY), spend(BUYER)], [produce(OWN_LISTING, OWN_DATUM)])).toEqual([]);
+    });
+
+    it('nor is a reprice or a cancel of the wallet\'s listing one it made when its own inputs fund none of it', () => {
+      expect(actions([spend(OWN_LISTING, OWN_DATUM), spend(BUYER)], [produce(OWN_LISTING, OWN_DATUM)])).toEqual([]);
+    });
+
+    it('a listing created under another stake key is not "listed" by this wallet', () => {
+      expect(actions([spend(OWN)], [produce(FOREIGN_LISTING, OWN_DATUM)])).toEqual([]);
+    });
+
+    it('a created listing whose datum does not name the wallet as owner and seller is not "listed"', () => {
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, FAKE_DATUM)])).toEqual([]);
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, STRANGER_DATUM)])).toEqual([]);
+    });
+
+    it('a created listing whose datum cannot be read is not "listed" either', () => {
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, 'zz')])).toEqual([]);
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, 'd8799f00ff')])).toEqual([]);
+    });
+
+    it('"sold" needs a spent listing whose datum names the wallet as owner AND seller', () => {
+      const buyerFunded = [spend(BUYER)];
+      const outputs = [produce(OWN), produce(FEE), produce(BUYER)];
+      expect(actions([spend(OWN_LISTING, FAKE_DATUM), ...buyerFunded], outputs)).toEqual([]);
+      expect(actions([spend(OWN_LISTING, STRANGER_DATUM), ...buyerFunded], outputs)).toEqual([]);
+      expect(actions([spend(OWN_LISTING, null), ...buyerFunded], outputs)).toEqual([]);
+      expect(actions([spend(OWN_LISTING, OWN_DATUM), ...buyerFunded], outputs)).toEqual(['sold']);
+    });
+
+    it('a collateral or reference input at the script is not a spend of the listing', () => {
+      const reference = { ...spend(OWN_LISTING, OWN_DATUM), reference: true };
+      const collateral = { ...spend(OWN_LISTING, OWN_DATUM), collateral: true };
+      expect(actions([reference, spend(BUYER)], [produce(OWN)])).toEqual([]);
+      expect(actions([collateral, spend(BUYER)], [produce(OWN)])).toEqual([]);
+    });
+
+    it('"bought" needs the wallet to fund the transaction', () => {
+      expect(actions([spend(FOREIGN_LISTING), spend(BUYER)], [produce(OWN)])).toEqual([]);
+    });
+
+    it('a wallet whose stake address cannot be read gets no wallet-side tag, and nothing throws', () => {
+      const unreadable = buildClassifyContext({ stakeAddress: 'stake_test1me', network: 'Preprod' }, { payment: [{ address: OWN, cred: OWNER }], change: [] }, {});
+      expect(actions([spend(OWN_LISTING, OWN_DATUM), spend(BUYER)], [produce(OWN)], unreadable)).toEqual([]);
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, OWN_DATUM)], unreadable)).toEqual([]);
+      const none = buildClassifyContext(undefined, undefined, undefined);
+      expect(actions([spend(OWN)], [produce(OWN_LISTING, OWN_DATUM)], none)).toEqual([]);
+    });
+
+    it('a pending transaction (no utxo set yet) and a record without inputs get no tag', () => {
+      expect(geroMarketActions(tx({ pending: true, utxo: null }), market)).toEqual([]);
+      expect(geroMarketActions(tx({ utxo: { inputs: [], outputs: [produce(OWN_LISTING, OWN_DATUM)] } }), market)).toEqual([]);
+    });
+
+    it('blank input addresses (a live-synced record) never throw', () => {
+      expect(actions([{ ...spend(''), address: undefined }, spend(OWN)], [produce(OWN)])).toEqual([]);
+    });
   });
 });

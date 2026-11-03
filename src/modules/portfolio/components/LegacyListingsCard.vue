@@ -44,14 +44,28 @@
     </ul>
 
     <footer class="legacy-card__footer">
-      <div v-if="showMaxHint || showVersionHint" class="legacy-card__hints">
+      <div v-if="showMaxHint || showVersionHint || moveHint" class="legacy-card__hints">
         <p v-if="showMaxHint" class="legacy-card__hint t-caption" data-testid="legacy-max-hint">
           {{ t('legacyListings.maxHint', { max: selectedMax }) }}
         </p>
         <p v-if="showVersionHint" class="legacy-card__hint t-caption" data-testid="legacy-version-hint">
           {{ t('legacyListings.versionHint') }}
         </p>
+        <p v-if="moveHint" class="legacy-card__hint t-caption" data-testid="legacy-move-hint">
+          {{ moveHint }}
+        </p>
       </div>
+      <!-- Only where Gero's market takes new business (a reviewed deployment on this network, the flag, a
+           wallet that can sign it): never a button for something that cannot happen. One listing at a time. -->
+      <GButton
+        v-if="moveAvailable"
+        tier="secondary"
+        :disabled="moveTarget === null"
+        data-testid="legacy-move-to-gero"
+        @click="moveToGero()"
+      >
+        {{ t('nftMarket.move.action') }}
+      </GButton>
       <GButton
         tier="primary"
         :disabled="selection.size === 0"
@@ -69,6 +83,7 @@ import { computed, onMounted, ref, useId, watch } from 'vue';
 import { legacyRef, type LegacyListingItem } from '@/api/legacy-listings-api';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
 import { legacyCancelMax, type LegacyContract } from '@/utils/legacyMarketScripts';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import LegacyItemLine from '@/modules/portfolio/components/LegacyItemLine.vue';
@@ -82,8 +97,18 @@ import { formatAda, legacyItemName } from '@/modules/portfolio/components/legacy
  * The card hands their refs (`txHash#index`) up as `get-back`; LegacyCancelDialog does the rest.
  * Every stuck item is listed, so a wallet with more than one transaction's worth (or both
  * versions) gets them back over several rounds.
+ *
+ * "Move to Gero" takes ONE listing at a time (never an offer, which holds no NFT, and never a
+ * selection of several): the seller prices each move, and a move is one transaction per NFT. It is
+ * offered only where Gero's market takes new business (`nftMarketAvailable`: the flag, a network
+ * with a reviewed deployment, a wallet the worker would not refuse), so on mainnet it stays out of
+ * sight until a deployment is configured there, and the card says why a pick cannot be moved.
  */
-const emit = defineEmits<{ (e: 'get-back', refs: string[]): void }>();
+const emit = defineEmits<{
+  (e: 'get-back', refs: string[]): void;
+  /** Move this ONE listing (`txHash#index`) into a Gero listing: MoveToGeroDialog does the rest. */
+  (e: 'move-to-gero', ref: string): void;
+}>();
 
 const { t } = useTranslation();
 const { items, meta, loading, refresh } = useLegacyListings();
@@ -106,6 +131,21 @@ const showMaxHint = computed(
 const showVersionHint = computed(
   () => selectedContract.value !== undefined && items.value.some((item) => item.contract !== selectedContract.value),
 );
+
+/** Whether the card offers "Move to Gero" at all. */
+const moveAvailable = computed(() => nftMarketAvailable());
+/** The picked items, in list order. */
+const picked = computed(() => items.value.filter((item) => selection.value.has(legacyRef(item))));
+/** The one listing a move would take: exactly one pick, and a listing (an offer holds no NFT). */
+const moveTarget = computed<LegacyListingItem | null>(() => {
+  const [only] = picked.value;
+  return picked.value.length === 1 && only?.kind === 'listing' ? only : null;
+});
+/** Why a pick cannot be moved, once something is picked: several at once, or an offer. */
+const moveHint = computed(() => {
+  if (!moveAvailable.value || picked.value.length === 0 || moveTarget.value !== null) return '';
+  return picked.value.length > 1 ? t('nftMarket.move.pickOne') : t('nftMarket.error.offerNotMovable');
+});
 
 /** Only the selected version's rows stay open, and at the cap only the picked ones: they are how a slot is given back. */
 function isBlocked(item: LegacyListingItem): boolean {
@@ -143,6 +183,12 @@ function getBack(): void {
   const refs = items.value.map(legacyRef).filter((ref) => selection.value.has(ref));
   if (refs.length === 0) return;
   emit('get-back', refs);
+}
+
+function moveToGero(): void {
+  const target = moveTarget.value;
+  if (!target) return;
+  emit('move-to-gero', legacyRef(target));
 }
 
 onMounted(() => { void refresh(); });

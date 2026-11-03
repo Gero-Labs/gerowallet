@@ -13,13 +13,14 @@ export type PushLocale = typeof PUSH_LOCALES[number];
 
 export type PushStringKey =
   | 'PUSH_GENERIC_TITLE' | 'PUSH_GENERIC_BODY'
-  | 'PUSH_CATEGORY_FUNDS' | 'PUSH_CATEGORY_STAKING' | 'PUSH_CATEGORY_SWAP' | 'PUSH_CATEGORY_ADAM' | 'PUSH_CATEGORY_GOVERNANCE' | 'PUSH_CATEGORY_REMOTESIGNING' | 'PUSH_CATEGORY_SYSTEM'
+  | 'PUSH_CATEGORY_FUNDS' | 'PUSH_CATEGORY_STAKING' | 'PUSH_CATEGORY_SWAP' | 'PUSH_CATEGORY_ADAM' | 'PUSH_CATEGORY_GOVERNANCE' | 'PUSH_CATEGORY_REMOTESIGNING' | 'PUSH_CATEGORY_SYSTEM' | 'PUSH_CATEGORY_NFT'
   | 'PUSH_FUNDS_TITLE' | 'PUSH_FUNDS_BODY' | 'PUSH_FUNDS_BODY_AMOUNT'
   | 'PUSH_FUNDS_SUMMARY_TITLE' | 'PUSH_FUNDS_SUMMARY_BODY' | 'PUSH_FUNDS_SUMMARY_BODY_ONE'
   | 'PUSH_SIGNWAKE_TITLE' | 'PUSH_SIGNWAKE_BODY'
   | 'PUSH_NEWDEVICE_TITLE' | 'PUSH_NEWDEVICE_BODY'
   | 'PUSH_REWARD_TITLE' | 'PUSH_REWARD_BODY' | 'PUSH_REWARD_BODY_AMOUNT'
   | 'PUSH_SWAP_FILLED_TITLE' | 'PUSH_SWAP_FILLED_BODY' | 'PUSH_SWAP_CANCELLED_TITLE' | 'PUSH_SWAP_CANCELLED_BODY'
+  | 'PUSH_NFT_SOLD_TITLE' | 'PUSH_NFT_SOLD_BODY' | 'PUSH_NFT_SOLD_BODY_AMOUNT'
   | 'PUSH_ADAM_TITLE' | 'PUSH_ADAM_BODY'
   | 'PUSH_DREP_RETIRED_TITLE' | 'PUSH_DREP_RETIRED_BODY' | 'PUSH_DREP_INACTIVE_TITLE' | 'PUSH_DREP_INACTIVE_BODY' | 'PUSH_DREP_EXPIRING_TITLE' | 'PUSH_DREP_EXPIRING_BODY'
   | 'PUSH_TEST_TITLE' | 'PUSH_TEST_BODY'
@@ -37,6 +38,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_CATEGORY_GOVERNANCE: 'There is news about your governance delegation',
     PUSH_CATEGORY_REMOTESIGNING: 'There is a security event on this wallet',
     PUSH_CATEGORY_SYSTEM: 'A notification from Gero',
+    PUSH_CATEGORY_NFT: 'There is news about your NFT listings',
     PUSH_FUNDS_TITLE: 'Funds Received',
     PUSH_FUNDS_BODY: 'You received funds',
     PUSH_FUNDS_BODY_AMOUNT: 'You received {amount}',
@@ -54,6 +56,9 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_SWAP_FILLED_BODY: 'Your swap order was filled',
     PUSH_SWAP_CANCELLED_TITLE: 'Order Cancelled',
     PUSH_SWAP_CANCELLED_BODY: 'Your swap order was cancelled',
+    PUSH_NFT_SOLD_TITLE: 'NFT Sold',
+    PUSH_NFT_SOLD_BODY: 'Your NFT listing was bought',
+    PUSH_NFT_SOLD_BODY_AMOUNT: 'Your NFT sold. You receive {ada} ADA',
     PUSH_ADAM_TITLE: 'ADAM proposal',
     PUSH_ADAM_BODY: 'ADAM proposes a trade for your review',
     PUSH_DREP_RETIRED_TITLE: 'DRep retired',
@@ -81,6 +86,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_CATEGORY_GOVERNANCE: 'Es gibt Neuigkeiten zu deiner Governance-Delegation',
     PUSH_CATEGORY_REMOTESIGNING: 'Es gibt ein Sicherheitsereignis in dieser Wallet',
     PUSH_CATEGORY_SYSTEM: 'Eine Benachrichtigung von Gero',
+    PUSH_CATEGORY_NFT: 'Es gibt Neuigkeiten zu Ihren NFT-Angeboten',
     PUSH_FUNDS_TITLE: 'Guthaben erhalten',
     PUSH_FUNDS_BODY: 'Du hast Guthaben erhalten',
     PUSH_FUNDS_BODY_AMOUNT: 'Du hast {amount} erhalten',
@@ -98,6 +104,9 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_SWAP_FILLED_BODY: 'Dein Swap-Auftrag wurde ausgeführt',
     PUSH_SWAP_CANCELLED_TITLE: 'Auftrag storniert',
     PUSH_SWAP_CANCELLED_BODY: 'Dein Swap-Auftrag wurde storniert',
+    PUSH_NFT_SOLD_TITLE: 'NFT verkauft',
+    PUSH_NFT_SOLD_BODY: 'Ihr NFT-Angebot wurde gekauft',
+    PUSH_NFT_SOLD_BODY_AMOUNT: 'Ihr NFT wurde verkauft. Sie erhalten {ada} ADA',
     PUSH_ADAM_TITLE: 'ADAM-Vorschlag',
     PUSH_ADAM_BODY: 'ADAM schlägt dir einen Handel zur Prüfung vor',
     PUSH_DREP_RETIRED_TITLE: 'DRep zurückgetreten',
@@ -125,6 +134,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_CATEGORY_GOVERNANCE: 'Hay novedades sobre tu delegación de gobernanza',
     PUSH_CATEGORY_REMOTESIGNING: 'Hay un evento de seguridad en esta billetera',
     PUSH_CATEGORY_SYSTEM: 'Una notificación de Gero',
+    PUSH_CATEGORY_NFT: 'Hay novedades sobre tus publicaciones de NFT',
     PUSH_FUNDS_TITLE: 'Fondos recibidos',
     PUSH_FUNDS_BODY: 'Recibiste fondos',
     PUSH_FUNDS_BODY_AMOUNT: 'Recibiste {amount}',
@@ -142,6 +152,9 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_SWAP_FILLED_BODY: 'Tu orden de intercambio se completó',
     PUSH_SWAP_CANCELLED_TITLE: 'Orden cancelada',
     PUSH_SWAP_CANCELLED_BODY: 'Tu orden de intercambio se canceló',
+    PUSH_NFT_SOLD_TITLE: 'NFT vendido',
+    PUSH_NFT_SOLD_BODY: 'Tu publicación de NFT fue comprada',
+    PUSH_NFT_SOLD_BODY_AMOUNT: 'Tu NFT se vendió. Recibes {ada} ADA',
     PUSH_ADAM_TITLE: 'Propuesta de ADAM',
     PUSH_ADAM_BODY: 'ADAM te propone una operación para que la revises',
     PUSH_DREP_RETIRED_TITLE: 'DRep retirado',

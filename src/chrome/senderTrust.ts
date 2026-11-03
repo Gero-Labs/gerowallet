@@ -37,6 +37,8 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'NOTIFY_INBOX_READ',
   'NOTIFY_INBOX_CLEAR',
   'NOTIFY_WATCH_ORDERS',
+  // Registers a Gero market listing of the logged wallet for sale alerts (market dialogs).
+  'NOTIFY_WATCH_LISTINGS',
   'NOTIFY_INTRO_ANSWER',
   // Part of signing: only the wallet's own pages sign (Ledger, Keystone, Trezor over WebUSB).
   'CIP113_SIGN_PREFLIGHT',

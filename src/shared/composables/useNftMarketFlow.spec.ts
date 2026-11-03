@@ -525,6 +525,139 @@ describe('signing and submitting', () => {
     expect(flow.failureKind.value).toBe('maybeSent');
   });
 
+  describe('the sale alert (NOTIFY_WATCH_LISTINGS) after a submit that went through', () => {
+    const LISTING_SUMMARY = { txId: TX_ID, listingOutputIndex: 2 };
+    const WATCHED = ['list', 'reprice', 'migrate'] as const;
+    const watchCalls = () => send.mock.calls.map(([m]) => m as { method: string; data: Record<string, unknown> }).filter((m) => m.method === MessageTypes.NOTIFY_WATCH_LISTINGS);
+
+    function submitted(action: MarketAction, over: { summary?: Record<string, unknown>; watch?: Handler } = {}) {
+      respond({
+        [PREPARE[action]]: prepared(over.summary ?? LISTING_SUMMARY),
+        [MessageTypes.VERIFY_SPENDING_PASSWORD]: () => ({ success: true }),
+        [MessageTypes.SIGN_TX]: () => ({ witnesses: 'WITNESSES' }),
+        [MessageTypes.SUBMIT_TX]: () => ({ txId: TX_ID }),
+        [MessageTypes.NOTIFY_WATCH_LISTINGS]: over.watch ?? (() => ({ success: true, result: { result: 'ok', watching: 1 } })),
+      });
+      return useNftMarketFlow(action);
+    }
+
+    it.each(WATCHED)('%s registers the listing output the verified summary names, once, with the logged wallet', async (action) => {
+      walletState.loggedWallet = { id: 7, type: 'Normal', network: 'Preprod' } as never;
+      const flow = submitted(action);
+      await prepareWith(action, flow);
+
+      expect(await flow.signAndSubmit({ password: 'secret' })).toBe(true);
+
+      expect(watchCalls()).toHaveLength(1);
+      // The index is the one the verified summary names (2), never an assumed 0; the page names no owner.
+      expect(watchCalls()[0].data).toEqual({ walletId: 7, listingRefs: [`${TX_ID}#2`] });
+      expect(methods().slice(-2)).toEqual([MessageTypes.SUBMIT_TX, MessageTypes.NOTIFY_WATCH_LISTINGS]);
+    });
+
+    it.each(['cancel', 'buy'] as const)('%s creates no listing of the wallet, so nothing is registered', async (action) => {
+      const flow = submitted(action);
+      await prepareWith(action, flow);
+      expect(await flow.signAndSubmit({ password: 'secret' })).toBe(true);
+      expect(watchCalls()).toHaveLength(0);
+    });
+
+    it('is never sent for a transaction that did not go through', async () => {
+      // A wrong password, a refused signature and a submit that was not confirmed.
+      respond({
+        [MessageTypes.NFT_MARKET_PREPARE_LIST]: prepared(LISTING_SUMMARY),
+        [MessageTypes.VERIFY_SPENDING_PASSWORD]: () => ({ success: false }),
+      });
+      const wrong = useNftMarketFlow('list');
+      await wrong.prepare(PAYLOADS.list);
+      expect(await wrong.signAndSubmit({ password: 'wrong' })).toBe(false);
+
+      respond({
+        [MessageTypes.NFT_MARKET_PREPARE_LIST]: prepared(LISTING_SUMMARY),
+        [MessageTypes.SIGN_TX]: () => ({ witnesses: 'W' }),
+        [MessageTypes.SUBMIT_TX]: () => ({ error: 'node down' }),
+      });
+      const unconfirmed = useNftMarketFlow('list');
+      await unconfirmed.prepare(PAYLOADS.list);
+      expect(await unconfirmed.signAndSubmit()).toBe(false);
+
+      expect(watchCalls()).toHaveLength(0);
+    });
+
+    it('does not guess: a summary without a usable output index registers nothing', async () => {
+      for (const summary of [{ txId: TX_ID }, { txId: TX_ID, listingOutputIndex: -1 }, { txId: TX_ID, listingOutputIndex: 1.5 }, { txId: TX_ID, listingOutputIndex: '1' }, { listingOutputIndex: 1 }]) {
+        send.mockReset();
+        const flow = submitted('list', { summary });
+        await flow.prepare(PAYLOADS.list);
+        expect(await flow.signAndSubmit({ password: 'secret' })).toBe(true);
+        expect(watchCalls(), JSON.stringify(summary)).toHaveLength(0);
+      }
+    });
+
+    it('never blocks the done screen: it resolves, and the flow is done, while the registration is still pending', async () => {
+      // The worker never answers the registration (the channel itself stays pending, not just its payload).
+      send.mockImplementation(({ method }: { method: string }) => {
+        if (method === MessageTypes.NOTIFY_WATCH_LISTINGS) return new Promise(() => undefined);
+        if (method === MessageTypes.NFT_MARKET_PREPARE_LIST) return Promise.resolve({ data: prepared(LISTING_SUMMARY)() });
+        if (method === MessageTypes.SIGN_TX) return Promise.resolve({ data: { witnesses: 'W' } });
+        if (method === MessageTypes.SUBMIT_TX) return Promise.resolve({ data: { txId: TX_ID } });
+        return Promise.reject(new Error(`unexpected ${method}`));
+      });
+      const flow = useNftMarketFlow('list');
+      await flow.prepare(PAYLOADS.list);
+
+      expect(await flow.signAndSubmit()).toBe(true);
+
+      expect(flow.stage.value).toBe('done');
+      expect(flow.failure.value).toBeNull();
+      expect(watchCalls()).toHaveLength(1);
+    });
+
+    it.each([
+      ['the device has no push registration', () => ({ success: true, result: { result: 'not_registered' } })],
+      ['gero-sync refuses (a 422 limit_exceeded, say)', () => ({ success: false, result: { result: 'failed' }, errorCode: 'FAILED' })],
+      ['the worker refuses the listing', () => ({ success: false, result: { result: 'failed' }, errorCode: 'NOT_VERIFIED' })],
+    ])('is non-fatal and only logged when %s', async (_name, watch) => {
+      const flow = submitted('migrate', { watch: watch as Handler });
+      await prepareWith('migrate', flow);
+
+      expect(await flow.signAndSubmit({ password: 'secret' })).toBe(true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(flow.stage.value).toBe('done');
+      expect(flow.failure.value).toBeNull();
+      expect(debugLog).toHaveBeenCalled();
+    });
+
+    it('a message that throws is swallowed the same way', async () => {
+      send.mockImplementation(async ({ method }: { method: string }) => {
+        if (method === MessageTypes.NOTIFY_WATCH_LISTINGS) throw new Error('worker asleep');
+        if (method === MessageTypes.NFT_MARKET_PREPARE_LIST) return { data: prepared(LISTING_SUMMARY)() };
+        if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'W' } };
+        if (method === MessageTypes.SUBMIT_TX) return { data: { txId: TX_ID } };
+        throw new Error(`unexpected ${method}`);
+      });
+      const flow = useNftMarketFlow('list');
+      await flow.prepare(PAYLOADS.list);
+
+      expect(await flow.signAndSubmit()).toBe(true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(flow.stage.value).toBe('done');
+      expect(debugLog).toHaveBeenCalled();
+    });
+
+    it('registers a transaction once, even if the submit result is asked twice', async () => {
+      const flow = submitted('list');
+      await flow.prepare(PAYLOADS.list);
+      expect(await flow.signAndSubmit({ password: 'secret' })).toBe(true);
+      // The prepared transaction is still held at "done"; a second call must not register it again.
+      expect(await flow.signAndSubmit({ password: 'secret' })).toBe(true);
+      expect(watchCalls()).toHaveLength(1);
+    });
+  });
+
   describe('the node refusing a spent input on submit', () => {
     // The text SUBMIT_TX really answers with: the worker's own prefix (submitErrors.ts) and the node's reason.
     const submitText = (reason: string) => describeSubmitFailure(400, reason);

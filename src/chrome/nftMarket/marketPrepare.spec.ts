@@ -825,6 +825,76 @@ describe('the signing allowance', () => {
   });
 });
 
+describe('the listing the sale alert may watch', () => {
+  // What NOTIFY_WATCH_LISTINGS (listingWatch.ts) later accepts: the listing output and the datum owner
+  // the verifier checked in THIS transaction, remembered by the worker, never taken from the page.
+  const outputIndexOf = (data: Reply['data']) => (data.result?.summary as { listingOutputIndex: number }).listingOutputIndex;
+
+  it('list: the summary\'s listing output index and the datum owner, once, after the allowance', async () => {
+    const tx = listTx();
+    const { deps } = rig({ built: response(tx) });
+    deps.rememberListing = vi.fn();
+    const data = await reply('list', LIST_REQUEST, deps);
+    expect(data.success).toBe(true);
+    expect(deps.rememberListing).toHaveBeenCalledTimes(1);
+    expect(deps.rememberListing).toHaveBeenCalledWith(1, tx.id, outputIndexOf(data), OWNER);
+  });
+
+  it('reprice: the new listing output, owned by the old listing\'s datum owner', async () => {
+    const tx = repriceTx();
+    const { deps } = rig({ built: response(tx) });
+    deps.rememberListing = vi.fn();
+    const data = await reply('reprice', REPRICE_REQUEST, deps);
+    expect(data.success).toBe(true);
+    expect(deps.rememberListing).toHaveBeenCalledWith(1, tx.id, outputIndexOf(data), OWN_LISTING.datum.owner);
+  });
+
+  it('migrate: the new Gero listing output, owned by the key the worker chose', async () => {
+    const tx = migrateTx();
+    const { deps } = rig({
+      wallet: MAINNET_WALLET,
+      built: response(tx),
+      state: { utxos: [M_FEE_UTXO], keys: M_KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 },
+      royalties: M_FIVE_PERCENT,
+    });
+    deps.rememberListing = vi.fn();
+    const data = await reply('migrate', MIGRATE_REQUEST, deps);
+    expect(data.success).toBe(true);
+    expect(deps.rememberListing).toHaveBeenCalledWith(1, tx.id, outputIndexOf(data), OWNER);
+  });
+
+  it('cancel and buy create no listing of the wallet, so nothing is remembered', async () => {
+    const cancel = rig({ built: response(cancelTx()) });
+    cancel.deps.rememberListing = vi.fn();
+    expect((await reply('cancel', CANCEL_REQUEST, cancel.deps)).success).toBe(true);
+    expect(cancel.deps.rememberListing).not.toHaveBeenCalled();
+
+    const buy = rig({ built: response(buyTx()), state: { utxos: [BUYER_UTXO], keys: KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 } });
+    buy.deps.rememberListing = vi.fn();
+    expect((await reply('buy', BUY_REQUEST, buy.deps)).success).toBe(true);
+    expect(buy.deps.rememberListing).not.toHaveBeenCalled();
+  });
+
+  it('nothing is remembered when the verification fails, when Nexus refuses, or when the wallet switched', async () => {
+    const bad = rig({ built: response(cancelTx()) });
+    bad.deps.rememberListing = vi.fn();
+    await reply('list', LIST_REQUEST, bad.deps);
+    const refused = rig({ buildError: nexusError('INSUFFICIENT_ADA') });
+    refused.deps.rememberListing = vi.fn();
+    await reply('list', LIST_REQUEST, refused.deps);
+    expect(bad.deps.rememberListing).not.toHaveBeenCalled();
+    expect(refused.deps.rememberListing).not.toHaveBeenCalled();
+  });
+
+  it('a dependency that throws never turns a verified transaction into a failure', async () => {
+    const { deps } = rig({ built: response(listTx()) });
+    deps.rememberListing = vi.fn(() => { throw new Error('memory full'); });
+    const data = await reply('list', LIST_REQUEST, deps);
+    expect(data.success).toBe(true);
+    expect(deps.grantAllowance).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('a Nexus 422 is passed through with its code', () => {
   const cases: [MarketAction, unknown, Partial<RigOptions>][] = [
     ['list', LIST_REQUEST, {}],

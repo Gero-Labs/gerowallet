@@ -66,6 +66,7 @@ import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { NFT_MARKET_SIGN_REFUSAL_MESSAGE, grantMarketSignAllowance, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
 import { marketPrepareHandler, type MarketHandlerDeps } from '@/chrome/nftMarket/marketPrepare';
+import { rememberVerifiedListing, watchListingsHandler, type ListingWatchDeps } from '@/chrome/nftMarket/listingWatch';
 import { fetchListingUtxoProven } from '@/chrome/nftMarket/listingChainUtxo';
 import { nftMarketApi } from '@/api/nft-market-api';
 import NetworkStore from '@/stores/networkStore';
@@ -1794,6 +1795,8 @@ const marketPrepareDeps: MarketHandlerDeps = {
   royalties: (policyId, network) => nftMarketApi.royalties(policyId, network),
   markNexusLent,
   grantAllowance: grantMarketSignAllowance,
+  // The listing a verified list, reprice or move creates, for the sale alert (NOTIFY_WATCH_LISTINGS).
+  rememberListing: rememberVerifiedListing,
 };
 
 // The same refusal for a signer outside the worker: Ledger, Keystone and Trezor over WebUSB
@@ -1884,6 +1887,21 @@ app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_REPRICE, marketPrepareHandler('
 app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_CANCEL, marketPrepareHandler('cancel', marketPrepareDeps));
 app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_BUY, marketPrepareHandler('buy', marketPrepareDeps));
 app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_MIGRATE, marketPrepareHandler('migrate', marketPrepareDeps));
+
+// The sale alert for a listing the wallet just made (list, reprice, move): the page asks, the worker
+// decides. The wallet is the logged one, the listing one the worker verified (or one of the wallet's own
+// verified listings), the owner that listing's datum owner and a key of this account (listingWatch.ts).
+// Non-fatal for the page: `{ result: 'ok' | 'not_registered' | 'failed' }`. Extension pages only (senderTrust).
+const listingWatchDeps: ListingWatchDeps = {
+  booted,
+  getWallet: () => walletManager.getWallet(),
+  getState: () => ({
+    keys: WalletStore.state.keys,
+    listedListings: WalletStore.state.listedListings,
+  }),
+  watch: (input) => notifyActions.watchListings(input),
+};
+app.addToOptions(MessageTypes.NOTIFY_WATCH_LISTINGS, watchListingsHandler(listingWatchDeps));
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
   // Same consent re-check as signData before the witness set is released.

@@ -17,6 +17,9 @@ const EX = {
   drep_retired: '{"v":1,"t":"drep_retired","c":"governance","w":"00112233445566778899aabbccddeeff","e":"23e508501de7bd7ef381b15e1333639e","ts":1790553600000,"exp":1790812800000,"d":"governance","x":{"drepId":"drep1y2uf2gxdj4hhkzkmhgtd7rfxh5q45sne2h3mlra2up53rrg4mwfnf"}}',
   drep_inactive: '{"v":1,"t":"drep_inactive","c":"governance","w":"00112233445566778899aabbccddeeff","e":"1fc44e8a1bed1cc819d0d3f67a8248ec","ts":1790553600000,"exp":1790812800000,"d":"governance","x":{"drepId":"drep1y2uf2gxdj4hhkzkmhgtd7rfxh5q45sne2h3mlra2up53rrg4mwfnf"}}',
   drep_expiring: '{"v":1,"t":"drep_expiring","c":"governance","w":"00112233445566778899aabbccddeeff","e":"cbdeecf66f251a16aed016f0aff9495e","ts":1790553600000,"exp":1790812800000,"d":"governance","x":{"drepId":"drep1y2uf2gxdj4hhkzkmhgtd7rfxh5q45sne2h3mlra2up53rrg4mwfnf"}}',
+  // As gero-sync PushPayloads.webPush writes nft_sold: `a.ada` is the seller share, `a.assets` the one NFT by unit (never a sym),
+  // `x.tx` the buying transaction and `x.listingRef` the listing output.
+  nft_sold: '{"v":1,"t":"nft_sold","c":"nft","w":"00112233445566778899aabbccddeeff","e":"0b6d1f8e2a3c4d5e6f708192a3b4c5d6","ts":1790553600000,"exp":1790640000000,"d":"nftListings","a":{"ada":"93.5","assets":[{"qty":"1","unit":"aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00474e4654"}]},"x":{"tx":"a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130","listingRef":"b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0#1"}}',
   test: '{"v":1,"t":"test","c":"system","w":"00112233445566778899aabbccddeeff","e":"8485b3752ebf592436a6786107e20610","ts":1790553600000,"exp":1790557200000,"d":"home"}',
 };
 const NOW = 1790553700000; // before every exp above
@@ -34,6 +37,99 @@ describe('§6.3 event tag vectors', () => {
     expect(computeEventTag(key, `fundsum:cardano-mainnet:${stake}:1790554200`)).toBe('8d66e9e1e07c4da7b7ecca5915a062d4');
     expect(computeEventTag(key, `reward:cardano-mainnet:${stake}:612`)).toBe('f22fe1d26bdd80a834a7b76c1b8996a2');
     expect(computeEventTag(key, 'test:21fe31dfa154a261626bf854046fd227:adm-0001')).toBe('8485b3752ebf592436a6786107e20610');
+  });
+});
+
+const LISTING_REF = 'b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0#1';
+const BUY_TX = 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130';
+const NFT_UNIT = 'aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00474e4654';
+
+describe('nft_sold (Gero NFT market, category nft, destination nftListings)', () => {
+  it('with amounts: the title carries the wallet name, the body the seller share, the click opens Portfolio collectibles on the listing', () => {
+    const r = render(EX.nft_sold);
+    expect(r.title).toBe('NFT Sold · Daily Cardano');
+    expect(r.body).toBe('Your NFT sold. You receive 93.5 ADA');
+    expect(r.title + r.body).not.toMatch(/—|–/);
+    expect(r.tag).toBe('0b6d1f8e2a3c4d5e6f708192a3b4c5d6');
+    expect(r.requireInteraction).toBe(false);
+    // The side panel has no collectibles view (R7).
+    expect(r.route).toEqual({ dashboard: '/?view=collectibles', sidepanel: null, highlight: { tx: BUY_TX, listingRef: LISTING_REF } });
+    expect(r.data).toMatchObject({ t: 'nft_sold', c: 'nft', d: 'nftListings', walletId: 4, degraded: 'none', x: { tx: BUY_TX, listingRef: LISTING_REF } });
+  });
+
+  it('the bell shows the NFT by its unit and then ADA', () => {
+    expect(render(EX.nft_sold).assets).toEqual([{ unit: NFT_UNIT, label: 'NFT' }, { unit: 'lovelace', label: 'ADA' }]);
+  });
+
+  it('without amounts (the wallet did not opt into details): generic body, no wallet name, still the deep link', () => {
+    const r = render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }));
+    expect(r.title).toBe('NFT Sold');
+    expect(r.body).toBe(us.PUSH_NFT_SOLD_BODY);
+    expect(r.assets).toBeUndefined();
+    expect(r.route.highlight).toEqual({ tx: BUY_TX, listingRef: LISTING_REF });
+  });
+
+  it('renders in German (formal Sie, no em dash) and Spanish (tú)', () => {
+    const de = render(EX.nft_sold, { locale: 'de' });
+    expect(de.title).toBe('NFT verkauft · Daily Cardano');
+    expect(de.body).toBe('Ihr NFT wurde verkauft. Sie erhalten 93.5 ADA');
+    const es = render(EX.nft_sold, { locale: 'es' });
+    expect(es.title).toBe('NFT vendido · Daily Cardano');
+    expect(es.body).toBe('Tu NFT se vendió. Recibes 93.5 ADA');
+    for (const r of [de, es]) expect(r.title + r.body).not.toMatch(/—|–/);
+    expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'de' }).body).toBe(pushStrings.de.PUSH_NFT_SOLD_BODY);
+    expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'es' }).body).toBe(pushStrings.es.PUSH_NFT_SOLD_BODY);
+  });
+
+  it('every locale has the three strings, none empty, and the amount one takes {ada}', () => {
+    for (const locale of ['us', 'de', 'es'] as const) {
+      const strings = pushStrings[locale];
+      for (const key of ['PUSH_CATEGORY_NFT', 'PUSH_NFT_SOLD_TITLE', 'PUSH_NFT_SOLD_BODY', 'PUSH_NFT_SOLD_BODY_AMOUNT'] as const) {
+        expect(strings[key], `${locale} ${key}`).toBeTruthy();
+        expect(strings[key], `${locale} ${key}`).not.toMatch(/—|–/);
+      }
+      expect(strings.PUSH_NFT_SOLD_BODY_AMOUNT).toContain('{ada}');
+    }
+  });
+
+  it('expired: the category text, no amounts and no deep link; an unknown type of the category says the category text', () => {
+    const expired = render(EX.nft_sold, { now: 1790640000001 });
+    expect(expired.body).toBe(us.PUSH_CATEGORY_NFT);
+    expect(expired.body).not.toContain('93.5');
+    expect(expired.route).toEqual({ dashboard: '/?view=collectibles', sidepanel: null });
+    expect(expired.data.degraded).toBe('expired');
+    const unknown = render(EX.nft_sold.replace('"t":"nft_sold"', '"t":"nft_bought"'));
+    expect(unknown.title).toBe(us.PUSH_GENERIC_TITLE);
+    expect(unknown.body).toBe(us.PUSH_CATEGORY_NFT);
+  });
+
+  it('routes nftListings with the listing as the highlight, and without it when deep links are off', () => {
+    expect(routeFor('nftListings', { listingRef: LISTING_REF }, true)).toEqual({ dashboard: '/?view=collectibles', sidepanel: null, highlight: { listingRef: LISTING_REF } });
+    expect(routeFor('nftListings', { listingRef: LISTING_REF }, false)).toEqual({ dashboard: '/?view=collectibles', sidepanel: null });
+    expect(routeFor('nftListings', undefined, true)).toEqual({ dashboard: '/?view=collectibles', sidepanel: null });
+  });
+});
+
+describe('x.listingRef (sanitizeDetails)', () => {
+  const withRef = (listingRef: unknown) => parsePushPayload(JSON.stringify({ ...JSON.parse(EX.nft_sold), x: { tx: BUY_TX, listingRef } }));
+  const refOf = (parsed: ReturnType<typeof parsePushPayload>) => (parsed.ok ? parsed.payload.x?.listingRef : 'not parsed');
+
+  it('keeps a valid ref', () => {
+    expect(refOf(withRef(LISTING_REF))).toBe(LISTING_REF);
+    expect(refOf(withRef(`${'0'.repeat(64)}#12345`))).toBe(`${'0'.repeat(64)}#12345`);
+  });
+
+  it('drops a malformed one and keeps the rest of the details', () => {
+    for (const bad of [`${'b1'.repeat(31)}#1`, `${'B1'.repeat(32)}#1`, `${'b1'.repeat(32)}`, `${'b1'.repeat(32)}#`, `${'b1'.repeat(32)}#x`, `${'b1'.repeat(32)}#1\n`, `<b>${LISTING_REF}`, 7, null, {}]) {
+      const parsed = withRef(bad);
+      expect(refOf(parsed), String(bad)).toBeUndefined();
+      expect(parsed.ok && parsed.payload.x).toEqual({ tx: BUY_TX });
+    }
+  });
+
+  it('a payload whose only detail is a bad ref has no details at all', () => {
+    const parsed = parsePushPayload(JSON.stringify({ ...JSON.parse(EX.nft_sold), x: { listingRef: 'nope' } }));
+    expect(parsed.ok && parsed.payload.x).toBeUndefined();
   });
 });
 

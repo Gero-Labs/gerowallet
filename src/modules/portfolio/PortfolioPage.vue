@@ -188,7 +188,7 @@
            with a way to get them back. Only on the Collectibles view, and only when there are any. -->
       <v-row v-if="activeView === 'collectibles' && legacyListingsCount > 0" no-gutters>
         <v-col cols="12" class="pa-2">
-          <LegacyListingsCard @get-back="openLegacyRescue" />
+          <LegacyListingsCard @get-back="openLegacyRescue" @move-to-gero="openMoveToGero" />
         </v-col>
       </v-row>
 
@@ -411,6 +411,9 @@
       <!-- Get stuck marketplace items back. Hosted here, not in the card: a cancel that empties
            the list removes the card, and this dialog's "done" screen must outlive it. -->
       <LegacyCancelDialog :is-open="legacyRescueOpen" :refs="legacyRescueRefs" @close="legacyRescueOpen = false" />
+
+      <!-- Move one stuck listing straight into a Gero listing. Hosted here for the same reason. -->
+      <MoveToGeroDialog :is-open="moveToGeroOpen" :legacy-ref="moveToGeroRef" @close="moveToGeroOpen = false" />
     </template>
   </div>
 </template>
@@ -445,6 +448,7 @@ import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import LegacyListingsCard from '@/modules/portfolio/components/LegacyListingsCard.vue';
 import LegacyCancelDialog from '@/modules/portfolio/components/LegacyCancelDialog.vue';
+import MoveToGeroDialog from '@/modules/portfolio/components/MoveToGeroDialog.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
@@ -561,6 +565,15 @@ const legacyRescueRefs = ref<string[]>([]);
 function openLegacyRescue(refs: string[]) {
   legacyRescueRefs.value = refs;
   legacyRescueOpen.value = true;
+}
+
+// Moving one stuck listing into a Gero listing (the card offers it only where the market is live).
+const moveToGeroOpen = ref(false);
+const moveToGeroRef = ref('');
+
+function openMoveToGero(ref: string) {
+  moveToGeroRef.value = ref;
+  moveToGeroOpen.value = true;
 }
 
 // DUST registration dialog state — only relevant when chain === Midnight.

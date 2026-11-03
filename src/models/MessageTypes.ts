@@ -187,6 +187,10 @@ export enum MessageTypes {
   NOTIFY_INBOX_READ = 'NOTIFY_INBOX_READ', // page -> worker: one e, or all (B-M3 bell)
   NOTIFY_INBOX_CLEAR = 'NOTIFY_INBOX_CLEAR',
   NOTIFY_WATCH_ORDERS = 'NOTIFY_WATCH_ORDERS', // swap widget -> worker: register a submitted swap for fill/cancel alerts
+  // Market dialog -> worker, after a list, reprice or move went through: have gero-sync watch the new Gero
+  // listing for a sale (`nft_sold`). `{ walletId?, ownerPkh?, listingRefs }`; the worker uses the LOGGED wallet and
+  // a listing it verified itself, and only compares what the page names (listingWatch.ts). Extension pages only.
+  NOTIFY_WATCH_LISTINGS = 'NOTIFY_WATCH_LISTINGS',
   NOTIFY_INTRO_ANSWER = 'NOTIFY_INTRO_ANSWER', // page -> worker: the offer to turn notifications on was answered (notifyIntro.ts)
   // The CIP-113 signing refusal for a signer outside the worker (Trezor over WebUSB,
   // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.

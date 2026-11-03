@@ -177,6 +177,12 @@ export interface MarketHandlerDeps {
   markNexusLent: (ref: string) => void;
   /** `grantMarketSignAllowance`: the one signature a verified market transaction may get. */
   grantAllowance: (walletId: number, txId: string, hits: readonly string[]) => void;
+  /**
+   * `rememberVerifiedListing`: the listing output a verified list, reprice or migrate creates and the
+   * datum owner the verifier checked, so NOTIFY_WATCH_LISTINGS (listingWatch.ts) can register it for the
+   * sale alert from the worker's own verification and not from anything a page says.
+   */
+  rememberListing?: (walletId: number, txId: string, outputIndex: number, ownerPkh: string) => void;
 }
 
 /** What the list sheet shows the seller about the royalties that were not written into the datum. */
@@ -202,6 +208,8 @@ export interface MarketPrepared {
   /** What the verified transaction touches (`findMarketTouch`); what the allowance covers. */
   hits: string[];
   sponsoredCollateralRef?: string;
+  /** A list, reprice or migrate: the listing output it creates and the datum owner, as verified. */
+  listing?: { outputIndex: number; ownerPkh: string };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -228,6 +236,14 @@ export function marketPrepareHandler(kind: MarketAction, deps: MarketHandlerDeps
       if (prepared.hits.length > 0) deps.grantAllowance(wallet.id, prepared.txId, prepared.hits);
       // A failed co-signature of Nexus pool collateral is then fatal in SIGN_TX, as for DUST.
       if (prepared.sponsoredCollateralRef) deps.markNexusLent(prepared.sponsoredCollateralRef);
+      // The listing a sale alert may watch. Best effort: losing it only costs the alert, never the transaction.
+      if (prepared.listing) {
+        try {
+          deps.rememberListing?.(wallet.id, prepared.txId, prepared.listing.outputIndex, prepared.listing.ownerPkh);
+        } catch (e) {
+          debugLog('NFT market prepare: the listing could not be remembered for the sale alert:', getErrorMessage(e));
+        }
+      }
       data = { success: true, result: { txCbor: prepared.txCbor, txId: prepared.txId, summary: prepared.summary } };
     } catch (error) {
       const known = error instanceof MarketPrepareError ? error : null;
@@ -476,6 +492,7 @@ async function buildAndVerify<S>(
 function finish(
   s: Session,
   verified: Verified<MarketSummary>,
+  listing?: { outputIndex: number; ownerPkh: string },
 ): MarketPrepared {
   const tx = Serialization.Transaction.fromCbor(HexBlob(verified.built.tx_cbor)).toCore();
   const hits = findMarketTouch(tx, s.deployments, new Set(s.ownListings.keys()));
@@ -488,6 +505,7 @@ function finish(
     summary,
     hits,
     ...(sponsoredCollateralRef ? { sponsoredCollateralRef } : {}),
+    ...(listing ? { listing } : {}),
   };
 }
 
@@ -682,7 +700,8 @@ async function prepareList(s: Session, request: unknown): Promise<MarketPrepared
     }, s.network),
     (built, ctx) => ({ ...verifyList(built.tx_cbor, built.tx_hash, intent, ctx), ...notes(royalties) }),
   );
-  return finish(s, verified);
+  // verifyList checked the listing's datum names `ownerPkh` as owner, so the summary's output index and this key go together.
+  return finish(s, verified, { outputIndex: verified.summary.listingOutputIndex, ownerPkh });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -719,7 +738,8 @@ async function prepareReprice(s: Session, request: unknown): Promise<MarketPrepa
     }, s.network),
     (built, ctx) => verifyReprice(built.tx_cbor, built.tx_hash, { ref, price }, ctx),
   );
-  return finish(s, verified);
+  // verifyReprice refuses a datum whose owner is not the old listing's, so the new output keeps that owner.
+  return finish(s, verified, { outputIndex: verified.summary.listingOutputIndex, ownerPkh: listing.datum.owner.toLowerCase() });
 }
 
 async function prepareCancel(s: Session, request: unknown): Promise<MarketPrepared> {
@@ -885,5 +905,5 @@ async function prepareMigrate(s: Session, request: unknown): Promise<MarketPrepa
       ...notes(royalties),
     }),
   );
-  return finish(s, verified);
+  return finish(s, verified, { outputIndex: verified.summary.listingOutputIndex, ownerPkh });
 }

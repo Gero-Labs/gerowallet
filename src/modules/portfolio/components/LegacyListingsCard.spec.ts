@@ -38,6 +38,11 @@ vi.mock('@/shared/composables/useLegacyListings', async () => {
   };
 });
 
+// Whether Gero's market takes new business here: the flag, a network with a reviewed deployment (mainnet has
+// none yet) and a wallet the worker would not refuse. The one predicate the card reads for "Move to Gero".
+const market = vi.hoisted(() => ({ available: true }));
+vi.mock('@/shared/utils/nftMarketAvailability', () => ({ nftMarketAvailable: () => market.available }));
+
 import LegacyListingsCard from './LegacyListingsCard.vue';
 import { legacyRef } from '@/api/legacy-listings-api';
 
@@ -76,6 +81,7 @@ describe('LegacyListingsCard', () => {
     listings.loading.value = false;
     listings.refresh.mockClear();
     listings.forget.mockClear();
+    market.available = true;
   });
   afterEach(() => {
     document.body.replaceChildren();
@@ -363,5 +369,136 @@ describe('LegacyListingsCard', () => {
 
       expect(wrapper.emitted('get-back')).toEqual([[[legacyRef(items[0]!), legacyRef(items[2]!), legacyRef(items[4]!)]]]);
     });
+  });
+});
+
+describe('Move to Gero', () => {
+  const moveButton = (wrapper: ReturnType<typeof render>) => wrapper.get('[data-testid="legacy-move-to-gero"]');
+  const moveHint = (wrapper: ReturnType<typeof render>) => wrapper.find('[data-testid="legacy-move-hint"]');
+  const offer = (n: number) => item(n, { kind: 'offer', contract: 'legacy_v2', lovelace: '25000000', assets: [] });
+
+  beforeEach(() => {
+    listings.items.value = [];
+    listings.meta.value = new Map();
+    listings.loading.value = false;
+    listings.refresh.mockClear();
+    listings.forget.mockClear();
+    market.available = true;
+  });
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('is there, and off, until exactly one listing is picked', async () => {
+    listings.items.value = [item(1), item(2)];
+    const wrapper = render();
+
+    expect(moveButton(wrapper).text()).toBe('Move to Gero');
+    expect(moveButton(wrapper).attributes('disabled')).toBeDefined();
+    // Nothing picked: nothing to explain yet.
+    expect(moveHint(wrapper).exists()).toBe(false);
+
+    await boxesOf(wrapper)[0]!.setValue(true);
+
+    expect(moveButton(wrapper).attributes('disabled')).toBeUndefined();
+    expect(moveHint(wrapper).exists()).toBe(false);
+  });
+
+  it('hands the one picked listing\'s ref to the move dialog, and nothing else', async () => {
+    const items = [item(1), item(2), item(3)];
+    listings.items.value = items;
+    const wrapper = render();
+    await boxesOf(wrapper)[1]!.setValue(true);
+
+    await moveButton(wrapper).trigger('click');
+
+    expect(wrapper.emitted('move-to-gero')).toEqual([[legacyRef(items[1]!)]]);
+    expect(wrapper.emitted('get-back')).toBeUndefined();
+  });
+
+  it('is off for an offer: it holds no NFT, so there is nothing to list (and the card says so)', async () => {
+    listings.items.value = [offer(1)];
+    const wrapper = render();
+    await boxesOf(wrapper)[0]!.setValue(true);
+
+    expect(moveButton(wrapper).attributes('disabled')).toBeDefined();
+    expect(moveHint(wrapper).text()).toBe('This is an offer to buy, not a listing, so it cannot be moved. You can still get it back.');
+    await moveButton(wrapper).trigger('click');
+    expect(wrapper.emitted('move-to-gero')).toBeUndefined();
+    // Getting it back is still open.
+    expect(wrapper.get('[data-testid="legacy-get-back"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('is off for more than one pick, listings or not, and says to pick one', async () => {
+    listings.items.value = [item(1), item(2), item(3)];
+    const wrapper = render();
+    await boxesOf(wrapper)[0]!.setValue(true);
+    await boxesOf(wrapper)[1]!.setValue(true);
+
+    expect(moveButton(wrapper).attributes('disabled')).toBeDefined();
+    expect(moveHint(wrapper).text()).toBe('Pick one listing to move it to Gero.');
+    await moveButton(wrapper).trigger('click');
+    expect(wrapper.emitted('move-to-gero')).toBeUndefined();
+
+    // Back to one: enabled again.
+    await boxesOf(wrapper)[1]!.setValue(false);
+    expect(moveButton(wrapper).attributes('disabled')).toBeUndefined();
+    expect(moveHint(wrapper).exists()).toBe(false);
+    // And back to none.
+    await boxesOf(wrapper)[0]!.setValue(false);
+    expect(moveButton(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it('is off when an offer is picked with a listing (the pick is more than one)', async () => {
+    // The same marketplace version, so both can be picked together.
+    listings.items.value = [item(1), item(2, { kind: 'offer', assets: [], lovelace: '25000000' })];
+    const wrapper = render();
+    await boxesOf(wrapper)[0]!.setValue(true);
+    await boxesOf(wrapper)[1]!.setValue(true);
+
+    expect(moveButton(wrapper).attributes('disabled')).toBeDefined();
+    expect(moveHint(wrapper).text()).toBe('Pick one listing to move it to Gero.');
+  });
+
+  it('drops the pick, and the move with it, when the picked listing leaves the list', async () => {
+    const items = [item(1), item(2)];
+    listings.items.value = items;
+    const wrapper = render();
+    await boxesOf(wrapper)[0]!.setValue(true);
+    expect(moveButton(wrapper).attributes('disabled')).toBeUndefined();
+
+    listings.items.value = [items[1]!];
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+
+    expect(moveButton(wrapper).attributes('disabled')).toBeDefined();
+    await moveButton(wrapper).trigger('click');
+    expect(wrapper.emitted('move-to-gero')).toBeUndefined();
+  });
+
+  it('is not offered where Gero\'s market is not available (no deployment on the network, the flag off, a wallet that cannot sign it)', async () => {
+    market.available = false;
+    listings.items.value = [item(1)];
+    const wrapper = render();
+    await boxesOf(wrapper)[0]!.setValue(true);
+
+    expect(wrapper.find('[data-testid="legacy-move-to-gero"]').exists()).toBe(false);
+    expect(moveHint(wrapper).exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Move to Gero');
+    // The rescue is untouched.
+    expect(wrapper.get('[data-testid="legacy-get-back"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('leaves Get back as it was: it still takes several items and emits them in list order', async () => {
+    const items = [item(1), item(2)];
+    listings.items.value = items;
+    const wrapper = render();
+    await boxesOf(wrapper)[1]!.setValue(true);
+    await boxesOf(wrapper)[0]!.setValue(true);
+
+    await wrapper.get('[data-testid="legacy-get-back"]').trigger('click');
+
+    expect(wrapper.emitted('get-back')).toEqual([[[legacyRef(items[0]!), legacyRef(items[1]!)]]]);
+    expect(wrapper.emitted('move-to-gero')).toBeUndefined();
   });
 });
