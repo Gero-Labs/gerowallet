@@ -290,6 +290,31 @@ describe('Quick Send Max over the request limit', () => {
     expect(request.selectAll).toBeFalsy();
   });
 
+  // 201 token holders and 4 ADA-only UTxOs: a sweep must merge 6, so there is no plan. The
+  // amount is still short only because of the limit; asking again cannot help, so it is asked once.
+  it('says the balance is spread, once, when the wallet has too few ADA-only UTxOs to merge', async () => {
+    const TOKEN = 'b'.repeat(56) + '4745524f';
+    const holder = (n: number) => [{ txId: txId(n), index: 0 }, { address: 'own-address', value: { coins: 1_000_000 + n, assets: new Map([[TOKEN, BigInt(1)]]) } }];
+    walletStore.utxos = [...Array.from({ length: 201 }, (_, n) => holder(n)), ...Array.from({ length: 4 }, (_, n) => utxo(500 + n, 1_000_000))] as never;
+    // Bounded, so a dialog that kept asking ends instead of hanging the run: after ten
+    // builds this Nexus stops answering in its own words.
+    let calls = 0;
+    mocks.build.mockImplementation(async (request: BuildRequest) => {
+      calls += 1;
+      if (calls > 10) throw new Error('stopped');
+      return likeNexus(request);
+    });
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await vi.advanceTimersByTimeAsync(500);
+    await dialog().get('[data-amount-large]').trigger('click');
+    await settle();
+    await settle();
+    expect(calls).toBeLessThanOrEqual(2);
+    expect(dialog().get('.global-total__error').text()).toContain('send.inputLimitFragmented');
+    expect(mocks.signingOptions?.prerequisites?.value).toBeNull();
+  });
+
   it('tells a wallet that cannot sweep that its balance is spread, not short', async () => {
     walletStore.loggedWallet = { ...walletStore.loggedWallet, type: WalletType.Ledger };
     await typeLargeAmount();

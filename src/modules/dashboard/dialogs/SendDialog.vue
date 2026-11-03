@@ -1405,10 +1405,10 @@ async function runBuild(): Promise<void> {
     const selection = inputSelection.value;
     const fragmented = shortOnlyByLimit(shortfallLovelaceFromMessage(msg), selection, spendableUtxos());
     // The wallet holds the amount, only spread over more UTxOs than one request carries:
-    // send it as Max does, merges first, then one payment. This happens once: the sweep's
-    // payment is built from its own candidates (no truncated selection), so it never
-    // reads as fragmented and cannot come back here.
-    if (fragmented && canSweep.value && !sweep.value) {
+    // send it as Max does, merges first, then one payment. Once per amount: when the retry
+    // still finds no sweep (its token holders leave too few ADA-only UTxOs to merge), asking
+    // again would only repeat it, so it falls through to the message below.
+    if (fragmented && canSweep.value && !sweep.value && amountSweepFrom.value === null) {
       amountSweepFrom.value = requestedLovelace();
       return runBuild();
     }
