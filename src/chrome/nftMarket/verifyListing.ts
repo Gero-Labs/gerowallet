@@ -60,6 +60,7 @@ export type MarketVerifyRule =
   | 'INPUTS'
   | 'OUTPUTS'
   | 'LISTING'
+  | 'PRIVATE_LISTING'
   | 'DATUM'
   | 'NFT'
   | 'REDEEMERS'

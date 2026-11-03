@@ -23,6 +23,7 @@ import {
 import { decodeListingDatum, listingFee, listingTag, sellerDue, sellerShare, type ListingDatum, type Payee } from './listingDatum';
 import type { OwnListing } from './ownListings';
 import { MarketVerifyError, type MarketVerifyRule } from './verifyListing';
+import type { ListingChainUtxo } from './listingChainUtxo';
 import { verifyBuy, type BuyVerifyContext } from './verifyBuy';
 
 const TESTNET = Cardano.NetworkId.Testnet;
@@ -315,7 +316,32 @@ const ROYALTY_OUT = 2;
 const NFT_OUT = 3;
 const CHANGE_OUT = 4;
 
-const INTENT = { listing: LISTING, buyerAddress: BUYER };
+/**
+ * The listing UTxO as an independent source (Koios) would report it when Nexus tells the truth:
+ * at the deployment's script, holding the deposit and the one NFT, with the row's own datum
+ * inline. The tests of the chain check pass something else.
+ */
+function chainFrom(listing: ListingDto): ListingChainUtxo {
+  try {
+    return {
+      address: baseAddress(TESTNET, listing.scriptHash, '2c'.repeat(28), true),
+      lovelace: BigInt(listing.depositLovelace),
+      assets: [{ unit: listing.unit, quantity: 1n }],
+      inlineDatumCbor: listing.datumCbor,
+    };
+  } catch {
+    // A row too broken to mirror (its own checks refuse it first).
+    return CHAIN;
+  }
+}
+const CHAIN: ListingChainUtxo = {
+  address: baseAddress(TESTNET, V1.scriptHash, '2c'.repeat(28), true),
+  lovelace: DEPOSIT,
+  assets: [{ unit: UNIT_222, quantity: 1n }],
+  inlineDatumCbor: listingDatumHex(DATUM),
+};
+const intentOf = (listing: ListingDto, chainUtxo: ListingChainUtxo = chainFrom(listing)) => ({ listing, buyerAddress: BUYER, chainUtxo });
+const INTENT = intentOf(LISTING);
 const verify = (tx: Built, intent = INTENT, ctx = context()) => verifyBuy(tx.cbor, tx.id, intent, ctx);
 
 function refusedBy(rule: MarketVerifyRule, run: () => unknown) {
@@ -380,22 +406,22 @@ describe('verifyBuy: a valid buy', () => {
 
   it('accepts a buy with no royalty, with two royalties, and with the NFT output also carrying change', () => {
     const none = withDatum({ royalties: [] });
-    expect(verify(buyTx(undefined, { datum: none }), { listing: listingDto(none), buyerAddress: BUYER }).royaltiesLovelace).toBe('0');
+    expect(verify(buyTx(undefined, { datum: none }), intentOf(listingDto(none))).royaltiesLovelace).toBe('0');
     const two = withDatum({ royalties: [...ROYALTIES, { address: ROYALTY_ADDRESS_2, lovelace: 2n * ADA }] });
-    const summary = verify(buyTx(undefined, { datum: two }), { listing: listingDto(two), buyerAddress: BUYER });
+    const summary = verify(buyTx(undefined, { datum: two }), intentOf(listingDto(two)));
     expect(summary.royaltiesLovelace).toBe('7000000');
     expect(summary.totalOutflowLovelace).toBe('100400000');
   });
 
   it("treats a payee output at the buyer's own address as paid out, so buying one's own listing still costs price + fee", () => {
     const mine = withDatum({ owner: BUYER_PAY, sellerAddress: BUYER });
-    const summary = verify(buyTx(undefined, { datum: mine }), { listing: listingDto(mine), buyerAddress: BUYER });
+    const summary = verify(buyTx(undefined, { datum: mine }), intentOf(listingDto(mine)));
     expect(summary.totalOutflowLovelace).toBe('100400000');
   });
 
   it('takes the fee from the cap on a dear listing', () => {
     const dear = withDatum({ price: 1000n * ADA, royalties: [] });
-    const summary = verify(buyTx(undefined, { datum: dear }), { listing: listingDto(dear), buyerAddress: BUYER });
+    const summary = verify(buyTx(undefined, { datum: dear }), intentOf(listingDto(dear)));
     expect(summary.feeLovelace).toBe('5000000');
     expect(summary.totalOutflowLovelace).toBe((1000n * ADA + NETWORK_FEE).toString());
   });
@@ -409,10 +435,10 @@ describe('verifyBuy: a valid buy', () => {
     const listing = listingDto(DATUM, { version: 2 });
     const ctx = context({ deployments: [V2, V1] });
     const ok = buyTx(undefined, { deployment: V2 });
-    expect(verify(ok, { listing, buyerAddress: BUYER }, ctx).feeLovelace).toBe('1500000');
+    expect(verify(ok, intentOf(listing), ctx).feeLovelace).toBe('1500000');
     // The same buy paying v1's fee address is not v2's.
     const wrong = buyTx((tx) => { tx.body.outputs[FEE_OUT].address = Cardano.PaymentAddress(FEE_ADDRESS); }, { deployment: V2 });
-    refusedBy('OUTPUTS', () => verify(wrong, { listing, buyerAddress: BUYER }, ctx));
+    refusedBy('OUTPUTS', () => verify(wrong, intentOf(listing), ctx));
   });
 
   it('accepts a lent pool UTxO as the collateral and says so', () => {
@@ -472,22 +498,86 @@ describe('verifyBuy: the seller output', () => {
     expect(due).toBe(170_000n);
     const min = paidTo(SELLER_ADDRESS, due);
     expect(min).toBeGreaterThan(due);
-    const summary = verify(buyTx(undefined, { datum: small, deposit: 70_000n }), { listing: dto, buyerAddress: BUYER });
+    const summary = verify(buyTx(undefined, { datum: small, deposit: 70_000n }), intentOf(dto));
     expect(summary.minUtxoTopUpLovelace).toBe((min - due).toString());
     expect(summary.totalOutflowLovelace).toBe((PRICE + NETWORK_FEE + min - due).toString());
     // One lovelace more than the min-UTxO, or one less, is not what a builder pays.
-    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[SELLER_OUT].value.coins += 1n; }, { datum: small, deposit: 70_000n }), { listing: dto, buyerAddress: BUYER }));
-    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[SELLER_OUT].value.coins -= 1n; }, { datum: small, deposit: 70_000n }), { listing: dto, buyerAddress: BUYER }));
+    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[SELLER_OUT].value.coins += 1n; }, { datum: small, deposit: 70_000n }), intentOf(dto)));
+    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[SELLER_OUT].value.coins -= 1n; }, { datum: small, deposit: 70_000n }), intentOf(dto)));
     // Exactly the due, below the min-UTxO, is an output the ledger would reject.
-    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[SELLER_OUT].value.coins = due; }, { datum: small, deposit: 70_000n }), { listing: dto, buyerAddress: BUYER }));
+    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[SELLER_OUT].value.coins = due; }, { datum: small, deposit: 70_000n }), intentOf(dto)));
   });
 
-  it('measures min-UTxO with the protocol parameter the context carries', () => {
+  describe('the protocol parameter behind min-UTxO', () => {
     const small = withDatum({ royalties: [{ address: ROYALTY_ADDRESS, lovelace: 98_400_000n }] });
     const dto = listingDto(small, { depositLovelace: '70000' });
-    const doubled = buyTx(undefined, { datum: small, deposit: 70_000n, cpb: CPB * 2n });
-    expect(verify(doubled, { listing: dto, buyerAddress: BUYER }, context({ coinsPerUtxoByte: CPB * 2n })).minUtxoTopUpLovelace).not.toBe('0');
-    refusedBy('OUTPUTS', () => verify(doubled, { listing: dto, buyerAddress: BUYER }, context({ coinsPerUtxoByte: CPB })));
+    const topUpBuy = (cpb: bigint) => buyTx(undefined, { datum: small, deposit: 70_000n, cpb });
+
+    it('uses a lower value from the context as it is (a buy built under the real one then fails the check, which is safe)', () => {
+      const half = CPB / 2n;
+      expect(verify(topUpBuy(half), intentOf(dto), context({ coinsPerUtxoByte: half })).minUtxoTopUpLovelace).not.toBe('0');
+      refusedBy('OUTPUTS', () => verify(topUpBuy(CPB), intentOf(dto), context({ coinsPerUtxoByte: half })));
+    });
+
+    it('never goes above the reviewed 4310, so an inflated value cannot make the verifier demand an overpayment', () => {
+      const inflated = CPB * 10n;
+      // A buy that pays the min-UTxO of an inflated parameter is refused, whatever the context says.
+      refusedBy('OUTPUTS', () => verify(topUpBuy(inflated), intentOf(dto), context({ coinsPerUtxoByte: inflated })));
+      refusedBy('OUTPUTS', () => verify(topUpBuy(CPB * 2n), intentOf(dto), context({ coinsPerUtxoByte: CPB * 2n })));
+      // The honest buy is accepted whether the context carries 4310 or something above it.
+      expect(verify(topUpBuy(CPB), intentOf(dto), context({ coinsPerUtxoByte: inflated })).minUtxoTopUpLovelace).not.toBe('0');
+    });
+
+    it('refuses a parameter that is not a positive integer', () => {
+      refusedBy('OUTPUTS', () => verify(topUpBuy(CPB), intentOf(dto), context({ coinsPerUtxoByte: 0n })));
+      refusedBy('OUTPUTS', () => verify(topUpBuy(CPB), intentOf(dto), context({ coinsPerUtxoByte: -1n })));
+    });
+  });
+
+  describe("min-UTxO is measured on the output's canonical encoding, not on the builder's bytes", () => {
+    const hexLen = (h: string) => h.length / 2;
+    const bytesHead = (n: number) => (n < 24 ? (0x40 + n).toString(16).padStart(2, '0') : n < 0x100 ? `58${hex2(n)}` : n < 0x10000 ? `59${n.toString(16).padStart(4, '0')}` : `5a${n.toString(16).padStart(8, '0')}`);
+
+    /** A tagged ADA output whose inline datum is an indefinite byte string padded with `chunks` empty chunks. */
+    function paddedTagOutput(address: string, coin: bigint, chunks: number): string {
+      const addr = String(Cardano.Address.fromBech32(address).toBytes());
+      const inner = `5f${'40'.repeat(chunks)}5820${tagOf()}ff`;
+      return `a300${bytesHead(hexLen(addr))}${addr}011a${coin.toString(16).padStart(8, '0')}028201d818${bytesHead(hexLen(inner))}${inner}`;
+    }
+
+    /** A balanced buy whose royalty output is that padded output, paid the "min-UTxO" of its padded bytes. */
+    function paddedRoyaltyBuy(chunks: number) {
+      const datum = withDatum({ royalties: [{ address: ROYALTY_ADDRESS, lovelace: 1n * ADA }] });
+      const rawMin = BigInt(160 + hexLen(paddedTagOutput(ROYALTY_ADDRESS, 0n, chunks))) * CPB;
+      const core = validBuy({ datum });
+      core.body.outputs[ROYALTY_OUT].value.coins = rawMin;
+      const change = core.body.outputs[CHANGE_OUT];
+      const others = core.body.outputs.slice(0, -1).reduce((sum, o) => sum + o.value.coins, 0n);
+      change.value.coins = BUYER_COINS + DEPOSIT - others - core.body.fee;
+      const serialized = Serialization.Transaction.fromCore(core);
+      const body = serialized.body();
+      const outputs = body.outputs();
+      outputs[ROYALTY_OUT] = Serialization.TransactionOutput.fromCbor(HexBlob(paddedTagOutput(ROYALTY_ADDRESS, rawMin, chunks)));
+      body.setOutputs(outputs);
+      serialized.setBody(body);
+      return { datum, rawMin, built: { cbor: serialized.toCbor(), id: serialized.getId() } };
+    }
+
+    it('refuses a royalty padded to a 40 ADA "min-UTxO top-up", though the datum and the tag read the same', () => {
+      const { datum, rawMin, built } = paddedRoyaltyBuy(10_000);
+      // The premise: the output the transaction carries is the padded one, it still holds the tag,
+      // and its own bytes put the ledger's min-UTxO far above the canonical 1,155,080 lovelace.
+      const back = Serialization.Transaction.fromCbor(HexBlob(built.cbor));
+      expect(hexLen(back.body().outputs()[ROYALTY_OUT].toCbor())).toBeGreaterThan(10_000);
+      expect(rawMin).toBeGreaterThan(40n * ADA);
+      expect(paidTo(ROYALTY_ADDRESS, 1n * ADA)).toBe(1_155_080n);
+      refusedBy('OUTPUTS', () => verify(built, intentOf(listingDto(datum))));
+    });
+
+    it('refuses a small padding too (a few empty chunks), and any other bytes beyond the canonical form', () => {
+      const { datum, built } = paddedRoyaltyBuy(10);
+      refusedBy('OUTPUTS', () => verify(built, intentOf(listingDto(datum))));
+    });
   });
 });
 
@@ -495,7 +585,7 @@ describe('verifyBuy: the royalty outputs', () => {
   const TWO = withDatum({ royalties: [...ROYALTIES, { address: ROYALTY_ADDRESS_2, lovelace: 2n * ADA }] });
   const twoDto = listingDto(TWO);
   const buyTwo = (edit: (tx: Cardano.Tx) => void = () => undefined) => buyTx(edit, { datum: TWO });
-  const verifyTwo = (tx: Built) => verify(tx, { listing: twoDto, buyerAddress: BUYER });
+  const verifyTwo = (tx: Built) => verify(tx, intentOf(twoDto));
 
   it('refuses a royalty short by 1 lovelace, or overpaid by 1 lovelace', () => {
     refusedBy('OUTPUTS', () => verify(balancedBuyTx((tx) => { tx.body.outputs[ROYALTY_OUT].value.coins -= 1n; })));
@@ -528,12 +618,12 @@ describe('verifyBuy: the royalty outputs', () => {
     const dto = listingDto(small);
     const min = paidTo(ROYALTY_ADDRESS, 500_000n);
     expect(min).toBeGreaterThan(1_000_000n);
-    const summary = verify(buyTx(undefined, { datum: small }), { listing: dto, buyerAddress: BUYER });
+    const summary = verify(buyTx(undefined, { datum: small }), intentOf(dto));
     expect(summary.minUtxoTopUpLovelace).toBe((min - 500_000n).toString());
     expect(summary.totalOutflowLovelace).toBe((PRICE + NETWORK_FEE + min - 500_000n).toString());
-    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[ROYALTY_OUT].value.coins = min + 3n * ADA; }, { datum: small }), { listing: dto, buyerAddress: BUYER }));
-    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[ROYALTY_OUT].value.coins = min + 1n; }, { datum: small }), { listing: dto, buyerAddress: BUYER }));
-    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[ROYALTY_OUT].value.coins = 500_000n; }, { datum: small }), { listing: dto, buyerAddress: BUYER }));
+    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[ROYALTY_OUT].value.coins = min + 3n * ADA; }, { datum: small }), intentOf(dto)));
+    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[ROYALTY_OUT].value.coins = min + 1n; }, { datum: small }), intentOf(dto)));
+    refusedBy('OUTPUTS', () => verify(balancedBuyTx((t) => { t.body.outputs[ROYALTY_OUT].value.coins = 500_000n; }, { datum: small }), intentOf(dto)));
   });
 });
 
@@ -578,9 +668,9 @@ describe('verifyBuy: the fee output', () => {
     refusedBy('OUTPUTS', () => verify(buyTx((tx) => {
       tx.body.outputs.splice(FEE_OUT, 1);
       tx.witness.redeemers = [purchase(LISTING_SORTED, 0)];
-    }, { datum: toFeeAddress }), { listing: dto, buyerAddress: BUYER }));
+    }, { datum: toFeeAddress }), intentOf(dto)));
     // With both, it is a valid buy.
-    expect(verify(buyTx(undefined, { datum: toFeeAddress }), { listing: dto, buyerAddress: BUYER }).totalOutflowLovelace).toBe('100400000');
+    expect(verify(buyTx(undefined, { datum: toFeeAddress }), intentOf(dto)).totalOutflowLovelace).toBe('100400000');
   });
 });
 
@@ -623,7 +713,7 @@ describe('verifyBuy: every other output is the wallet\'s', () => {
   });
 
   it('refuses a buyer address that is not the wallet\'s', () => {
-    refusedBy('OUTPUTS', () => verify(buyTx(), { listing: LISTING, buyerAddress: STRANGER }));
+    refusedBy('OUTPUTS', () => verify(buyTx(), { ...INTENT, buyerAddress: STRANGER }));
   });
 
   it('refuses the wrong NFT in the buyer\'s output', () => {
@@ -659,59 +749,65 @@ describe("verifyBuy: the buyer's net cost", () => {
 describe('verifyBuy: the listing', () => {
   it('refuses a private listing', () => {
     const priv = withDatum({ buyer: BUYER_PAY });
-    refusedBy('LISTING', () => verify(buyTx(), { listing: listingDto(priv), buyerAddress: BUYER }));
+    refusedBy('PRIVATE_LISTING', () => verify(buyTx(), intentOf(listingDto(priv))));
+  });
+
+  it('refuses a private listing that Nexus presented as public, once the chain says so', () => {
+    const priv = withDatum({ buyer: BUYER_PAY });
+    const chain = { ...CHAIN, inlineDatumCbor: listingDatumHex(priv) };
+    refusedBy('PRIVATE_LISTING', () => verify(buyTx(), intentOf(LISTING, chain)));
   });
 
   it('refuses a listing whose seller share is zero or below (it can never be bought)', () => {
     // 3.5 ADA with a 2 ADA royalty: fee 1.5, share 0 (docs/rules.md P2).
     const zero = withDatum({ price: 3_500_000n, royalties: [{ address: ROYALTY_ADDRESS, lovelace: 2n * ADA }] });
     expect(sellerShare(zero, V1)).toBe(0n);
-    refusedBy('DATUM', () => verify(buyTx(), { listing: listingDto(zero), buyerAddress: BUYER }));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(listingDto(zero))));
     const negative = withDatum({ price: 10n * ADA, royalties: [{ address: ROYALTY_ADDRESS, lovelace: 9n * ADA }] });
-    refusedBy('DATUM', () => verify(buyTx(), { listing: listingDto(negative), buyerAddress: BUYER }));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(listingDto(negative))));
   });
 
   it('refuses a listing with a zero or negative royalty', () => {
     const zero = withDatum({ royalties: [{ address: ROYALTY_ADDRESS, lovelace: 0n }] });
-    refusedBy('DATUM', () => verify(buyTx(), { listing: listingDto(zero), buyerAddress: BUYER }));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(listingDto(zero))));
     const negative = withDatum({ royalties: [{ address: ROYALTY_ADDRESS, lovelace: -ADA }] });
     // The datum decodes (the codec accepts any integer), so it is the buy check that refuses it.
     expect(decodeListingDatum(listingDatumHex(negative), TESTNET).royalties[0].lovelace).toBe(-ADA);
-    refusedBy('DATUM', () => verify(buyTx(), { listing: listingDto(negative), buyerAddress: BUYER }));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(listingDto(negative))));
   });
 
   it('refuses a datum that is not a Gero listing', () => {
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, datumCbor: '182a' }, buyerAddress: BUYER }));
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, datumCbor: `${LISTING.datumCbor}00` }, buyerAddress: BUYER }));
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, datumCbor: 'zz' }, buyerAddress: BUYER }));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, datumCbor: '182a' })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, datumCbor: `${LISTING.datumCbor}00` })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, datumCbor: 'zz' })));
   });
 
   it('refuses a row whose fields disagree with its datum', () => {
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, priceLovelace: '90000000' }, buyerAddress: BUYER }));
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, sellerAddress: STRANGER }, buyerAddress: BUYER }));
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, ownerPkh: '3c'.repeat(28) }, buyerAddress: BUYER }));
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, royalties: [{ address: ROYALTY_ADDRESS, lovelace: '4000000' }] }, buyerAddress: BUYER }));
-    refusedBy('DATUM', () => verify(buyTx(), { listing: { ...LISTING, royalties: [] }, buyerAddress: BUYER }));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, priceLovelace: '90000000' })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, sellerAddress: STRANGER })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, ownerPkh: '3c'.repeat(28) })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, royalties: [{ address: ROYALTY_ADDRESS, lovelace: '4000000' }] })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf({ ...LISTING, royalties: [] })));
   });
 
   it('refuses a listing at a script that is not a reviewed deployment, or at the wrong version', () => {
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, scriptHash: 'ee'.repeat(28) }, buyerAddress: BUYER }));
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, version: 2 }, buyerAddress: BUYER }));
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, version: 7 }, buyerAddress: BUYER }));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, scriptHash: 'ee'.repeat(28) })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, version: 2 })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, version: 7 })));
   });
 
   it('refuses a malformed listing row', () => {
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, txHash: 'b1' }, buyerAddress: BUYER }));
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, outputIndex: -1 }, buyerAddress: BUYER }));
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, depositLovelace: '2.5' }, buyerAddress: BUYER }));
-    refusedBy('LISTING', () => verify(buyTx(), { listing: { ...LISTING, unit: `${POLICY}00` }, buyerAddress: BUYER }));
-    refusedBy('LISTING', () => verify(buyTx(), { listing: undefined as unknown as ListingDto, buyerAddress: BUYER }));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, txHash: 'b1' })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, outputIndex: -1 })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, depositLovelace: '2.5' })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf({ ...LISTING, unit: `${POLICY}00` })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(undefined as unknown as ListingDto)));
   });
 
   it('refuses a CIP-68 reference token, which is not an NFT to own', () => {
     const reference = listingDto(DATUM, { unit: UNIT_100, assetName: `000643b0${NAME}` });
     const tx = buyTx((t) => { t.body.outputs[NFT_OUT].value.assets = assetMap(UNIT_100); });
-    refusedBy('NFT', () => verify(tx, { listing: reference, buyerAddress: BUYER }));
+    refusedBy('NFT', () => verify(tx, intentOf(reference)));
   });
 
   it('refuses a market with no deployment on the network', () => {
@@ -721,7 +817,7 @@ describe('verifyBuy: the listing', () => {
 
 describe('verifyBuy: what the transaction spends', () => {
   it('refuses a transaction that does not spend the listing', () => {
-    refusedBy('INPUTS', () => verify(buyTx(), { listing: listingDto(DATUM, { outputIndex: 1 }), buyerAddress: BUYER }));
+    refusedBy('INPUTS', () => verify(buyTx(), intentOf(listingDto(DATUM, { outputIndex: 1 }))));
   });
 
   it('refuses a UTxO that is not the wallet\'s', () => {
@@ -842,5 +938,103 @@ describe('verifyBuy: signers, collateral, fee and the envelope', () => {
 
   it('refuses a body for another network', () => {
     refusedBy('NETWORK', () => verify(buyTx((tx) => { tx.body.networkId = MAINNET; })));
+  });
+});
+
+describe('verifyBuy: the listing UTxO as the chain has it (ruling P28)', () => {
+  // The attack: Nexus supplies a datum that is a SUPERSET of the real one, same seller, the price
+  // raised by 5 ADA and one extra royalty of 5 ADA to the attacker. The contract ignores trailing
+  // outputs and accepts overpayment, so a buy paid out per the fake datum succeeds on chain.
+  const REAL = withDatum({ royalties: [] });
+  const FAKE = withDatum({ price: REAL.price + 5n * ADA, royalties: [{ address: STRANGER, lovelace: 5n * ADA }] });
+
+  it('refuses a buy paid out per a superset datum Nexus made up, which the contract itself would accept', () => {
+    const fakeBuy = buyTx(undefined, { datum: FAKE });
+    // The seller output is the real due, so the contract is satisfied with the REAL datum too.
+    const tx = validBuy({ datum: FAKE });
+    expect(tx.body.outputs[SELLER_OUT].value.coins).toBe(sellerDue(REAL, V1, DEPOSIT));
+    expect(tx.body.outputs[ROYALTY_OUT].address).toBe(STRANGER);
+    // Taken at Nexus's word it passes every other check; against the chain's datum it does not.
+    expect(verify(fakeBuy, intentOf(listingDto(FAKE))).priceLovelace).toBe('105000000');
+    refusedBy('DATUM', () => verify(fakeBuy, intentOf(listingDto(FAKE), chainFrom(listingDto(REAL)))));
+  });
+
+  it('accepts the buy when the chain and the row agree', () => {
+    expect(verify(buyTx(), intentOf(LISTING, CHAIN)).ref).toBe(LISTING_REF);
+  });
+
+  it.each([
+    ['another owner', { owner: '3c'.repeat(28) }],
+    ['another seller address', { sellerAddress: STRANGER }],
+    ['another price', { price: PRICE + 1n }],
+    ['another royalty amount', { royalties: [{ address: ROYALTY_ADDRESS, lovelace: 5n * ADA + 1n }] }],
+    ['another royalty address', { royalties: [{ address: ROYALTY_ADDRESS_2, lovelace: 5n * ADA }] }],
+    ['an extra royalty', { royalties: [...ROYALTIES, { address: ROYALTY_ADDRESS_2, lovelace: 1n * ADA }] }],
+    ['no royalty', { royalties: [] }],
+  ] as [string, Partial<ListingDatum>][])('refuses a chain datum with %s', (_name, patch) => {
+    const chain = { ...CHAIN, inlineDatumCbor: listingDatumHex(withDatum(patch)) };
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(LISTING, chain)));
+  });
+
+  it('refuses royalties in another order on chain', () => {
+    const two = withDatum({ royalties: [...ROYALTIES, { address: ROYALTY_ADDRESS_2, lovelace: 2n * ADA }] });
+    const swapped = withDatum({ royalties: [two.royalties[1], two.royalties[0]] });
+    const chain = { ...chainFrom(listingDto(two)), inlineDatumCbor: listingDatumHex(swapped) };
+    refusedBy('DATUM', () => verify(buyTx(undefined, { datum: two }), intentOf(listingDto(two), chain)));
+  });
+
+  it('refuses a chain UTxO with no inline datum, or one that is not a Gero listing', () => {
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, inlineDatumCbor: null })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, inlineDatumCbor: '182a' })));
+    refusedBy('DATUM', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, inlineDatumCbor: `${listingDatumHex(DATUM)}00` })));
+  });
+
+  it('refuses a chain UTxO that holds another amount of ADA than the deposit', () => {
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, lovelace: DEPOSIT + 1n })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, lovelace: DEPOSIT - 1n })));
+  });
+
+  it('refuses a chain UTxO that does not hold exactly the one NFT', () => {
+    const other = `${'bb'.repeat(28)}${NAME}`;
+    refusedBy('NFT', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, assets: [{ unit: other, quantity: 1n }] })));
+    refusedBy('NFT', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, assets: [{ unit: UNIT_222, quantity: 2n }] })));
+    refusedBy('NFT', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, assets: [] })));
+    refusedBy('NFT', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, assets: [{ unit: UNIT_222, quantity: 1n }, { unit: other, quantity: 1n }] })));
+  });
+
+  it("refuses a chain UTxO that is not at the listing's deployment script on this network", () => {
+    const at = (payment: string, isScript: boolean, network = TESTNET) => baseAddress(network, payment, '2c'.repeat(28), isScript);
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: at(V2.scriptHash, true) })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: at(V1.scriptHash, false) })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: at(V1.scriptHash, true, MAINNET) })));
+    refusedBy('LISTING', () => verify(buyTx(), intentOf(LISTING, { ...CHAIN, address: 'not an address' })));
+  });
+
+  it('requires the on-chain read: without it nothing is bought', () => {
+    refusedBy('LISTING', () => verify(buyTx(), { ...INTENT, chainUtxo: undefined as unknown as ListingChainUtxo }));
+  });
+});
+
+describe('verifyBuy: the NFT comes from the listing, and the witness set is empty of scripts', () => {
+  it("refuses a buy whose NFT is the buyer's own copy (the wallet's balance of it does not rise)", () => {
+    const OWN_NFT_TX = 'e1'.repeat(32);
+    const ownNft = utxo(OWN_NFT_TX, 0, BUYER_CHANGE, 2n * ADA, { [UNIT_222]: 1n });
+    const tx = buyTx((t) => {
+      t.body.inputs.push(txIn(OWN_NFT_TX, 0));
+      t.body.outputs[CHANGE_OUT].value.coins += 2n * ADA;
+    });
+    refusedBy('NFT', () => verify(tx, INTENT, context({ ownUtxos: [BUYER_UTXO, ownNft] })));
+    // The same transaction without the buyer's own copy is a plain buy.
+    expect(verify(buyTx(), INTENT, context({ ownUtxos: [BUYER_UTXO, ownNft] })).ref).toBe(LISTING_REF);
+  });
+
+  it.each([
+    ['a datum', (tx: Cardano.Tx) => { tx.witness.datums = [plutusData('182a')]; }],
+    ['a native script', (tx: Cardano.Tx) => { tx.witness.scripts = [{ __type: Cardano.ScriptType.Native, kind: Cardano.NativeScriptKind.RequireAllOf, scripts: [] } as Cardano.Script]; }],
+    ['a Plutus V3 script', (tx: Cardano.Tx) => { tx.witness.scripts = [{ __type: Cardano.ScriptType.Plutus, bytes: HexBlob('4e4d01000033222220051200120011'), version: Cardano.PlutusLanguageVersion.V3 } as Cardano.Script]; }],
+    ['a Plutus V2 script', (tx: Cardano.Tx) => { tx.witness.scripts = [{ __type: Cardano.ScriptType.Plutus, bytes: HexBlob('4e4d01000033222220051200120011'), version: Cardano.PlutusLanguageVersion.V2 } as Cardano.Script]; }],
+    ['a Plutus V1 script', (tx: Cardano.Tx) => { tx.witness.scripts = [{ __type: Cardano.ScriptType.Plutus, bytes: HexBlob('4e4d01000033222220051200120011'), version: Cardano.PlutusLanguageVersion.V1 } as Cardano.Script]; }],
+  ])('refuses %s in the witness set', (_name, edit) => {
+    refusedBy('FORBIDDEN_FIELD', () => verify(buyTx(edit)));
   });
 });

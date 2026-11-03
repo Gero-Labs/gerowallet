@@ -14,6 +14,7 @@
 //  - spend exactly one listing, the one asked for, at a reviewed deployment of the network, with
 //    the contract's `Purchase{first_output}` as the only redeemer and exactly that deployment's
 //    reference script as the only reference input; and spend the wallet's own UTxOs, nothing else;
+//    carry no script and no datum of its own in the witness set;
 //  - pay, at `first_output`, the datum's seller address exactly its due (share + the listing's
 //    deposit), then one output per royalty, in datum order, each exactly its amount, all ADA only
 //    and tagged with this listing's tag; an output below its min-UTxO is raised to it, and the
@@ -22,7 +23,8 @@
 //    untagged ADA output, raised to its min-UTxO at most, so no payee can be overpaid "for
 //    min-UTxO" by more than that output's own gap;
 //  - pay every other output to the wallet itself, at one of its own keys, with no datum and no
-//    reference script, and deliver the NFT to the buyer address the user chose;
+//    reference script, and deliver the NFT to the buyer address the user chose, a net gain of one
+//    for the wallet (the NFT comes out of the listing, not out of a copy the buyer already held);
 //  - cost the buyer exactly price + network fee + the min-UTxO top-ups: the listing's deposit is
 //    the listing input's own ADA, passed on to the seller, and the ADA of the buyer's own NFT
 //    output stays theirs;
@@ -34,17 +36,23 @@
 // listing or any UTxO that is not the wallet's, or pay anyone but the datum's payees, the fee
 // address and the wallet.
 //
-// What it does NOT see: the listing UTxO's own value. The transaction names the input, not what
-// it holds, so the listing's deposit, unit and datum are the row Nexus gave, checked against each
-// other. The balance equation ties the deposit to the chain: the ledger forces inputs to equal
-// outputs plus the fee, so the buyer's net cost can equal price + fee + top-up only if the
-// deposit the payees are paid is the deposit the listing UTxO really holds. A datum Nexus made up
-// still fails on chain; the collateral cap bounds that loss (ruling R11).
+// What the transaction cannot tell: the listing UTxO's own content. It names the input, not what
+// it holds, and a datum Nexus made up can be a SUPERSET of the real one (same seller, a higher
+// price, one extra royalty to an attacker): the contract ignores trailing outputs and accepts
+// overpayment, so such a buy SUCCEEDS on chain and Nexus keeps the difference. Ruling P28
+// (overriding R11) therefore makes the caller read the listing UTxO from a source independent of
+// Nexus (`listingChainUtxo.ts`, Koios) and `verifyBuy` refuses unless that UTxO is at the
+// deployment's script, holds exactly the deposit and the one NFT, and carries an inline datum
+// equal to the one the row supplied, field by field. The balance equation then ties the same
+// deposit to the transaction: the ledger forces inputs to equal outputs plus the fee, so the
+// buyer's net cost equals price + fee + top-up only if the deposit the payees are paid is the
+// deposit the listing UTxO really holds.
 
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { forEachAsset } from '@/api/nexusInputSelection';
 import type { ListingDto } from '@/api/nft-market-api';
+import type { ListingChainUtxo } from '@/chrome/nftMarket/listingChainUtxo';
 import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
 import {
   checkCollateral,
@@ -80,8 +88,11 @@ export interface BuyVerifyContext extends MarketVerifyContext {
   /**
    * `coinsPerUtxoByte` of the current epoch (`NetworkStore.state.epochParams`). It sets the
    * min-UTxO of the payee and fee outputs. Defaults to 4310, the value on mainnet, preprod and
-   * preview since Babbage; a buy built under a different value is refused (fail closed), never
-   * accepted on the default.
+   * preview since Babbage, and is CAPPED at it: a larger value would make the verifier demand
+   * more than the ledger does, so an inflated figure could talk it into accepting overpayment. A
+   * lower value only makes a buy built under the real one fail the check (and, were it signed,
+   * the ledger's own min-UTxO rule), which is safe. A buy built under a different value than the
+   * one used here is refused, never accepted.
    */
   coinsPerUtxoByte?: bigint;
 }
@@ -92,6 +103,12 @@ export interface BuyIntent {
   listing: ListingDto;
   /** One of the wallet's own addresses (bech32): where the NFT goes. */
   buyerAddress: string;
+  /**
+   * The listing UTxO as read from a source independent of Nexus (`fetchListingUtxoFromKoios`),
+   * for the same out-ref as `listing`. Required: without it a made-up datum cannot be told from
+   * the real one (ruling P28).
+   */
+  chainUtxo: ListingChainUtxo;
 }
 
 /** What the review screen shows, read from the verified buy. All amounts are lovelace as decimal strings. */
@@ -154,6 +171,7 @@ export function verifyBuy(txCbor: string, txHash: string, intent: BuyIntent, ctx
   const cpb = coinsPerUtxoByte(ctx);
   const listing = listingFacts(intent?.listing, ctx);
   const { datum, deployment, deposit } = listing;
+  checkChainUtxo(intent?.chainUtxo, listing, ctx);
 
   // The buyer address: where the NFT goes. One of the wallet's own, at one of its own keys.
   const buyerAddress = String(intent?.buyerAddress ?? '');
@@ -169,6 +187,7 @@ export function verifyBuy(txCbor: string, txHash: string, intent: BuyIntent, ctx
   if (!inputRefs.has(listing.ref)) refuse('INPUTS', `does not spend the listing ${listing.ref}`);
   const ownByRef = new Map(ctx.ownUtxos.map((utxo) => [refOf(utxo[0]), utxo]));
   let ownIn = 0n;
+  let ownUnitIn = 0n;
   for (const ref of inputRefs) {
     if (ref === listing.ref) continue;
     if (ctx.ownListings.has(ref)) refuse('INPUTS', `spends ${ref}, another listing, which a buy never does`);
@@ -176,6 +195,9 @@ export function verifyBuy(txCbor: string, txHash: string, intent: BuyIntent, ctx
     // OX Agent: Authorization prevented by ownership check - a buy spends only the listing asked for and the wallet's own UTxOs
     if (!own) refuse('INPUTS', `spends ${ref}, which is not the wallet's`);
     ownIn += own[1].value.coins;
+    forEachAsset(own[1], (unit, quantity) => {
+      if (unit.toLowerCase() === listing.unit) ownUnitIn += quantity;
+    });
   }
 
   // Reference inputs: exactly the listing's deployment's reference script.
@@ -191,8 +213,15 @@ export function verifyBuy(txCbor: string, txHash: string, intent: BuyIntent, ctx
   // Required signers: none. A public listing needs no key; the keys that sign are those of the inputs.
   if ((body.requiredExtraSignatures ?? []).length > 0) refuse('SIGNERS', 'a public buy requires no signer');
 
+  // Witness set: the listing script comes from the reference input and its datum is inline, so a
+  // buy carries no script and no datum of its own.
+  checkWitnessSet(serialized);
+
   // Outputs: the payees, the fee, the wallet's own. Nothing else.
   const outputs = checkBuyOutputs(serialized, tx, listing, firstOutput, buyerAddress, ctx, cpb);
+
+  // The NFT must come out of the listing: the wallet ends up holding one more of it than it spent.
+  if (outputs.ownUnitOut - ownUnitIn < 1n) refuse('NFT', "the wallet's NFT balance does not rise by the one in the listing");
 
   // Network fee.
   if (body.fee > NFT_MARKET_MAX_FEE_LOVELACE) refuse('FEE', 'is above the cap');
@@ -230,10 +259,11 @@ export function verifyBuy(txCbor: string, txHash: string, intent: BuyIntent, ctx
   };
 }
 
+/** The protocol parameter min-UTxO is measured with: the context's, never above the reviewed ceiling. */
 function coinsPerUtxoByte(ctx: BuyVerifyContext): bigint {
   const cpb = ctx.coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE;
   if (typeof cpb !== 'bigint' || cpb <= 0n) refuse('OUTPUTS', 'the protocol parameter that sets min-UTxO is unusable');
-  return cpb;
+  return cpb > DEFAULT_COINS_PER_UTXO_BYTE ? DEFAULT_COINS_PER_UTXO_BYTE : cpb;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -276,7 +306,7 @@ function listingFacts(listing: ListingDto, ctx: BuyVerifyContext): ListingFacts 
   } catch (e) {
     return refuse('DATUM', (e as Error)?.message ?? 'the datum is not a Gero listing');
   }
-  if (datum.buyer !== null) refuse('LISTING', 'a private listing is not for sale to everyone (public listings only)');
+  if (datum.buyer !== null) refuse('PRIVATE_LISTING', 'a private listing is not for sale to everyone (public listings only)');
 
   // The row must say what the datum says: the user is shown the row, the contract pays the datum.
   if (BigInt(listing.priceLovelace) !== datum.price) refuse('DATUM', "the listing's price is not its datum's");
@@ -304,6 +334,84 @@ function listingFacts(listing: ListingDto, ctx: BuyVerifyContext): ListingFacts 
     deployment,
     deposit: BigInt(listing.depositLovelace),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The listing UTxO on chain
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Hold the row Nexus gave to the listing UTxO as an independent source read it (ruling P28): it is
+ * at the deployment's script on this network, holds exactly the deposit and the one NFT, and its
+ * inline datum is a Gero listing equal, field by field, to the datum the row supplied. A datum
+ * that differs (above all a superset with an extra royalty, which the contract would accept) is
+ * the attack this refuses.
+ */
+function checkChainUtxo(chain: ListingChainUtxo, listing: ListingFacts, ctx: BuyVerifyContext): void {
+  if (typeof chain !== 'object' || chain === null) refuse('LISTING', 'the listing was not read from the chain');
+
+  // Address: the deployment's script.
+  const address = typeof chain.address === 'string' ? chain.address : '';
+  // OX Agent: Authorization prevented by ownership check - the listing UTxO is at the reviewed deployment's script on this network
+  if (outputNetwork(address) !== ctx.networkId || listingScriptHash(address) !== listing.deployment.scriptHash) {
+    refuse('LISTING', "the listing on chain is not at its deployment's script");
+  }
+
+  // Value: the deposit and the one NFT, nothing else.
+  if (typeof chain.lovelace !== 'bigint' || chain.lovelace !== listing.deposit) {
+    refuse('LISTING', 'the listing on chain holds a different amount of ADA than the row says');
+  }
+  const assets = Array.isArray(chain.assets) ? chain.assets : [];
+  if (assets.length !== 1 || String(assets[0]?.unit).toLowerCase() !== listing.unit || assets[0]?.quantity !== 1n) {
+    refuse('NFT', 'the listing on chain must hold exactly the one NFT and nothing else');
+  }
+
+  // Datum: inline, a Gero listing, and the one the row supplied.
+  if (typeof chain.inlineDatumCbor !== 'string') refuse('DATUM', 'the listing on chain has no inline datum, so it cannot be bought');
+  let onChain: ListingDatum;
+  try {
+    onChain = decodeListingDatum(chain.inlineDatumCbor, ctx.networkId);
+  } catch (e) {
+    return refuse('DATUM', (e as Error)?.message ?? 'the datum on chain is not a Gero listing');
+  }
+  if (onChain.buyer !== null) refuse('PRIVATE_LISTING', 'a private listing is not for sale to everyone (public listings only)');
+  const row = listing.datum;
+  if (
+    onChain.owner.toLowerCase() !== row.owner.toLowerCase() ||
+    !sameAddress(onChain.sellerAddress, row.sellerAddress) ||
+    onChain.price !== row.price ||
+    onChain.royalties.length !== row.royalties.length ||
+    onChain.royalties.some((r, i) => !sameAddress(r.address, row.royalties[i].address) || r.lovelace !== row.royalties[i].lovelace)
+  ) {
+    refuse('DATUM', "the datum on chain is not the one the row supplied");
+  }
+}
+
+/** The script hash an address pays, or null when it pays a key or cannot be read. */
+function listingScriptHash(address: string): string | null {
+  try {
+    const parsed = Cardano.Address.fromBech32(address);
+    const credential = (parsed.asBase() ?? parsed.asEnterprise() ?? parsed.asPointer())?.getPaymentCredential();
+    return credential?.type === Cardano.CredentialType.ScriptHash ? String(credential.hash) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A buy brings no script of its own (the listing's comes from the reference input) and no witness
+ * datum (the listing's is inline): refuse any Plutus or native script and any datum in the witness set.
+ */
+function checkWitnessSet(serialized: Serialization.Transaction): void {
+  const witness = serialized.witnessSet();
+  const sizes = [
+    witness.plutusV1Scripts()?.size() ?? 0,
+    witness.plutusV2Scripts()?.size() ?? 0,
+    witness.plutusV3Scripts()?.size() ?? 0,
+    witness.nativeScripts()?.size() ?? 0,
+    witness.plutusData()?.size() ?? 0,
+  ];
+  if (sizes.some((size) => size > 0)) refuse('FORBIDDEN_FIELD', 'carries a script or a datum in its witness set, which a buy never needs');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -348,6 +456,8 @@ interface OutputSums {
   topUp: bigint;
   /** Lovelace in the outputs that are neither payee nor fee outputs: the buyer's own NFT output and change. */
   ownOut: bigint;
+  /** The listing's NFT in those same outputs. */
+  ownUnitOut: bigint;
 }
 
 /**
@@ -389,7 +499,7 @@ function checkBuyOutputs(
     if (!sameAddress(String(out.address), payee.address)) refuse('OUTPUTS', `the ${payee.name} output does not pay the address in the datum`);
     if (!isAdaOnly(out) || out.scriptReference !== undefined) refuse('OUTPUTS', `the ${payee.name} output is not plain ADA`);
     if (out.datumHash !== undefined || !hasTag(raw[index], tag)) refuse('OUTPUTS', `the ${payee.name} output does not carry this listing's tag`);
-    const min = minUtxo(raw[index], cpb);
+    const min = minUtxo(out, cpb);
     const required = payee.due >= min ? payee.due : min;
     if (out.value.coins !== required) {
       refuse('OUTPUTS', `the ${payee.name} output pays ${out.value.coins} lovelace, not the ${required} the listing requires`);
@@ -401,6 +511,7 @@ function checkBuyOutputs(
   const fee = listingFee(datum.price, deployment);
   const feeOutputs: number[] = [];
   let ownOut = 0n;
+  let ownUnitOut = 0n;
   let delivered = 0n;
   outputs.forEach((out, index) => {
     if (roles.has(index)) return;
@@ -417,11 +528,11 @@ function checkBuyOutputs(
       refuse('OUTPUTS', 'an output of the wallet carries a datum or a reference script');
     }
     ownOut += out.value.coins;
-    if (address === buyerAddress) {
-      forEachAsset(out, (unit, quantity) => {
-        if (unit.toLowerCase() === listing.unit) delivered += quantity;
-      });
-    }
+    forEachAsset(out, (unit, quantity) => {
+      if (unit.toLowerCase() !== listing.unit) return;
+      ownUnitOut += quantity;
+      if (address === buyerAddress) delivered += quantity;
+    });
   });
 
   // The fee: one untagged ADA output at the fee address, at least the fee, at most the fee or its own min-UTxO.
@@ -431,7 +542,7 @@ function checkBuyOutputs(
   if (!isAdaOnly(feeOut) || feeOut.datum !== undefined || feeOut.datumHash !== undefined || feeOut.scriptReference !== undefined) {
     refuse('OUTPUTS', 'the fee output is not plain ADA with no datum');
   }
-  const feeMin = minUtxo(raw[feeIndex], cpb);
+  const feeMin = minUtxo(feeOut, cpb);
   const feeCeiling = fee >= feeMin ? fee : feeMin;
   if (feeOut.value.coins < fee) refuse('OUTPUTS', 'the fee output pays less than the market fee');
   if (feeOut.value.coins > feeCeiling) refuse('OUTPUTS', 'the fee output pays more than the market fee and its own min-UTxO');
@@ -440,7 +551,7 @@ function checkBuyOutputs(
   // The NFT: delivered to the buyer address the user chose.
   if (delivered < 1n) refuse('OUTPUTS', 'does not deliver the NFT to the buyer address');
 
-  return { topUp, ownOut };
+  return { topUp, ownOut, ownUnitOut };
 }
 
 /** Whether `out` holds lovelace and nothing else. */
@@ -460,12 +571,18 @@ function hasTag(out: Serialization.TransactionOutput, tag: string): boolean {
 }
 
 /**
- * The ledger's minimum ADA for an output: `(160 + serialised size) * coinsPerUtxoByte`, over the
- * output's own bytes in the transaction, its coin included. A builder that raises an output to
- * min-UTxO writes the same bytes, so the figure is exact for the transaction as it will be signed.
+ * The minimum ADA the wallet allows an output to be raised to: `(160 + size) * coinsPerUtxoByte`
+ * over the CANONICAL encoding of the output, its coin included (ruling P29). Not over the bytes
+ * the builder wrote: a datum padded with empty chunks of an indefinite-length byte string means
+ * the same value, costs the buyer thousands of lovelace per byte, and would turn a "min-UTxO
+ * top-up" into a payment of tens of ADA to a payee. Re-encoding drops the padding, a
+ * non-minimal integer head and any other non-canonical form. The honest case is unchanged: a
+ * seller output with a 32-byte tag is 108 bytes, 268 * 4310 = 1,155,080 lovelace. A builder whose
+ * encoding is larger than canonical is refused here (a false refusal that fails closed).
  */
-function minUtxo(out: Serialization.TransactionOutput, cpb: bigint): bigint {
-  return BigInt(MIN_UTXO_OVERHEAD_BYTES + out.toCbor().length / 2) * cpb;
+function minUtxo(out: Cardano.TxOut, cpb: bigint): bigint {
+  const canonical = Serialization.TransactionOutput.fromCore(out).toCbor();
+  return BigInt(MIN_UTXO_OVERHEAD_BYTES + canonical.length / 2) * cpb;
 }
 
 const sameAddress = (a: unknown, b: unknown) => String(a).toLowerCase() === String(b).toLowerCase();
