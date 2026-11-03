@@ -37,6 +37,33 @@ describe('signTx approval surfaces share one summary', () => {
     });
   }
 
+  // A listing a dApp creates that pays someone else (owner or seller not the wallet, terms unreadable,
+  // royalties or share off), or a spent listing whose NFT does not come back, blocks Sign on both
+  // surfaces until the user acknowledges it, and the acknowledgement starts over for each request.
+  for (const [file, gate] of [
+    ['sidepanel/components/DAppOverlay.vue', /approvalSummary\.value\?\.requiresMarketAck && !marketAck\.value/],
+    ['popup/modules/views/SignTx.vue', /approvalSummary\.value\.requiresMarketAck && !marketAck\.value/],
+  ] as const) {
+    it(`${file} gates Sign on the market acknowledgement`, () => {
+      const src = read(file);
+      expect(src).toMatch(gate);
+      expect(src).toContain('v-model:market-ack="marketAck"');
+      expect(src).toContain('const marketAck = ref(false)');
+    });
+  }
+
+  it('the side panel forgets the market acknowledgement with every other per-request one', () => {
+    const src = read('sidepanel/components/DAppOverlay.vue');
+    expect(src).toMatch(/foreignValueAck\.value = false;\s*marketAck\.value = false;/);
+  });
+
+  it('the approval context takes its market part as required (no empty default that fails open)', () => {
+    const src = read('shared/utils/txApprovalSummary.ts');
+    expect(src).toMatch(/extras: \{[^}]*market: ApprovalMarketContext \}\s*,?\s*\): ApprovalContext/);
+    expect(src).not.toMatch(/market\?: ApprovalMarketContext/);
+    expect(src).not.toMatch(/extras\.market\?\./);
+  });
+
   it('the popup blocks Sign (button, PassKey and Enter) until a network mismatch is acknowledged', () => {
     const src = read('popup/modules/views/SignTx.vue');
     const start = src.indexOf('const sign = () => approval.run(async () => {');

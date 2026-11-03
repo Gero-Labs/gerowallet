@@ -6,6 +6,7 @@ import { mockGlobalProperties } from '@test/helpers/globalProperties';
 const mocks = vi.hoisted(() => ({
   request: vi.fn(), returnData: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), background: vi.fn(),
   authorize: vi.fn(), error: vi.fn(), begin: vi.fn(), end: vi.fn(), setLoading: vi.fn(),
+  summary: vi.fn(),
 }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: {
   createInternalController: () => ({ requestData: mocks.request, returnData: mocks.returnData }),
@@ -22,7 +23,7 @@ vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: mocks.begin, end
 vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: mocks.ledger } }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: mocks.trezor }));
 vi.mock('@/chrome/cardanoJsSdkCbor', () => ({ deserializeCardanoJsSdkTx: () => ({ body: { inputs: [], outputs: [], fee: 170000n }, witness: {} }) }));
-vi.mock('@/shared/utils/txApprovalSummary', () => ({ approvalContextFromKeys: () => ({}), approvalMarketContext: () => ({}), buildTxApprovalSummary: () => null, toTransactionDetailsCardProps: () => null }));
+vi.mock('@/shared/utils/txApprovalSummary', () => ({ approvalContextFromKeys: () => ({}), approvalDepositsFrom: () => ({}), approvalMarketContext: () => ({}), buildTxApprovalSummary: () => mocks.summary(), toTransactionDetailsCardProps: () => null }));
 vi.mock('@/shared/utils/builder', () => ({ diffAssetsFromIncomingToOutgoing: vi.fn(), getPayAndReceiveTokens: vi.fn() }));
 vi.mock('@/shared/utils/keystone', () => ({ createKeystoneSignRequest: vi.fn(), parseSignature: vi.fn() }));
 vi.mock('@/api/cardano-shield-api', () => ({ default: { scanTx: vi.fn() } }));
@@ -37,7 +38,11 @@ vi.mock('@/shared/components/AnimatedQRCode.vue', () => ({ default: { template: 
 vi.mock('@/shared/components/AnimatedQRScanner.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/shared/components/EmbeddedSiteWarning.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/shared/components/CopyButton.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('@/shared/components/TxApprovalIntents.vue', () => ({ default: { template: '<div />' } }));
+// Stands in for the effects list: its acknowledgement button reports a tick as the real one does.
+vi.mock('@/shared/components/TxApprovalIntents.vue', () => ({ default: {
+  emits: ['update:marketAck'],
+  template: '<div><button data-testid="ack-market" @click="$emit(\'update:marketAck\', true)">ack</button></div>',
+} }));
 vi.mock('@/shared/components/TransactionDetailsCard.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/shared/components/ToggleSwitch.vue', () => ({ default: { template: '<div />' } }));
 
@@ -50,6 +55,7 @@ import { TxSignError } from '@/chrome/config';
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.summary.mockReset().mockReturnValue(null);
   mocks.request.mockResolvedValue({ data: { tx: 'synthetic-cbor-decoder-fixture' } });
   mocks.returnData.mockResolvedValue(undefined);
   mocks.authorize.mockReset().mockResolvedValue(undefined);
@@ -111,5 +117,25 @@ describe.each(devices)('Cardano %s signing busy state', device => {
     expect(mocks.error).not.toHaveBeenCalled();
     expect(window.close).not.toHaveBeenCalled();
     expect(mocks.end).toHaveBeenCalled();
+  });
+});
+
+// A dApp can list the user's NFT with itself as owner and seller, and the worker signs such a
+// transaction once the user approves it: Sign waits for an explicit acknowledgement.
+describe('Cardano signing: a Gero listing the transaction creates', () => {
+  const signButton = (view: View) => view.findAll('button').find(entry => entry.text() === 'wallet.sign')!;
+
+  it('holds Sign until a listing that pays someone else is acknowledged', async () => {
+    mocks.summary.mockReturnValue({ requiresMarketAck: true });
+    const view = await render('ledger');
+    expect(signButton(view).attributes('disabled')).toBeDefined();
+    await view.find('[data-testid="ack-market"]').trigger('click');
+    expect(signButton(view).attributes('disabled')).toBeUndefined();
+  });
+
+  it('does not hold Sign for a transaction with nothing to acknowledge', async () => {
+    mocks.summary.mockReturnValue({ requiresMarketAck: false });
+    const view = await render('ledger');
+    expect(signButton(view).attributes('disabled')).toBeUndefined();
   });
 });

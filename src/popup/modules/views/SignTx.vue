@@ -55,6 +55,7 @@
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:market-ack="marketAck"
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
         />
@@ -363,13 +364,17 @@ const approvalCard = computed(() =>
 );
 const networkMismatchAck = ref(false);
 const foreignValueAck = ref(false);
+// A Gero listing this transaction creates that pays someone else (or whose terms are unreadable or
+// off), or a spent listing whose NFT does not come back to the wallet.
+const marketAck = ref(false);
 const inputsMisreportedAck = ref(false);
 // Sign is blocked until a network mismatch, a deposit refund or collateral return
-// to someone else, and a misstated input are explicitly acknowledged.
+// to someone else, a risky Gero listing, and a misstated input are explicitly acknowledged.
 const signBlocked = computed(() =>
   !!approvalSummary.value
   && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
     || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
+    || (approvalSummary.value.requiresMarketAck && !marketAck.value)
     || (inputsMisreported.value && !inputsMisreportedAck.value)),
 );
 

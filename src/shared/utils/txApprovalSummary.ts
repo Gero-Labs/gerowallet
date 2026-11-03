@@ -1,6 +1,9 @@
 import { Cardano } from '@cardano-sdk/core';
+import { decodeListingDatum, sellerShare, type ListingFeeParams } from '@/chrome/nftMarket/listingDatum';
 import { paymentScriptHash } from '@/chrome/nftMarket/marketGuard';
 import { reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
+import { inlineDatumCbor } from '@/shared/utils/utxoCbor';
+import { MAX_ROYALTIES, MIN_SELLER_SHARE, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
 import { inputRefOf, scriptSpentInputRefs } from './txIntentGuard';
 
 /**
@@ -58,10 +61,20 @@ export interface ApprovalContext {
    * unsupported.
    */
   listingScriptHashes: ReadonlySet<string>;
+  /**
+   * The fee parameters of each deployed version, by script hash (lower-case hex): what the seller
+   * of a created listing would keep is its price less the fee these give and its royalties. A
+   * script hash missing here has no known fee, so its share cannot be shown and is warned about.
+   */
+  listingFees: ReadonlyMap<string, ListingFeeParams>;
 }
 
-/** The market part of an {@link ApprovalContext}: the wallet's listings and the listing scripts. */
-export type ApprovalMarketContext = Pick<ApprovalContext, 'ownListings' | 'listingScriptHashes'>;
+/**
+ * The market part of an {@link ApprovalContext}: the wallet's listings, the listing scripts and
+ * their fees. Required wherever a context is built (no empty default): a surface that forgot it
+ * would show a created listing as nothing at all.
+ */
+export type ApprovalMarketContext = Pick<ApprovalContext, 'ownListings' | 'listingScriptHashes' | 'listingFees'>;
 
 export interface ApprovalDeposits {
   /** keyDeposit, for the pre-Conway stake (de)registration certificates. */
@@ -150,6 +163,60 @@ export interface ApprovalListedInput {
   label: string;
   /** The price the wallet's stored datum lists it at, in lovelace. */
   priceLovelace: bigint;
+  /**
+   * The NFT does not land in one of the wallet's own addresses, nor in a created listing that
+   * names the wallet as owner and seller: it leaves the wallet (sent to a stranger, or burned).
+   */
+  nftLeavesWallet: boolean;
+}
+
+/**
+ * What the transaction's datum says about a listing it creates (an output at a listing script).
+ * Anyone can put an NFT at the script with a datum of their choosing, so a dApp can list the
+ * user's NFT with itself as owner and seller: the preview must read the datum, not just count it.
+ */
+export type ApprovalListingDatumStatus =
+  /** An inline datum that decodes strictly as a Gero listing. */
+  | 'ok'
+  /** The output carries a datum hash: the terms are not in the transaction. */
+  | 'datumHash'
+  /** The output carries no datum. */
+  | 'missing'
+  /** An inline datum that is not a listing, is not readable, or the wallet's network is unknown. */
+  | 'undecodable';
+
+export interface ApprovalCreatedListing {
+  /** The output's index in the transaction. */
+  outputIndex: number;
+  datum: ApprovalListingDatumStatus;
+  /** Null unless the datum is `ok`, as is every field below it except the booleans. */
+  priceLovelace: bigint | null;
+  royaltyCount: number;
+  royaltyTotalLovelace: bigint | null;
+  /** Price less fee and royalties (what the seller keeps), or null when unknown. */
+  sellerShareLovelace: bigint | null;
+  /** The datum's owner is one of the wallet's own payment keys. */
+  ownerIsOwn: boolean;
+  /** The datum's seller address is one of the wallet's own addresses. */
+  sellerIsOwn: boolean;
+  /** A named buyer: only that key can buy it. */
+  hasBuyer: boolean;
+  /**
+   * The datum is not readable, or names an owner or a seller that is not the wallet: whoever it
+   * does name cancels it or is paid for it, not the user.
+   */
+  paysSomeoneElse: boolean;
+  /** More royalty payees than the wallet itself ever writes (MAX_ROYALTIES). */
+  tooManyRoyalties: boolean;
+  /** Royalties above the rate cap (10%) of the price, or a negative royalty. */
+  highRoyalties: boolean;
+  /** The seller's share is at or below MIN_SELLER_SHARE, or cannot be worked out. */
+  lowSellerShare: boolean;
+}
+
+/** Whether a created listing needs the user's explicit acknowledgement before Sign unlocks. */
+export function createdListingWarns(listing: ApprovalCreatedListing): boolean {
+  return listing.paysSomeoneElse || listing.tooManyRoyalties || listing.highRoyalties || listing.lowSellerShare;
 }
 
 export interface TxApprovalSummary {
@@ -205,6 +272,14 @@ export interface TxApprovalSummary {
   createsListing: boolean;
   /** How many outputs are paid to a Gero listing script. */
   createdListingCount: number;
+  /** One entry per such output, in output order, with what its datum says. */
+  createdListings: ApprovalCreatedListing[];
+  /**
+   * A created listing warns (it pays someone else, its terms cannot be read, its royalties or
+   * the seller's share are off) or a spent own listing's NFT leaves the wallet. Sign waits for an
+   * explicit acknowledgement, as for `requiresForeignValueAck`.
+   */
+  requiresMarketAck: boolean;
   totals: {
     totalSendingAda: string;
     feeAda: string;
@@ -331,6 +406,75 @@ function voteChoice(vote: Cardano.Vote): ApprovalVoteChoice {
   return 'abstain';
 }
 
+/** ROYALTY_RATE_CAP in basis points (0.1 is 1000), for bigint arithmetic. */
+const ROYALTY_CAP_BPS = BigInt(Math.round(ROYALTY_RATE_CAP * 10_000));
+
+/** A created listing whose terms cannot be read: every flag that matters is on. */
+function unreadableListing(outputIndex: number, datum: Exclude<ApprovalListingDatumStatus, 'ok'>): ApprovalCreatedListing {
+  return {
+    outputIndex,
+    datum,
+    priceLovelace: null,
+    royaltyCount: 0,
+    royaltyTotalLovelace: null,
+    sellerShareLovelace: null,
+    ownerIsOwn: false,
+    sellerIsOwn: false,
+    hasBuyer: false,
+    paysSomeoneElse: true,
+    tooManyRoyalties: false,
+    highRoyalties: false,
+    lowSellerShare: false,
+  };
+}
+
+/**
+ * Read the datum of an output paid to a listing script, strictly (`decodeListingDatum`, the same
+ * decoder that decides which UTxOs are the wallet's own listings), and judge it against the
+ * wallet's own keys and addresses. Never throws: the approval views drop the whole summary on an
+ * exception, so anything unreadable, an unknown network included, is reported as such and warned
+ * about, never skipped.
+ */
+function inspectCreatedListing(
+  outputIndex: number,
+  output: Cardano.TxOut,
+  scriptHash: string,
+  ctx: ApprovalContext,
+  ownAddresses: ReadonlySet<string>,
+): ApprovalCreatedListing {
+  try {
+    if (output.datum == null) return unreadableListing(outputIndex, output.datumHash ? 'datumHash' : 'missing');
+    const cbor = inlineDatumCbor(output.datum);
+    if (!cbor || ctx.walletNetworkId === null) return unreadableListing(outputIndex, 'undecodable');
+    const datum = decodeListingDatum(cbor, ctx.walletNetworkId);
+
+    const royaltyTotal = datum.royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
+    const fees = ctx.listingFees.get(scriptHash);
+    const share = fees ? sellerShare(datum, fees) : null;
+    const ownerIsOwn = ctx.ownPaymentKeyHashes.has(datum.owner.toLowerCase());
+    const sellerIsOwn = ownAddresses.has(datum.sellerAddress);
+    return {
+      outputIndex,
+      datum: 'ok',
+      priceLovelace: datum.price,
+      royaltyCount: datum.royalties.length,
+      royaltyTotalLovelace: royaltyTotal,
+      sellerShareLovelace: share,
+      ownerIsOwn,
+      sellerIsOwn,
+      hasBuyer: datum.buyer !== null,
+      paysSomeoneElse: !ownerIsOwn || !sellerIsOwn,
+      tooManyRoyalties: datum.royalties.length > MAX_ROYALTIES,
+      // Strictly above the cap (exactly 10% is what a collection may ask for); a negative royalty
+      // is not a royalty and would hide the real total, so it counts as too high.
+      highRoyalties: royaltyTotal * 10_000n > datum.price * ROYALTY_CAP_BPS || datum.royalties.some((royalty) => royalty.lovelace < 0n),
+      lowSellerShare: share === null || share <= MIN_SELLER_SHARE,
+    };
+  } catch {
+    return unreadableListing(outputIndex, 'undecodable');
+  }
+}
+
 /**
  * How the transaction touches the Gero market, for the approval screen. A dApp transaction that
  * spends one of the wallet's own listings or puts something at a listing script is signable once
@@ -340,13 +484,36 @@ function voteChoice(vote: Cardano.Vote): ApprovalVoteChoice {
  *
  * What is shown for a spent listing is the wallet's stored one, matched by reference: nothing the
  * dApp wrote in the transaction decides the NFT or the price, and a listing UTxO the wallet did not
- * verify as its own (a stranger's, or a fake that names the wallet) is simply not "yours".
+ * verify as its own (a stranger's, or a fake that names the wallet) is simply not "yours". A
+ * created listing is different: its terms ARE the dApp's, so each is read and judged.
  */
 function marketEffects(
   tx: Cardano.Tx,
   outputs: readonly ApprovalOutput[],
   ctx: ApprovalContext,
-): { listedInputs: ApprovalListedInput[]; createdListingCount: number } {
+): { listedInputs: ApprovalListedInput[]; createdListings: ApprovalCreatedListing[] } {
+  const createdListings: ApprovalCreatedListing[] = [];
+  if (ctx.listingScriptHashes.size > 0) {
+    const ownAddresses = new Set([...ctx.paymentAddresses, ...ctx.changeAddresses]);
+    const txOutputs = tx.body.outputs ?? [];
+    outputs.forEach((output, index) => {
+      const hash = paymentScriptHash(output.address)?.toLowerCase();
+      if (hash && ctx.listingScriptHashes.has(hash)) {
+        createdListings.push(inspectCreatedListing(index, txOutputs[index], hash, ctx, ownAddresses));
+      }
+    });
+  }
+
+  // Outputs where a spent listing's NFT is still the wallet's: one of its own addresses, or a
+  // listing the wallet is both owner and seller of (a reprice puts the NFT back at the script).
+  const ownListingOutputs = new Set(
+    createdListings.filter((l) => l.datum === 'ok' && l.ownerIsOwn && l.sellerIsOwn).map((l) => l.outputIndex),
+  );
+  const landsWithWallet = (unit: string): boolean =>
+    outputs.some((output, index) =>
+      (output.isOwn || ownListingOutputs.has(index))
+      && output.assets.some((asset) => asset.unit === unit && BigInt(asset.quantity) > 0n));
+
   const listedInputs: ApprovalListedInput[] = [];
   if (ctx.ownListings.size > 0) {
     const ownByRef = new Map<string, OwnListing>();
@@ -362,18 +529,11 @@ function marketEffects(
         unit: listing.unit,
         label: ctx.resolveAsset(listing.unit).name,
         priceLovelace: BigInt(listing.datum.price),
+        nftLeavesWallet: !landsWithWallet(listing.unit),
       });
     }
   }
-
-  let createdListingCount = 0;
-  if (ctx.listingScriptHashes.size > 0) {
-    for (const output of outputs) {
-      const hash = paymentScriptHash(output.address);
-      if (hash && ctx.listingScriptHashes.has(hash.toLowerCase())) createdListingCount += 1;
-    }
-  }
-  return { listedInputs, createdListingCount };
+  return { listedInputs, createdListings };
 }
 
 export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): TxApprovalSummary {
@@ -545,7 +705,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
     if (held) ownInputLovelace += coinsOf(held);
     else if (!scriptSpent.has(ref)) unmatchedInputCount += 1;
   }
-  const { listedInputs, createdListingCount } = marketEffects(tx, outputs, ctx);
+  const { listedInputs, createdListings } = marketEffects(tx, outputs, ctx);
   const ownOutputLovelace = outputs.reduce((sum, o) => (o.isOwn ? sum + o.lovelace : sum), 0n);
   const youPayLovelace = ctx.ownUtxos && unmatchedInputCount === 0
     ? ownInputLovelace - ownOutputLovelace
@@ -586,8 +746,10 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
     requiresForeignValueAck,
     treasuryDonationAda: donationLovelace > 0n ? formatLovelace(donationLovelace) : null,
     listedInputs,
-    createsListing: createdListingCount > 0,
-    createdListingCount,
+    createsListing: createdListings.length > 0,
+    createdListingCount: createdListings.length,
+    createdListings,
+    requiresMarketAck: createdListings.some(createdListingWarns) || listedInputs.some((l) => l.nftLeavesWallet),
     totals: {
       totalSendingAda: formatLovelace(totalSendingLovelace),
       feeAda,
@@ -611,7 +773,7 @@ export function approvalContextFromKeys(
   } | null | undefined,
   walletNetworkId: Cardano.NetworkId | null,
   resolveAsset: (unit: string) => ApprovalAssetInfo,
-  extras: { ownUtxos?: readonly Cardano.Utxo[]; deposits?: ApprovalDeposits; market?: ApprovalMarketContext } = {},
+  extras: { ownUtxos?: readonly Cardano.Utxo[]; deposits?: ApprovalDeposits; market: ApprovalMarketContext },
 ): ApprovalContext {
   const addrs = (list?: Array<{ address?: string }>) => new Set((list ?? []).map((k) => k.address).filter((a): a is string => !!a));
   const creds = (...lists: Array<Array<{ cred: string }> | undefined>) =>
@@ -628,27 +790,32 @@ export function approvalContextFromKeys(
     resolveAsset,
     ownUtxos: extras.ownUtxos,
     deposits: extras.deposits,
-    ownListings: extras.market?.ownListings ?? new Map(),
-    listingScriptHashes: extras.market?.listingScriptHashes ?? new Set(),
+    ownListings: extras.market.ownListings,
+    listingScriptHashes: extras.market.listingScriptHashes,
+    listingFees: extras.market.listingFees,
   };
 }
 
 /**
  * The market part of the approval context, for a UI context: the wallet's own listings as the
  * store holds them (`walletStore.listedListings`, whose bigint fields are decimal strings outside
- * the worker, so they are revived here) and the script hashes of the network's deployments
- * (`networks.resolveNftMarketDeployments`). Never gated on the `isNftMarketEnabled` flag: the
- * preview applies whatever the flag says, as the signing guard does. A malformed stored row is
- * skipped; with nothing stored and no deployments both parts are empty and the summary is as
- * it was before the market existed.
+ * the worker, so they are revived here) and the network's deployments
+ * (`networks.resolveNftMarketDeployments`): their script hashes and fee parameters. Never gated
+ * on the `isNftMarketEnabled` flag: the preview applies whatever the flag says, as the signing
+ * guard does. A malformed stored row is skipped; with nothing stored and no deployments every part
+ * is empty and the summary is as it was before the market existed.
  */
 export function approvalMarketContext(
   listedListings: unknown,
-  deployments: ReadonlyArray<{ scriptHash: string }>,
+  deployments: ReadonlyArray<{ scriptHash: string } & ListingFeeParams>,
 ): ApprovalMarketContext {
   return {
     ownListings: new Map(reviveOwnListings(listedListings).map((listing) => [listing.ref.toLowerCase(), listing])),
     listingScriptHashes: new Set(deployments.map((deployment) => deployment.scriptHash.toLowerCase())),
+    listingFees: new Map(deployments.map((deployment) => [
+      deployment.scriptHash.toLowerCase(),
+      { feeBps: deployment.feeBps, minFeeLovelace: deployment.minFeeLovelace, maxFeeLovelace: deployment.maxFeeLovelace },
+    ])),
   };
 }
 

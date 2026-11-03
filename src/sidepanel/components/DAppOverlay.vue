@@ -142,6 +142,7 @@
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:market-ack="marketAck"
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
           :primary-color="primaryColor"
@@ -2012,6 +2013,11 @@ const networkMismatchAck = ref(false);
 // another address (blocking, acknowledged in TxApprovalIntents).
 const foreignValueAck = ref(false);
 
+// A Gero listing this transaction creates that pays someone else (or whose terms are unreadable
+// or off), or a spent listing whose NFT does not come back to the wallet (blocking, acknowledged
+// in TxApprovalIntents). A dApp can list the user's NFT with itself as owner and seller.
+const marketAck = ref(false);
+
 // The UTxO list misstated an input this transaction spends (blocking,
 // acknowledged in TxApprovalIntents; amounts already use the proven values).
 const inputsMisreportedAck = ref(false);
@@ -2031,6 +2037,7 @@ const signTxBlocked = computed(() =>
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
   || (!!approvalSummary.value?.requiresForeignValueAck && !foreignValueAck.value)
+  || (!!approvalSummary.value?.requiresMarketAck && !marketAck.value)
   || (inputsMisreported.value && !inputsMisreportedAck.value)
   || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
@@ -2184,6 +2191,7 @@ watch(currentRequest, () => {
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
   foreignValueAck.value = false;
+  marketAck.value = false;
   inputsMisreportedAck.value = false;
   highRiskAck.value = false;
 });

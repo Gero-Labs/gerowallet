@@ -2,7 +2,8 @@ import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
 import { Psbt } from 'bitcoinjs-lib';
@@ -55,7 +56,12 @@ vi.mock('@/shared/utils/keystone', () => ({ createKeystoneDataSignRequest: vi.fn
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: vi.fn(), end: vi.fn() } }));
 vi.mock('@/api/cardano-shield-api', () => ({ default: { scanTx: vi.fn() } }));
 vi.mock('@/shared/components/TransactionDetailsCard.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('@/shared/components/TxApprovalIntents.vue', () => ({ default: { template: '<div />' } }));
+// Stands in for the effects list: its acknowledgement button reports a tick as the real one does.
+vi.mock('@/shared/components/TxApprovalIntents.vue', () => ({ default: {
+  props: ['summary'],
+  emits: ['update:marketAck'],
+  template: '<div data-testid="intents-stub"><button data-testid="ack-market" @click="$emit(\'update:marketAck\', true)">ack</button></div>',
+} }));
 vi.mock('./KeystoneSignSheet.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./BottomSheet.vue', () => ({ default: { template: '<section><slot /><slot name="footer" /></section>' } }));
@@ -70,6 +76,8 @@ import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import networks from '@/utils/networks';
+import { NFT_MARKET_DEPLOYMENTS_PREPROD } from '@/utils/nftMarketDeployments';
+import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 
 // Synthetic enterprise address from a fixed public payment-key hash.
 const ADDRESS = Cardano.Address.fromBytes(HexBlob(`61${'01'.repeat(28)}`)).toBech32();
@@ -498,5 +506,89 @@ describe('Bitcoin dApp signing with a PassKey', () => {
     finishRawPrf([9, 8, 7]);
     await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(approved));
     expect(mocks.send).toHaveBeenCalledExactlyOnceWith({ method, data: expect.objectContaining({ privateKeyBytes: [9, 8, 7] }) });
+  });
+});
+
+// A dApp can list the user's NFT with itself as owner and seller, and the worker signs such a
+// transaction once the user approves it (dApp market pass): Sign must wait for an explicit
+// acknowledgement of a created listing that pays someone else, and not otherwise.
+describe('dApp signTx: a Gero listing the transaction creates', () => {
+  const V1 = NFT_MARKET_DEPLOYMENTS_PREPROD[0];
+  const OWN_PAYMENT = '0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c';
+  const STAKE = '2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c';
+  const STRANGER = '77'.repeat(28);
+  const NFT = `${'b'.repeat(56)}${Buffer.from('NFT').toString('hex')}`;
+  const key = (hash: string, type = Cardano.CredentialType.KeyHash) => ({ hash: Hash28ByteBase16(hash), type });
+  const baseAddress = (payment: string, stake: string, paymentIsScript = false) => Cardano.BaseAddress.fromCredentials(
+    Cardano.NetworkId.Testnet, key(payment, paymentIsScript ? Cardano.CredentialType.ScriptHash : Cardano.CredentialType.KeyHash), key(stake),
+  ).toAddress().toBech32();
+  const OWN = baseAddress(OWN_PAYMENT, STAKE);
+
+  // A listing datum, encoded by hand (the contract's indefinite-length constructors).
+  const bstr = (h: string) => `581c${h}`;
+  const constr = (index: 0 | 1, fields: string[]) => `${index === 0 ? 'd879' : 'd87a'}9f${fields.join('')}ff`;
+  const addressData = (payment: string, stake: string) => constr(0, [constr(0, [bstr(payment)]), constr(0, [constr(0, [constr(0, [bstr(stake)])])])]);
+  const datum = (owner: string, sellerPayment: string) =>
+    constr(0, [bstr(owner), addressData(sellerPayment, STAKE), '1a017d7840', '9fff', 'd87a80']);
+
+  const signTxRequest = (datumHex: string) => {
+    const core = {
+      id: '0'.repeat(64),
+      body: {
+        inputs: [{ txId: '1'.repeat(64), index: 0 }],
+        outputs: [
+          { address: baseAddress(V1.scriptHash, STAKE, true), value: { coins: 2_000_000n, assets: new Map([[NFT, 1n]]) }, datum: inlineDatumFromCbor(HexBlob(datumHex)) },
+          { address: OWN, value: { coins: 9_000_000n } },
+        ],
+        fee: 200_000n,
+      },
+      witness: { signatures: new Map() },
+    };
+    const tx = Serialization.Transaction.fromCore(core as never).toCbor();
+    return { requestId: 'tx-market', method: 'signTx', payload: { website: 'https://dapp.example', tx } };
+  };
+
+  beforeEach(() => {
+    WalletStore.state.loggedWallet = {
+      ...WalletStore.state.loggedWallet, network: Network.PREPROD, encryptionMethod: 'prf',
+    } as never;
+    WalletStore.state.keys = { payment: [{ address: OWN, cred: OWN_PAYMENT }], change: [], stake: [] } as never;
+    expect(networks.resolveNftMarketDeployments(Blockchain.CARDANO, Network.PREPROD)).toEqual([V1]);
+  });
+
+  const sign = (wrapper: View) => wrapper.findAll('button').find(entry => entry.text() === 'miniGero.sign')!;
+
+  it('holds Sign until a listing owned by someone else is acknowledged, then lets it through', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
+    await wrapper.find('[data-testid="ack-market"]').trigger('click');
+    expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+  });
+
+  it('holds Sign for a listing whose seller is someone else, too', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(OWN_PAYMENT, STRANGER)) as never;
+    const wrapper = render();
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it('does not hold Sign for the wallet\'s own plain listing', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(OWN_PAYMENT, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+  });
+
+  it('asks again for the next request: an acknowledgement is not carried over', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    await wrapper.find('[data-testid="ack-market"]').trigger('click');
+    expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+    overlay.currentRequest.value = { ...signTxRequest(datum(STRANGER, OWN_PAYMENT)), requestId: 'tx-market-2' } as never;
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
   });
 });

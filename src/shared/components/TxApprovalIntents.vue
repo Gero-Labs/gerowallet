@@ -7,8 +7,10 @@
       <div class="tx-intents-header text-caption grey--text text-uppercase">{{ $t('signTx.thisTransactionWill') }}</div>
 
       <!-- Gero market effects come first: a dApp transaction that spends the user's own listing or
-           creates one is signable once approved, so this is where the user is told. The NFT and
-           price shown for a spent listing are the wallet's stored ones, never the dApp's. -->
+           creates one is signable once approved, so this is where the user is told. A spent
+           listing's NFT and price are the wallet's stored ones, never the dApp's. A created
+           listing's terms ARE the dApp's, so its datum is read and every way it can pay someone
+           else is said, in the error tone; the reassuring hint shows only when nothing warns. -->
       <div v-if="summary.listedInputs.length > 0">
         <div
           v-for="listed in summary.listedInputs"
@@ -16,22 +18,49 @@
           class="tx-intent-row"
           data-testid="tx-intent-listing-spend"
         >
-          <v-icon size="14" color="warning" class="mr-1">mdi-storefront-minus-outline</v-icon>
+          <v-icon size="14" :color="listed.nftLeavesWallet ? 'error' : 'warning'" class="mr-1">mdi-storefront-minus-outline</v-icon>
           <div class="tx-intent-text">
             <div class="warning--text text-caption font-weight-medium">{{ $t('signTx.spendsYourListing') }}</div>
             <div class="white--text text-caption">{{ $t('signTx.listedFor', { name: listed.label, price: formatLovelace(listed.priceLovelace) }) }}</div>
             <div class="grey--text text-caption tx-intent-id">{{ listed.unit }}</div>
+            <div v-if="listed.nftLeavesWallet" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-nft-leaves">{{ $t('signTx.listingNftLeaves') }}</div>
           </div>
         </div>
-        <div class="grey--text text-caption" data-testid="tx-intent-listing-spend-hint">{{ $t('signTx.spendsYourListingHint') }}</div>
+        <div v-if="!nftLeaves" class="grey--text text-caption" data-testid="tx-intent-listing-spend-hint">{{ $t('signTx.spendsYourListingHint') }}</div>
       </div>
 
-      <div v-if="summary.createsListing" data-testid="tx-intent-creates-listing">
-        <div class="tx-intent-row">
-          <v-icon size="14" color="warning" class="mr-1">mdi-storefront-plus-outline</v-icon>
-          <span class="warning--text text-caption font-weight-medium">{{ $t('signTx.createsMarketListing', { count: summary.createdListingCount }, summary.createdListingCount) }}</span>
+      <div
+        v-for="listing in summary.createdListings"
+        :key="'created-' + listing.outputIndex"
+        class="tx-intent-row"
+        data-testid="tx-intent-creates-listing"
+      >
+        <v-icon size="14" :color="listingWarns(listing) ? 'error' : 'warning'" class="mr-1">mdi-storefront-plus-outline</v-icon>
+        <div class="tx-intent-text">
+          <div class="warning--text text-caption font-weight-medium">{{ $t('signTx.createsMarketListing') }}</div>
+          <template v-if="listing.datum === 'ok' && listing.priceLovelace !== null">
+            <div class="white--text text-caption">{{ $t('signTx.listingPrice', { price: formatLovelace(listing.priceLovelace) }) }}</div>
+            <div
+              v-if="listing.royaltyCount > 0 && listing.royaltyTotalLovelace !== null"
+              class="text-caption"
+              :class="listing.tooManyRoyalties || listing.highRoyalties ? 'error--text' : 'grey--text'"
+              data-testid="tx-intent-listing-royalties"
+            >{{ $t('signTx.listingRoyalties', { count: listing.royaltyCount, total: formatLovelace(listing.royaltyTotalLovelace) }, listing.royaltyCount) }}</div>
+            <div
+              v-if="listing.sellerShareLovelace !== null"
+              class="text-caption"
+              :class="listing.lowSellerShare ? 'error--text' : 'grey--text'"
+            >{{ $t('signTx.listingSellerReceives', { amount: formatLovelace(listing.sellerShareLovelace) }) }}</div>
+            <div v-if="listing.hasBuyer" class="grey--text text-caption" data-testid="tx-intent-listing-private">{{ $t('signTx.listingPrivate') }}</div>
+            <div v-if="!listing.ownerIsOwn" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-owner-not-you">{{ $t('signTx.listingOwnerNotYou') }}</div>
+            <div v-if="!listing.sellerIsOwn" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-seller-not-you">{{ $t('signTx.listingSellerNotYou') }}</div>
+            <div v-if="listing.tooManyRoyalties" class="error--text text-caption" data-testid="tx-intent-listing-too-many-royalties">{{ $t('signTx.listingTooManyRoyalties', { max: MAX_ROYALTIES }) }}</div>
+            <div v-if="listing.highRoyalties" class="error--text text-caption" data-testid="tx-intent-listing-high-royalties">{{ $t('signTx.listingHighRoyalties', { percent: ROYALTY_CAP_PERCENT }) }}</div>
+            <div v-if="listing.lowSellerShare" class="error--text text-caption" data-testid="tx-intent-listing-low-share">{{ $t('signTx.listingLowShare') }}</div>
+          </template>
+          <div v-else class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-datum-problem">{{ $t(DATUM_PROBLEM_KEYS[listing.datum]) }}</div>
+          <div v-if="!listingWarns(listing)" class="grey--text text-caption" data-testid="tx-intent-creates-listing-hint">{{ $t('signTx.createsMarketListingHint') }}</div>
         </div>
-        <div class="grey--text text-caption" data-testid="tx-intent-creates-listing-hint">{{ $t('signTx.createsMarketListingHint') }}</div>
       </div>
 
       <div v-for="(cert, i) in summary.certificates" :key="'cert-' + i" class="tx-intent-row">
@@ -129,6 +158,28 @@
       </div>
     </div>
 
+    <!-- A listing the transaction creates that pays someone else, or whose terms cannot be read or
+         are off, or a spent listing whose NFT does not come back to the wallet (blocking). A dApp
+         can list the user's NFT with itself as owner and seller, so this is the user's only
+         protection. The parent gates Sign on the acknowledgement. -->
+    <div v-if="summary.requiresMarketAck" class="tx-network-banner mb-3" data-testid="tx-market-risk-banner">
+      <v-icon color="error" size="20" class="mr-2">mdi-storefront-remove-outline</v-icon>
+      <div class="tx-network-text">
+        <div class="tx-network-title">{{ $t('signTx.marketRiskTitle') }}</div>
+        <div class="tx-network-body">{{ $t('signTx.marketRiskBody') }}</div>
+        <v-checkbox
+          :model-value="marketAck"
+          color="error"
+          hide-details
+          theme="dark"
+          density="compact"
+          class="mt-2"
+          :label="$t('signTx.highRiskAck')"
+          @update:model-value="emit('update:marketAck', !!$event)"
+        />
+      </div>
+    </div>
+
     <!-- A deposit refunded to someone else, or the wallet's collateral returned
          to another address if a script fails (blocking). The parent gates Sign
          on the acknowledgement. -->
@@ -199,20 +250,24 @@ import { computed } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import filters from '@/shared/utils/filters';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { formatLovelace, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { createdListingWarns, formatLovelace, type ApprovalCreatedListing, type ApprovalListingDatumStatus, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
 
 const props = withDefaults(defineProps<{
   summary: TxApprovalSummary;
   networkAck: boolean;
   foreignValueAck?: boolean;
+  /** The user accepted a listing that pays someone else, or an NFT that leaves the wallet (`summary.requiresMarketAck`). */
+  marketAck?: boolean;
   /** The wallet's UTxO list misstated an input this transaction spends (useProvenApprovalUtxos). */
   inputsMisreported?: boolean;
   inputsMisreportedAck?: boolean;
   primaryColor?: string;
-}>(), { foreignValueAck: false, inputsMisreported: false, inputsMisreportedAck: false, primaryColor: undefined });
+}>(), { foreignValueAck: false, marketAck: false, inputsMisreported: false, inputsMisreportedAck: false, primaryColor: undefined });
 const emit = defineEmits<{
   (e: 'update:networkAck', value: boolean): void;
   (e: 'update:foreignValueAck', value: boolean): void;
+  (e: 'update:marketAck', value: boolean): void;
   (e: 'update:inputsMisreportedAck', value: boolean): void;
 }>();
 
@@ -222,6 +277,18 @@ const networkMismatch = computed(() => props.summary.bodyNetworkMismatch || prop
 const foreignSignerCount = computed(() => props.summary.requiredSigners.filter(s => !s.isOwn).length);
 // What the wallet itself stands to lose; the declared total when its inputs can't be resolved.
 const collateralAtRisk = computed(() => props.summary.collateralAtRiskAda ?? props.summary.totalCollateralAda);
+// A spent listing's NFT leaves the wallet: the reassuring hint would be false for the group.
+const nftLeaves = computed(() => props.summary.listedInputs.some((listed) => listed.nftLeavesWallet));
+const listingWarns = (listing: ApprovalCreatedListing) => createdListingWarns(listing);
+// The royalty cap in percent for the copy, so the number is never baked into a translation.
+const ROYALTY_CAP_PERCENT = Math.round(ROYALTY_RATE_CAP * 100);
+const DATUM_PROBLEM_KEYS: Record<ApprovalListingDatumStatus, string> = {
+  datumHash: 'signTx.listingDatumHash',
+  missing: 'signTx.listingDatumMissing',
+  undecodable: 'signTx.listingDatumUnreadable',
+  // Not reached (an `ok` datum carries its price), but a listing never shows without a line.
+  ok: 'signTx.listingDatumUnreadable',
+};
 const hasIntents = computed(() => {
   const s = props.summary;
   return s.listedInputs.length > 0 || s.createsListing

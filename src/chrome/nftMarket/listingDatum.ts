@@ -374,12 +374,15 @@ export function listingTag(txId: string, index: number): string {
 // Fee and the seller's share (bigint only)
 // ---------------------------------------------------------------------------------------------
 
+/** The fee parameters of a deployment: all the arithmetic below needs of one. */
+export type ListingFeeParams = Pick<NftMarketDeployment, 'feeBps' | 'minFeeLovelace' | 'maxFeeLovelace'>;
+
 /**
  * The fee the contract takes from a listing of `price` (rules.md P1):
  * `clamp(min, max, floor(price * bps / 10000))`, the minimum applied first and the cap last, so
  * a cap below the minimum would win. No cap when `maxFeeLovelace` is null.
  */
-export function listingFee(price: bigint, d: NftMarketDeployment): bigint {
+export function listingFee(price: bigint, d: ListingFeeParams): bigint {
   let fee = (price * BigInt(d.feeBps)) / BPS_DENOMINATOR;
   if (fee < d.minFeeLovelace) fee = d.minFeeLovelace;
   if (d.maxFeeLovelace !== null && fee > d.maxFeeLovelace) fee = d.maxFeeLovelace;
@@ -390,7 +393,7 @@ export function listingFee(price: bigint, d: NftMarketDeployment): bigint {
  * What the seller keeps of the price: `price - fee - sum(royalties)`. Zero or negative means
  * the listing can never be bought (rules.md P2); callers decide what to do with that.
  */
-export function sellerShare(l: ListingDatum, d: NftMarketDeployment): bigint {
+export function sellerShare(l: ListingDatum, d: ListingFeeParams): bigint {
   return l.price - listingFee(l.price, d) - l.royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
 }
 
