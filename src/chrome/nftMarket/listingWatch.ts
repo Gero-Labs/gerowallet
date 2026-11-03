@@ -13,8 +13,8 @@
 //            wallet's own verified listings (`walletStore.listedListings`, for a later
 //            registration after the worker restarted). Any other ref is refused: a page cannot get
 //            gero-sync to watch an arbitrary listing under this wallet.
-//   owner    that listing's datum owner, which must also be a payment key of the logged account's
-//            key set. A page-supplied `ownerPkh` is only compared to it, never used.
+//   owner    that listing's datum owner, which must also be a payment key of the logged account: its
+//            key set or a key derived from its xpub (the union the wallet recognises its listings by). A page-supplied `ownerPkh` is only compared to it, never used.
 //   refs     one to LISTING_WATCH_MAX_REFS, each matching gero-sync's own shape, unique.
 //
 // Never fatal and never blocking: the answer is `{ success, result: { result: 'ok' | 'not_registered'
@@ -115,6 +115,12 @@ export interface ListingWatchDeps {
     /** `walletStore.listedListings`: the wallet's own verified listings. */
     listedListings?: readonly OwnListing[] | null;
   };
+  /**
+   * The payment key hashes derived from the wallet's xpub (`WalletBg.derivePaymentCredentials`), which
+   * the wallet also counts as its own when it recognises a listing (`walletBg.ownListingIdentity`): a
+   * key set can lag a sync while derivation never does. The owner check reads the same union.
+   */
+  derivedPaymentKeyHashes?: () => Iterable<string>;
   /** `notifyActions.watchListings`: the signed POST to gero-sync, never rejecting for a server refusal. */
   watch: (input: WatchListingsInput) => Promise<WatchListingsResult>;
 }
@@ -141,6 +147,16 @@ function readRefs(raw: unknown): string[] {
     refs.push(ref);
   }
   return refs;
+}
+
+/** The wallet's derived payment key hashes; none when they cannot be derived (the key set alone decides then). */
+function derivedKeys(deps: ListingWatchDeps): string[] {
+  try {
+    return [...(deps.derivedPaymentKeyHashes?.() ?? [])];
+  } catch (error) {
+    debugLog('NFT market listing watch: the derived keys are not available:', error instanceof Error ? error.name : 'unknown');
+    return [];
+  }
 }
 
 async function register(request: unknown, deps: ListingWatchDeps): Promise<Record<string, unknown>> {
@@ -174,8 +190,8 @@ async function register(request: unknown, deps: ListingWatchDeps): Promise<Recor
   // One request carries one owner (gero-sync takes one `ownerPkh`), so a mix is not one wallet account's listing.
   if (owners.size !== 1) throw new ListingWatchError('OWNER', 'The listings have different owners');
   const [owner] = owners;
-  // OX Agent: Authorization prevented by requiring the owner to be a payment key of the logged account's own key set
-  if (!ownListingIdentity(state.keys).paymentKeyHashes.has(owner)) {
+  // OX Agent: Authorization prevented by requiring the owner to be a payment key of the logged account: its key set or a key derived from its xpub, as ownListingIdentity counts them
+  if (!ownListingIdentity(state.keys, derivedKeys(deps)).paymentKeyHashes.has(owner)) {
     throw new ListingWatchError('OWNER', 'The listing owner is not a key of this wallet');
   }
   if (typeof named === 'string' && named.toLowerCase() !== owner) {

@@ -251,6 +251,8 @@ describe('NFT market sale-alert registration wiring', () => {
     expect(deps).toContain('getWallet: () => walletManager.getWallet()');
     expect(deps).toContain('keys: WalletStore.state.keys');
     expect(deps).toContain('listedListings: WalletStore.state.listedListings');
+    // The same union of keys as WalletBg.ownListingIdentity: the key set and the keys derived from the xpub.
+    expect(deps).toContain('derivedPaymentKeyHashes: () => walletManager.getWallet()?.derivePaymentCredentials() ?? []');
     expect(deps).toContain('watch: (input) => notifyActions.watchListings(input)');
     // A guard, not UI: the feature flag has no say.
     expect(deps).not.toMatch(/isNftMarketEnabled/);

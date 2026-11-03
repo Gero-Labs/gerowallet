@@ -41,13 +41,14 @@ const OWN_LISTING = {
 
 type Reply = { id: unknown; data: Record<string, unknown>; target: string; sender: string };
 
-function rig(over: { wallet?: { id: number; chain: string; network: string; type: string } | null; keys?: Partial<Keys> | null; listed?: OwnListing[]; watch?: ListingWatchDeps['watch'] } = {}) {
+function rig(over: { wallet?: { id: number; chain: string; network: string; type: string } | null; keys?: Partial<Keys> | null; listed?: OwnListing[]; watch?: ListingWatchDeps['watch']; derived?: ListingWatchDeps['derivedPaymentKeyHashes'] } = {}) {
   const watch = vi.fn(over.watch ?? (async () => ({ result: 'ok' as const, watching: 1 })));
   const order: string[] = [];
   const deps: ListingWatchDeps = {
     booted: async () => { order.push('booted'); },
     getWallet: () => { order.push('getWallet'); return over.wallet === undefined ? { id: 4, chain: 'Cardano', network: 'Preprod', type: 'Normal' } : over.wallet; },
     getState: () => ({ keys: over.keys === undefined ? KEYS : over.keys, listedListings: over.listed ?? [] }),
+    ...(over.derived ? { derivedPaymentKeyHashes: over.derived } : {}),
     watch,
   };
   const replies: Reply[] = [];
@@ -188,6 +189,43 @@ describe('what a hostile or buggy page cannot get registered', () => {
     // The verification said STRANGER, but the key set of this account has no such key.
     rememberVerifiedListing(4, TX, 1, STRANGER);
     expect(await refuses(rig(), { listingRefs: [REF] })).toBe('OWNER');
+  });
+
+  describe('a key derived from the xpub counts as the account\'s, as it does when the wallet recognises its listings', () => {
+    const DERIVED = 'd4'.repeat(28);
+
+    it('a listing owned by a derived key the key set has not caught up with registers', async () => {
+      rememberVerifiedListing(4, TX, 1, DERIVED);
+      const r = rig({ derived: () => [DERIVED, OWNER] });
+      await r.run({ listingRefs: [REF] });
+      expect(r.watch).toHaveBeenCalledWith({ walletId: 4, ownerPkh: DERIVED, listingRefs: [REF] });
+    });
+
+    it('a reprice of a listing recognised through a derived key (and found in the wallet\'s own listings) registers', async () => {
+      const own = { ...OWN_LISTING, datum: { ...OWN_LISTING.datum, owner: DERIVED } } as OwnListing;
+      const r = rig({ listed: [own], derived: () => [DERIVED] });
+      await r.run({ listingRefs: [own.ref] });
+      expect(r.watch).toHaveBeenCalledWith({ walletId: 4, ownerPkh: DERIVED, listingRefs: [own.ref] });
+    });
+
+    it('is still refused when neither the key set nor the derived keys hold the owner', async () => {
+      rememberVerifiedListing(4, TX, 1, DERIVED);
+      expect(await refuses(rig({ derived: () => [OWNER] }), { listingRefs: [REF] })).toBe('OWNER');
+    });
+
+    it('a derivation that fails leaves the key set to decide', async () => {
+      rememberVerifiedListing(4, TX, 1, OWNER);
+      const r = rig({ derived: () => { throw new Error('no xpub'); } });
+      await r.run({ listingRefs: [REF] });
+      expect(r.watch).toHaveBeenCalledWith({ walletId: 4, ownerPkh: OWNER, listingRefs: [REF] });
+      rememberVerifiedListing(4, TX, 2, DERIVED);
+      expect(await refuses(rig({ derived: () => { throw new Error('no xpub'); } }), { listingRefs: [`${TX}#2`] })).toBe('OWNER');
+    });
+
+    it('a malformed derived hash is not a key', async () => {
+      rememberVerifiedListing(4, TX, 1, DERIVED);
+      expect(await refuses(rig({ derived: () => ['zz', DERIVED.slice(2), '', 5 as unknown as string] }), { listingRefs: [REF] })).toBe('OWNER');
+    });
   });
 
   it('the account\'s stake key is not an owner', async () => {

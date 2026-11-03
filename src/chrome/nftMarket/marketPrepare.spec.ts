@@ -1668,12 +1668,27 @@ describe('migrate', () => {
   it('moves one NFT only, and only a (222) user token', async () => {
     const two = itemOf({ assets: [{ unit: V3_NFT, quantity: '1' }, { unit: UNIT_PLAIN, quantity: '1' }] });
     const r1 = setup({ legacy: [two] });
-    expect(await reply('migrate', MIGRATE_REQUEST, r1.deps)).toMatchObject({ errorCode: 'VERIFY_FAILED', error: 'NFT' });
+    // A bundle is its own refusal, so the page can say "only a single NFT can move" and not "could not confirm".
+    expect(await reply('migrate', MIGRATE_REQUEST, r1.deps)).toMatchObject({ errorCode: 'NOT_SINGLE_NFT' });
     const reference = itemOf({ assets: [{ unit: UNIT_100, quantity: '1' }] });
     const r2 = setup({ legacy: [reference] });
     expect(await reply('migrate', MIGRATE_REQUEST, r2.deps)).toMatchObject({ errorCode: 'VERIFY_FAILED', error: 'NFT' });
     expect(r1.calls.migrate).not.toHaveBeenCalled();
     expect(r2.calls.migrate).not.toHaveBeenCalled();
+  });
+
+  it('a bundle is NOT_SINGLE_NFT however it is made: several assets, several of one, or none', async () => {
+    for (const assets of [
+      [{ unit: V3_NFT, quantity: '2' }],
+      [{ unit: V3_NFT, quantity: '1' }, { unit: V3_NFT, quantity: '1' }],
+      [{ unit: V3_NFT, quantity: '1' }, { unit: UNIT_PLAIN, quantity: '5' }],
+      [{ unit: V3_NFT, quantity: '0' }],
+    ]) {
+      const r = setup({ legacy: [itemOf({ assets })] });
+      expect(await reply('migrate', MIGRATE_REQUEST, r.deps), JSON.stringify(assets)).toMatchObject({ success: false, errorCode: 'NOT_SINGLE_NFT' });
+      expect(r.calls.migrate).not.toHaveBeenCalled();
+      expect(r.deps.royalties).not.toHaveBeenCalled();
+    }
   });
 
   it('reads the royalties from the legacy item\'s own policy', async () => {

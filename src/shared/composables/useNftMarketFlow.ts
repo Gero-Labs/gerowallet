@@ -196,6 +196,8 @@ export function describeNftMarketFailure(
       return is('refused', 'nftMarket.error.notOwned');
     case 'OFFER_NOT_MOVABLE':
       return is('refused', 'nftMarket.error.offerNotMovable');
+    case 'NOT_SINGLE_NFT':
+      return is('refused', 'nftMarket.error.notSingleNft');
     case 'NOT_GERO_LISTING':
     case 'DATUM_UNREADABLE':
       return is('refused', 'nftMarket.error.notListing');

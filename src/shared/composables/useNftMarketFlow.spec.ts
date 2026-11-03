@@ -207,6 +207,7 @@ describe('failure states', () => {
     ['SELLER_SHARE_TOO_LOW', 'refused', 'nftMarket.error.sellerShareTooLow'],
     ['TOO_MANY_ROYALTIES', 'refused', 'nftMarket.error.tooManyRoyalties'],
     ['OFFER_NOT_MOVABLE', 'refused', 'nftMarket.error.offerNotMovable'],
+    ['NOT_SINGLE_NFT', 'refused', 'nftMarket.error.notSingleNft'],
     ['NOT_OWNED', 'refused', 'nftMarket.error.notOwned'],
     ['INSUFFICIENT_ADA', 'refused', 'nftMarket.error.insufficientAda'],
     // The shared collateral pool may only be empty for now.

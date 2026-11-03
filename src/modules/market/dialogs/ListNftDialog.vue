@@ -117,83 +117,14 @@
 
       <!-- The price. -->
       <template v-else>
-        <dl v-if="isReprice && existing" class="list-nft__old glass-tier">
-          <div class="list-nft__old-row" data-testid="list-nft-old-price">
-            <dt class="t-caption">{{ t('nftMarket.reprice.current') }}</dt>
-            <dd class="t-body-sm g-num">{{ ada(existing.datum.price) }} ADA</dd>
-          </div>
-        </dl>
-
-        <dl v-if="floorLovelace !== null || lastSaleLovelace !== null" class="list-nft__hints">
-          <div v-if="floorLovelace !== null" class="list-nft__hint" data-testid="list-nft-floor">
-            <dt class="t-caption">{{ t('portfolio.floorPrice') }}</dt>
-            <dd class="t-body-sm g-num">{{ ada(floorLovelace) }} ADA</dd>
-          </div>
-          <div v-if="lastSaleLovelace !== null" class="list-nft__hint" data-testid="list-nft-last-sale">
-            <dt class="t-caption">{{ t('portfolio.lastSale') }}</dt>
-            <dd class="t-body-sm g-num">{{ ada(lastSaleLovelace) }} ADA</dd>
-          </div>
-        </dl>
-
-        <v-text-field
-          :model-value="priceText"
-          :label="t('common.price')"
-          inputmode="decimal"
-          variant="outlined"
-          density="comfortable"
-          autocomplete="off"
-          suffix="ADA"
-          :error-messages="priceErrors"
-          :disabled="busy"
-          data-testid="list-nft-price"
-          @update:model-value="onPriceInput($event)"
-          @keydown.enter="review()"
+        <ListingPriceView
+          :form="form"
+          testid="list-nft"
+          :busy="busy"
+          :is-reprice="isReprice"
+          :current-price="isReprice && existing ? existing.datum.price : null"
+          @submit="review()"
         />
-
-        <!-- The terms the royalties come from. A listing is never priced without them. -->
-        <p v-if="!isReprice && royaltiesState === 'loading'" class="t-caption list-nft__note" data-testid="list-nft-royalties-loading">
-          {{ t('nftMarket.list.royaltiesLoading') }}
-        </p>
-        <div v-else-if="!isReprice && royaltiesState === 'failed'" class="list-nft__note">
-          <v-alert type="error" variant="tonal" density="compact" data-testid="list-nft-royalties-error">
-            {{ t('nftMarket.error.royaltiesUnreadable') }}
-          </v-alert>
-          <GButton tier="tertiary" compact class="mt-2" data-testid="list-nft-royalties-retry" @click="market.load()">
-            {{ t('common.tryAgain') }}
-          </GButton>
-        </div>
-
-        <v-alert v-if="unavailableText" type="error" variant="tonal" density="compact" class="mt-2" data-testid="list-nft-unavailable">
-          {{ unavailableText }}
-        </v-alert>
-        <v-alert v-else-if="termsErrorText" type="error" variant="tonal" density="compact" class="mt-2" data-testid="list-nft-terms-error">
-          {{ termsErrorText }}
-        </v-alert>
-
-        <ListingBreakdown
-          v-if="preview"
-          class="mt-3"
-          :price="preview.price"
-          :fee="preview.fee"
-          :royalties="preview.royalties"
-          :seller-receives="preview.sellerReceives"
-          :dropped="preview.dropped"
-          :invalid-recipients="preview.invalidRecipients"
-          :min-utxo="minUtxo"
-        />
-
-        <!-- Royalties above the usual limit: the seller sees what they cost and agrees, or the listing waits. -->
-        <div v-if="needsConfirmation && confirmation" class="list-nft__confirm" data-testid="list-nft-royalty-warning">
-          <v-alert type="warning" variant="tonal" density="compact">{{ t('nftMarket.error.royaltyConfirmation') }}</v-alert>
-          <v-checkbox
-            v-model="confirmed"
-            :label="t('nftMarket.list.royaltyConfirm', { amount: confirmation.ada, percent: confirmation.percent })"
-            density="compact"
-            hide-details
-            color="var(--g-accent)"
-            data-testid="list-nft-royalty-confirm"
-          />
-        </div>
 
         <div class="list-nft__actions">
           <GButton tier="secondary" :disabled="busy" data-testid="list-nft-cancel" @click="close()">{{ t('common.cancel') }}</GButton>
@@ -225,6 +156,7 @@ import PreparedTxCredentials from '@/shared/components/PreparedTxCredentials.vue
 import CopyButton from '@/shared/components/CopyButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ListingBreakdown from '@/modules/market/components/ListingBreakdown.vue';
+import ListingPriceView from '@/modules/market/components/ListingPriceView.vue';
 import ListingNftLine from '@/modules/market/components/ListingNftLine.vue';
 import { useListingPriceForm, verifiedFigures } from '@/modules/market/composables/useListingPriceForm';
 import { adaInputText } from '@/modules/market/utils/listingPreview';
@@ -247,8 +179,8 @@ import { POLICY_ID_HEX_LENGTH, isNftMarketHardware } from '@/utils/nftMarketDepl
  *     -> preparing -> review (the worker's verified figures) -> credentials -> done  |  a failure
  *
  * The price half (the typed price as an exact lovelace amount, the preview, the limits, the royalty
- * confirmation, the worker's figures for the review) is useListingPriceForm, which the move-to-Gero
- * sheet shares. The seller types a price in ADA and the sheet refuses what the worker would refuse;
+ * confirmation, the worker's figures for the review) is useListingPriceForm and its view is
+ * ListingPriceView, both shared with the move-to-Gero sheet. The seller types a price in ADA and the sheet refuses what the worker would refuse;
  * the worker re-derives everything (NFT_MARKET_PREPARE_LIST / _REPRICE) and the review shows ITS
  * figures, plus the deposit that comes back and the network fee. A collection whose royalties pass
  * the usual 10% (judged on the effective amount) needs the seller's agreement before anything is
@@ -286,11 +218,7 @@ const form = useListingPriceForm({
   failureKind: () => flow.failureKind.value,
   royaltyConfirmation: () => flow.royaltyConfirmation.value,
 });
-const {
-  market, royaltiesState, floorLovelace, lastSaleLovelace,
-  priceText, confirmed, price, minUtxo, preview, priceErrors, termsErrorText, unavailableText,
-  needsConfirmation, confirmation, onPriceInput,
-} = form;
+const { market, priceText, confirmed, price, minUtxo } = form;
 
 const view = computed<'price' | 'preparing' | 'review' | 'done' | 'failed'>(() => {
   if (stage.value === 'done') return 'done';
@@ -425,8 +353,7 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
   border-radius: var(--g-r-card);
 }
 
-.list-nft__old-row,
-.list-nft__hint {
+.list-nft__old-row {
   display: flex;
   justify-content: space-between;
   gap: var(--g-s-3);
@@ -439,28 +366,6 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
     margin: 0;
     color: var(--g-text-1);
   }
-}
-
-// The collection floor and the NFT's last sale: hints for choosing a price.
-.list-nft__hints {
-  display: flex;
-  gap: var(--g-s-4);
-  margin: 0 0 var(--g-s-3);
-}
-
-.list-nft__hint {
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 0;
-}
-
-.list-nft__note {
-  margin: 0 0 var(--g-s-2);
-  color: var(--g-text-2);
-}
-
-.list-nft__confirm {
-  margin-top: var(--g-s-3);
 }
 
 .list-nft__sponsored {

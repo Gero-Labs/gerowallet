@@ -120,76 +120,7 @@
 
         <!-- The price. -->
         <template v-else>
-          <dl v-if="floorLovelace !== null || lastSaleLovelace !== null" class="move-to-gero__hints">
-            <div v-if="floorLovelace !== null" class="move-to-gero__hint" data-testid="move-to-gero-floor">
-              <dt class="t-caption">{{ t('portfolio.floorPrice') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(floorLovelace) }} ADA</dd>
-            </div>
-            <div v-if="lastSaleLovelace !== null" class="move-to-gero__hint" data-testid="move-to-gero-last-sale">
-              <dt class="t-caption">{{ t('portfolio.lastSale') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(lastSaleLovelace) }} ADA</dd>
-            </div>
-          </dl>
-
-          <v-text-field
-            :model-value="priceText"
-            :label="t('common.price')"
-            inputmode="decimal"
-            variant="outlined"
-            density="comfortable"
-            autocomplete="off"
-            suffix="ADA"
-            :error-messages="priceErrors"
-            :disabled="busy"
-            data-testid="move-to-gero-price"
-            @update:model-value="onPriceInput($event)"
-            @keydown.enter="review()"
-          />
-
-          <!-- The terms the royalties come from. A listing is never priced without them. -->
-          <p v-if="royaltiesState === 'loading'" class="t-caption move-to-gero__note" data-testid="move-to-gero-royalties-loading">
-            {{ t('nftMarket.list.royaltiesLoading') }}
-          </p>
-          <div v-else-if="royaltiesState === 'failed'" class="move-to-gero__note">
-            <v-alert type="error" variant="tonal" density="compact" data-testid="move-to-gero-royalties-error">
-              {{ t('nftMarket.error.royaltiesUnreadable') }}
-            </v-alert>
-            <GButton tier="tertiary" compact class="mt-2" data-testid="move-to-gero-royalties-retry" @click="market.load()">
-              {{ t('common.tryAgain') }}
-            </GButton>
-          </div>
-
-          <v-alert v-if="unavailableText" type="error" variant="tonal" density="compact" class="mt-2" data-testid="move-to-gero-unavailable">
-            {{ unavailableText }}
-          </v-alert>
-          <v-alert v-else-if="termsErrorText" type="error" variant="tonal" density="compact" class="mt-2" data-testid="move-to-gero-terms-error">
-            {{ termsErrorText }}
-          </v-alert>
-
-          <ListingBreakdown
-            v-if="preview"
-            class="mt-3"
-            :price="preview.price"
-            :fee="preview.fee"
-            :royalties="preview.royalties"
-            :seller-receives="preview.sellerReceives"
-            :dropped="preview.dropped"
-            :invalid-recipients="preview.invalidRecipients"
-            :min-utxo="minUtxo"
-          />
-
-          <!-- Royalties above the usual limit: the seller sees what they cost and agrees, or the listing waits. -->
-          <div v-if="needsConfirmation && confirmation" class="move-to-gero__confirm" data-testid="move-to-gero-royalty-warning">
-            <v-alert type="warning" variant="tonal" density="compact">{{ t('nftMarket.error.royaltyConfirmation') }}</v-alert>
-            <v-checkbox
-              v-model="confirmed"
-              :label="t('nftMarket.list.royaltyConfirm', { amount: confirmation.ada, percent: confirmation.percent })"
-              density="compact"
-              hide-details
-              color="var(--g-accent)"
-              data-testid="move-to-gero-royalty-confirm"
-            />
-          </div>
+          <ListingPriceView :form="form" testid="move-to-gero" :busy="busy" @submit="review()" />
 
           <div class="move-to-gero__actions">
             <GButton tier="secondary" :disabled="busy" data-testid="move-to-gero-cancel" @click="close()">{{ t('common.cancel') }}</GButton>
@@ -222,9 +153,10 @@ import PreparedTxCredentials from '@/shared/components/PreparedTxCredentials.vue
 import CopyButton from '@/shared/components/CopyButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ListingBreakdown from '@/modules/market/components/ListingBreakdown.vue';
+import ListingPriceView from '@/modules/market/components/ListingPriceView.vue';
 import ListingNftLine from '@/modules/market/components/ListingNftLine.vue';
 import { useListingPriceForm, verifiedFigures } from '@/modules/market/composables/useListingPriceForm';
-import { legacyItemImage, legacyItemName } from '@/modules/portfolio/components/legacyItemDisplay';
+import { legacyItemImage, legacyItemName, singleNftUnit } from '@/modules/portfolio/components/legacyItemDisplay';
 import { legacyRef as refOf, type LegacyListingItem } from '@/api/legacy-listings-api';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
@@ -232,7 +164,6 @@ import { useNftMarketFlow } from '@/shared/composables/useNftMarketFlow';
 import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCredentials';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
-import { formatLovelaceAsAda } from '@/shared/utils/format';
 import { POLICY_ID_HEX_LENGTH, isNftMarketHardware } from '@/utils/nftMarketDeployments';
 
 /**
@@ -245,9 +176,9 @@ import { POLICY_ID_HEX_LENGTH, isNftMarketHardware } from '@/utils/nftMarketDepl
  *   price (live breakdown, the limits, the royalty confirmation) -> Continue
  *     -> preparing -> review (the worker's verified figures) -> credentials -> done  |  a failure
  *
- * The price half is the list sheet's own (useListingPriceForm: the typed price as an exact lovelace
- * amount, the preview, the limits, the royalty confirmation) and so is the breakdown
- * (ListingBreakdown). The page names only the legacy item and the price: the worker finds the item
+ * The price step is the list sheet's own: the form (useListingPriceForm: the typed price as an exact
+ * lovelace amount, the preview, the limits, the royalty confirmation) and its view (ListingPriceView,
+ * with the live ListingBreakdown). The page names only the legacy item and the price: the worker finds the item
  * again under the wallet's own key hashes, reads the royalties from the NFT's own policy, chooses the
  * owner (the legacy owner when it is one of the account's payment keys, else the receive key), has
  * Nexus build, and verifies the exact shape (verifyMigrate). Mainnet only (the legacy contracts exist
@@ -278,7 +209,7 @@ const { explorerUrl } = useExplorer();
 // list, and the screens that follow must not lose it.
 const item = ref<LegacyListingItem | null>(null);
 /** The one NFT of a listing, or '' for anything that is not a single NFT listing. */
-const unit = computed(() => (item.value?.kind === 'listing' && item.value.assets.length === 1 ? item.value.assets[0].unit : ''));
+const unit = computed(() => (item.value ? singleNftUnit(item.value) ?? '' : ''));
 const movable = computed(() => unit.value !== '');
 
 const stage = computed(() => flow.stage.value);
@@ -290,11 +221,7 @@ const form = useListingPriceForm({
   failureKind: () => flow.failureKind.value,
   royaltyConfirmation: () => flow.royaltyConfirmation.value,
 });
-const {
-  market, royaltiesState, floorLovelace, lastSaleLovelace,
-  priceText, confirmed, price, minUtxo, preview, priceErrors, termsErrorText, unavailableText,
-  needsConfirmation, confirmation, onPriceInput,
-} = form;
+const { priceText, confirmed, price, minUtxo } = form;
 
 const view = computed<'gone' | 'price' | 'preparing' | 'review' | 'done' | 'failed'>(() => {
   if (stage.value === 'done') return 'done';
@@ -321,8 +248,6 @@ const credentials = usePreparedTxCredentials(flow, {
 });
 const busy = credentials.busy;
 
-const ada = (lovelace: bigint): string => formatLovelaceAsAda(lovelace);
-
 // ---- The NFT -------------------------------------------------------------------------------
 
 // The NFT shown is the one the worker verified (`summary.unit`) once there is a summary: the
@@ -332,8 +257,14 @@ const nftName = computed(() => (item.value ? legacyItemName(item.value, meta.val
 const nftImage = computed(() => (item.value ? legacyItemImage(item.value, meta.value) : undefined));
 const policyCaption = computed(() => (shownUnit.value ? filters.truncate(shownUnit.value.slice(0, POLICY_ID_HEX_LENGTH)) : ''));
 
-/** Why there is nothing to move: an offer holds no NFT, anything else was spent. */
-const goneText = computed(() => t(item.value?.kind === 'offer' ? 'nftMarket.error.offerNotMovable' : 'nftMarket.move.gone'));
+/**
+ * Why there is nothing to move: an offer holds no NFT, a bundle holds several, and an item the list no
+ * longer has was spent since it was read. Each says so, so a bundle is never reported as gone.
+ */
+const goneText = computed(() => {
+  if (item.value?.kind === 'offer') return t('nftMarket.error.offerNotMovable');
+  return t(item.value ? 'nftMarket.error.notSingleNft' : 'nftMarket.move.gone');
+});
 
 const canContinue = computed(() => !busy.value && !credentials.deviceBlocked.value && movable.value && form.ready.value);
 
@@ -423,43 +354,6 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
 
 .move-to-gero__heading {
   margin: 0 0 var(--g-s-2);
-}
-
-.move-to-gero__hint {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--g-s-3);
-
-  dt {
-    color: var(--g-text-2);
-  }
-
-  dd {
-    margin: 0;
-    color: var(--g-text-1);
-  }
-}
-
-// The collection floor and the NFT's last sale: hints for choosing a price.
-.move-to-gero__hints {
-  display: flex;
-  gap: var(--g-s-4);
-  margin: 0 0 var(--g-s-3);
-}
-
-.move-to-gero__hint {
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 0;
-}
-
-.move-to-gero__note {
-  margin: 0 0 var(--g-s-2);
-  color: var(--g-text-2);
-}
-
-.move-to-gero__confirm {
-  margin-top: var(--g-s-3);
 }
 
 .move-to-gero__sponsored {

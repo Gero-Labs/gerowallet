@@ -1899,6 +1899,8 @@ const listingWatchDeps: ListingWatchDeps = {
     keys: WalletStore.state.keys,
     listedListings: WalletStore.state.listedListings,
   }),
+  // The same union of keys the wallet recognises its own listings by (WalletBg.ownListingIdentity).
+  derivedPaymentKeyHashes: () => walletManager.getWallet()?.derivePaymentCredentials() ?? [],
   watch: (input) => notifyActions.watchListings(input),
 };
 app.addToOptions(MessageTypes.NOTIFY_WATCH_LISTINGS, watchListingsHandler(listingWatchDeps));

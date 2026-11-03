@@ -6123,6 +6123,7 @@ export default {
   'nftMarket.error.ownListing': 'Dies ist Ihr eigenes Angebot.',
   'nftMarket.error.notOwned': 'Dieses Element gehört nicht zu dieser Wallet.',
   'nftMarket.error.offerNotMovable': 'Dies ist ein Kaufgebot und kein Verkaufsangebot, daher kann es nicht verschoben werden. Sie können es aber zurückholen.',
+  'nftMarket.error.notSingleNft': 'Nur ein Angebot mit einem einzelnen NFT kann zu Gero verschoben werden.',
   'nftMarket.error.notListing': 'Dieses Angebot kann nicht gelesen werden und lässt sich hier nicht verwenden.',
   'nftMarket.error.listingUnreadable': 'Dieses Angebot konnte nicht gelesen werden. Versuchen Sie es erneut.',
   'nftMarket.error.networkUnsupported': 'Der Markt ist in diesem Netzwerk nicht verfügbar.',

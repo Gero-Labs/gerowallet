@@ -5999,6 +5999,7 @@ export default {
   'nftMarket.error.ownListing': 'Esta es tu propia publicación.',
   'nftMarket.error.notOwned': 'Este elemento no pertenece a esta billetera.',
   'nftMarket.error.offerNotMovable': 'Esto es una oferta de compra, no una publicación, así que no se puede mover. Aun así puedes recuperarla.',
+  'nftMarket.error.notSingleNft': 'Solo una publicación de un único NFT se puede mover a Gero.',
   'nftMarket.error.notListing': 'No se puede leer esta publicación, así que no se puede usar aquí.',
   'nftMarket.error.listingUnreadable': 'No pudimos leer esta publicación. Inténtalo de nuevo.',
   'nftMarket.error.networkUnsupported': 'El mercado no está disponible en esta red.',

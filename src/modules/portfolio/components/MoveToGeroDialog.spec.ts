@@ -619,12 +619,33 @@ describe('MoveToGeroDialog: what cannot be moved', () => {
     expect(flow.prepare).not.toHaveBeenCalled();
   });
 
-  it('an item holding more than one asset is not a single NFT and is not moved', async () => {
-    legacy.items.value = [{ ...LISTING, assets: [{ unit: UNIT, quantity: '1' }, { unit: `${POLICY}4f74686572`, quantity: '1' }] }];
+  it('a bundle (several assets, or several of one) is not a single NFT: it says so, never "no longer locked", and is not moved', async () => {
+    const SINGLE_ONLY = 'Only a listing of a single NFT can move to Gero.';
+    for (const assets of [
+      [{ unit: UNIT, quantity: '1' }, { unit: `${POLICY}4f74686572`, quantity: '1' }],
+      [{ unit: UNIT, quantity: '3' }],
+    ]) {
+      legacy.items.value = [{ ...LISTING, assets }];
+      const wrapper = render();
+      await flushPromises();
+      expect(byId(wrapper, 'gone').text(), JSON.stringify(assets)).toBe(SINGLE_ONLY);
+      expect(wrapper.text()).not.toContain('no longer locked');
+      expect(has(wrapper, 'continue')).toBe(false);
+      expect(flow.prepare).not.toHaveBeenCalled();
+      wrapper.unmount();
+    }
+  });
+
+  it('the worker\'s not-a-single-NFT refusal reads the same, and offers no retry', async () => {
+    prepareFails('NOT_SINGLE_NFT');
     const wrapper = render();
+    await typePrice(wrapper, '100');
+    await byId(wrapper, 'continue').trigger('click');
     await flushPromises();
-    expect(has(wrapper, 'gone')).toBe(true);
-    expect(flow.prepare).not.toHaveBeenCalled();
+
+    expect(byId(wrapper, 'error').text()).toBe('Only a listing of a single NFT can move to Gero.');
+    expect(has(wrapper, 'retry')).toBe(false);
+    expect(has(wrapper, 'refresh')).toBe(false);
   });
 
   it('a hardware wallet no device has signed a market transaction with is told so, and nothing is built', async () => {

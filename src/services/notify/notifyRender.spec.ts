@@ -69,15 +69,20 @@ describe('nft_sold (Gero NFT market, category nft, destination nftListings)', ()
     expect(r.route.highlight).toEqual({ tx: BUY_TX, listingRef: LISTING_REF });
   });
 
-  it('renders in German (formal Sie, no em dash) and Spanish (tú)', () => {
+  it('renders in German (du, as every other push string, no em dash) and Spanish (tú)', () => {
     const de = render(EX.nft_sold, { locale: 'de' });
     expect(de.title).toBe('NFT verkauft · Daily Cardano');
-    expect(de.body).toBe('Ihr NFT wurde verkauft. Sie erhalten 93.5 ADA');
+    expect(de.body).toBe('Dein NFT wurde verkauft. Du erhältst 93.5 ADA');
     const es = render(EX.nft_sold, { locale: 'es' });
     expect(es.title).toBe('NFT vendido · Daily Cardano');
     expect(es.body).toBe('Tu NFT se vendió. Recibes 93.5 ADA');
     for (const r of [de, es]) expect(r.title + r.body).not.toMatch(/—|–/);
-    expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'de' }).body).toBe(pushStrings.de.PUSH_NFT_SOLD_BODY);
+    expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'de' }).body).toBe('Dein NFT-Angebot wurde gekauft');
+    expect(pushStrings.de.PUSH_CATEGORY_NFT).toBe('Es gibt Neuigkeiten zu deinen NFT-Angeboten');
+    // One register for the whole German push table (Ruling P46): no formal address anywhere in the nft strings.
+    for (const key of ['PUSH_CATEGORY_NFT', 'PUSH_NFT_SOLD_TITLE', 'PUSH_NFT_SOLD_BODY', 'PUSH_NFT_SOLD_BODY_AMOUNT'] as const) {
+      expect(pushStrings.de[key], key).not.toMatch(/\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer)\b/);
+    }
     expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'es' }).body).toBe(pushStrings.es.PUSH_NFT_SOLD_BODY);
   });
 

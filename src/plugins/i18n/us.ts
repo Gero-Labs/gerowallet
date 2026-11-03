@@ -6230,6 +6230,7 @@ export default {
   'nftMarket.error.ownListing': 'This is your own listing.',
   'nftMarket.error.notOwned': 'This item does not belong to this wallet.',
   'nftMarket.error.offerNotMovable': 'This is an offer to buy, not a listing, so it cannot be moved. You can still get it back.',
+  'nftMarket.error.notSingleNft': 'Only a listing of a single NFT can move to Gero.',
   'nftMarket.error.notListing': 'This listing cannot be read, so it cannot be used here.',
   'nftMarket.error.listingUnreadable': 'We could not read this listing. Try again.',
   'nftMarket.error.networkUnsupported': 'The market is not available on this network.',

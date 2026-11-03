@@ -45,6 +45,7 @@
 //   OWN_LISTING                 buy: the listing is the wallet's own
 //   NOT_OWNED                   migrate: the legacy item is under another owner
 //   OFFER_NOT_MOVABLE           migrate: an offer holds no NFT
+//   NOT_SINGLE_NFT              migrate: the listing holds more than one asset, or more than one of it (a bundle)
 //   BUILD_FAILED                Nexus could not build, with no code, or anything unexpected
 //   VERIFY_FAILED               the built transaction is not what was asked for; `error` is the MarketVerifyError rule
 
@@ -865,12 +866,14 @@ async function prepareMigrate(s: Session, request: unknown): Promise<MarketPrepa
   if (!item) throw new MarketPrepareError('LISTING_NOT_FOUND', 'This item is no longer locked');
   if (item.kind !== 'listing') throw new MarketPrepareError('OFFER_NOT_MOVABLE', 'An offer holds no NFT, so there is nothing to list');
 
-  // Exactly one NFT, and only a user token: the unit comes from the lookup, never from the page.
+  // Exactly one NFT, and only a user token: the unit comes from the lookup, never from the page. A bundle
+  // (several assets, or several of one) is said so, apart from a unit that is not an NFT at all.
   const [asset] = item.assets;
-  const unit = typeof asset?.unit === 'string' ? asset.unit.toLowerCase() : '';
-  if (item.assets.length !== 1 || !/^[0-9]{1,18}$/.test(String(asset.quantity)) || BigInt(asset.quantity) !== 1n || !UNIT.test(unit)) {
-    throw new MarketPrepareError('VERIFY_FAILED', 'NFT');
+  if (item.assets.length !== 1 || !/^[0-9]{1,18}$/.test(String(asset.quantity)) || BigInt(asset.quantity) !== 1n) {
+    throw new MarketPrepareError('NOT_SINGLE_NFT', 'Only a listing of a single NFT can be moved');
   }
+  const unit = typeof asset.unit === 'string' ? asset.unit.toLowerCase() : '';
+  if (!UNIT.test(unit)) throw new MarketPrepareError('VERIFY_FAILED', 'NFT');
   checkListableUnit(unit);
 
   // The legacy owner signs the cancel half; the new listing is owned by that key when it is one

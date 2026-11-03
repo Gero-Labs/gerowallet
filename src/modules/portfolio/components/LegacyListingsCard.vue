@@ -87,7 +87,7 @@ import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
 import { legacyCancelMax, type LegacyContract } from '@/utils/legacyMarketScripts';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import LegacyItemLine from '@/modules/portfolio/components/LegacyItemLine.vue';
-import { formatAda, legacyItemName } from '@/modules/portfolio/components/legacyItemDisplay';
+import { formatAda, legacyItemName, singleNftUnit } from '@/modules/portfolio/components/legacyItemDisplay';
 
 /**
  * Portfolio -> Collectibles: the wallet's NFTs and offers still locked at a closed marketplace's
@@ -98,8 +98,9 @@ import { formatAda, legacyItemName } from '@/modules/portfolio/components/legacy
  * Every stuck item is listed, so a wallet with more than one transaction's worth (or both
  * versions) gets them back over several rounds.
  *
- * "Move to Gero" takes ONE listing at a time (never an offer, which holds no NFT, and never a
- * selection of several): the seller prices each move, and a move is one transaction per NFT. It is
+ * "Move to Gero" takes ONE listing of ONE NFT at a time (never an offer, which holds no NFT, never a
+ * bundle, and never a selection of several): the seller prices each move, and a move is one
+ * transaction per NFT. It is
  * offered only where Gero's market takes new business (`nftMarketAvailable`: the flag, a network
  * with a reviewed deployment, a wallet the worker would not refuse), so on mainnet it stays out of
  * sight until a deployment is configured there, and the card says why a pick cannot be moved.
@@ -136,15 +137,16 @@ const showVersionHint = computed(
 const moveAvailable = computed(() => nftMarketAvailable());
 /** The picked items, in list order. */
 const picked = computed(() => items.value.filter((item) => selection.value.has(legacyRef(item))));
-/** The one listing a move would take: exactly one pick, and a listing (an offer holds no NFT). */
+/** The one listing a move would take: exactly one pick, and a listing of a single NFT (an offer holds none, a bundle holds several). */
 const moveTarget = computed<LegacyListingItem | null>(() => {
   const [only] = picked.value;
-  return picked.value.length === 1 && only?.kind === 'listing' ? only : null;
+  return picked.value.length === 1 && only && singleNftUnit(only) !== null ? only : null;
 });
-/** Why a pick cannot be moved, once something is picked: several at once, or an offer. */
+/** Why a pick cannot be moved, once something is picked: several at once, an offer, or a bundle. */
 const moveHint = computed(() => {
   if (!moveAvailable.value || picked.value.length === 0 || moveTarget.value !== null) return '';
-  return picked.value.length > 1 ? t('nftMarket.move.pickOne') : t('nftMarket.error.offerNotMovable');
+  if (picked.value.length > 1) return t('nftMarket.move.pickOne');
+  return t(picked.value[0]?.kind === 'offer' ? 'nftMarket.error.offerNotMovable' : 'nftMarket.error.notSingleNft');
 });
 
 /** Only the selected version's rows stay open, and at the cap only the picked ones: they are how a slot is given back. */

@@ -429,6 +429,29 @@ describe('Move to Gero', () => {
     expect(wrapper.get('[data-testid="legacy-get-back"]').attributes('disabled')).toBeUndefined();
   });
 
+  it('is off for a bundle (several assets, or several of one): only a listing of a single NFT can move, and the card says so', async () => {
+    const bundle = item(1, { assets: [{ unit: unitOf(1), quantity: '1' }, { unit: unitOf(9), quantity: '1' }] });
+    const many = item(2, { assets: [{ unit: unitOf(2), quantity: '3' }] });
+    listings.items.value = [bundle, many, item(3)];
+    const wrapper = render();
+
+    for (const index of [0, 1]) {
+      await boxesOf(wrapper)[index]!.setValue(true);
+      expect(moveButton(wrapper).attributes('disabled'), `row ${index}`).toBeDefined();
+      expect(moveHint(wrapper).text(), `row ${index}`).toBe('Only a listing of a single NFT can move to Gero.');
+      await moveButton(wrapper).trigger('click');
+      expect(wrapper.emitted('move-to-gero')).toBeUndefined();
+      // Getting it back is still open.
+      expect(wrapper.get('[data-testid="legacy-get-back"]').attributes('disabled')).toBeUndefined();
+      await boxesOf(wrapper)[index]!.setValue(false);
+    }
+
+    // A listing of one NFT right beside them moves.
+    await boxesOf(wrapper)[2]!.setValue(true);
+    expect(moveButton(wrapper).attributes('disabled')).toBeUndefined();
+    expect(moveHint(wrapper).exists()).toBe(false);
+  });
+
   it('is off for more than one pick, listings or not, and says to pick one', async () => {
     listings.items.value = [item(1), item(2), item(3)];
     const wrapper = render();

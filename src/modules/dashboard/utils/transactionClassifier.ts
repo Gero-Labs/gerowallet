@@ -1,5 +1,5 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { decodeListingDatum } from '@/chrome/nftMarket/listingDatum';
+import { decodeListingDatum, listingTag } from '@/chrome/nftMarket/listingDatum';
 import { Blockchain, Network } from '@/models/types';
 import { isCardanoTx, StoredTransaction } from '@/models/transaction.types';
 import { DUST_MAPPING_VALIDATOR } from '@/shared/composables/useCnightDustRegistration';
@@ -39,6 +39,12 @@ export interface TxClassifyContext {
    * the market is not configured (mainnet, for now), so nothing is tagged there.
    */
   marketScriptHashes?: ReadonlySet<string>;
+  /**
+   * The reference-script UTxOs (`txHash#index`) of every Gero deployment of the network. A buy,
+   * reprice or cancel carries the one of its deployment in its reference inputs, which is how a
+   * record whose input addresses are not known (a live one) still shows it ran the market's script.
+   */
+  marketReferenceScripts?: ReadonlySet<string>;
   /** The wallet's own stake KEY hash (56 lower-case hex), read from its reward address; null when unreadable. */
   stakeKeyHash?: string | null;
   /** The wallet's payment and change key hashes: who may own a listing of its. */
@@ -88,6 +94,7 @@ export function buildClassifyContext(
     walletAddresses,
     contacts: contactMap,
     marketScriptHashes: new Set(deployments.map((deployment) => deployment.scriptHash.toLowerCase())),
+    marketReferenceScripts: new Set(deployments.map((deployment) => deployment.referenceScript.toLowerCase())),
     stakeKeyHash: stakeKeyHashOfReward(wallet?.stakeAddress),
     paymentKeyHashes,
   };
@@ -551,9 +558,11 @@ export const isStakeDeRegistration = (item: StoredTransaction): boolean => {
 export type GeroMarketAction = 'listed' | 'repriced' | 'cancelled' | 'sold' | 'bought' | 'moved';
 
 const LEGACY_SCRIPT_HASHES: ReadonlySet<string> = new Set(Object.values(LEGACY_SCRIPTS).map((script) => script.scriptHash));
+/** The pinned reference scripts a closed marketplace's cancel carries (a move is such a cancel plus a Gero listing). */
+const LEGACY_REFERENCE_SCRIPTS: ReadonlySet<string> = new Set(Object.values(LEGACY_SCRIPTS).map((script) => script.referenceScript.toLowerCase()));
 
 /** The stake KEY hash of a base address, lower case; null for any other shape (a script, a pointer, unreadable). */
-function stakeKeyHashOfAddress(address: string | undefined): string | null {
+function stakeKeyHashOfAddress(address: string | undefined | null): string | null {
   if (!address) return null;
   try {
     const stake = Cardano.Address.fromBech32(address).asBase()?.getStakeCredential();
@@ -564,84 +573,154 @@ function stakeKeyHashOfAddress(address: string | undefined): string | null {
 }
 
 const marketHashesOf = (ctx: TxClassifyContext): ReadonlySet<string> => ctx.marketScriptHashes ?? new Set<string>();
-const atScript = (address: string | undefined, hashes: ReadonlySet<string>): boolean => hashes.has(paymentScriptHash(address) ?? '');
+const atScript = (address: string | undefined | null, hashes: ReadonlySet<string>): boolean => hashes.has(paymentScriptHash(address ?? undefined) ?? '');
 
 /**
- * Whether a transaction touches a Gero market listing script (an input or an output at any
- * configured deployment of the wallet's network). Matched on the payment credential, as a
- * listing's address carries its seller's own stake key, so no single bech32 string covers every
- * listing. The hashes come from the reviewed deployments (nftMarketDeployments.ts), never from here.
+ * `txHash#index` of every reference input of a record that carries its body (decoded from the
+ * CBOR, so live records have it too; a thin history record without CBOR has none).
+ */
+function referenceInputsOf(item: StoredTransaction): Set<string> {
+  const refs = new Set<string>();
+  if (!isCardanoTx(item)) return refs;
+  for (const ref of item.body?.referenceInputs ?? []) {
+    if (ref?.txId) refs.add(`${String(ref.txId).toLowerCase()}#${ref.index}`);
+  }
+  return refs;
+}
+
+const referencesAny = (refs: ReadonlySet<string>, scripts: ReadonlySet<string> | undefined): boolean =>
+  !!scripts && [...scripts].some((script) => refs.has(script));
+
+/**
+ * Whether a transaction touches the Gero market: an input or an output at any configured
+ * deployment's listing script, or the deployment's reference script among its reference inputs (the
+ * only trace a live record leaves when the addresses of its inputs are not known yet). The listing
+ * address is matched on its payment credential, as it carries its seller's own stake key, so no
+ * single bech32 string covers every listing. Hashes and reference scripts come from the reviewed
+ * deployments (nftMarketDeployments.ts), never from here.
  */
 export const isGeroMarket = (item: StoredTransaction, ctx: TxClassifyContext): boolean => {
   const hashes = marketHashesOf(ctx);
-  return hashes.size > 0 && addressesOf(item).some((address) => atScript(address, hashes));
+  if (hashes.size === 0) return false;
+  return addressesOf(item).some((address) => atScript(address, hashes)) || referencesAny(referenceInputsOf(item), ctx.marketReferenceScripts);
 };
 
-type ListingOwnership = 'own' | 'foreign' | 'unknown';
-
 /**
- * Whether the listing a UTxO (an input spent or an output created) holds is the wallet's own: its
- * address carries the wallet's stake key, and its inline datum, when the record has one, names the
- * wallet as owner (a payment key) AND seller (an address), both halves, as the wallet's own listings
- * are recognised (ownListings.ts). Anyone can lock anything at the script under any stake key with
- * any datum, so a datum that does not read, or names someone else, is `foreign`. No datum in the
- * record leaves it `unknown`: decided by what else the transaction shows.
+ * Whether a listing the transaction CREATES is the wallet's own: its address carries the wallet's
+ * stake key, and its inline datum, when the record has one, names the wallet as owner (a payment
+ * key) AND seller (an address), both halves, as the wallet's own listings are recognised
+ * (ownListings.ts). Anyone can lock anything at the script under any stake key with any datum, so a
+ * datum that does not read, or names someone else, is not. Outputs carry their inline datum on
+ * every record, history and live; a missing one is not held against it.
  */
-function listingOwnership(utxo: { address?: string; inline_datum?: unknown }, ctx: TxClassifyContext): ListingOwnership {
-  if (!ctx.stakeKeyHash || stakeKeyHashOfAddress(utxo.address) !== ctx.stakeKeyHash) return 'foreign';
-  if (utxo.inline_datum === null || utxo.inline_datum === undefined || utxo.inline_datum === '') return 'unknown';
+function isOwnListingOutput(output: { address?: string; inline_datum?: unknown }, ctx: TxClassifyContext): boolean {
+  if (!ctx.stakeKeyHash || stakeKeyHashOfAddress(output.address) !== ctx.stakeKeyHash) return false;
+  if (output.inline_datum === null || output.inline_datum === undefined || output.inline_datum === '') return true;
   try {
-    const cbor = inlineDatumCbor(utxo.inline_datum);
-    if (!cbor) return 'unknown';
+    const cbor = inlineDatumCbor(output.inline_datum);
+    if (!cbor) return true;
     const datum = decodeListingDatum(cbor, ctx.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet);
-    return ctx.paymentKeyHashes?.has(datum.owner) && ctx.walletAddresses.has(datum.sellerAddress) ? 'own' : 'foreign';
+    return !!ctx.paymentKeyHashes?.has(datum.owner) && ctx.walletAddresses.has(datum.sellerAddress);
   } catch {
-    return 'foreign';
+    return false;
+  }
+}
+
+/** An inline datum that is exactly a listing tag, `5820` and 32 bytes, lower case; null for anything else. */
+function tagDatumOf(raw: unknown): string | null {
+  if (typeof raw !== 'string' && (typeof raw !== 'object' || raw === null)) return null;
+  try {
+    const cbor = inlineDatumCbor(raw);
+    const hex = cbor ? String(cbor).toLowerCase() : '';
+    return /^5820[0-9a-f]{64}$/.test(hex) ? hex : null;
+  } catch {
+    return null;
   }
 }
 
 /**
+ * The wallet sold something: one of its own outputs carries, as its inline datum, the tag of an
+ * input the transaction spends. The contract makes a buy pay the seller with the listing's tag as
+ * the datum (rules.md G1, verifyBuy `hasTag`), and the tag is a hash of that exact input's
+ * reference, so it binds the payout to the listing that was spent. The listing's own datum is on
+ * no record (an input carries only its reference, address and amount), so the input is judged by
+ * its address when that is known (at a deployment's script under the wallet's stake key) and by the
+ * tag alone when it is not (a live record: the buyer's side of the chain is not synced locally).
+ */
+function paidAsSeller(spent: readonly { tx_hash?: string; output_index?: number; address?: string | null }[], created: readonly { address?: string; inline_datum?: unknown }[], ctx: TxClassifyContext, hashes: ReadonlySet<string>): boolean {
+  const payouts = new Set<string>();
+  for (const output of created) {
+    if (!output.address || !ctx.walletAddresses.has(output.address)) continue;
+    const datum = tagDatumOf(output.inline_datum);
+    if (datum) payouts.add(datum);
+  }
+  if (payouts.size === 0) return false;
+  return spent.some((input) => {
+    if (input.address) {
+      // A known address must be a listing of this wallet's: at a deployment's script, under its stake key.
+      if (!ctx.stakeKeyHash || !atScript(input.address, hashes) || stakeKeyHashOfAddress(input.address) !== ctx.stakeKeyHash) return false;
+    }
+    try {
+      return payouts.has(`5820${listingTag(String(input.tx_hash), Number(input.output_index))}`);
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * What a transaction did with the wallet's Gero market listings, from which side the wallet is on
- * (read-only, on the stored record, no service called):
+ * (read-only, on the stored record, no service called). It reads only what a stored record really
+ * carries: history records keep an input's reference, address and amount; live records keep the
+ * reference only, and the address once the producing output is synced locally. No input carries a
+ * datum or a flag. Outputs carry their address and inline datum, and a record with a body keeps
+ * its reference inputs and required signers.
  *
- *   listed     the wallet's inputs fund a new listing of its own; no listing is spent
- *   repriced   its own listing is spent and a listing of its own is created
- *   cancelled  its own listing is spent, its inputs fund it, no listing is created
- *   sold       its own listing is spent and none of the funding is the wallet's: a buyer's
- *   bought     someone else's listing is spent and the wallet funds it
- *   moved      a closed marketplace's listing is spent and a Gero listing of the wallet's is created
+ *   listed     the wallet funds a new listing of its own; nothing of the market's is spent
+ *   repriced   its own listing is spent (or the market's script ran) and a listing of its own is created
+ *   cancelled  its own listing is spent and none is created
+ *   sold       one of its own outputs carries the tag of a spent input and the wallet funds none of it
+ *   bought     someone else's listing is spent (or the script ran and the wallet gained an NFT), no own listing
+ *              is spent, and the wallet funds it
+ *   moved      a closed marketplace's listing is spent (its input, or its reference script) and a Gero listing
+ *              of the wallet's is created
  *
- * Every tag but `sold` is anchored by the wallet funding the transaction (an input at one of its
- * own addresses), which a stranger cannot fake; `sold` has no wallet input, so it needs the spent
- * listing's datum to name the wallet as owner and seller. Only a confirmed record has input
- * addresses to read, so a pending one gets no tag until it confirms.
+ * Every tag but `sold` is anchored by the wallet being a party to the transaction: an input at one of
+ * its own addresses funds it, or its key is a required signer, which a stranger cannot fake. `sold`
+ * has no wallet input (a buyer pays), so it is anchored by the tag. Only a confirmed record has
+ * outputs to read, so a pending one gets no tag until it confirms.
  */
 export const geroMarketActions = (item: StoredTransaction, ctx: TxClassifyContext): GeroMarketAction[] => {
   const hashes = marketHashesOf(ctx);
   if (hashes.size === 0 || !item.utxo) return [];
-  const spent = (item.utxo.inputs ?? []).filter((input) => !input.collateral && !input.reference);
+  const refs = referenceInputsOf(item);
+  const spent = (item.utxo.inputs ?? []).filter((input) => !refs.has(`${String(input.tx_hash).toLowerCase()}#${input.output_index}`));
   const created = item.utxo.outputs ?? [];
   if (spent.length === 0) return [];
 
-  const geroIn = spent.filter((input) => atScript(input.address, hashes));
-  const geroOut = created.filter((output) => atScript(output.address, hashes));
-  const legacyIn = spent.some((input) => LEGACY_SCRIPT_HASHES.has(paymentScriptHash(input.address) ?? ''));
   const walletFunds = spent.some((input) => !!input.address && ctx.walletAddresses.has(input.address));
-
-  const ownersIn = geroIn.map((input) => listingOwnership(input, ctx));
-  const spendsOwn = ownersIn.some((owner) => owner === 'own' || owner === 'unknown');
-  const spendsOwnVerified = ownersIn.includes('own');
-  const spendsForeign = ownersIn.includes('foreign');
-  // A created listing counts as the wallet's when it sits under its stake key and no datum says otherwise.
-  const createsOwn = geroOut.some((output) => listingOwnership(output, ctx) !== 'foreign');
+  const signers = isCardanoTx(item) ? item.body?.requiredExtraSignatures ?? [] : [];
+  const walletSigns = signers.some((signer) => !!ctx.paymentKeyHashes?.has(String(signer).toLowerCase()));
 
   const actions: GeroMarketAction[] = [];
-  if (walletFunds && legacyIn && createsOwn && geroIn.length === 0) actions.push('moved');
-  else if (walletFunds && createsOwn && geroIn.length === 0 && !legacyIn) actions.push('listed');
-  else if (walletFunds && createsOwn && spendsOwn) actions.push('repriced');
-  else if (walletFunds && spendsOwn && geroOut.length === 0) actions.push('cancelled');
-  if (!walletFunds && spendsOwnVerified && geroOut.length === 0) actions.push('sold');
-  if (walletFunds && spendsForeign && !spendsOwn) actions.push('bought');
+  if ((walletFunds || walletSigns) && isGeroMarket(item, ctx)) {
+    const geroIn = spent.filter((input) => atScript(input.address, hashes));
+    const ownIn = geroIn.filter((input) => !!ctx.stakeKeyHash && stakeKeyHashOfAddress(input.address) === ctx.stakeKeyHash);
+    const foreignIn = geroIn.filter((input) => !ownIn.includes(input));
+    const geroOut = created.filter((output) => atScript(output.address, hashes));
+    const createsOwn = geroOut.some((output) => isOwnListingOutput(output, ctx));
+    const refsGero = referencesAny(refs, ctx.marketReferenceScripts);
+    const spendsLegacy = referencesAny(refs, LEGACY_REFERENCE_SCRIPTS) || spent.some((input) => LEGACY_SCRIPT_HASHES.has(paymentScriptHash(input.address ?? undefined) ?? ''));
+    const gainsNft = (item.assets ?? []).some((asset) => asset.unit !== 'lovelace' && asset.quantity > 0);
+
+    if (spendsLegacy && createsOwn && geroIn.length === 0) actions.push('moved');
+    else if (createsOwn && !spendsLegacy && geroIn.length === 0 && !refsGero) actions.push('listed');
+    else if (createsOwn && !spendsLegacy && (ownIn.length > 0 || (refsGero && geroIn.length === 0))) actions.push('repriced');
+    else if (geroOut.length === 0 && (ownIn.length > 0 || (refsGero && geroIn.length === 0 && walletSigns))) actions.push('cancelled');
+    // The owner signs a cancel, a reprice and a move; a buyer signs for nothing of the contract's.
+    if (walletFunds && !walletSigns && ownIn.length === 0 && (foreignIn.length > 0 || (refsGero && gainsNft))) actions.push('bought');
+  }
+  if (!walletFunds && !walletSigns && paidAsSeller(spent, created, ctx, hashes)) actions.push('sold');
   return actions;
 };
 
