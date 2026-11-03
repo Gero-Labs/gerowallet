@@ -28,7 +28,9 @@ import { MAX_LIST_PRICE, MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMar
  *    (listingPreview.ts); the worker re-derives everything and the review shows ITS figures
  *    (`verifiedFigures`);
  *  - a collection whose royalties pass the usual 10% (judged on the effective amount) needs the
- *    seller's agreement before anything is built (`needsConfirmation`, `confirmed`).
+ *    seller's agreement before anything is built (`needsConfirmation`, `confirmed`); so does a
+ *    reprice whose kept royalties pass it at the new price (they stay as lovelace amounts, so a cut
+ *    in price raises their share).
  *
  * The caller owns the flow (prepare, sign, submit), the credentials and the failure copy. A new
  * listing (and a move) is priced against the newest deployment and the collection's royalty terms;
@@ -198,7 +200,7 @@ export function useListingPriceForm(options: ListingPriceFormOptions): ListingPr
   });
 
   // Above the cap on the preview, or the worker says so itself (it re-derives and may disagree).
-  const needsConfirmation = computed(() => !isReprice && (preview.value?.overCap === true || options.failureKind() === 'confirmRoyalty'));
+  const needsConfirmation = computed(() => preview.value?.overCap === true || options.failureKind() === 'confirmRoyalty');
   const confirmation = computed(() => {
     const fromWorker = options.royaltyConfirmation();
     if (fromWorker) return fromWorker;

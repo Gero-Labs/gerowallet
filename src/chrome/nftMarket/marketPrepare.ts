@@ -9,7 +9,7 @@
 //   list     { unit, priceLovelace, confirmRoyaltyAboveCap? }   the worker finds the UTxO holding
 //            the NFT, takes `owner` from its payment key and the stake credential from the
 //            account's own base address, computes the royalties from the NFT's own policy
-//   reprice  { ref, priceLovelace }                              ref must be one of the wallet's own listings
+//   reprice  { ref, priceLovelace, confirmRoyaltyAboveCap? }     ref must be one of the wallet's own listings; its royalties keep their lovelace
 //   cancel   { ref }                                             the NFT returns to the wallet's receive address
 //   buy      { ref }                                             the listing is read twice (Nexus, and the chain, proven
 //                                                                against the transaction id) and the buy is checked against both
@@ -39,7 +39,9 @@
 //   SELLER_SHARE_TOO_LOW        price - fee - royalties would be under MIN_SELLER_SHARE
 //   ROYALTIES_UNREADABLE        the collection's royalty terms could not be read (never listed without them)
 //   ROYALTIES_MALFORMED         the terms contradict themselves
-//   ROYALTY_CONFIRMATION_REQUIRED  above ROYALTY_RATE_CAP; details: effectiveRoyaltyLovelace, effectiveRoyaltyRate, royaltyRate
+//   ROYALTY_CONFIRMATION_REQUIRED  above ROYALTY_RATE_CAP; details: effectiveRoyaltyLovelace, effectiveRoyaltyRate, royaltyRate.
+//                               A reprice asks too: its royalties stay as they are in lovelace, so a lower price makes them a
+//                               larger share (the listing's own royalties over the NEW price; no royaltyRate, no collection read)
 //   LISTING_NOT_FOUND           reprice/cancel: not among the wallet's own listings; buy: Nexus or the chain has no such listing
 //   LISTING_UNREADABLE          the listing (or the legacy lookup) could not be read or did not read back whole
 //   OWN_LISTING                 buy: the listing is the wallet's own
@@ -85,7 +87,7 @@ import { listingSplit } from './listingDatum';
 import { ListingUtxoError, type ListingChainUtxo } from './listingChainUtxo';
 import { findMarketTouch } from './marketGuard';
 import { reviveOwnListings, type OwnListing } from './ownListings';
-import { computeRoyalties, protocolParameter, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
+import { computeRoyalties, protocolParameter, royaltiesAboveCap, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
 import { verifyBuy, type BuySummary } from './verifyBuy';
 import {
   MarketVerifyError,
@@ -627,6 +629,22 @@ async function chooseRoyalties(s: Session, unit: string, price: bigint, confirmA
   };
 }
 
+/**
+ * A reprice keeps the listing's royalties as lovelace amounts, so a lower price makes them a larger
+ * share of it: 5 ADA is 5% of 100 ADA and 12.5% of 40 ADA. Above ROYALTY_RATE_CAP of the NEW price
+ * nothing is built until the seller has confirmed, as for a new listing, and the refusal carries
+ * what the royalties would cost so the page can show it. (Re-deriving them from the collection's
+ * terms at the new price is a different design: this is the interim guard.)
+ */
+function checkKeptRoyalties(price: bigint, royalties: readonly { lovelace: bigint }[], confirmed: boolean): void {
+  const total = royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
+  if (confirmed || !royaltiesAboveCap(total, price)) return;
+  throw new MarketPrepareError('ROYALTY_CONFIRMATION_REQUIRED', 'The royalties are above the usual limit at this price and need the seller\'s confirmation', {
+    effectiveRoyaltyLovelace: total.toString(),
+    effectiveRoyaltyRate: fractionText(total, price),
+  });
+}
+
 const royaltyRequest = (royalties: ChosenRoyalties) =>
   royalties.royalties.map((royalty) => ({ address: royalty.address, lovelace: royalty.lovelace.toString() }));
 
@@ -721,12 +739,15 @@ async function prepareReprice(s: Session, request: unknown): Promise<MarketPrepa
   const body = readRecord(request);
   const { ref, listingRef } = readRef(body['ref']);
   const price = readPrice(body['priceLovelace']);
+  const confirmAboveCap = body['confirmRoyaltyAboveCap'] === true;
   checkPrice(price);
   const listing = ownListing(s, ref);
-  // The royalties stay as they are (R4), so the new price must still leave the seller their share.
+  // The royalties stay as they are (a reprice changes only the price), so the new price must still
+  // leave the seller their share, and a cut in price must not push them past the usual limit unasked.
   const deployment = s.deployments.find((d) => d.version === listing.deploymentVersion);
   if (!deployment) throw new MarketPrepareError('VERIFY_FAILED', 'LISTING');
   checkSellerShare(price, deployment, listing.datum.royalties);
+  checkKeptRoyalties(price, listing.datum.royalties, confirmAboveCap);
 
   const verified = await buildAndVerify(
     s,

@@ -6261,6 +6261,7 @@ export default {
   'nftMarket.list.done': 'Your NFT is being listed. It shows as listed once the transaction is confirmed.',
   'nftMarket.reprice.subtitle': 'Change the price of this listing. The NFT, the deposit and the royalties stay as they are.',
   'nftMarket.reprice.current': 'Current price',
+  'nftMarket.reprice.royaltyConfirmation': 'The royalties stay as they are, so at this price they take more than usual. Check the amounts before you confirm.',
   'nftMarket.reprice.samePrice': 'This is already the price. Enter a new one.',
   'nftMarket.reprice.review': 'New price',
   'nftMarket.reprice.done': 'The new price is on its way. It shows once the transaction is confirmed.',

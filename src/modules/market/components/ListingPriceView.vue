@@ -69,7 +69,7 @@
 
     <!-- Royalties above the usual limit: the seller sees what they cost and agrees, or the listing waits. -->
     <div v-if="f.needsConfirmation && f.confirmation" class="listing-price-view__confirm" :data-testid="`${testid}-royalty-warning`">
-      <v-alert type="warning" variant="tonal" density="compact">{{ t('nftMarket.error.royaltyConfirmation') }}</v-alert>
+      <v-alert type="warning" variant="tonal" density="compact">{{ t(isReprice ? 'nftMarket.reprice.royaltyConfirmation' : 'nftMarket.error.royaltyConfirmation') }}</v-alert>
       <v-checkbox
         v-model="f.confirmed"
         :label="t('nftMarket.list.royaltyConfirm', { amount: f.confirmation.ada, percent: f.confirmation.percent })"
@@ -109,7 +109,10 @@ const props = defineProps<{
   testid: string;
   /** The sheet is preparing or signing: the price cannot change. */
   busy: boolean;
-  /** A reprice prices a listing whose royalties are fixed, so the collection's terms are not waited for. */
+  /**
+   * A reprice prices a listing whose royalties are fixed, so the collection's terms are not waited
+   * for; if the kept royalties are above the usual limit at the new price it asks, in its own words.
+   */
   isReprice?: boolean;
   /** A reprice: the price it replaces, shown above the field. */
   currentPrice?: bigint | null;

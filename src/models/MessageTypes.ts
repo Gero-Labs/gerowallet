@@ -211,7 +211,7 @@ export enum MessageTypes {
   // transaction (nftMarket/marketPrepare.ts) and allows exactly that transaction id to be signed
   // once. The page sends the thing and the price, never an address, key or input:
   //   LIST     { unit, priceLovelace (decimal text), confirmRoyaltyAboveCap? }
-  //   REPRICE  { ref: 'txHash#index', priceLovelace }
+  //   REPRICE  { ref: 'txHash#index', priceLovelace, confirmRoyaltyAboveCap? }
   //   CANCEL   { ref }
   //   BUY      { ref }
   //   MIGRATE  { legacyRef, priceLovelace, confirmRoyaltyAboveCap? }   (mainnet only)

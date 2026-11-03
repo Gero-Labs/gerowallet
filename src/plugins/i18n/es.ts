@@ -6030,6 +6030,7 @@ export default {
   'nftMarket.list.done': 'Tu NFT se está publicando. Aparecerá como publicado cuando se confirme la transacción.',
   'nftMarket.reprice.subtitle': 'Cambia el precio de esta publicación. El NFT, el depósito y las regalías se mantienen.',
   'nftMarket.reprice.current': 'Precio actual',
+  'nftMarket.reprice.royaltyConfirmation': 'Las regalías se mantienen, así que con este precio son más de lo habitual. Revisa los montos antes de confirmar.',
   'nftMarket.reprice.samePrice': 'Este ya es el precio. Ingresa uno nuevo.',
   'nftMarket.reprice.review': 'Nuevo precio',
   'nftMarket.reprice.done': 'El nuevo precio está en camino. Aparecerá cuando se confirme la transacción.',

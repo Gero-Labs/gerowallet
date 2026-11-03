@@ -279,7 +279,7 @@ async function review(): Promise<void> {
   if (!canContinue.value || amount === null) return;
   credentials.begin();
   if (props.existing) {
-    await flow.prepare({ ref: props.existing.ref, priceLovelace: amount });
+    await flow.prepare({ ref: props.existing.ref, priceLovelace: amount, ...(confirmed.value ? { confirmRoyaltyAboveCap: true } : {}) });
   } else {
     await flow.prepare({ unit: props.unit, priceLovelace: amount, ...(confirmed.value ? { confirmRoyaltyAboveCap: true } : {}) });
   }

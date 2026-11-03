@@ -279,6 +279,21 @@ describe('previewRepricedListing: a new price, the same royalties', () => {
   it('shows the royalty as a share of the NEW price', () => {
     expect(previewRepricedListing(50n * ADA, ROYALTIES, V1)!.royaltyFraction).toBe(0.1);
   });
+
+  it('is over the cap when the kept royalties are more than 10% of the NEW price: a cut in price raises their share', () => {
+    // 5 ADA is 5% of 100 ADA, exactly 10% of 50 ADA (not over) and 12.5% of 40 ADA.
+    expect(previewRepricedListing(100n * ADA, ROYALTIES, V1)!.overCap).toBe(false);
+    expect(previewRepricedListing(50n * ADA, ROYALTIES, V1)!.overCap).toBe(false);
+    expect(previewRepricedListing(50n * ADA - 1n, ROYALTIES, V1)!.overCap).toBe(true);
+    const cut = previewRepricedListing(40n * ADA, ROYALTIES, V1)!;
+    expect(cut.overCap).toBe(true);
+    expect(cut.royaltiesTotal).toBe(5n * ADA);
+    expect(cut.royaltyFraction).toBe(0.125);
+  });
+
+  it('is never over the cap with no royalties', () => {
+    expect(previewRepricedListing(5n * ADA, [], V1)!.overCap).toBe(false);
+  });
 });
 
 describe('pageRoyaltyMinUtxo', () => {

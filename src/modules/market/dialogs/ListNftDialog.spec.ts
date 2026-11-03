@@ -994,10 +994,68 @@ describe('ListNftDialog: edit price', () => {
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
   });
 
-  it('never asks for a royalty confirmation: the royalties are not recomputed', async () => {
-    const wrapper = render({ existing: { ...EXISTING, datum: { ...EXISTING.datum, royalties: [{ address: CREATOR_A, lovelace: 40n * ADA }] } } });
-    await typePrice(wrapper, '100');
-    expect(has(wrapper, 'royalty-confirm')).toBe(false);
+  describe('royalties that stay in lovelace', () => {
+    // EXISTING keeps a 6 ADA royalty: 5% of 120 ADA, 12% of 50 ADA, exactly 10% of 60 ADA.
+    it('does not ask while the kept royalties are no more than 10% of the new price', async () => {
+      const wrapper = render({ existing: EXISTING });
+      await typePrice(wrapper, '90');
+      expect(has(wrapper, 'royalty-confirm')).toBe(false);
+      await typePrice(wrapper, '60');
+      expect(has(wrapper, 'royalty-confirm')).toBe(false);
+      expect(byId(wrapper, 'continue').attributes('disabled')).toBeUndefined();
+    });
+
+    it('asks for the seller\'s confirmation when a cut makes them more, in the reprice\'s own words, and keeps Continue off', async () => {
+      const wrapper = render({ existing: EXISTING });
+      await typePrice(wrapper, '50');
+
+      expect(byId(wrapper, 'royalty-confirm').text()).toContain('I agree to pay 6 ADA in royalties, 12% of the price');
+      expect(body(wrapper).text()).toContain('The royalties stay as they are, so at this price they take more than usual. Check the amounts before you confirm.');
+      expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+      await byId(wrapper, 'continue').trigger('click');
+      expect(flow.prepare).not.toHaveBeenCalled();
+    });
+
+    it('lets the seller continue once they agree, and tells the worker so', async () => {
+      const wrapper = render({ existing: EXISTING });
+      await typePrice(wrapper, '50');
+      await wrapper.get('[data-testid="list-nft-royalty-confirm"] input').setValue(true);
+      await flushPromises();
+
+      expect(byId(wrapper, 'continue').attributes('disabled')).toBeUndefined();
+      await byId(wrapper, 'continue').trigger('click');
+      await flushPromises();
+      expect(flow.prepare).toHaveBeenCalledWith({ ref: LISTING_REF, priceLovelace: 50n * ADA, confirmRoyaltyAboveCap: true });
+    });
+
+    it('asks again when the price changes: the agreement was to those amounts', async () => {
+      const wrapper = render({ existing: EXISTING });
+      await typePrice(wrapper, '50');
+      await wrapper.get('[data-testid="list-nft-royalty-confirm"] input').setValue(true);
+      await flushPromises();
+      await typePrice(wrapper, '40');
+
+      expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+      expect(byId(wrapper, 'royalty-confirm').text()).toContain('6 ADA in royalties, 15% of the price');
+    });
+
+    it('shows the worker\'s own request when it asks for the confirmation itself', async () => {
+      const wrapper = render({ existing: EXISTING });
+      await typePrice(wrapper, '90');
+      flow.prepare.mockImplementation(async () => {
+        flow.failure.value = { code: 'ROYALTY_CONFIRMATION_REQUIRED' };
+        flow.royaltyConfirmation.value = { ada: '6', percent: '11' };
+        flow.stage.value = 'idle';
+        return false;
+      });
+      await byId(wrapper, 'continue').trigger('click');
+      await flushPromises();
+
+      // Back on the price, with the checkbox and the worker's figures: no error screen.
+      expect(has(wrapper, 'error')).toBe(false);
+      expect(byId(wrapper, 'royalty-confirm').text()).toContain('I agree to pay 6 ADA in royalties, 11% of the price');
+      expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+    });
   });
 
   it('asks the worker to change the price of that listing, with the exact amount', async () => {

@@ -114,6 +114,16 @@ const CAP_UNITS: bigint = (() => {
   return units;
 })();
 
+/**
+ * Whether `royaltiesLovelace` is more than ROYALTY_RATE_CAP of `price`, compared exactly in bigint
+ * (cross-multiplied, so nothing is rounded: for the 10% cap this is royalties x 10 > price). The
+ * one test of "above the usual limit", used for a new listing's computed royalties and for a
+ * reprice, whose royalties keep their lovelace amounts while the price changes.
+ */
+export function royaltiesAboveCap(royaltiesLovelace: bigint, price: bigint): boolean {
+  return royaltiesLovelace * RATE_SCALE > price * CAP_UNITS;
+}
+
 /** Units of 1e-12 back to the nearest double (1e12 is exact, so the division rounds once). */
 function unitsToRate(units: bigint): number {
   return Number(units) / Number(RATE_SCALE);
@@ -203,9 +213,7 @@ export function computeRoyalties(price: bigint, info: RoyaltyInfo, opts: Royalty
   if (effective > price) return malformedTerms();
 
   const rate = unitsToRate(total);
-  // effective / price > CAP_UNITS / RATE_SCALE, cross-multiplied so nothing is rounded (for the
-  // 10% cap this is effective x 10 > price).
-  const overCap = total > CAP_UNITS || effective * RATE_SCALE > price * CAP_UNITS;
+  const overCap = total > CAP_UNITS || royaltiesAboveCap(effective, price);
   if (overCap && !opts.confirmAboveCap) {
     return { royalties: [], dropped: [], rate, needsConfirmation: true, malformed: false, invalidRecipients };
   }

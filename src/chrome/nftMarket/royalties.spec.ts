@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
-import { computeRoyalties, protocolParameter, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
+import { computeRoyalties, protocolParameter, royaltiesAboveCap, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
 
 const ADA = 1_000_000n;
 // Seller and royalty outputs carry a 32-byte inline datum and need about 1.2 ADA (spec 5.5).
@@ -751,5 +751,29 @@ describe('royaltyMinUtxoFor', () => {
   it('never goes above the ceiling: an inflated figure cannot make every royalty look too small', () => {
     expect(royaltyMinUtxoFor(999_999n)).toBe(1_155_080n);
     expect(royaltyMinUtxoFor(4310n)).toBe(1_155_080n);
+  });
+});
+
+describe('royaltiesAboveCap', () => {
+  it('is exact at the cap: 10% of the price is not above it, one lovelace more is', () => {
+    expect(royaltiesAboveCap(10_000_000n, 100_000_000n)).toBe(false);
+    expect(royaltiesAboveCap(10_000_001n, 100_000_000n)).toBe(true);
+    // The same share at a price that does not divide evenly.
+    expect(royaltiesAboveCap(333_333n, 3_333_330n)).toBe(false);
+    expect(royaltiesAboveCap(333_334n, 3_333_330n)).toBe(true);
+  });
+
+  it('is false for no royalties and for royalties far under the cap', () => {
+    expect(royaltiesAboveCap(0n, 5_000_000n)).toBe(false);
+    expect(royaltiesAboveCap(1_000_000n, 100_000_000n)).toBe(false);
+  });
+
+  it('agrees with computeRoyalties about when a collection needs the seller to confirm', () => {
+    const info: RoyaltyInfo = { source: 'cip27', rate: 0.1, recipients: [{ address: 'addr_test1royalty', rate: 0.1, minFeeLovelace: null, maxFeeLovelace: null }] };
+    for (const price of [10_000_000n, 99_999_999n, 100_000_000n, 333_333_333n]) {
+      const result = computeRoyalties(price, info, { confirmAboveCap: false, minUtxo: 0n });
+      const paid = (price * 100_000_000_000n) / 1_000_000_000_000n;
+      expect(result.needsConfirmation, String(price)).toBe(royaltiesAboveCap(paid, price));
+    }
   });
 });

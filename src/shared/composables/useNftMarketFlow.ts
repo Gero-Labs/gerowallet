@@ -51,8 +51,9 @@ import { MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
  *   maybeSent       signed, and the submit was not confirmed: the transaction may be on chain.
  *                   Send the user to their activity; never offer a retry.
  *   wrongPassword   the spending password was wrong: stay on the review and ask again.
- *   confirmRoyalty  the list or move needs the seller's confirmation of royalties above the usual
- *                   limit: `royaltyConfirmation` has the amounts; prepare again with
+ *   confirmRoyalty  the list, reprice or move needs the seller's confirmation of royalties above the
+ *                   usual limit (a reprice keeps its royalties as lovelace, so a lower price raises
+ *                   their share): `royaltyConfirmation` has the amounts; prepare again with
  *                   `confirmRoyaltyAboveCap: true` once they agree.
  *   refused         the same request fails the same way (a rule, a price, a wallet that is not
  *                   allowed): say why, offer no retry.
@@ -107,7 +108,7 @@ export interface RoyaltyConfirmation {
 /** What each action takes. Anything beyond these fields is not sent. */
 export interface NftMarketPayloads {
   list: { unit: string; priceLovelace: bigint | string; confirmRoyaltyAboveCap?: boolean };
-  reprice: { ref: string; priceLovelace: bigint | string };
+  reprice: { ref: string; priceLovelace: bigint | string; confirmRoyaltyAboveCap?: boolean };
   cancel: { ref: string };
   buy: { ref: string };
   migrate: { legacyRef: string; priceLovelace: bigint | string; confirmRoyaltyAboveCap?: boolean };
@@ -280,8 +281,8 @@ function requestFor(action: MarketAction, payload: NftMarketPayloads[MarketActio
       return { unit, priceLovelace: lovelaceText(priceLovelace), ...(confirmRoyaltyAboveCap === true ? { confirmRoyaltyAboveCap: true } : {}) };
     }
     case 'reprice': {
-      const { ref, priceLovelace } = payload as NftMarketPayloads['reprice'];
-      return { ref, priceLovelace: lovelaceText(priceLovelace) };
+      const { ref, priceLovelace, confirmRoyaltyAboveCap } = payload as NftMarketPayloads['reprice'];
+      return { ref, priceLovelace: lovelaceText(priceLovelace), ...(confirmRoyaltyAboveCap === true ? { confirmRoyaltyAboveCap: true } : {}) };
     }
     case 'cancel':
     case 'buy': {

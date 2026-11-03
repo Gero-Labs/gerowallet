@@ -1560,6 +1560,80 @@ describe('reprice and cancel', () => {
     expect(r.calls.reprice).not.toHaveBeenCalled();
   });
 
+  describe('royalties that stay in lovelace (interim safeguard)', () => {
+    // The listing's royalty is 5 ADA and a reprice keeps it, so a lower price makes it a larger
+    // share: at 40 ADA it is 12.5%, over the 10% cap, and the seller has not agreed to that.
+    const repriceAt = (price: bigint): Built => {
+      const tx = cancelBody();
+      tx.body.outputs = [
+        listingOutput(LISTING_V1, { ...DATUM, price }),
+        { address: Cardano.PaymentAddress(CHANGE), value: { coins: 9_600_000n } },
+      ];
+      return build(tx);
+    };
+    const request = (price: bigint, extra: Record<string, unknown> = {}) => ({ ref: LISTING_REF, priceLovelace: price.toString(), ...extra });
+
+    it('a price that makes the old royalties more than 10% of it needs the seller\'s confirmation, and the reply says what they cost', async () => {
+      const r = rig({ built: response(repriceAt(40n * ADA)) });
+      const data = await reply('reprice', request(40n * ADA), r.deps);
+      expect(data).toMatchObject({
+        success: false,
+        errorCode: 'ROYALTY_CONFIRMATION_REQUIRED',
+        effectiveRoyaltyLovelace: '5000000',
+        effectiveRoyaltyRate: '0.125000',
+      });
+      // Nothing is built, nothing may be signed.
+      expect(r.calls.reprice).not.toHaveBeenCalled();
+      expect(r.deps.grantAllowance).not.toHaveBeenCalled();
+    });
+
+    it('with the confirmation it builds and verifies as before', async () => {
+      const tx = repriceAt(40n * ADA);
+      const r = rig({ built: response(tx) });
+      const data = await reply('reprice', request(40n * ADA, { confirmRoyaltyAboveCap: true }), r.deps);
+      expect(data.success).toBe(true);
+      expect(data.result?.summary).toMatchObject({ priceLovelace: '40000000', oldPriceLovelace: '100000000' });
+      expect(r.calls.reprice).toHaveBeenCalledTimes(1);
+      expect(r.deps.grantAllowance).toHaveBeenCalledTimes(1);
+    });
+
+    it('only a true confirmation counts', async () => {
+      for (const value of ['true', 1, 'yes', {}]) {
+        const r = rig({ built: response(repriceAt(40n * ADA)) });
+        const data = await reply('reprice', request(40n * ADA, { confirmRoyaltyAboveCap: value }), r.deps);
+        expect(data.errorCode, String(value)).toBe('ROYALTY_CONFIRMATION_REQUIRED');
+        expect(r.calls.reprice).not.toHaveBeenCalled();
+      }
+    });
+
+    it('exactly 10% of the new price is not asked about; one lovelace less price is', async () => {
+      const atCap = rig({ built: response(repriceAt(50n * ADA)) });
+      expect((await reply('reprice', request(50n * ADA), atCap.deps)).success).toBe(true);
+      const over = rig({ built: response(repriceAt(50n * ADA - 1n)) });
+      expect((await reply('reprice', request(50n * ADA - 1n), over.deps)).errorCode).toBe('ROYALTY_CONFIRMATION_REQUIRED');
+      expect(over.calls.reprice).not.toHaveBeenCalled();
+    });
+
+    it('a raise or a modest cut, and a listing with no royalties at any price, is not asked about', async () => {
+      const raised = rig({ built: response(repriceAt(150n * ADA)) });
+      expect((await reply('reprice', request(150n * ADA), raised.deps)).success).toBe(true);
+      const none: OwnListing = { ...OWN_LISTING, datum: { ...DATUM, royalties: [] } };
+      const noRoyalty = rig({
+        built: response(repriceAt(MIN_LIST_PRICE)),
+        state: { utxos: [NFT_UTXO, FEE_UTXO], keys: KEYS, collateral: null, listedListings: [none], coinsPerUtxoByte: 4310 },
+      });
+      const data = await reply('reprice', request(MIN_LIST_PRICE), noRoyalty.deps);
+      expect(data.errorCode).not.toBe('ROYALTY_CONFIRMATION_REQUIRED');
+    });
+
+    it('the seller\'s share is refused first: confirming cannot make an unsellable price listable', async () => {
+      const r = rig();
+      const data = await reply('reprice', request(MIN_LIST_PRICE, { confirmRoyaltyAboveCap: true }), r.deps);
+      expect(data.errorCode).toBe('SELLER_SHARE_TOO_LOW');
+      expect(r.calls.reprice).not.toHaveBeenCalled();
+    });
+  });
+
   it('offers the wallet\'s plain key UTxOs for the fee, never the reserved collateral or a script UTxO', async () => {
     const r = rig({
       built: response(cancelTx()),

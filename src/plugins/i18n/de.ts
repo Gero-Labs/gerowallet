@@ -6154,6 +6154,7 @@ export default {
   'nftMarket.list.done': 'Ihr NFT wird angeboten. Es erscheint als angeboten, sobald die Transaktion bestätigt ist.',
   'nftMarket.reprice.subtitle': 'Ändern Sie den Preis dieses Angebots. NFT, Kaution und Royalties bleiben unverändert.',
   'nftMarket.reprice.current': 'Aktueller Preis',
+  'nftMarket.reprice.royaltyConfirmation': 'Die Royalties bleiben unverändert und machen bei diesem Preis mehr aus als üblich. Prüfen Sie die Beträge, bevor Sie bestätigen.',
   'nftMarket.reprice.samePrice': 'Das ist bereits der Preis. Geben Sie einen neuen ein.',
   'nftMarket.reprice.review': 'Neuer Preis',
   'nftMarket.reprice.done': 'Der neue Preis ist unterwegs. Er erscheint, sobald die Transaktion bestätigt ist.',

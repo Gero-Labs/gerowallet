@@ -394,6 +394,34 @@ describe('failure states', () => {
       expect(flow.royaltyConfirmation.value).toBeNull();
     });
 
+    it('a reprice asks too (its royalties stay in lovelace, so a lower price raises their share) and sends the confirmation on the next prepare', async () => {
+      respond({
+        [MessageTypes.NFT_MARKET_PREPARE_REPRICE]: refusal('ROYALTY_CONFIRMATION_REQUIRED', {
+          effectiveRoyaltyLovelace: '5000000',
+          effectiveRoyaltyRate: '0.125000',
+        }),
+      });
+      const flow = useNftMarketFlow('reprice');
+      expect(await flow.prepare(PAYLOADS.reprice)).toBe(false);
+      expect(flow.failureKind.value).toBe('confirmRoyalty');
+      expect(flow.royaltyConfirmation.value).toMatchObject({ ada: '5', percent: '12.5' });
+
+      respond({ [MessageTypes.NFT_MARKET_PREPARE_REPRICE]: prepared() });
+      expect(await flow.prepare({ ...PAYLOADS.reprice, confirmRoyaltyAboveCap: true })).toBe(true);
+      expect(messageAt(1).data).toEqual({ ...PAYLOADS.reprice, confirmRoyaltyAboveCap: true });
+      expect(flow.royaltyConfirmation.value).toBeNull();
+    });
+
+    it('sends a confirmation only when it is exactly true, for a reprice as for a list', async () => {
+      for (const value of [false, 'true', 1, 'yes', {}, null]) {
+        send.mockReset();
+        respond({ [MessageTypes.NFT_MARKET_PREPARE_REPRICE]: prepared() });
+        const flow = useNftMarketFlow('reprice');
+        await (flow.prepare as (payload: unknown) => Promise<boolean>)({ ...PAYLOADS.reprice, confirmRoyaltyAboveCap: value });
+        expect(messageAt(0).data, String(value)).toEqual(PAYLOADS.reprice);
+      }
+    });
+
     it('without usable amounts there is nothing to show, but it is still a confirmation', async () => {
       respond({ [MessageTypes.NFT_MARKET_PREPARE_LIST]: refusal('ROYALTY_CONFIRMATION_REQUIRED', { effectiveRoyaltyLovelace: 'many' }) });
       const flow = useNftMarketFlow('list');

@@ -10,7 +10,7 @@
 
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import { listingSplit, type ListingFeeParams, type Payee } from '@/chrome/nftMarket/listingDatum';
-import { computeRoyalties, protocolParameter, royaltyMinUtxoFor } from '@/chrome/nftMarket/royalties';
+import { computeRoyalties, protocolParameter, royaltiesAboveCap, royaltyMinUtxoFor } from '@/chrome/nftMarket/royalties';
 import { MAX_LIST_PRICE, MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
 
 // ---------------------------------------------------------------------------------------------
@@ -146,12 +146,16 @@ export function previewNewListing(
 
 /**
  * The preview of a new price for a listing that already exists: its royalties keep their amounts
- * (a reprice changes only the price), so only the fee and the seller's share move. Null for a
- * price of zero or less.
+ * (a reprice changes only the price), so only the fee and the seller's share move. A cut in price
+ * raises the royalties' share of it, so `overCap` is judged on the kept amounts against the NEW
+ * price, exactly as the worker does (the seller confirms, as for a new listing). Null for a price
+ * of zero or less.
  */
 export function previewRepricedListing(price: bigint, royalties: readonly Payee[], fee: ListingFeeParams): ListingPreview | null {
   if (typeof price !== 'bigint' || price <= 0n) return null;
-  return assemble(price, [...royalties], fee, { dropped: [], invalidRecipients: 0, overCap: false });
+  const kept = [...royalties];
+  const total = kept.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
+  return assemble(price, kept, fee, { dropped: [], invalidRecipients: 0, overCap: royaltiesAboveCap(total, price) });
 }
 
 /**
