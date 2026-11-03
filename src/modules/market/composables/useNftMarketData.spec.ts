@@ -8,9 +8,11 @@ import { Blockchain, Network, WalletType } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 
-vi.mock('@/api/market-api', () => ({ default: { getNftCollections: vi.fn(() => Promise.resolve([])) } }));
+const getNftCollections = vi.hoisted(() => vi.fn(() => Promise.resolve([] as unknown[])));
+vi.mock('@/api/market-api', () => ({ default: { getNftCollections } }));
 
 import { useNftMarketData } from './useNftMarketData';
+import { loadTopNftCollections, resetTopNftCollections } from './useTopNftCollections';
 
 const POLICY_CATS = 'cd'.repeat(28);
 const POLICY_APES = 'ef'.repeat(28);
@@ -31,6 +33,8 @@ const storeListing = (unit: string): OwnListing =>
   }) as unknown as OwnListing;
 
 beforeEach(() => {
+  resetTopNftCollections();
+  getNftCollections.mockClear();
   walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Normal } as never;
   featureFlagsStore.state.flags.isNftMarketEnabled = true;
   walletStore.collections = { [POLICY_CATS]: { name: 'Cats', img: 'x', quantity: 1, isScam: false, items: [item(CAT_1, 'Cat1')] } };
@@ -65,5 +69,22 @@ describe('useNftMarketData: the wallet\'s own rows', () => {
     const { collections, fetchUserNftCollections } = useNftMarketData();
     await fetchUserNftCollections();
     expect(collections.value.map((c) => c.policyId)).toEqual([POLICY_CATS]);
+  });
+});
+
+describe('useNftMarketData: the top collections', () => {
+  it('reads them through the shared loader, so the lookalike check is served by the same request', async () => {
+    // A policy no earlier test cached an answer for: the table remembers "no data" per policy.
+    const FRESH = 'ab'.repeat(28);
+    const top = [{ policyId: FRESH, name: 'Cool Cats', floorPriceLovelace: 25_000_000 }];
+    walletStore.collections = { [FRESH]: { name: 'Cats', img: 'x', quantity: 1, isScam: false, items: [item(`${FRESH}43617431`, 'Cat1')] } };
+    getNftCollections.mockResolvedValueOnce(top);
+    const { collections, fetchUserNftCollections } = useNftMarketData();
+    await fetchUserNftCollections();
+
+    expect(collections.value[0]).toMatchObject({ policyId: FRESH, name: 'Cool Cats', floorPriceLovelace: 25_000_000 });
+    expect(await loadTopNftCollections()).toEqual(top);
+    expect(getNftCollections).toHaveBeenCalledTimes(1);
+    expect(getNftCollections).toHaveBeenCalledWith('volume', 200);
   });
 });

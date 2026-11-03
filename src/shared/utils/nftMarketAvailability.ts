@@ -25,6 +25,18 @@ export function nftMarketAvailable(): boolean {
   return canUseNftMarketWallet(wallet.chain, wallet.type) && networks.isNftMarketSupported(wallet.chain, wallet.network);
 }
 
+/**
+ * Whether the collection page may show Gero's open listings to the logged wallet: the flag and a
+ * network with a reviewed deployment, and NOTHING about the wallet's type. Reading the market
+ * needs no key, so a watch wallet or a hardware wallet no device has signed a market transaction
+ * with can browse; whether it may BUY is `nftMarketAvailable()`.
+ */
+export function nftMarketBrowseAvailable(): boolean {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet || !featureFlagsStore.isNftMarketEnabled()) return false;
+  return networks.isNftMarketSupported(wallet.chain, wallet.network);
+}
+
 /** The deployment a NEW listing goes to: the newest version on the logged wallet's network, or null where there is none. */
 export function nftMarketNewestDeployment(): NftMarketDeployment | null {
   const wallet = walletStore.loggedWallet;

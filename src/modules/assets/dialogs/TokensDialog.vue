@@ -4,7 +4,16 @@
               :title="modalData ? `${modalData.name} (${Number(modalData.quantity || modalData.items.length).toLocaleString('en-US')})` : ''"
               :subtitle="description" :subtitle2="tokensData?.[0]?.policy_id || ''" :width="696" :min-height="646" :height="646">
     <v-card-text class="pa-3 justify-center text-center" style="z-index: 1">
-        <v-row v-if="pickedToken === null">
+        <!-- Gero's NFT market: the NFTs the wallet holds of this collection, or the collection's open
+             listings. Browsing needs no key, so it is offered to every wallet where the market runs. -->
+        <div v-if="showViewToggle" class="tokens-view" data-testid="tokens-view">
+          <v-btn-toggle v-model="view" mandatory density="compact" divided variant="outlined">
+            <v-btn value="yours" size="small" data-testid="tokens-view-yours">{{ t('nftMarket.browse.yours') }}</v-btn>
+            <v-btn value="sale" size="small" data-testid="tokens-view-sale">{{ t('nftMarket.browse.forSale') }}</v-btn>
+          </v-btn-toggle>
+        </div>
+        <CollectionListings v-if="showListings" :policy-id="policyId!" />
+        <v-row v-else-if="pickedToken === null">
           <v-col cols="6" xl="3" lg="3" md="3" sm="4" v-for="(token, index) in displayedTokens" :key="index" class="pa-1">
             <v-card variant="outlined" class="pa-0 token-image" @click="handleTokenClick(token)"
                     :style="{ backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${token.img})`,border: '1px solid #444', backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '8px' }">
@@ -65,12 +74,13 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
+import CollectionListings from '@/modules/market/components/CollectionListings.vue';
 import ListNftDialog from '@/modules/market/dialogs/ListNftDialog.vue';
 import UnlistNftDialog from '@/modules/market/dialogs/UnlistNftDialog.vue';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { useMyListings } from '@/shared/composables/useMyListings';
 import { formatLovelaceAsAda } from '@/shared/utils/format';
-import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
+import { nftMarketAvailable, nftMarketBrowseAvailable } from '@/shared/utils/nftMarketAvailability';
 
 
 const { t } = useTranslation();
@@ -115,6 +125,16 @@ const handleTokenClick = (token: CollectionToken) => {
 
 const { byUnit } = useMyListings();
 
+/** What the dialog shows of the collection: the NFTs the wallet holds, or the collection's open listings. */
+const view = ref<'yours' | 'sale'>('yours');
+
+/** The collection's policy ID, from its NFTs (the dialog's data names none of its own). */
+const policyId = computed(() => props.modalData?.items?.find((token) => /^[0-9a-f]{56}$/.test(String(token.policy_id)))?.policy_id);
+
+/** The choice between the wallet's NFTs and the collection's listings: where the market can be browsed, and not over an NFT's detail. */
+const showViewToggle = computed(() => pickedToken.value === null && !!policyId.value && nftMarketBrowseAvailable());
+const showListings = computed(() => showViewToggle.value && view.value === 'sale');
+
 /** The wallet's own listing of this NFT, where the market is available; the "Listed" badge reads it. */
 function listingOf(token: CollectionToken): OwnListing | undefined {
   return nftMarketAvailable() ? byUnit.value.get(String(token.unit).toLowerCase()) : undefined;
@@ -149,10 +169,17 @@ watch(isDialogVisible, (val) => {
   marketSheet.value = null;
   if (val) {
     pickedToken.value = null;
+    view.value = 'yours';
   }
 });
 </script>
 <style scoped>
+.tokens-view {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--g-s-3);
+}
+
 /* The "Listed" badge sits in the card's top-left corner, below the scam flag when there is one. */
 .token-listed {
   position: absolute;

@@ -12,6 +12,7 @@ import {
   isListableNft,
   nftMarketActionsFor,
   nftMarketAvailable,
+  nftMarketBrowseAvailable,
   nftMarketDeploymentFor,
   nftMarketNewestDeployment,
 } from './nftMarketAvailability';
@@ -100,6 +101,40 @@ describe('nftMarketAvailable', () => {
     walletStore.loggedWallet = wallet({ type: WalletType.Ledger });
     expect(nftMarketAvailable()).toBe(true);
     walletStore.loggedWallet = wallet({ type: WalletType.Trezor });
+    expect(nftMarketAvailable()).toBe(false);
+  });
+});
+
+describe('nftMarketBrowseAvailable', () => {
+  it('is on for any wallet on a network with a deployment, with the flag on: reading the market needs no key', () => {
+    for (const type of [WalletType.Normal, WalletType.Google, WalletType.Watch, WalletType.Ledger, WalletType.Trezor, WalletType.Keystone]) {
+      walletStore.loggedWallet = wallet({ type });
+      expect(nftMarketBrowseAvailable(), type).toBe(true);
+    }
+  });
+
+  it('is off while the flag is off, with no wallet, and on a network with no reviewed deployment', () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    expect(nftMarketBrowseAvailable()).toBe(false);
+    featureFlagsStore.state.flags.isNftMarketEnabled = true;
+    walletStore.loggedWallet = null;
+    expect(nftMarketBrowseAvailable()).toBe(false);
+    for (const network of [Network.MAINNET, Network.PREVIEW]) {
+      walletStore.loggedWallet = wallet({ network });
+      expect(nftMarketBrowseAvailable(), network).toBe(false);
+    }
+  });
+
+  it('is off for any chain but Cardano', () => {
+    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.APEX_PRIME]) {
+      walletStore.loggedWallet = wallet({ chain });
+      expect(nftMarketBrowseAvailable(), chain).toBe(false);
+    }
+  });
+
+  it('is wider than buying: a watch wallet browses but is not offered Buy', () => {
+    walletStore.loggedWallet = wallet({ type: WalletType.Watch });
+    expect(nftMarketBrowseAvailable()).toBe(true);
     expect(nftMarketAvailable()).toBe(false);
   });
 });

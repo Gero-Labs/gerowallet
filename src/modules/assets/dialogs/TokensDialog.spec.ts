@@ -41,6 +41,13 @@ vi.mock('@/modules/market/dialogs/UnlistNftDialog.vue', () => ({
   },
 }));
 
+vi.mock('@/modules/market/components/CollectionListings.vue', () => ({
+  default: {
+    props: ['policyId'],
+    template: `<div data-test="collection-listings" :data-policy="policyId" />`,
+  },
+}));
+
 import TokensDialog from './TokensDialog.vue';
 
 enableAutoUnmount(afterEach);
@@ -239,5 +246,77 @@ describe('the actions of an NFT', () => {
 
     expect(wrapper.find('[data-test="list-dialog"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="asset-listed-status"]').exists()).toBe(true);
+  });
+});
+
+describe('the collection\'s listings', () => {
+  const toggle = (wrapper: Wrapper) => wrapper.find('[data-testid="tokens-view"]');
+  const forSale = (wrapper: Wrapper) => wrapper.get('[data-testid="tokens-view-sale"]');
+  const yours = (wrapper: Wrapper) => wrapper.get('[data-testid="tokens-view-yours"]');
+  const listingsOf = (wrapper: Wrapper) => wrapper.find('[data-test="collection-listings"]');
+
+  it('starts on the wallet\'s own NFTs and offers the collection\'s listings beside them', () => {
+    const wrapper = render();
+    expect(toggle(wrapper).exists()).toBe(true);
+    expect(yours(wrapper).text()).toBe('In your wallet');
+    expect(forSale(wrapper).text()).toBe('For sale');
+    expect(cards(wrapper)).toHaveLength(2);
+    expect(listingsOf(wrapper).exists()).toBe(false);
+  });
+
+  it('shows the listings of this collection\'s policy, in place of the NFTs, when For sale is picked', async () => {
+    const wrapper = render();
+    await forSale(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(listingsOf(wrapper).attributes('data-policy')).toBe(POLICY);
+    expect(cards(wrapper)).toHaveLength(0);
+
+    await yours(wrapper).trigger('click');
+    await flushPromises();
+    expect(listingsOf(wrapper).exists()).toBe(false);
+    expect(cards(wrapper)).toHaveLength(2);
+  });
+
+  it('is there for a wallet that can only look: a watch wallet browses', async () => {
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Watch } as never;
+    const wrapper = render();
+    await forSale(wrapper).trigger('click');
+    await flushPromises();
+    expect(listingsOf(wrapper).exists()).toBe(true);
+  });
+
+  it('is not there while the market is off', () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    expect(toggle(render()).exists()).toBe(false);
+  });
+
+  it('is not there on a network with no reviewed deployment', () => {
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
+    expect(toggle(render()).exists()).toBe(false);
+  });
+
+  it('is not there for a collection whose policy is not known', () => {
+    const wrapper = render({ name: 'Nameless', items: [{ ...item(FREE_UNIT, 'Free'), policy_id: undefined }] });
+    expect(toggle(wrapper).exists()).toBe(false);
+  });
+
+  it('is hidden while one NFT\'s detail is on screen, and the way back lands on the NFTs', async () => {
+    const wrapper = render();
+    await forSale(wrapper).trigger('click');
+    await yours(wrapper).trigger('click');
+    await cardFor(wrapper, 'Free').trigger('click');
+    await flushPromises();
+    expect(toggle(wrapper).exists()).toBe(false);
+  });
+
+  it('starts on the NFTs again each time the dialog opens', async () => {
+    const wrapper = render();
+    await forSale(wrapper).trigger('click');
+    await wrapper.setProps({ modalData: undefined });
+    await wrapper.setProps({ modalData: COLLECTION as never });
+    await flushPromises();
+    expect(listingsOf(wrapper).exists()).toBe(false);
+    expect(cards(wrapper)).toHaveLength(2);
   });
 });

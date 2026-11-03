@@ -1,5 +1,6 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type WatchStopHandle } from 'vue';
-import marketApi, { type NftCollectionStats } from '@/api/market-api';
+import type { NftCollectionStats } from '@/api/market-api';
+import { loadTopNftCollections } from '@/modules/market/composables/useTopNftCollections';
 import { collectibleCollectionsNow } from '@/shared/composables/useCollectibleCollections';
 
 export interface NftCollectionDisplay {
@@ -114,16 +115,15 @@ export function useNftMarketData() {
       // show anyway. That per-collection loop was the source of the console spam.
       const uncachedIds = new Set(uncached.map(c => c.policyId));
       let bulkOk = false;
-      try {
-        const topCollections = await marketApi.getNftCollections('volume', 200);
-        if (Array.isArray(topCollections)) {
-          bulkOk = true;
-          for (const tc of topCollections) {
-            if (tc.policyId && uncachedIds.has(tc.policyId)) statsCache.set(tc.policyId, tc);
-          }
+      // The same list the market page's lookalike warning compares names against: one shared
+      // request. null = the bulk endpoint is unavailable — leave collections un-enriched and
+      // retry next round.
+      const topCollections = await loadTopNftCollections();
+      if (topCollections) {
+        bulkOk = true;
+        for (const tc of topCollections) {
+          if (tc.policyId && uncachedIds.has(tc.policyId)) statsCache.set(tc.policyId, tc);
         }
-      } catch {
-        // Bulk endpoint unavailable — leave collections un-enriched and retry next round.
       }
 
       // After a successful bulk pass, cache everything else as "no data" so we never

@@ -97,6 +97,29 @@ describe('i18n parity', () => {
       const offenders = Object.entries(dict).filter(([key, value]) => key.startsWith('nftMarket.') && /jpg/i.test(value)).map(([key]) => key);
       expect(offenders).toEqual([]);
     });
+
+    // The lookalike warning is useless without the real collection's policy ID: it is the one
+    // thing that tells a copy from the original (ruling R8).
+    it('keeps the real collection\'s name and policy ID in the lookalike warning', () => {
+      expect(placeholders(dict['nftMarket.browse.lookalike']!)).toEqual(['{name}', '{policyId}']);
+    });
+
+    // The purchase sheet's figures are the worker's, never baked into the copy.
+    it('takes the purchase sheet\'s amounts as placeholders and names no number of its own', () => {
+      expect(placeholders(dict['nftMarket.buy.depositNote']!)).toEqual(['{deposit}']);
+      expect(placeholders(dict['nftMarket.buy.priceDiffers']!)).toEqual(['{price}', '{shown}']);
+      for (const key of ['nftMarket.buy.depositNote', 'nftMarket.buy.priceDiffers', 'nftMarket.buy.minUtxoNote', 'nftMarket.buy.nftAdaNote']) {
+        expect(dict[key], key).not.toMatch(/\d/);
+      }
+    });
+  });
+
+  it('addresses German users formally in the browse and buy copy, as the rest of the market copy does', () => {
+    const de = locale('de');
+    const keys = Object.keys(de).filter((key) => key.startsWith('nftMarket.browse.') || key.startsWith('nftMarket.buy.'));
+    expect(keys.length).toBeGreaterThan(0);
+    const informal = keys.filter((key) => /\b(du|dein\w*|dich|dir)\b/i.test(de[key]!));
+    expect(informal).toEqual([]);
   });
 
   it('keeps "sitzt fest" for a stuck NFT in German, as the other listing warnings do', () => {
