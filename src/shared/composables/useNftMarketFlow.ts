@@ -46,8 +46,10 @@ import { MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
  * out of the reply, and the rule a verifier refused on is only logged (VERIFY_FAILED reads the
  * same whatever refused).
  *
- *   changed         nothing was sent: the listing or the NFT is not as it was (sold, delisted,
- *                   repriced, moved). Refresh what is shown, then the user may start again.
+ *   changed         the listing or the NFT is not as it was (sold, delisted, repriced, moved). This
+ *                   attempt sent nothing, but the change may be the user's OWN earlier transaction
+ *                   having gone through, so the copy says it may have and points to Activity.
+ *                   Refresh what is shown, then the user may start again.
  *   maybeSent       signed, and the submit was not confirmed: the transaction may be on chain.
  *                   Send the user to their activity; never offer a retry.
  *   wrongPassword   the spending password was wrong: stay on the review and ask again.

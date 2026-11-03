@@ -22,7 +22,10 @@
 // cancel of, something that is not theirs. Both halves are checked, never just one.
 //
 // What this does NOT decide: signing. Refusing to sign a transaction that spends a listed UTxO
-// is the signing guard's job and reads the whole candidate set, not only the verified listings.
+// is the signing guard's job (marketGuard.ts, through WalletBg.findMarketTouch). It reads the
+// VERIFIED listings only: a listing this file has not recognised cannot be told from somebody
+// else's, and spending somebody else's is not the wallet's loss. It also holds any output paid to
+// a listing script, whoever's it is.
 
 import { Cardano } from '@cardano-sdk/core';
 import type { Keys } from '@/models/types';
