@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { NFT_MARKET_EXPIRED_KEY, marketSignRefusalKey } from './nftMarketSignRefusal';
 
 describe('marketSignRefusalKey', () => {

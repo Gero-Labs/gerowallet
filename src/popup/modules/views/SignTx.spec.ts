@@ -51,7 +51,7 @@ import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { TxSignError } from '@/chrome/config';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 enableAutoUnmount(afterEach);
 beforeEach(() => {

@@ -1,4 +1,4 @@
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 /** The i18n key the worker's market signing refusal (its allowance or dApp pass ran out) is shown as. */
 export const NFT_MARKET_EXPIRED_KEY = 'nftMarket.error.expired';

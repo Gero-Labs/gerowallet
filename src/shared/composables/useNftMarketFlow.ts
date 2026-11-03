@@ -3,7 +3,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import type { MarketAction, RoyaltyNotes } from '@/chrome/nftMarket/marketPrepare';
 import type { CancelSummary, ListSummary, RepriceSummary } from '@/chrome/nftMarket/verifyListing';
 import type { BuySummary } from '@/chrome/nftMarket/verifyBuy';

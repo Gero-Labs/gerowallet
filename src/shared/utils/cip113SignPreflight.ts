@@ -1,5 +1,4 @@
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { CIP113_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 

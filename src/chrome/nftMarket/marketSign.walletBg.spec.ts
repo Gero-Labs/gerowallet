@@ -17,13 +17,12 @@ import WalletStore from '@/stores/walletStore';
 import { getPaymentKeyExternal, getStakeKey } from '@/chrome/serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { setWalletConfiguration } from '@/db/wallet-db';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { clearCip113SignAllowance, grantCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { NFT_MARKET_DEPLOYMENTS_PREPROD } from '@/utils/nftMarketDeployments';
 import { Blockchain, CoinTypes, HARDENED, Network, WalletType, WalletTypePurpose } from '@/models/types';
 import {
   DAPP_MARKET_PASS_TTL_MS,
-  NFT_MARKET_SIGN_REFUSAL_MESSAGE,
   clearDappMarketPasses,
   clearMarketSignAllowance,
   grantDappMarketPass,

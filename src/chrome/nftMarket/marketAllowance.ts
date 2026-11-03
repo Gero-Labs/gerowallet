@@ -26,13 +26,6 @@
 // without consuming, because the device may still be declined. A page cannot create a pass: the
 // only callers of grantDappMarketPass are the dApp signing entries in background.ts.
 
-/**
- * What every market signing path reports once a transaction touching a Gero listing is refused.
- * Fixed English, thrown from the background (which has no i18n), so a page can map it back to
- * its own copy, as it does for the CIP-113 refusal.
- */
-export const NFT_MARKET_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign a market transaction that was not prepared and checked by this wallet';
-
 /** How long a verified market transaction may wait for its signature. */
 export const NFT_MARKET_ALLOWANCE_TTL_MS = 5 * 60_000;
 

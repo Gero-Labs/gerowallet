@@ -7,7 +7,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { useTransactionSigning } from './useTransactionSigning';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), ledger: vi.fn(), evaluatePrf: vi.fn(), decryptPrf: vi.fn(), error: vi.fn(), success: vi.fn(), createQr: vi.fn(), parseQr: vi.fn() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, utxos: [], keys: [], config: { txAutoSubmit: true }, isLocked: false }) }));

@@ -9,7 +9,7 @@ import {
   SUBMIT_API_STORAGE_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 describe('isCollateralError', () => {
   it('matches a genuine missing-collateral error', () => {

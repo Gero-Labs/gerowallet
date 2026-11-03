@@ -41,7 +41,7 @@ import {
   type NftMarketFailureKind,
 } from './useNftMarketFlow';
 import type { MarketAction } from '@/chrome/nftMarket/marketPrepare';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { describeSubmitFailure } from '@/chrome/submitErrors';
 import i18n from '@/plugins/i18n';
 import { MessageTypes } from '@/models/MessageTypes';

@@ -2,11 +2,11 @@
 // was prepared for, touching only what the verification found, within five minutes. The same
 // rules as the CIP-113 allowance (cip113Allowance.spec.ts), in a slot of its own.
 import { beforeEach, describe, expect, it } from 'vitest';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import {
   DAPP_MARKET_PASS_MAX,
   DAPP_MARKET_PASS_TTL_MS,
   NFT_MARKET_ALLOWANCE_TTL_MS,
-  NFT_MARKET_SIGN_REFUSAL_MESSAGE,
   clearDappMarketPasses,
   clearMarketSignAllowance,
   consumeDappMarketPass,

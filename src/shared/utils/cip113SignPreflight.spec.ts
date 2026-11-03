@@ -6,7 +6,7 @@ vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions:
 
 import { assertCip113SignAllowed } from './cip113SignPreflight';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/nftMarket/marketAllowance';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { MessageTypes } from '@/models/MessageTypes';
 
 describe('assertCip113SignAllowed', () => {

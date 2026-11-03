@@ -4,7 +4,7 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import {
   describeSubmitFailure,
   isUnexpectedSubmitResponseError,
@@ -59,11 +59,7 @@ import {
   type OwnListingRejection,
 } from '@/chrome/nftMarket/ownListings';
 import { findMarketTouch } from '@/chrome/nftMarket/marketGuard';
-import {
-  NFT_MARKET_SIGN_REFUSAL_MESSAGE,
-  consumeMarketAuthorization,
-  hasMarketAuthorization,
-} from '@/chrome/nftMarket/marketAllowance';
+import { consumeMarketAuthorization, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
 import { SecretPurpose, decrypt, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
