@@ -1,6 +1,6 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type WatchStopHandle } from 'vue';
 import marketApi, { type NftCollectionStats } from '@/api/market-api';
-import { walletStore } from '@/stores/walletStore';
+import { collectibleCollectionsNow } from '@/shared/composables/useCollectibleCollections';
 
 export interface NftCollectionDisplay {
   policyId: string;
@@ -73,9 +73,10 @@ export function useNftMarketData() {
     fetchInFlight = true;
     loading.value = true;
     try {
-      // Start from walletStore.collections (populated by chain sync — always available)
-      const walletCollections = walletStore.collections || {};
-      const entries = Object.entries(walletCollections) as [string, any][];
+      // Start from walletStore.collections (populated by chain sync — always available), with
+      // the NFTs the wallet has listed on Gero's market added back where it is available.
+      const walletCollections = collectibleCollectionsNow();
+      const entries = Object.entries(walletCollections);
 
       if (entries.length === 0) {
         collections.value = [];
@@ -156,7 +157,7 @@ export function useNftMarketData() {
   // Re-fetch when wallet collections change (e.g. wallet switch) — register only once
   if (!nftWatcherRegistered) {
     nftWatcherRegistered = true;
-    nftWatcherStop = watch(() => walletStore.collections, () => {
+    nftWatcherStop = watch(() => collectibleCollectionsNow(), () => {
       // Coalesce bursts of sync updates (which fire on every tip) into one fetch.
       if (fetchDebounce) clearTimeout(fetchDebounce);
       fetchDebounce = setTimeout(() => { fetchDebounce = null; fetchUserNftCollections(); }, 600);

@@ -32,7 +32,11 @@
 // Addresses pass through unchanged. Checking an address's shape and network belongs to whoever
 // turns the result into a list intent; only an entry with no address at all is dropped here.
 
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
+import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
 import type { Payee } from './listingDatum';
 
@@ -226,4 +230,33 @@ function largestThenAddress(a: PricedEntry, b: PricedEntry): number {
   if (a.lovelace !== b.lovelace) return a.lovelace > b.lovelace ? -1 : 1;
   if (a.address !== b.address) return a.address < b.address ? -1 : 1;
   return a.index - b.index;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The smallest royalty an output can hold
+// ---------------------------------------------------------------------------------------------
+
+/** 32-byte inline datum: what a payee output with its listing tag carries. */
+const TAG_DATUM_SAMPLE = `5820${'00'.repeat(32)}`;
+/** Any amount that encodes the way a royalty usually does (4 bytes); the minimum hardly moves with it. */
+const SAMPLE_COINS = 2_000_000n;
+
+/**
+ * The least lovelace a royalty payee output (a base address, an ADA amount, the 32-byte tag as
+ * inline datum) may hold: `(160 + serialised size) * coinsPerUtxoByte`, 1,155,080 at 4310. A
+ * royalty under it is left out of the datum rather than raised by the builder at the buyer's
+ * expense (spec 5.5). A shorter address (enterprise) could hold a little less; the base address
+ * is the common case and the larger of the two, so a royalty that is left out is never one that
+ * would have fitted.
+ */
+export function royaltyOutputMinUtxo(coinsPerUtxoByte: bigint): bigint {
+  const key = { hash: Hash28ByteBase16('00'.repeat(28)), type: Cardano.CredentialType.KeyHash };
+  const address = Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Testnet, key, key).toAddress().toBech32();
+  const output: Cardano.TxOut = {
+    address: Cardano.PaymentAddress(address),
+    value: { coins: SAMPLE_COINS },
+    datum: inlineDatumFromCbor(HexBlob(TAG_DATUM_SAMPLE)),
+  };
+  const size = BigInt(Serialization.TransactionOutput.fromCore(output).toCbor().length / 2);
+  return (160n + size) * coinsPerUtxoByte;
 }

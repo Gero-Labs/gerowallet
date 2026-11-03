@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
-import { computeRoyalties } from './royalties';
+import { computeRoyalties, royaltyOutputMinUtxo } from './royalties';
 
 const ADA = 1_000_000n;
 // Seller and royalty outputs carry a 32-byte inline datum and need about 1.2 ADA (spec 5.5).
@@ -711,5 +711,15 @@ describe('computeRoyalties: CIP-102 fee bounds', () => {
       (numeric.recipients[0] as { minFeeLovelace: unknown }).minFeeLovelace = 5_000_000;
       expect(computeRoyalties(100n * ADA, numeric, OPTS).malformed).toBe(true);
     });
+  });
+});
+
+describe('royaltyOutputMinUtxo', () => {
+  it('is the minimum of an ADA-only output with a 32-byte inline datum: 1 155 080 lovelace at 4310 per byte', () => {
+    expect(royaltyOutputMinUtxo(4310n)).toBe(1_155_080n);
+  });
+
+  it('scales with the protocol parameter', () => {
+    expect(royaltyOutputMinUtxo(8620n)).toBe(2n * 1_155_080n);
   });
 });

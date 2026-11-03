@@ -15,17 +15,49 @@
                   </v-icon>{{ t('assets.scamToken') }}
                 </v-chip>
               </div>
+              <!-- Listed on Gero's market: the price it is listed at. -->
+              <div v-if="listingOf(token)" class="token-listed" :class="{ 'token-listed--below-scam': token.isScam }">
+                <v-chip size="x-small" label class="token-listed__chip px-2 ma-2" data-testid="token-listed-badge">
+                  {{ t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listingOf(token)!.datum.price) }) }}
+                </v-chip>
+              </div>
               <div class="collectible-text-container">
                 <span class="collectible-text">{{ token.name }}</span>
               </div>
             </v-card>
           </v-col>
         </v-row>
-      <AssetDetails :asset="pickedToken" v-else ref="assetDetailsRef" />
+      <AssetDetails
+        :asset="pickedToken"
+        v-else
+        ref="assetDetailsRef"
+        @list="openSheet('list')"
+        @edit-price="openSheet('reprice')"
+        @unlist="openSheet('unlist')"
+      />
     </v-card-text>
     <v-card-actions class="justify-center py-0">
       <v-btn variant="text" elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">{{ t('common.back') }}</v-btn>
     </v-card-actions>
+
+    <!-- Gero's NFT market: the sheets are mounted for one NFT and one action at a time, and taken
+         away on close, so each starts clean. They live here, not in AssetDetails, so the NFT on
+         screen outlives the sheet's own "done" screen while the sync catches up. -->
+    <ListNftDialog
+      v-if="marketSheet && marketSheet.kind !== 'unlist'"
+      :key="`${marketSheet.kind}:${marketSheet.unit}`"
+      :is-open="true"
+      :unit="marketSheet.unit"
+      :existing="marketSheet.existing"
+      @close="closeSheet()"
+    />
+    <UnlistNftDialog
+      v-else-if="marketSheet && marketSheet.existing"
+      :key="`unlist:${marketSheet.unit}`"
+      :is-open="true"
+      :existing="marketSheet.existing"
+      @close="closeSheet()"
+    />
   </BaseDialog>
 </template>
 <script setup lang="ts">
@@ -33,6 +65,12 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
+import ListNftDialog from '@/modules/market/dialogs/ListNftDialog.vue';
+import UnlistNftDialog from '@/modules/market/dialogs/UnlistNftDialog.vue';
+import type { OwnListing } from '@/chrome/nftMarket/ownListings';
+import { useMyListings } from '@/shared/composables/useMyListings';
+import { formatLovelaceAsAda } from '@/shared/utils/format';
+import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
 
 
 const { t } = useTranslation();
@@ -73,6 +111,32 @@ const handleTokenClick = (token: CollectionToken) => {
   pickedToken.value = token;
 };
 
+// ---- Gero's NFT market ---------------------------------------------------------------------
+
+const { byUnit } = useMyListings();
+
+/** The wallet's own listing of this NFT, where the market is available; the "Listed" badge reads it. */
+function listingOf(token: CollectionToken): OwnListing | undefined {
+  return nftMarketAvailable() ? byUnit.value.get(String(token.unit).toLowerCase()) : undefined;
+}
+
+type MarketSheet = { kind: 'list' | 'reprice' | 'unlist'; unit: string; existing?: OwnListing };
+const marketSheet = ref<MarketSheet | null>(null);
+
+/** Open the list, edit-price or unlist sheet for the NFT on screen. Edit price and Unlist need its listing. */
+function openSheet(kind: MarketSheet['kind']): void {
+  const token = pickedToken.value;
+  if (!token) return;
+  const unit = String(token.unit).toLowerCase();
+  const existing = kind === 'list' ? undefined : listingOf(token);
+  if (kind !== 'list' && !existing) return;
+  marketSheet.value = { kind, unit, existing };
+}
+
+const closeSheet = () => {
+  marketSheet.value = null;
+};
+
 const handleClose = () => {
   // Stop any playing media before closing
   if (assetDetailsRef.value && assetDetailsRef.value.stopMedia) {
@@ -82,13 +146,31 @@ const handleClose = () => {
 };
 
 watch(isDialogVisible, (val) => {
+  marketSheet.value = null;
   if (val) {
-    console.log("tokensData", JSON.stringify(tokensData.value));
     pickedToken.value = null;
   }
 });
 </script>
 <style scoped>
+/* The "Listed" badge sits in the card's top-left corner, below the scam flag when there is one. */
+.token-listed {
+  position: absolute;
+  top: 0;
+  display: flex;
+}
+
+.token-listed--below-scam {
+  top: 28px;
+}
+
+/* A chip is a control: a solid token, with a hairline, reads on any NFT picture. */
+.token-listed__chip {
+  color: var(--g-text-1);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+}
+
 .close-button {
   position: absolute;
   top: 10px;

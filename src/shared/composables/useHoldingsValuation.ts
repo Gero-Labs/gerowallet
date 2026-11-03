@@ -27,12 +27,14 @@ import { useMarketData, type MarketToken } from '@/modules/market/composables/us
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { isRealFiAsset } from '@/modules/realfi/assets';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 export function useHoldingsValuation() {
   const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
+  const { t } = useTranslation();
 
   const isApex = computed(() =>
     loggedWallet.value?.chain === Blockchain.APEX_PRIME
@@ -157,7 +159,11 @@ export function useHoldingsValuation() {
 
       rows.push({
         unit,
-        name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
+        // The ADA in the wallet's own listings is a second ADA row beside the spendable one: it says
+        // what it is, wherever a holdings row renders its name.
+        name: isListed
+          ? t('nftMarket.holdings.listedAda')
+          : marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
         // The table renders `ticker` as the row label, so an empty one leaves a
         // nameless row. Tokens with no registry entry and no market data have none,
         // so fall back to the asset name resolveAsset() already decoded.

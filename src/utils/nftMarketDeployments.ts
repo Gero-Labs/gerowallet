@@ -104,6 +104,12 @@ export const NFT_MARKET_ALLOWED_NETWORKS: readonly string[] = [Network.MAINNET, 
 /** Lowest list price the wallet offers, in lovelace (5 ADA). */
 export const MIN_LIST_PRICE = 5_000_000n;
 
+/**
+ * Highest list price the wallet accepts, in lovelace: the whole ADA supply (45 billion ADA). Above
+ * it a price is a typo, and the worker refuses it before anything is built.
+ */
+export const MAX_LIST_PRICE = 45_000_000_000_000_000n;
+
 /** Least the seller must receive after fee and royalties, in lovelace (1.5 ADA). */
 export const MIN_SELLER_SHARE = 1_500_000n;
 

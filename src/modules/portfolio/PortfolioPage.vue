@@ -429,6 +429,7 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { useCollectibleCollections } from '@/shared/composables/useCollectibleCollections';
 import { walletStore, hasLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
@@ -509,7 +510,10 @@ const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, collections, bitcoinBalance } = toRefs(walletStore);
+const { loggedWallet, transactions, account, bitcoinBalance } = toRefs(walletStore);
+// The wallet's NFT collections, with the ones it has listed on Gero's market added back where the
+// market is available: a listed NFT is locked at the contract, outside the store's own.
+const collections = useCollectibleCollections();
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 

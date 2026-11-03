@@ -138,6 +138,21 @@ export function formatPercentOfFraction(fraction: number, localeCode: string = '
   return (fraction * 100).toLocaleString(localeCode, { maximumFractionDigits: 2 });
 }
 
+/**
+ * An exact lovelace amount as ADA (en-US, like every ADA amount in the wallet): the whole part
+ * grouped by thousands, up to six decimals with no trailing zeros. Worked in bigint end to end,
+ * so a price near the ADA supply keeps every digit and a breakdown always adds up to the lovelace.
+ * Use it where an amount is money being agreed to (a price, a fee, a deposit); formatTokenQuantity
+ * rounds to two decimals above 1,000 and goes through a float.
+ */
+export function formatLovelaceAsAda(lovelace: bigint): string {
+  const negative = lovelace < 0n;
+  const absolute = negative ? -lovelace : lovelace;
+  const whole = (absolute / 1_000_000n).toLocaleString('en-US');
+  const fraction = (absolute % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
+}
+
 /** Format a percentage change (absolute value + %) */
 export function formatChange(change: number): string {
   return Math.abs(change).toFixed(1) + '%';

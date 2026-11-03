@@ -18,6 +18,7 @@ import {
   ListingDatumError,
   decodeListingDatum,
   listingFee,
+  listingSplit,
   listingTag,
   listingTagPreimage,
   sellerDue,
@@ -812,5 +813,25 @@ describe('sellerShare and sellerDue', () => {
   it('follows the deployment passed in', () => {
     const uncapped: NftMarketDeployment = { ...V1, maxFeeLovelace: null };
     expect(sellerShare(listing(5_000n * ADA), uncapped)).toBe(4_950n * ADA);
+  });
+});
+
+describe('listingSplit', () => {
+  it('splits 100 ADA with a 5 ADA royalty into fee 1.5, royalties 5 and 93.5 for the seller', () => {
+    expect(listingSplit(100n * ADA, [{ lovelace: 5n * ADA }], V1)).toEqual({ fee: 1_500_000n, royalties: 5_000_000n, sellerShare: 93_500_000n });
+  });
+
+  it('is the arithmetic of sellerShare: the same number for the same price and royalties', () => {
+    for (const price of [5n * ADA, 10n * ADA, 150n * ADA, 600n * ADA, 5_000n * ADA]) {
+      const royalties = [{ lovelace: 1_250_000n }, { lovelace: 777_777n }];
+      const l = { owner: OWNER, sellerAddress: 'addr_test1seller', price, royalties: royalties.map((r) => ({ address: 'a', lovelace: r.lovelace })), buyer: null };
+      expect(listingSplit(price, royalties, V1).sellerShare).toBe(sellerShare(l, V1));
+      expect(listingSplit(price, royalties, V1).fee).toBe(listingFee(price, V1));
+    }
+  });
+
+  it('has no royalties to add up for an empty list, and can go negative when nothing is left', () => {
+    expect(listingSplit(10n * ADA, [], V1)).toEqual({ fee: 1_500_000n, royalties: 0n, sellerShare: 8_500_000n });
+    expect(listingSplit(3n * ADA, [{ lovelace: 2n * ADA }], V1).sellerShare).toBe(-500_000n);
   });
 });

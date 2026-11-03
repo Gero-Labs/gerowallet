@@ -389,12 +389,32 @@ export function listingFee(price: bigint, d: ListingFeeParams): bigint {
   return fee;
 }
 
+/** Where a price goes: the market fee, the royalties and what is left for the seller. */
+export interface ListingSplit {
+  fee: bigint;
+  /** The sum of the royalty amounts. */
+  royalties: bigint;
+  /** `price - fee - royalties`. Zero or negative means the listing can never be bought. */
+  sellerShare: bigint;
+}
+
+/**
+ * The split of `price` for these royalties under a deployment's fee parameters: the one place the
+ * seller's share is worked out, for the datum of a listing (`sellerShare`) and for the list and
+ * edit-price sheets that show it before the datum exists.
+ */
+export function listingSplit(price: bigint, royalties: readonly { lovelace: bigint }[], d: ListingFeeParams): ListingSplit {
+  const fee = listingFee(price, d);
+  const paid = royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
+  return { fee, royalties: paid, sellerShare: price - fee - paid };
+}
+
 /**
  * What the seller keeps of the price: `price - fee - sum(royalties)`. Zero or negative means
  * the listing can never be bought (rules.md P2); callers decide what to do with that.
  */
 export function sellerShare(l: ListingDatum, d: ListingFeeParams): bigint {
-  return l.price - listingFee(l.price, d) - l.royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
+  return listingSplit(l.price, l.royalties, d).sellerShare;
 }
 
 /**

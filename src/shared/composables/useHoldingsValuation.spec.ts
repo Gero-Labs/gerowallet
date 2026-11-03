@@ -205,6 +205,21 @@ describe('useHoldingsValuation — own listing deposits', () => {
     expect(rows.find(r => r.isProgrammable)!.balance).toBe(2.5);
   });
 
+  it('names it "ADA in your listings", so it never reads as a second unlabeled ADA row', () => {
+    walletStore.listedLockedLovelace = '3500000';
+    walletStore.programmableLockedLovelace = '2500000';
+    walletStore.utxos = [];
+
+    const rows = useHoldingsValuation().holdings.value.filter(r => r.unit === 'lovelace');
+    const listed = rows.find(r => r.isListed)!;
+
+    expect(listed.name).toBe('ADA in your listings');
+    // Still ADA: the ticker, and so every place that matches on it, is unchanged.
+    expect(listed.ticker).toBe('ADA');
+    // The CIP-113 row keeps its own wording.
+    expect(rows.find(r => r.isProgrammable)!.name).not.toBe('ADA in your listings');
+  });
+
   it('renders no listed-ADA row when nothing is listed, or the stored value is unreadable', () => {
     walletStore.listedLockedLovelace = '0';
     expect(useHoldingsValuation().holdings.value.find(r => r.isListed)).toBeUndefined();

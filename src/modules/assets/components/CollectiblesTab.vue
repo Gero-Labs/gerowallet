@@ -33,6 +33,10 @@
                   <v-icon start size="x-small">mdi-alert-decagram</v-icon>
                   {{ $t('assets.scam') }}
                 </v-chip>
+                <!-- Listed on Gero's market: the price of the one NFT, or how many of the collection. -->
+                <v-chip v-if="listedBadgeText(collection)" size="small" variant="outlined" class="listed-chip" data-testid="collection-listed-badge">
+                  {{ listedBadgeText(collection) }}
+                </v-chip>
               </div>
             </v-img>
           </div>
@@ -61,9 +65,13 @@
 
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
-import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
-import { walletStore } from '@/stores/walletStore';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
+import { useCollectibleCollections } from '@/shared/composables/useCollectibleCollections';
+import { useMyListings } from '@/shared/composables/useMyListings';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { formatLovelaceAsAda } from '@/shared/utils/format';
+import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
 
 // Props
 interface Props {
@@ -83,8 +91,12 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 defineEmits(['rowClick']);
 
-// Store references
-const { collections } = toRefs(walletStore);
+const { t } = useTranslation();
+
+// The wallet's collections, with the NFTs it has listed added back where Gero's market is
+// available: a listed NFT is locked at the market contract and so absent from the store's own.
+const collections = useCollectibleCollections();
+const { byUnit } = useMyListings();
 
 /**
  * Shape of a walletStore collection as this tab consumes it. The store keeps
@@ -117,9 +129,23 @@ const closeDialog = () => {
   dialogData.value = null;
 };
 
+/**
+ * What the "Listed" badge of a collection card says, or '' for none: the price when the
+ * collection is that one NFT, otherwise how many of its NFTs are listed.
+ */
+function listedBadgeText(collection: CollectionEntry): string {
+  if (!nftMarketAvailable()) return '';
+  const listed = collection.items.map((item) => byUnit.value.get(String(item.unit).toLowerCase())).filter((listing) => listing !== undefined);
+  if (listed.length === 0) return '';
+  if (listed.length === 1 && collection.items.length === 1) {
+    return t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listed[0]!.datum.price) });
+  }
+  return t('nftMarket.badge.listedCount', { count: listed.length });
+}
+
 // Computed properties
 const collectibles = computed<CollectionEntry[]>(() => {
-  let res = Object.values(collections.value as Record<string, CollectionEntry>).filter((collection) =>
+  let res = Object.values(collections.value as unknown as Record<string, CollectionEntry>).filter((collection) =>
     collection.items.every(item => !item.metadata)
   );
   if (res && props.hideScam) {
@@ -319,6 +345,8 @@ onUnmounted(() => {
   padding-top: 8px;
   z-index: 2;
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   justify-content: space-between;
   padding-left: 8px;
   padding-right: 8px;
@@ -328,6 +356,13 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.7) !important;
   border: 1px solid var(--g-hairline-3) !important;
   color: var(--g-text-1) !important;
+}
+
+/* A chip is a control: a solid token reads on any collection picture. */
+.listed-chip {
+  background: var(--g-raised);
+  border-color: var(--g-hairline-2);
+  color: var(--g-text-1);
 }
 
 .card-content-overlay {

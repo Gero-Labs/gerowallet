@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatPercentOfFraction, formatTokenQuantity } from './format';
+import { formatLovelaceAsAda, formatPercentOfFraction, formatTokenQuantity } from './format';
 
 describe('formatTokenQuantity', () => {
   // The CIP-113 preprod holdings a tester reported as "2" and "2.57".
@@ -45,5 +45,31 @@ describe('formatPercentOfFraction', () => {
   it("uses the locale's own decimal separator", () => {
     expect(formatPercentOfFraction(0.128125, 'de-DE')).toBe('12,81');
     expect(formatPercentOfFraction(0.128125, 'en-US')).toBe('12.81');
+  });
+});
+
+describe('formatLovelaceAsAda', () => {
+  it('writes an exact lovelace amount as ADA, with no trailing zeros', () => {
+    expect(formatLovelaceAsAda(93_500_000n)).toBe('93.5');
+    expect(formatLovelaceAsAda(1_500_000n)).toBe('1.5');
+    expect(formatLovelaceAsAda(5_000_000n)).toBe('5');
+    expect(formatLovelaceAsAda(1_155_080n)).toBe('1.15508');
+  });
+
+  it('keeps every digit down to one lovelace, however large the amount', () => {
+    expect(formatLovelaceAsAda(1n)).toBe('0.000001');
+    expect(formatLovelaceAsAda(1_000_123_456n)).toBe('1,000.123456');
+    // Past 2^53 lovelace a float would round: this is the whole ADA supply plus one lovelace.
+    expect(formatLovelaceAsAda(45_000_000_000_000_001n)).toBe('45,000,000,000.000001');
+  });
+
+  it('groups thousands of whole ADA and reads zero as 0', () => {
+    expect(formatLovelaceAsAda(4_995_000_000n)).toBe('4,995');
+    expect(formatLovelaceAsAda(0n)).toBe('0');
+  });
+
+  it('keeps the sign of a negative amount', () => {
+    expect(formatLovelaceAsAda(-500_000n)).toBe('-0.5');
+    expect(formatLovelaceAsAda(-3_000_000n)).toBe('-3');
   });
 });

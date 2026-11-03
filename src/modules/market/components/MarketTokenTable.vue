@@ -110,6 +110,16 @@
         >
           {{ $t('programmableTokens.badge') }}
         </v-chip>
+        <!-- ADA held in the wallet's own Gero listings: a row of its own beside the spendable ADA. -->
+        <v-chip
+          v-if="item.isListed"
+          size="x-small" label
+          class="ml-1 flex-shrink-0"
+          style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-text-2); background: var(--g-raised); border: 1px solid var(--g-hairline-2);"
+          data-testid="holdings-listed-badge"
+        >
+          {{ $t('nftMarket.holdings.listedBadge') }}
+        </v-chip>
         <v-chip
           v-if="showOwnedBadge && ownedUnits.has(item.unit)"
           size="x-small" label

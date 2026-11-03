@@ -49,13 +49,11 @@
 //   VERIFY_FAILED               the built transaction is not what was asked for; `error` is the MarketVerifyError rule
 
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import type { Keys } from '@/models/types';
-import { Blockchain, Network } from '@/models/types';
+import { Network } from '@/models/types';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
-import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import { debugLog } from '@/utils/debug';
 import { SENDER, TARGET } from '@/chrome/config';
 import { forEachAsset } from '@/api/nexusInputSelection';
@@ -74,16 +72,17 @@ import type { ListingDto, ListingRef, RoyaltyInfo } from '@/api/nft-market-api';
 import { ownKeys } from '@/chrome/cip113PrepareTransfer';
 import { keyAddressUtxos } from '@/chrome/legacyCancelPrepare';
 import {
+  MAX_LIST_PRICE,
   MIN_LIST_PRICE,
   MIN_SELLER_SHARE,
-  isNftMarketHardware,
   type NftMarketDeployment,
 } from '@/utils/nftMarketDeployments';
+import { canUseNftMarketWallet } from '@/utils/nftMarketGate';
 import { listingFee } from './listingDatum';
 import { ListingUtxoError, type ListingChainUtxo } from './listingChainUtxo';
 import { findMarketTouch } from './marketGuard';
 import { reviveOwnListings, type OwnListing } from './ownListings';
-import { computeRoyalties } from './royalties';
+import { computeRoyalties, royaltyOutputMinUtxo } from './royalties';
 import { verifyBuy, type BuySummary } from './verifyBuy';
 import {
   MarketVerifyError,
@@ -100,16 +99,13 @@ import {
 } from './verifyListing';
 import { verifyMigrate, type MigrateSummary } from './verifyMigrate';
 
-export type MarketAction = 'list' | 'reprice' | 'cancel' | 'buy' | 'migrate';
+// Moved to royalties.ts so the pages that preview a listing can read it without the worker's handlers.
+export { royaltyOutputMinUtxo };
 
-/** Wallet types that sign in the worker with a key the wallet holds (as CIP-113 Send and the rescue). */
-const SOFTWARE_WALLET_TYPES = new Set(['Normal', 'Google']);
+export type MarketAction = 'list' | 'reprice' | 'cancel' | 'buy' | 'migrate';
 
 /** Most UTxOs offered to one build: what Nexus's legacy cancel takes, the same candidate-selection limit. */
 export const MARKET_MAX_FEE_INPUTS = 50;
-
-/** The most a price can be: the whole ADA supply (45 billion ADA) in lovelace. */
-const MAX_LIST_PRICE = 45_000_000_000_000_000n;
 
 const UTXO_REF = /^[0-9a-f]{64}#\d{1,5}$/;
 /** policy id (28 bytes) then an asset name of up to 32 bytes. */
@@ -313,7 +309,8 @@ interface Session {
 }
 
 function openSession(kind: MarketAction, deps: MarketHandlerDeps, wallet: MarketHandlerWallet): Session {
-  if (wallet.chain !== Blockchain.CARDANO || !(SOFTWARE_WALLET_TYPES.has(wallet.type) || isNftMarketHardware(wallet.type))) {
+  // The same predicate the pages read to decide whether to show the market's actions at all.
+  if (!canUseNftMarketWallet(wallet.chain, wallet.type)) {
     throw new MarketPrepareError('WALLET_UNSUPPORTED', 'The market is not available for this wallet');
   }
   const deployments = deps.deployments(wallet.chain, wallet.network);
@@ -567,31 +564,6 @@ function checkListableUnit(unit: string): void {
 // ---------------------------------------------------------------------------------------------
 // Royalties
 // ---------------------------------------------------------------------------------------------
-
-/** 32-byte inline datum: what a payee output with its listing tag carries. */
-const TAG_DATUM_SAMPLE = `5820${'00'.repeat(32)}`;
-/** Any amount that encodes the way a royalty usually does (4 bytes); the minimum hardly moves with it. */
-const SAMPLE_COINS = 2_000_000n;
-
-/**
- * The least lovelace a royalty payee output (a base address, an ADA amount, the 32-byte tag as
- * inline datum) may hold: `(160 + serialised size) * coinsPerUtxoByte`, 1,155,080 at 4310. A
- * royalty under it is left out of the datum rather than raised by the builder at the buyer's
- * expense (spec 5.5). A shorter address (enterprise) could hold a little less; the base address
- * is the common case and the larger of the two, so a royalty that is left out is never one that
- * would have fitted.
- */
-export function royaltyOutputMinUtxo(coinsPerUtxoByte: bigint): bigint {
-  const key = { hash: Hash28ByteBase16('00'.repeat(28)), type: Cardano.CredentialType.KeyHash };
-  const address = Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Testnet, key, key).toAddress().toBech32();
-  const output: Cardano.TxOut = {
-    address: Cardano.PaymentAddress(address),
-    value: { coins: SAMPLE_COINS },
-    datum: inlineDatumFromCbor(HexBlob(TAG_DATUM_SAMPLE)),
-  };
-  const size = BigInt(Serialization.TransactionOutput.fromCore(output).toCbor().length / 2);
-  return (160n + size) * coinsPerUtxoByte;
-}
 
 /** `part / whole` as a decimal fraction with six digits, computed exactly (no float meets lovelace). */
 function fractionText(part: bigint, whole: bigint): string {

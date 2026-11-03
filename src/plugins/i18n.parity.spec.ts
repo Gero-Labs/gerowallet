@@ -81,6 +81,29 @@ describe('i18n parity', () => {
     });
   });
 
+  // The market's warnings and sheets. The "holds more" warning also shows for an output that holds
+  // no NFT at all, so it may not say "more than the one NFT"; the German keeps one word for a
+  // listing that sits stuck ("festsitzen"); the market copy never names the closed marketplace.
+  describe.each(READY_LANGUAGES)('market copy: %s', (lang) => {
+    const dict = locale(lang);
+
+    it('says the listing does not hold exactly one NFT, which is true for no NFT at all as well as for extras', () => {
+      const text = dict['signTx.listingHoldsMore']!;
+      expect(text).not.toMatch(/more than the one NFT|mehr als das eine NFT|más que el único NFT/i);
+      expect(text).toMatch(/exactly one NFT|genau ein NFT|exactamente un NFT/i);
+    });
+
+    it('never names the marketplace anywhere in the market copy', () => {
+      const offenders = Object.entries(dict).filter(([key, value]) => key.startsWith('nftMarket.') && /jpg/i.test(value)).map(([key]) => key);
+      expect(offenders).toEqual([]);
+    });
+  });
+
+  it('keeps "sitzt fest" for a stuck NFT in German, as the other listing warnings do', () => {
+    expect(locale('de')['signTx.listingNeverSells']).toContain('sitzt fest');
+    expect(locale('de')['signTx.listingNeverSells']).not.toContain('festgesetzt');
+  });
+
   // The service worker renders pushes from this table alone (no vue-i18n
   // fallback), so a missing key throws for that language's users.
   for (const lang of PUSH_LOCALES.filter((l) => l !== 'us')) {

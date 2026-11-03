@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blockchain, Network } from '@/models/types';
 import {
   isNftMarketHardware,
+  MAX_LIST_PRICE,
   MAX_LISTING_DEPOSIT,
   MAX_ROYALTIES,
   MIN_LIST_PRICE,
@@ -97,6 +98,7 @@ describe('market limits', () => {
   it('pins the wallet limits every market transaction is held to', () => {
     expect(MIN_LIST_PRICE).toBe(5_000_000n);
     expect(MIN_SELLER_SHARE).toBe(1_500_000n);
+    expect(MAX_LIST_PRICE).toBe(45_000_000_000_000_000n);
     expect(MAX_ROYALTIES).toBe(3);
     expect(ROYALTY_RATE_CAP).toBe(0.1);
     expect(MAX_LISTING_DEPOSIT).toBe(5_000_000n);
