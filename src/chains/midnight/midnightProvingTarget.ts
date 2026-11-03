@@ -91,6 +91,56 @@ export type ProvingTarget =
   | ProvingUnconfiguredTarget;
 
 /**
+ * Where the background proves a transaction the wallet built: the user's own
+ * proof server (docker or Arkhia zkPaaS), or this device
+ * (midnightDeviceProver.ts). Crosses the background message boundary, so the
+ * background re-validates it (`parseProvingRequest`).
+ */
+export type WalletProvingRequest =
+  | { url: string; headers?: Record<string, string> }
+  | { device: true };
+
+export function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
+  return 'device' in request && request.device === true;
+}
+
+/** Who proves a wallet-built transaction, and so who sees its proof inputs. */
+export type WalletProver = 'device' | 'local' | 'zkpaas' | 'cloud';
+
+/**
+ * Networks whose built-in circuits this device can prove: the ledger-8 key
+ * set is pinned in midnightZkKeys.ts. Stagenet (ledger 9) has other keys and
+ * keeps the proof-server paths.
+ */
+export function canProveOnDevice(network: string): boolean {
+  try {
+    return !isLedger9Network(network) && !!getMidnightEndpoints(network);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The prover a wallet-built send uses. Only Gero Cloud mode changes here: a
+ * public (unshielded) send proves its one proof, the DUST fee, on this device,
+ * so no secret reaches Gero. A private (shielded) send also needs Zswap
+ * proofs, which take 30-70 s on a fast laptop; it stays on Gero Cloud unless
+ * `shieldedOnDevice` (the `isMidnightShieldedDeviceProvingEnabled` flag) moves
+ * it here too. Local and zkPaaS mean what the user chose, for both kinds.
+ */
+export function walletProverFor(
+  network: string,
+  ps: Pick<ProofServerPreference, 'mode'>,
+  kind: 'unshielded' | 'shielded',
+  options: { shieldedOnDevice?: boolean } = {},
+): WalletProver {
+  if (ps.mode === 'local') return 'local';
+  if (ps.mode === 'zkpaas') return 'zkpaas';
+  if (canProveOnDevice(network) && (kind === 'unshielded' || options.shieldedOnDevice)) return 'device';
+  return 'cloud';
+}
+
+/**
  * Map the stored preference to a target. Never throws: callers decide what
  * an `unconfigured` result means for their flow (the send dialogs turn it
  * into the two-action fallback; the connector rejects the request).

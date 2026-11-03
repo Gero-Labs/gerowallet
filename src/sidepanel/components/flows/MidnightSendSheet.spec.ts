@@ -193,8 +193,18 @@ describe('Midnight sidepanel authorization freshness', () => {
     expect(wrapper.find('.success-overlay').exists()).toBe(false);
   });
 
+  it('sends a public transfer in Gero Cloud mode without a consent notice (the fee is proven on this device)', async () => {
+    midnightStore.proofServer = { mode: 'remote' } as never;
+    const wrapper = await ready();
+    await confirm(wrapper).trigger('click');
+    await authenticate();
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    expect(wrapper.find('[data-testid="consent"]').exists()).toBe(false);
+  });
+
   it('discards consent approval when its recipient changes and obtains fresh authorization', async () => {
-    midnightStore.proofServer = { mode: 'cloud' } as never;
+    // zkPaaS still receives a public send's DUST witness, so it still needs consent.
+    midnightStore.proofServer = { mode: 'zkpaas' } as never;
     const wrapper = await ready();
     await confirm(wrapper).trigger('click');
     await authenticate();

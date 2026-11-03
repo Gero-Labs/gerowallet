@@ -104,7 +104,7 @@ import {
   midnightPrivateSessionEpoch,
   prepareMidnightPrivateSession,
 } from '@/chains/midnight/midnightPrivateSyncSession';
-import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { resolveDappProvingTarget, walletProverFor, type WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
 import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
@@ -2580,8 +2580,8 @@ export class WalletBg {
    * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
    * proven, unbound tx and return the SEALED hex. Same credential handling
    * and key hygiene as balanceAndSignMidnightUnshieldedTransfer; the DUST fee
-   * proof is generated wallet-side against the user's proof-server
-   * preference (resolveDappProvingTarget), never through Gero Cloud, so the
+   * proof is generated wallet-side, on this device in Gero Cloud mode or on
+   * the user's proof server otherwise, never through Gero Cloud, so the
    * dapp's contract proofs and the wallet's witness stay off our servers.
    */
   async balanceMidnightConnectorTransaction(
@@ -2624,7 +2624,17 @@ export class WalletBg {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
         if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
-        const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+        // The fee proof is the wallet's own DUST spend. In Gero Cloud mode it is
+        // made on this device (Gero Cloud never proves a dapp's transaction, and
+        // the DUST secret must not leave the wallet); otherwise on the proof
+        // server the user chose.
+        let proving: WalletProvingRequest;
+        if (walletProverFor(network, midnightStore.proofServer, 'unshielded') === 'device') {
+          proving = { device: true };
+        } else {
+          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          proving = { url: target.url, headers: target.headers };
+        }
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
@@ -2638,7 +2648,7 @@ export class WalletBg {
           dustRegisteredAt: Number.isFinite(createdMs)
             ? new Date(createdMs)
             : new Date(Date.now() - 90 * 24 * 3_600_000),
-          proving: { url: target.url, headers: target.headers },
+          proving,
         });
         assertSession();
         return { tx: result.txHex };
@@ -3144,7 +3154,7 @@ export class WalletBg {
     outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
     password?: string,
     prfSecret?: Uint8Array,
-    proving?: { url: string; headers?: Record<string, string> },
+    proving?: WalletProvingRequest,
     sponsor?: { walletId: number; password?: string; prfSecret?: Uint8Array },
   ): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
@@ -3296,7 +3306,7 @@ export class WalletBg {
     _amount: bigint,
     _password?: string,
     _prfSecret?: Uint8Array,
-    _proving?: { url: string; headers?: Record<string, string> },
+    _proving?: WalletProvingRequest,
   ): Promise<{ signedTxHex: string; proven: boolean }> {
     return assertNativeNightConversionSupported();
   }

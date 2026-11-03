@@ -85,6 +85,12 @@ export interface FeatureFlags {
   // background router honours a saved endpoint whatever this says, because a remote
   // flip must never reroute a privacy user's transactions to Gero.
   isSubmitApiEnabled: boolean;
+  // Midnight private (shielded) sends proven on this device in Gero Cloud mode.
+  // Default OFF, ships dark: a decision for Adam and the CTO. Off, a private send
+  // proves on Gero Cloud (its consent names the coin secret key); on, it proves
+  // here (Zswap proofs: 30-70 s on a fast laptop) and Gero receives no secret.
+  // Public sends prove their DUST fee on this device either way.
+  isMidnightShieldedDeviceProvingEnabled: boolean;
   // CIP-113 Send (Gero's own transfer of a programmable token). Default OFF, ships dark.
   // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
   // the background's checks stay on the build-time network gates (cip113Deployments.ts).
@@ -152,6 +158,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     isSubmitApiEnabled: false,
+    isMidnightShieldedDeviceProvingEnabled: false,
     isCip113Enabled: false,
     isMultiAccountEnabled: false,
     isCardholderDetailsEnabled: true,
@@ -242,6 +249,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
     // Submit API ships DARK (default false); UI-only gate for the Settings dialog.
     featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
+    // Shielded on-device proving ships DARK (default false).
+    featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled = featureFlagService.getFlag('isMidnightShieldedDeviceProvingEnabled', false);
     // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
     // Multi-account ships DARK (default false); UI-only gate.
@@ -346,6 +355,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isSubmitApiEnabled', (newValue) => {
       featureFlagsState.flags['isSubmitApiEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isMidnightShieldedDeviceProvingEnabled', (newValue) => {
+      featureFlagsState.flags['isMidnightShieldedDeviceProvingEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       featureFlagsState.flags['isCip113Enabled'] = newValue === true;
@@ -601,6 +613,14 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isSubmitApiEnabled;
   },
 
+  /**
+   * Prove Midnight private (shielded) sends on this device in Gero Cloud mode.
+   * Ships DARK (default false); see the flag's declaration.
+   */
+  isMidnightShieldedDeviceProvingEnabled(): boolean {
+    return featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled;
+  },
+
   /** Gero Card cardholder-details step; on unless the flag service says false. */
   isCardholderDetailsEnabled(): boolean {
     return featureFlagsState.flags.isCardholderDetailsEnabled;
@@ -655,6 +675,7 @@ export const featureFlagsStore = {
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       isSubmitApiEnabled: false,
+      isMidnightShieldedDeviceProvingEnabled: false,
       isCip113Enabled: false,
       isMultiAccountEnabled: false,
       isCardholderDetailsEnabled: true,

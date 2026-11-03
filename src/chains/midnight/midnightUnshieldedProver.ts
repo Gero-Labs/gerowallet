@@ -56,6 +56,8 @@ import { LocalProvingError } from '@/chains/midnight/midnightShieldedBuilder';
 import { hexToBytes } from '@/chains/midnight/midnightTxBuilder';
 import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
 import { midnightLedgerVersion } from './midnightLedger';
+import type { WalletProvingRequest } from './midnightProvingTarget';
+import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 
 export interface ProveUnshieldedTransferArgs {
   readonly sdkNetworkId?: string;
@@ -65,17 +67,18 @@ export interface ProveUnshieldedTransferArgs {
    */
   readonly signedTxHex: string;
   /**
-   * Native-API proof server to prove against: the user's own docker server
-   * (`http://localhost:6300`) or an Arkhia zkPaaS gateway (auth via
-   * {@code headers}).
+   * Where to prove: `{ device: true }` (this computer, midnightDeviceProver.ts:
+   * the default for Gero Cloud mode on ledger-8 networks), or a native-API
+   * proof server: the user's own docker server (`http://localhost:6300`) or an
+   * Arkhia zkPaaS gateway (auth via {@code headers}).
    *
-   * Only `localhost` keeps the witness on this machine. zkPaaS ships it to
-   * Arkhia — same trust downgrade the shielded path consent-gates
+   * The device and `localhost` keep the witness on this machine. zkPaaS ships
+   * it to Arkhia — same trust downgrade the shielded path consent-gates
    * (midnight-tx.service.ts:249-259). For XDP, callers MUST pass a local URL:
    * proving a phone's tx against a third-party gateway would defeat the entire
    * point of moving proving off Gero Cloud.
    */
-  readonly proving: { readonly url: string; readonly headers?: Record<string, string> };
+  readonly proving: WalletProvingRequest;
 }
 
 export interface ProveUnshieldedTransferResult {
@@ -178,13 +181,13 @@ export async function proveUnshieldedTransfer(
   debugLog('🌙 unshielded prove: signed tx deserialized', { bytes: signedBytes.length });
 
   // URL only — never the auth header values (file-header privacy note).
-  debugLog('🌙 unshielded prove: proving wallet-side', { network });
+  debugLog('🌙 unshielded prove: proving wallet-side', { network, prover: describeWalletProving(args.proving) });
   const proveStartMs = Date.now();
   let boundBytes: Uint8Array;
   let ledgerTxHash: string | undefined;
   try {
-    const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-    const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers, sdkNetworkId: network });
+    // An unshielded transfer's only proof is its DUST fee spend.
+    const provider = await walletProvingProvider(args.proving, { sdkNetworkId: network, shielded: false });
     const proven = await (signedTx as unknown as ProvableTx).prove(
       provider, ledgerMod.CostModel.initialCostModel(),
     );
@@ -196,7 +199,9 @@ export async function proveUnshieldedTransfer(
     ledgerTxHash = finalizedLedgerTxHash(bound);
   } catch (err) {
     const durationMs = Date.now() - proveStartMs;
-    const message = 'Midnight local proving failed';
+    // On-device failures carry a message written for the user (no payload);
+    // a proof server's error text stays out of it.
+    const message = (err as Error)?.name === 'DeviceProvingError' ? (err as Error).message : 'Midnight local proving failed';
     debugLog(`🌙 unshielded prove: failed after ${durationMs}ms`, message);
     throw new LocalProvingError(message, durationMs);
   }
