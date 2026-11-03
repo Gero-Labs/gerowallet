@@ -179,7 +179,7 @@ export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: 
     case 'activity': return withHighlight({ dashboard: highlight?.tx ? `/transactions?tx=${highlight.tx}` : '/transactions', sidepanel: '/activity' });
     case 'staking': return withHighlight({ dashboard: '/staking', sidepanel: '/staking' });
     case 'swapOrders': return withHighlight({ dashboard: '/swap', sidepanel: null });
-    // A Gero market listing sold: Portfolio on its Collectibles view. The side panel has no collectibles view (R7).
+    // A Gero market listing sold: Portfolio on its Collectibles view. The side panel has no collectibles view.
     case 'nftListings': return withHighlight({ dashboard: '/?view=collectibles', sidepanel: null });
     case 'governance': return withHighlight({ dashboard: deepLinks && x?.drepId ? `/governance/dreps/${x.drepId}` : '/governance/me', sidepanel: null });
     case 'pairedDevices': return withHighlight({ dashboard: '/', sidepanel: null, settingsTab: 'security' });

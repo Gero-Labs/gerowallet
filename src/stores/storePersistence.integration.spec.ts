@@ -311,7 +311,7 @@ describe('store persistence in the worker', () => {
   // The store's persisted copy of a bigint is a decimal string (serializeValue). The worker's own
   // readers of the wallet's listings (the market verifiers, the signing guard) compare and price
   // with bigints, and the repeat-push check in setListedListings would keep a stringified copy
-  // forever, so a restarted worker must not hand them strings (ruling P20).
+  // forever, so a restarted worker must not hand them strings.
   describe('the wallet\'s own listings after a restart', () => {
     const listing = (ref: string) => ({
       ref,

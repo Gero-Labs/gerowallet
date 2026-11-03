@@ -16,7 +16,7 @@
       </v-btn-toggle>
     </header>
 
-    <!-- No NFT verified flag exists in any data source (ruling R8): a collection that has the name
+    <!-- No NFT verified flag exists in any data source: a collection that has the name
          of a popular one under another policy ID is flagged, and every listing shows its policy ID. -->
     <v-alert v-if="lookalike" type="warning" variant="tonal" density="compact" class="collection-listings__lookalike mb-3" data-testid="collection-lookalike">
       {{ t('nftMarket.browse.lookalike', { name: lookalike.name, policyId: lookalike.policyId }) }}
@@ -153,7 +153,7 @@ import { walletStore } from '@/stores/walletStore';
  * The open listings of one collection on Gero's market, with Buy: the "For sale" side of the
  * collection page (TokensDialog hosts it, opened from the collectibles table's `collection-click`).
  *
- * Each row shows the NFT's picture, name and price and its policy ID (ruling R8), and a warning
+ * Each row shows the NFT's picture, name and price and its policy ID, and a warning
  * when the collection has the name of a top-200 collection under another policy ID: the one thing
  * that tells a copy from the real collection is the policy ID, so it is never hidden. Rows come
  * from Nexus's index, page by page on its cursor (useCollectionListings); what this page shows is
@@ -169,7 +169,7 @@ import { walletStore } from '@/stores/walletStore';
  *    account on one side only (the fake "your listing" that pays an attacker) gets neither the
  *    mark nor a Buy.
  *  - A private listing (a `buyer` set in its datum) is never shown, the account's own included
- *    (rulings R2 and P43: public listings only): hidden on purpose, so not counted in the note
+ *    (phase 1 buys public listings only): hidden on purpose, so not counted in the note
  *    about listings that could not be shown.
  *  - A listing whose datum is not a Gero listing, or that its row contradicts (a bait price), cannot
  *    be bought: it is left out and counted in that note, as the rows the page validation drops are.
@@ -260,7 +260,7 @@ const rows = computed(() =>
     }),
 );
 
-// ---- The lookalike warning (R8) ------------------------------------------------------------
+// ---- The lookalike warning -----------------------------------------------------------------
 
 /** The top collections: undefined until they are asked for, null if they could not be read. */
 const topCollections = ref<TopCollectionRef[] | null | undefined>(undefined);

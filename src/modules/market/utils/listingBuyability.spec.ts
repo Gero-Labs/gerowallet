@@ -1,6 +1,6 @@
 // What the wallet may do with a listing in a collection's list. The browse page offers Buy only
 // where the worker would build one: never the wallet's own listing (it is cancelled, not bought),
-// never a private listing (R2: the buy builder and the worker refuse every listing with a `buyer`
+// never a private listing (the buy builder and the worker refuse every listing with a `buyer`
 // in this phase, this account's own keys included), never a listing whose datum does not read as
 // a Gero listing. The datum is read here the way the worker reads
 // it, from the row's own bytes, because the row's other fields are Nexus's word.

@@ -17,7 +17,7 @@ import { debugLog } from '@/utils/debug';
  * that selects inputs or sends an NFT reads this, so a listed NFT can only be listed, repriced or
  * unlisted from here, never sent.
  *
- * Not behind the `isNftMarketEnabled` flag (Ruling P41): a listing locks the user's NFT and
+ * Not behind the `isNftMarketEnabled` flag: a listing locks the user's NFT and
  * deposit, so switching the market off must never hide them. Only what the sheets offer on them
  * (List, Edit price) follows the flag.
  */

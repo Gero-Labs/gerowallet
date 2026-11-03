@@ -254,7 +254,7 @@ describe('failure states', () => {
   });
 
   it.each(['reprice', 'cancel', 'buy', 'migrate'] as const)(
-    'LISTING_NOT_FOUND on %s is "changed": refresh, then try again (Review Focus 5)',
+    'LISTING_NOT_FOUND on %s is "changed": refresh, then try again',
     async (action) => {
       respond({ [PREPARE[action]]: refusal('LISTING_NOT_FOUND') });
       const flow = useNftMarketFlow(action);

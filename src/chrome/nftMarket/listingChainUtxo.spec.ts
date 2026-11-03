@@ -1,4 +1,4 @@
-// The wallet's independent read of a listing UTxO (rulings P28, P30): the bytes of the transaction
+// The wallet's independent read of a listing UTxO: the bytes of the transaction
 // that created it, fetched from Koios `tx_cbor` and kept only if their body hashes to the id of
 // the listing's transaction. The transactions below are real serialized transactions; what Koios
 // "serves" is whatever a test puts in the `tx_cbor` answer, and every departure from the genuine

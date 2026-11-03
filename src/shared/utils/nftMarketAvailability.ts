@@ -22,7 +22,7 @@ import { canUseNftMarketWallet } from '@/utils/nftMarketGate';
  * Never a watch wallet.
  *
  * This is the part of the market the flag switches off. What the wallet already has in the market
- * is not: see `nftMarketListingsVisible` and `nftMarketCanUnlist` (Ruling P41). The signing
+ * is not: see `nftMarketListingsVisible` and `nftMarketCanUnlist`. The signing
  * refusals and the `listed` partition do not read the flag either: they apply whatever it says.
  */
 export function nftMarketAvailable(): boolean {
@@ -35,7 +35,7 @@ export function nftMarketAvailable(): boolean {
  * Whether the wallet's own listings are shown (marked "Listed", among its NFTs): a network with a
  * reviewed deployment, and NOTHING about the flag or the wallet's type. A listing locks the user's
  * NFT and deposit at the contract, so switching the market off must never make them invisible
- * (Ruling P41: hiding locked assets with no way out is worse than a partial kill switch). The
+ * (hiding locked assets with no way out is worse than a partial kill switch). The
  * wallet's `listedListings` are only ever the ones its own keys own, so a wallet with none has
  * nothing to show.
  */
@@ -48,8 +48,8 @@ export function nftMarketListingsVisible(): boolean {
 /**
  * Whether Unlist is offered: a network with a reviewed deployment and a wallet the worker would
  * not refuse (`canUseNftMarketWallet`), and NOT the flag. A cancel only returns the user's own NFT
- * and deposit to their own address, so it stays reachable with the market switched off (Ruling
- * P41). The worker's cancel prepare does not read the flag at all.
+ * and deposit to their own address, so it stays reachable with the market switched off. The worker's cancel
+ * prepare does not read the flag at all.
  */
 export function nftMarketCanUnlist(): boolean {
   const wallet = walletStore.loggedWallet;
@@ -123,7 +123,7 @@ export interface NftMarketActions {
  * Which market actions an NFT's detail offers: List for one that can be listed and is not, Edit
  * price and Unlist for one the wallet has listed (`listing`, from `useMyListings().byUnit`).
  * List and Edit price follow `nftMarketAvailable()` (the flag is theirs); Unlist follows
- * `nftMarketCanUnlist()` and stays with the flag off (Ruling P41). A listing a hardware wallet
+ * `nftMarketCanUnlist()` and stays with the flag off. A listing a hardware wallet
  * cannot unlist here gets `unlistElsewhere` instead: a locked NFT is never left with no word on
  * the way out.
  */

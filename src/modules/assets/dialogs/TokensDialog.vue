@@ -137,7 +137,7 @@ const showListings = computed(() => showViewToggle.value && view.value === 'sale
 
 /**
  * The wallet's own listing of this NFT, where its network has a market; the "Listed" badge reads
- * it. Not behind the `isNftMarketEnabled` flag (Ruling P41): a listing stays visible, and can be
+ * it. Not behind the `isNftMarketEnabled` flag: a listing stays visible, and can be
  * unlisted, with the market switched off.
  */
 function listingOf(token: CollectionToken): OwnListing | undefined {

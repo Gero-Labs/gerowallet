@@ -121,7 +121,7 @@ describe('the listed badge', () => {
     expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 1,234.567891 ADA');
   });
 
-  it('stays with the market switched off: a listing locks the NFT, so it is never hidden (Ruling P41)', () => {
+  it('stays with the market switched off: a listing locks the NFT, so it is never hidden', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 120 ADA');
   });
@@ -166,7 +166,7 @@ describe('the actions of an NFT', () => {
     expect(wrapper.find('[data-testid="asset-list"]').exists()).toBe(false);
   });
 
-  it('with the market off: a listed NFT keeps its status and Unlist, and loses Edit price (Ruling P41)', async () => {
+  it('with the market off: a listed NFT keeps its status and Unlist, and loses Edit price', async () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const wrapper = render();
     await open(wrapper, 'Listed');

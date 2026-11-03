@@ -99,7 +99,7 @@ describe('i18n parity', () => {
     });
 
     // The lookalike warning is useless without the real collection's policy ID: it is the one
-    // thing that tells a copy from the original (ruling R8).
+    // thing that tells a copy from the original.
     it('keeps the real collection\'s name and policy ID in the lookalike warning', () => {
       expect(placeholders(dict['nftMarket.browse.lookalike']!)).toEqual(['{name}', '{policyId}']);
     });

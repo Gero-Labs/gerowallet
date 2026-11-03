@@ -5,9 +5,9 @@
 // policy only: `RoyaltyInfo`). The contract then forces every buyer to pay exactly those entries
 // (docs/rules.md, one tagged ADA-only output per royalty, each `lovelace > 0`), so what is chosen
 // here is what the seller, every buyer and the verifier of the built transaction will hold the
-// listing to (spec 5.7 "Royalties").
+// listing to.
 //
-// Rules (spec 5.7, Ruling P27):
+// Rules:
 //  - the amount of each entry is floor(price x rate), in lovelace, exact. A rate arrives as a JS
 //    number and is converted to an exact fraction of 10^12 from its decimal text before it meets a
 //    lovelace amount, so no float multiplication touches money (100 ADA x 0.0157 must be

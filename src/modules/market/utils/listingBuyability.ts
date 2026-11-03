@@ -18,7 +18,7 @@ import { MAX_ROYALTIES } from '@/utils/nftMarketDeployments';
  *               way round. Not marked as the account's own, and never offered (the worker refuses
  *               either, `isOwnRow`).
  *   private     a `buyer` is set in the datum, whoever it names and whoever lists it: not shown
- *               and never bought. Ruling R2 (and P43): phase 1 buys PUBLIC listings only. The Nexus
+ *               and never bought. Phase 1 buys PUBLIC listings only. The Nexus
  *               buy builder and the worker (`verifyBuy`) refuse every listing with a `buyer`
  *               (`PRIVATE_LISTING`), this account's own keys included, and browse hides them.
  *               Private buying is phase 1b, which lifts the refusal on both sides.
@@ -28,7 +28,7 @@ import { MAX_ROYALTIES } from '@/utils/nftMarketDeployments';
  *               these, so it can never be bought, and the page counts it among the listings it
  *               could not show.
  *
- * The datum is read here from the row's own bytes, strictly, the way the worker reads it (R11):
+ * The datum is read here from the row's own bytes, strictly, the way the worker reads it:
  * the row's other fields are Nexus's word, and a row that shows one price over a datum that holds
  * another is not a listing to put in front of a buyer.
  */

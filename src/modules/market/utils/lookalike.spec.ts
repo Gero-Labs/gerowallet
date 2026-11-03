@@ -1,4 +1,4 @@
-// The lookalike warning (R8). No NFT verified flag exists in any data source, so the page warns
+// The lookalike warning. No NFT verified flag exists in any data source, so the page warns
 // when the collection it is showing has the name of a top-200 collection under another policy
 // id. Names are compared case-insensitively with the ends trimmed; nothing else is folded, so
 // the warning never fires on a mere resemblance.

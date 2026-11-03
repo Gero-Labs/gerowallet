@@ -1,14 +1,14 @@
-// The wallet's own check of a Gero market buy that Nexus built, before anything is signed
-// (spec 5.8, 5.10). Pure and fail closed: every rule below either holds or the transaction is
-// refused with a MarketVerifyError naming the rule. Nothing Nexus says about the transaction is
-// trusted; only the CBOR is read, against the listing's datum and the reviewed deployment.
+// The wallet's own check of a Gero market buy that Nexus built, before anything is signed.
+// Pure and fail closed: every rule below either holds or the transaction is refused with a
+// MarketVerifyError naming the rule. Nothing Nexus says about the transaction is trusted; only the
+// CBOR is read, against the listing's datum and the reviewed deployment.
 //
 // Why this is the wallet's job: a wrong buy either fails on chain, which forfeits the collateral,
 // or pays somebody more than the listing says. The contract pays the seller and the royalty
 // payees what the DATUM says (rules.md P4, P5) and the fee address what the deployment's
 // parameters say (P3); it never looks at where the NFT goes (P7) or at what else the transaction
-// pays. So the wallet reads the datum itself (ruling R11: it decodes the inline datum Nexus
-// supplied, strictly) and holds every output to it.
+// pays. So the wallet reads the datum itself (it decodes the inline datum Nexus supplied,
+// strictly) and holds every output to it.
 //
 // What a buy that passes can do to the wallet:
 //  - spend exactly one listing, the one asked for, at a reviewed deployment of the network, with
@@ -41,15 +41,14 @@
 // What the transaction cannot tell: the listing UTxO's own content. It names the input, not what
 // it holds, and a datum Nexus made up can be a SUPERSET of the real one (same seller, a higher
 // price, one extra royalty to an attacker): the contract ignores trailing outputs and accepts
-// overpayment, so such a buy SUCCEEDS on chain and Nexus keeps the difference. Ruling P28
-// (overriding R11) therefore makes the caller read the listing UTxO from a source independent of
-// Nexus (`listingChainUtxo.ts`: the bytes of the transaction that created it, proven against its
-// id, ruling P30) and `verifyBuy` refuses unless that UTxO is the listing's own out-ref, is at the
-// deployment's script, holds exactly the deposit and the one NFT, and carries an inline datum
-// equal to the one the row supplied, field by field. The balance equation then ties the same
-// deposit to the transaction: the ledger forces inputs to equal outputs plus the fee, so the
-// buyer's net cost equals price + fee + top-up only if the deposit the payees are paid is the
-// deposit the listing UTxO really holds.
+// overpayment, so such a buy SUCCEEDS on chain and Nexus keeps the difference. The caller therefore
+// reads the listing UTxO from a source independent of Nexus (`listingChainUtxo.ts`: the bytes of
+// the transaction that created it, proven against its id) and `verifyBuy` refuses unless that UTxO
+// is the listing's own out-ref, is at the deployment's script, holds exactly the deposit and the
+// one NFT, and carries an inline datum equal to the one the row supplied, field by field. The
+// balance equation then ties the same deposit to the transaction: the ledger forces inputs to equal
+// outputs plus the fee, so the buyer's net cost equals price + fee + top-up only if the deposit the
+// payees are paid is the deposit the listing UTxO really holds.
 
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -109,7 +108,7 @@ export interface BuyIntent {
   /**
    * The listing UTxO as read from a source independent of Nexus (`fetchListingUtxoProven`), for
    * the same out-ref as `listing` (its `ref` is checked). Required: without it a made-up datum
-   * cannot be told from the real one (ruling P28).
+   * cannot be told from the real one.
    */
   chainUtxo: ListingChainUtxo;
 }
@@ -269,9 +268,9 @@ function coinsPerUtxoByte(ctx: BuyVerifyContext): bigint {
 /**
  * Read the listing row for a buy: its ref, its reviewed deployment (looked up by script hash and
  * version, never by what the row says about fees), and its datum, which the worker decodes itself
- * from the raw bytes (R11) and cross-checks against the row. Refuses a private listing (R2), a
- * listing that can never be bought (seller share or a royalty at or below zero) and a unit that
- * is not an NFT.
+ * from the raw bytes and cross-checks against the row. Refuses a private listing (phase 1 buys
+ * public listings only), a listing that can never be bought (seller share or a royalty at or below
+ * zero) and a unit that is not an NFT.
  */
 function listingFacts(listing: ListingDto, ctx: BuyVerifyContext): ListingFacts {
   if (typeof listing !== 'object' || listing === null) refuse('LISTING', 'there is no listing to buy');
@@ -342,7 +341,7 @@ function listingFacts(listing: ListingDto, ctx: BuyVerifyContext): ListingFacts 
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Hold the row Nexus gave to the listing UTxO as an independent source read it (ruling P28): it was
+ * Hold the row Nexus gave to the listing UTxO as an independent source read it: it was
  * read for this listing's out-ref (a UTxO read for another listing proves nothing about this one),
  * it is at the deployment's script on this network, holds exactly the deposit and the one NFT, and
  * its inline datum is a Gero listing equal, field by field, to the datum the row supplied. A datum

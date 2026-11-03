@@ -12,7 +12,7 @@
     <v-card-text class="buy-nft pt-2 px-5 pb-5" data-testid="buy-nft">
       <ListingNftLine :name="nftName" :image="nftImage" :caption="policyCaption" />
 
-      <!-- The policy ID, whole, so it can be compared with the real collection's (ruling R8). -->
+      <!-- The policy ID, whole, so it can be compared with the real collection's. -->
       <div class="buy-nft__policy" data-testid="buy-nft-policy">
         <span class="t-caption">{{ t('transactions.policyId') }}</span>
         <span class="t-caption g-mono buy-nft__policy-id">
@@ -195,7 +195,7 @@ import { isNftMarketHardware } from '@/utils/nftMarketDeployments';
  * the listing; the worker reads it again from Nexus and from the chain, so what the list showed
  * is never what is bought. If its price is not the one the list showed, the sheet says so.
  *
- * The NFT's policy ID is always shown whole (ruling R8), and a lookalike warning from the
+ * The NFT's policy ID is always shown whole, and a lookalike warning from the
  * collection page is shown with the real collection's policy ID beside it.
  *
  * A listing that changed (bought, delisted, repriced) offers Refresh, and closing the sheet in any

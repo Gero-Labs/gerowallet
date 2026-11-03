@@ -1300,7 +1300,7 @@ describe('who may use the market, and where', () => {
     }
   });
 
-  // Ruling P41: with the UI flag off the user's existing listings stay visible and Unlist stays
+  // With the UI flag off the user's existing listings stay visible and Unlist stays
   // reachable, so the worker must not read the flag: a cancel only returns the user's own NFT and
   // deposit to their own address.
   it('the UI flag has no say: every kind prepares the same with isNftMarketEnabled off and on', async () => {
@@ -1407,7 +1407,7 @@ describe('list', () => {
     expect((await reply('list', LIST_REQUEST, elsewhere.deps)).errorCode).toBe('NFT_NOT_FOUND');
   });
 
-  it('refuses a CIP-68 token that is not the (222) user token (review focus 4) before Nexus is asked', async () => {
+  it('refuses a CIP-68 token that is not the (222) user token before Nexus is asked', async () => {
     const r = rig({ state: { utxos: [utxo(NFT_TX, 0, RECEIVE, 2n * ADA, { [UNIT_100]: 1n }), FEE_UTXO], keys: KEYS, collateral: null, listedListings: [], coinsPerUtxoByte: 4310 } });
     const data = await reply('list', { unit: UNIT_100, priceLovelace: PRICE.toString() }, r.deps);
     expect(data).toMatchObject({ errorCode: 'VERIFY_FAILED', error: 'NFT' });

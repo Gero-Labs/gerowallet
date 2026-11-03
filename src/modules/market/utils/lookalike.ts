@@ -1,5 +1,5 @@
 /**
- * The lookalike warning (ruling R8). No NFT "verified collection" flag exists in any data source,
+ * The lookalike warning. No NFT "verified collection" flag exists in any data source,
  * so the market page warns when the collection it shows has the name of one of the top 200
  * collections (`getNftCollections`) under a DIFFERENT policy id. Anyone can mint a copy of a
  * popular collection and list it; the policy id is the only thing that tells them apart, so the

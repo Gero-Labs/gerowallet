@@ -7,7 +7,7 @@
 // from it succeeds on chain and Nexus keeps the difference. `verifyBuy` therefore refuses unless
 // this independently read UTxO says the same thing.
 //
-// Why PROVEN (ruling P30): a first version asked Koios `utxo_info` what the UTxO holds, which
+// Why PROVEN: a first version asked Koios `utxo_info` what the UTxO holds, which
 // made Koios a trusted party for its content. A transaction id is the blake2b-256 hash of the
 // transaction body, so the CBOR of the transaction that created `txHash#index` proves that
 // output's address, value and inline datum, whoever served the CBOR. This reads it through the

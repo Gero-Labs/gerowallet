@@ -160,8 +160,9 @@ function normalizeNftMarketDeployments(
   return Array.from(byScriptHash.values()).sort((a, b) => b.version - a.version);
 }
 
-// A bech32 base address of the deployment's own network: a mainnet list takes `addr1...`, the
-// testnet lists `addr_test1...`.
+// A fee address is checked by its prefix (a mainnet list takes `addr1`, the testnet lists
+// `addr_test1`), its bech32 character set and a minimum length; the bech32 checksum is not
+// verified here.
 const MAINNET_ADDRESS = /^addr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
 const TESTNET_ADDRESS = /^addr_test1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
 const NFT_MARKET_MAINNET: NftMarketDeployment[] = normalizeNftMarketDeployments(NFT_MARKET_LISTED_MAINNET, MAINNET_ADDRESS);

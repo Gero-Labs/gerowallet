@@ -55,7 +55,7 @@ describe('classifyUtxoAddress: Gero market listed partition', () => {
 
   const ownPayment = new Set([OWN_PAYMENT]);
   const owners = new Set([OWN_PAYMENT, OWN_STAKE]);
-  /** What the listed branch counts as own: the stake key only (ruling P20). */
+  /** What the listed branch counts as own: the stake key only. */
   const stakeOnly = new Set([OWN_STAKE]);
   const listedSet = new Set([LISTED]);
   const plbSet = new Set([PLB]);
@@ -119,7 +119,7 @@ describe('classifyUtxoAddress: Gero market listed partition', () => {
     expect(classifyUtxoAddress(listedOwn, ownPayment, plbSet, owners, listedSet, stakeOnly)).toBe('listed');
   });
 
-  // Ruling P20: a listing's stake slot is "own" only when it holds the wallet's STAKE key. A
+  // A listing's stake slot is "own" only when it holds the wallet's STAKE key. A
   // listing under one of the wallet's payment keys sits under a different reward address, so
   // the stake anchor never returns it for this wallet and it is not this wallet's to subtract.
   // (CIP-113 keeps accepting a payment key in its owner slot: Minswap V3 puts one there.)

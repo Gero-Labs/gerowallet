@@ -1,6 +1,6 @@
 // The collectibles table's rows. They start from the wallet's own collections, which leave out
 // the NFTs it has listed (locked at the market contract), so where Gero's market is available the
-// listed ones are added back (the market's flag does not hide them: Ruling P41), counted as listed
+// listed ones are added back (the market's flag does not hide them), counted as listed
 // and not as held: a seller who lists their only NFT of a collection must not see the
 // collection vanish from the table, and with it the way to edit the price or take it down.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,7 +95,7 @@ describe('useNftMarketData: the wallet\'s own rows', () => {
     expect(totalFloorValue.value).toBe(50);
   });
 
-  it('still adds and counts them with the market switched off (Ruling P41)', async () => {
+  it('still adds and counts them with the market switched off', async () => {
     walletStore.listedListings = [storeListing(APE_1)];
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const { collections, fetchUserNftCollections } = useNftMarketData();

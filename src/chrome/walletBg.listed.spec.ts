@@ -4,7 +4,7 @@
 // (fake-indexeddb). A listing sits at the listing script's address with the seller's own stake
 // key in the stake slot, so gero-sync returns it as the user's: it must never be spent by coin
 // selection or counted as spendable, and a fake "your listing" (someone else's datum at the
-// user's stake key) must never be treated as the user's (Review Focus 1: a datum naming the
+// user's stake key) must never be treated as the user's (a datum naming the
 // wallet as owner but another seller address, or the reverse).
 //
 // The datums are built here byte by byte, the way the contract's own types encode them
@@ -275,7 +275,7 @@ describe('own listings: the partition', () => {
     expect(asked).toContain(NFT);
   });
 
-  // Review Focus 1 (spec 5.10, "fake your listing"). Each half alone is a fake.
+  // The fake "your listing": each half alone is a fake.
   describe('a listing that is not the wallet\'s own', () => {
     it('drops one whose datum names another owner, though the seller address is the wallet\'s', async () => {
       const bg = bootWallet(makeWallet());
@@ -319,7 +319,7 @@ describe('own listings: the partition', () => {
       expect(walletStore.listedListings).toEqual([]);
     });
 
-    // Ruling P20: only the wallet's STAKE key in the stake slot is "own". A listing under one of
+    // Only the wallet's STAKE key in the stake slot is "own". A listing under one of
     // its payment keys is under a different reward address (the stake anchor never returns it
     // for this wallet), so it is not listed and its deposit is not the wallet's to subtract.
     it('drops a listing whose stake slot holds one of the wallet\'s payment keys, and does not subtract it', async () => {

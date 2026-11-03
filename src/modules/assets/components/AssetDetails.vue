@@ -156,7 +156,7 @@ const emit = defineEmits<{
 }>();
 
 const { byUnit } = useMyListings();
-/** This NFT's own listing, where its network has a market (with the market switched off too: Ruling P41). */
+/** This NFT's own listing, where its network has a market. Shown with the market switched off too: a listing locks the NFT. */
 const listing = computed(() => (nftMarketListingsVisible() ? byUnit.value.get(String(props.asset.unit).toLowerCase()) : undefined));
 const marketActions = computed(() => nftMarketActionsFor(props.asset, listing.value));
 const hasMarketActions = computed(() => marketActions.value.list || marketActions.value.reprice || marketActions.value.unlist || marketActions.value.unlistElsewhere);

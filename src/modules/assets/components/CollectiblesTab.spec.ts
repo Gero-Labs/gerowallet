@@ -116,7 +116,7 @@ describe('CollectiblesTab', () => {
     expect(cardNames(wrapper)).toEqual(['Cats']);
   });
 
-  it('keeps the listed NFTs, and their badge, with the market switched off (Ruling P41)', () => {
+  it('keeps the listed NFTs, and their badge, with the market switched off', () => {
     walletStore.listedListings = [storeListing(APE_1, '120000000')];
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const wrapper = render();

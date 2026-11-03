@@ -52,7 +52,7 @@ describe('nft_sold (Gero NFT market, category nft, destination nftListings)', ()
     expect(r.title + r.body).not.toMatch(/—|–/);
     expect(r.tag).toBe('0b6d1f8e2a3c4d5e6f708192a3b4c5d6');
     expect(r.requireInteraction).toBe(false);
-    // The side panel has no collectibles view (R7).
+    // The side panel has no collectibles view.
     expect(r.route).toEqual({ dashboard: '/?view=collectibles', sidepanel: null, highlight: { tx: BUY_TX, listingRef: LISTING_REF } });
     expect(r.data).toMatchObject({ t: 'nft_sold', c: 'nft', d: 'nftListings', walletId: 4, degraded: 'none', x: { tx: BUY_TX, listingRef: LISTING_REF } });
   });
@@ -79,7 +79,7 @@ describe('nft_sold (Gero NFT market, category nft, destination nftListings)', ()
     for (const r of [de, es]) expect(r.title + r.body).not.toMatch(/—|–/);
     expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'de' }).body).toBe('Dein NFT-Angebot wurde gekauft');
     expect(pushStrings.de.PUSH_CATEGORY_NFT).toBe('Es gibt Neuigkeiten zu deinen NFT-Angeboten');
-    // One register for the whole German push table (Ruling P46): no formal address anywhere in the nft strings.
+    // One register for the whole German push table: no formal address anywhere in the nft strings.
     for (const key of ['PUSH_CATEGORY_NFT', 'PUSH_NFT_SOLD_TITLE', 'PUSH_NFT_SOLD_BODY', 'PUSH_NFT_SOLD_BODY_AMOUNT'] as const) {
       expect(pushStrings.de[key], key).not.toMatch(/\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer)\b/);
     }

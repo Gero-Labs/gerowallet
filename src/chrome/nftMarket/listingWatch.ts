@@ -1,8 +1,8 @@
 // NOTIFY_WATCH_LISTINGS: register a Gero market listing with gero-sync so the wallet gets an
-// `nft_sold` push when it is bought (spec 8.1, watch-and-poll as for swap orders). Background only.
+// `nft_sold` push when it is bought (watch-and-poll as for swap orders). Background only.
 //
 // The page that just listed, repriced or moved something sends this once the submit went through.
-// A page is untrusted input to the worker (Ruling P18), so it supplies a hint at most and the
+// A page is untrusted input to the worker, so it supplies a hint at most and the
 // worker decides every field of what goes to gero-sync:
 //
 //   wallet   always the LOGGED wallet. A `walletId` in the request is checked against it and a

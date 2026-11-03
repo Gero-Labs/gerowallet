@@ -283,7 +283,7 @@ function checkIntent(
 ): string {
   const unit = typeof intent?.unit === 'string' ? intent.unit.toLowerCase() : '';
   if (!UNIT.test(unit)) refuse('NFT', 'the unit is not a policy id and an asset name');
-  // Review focus 4: a CIP-68 asset is listed only as its (222) user token. Every other label is
+  // A CIP-68 asset is listed only as its (222) user token. Every other label is
   // refused: (100) is the metadata reference, (333), (444) and (500) are fungible, rich-fungible
   // and royalty tokens, and an unknown label is none of the wallet's business to guess.
   const label = cip68Label(unit.slice(POLICY_HEX_LENGTH));
@@ -350,7 +350,7 @@ export function verifyCancel(
 /**
  * Check `txCbor` as the reprice of the wallet's own listing `intent.ref` to `intent.price`: the
  * cancel's rules for the input, and one new listing at the SAME address with the same NFT and
- * deposit, whose datum is the old one except for the price (ruling R4). Throws MarketVerifyError.
+ * deposit, whose datum is the old one except for the price. Throws MarketVerifyError.
  */
 export function verifyReprice(
   txCbor: string,

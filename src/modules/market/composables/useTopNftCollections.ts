@@ -12,7 +12,7 @@ let inflight: Promise<NftCollectionStats[] | null> | null = null;
 /**
  * The top collections by volume, one request shared by everyone who needs them: the collectibles
  * table (market data for the wallet's own collections) and the market page's lookalike warning
- * (names to compare against, ruling R8). A good answer is reused for ten minutes; callers that
+ * (names to compare against). A good answer is reused for ten minutes; callers that
  * ask while a request is out share it. Resolves to null when the market API cannot be read or
  * answers with something that is not a list, and a failure is not kept, so the next caller asks
  * again.

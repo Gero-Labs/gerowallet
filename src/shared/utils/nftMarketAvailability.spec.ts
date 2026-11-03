@@ -3,7 +3,7 @@
 // prepare handlers would not refuse (canUseNftMarketWallet), so a button never leads to a refusal
 // the pages could have seen coming. A watch wallet never gets it.
 //
-// The flag is a partial kill switch (Ruling P41): it hides List, Edit price and Buy, but the
+// The flag is a partial kill switch: it hides List, Edit price and Buy, but the
 // wallet's existing listings stay visible and Unlist stays reachable, because a listing locks the
 // user's NFT and deposit and a cancel only returns them to the user's own address.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -183,7 +183,7 @@ describe('nftMarketActionsFor', () => {
     expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, undefined)).toEqual({ list: false, reprice: false, unlist: false, unlistElsewhere: false });
   });
 
-  it('with the market off, a listed NFT keeps Unlist and loses Edit price (Ruling P41)', () => {
+  it('with the market off, a listed NFT keeps Unlist and loses Edit price', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual({ list: false, reprice: false, unlist: true, unlistElsewhere: false });
   });
@@ -245,7 +245,7 @@ describe('nftMarketActionsFor: a listing a hardware wallet cannot unlist here', 
   });
 });
 
-describe('the wallet\'s own listings with the market switched off (Ruling P41)', () => {
+describe('the wallet\'s own listings with the market switched off', () => {
   it('stay visible: only a network with a market matters, not the flag or the wallet type', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     expect(nftMarketListingsVisible()).toBe(true);

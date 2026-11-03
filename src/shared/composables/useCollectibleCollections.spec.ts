@@ -131,7 +131,7 @@ describe('useCollectibleCollections', () => {
     expect(collections.value[POLICY_A].items).toHaveLength(1);
   });
 
-  it('still shows them with the market switched off: a listing locks the NFT, so it is never hidden (Ruling P41)', () => {
+  it('still shows them with the market switched off: a listing locks the NFT, so it is never hidden', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const collections = useCollectibleCollections();
     expect(collections.value[POLICY_A].items.map((i) => i.unit)).toEqual([COOL_1, COOL_2]);

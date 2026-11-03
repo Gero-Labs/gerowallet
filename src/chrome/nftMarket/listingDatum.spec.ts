@@ -794,7 +794,7 @@ describe('sellerShare and sellerDue', () => {
     expect(sellerDue(listing(600n * ADA), V1, 3n * ADA)).toBe(598n * ADA);
   });
 
-  it('is zero or negative when fee and royalties leave nothing (P2: such a listing cannot be bought)', () => {
+  it('is zero or negative when fee and royalties leave nothing (rules.md P2: such a listing cannot be bought)', () => {
     expect(sellerShare(listing(3_500_000n, [2n * ADA]), V1)).toBe(0n); // the rules.md example
     expect(sellerShare(listing(3_500_001n, [2n * ADA]), V1)).toBe(1n);
     expect(sellerShare(listing(3n * ADA, [2n * ADA]), V1)).toBe(-500_000n);

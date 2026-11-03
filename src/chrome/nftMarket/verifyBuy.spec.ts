@@ -972,7 +972,7 @@ describe('verifyBuy: signers, collateral, fee and the envelope', () => {
   });
 });
 
-describe('verifyBuy: the listing UTxO as the chain has it (rulings P28, P30)', () => {
+describe('verifyBuy: the listing UTxO as the chain has it', () => {
   // The attack: Nexus supplies a datum that is a SUPERSET of the real one, same seller, the price
   // raised by 5 ADA and one extra royalty of 5 ADA to the attacker. The contract ignores trailing
   // outputs and accepts overpayment, so a buy paid out per the fake datum succeeds on chain.

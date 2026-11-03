@@ -813,7 +813,7 @@ async function prepareBuy(s: Session, request: unknown): Promise<MarketPrepared>
   if (isOwnRow(s, row)) throw new MarketPrepareError('OWN_LISTING', 'This is your own listing');
 
   // The listing as the chain has it, proven against its transaction id, from a source other
-  // than Nexus: the datum Nexus supplied must be the one on chain (ruling P28, P30).
+  // than Nexus: the datum Nexus supplied must be the one on chain.
   let chainUtxo: ListingChainUtxo;
   try {
     chainUtxo = await s.deps.lookupChainUtxo(listingRef, s.network);
