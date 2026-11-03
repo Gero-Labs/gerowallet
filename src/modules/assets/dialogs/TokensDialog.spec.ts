@@ -121,13 +121,13 @@ describe('the listed badge', () => {
     expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 1,234.567891 ADA');
   });
 
-  it('shows nothing while the market is off', () => {
+  it('stays with the market switched off: a listing locks the NFT, so it is never hidden (Ruling P41)', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
-    expect(badgeOf(cardFor(render(), 'Listed')).exists()).toBe(false);
+    expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 120 ADA');
   });
 
-  it('shows nothing for a wallet the market is not offered to', () => {
-    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Watch } as never;
+  it('shows nothing on a network with no market', () => {
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
     expect(badgeOf(cardFor(render(), 'Listed')).exists()).toBe(false);
   });
 
@@ -166,7 +166,27 @@ describe('the actions of an NFT', () => {
     expect(wrapper.find('[data-testid="asset-list"]').exists()).toBe(false);
   });
 
-  it('offers nothing while the market is off', async () => {
+  it('with the market off: a listed NFT keeps its status and Unlist, and loses Edit price (Ruling P41)', async () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    const wrapper = render();
+    await open(wrapper, 'Listed');
+
+    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 ADA');
+    expect(wrapper.get('[data-testid="asset-unlist"]').text()).toBe('Unlist');
+    expect(wrapper.find('[data-testid="asset-edit-price"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="asset-list"]').exists()).toBe(false);
+  });
+
+  it('with the market off: Unlist still opens the unlist sheet for the listing', async () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    const wrapper = render();
+    await open(wrapper, 'Listed');
+    await wrapper.get('[data-testid="asset-unlist"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-test="unlist-dialog"]').attributes('data-existing')).toBe(LISTING_REF);
+  });
+
+  it('with the market off: an NFT that is not listed is offered nothing (no List)', async () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const wrapper = render();
     await open(wrapper, 'Free');

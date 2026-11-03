@@ -5,11 +5,14 @@
 // is pinned here: a transaction Nexus builds correctly must be accepted, and one that is wrong
 // must come back as VERIFY_FAILED with a rule, never as a transaction.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16, Hash32ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { minAdaRequired } from '@cardano-sdk/tx-construction';
 import { Blockchain, Network } from '@/models/types';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { SENDER, TARGET } from '@/chrome/config';
 import type { LegacyListingItem } from '@/api/legacy-listings-api';
 import type { NftMarketBuildResponse } from '@/api/nexus-tx-api';
@@ -1160,6 +1163,32 @@ describe('who may use the market, and where', () => {
     }
   });
 
+  // Ruling P41: with the UI flag off the user's existing listings stay visible and Unlist stays
+  // reachable, so the worker must not read the flag: a cancel only returns the user's own NFT and
+  // deposit to their own address.
+  it('the UI flag has no say: every kind prepares the same with isNftMarketEnabled off and on', async () => {
+    for (const flag of [false, true]) {
+      featureFlagsStore.state.flags.isNftMarketEnabled = flag;
+      try {
+        const cancel = rig({ built: response(cancelTx()) });
+        const data = await reply('cancel', CANCEL_REQUEST, cancel.deps);
+        expect(data.success, `cancel, flag ${flag}`).toBe(true);
+        expect(cancel.calls.cancel).toHaveBeenCalledTimes(1);
+        const reprice = rig({ built: response(repriceTx()) });
+        expect((await reply('reprice', REPRICE_REQUEST, reprice.deps)).success, `reprice, flag ${flag}`).toBe(true);
+      } finally {
+        featureFlagsStore.state.flags.isNftMarketEnabled = false;
+      }
+    }
+  });
+
+  it('the worker\'s market code never reads the UI flag', () => {
+    for (const file of ['marketPrepare.ts', 'verifyListing.ts', 'verifyBuy.ts', 'verifyMigrate.ts', 'marketGuard.ts', 'marketAllowance.ts']) {
+      const source = readFileSync(join(__dirname, file), 'utf8');
+      expect(source, file).not.toMatch(/isNftMarketEnabled|featureFlagsStore|featureFlagService/);
+    }
+  });
+
   it('a network with no deployment is NETWORK_UNSUPPORTED, for every kind, before anything is asked', async () => {
     const kinds: [MarketAction, unknown][] = [
       ['list', LIST_REQUEST], ['reprice', REPRICE_REQUEST], ['cancel', CANCEL_REQUEST], ['buy', BUY_REQUEST], ['migrate', MIGRATE_REQUEST],
@@ -1379,6 +1408,22 @@ describe('list', () => {
       const data = await reply('list', { unit: UNIT_222, priceLovelace: MIN_LIST_PRICE.toString(), confirmRoyaltyAboveCap: true }, r.deps);
       expect(data.errorCode).toBe('SELLER_SHARE_TOO_LOW');
       expect(r.calls.list).not.toHaveBeenCalled();
+    });
+
+    it('the seller share is held at exactly MIN_SELLER_SHARE: 1.5 ADA is enough, one lovelace less is not', async () => {
+      const minRoyalty = (lovelace: bigint): RoyaltyInfo => ({
+        source: 'cip102',
+        rate: 0.01,
+        recipients: [{ address: ROYALTY_ADDRESS, rate: 0.01, minFeeLovelace: lovelace, maxFeeLovelace: null }],
+      });
+      const request = { unit: UNIT_222, priceLovelace: MIN_LIST_PRICE.toString(), confirmRoyaltyAboveCap: true };
+      // 5 ADA - 1.5 ADA fee - 2 ADA royalty = 1.5 ADA: Nexus is asked (the transaction itself is not this test's).
+      const exact = rig({ royalties: minRoyalty(2_000_000n) });
+      expect((await reply('list', request, exact.deps)).errorCode).not.toBe('SELLER_SHARE_TOO_LOW');
+      expect(exact.calls.list).toHaveBeenCalled();
+      const under = rig({ royalties: minRoyalty(2_000_001n) });
+      expect((await reply('list', request, under.deps)).errorCode).toBe('SELLER_SHARE_TOO_LOW');
+      expect(under.calls.list).not.toHaveBeenCalled();
     });
 
     it('tells the seller what was left out: entries under min-UTxO and recipients with no address', async () => {

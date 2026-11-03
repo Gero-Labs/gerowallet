@@ -53,7 +53,6 @@ import { HexBlob } from '@cardano-sdk/util';
 import type { Keys } from '@/models/types';
 import { Network } from '@/models/types';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
 import { debugLog } from '@/utils/debug';
 import { SENDER, TARGET } from '@/chrome/config';
 import { forEachAsset } from '@/api/nexusInputSelection';
@@ -72,17 +71,20 @@ import type { ListingDto, ListingRef, RoyaltyInfo } from '@/api/nft-market-api';
 import { ownKeys } from '@/chrome/cip113PrepareTransfer';
 import { keyAddressUtxos } from '@/chrome/legacyCancelPrepare';
 import {
+  CIP68_USER_TOKEN_LABEL,
   MAX_LIST_PRICE,
   MIN_LIST_PRICE,
   MIN_SELLER_SHARE,
+  NFT_UNIT_PATTERN as UNIT,
+  POLICY_ID_HEX_LENGTH as POLICY_HEX_LENGTH,
   type NftMarketDeployment,
 } from '@/utils/nftMarketDeployments';
 import { canUseNftMarketWallet } from '@/utils/nftMarketGate';
-import { listingFee } from './listingDatum';
+import { listingSplit } from './listingDatum';
 import { ListingUtxoError, type ListingChainUtxo } from './listingChainUtxo';
 import { findMarketTouch } from './marketGuard';
 import { reviveOwnListings, type OwnListing } from './ownListings';
-import { computeRoyalties, royaltyOutputMinUtxo } from './royalties';
+import { computeRoyalties, protocolParameter, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
 import { verifyBuy, type BuySummary } from './verifyBuy';
 import {
   MarketVerifyError,
@@ -108,13 +110,8 @@ export type MarketAction = 'list' | 'reprice' | 'cancel' | 'buy' | 'migrate';
 export const MARKET_MAX_FEE_INPUTS = 50;
 
 const UTXO_REF = /^[0-9a-f]{64}#\d{1,5}$/;
-/** policy id (28 bytes) then an asset name of up to 32 bytes. */
-const UNIT = /^[0-9a-f]{56}(?:[0-9a-f]{2}){0,32}$/;
 /** A canonical lovelace amount: no sign, no exponent, no leading zero. */
 const PRICE_TEXT = /^(0|[1-9][0-9]{0,16})$/;
-const POLICY_HEX_LENGTH = 56;
-/** CIP-68 user token: the only CIP-68 label an NFT is listed under. */
-const CIP68_USER_TOKEN_LABEL = 222;
 
 export type MarketPrepareErrorCode = string;
 
@@ -407,15 +404,6 @@ function paymentKeyHashOf(address: string): string | null {
   }
 }
 
-/** A protocol parameter from the store: a positive whole number as a number, a bigint or decimal text; else none. */
-function protocolParameter(raw: unknown): bigint | undefined {
-  let value: bigint | undefined;
-  if (typeof raw === 'bigint') value = raw;
-  else if (typeof raw === 'number' && Number.isSafeInteger(raw)) value = BigInt(raw);
-  else if (typeof raw === 'string' && /^[0-9]{1,15}$/.test(raw)) value = BigInt(raw);
-  return value !== undefined && value > 0n ? value : undefined;
-}
-
 /** The context every verifier gets. `sponsoredCollateralRef` only when Nexus named a well-formed one. */
 function verifyContext(s: Session, sponsoredCollateralRef?: string): MarketVerifyContext {
   return {
@@ -546,8 +534,7 @@ function checkPrice(price: bigint): void {
 
 /** The seller must keep at least MIN_SELLER_SHARE of the price after the market fee and the royalties. */
 function checkSellerShare(price: bigint, deployment: NftMarketDeployment, royalties: readonly { lovelace: bigint }[]): void {
-  const paid = royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
-  if (price - listingFee(price, deployment) - paid < MIN_SELLER_SHARE) {
+  if (listingSplit(price, royalties, deployment).sellerShare < MIN_SELLER_SHARE) {
     throw new MarketPrepareError('SELLER_SHARE_TOO_LOW', 'After the fee and royalties the seller would receive too little');
   }
 }
@@ -590,10 +577,8 @@ async function chooseRoyalties(s: Session, unit: string, price: bigint, confirmA
   }
   unchanged(s);
 
-  // Capped at the reviewed ceiling, as verifyBuy does: an inflated figure in the store must not
-  // make every royalty look too small to keep.
-  const live = s.coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE;
-  const minUtxo = royaltyOutputMinUtxo(live < DEFAULT_COINS_PER_UTXO_BYTE ? live : DEFAULT_COINS_PER_UTXO_BYTE);
+  // Capped at the reviewed ceiling, as verifyBuy does (the same threshold the list sheet previews with).
+  const minUtxo = royaltyMinUtxoFor(s.coinsPerUtxoByte);
   let computed: ReturnType<typeof computeRoyalties>;
   let preview: ReturnType<typeof computeRoyalties> | null = null;
   try {

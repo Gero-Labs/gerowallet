@@ -71,7 +71,7 @@ import { useCollectibleCollections } from '@/shared/composables/useCollectibleCo
 import { useMyListings } from '@/shared/composables/useMyListings';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { formatLovelaceAsAda } from '@/shared/utils/format';
-import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
+import { nftMarketListingsVisible } from '@/shared/utils/nftMarketAvailability';
 
 // Props
 interface Props {
@@ -91,7 +91,7 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 defineEmits(['rowClick']);
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 
 // The wallet's collections, with the NFTs it has listed added back where Gero's market is
 // available: a listed NFT is locked at the market contract and so absent from the store's own.
@@ -134,13 +134,13 @@ const closeDialog = () => {
  * collection is that one NFT, otherwise how many of its NFTs are listed.
  */
 function listedBadgeText(collection: CollectionEntry): string {
-  if (!nftMarketAvailable()) return '';
+  if (!nftMarketListingsVisible()) return '';
   const listed = collection.items.map((item) => byUnit.value.get(String(item.unit).toLowerCase())).filter((listing) => listing !== undefined);
   if (listed.length === 0) return '';
   if (listed.length === 1 && collection.items.length === 1) {
     return t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listed[0]!.datum.price) });
   }
-  return t('nftMarket.badge.listedCount', { count: listed.length });
+  return tc('nftMarket.badge.listedCount', listed.length, { count: listed.length });
 }
 
 // Computed properties
@@ -346,7 +346,7 @@ onUnmounted(() => {
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--g-s-1);
   justify-content: space-between;
   padding-left: 8px;
   padding-right: 8px;

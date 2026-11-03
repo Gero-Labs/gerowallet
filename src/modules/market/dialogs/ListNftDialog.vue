@@ -89,9 +89,9 @@
             {{ flow.submittedTxId.value }}
             <CopyButton x-small :value="flow.submittedTxId.value ?? ''" class="ml-1" />
           </p>
-          <v-btn v-if="txExplorerUrl" variant="text" size="small" :href="txExplorerUrl" target="_blank" rel="noopener noreferrer">
+          <GButton v-if="txExplorerUrl" tier="tertiary" compact :href="txExplorerUrl" target="_blank" rel="noopener noreferrer" data-testid="list-nft-explorer">
             {{ t('market.viewOnExplorer') }}
-          </v-btn>
+          </GButton>
         </div>
         <div class="list-nft__actions">
           <GButton tier="primary" block data-testid="list-nft-done-button" @click="close()">{{ t('common.done') }}</GButton>
@@ -110,6 +110,8 @@
                that may be on chain, offer neither. -->
           <GButton v-if="failureKind === 'retry'" tier="primary" data-testid="list-nft-retry" @click="retry()">{{ t('common.tryAgain') }}</GButton>
           <GButton v-else-if="failureKind === 'changed'" tier="primary" data-testid="list-nft-refresh" @click="refresh()">{{ t('common.refresh') }}</GButton>
+          <!-- Signed, and the network did not confirm: it may be on chain. Look, never rebuild. -->
+          <GButton v-else-if="failureKind === 'maybeSent'" tier="primary" data-testid="list-nft-activity" @click="viewActivity()">{{ t('nftMarket.actions.viewActivity') }}</GButton>
         </div>
       </template>
 
@@ -134,7 +136,7 @@
         </dl>
 
         <v-text-field
-          v-model="priceText"
+          :model-value="priceText"
           :label="t('common.price')"
           inputmode="decimal"
           variant="outlined"
@@ -144,6 +146,7 @@
           :error-messages="priceErrors"
           :disabled="busy"
           data-testid="list-nft-price"
+          @update:model-value="onPriceInput($event)"
           @keydown.enter="review()"
         />
 
@@ -214,6 +217,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -246,6 +250,7 @@ import {
   MAX_LIST_PRICE,
   MIN_LIST_PRICE,
   MIN_SELLER_SHARE,
+  POLICY_ID_HEX_LENGTH,
   isNftMarketHardware,
 } from '@/utils/nftMarketDeployments';
 
@@ -280,6 +285,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
+const router = useRouter();
 const isReprice = props.existing !== undefined;
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
 const isBT = ref(false);
@@ -319,12 +325,17 @@ const ada = (lovelace: bigint): string => formatLovelaceAsAda(lovelace);
 
 // ---- The NFT -------------------------------------------------------------------------------
 
-const nft = computed(() => resolveNftUnit(props.unit));
-const policyCaption = computed(() => filters.truncate(props.unit.slice(0, 56)));
+// The NFT shown is the one the worker verified (`summary.unit`) once there is a summary: the
+// review is of that transaction, not of what the page asked for.
+const shownUnit = computed(() => summary.value?.unit ?? props.unit);
+const nft = computed(() => resolveNftUnit(shownUnit.value));
+const policyCaption = computed(() => filters.truncate(shownUnit.value.slice(0, POLICY_ID_HEX_LENGTH)));
 
 // ---- The price -----------------------------------------------------------------------------
 
 const priceText = ref('');
+/** The seller has edited the field: an opening price (a reprice starts on the current one) is not an error to show. */
+const priceTouched = ref(false);
 const confirmed = ref(false);
 
 const parsed = computed(() => parseAdaPrice(priceText.value));
@@ -358,7 +369,9 @@ const issue = computed(() => limitIssue.value ?? preview.value?.issue ?? null);
 const priceErrors = computed<string[]>(() => {
   const result = parsed.value;
   if ('reason' in result) return result.reason === 'invalid' ? [t('nftMarket.list.priceInvalid')] : [];
-  if (samePrice.value) return [t('nftMarket.reprice.samePrice')];
+  // Continue stays off while the price is the current one (Nexus would build a fee-only no-op), but
+  // the sheet opens on that price: say it only once the seller has edited the field.
+  if (samePrice.value) return priceTouched.value ? [t('nftMarket.reprice.samePrice')] : [];
   switch (issue.value) {
     case 'PRICE_TOO_LOW': return [t('nftMarket.error.priceTooLow', { min: ada(MIN_LIST_PRICE) })];
     case 'PRICE_TOO_HIGH': return [t('nftMarket.list.priceTooHigh', { max: ada(MAX_LIST_PRICE) })];
@@ -461,10 +474,30 @@ async function retry(): Promise<void> {
   await review();
 }
 
-/** Something changed (an NFT moved, a listing was bought): look again, from the price. */
+/**
+ * Something changed (an NFT moved, a listing was bought, repriced elsewhere). A new listing looks
+ * again, from the price. A reprice was opened on the listing the page held (its price, its
+ * royalties) and looking again cannot change that, so it closes: reopened after the sync, it
+ * starts from the listing as it now is.
+ */
 function refresh(): void {
+  if (isReprice) {
+    close();
+    return;
+  }
   flow.reset();
   void market.load();
+}
+
+/** The signed transaction may be on chain: take the seller to their activity. Nothing is rebuilt or re-sent. */
+function viewActivity(): void {
+  close();
+  void router?.push({ path: '/transactions' });
+}
+
+function onPriceInput(value: string): void {
+  priceTouched.value = true;
+  priceText.value = value;
 }
 
 /** Start over: a clean flow and a fresh price. */
@@ -472,6 +505,7 @@ function start(): void {
   credentials.clearPassword();
   flow.reset();
   confirmed.value = false;
+  priceTouched.value = false;
   priceText.value = props.existing ? adaInputText(props.existing.datum.price) : '';
   market.reset();
   void market.load();

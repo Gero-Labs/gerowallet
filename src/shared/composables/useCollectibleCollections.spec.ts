@@ -9,6 +9,7 @@ import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import {
+  listedUnitsNow,
   mergeListedCollectibles,
   useCollectibleCollections,
   type CollectibleCollection,
@@ -130,10 +131,25 @@ describe('useCollectibleCollections', () => {
     expect(collections.value[POLICY_A].items).toHaveLength(1);
   });
 
-  it('is exactly the store\'s collections where the market is not available', () => {
+  it('still shows them with the market switched off: a listing locks the NFT, so it is never hidden (Ruling P41)', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const collections = useCollectibleCollections();
+    expect(collections.value[POLICY_A].items.map((i) => i.unit)).toEqual([COOL_1, COOL_2]);
+    expect(collections.value[POLICY_A].quantity).toBe(2);
+  });
+
+  it('is exactly the store\'s collections on a network with no market', () => {
+    walletStore.loggedWallet = wallet({ network: Network.MAINNET });
+    const collections = useCollectibleCollections();
     expect(collections.value).toBe(walletStore.collections);
+  });
+
+  it('names the listed units that are shown, and none where the network has no market', () => {
+    expect([...listedUnitsNow()]).toEqual([COOL_2]);
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    expect([...listedUnitsNow()]).toEqual([COOL_2]);
+    walletStore.loggedWallet = wallet({ network: Network.MAINNET });
+    expect([...listedUnitsNow()]).toEqual([]);
   });
 
   it('leaves the store itself alone', () => {

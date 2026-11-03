@@ -122,6 +122,13 @@ describe('i18n parity', () => {
     expect(informal).toEqual([]);
   });
 
+  // The count of listed NFTs is a plural: Spanish says "1 publicado", never "1 publicados".
+  it('gives the listed count a singular and a plural form', () => {
+    const forms = (lang: string) => locale(lang)['nftMarket.badge.listedCount']!.split('|').map((form) => form.trim());
+    for (const lang of READY_LANGUAGES) expect(forms(lang), lang).toHaveLength(2);
+    expect(forms('es')).toEqual(['{count} publicado', '{count} publicados']);
+  });
+
   it('keeps "sitzt fest" for a stuck NFT in German, as the other listing warnings do', () => {
     expect(locale('de')['signTx.listingNeverSells']).toContain('sitzt fest');
     expect(locale('de')['signTx.listingNeverSells']).not.toContain('festgesetzt');

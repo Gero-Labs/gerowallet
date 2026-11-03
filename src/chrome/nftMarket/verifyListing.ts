@@ -44,6 +44,7 @@ import {
 import { listingFee, decodeListingDatum, sellerShare, type ListingDatum, type Payee } from '@/chrome/nftMarket/listingDatum';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import {
+  CIP68_USER_TOKEN_LABEL,
   MAX_LISTING_DEPOSIT,
   MAX_ROYALTIES,
   MIN_LIST_PRICE,
@@ -51,6 +52,8 @@ import {
   NFT_MARKET_MAX_COLLATERAL_LOVELACE,
   NFT_MARKET_MAX_FEE_LOVELACE,
   NFT_MARKET_MAX_VALIDITY_SLOTS,
+  NFT_UNIT_PATTERN as UNIT,
+  POLICY_ID_HEX_LENGTH as POLICY_HEX_LENGTH,
   type NftMarketDeployment,
 } from '@/utils/nftMarketDeployments';
 
@@ -159,11 +162,6 @@ export interface CancelSummary {
   sponsoredCollateralRef?: string;
 }
 
-/** CIP-68 user token: the only CIP-68 label an NFT is listed under. */
-const CIP68_USER_TOKEN_LABEL = 222;
-/** policy id (28 bytes) then an asset name of up to 32 bytes. */
-const UNIT = /^[0-9a-f]{56}(?:[0-9a-f]{2}){0,32}$/;
-const POLICY_HEX_LENGTH = 56;
 /** `Constr 1 []`, the contract's `Cancel`, in either list encoding (the same Plutus data). */
 const CANCEL_REDEEMER_CBOR: readonly string[] = ['d87a80', 'd87a9fff'];
 

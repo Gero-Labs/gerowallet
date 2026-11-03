@@ -1,6 +1,7 @@
 // The collectibles table's rows. They start from the wallet's own collections, which leave out
 // the NFTs it has listed (locked at the market contract), so where Gero's market is available the
-// listed ones are added back: a seller who lists their only NFT of a collection must not see the
+// listed ones are added back (the market's flag does not hide them: Ruling P41), counted as listed
+// and not as held: a seller who lists their only NFT of a collection must not see the
 // collection vanish from the table, and with it the way to edit the price or take it down.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
@@ -54,18 +55,57 @@ describe('useNftMarketData: the wallet\'s own rows', () => {
     expect(collections.value.map((c) => c.policyId)).toEqual([POLICY_CATS]);
   });
 
-  it('adds a collection made only of listed NFTs, counted as held', async () => {
+  it('adds a collection made only of listed NFTs, counted as listed and NOT as held', async () => {
     walletStore.listedListings = [storeListing(APE_1)];
     const { collections, fetchUserNftCollections } = useNftMarketData();
     await fetchUserNftCollections();
 
     expect(collections.value.map((c) => c.policyId).sort()).toEqual([POLICY_CATS, POLICY_APES].sort());
-    expect(collections.value.find((c) => c.policyId === POLICY_APES)).toMatchObject({ name: 'Ape1', quantity: 1, isScam: false });
+    // A collection whose only NFT is listed reads Held 0, with one listed.
+    expect(collections.value.find((c) => c.policyId === POLICY_APES)).toMatchObject({ name: 'Ape1', quantity: 0, listedCount: 1, isScam: false });
   });
 
-  it('does not add them while the market is off', async () => {
+  it('counts only the NFTs in the wallet as held when some of a collection are listed', async () => {
+    const CAT_2 = `${POLICY_CATS}43617432`;
+    walletStore.listedListings = [storeListing(CAT_2)];
+    const { collections, fetchUserNftCollections } = useNftMarketData();
+    await fetchUserNftCollections();
+
+    expect(collections.value.find((c) => c.policyId === POLICY_CATS)).toMatchObject({ quantity: 1, listedCount: 1 });
+  });
+
+  it('a collection with no listed NFT has a listed count of zero and its own quantity', async () => {
+    const { collections, fetchUserNftCollections } = useNftMarketData();
+    await fetchUserNftCollections();
+    expect(collections.value[0]).toMatchObject({ policyId: POLICY_CATS, quantity: 1, listedCount: 0 });
+  });
+
+  it('keeps listed NFTs in the floor value: they are still the user\'s, and the row says they are listed', async () => {
+    const FLOOR = 'ba'.repeat(28);
+    const A = `${FLOOR}43617431`;
+    const B = `${FLOOR}43617432`;
+    walletStore.collections = { [FLOOR]: { name: 'Floors', img: 'x', quantity: 1, isScam: false, items: [item(A, 'Cat1')] } };
+    walletStore.listedListings = [storeListing(B)];
+    getNftCollections.mockResolvedValueOnce([{ policyId: FLOOR, name: 'Floors', floorPriceLovelace: 25_000_000 }]);
+    const { collections, fetchUserNftCollections, totalFloorValue } = useNftMarketData();
+    await fetchUserNftCollections();
+
+    const row = collections.value.find((c) => c.policyId === FLOOR)!;
+    expect(row).toMatchObject({ quantity: 1, listedCount: 1, floorValueLovelace: 50_000_000 });
+    expect(totalFloorValue.value).toBe(50);
+  });
+
+  it('still adds and counts them with the market switched off (Ruling P41)', async () => {
     walletStore.listedListings = [storeListing(APE_1)];
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    const { collections, fetchUserNftCollections } = useNftMarketData();
+    await fetchUserNftCollections();
+    expect(collections.value.find((c) => c.policyId === POLICY_APES)).toMatchObject({ quantity: 0, listedCount: 1 });
+  });
+
+  it('does not add them on a network with no market', async () => {
+    walletStore.listedListings = [storeListing(APE_1)];
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
     const { collections, fetchUserNftCollections } = useNftMarketData();
     await fetchUserNftCollections();
     expect(collections.value.map((c) => c.policyId)).toEqual([POLICY_CATS]);

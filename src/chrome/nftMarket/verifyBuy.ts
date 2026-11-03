@@ -79,8 +79,11 @@ import {
   type MarketVerifyRule,
 } from '@/chrome/nftMarket/verifyListing';
 import {
+  CIP68_USER_TOKEN_LABEL,
   NFT_MARKET_MAX_COLLATERAL_LOVELACE,
   NFT_MARKET_MAX_FEE_LOVELACE,
+  NFT_UNIT_PATTERN as UNIT,
+  POLICY_ID_HEX_LENGTH as POLICY_HEX_LENGTH,
   type NftMarketDeployment,
 } from '@/utils/nftMarketDeployments';
 
@@ -141,12 +144,7 @@ function refuse(rule: MarketVerifyRule, detail: string): never {
 
 const TX_HASH = /^[0-9a-f]{64}$/;
 const HASH28 = /^[0-9a-f]{56}$/;
-/** policy id (28 bytes) then an asset name of up to 32 bytes. */
-const UNIT = /^[0-9a-f]{56}(?:[0-9a-f]{2}){0,32}$/;
 const DECIMAL = /^[0-9]+$/;
-const POLICY_HEX_LENGTH = 56;
-/** CIP-68 user token: the only CIP-68 label an NFT is bought under. */
-const CIP68_USER_TOKEN_LABEL = 222;
 /** The ledger charges 160 bytes of overhead per output on top of its serialised size (Babbage). */
 const MIN_UTXO_OVERHEAD_BYTES = 160;
 

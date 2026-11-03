@@ -116,18 +116,20 @@ describe('CollectiblesTab', () => {
     expect(cardNames(wrapper)).toEqual(['Cats']);
   });
 
-  it('is exactly the store\'s collections while the market is off', () => {
+  it('keeps the listed NFTs, and their badge, with the market switched off (Ruling P41)', () => {
     walletStore.listedListings = [storeListing(APE_1, '120000000')];
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const wrapper = render();
-    expect(cardNames(wrapper)).toEqual(['Cats']);
-    expect(wrapper.find('[data-testid="collection-listed-badge"]').exists()).toBe(false);
+    expect(cardNames(wrapper).sort()).toEqual(['Ape1', 'Cats']);
+    expect(listedBadge(cardFor(wrapper, 'Ape1')).text()).toBe('Listed · 120 ADA');
   });
 
-  it('is exactly the store\'s collections for a wallet the market is not offered to', () => {
+  it('is exactly the store\'s collections on a network with no market', () => {
     walletStore.listedListings = [storeListing(APE_1, '120000000')];
-    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Watch } as never;
-    expect(cardNames(render())).toEqual(['Cats']);
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
+    const wrapper = render();
+    expect(cardNames(wrapper)).toEqual(['Cats']);
+    expect(wrapper.find('[data-testid="collection-listed-badge"]').exists()).toBe(false);
   });
 
   it('opens the collection with its listed NFTs among the items', async () => {

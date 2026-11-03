@@ -6138,7 +6138,7 @@ export default {
   'nftMarket.actions.editPrice': 'Preis ändern',
   'nftMarket.actions.unlist': 'Angebot zurückziehen',
   'nftMarket.badge.listed': 'Angeboten · {price} ADA',
-  'nftMarket.badge.listedCount': '{count} angeboten',
+  'nftMarket.badge.listedCount': '{count} angeboten | {count} angeboten',
   'nftMarket.holdings.listedAda': 'ADA in Ihren Angeboten',
   'nftMarket.holdings.listedBadge': 'In Angeboten',
   'nftMarket.list.subtitle': 'Solange es angeboten wird, liegt Ihr NFT im Marktvertrag. Sie können das Angebot jederzeit zurückziehen, um es zurückzuerhalten.',
@@ -6188,4 +6188,6 @@ export default {
   'nftMarket.buy.depositNote': 'Die Kaution des Verkäufers von {deposit} ADA geht an den Verkäufer zurück. Sie zahlen sie nicht.',
   'nftMarket.buy.nftAdaNote': 'Ihr NFT kommt mit dem kleinen ADA-Betrag an, den das Netzwerk verlangt. Er bleibt Ihnen und ist nicht Teil der Summe.',
   'nftMarket.buy.done': 'Ihr Kauf ist unterwegs. Das NFT erscheint in Ihrer Wallet, sobald die Transaktion bestätigt ist.',
+  'nftMarket.breakdown.depositLocked': 'Kaution (kommt zurück, wenn es verkauft oder das Angebot zurückgezogen wird)',
+  'nftMarket.actions.viewActivity': 'Aktivität ansehen',
 }

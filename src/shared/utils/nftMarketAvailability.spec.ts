@@ -2,6 +2,10 @@
 // the isNftMarketEnabled flag, a network with a reviewed deployment, and a wallet the worker's
 // prepare handlers would not refuse (canUseNftMarketWallet), so a button never leads to a refusal
 // the pages could have seen coming. A watch wallet never gets it.
+//
+// The flag is a partial kill switch (Ruling P41): it hides List, Edit price and Buy, but the
+// wallet's existing listings stay visible and Unlist stays reachable, because a listing locks the
+// user's NFT and deposit and a cancel only returns them to the user's own address.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
@@ -13,7 +17,9 @@ import {
   nftMarketActionsFor,
   nftMarketAvailable,
   nftMarketBrowseAvailable,
+  nftMarketCanUnlist,
   nftMarketDeploymentFor,
+  nftMarketListingsVisible,
   nftMarketNewestDeployment,
 } from './nftMarketAvailability';
 
@@ -172,14 +178,70 @@ describe('nftMarketActionsFor', () => {
     expect(nftMarketActionsFor({ unit: CIP68_100, quantity: 1 }, undefined)).toEqual({ list: false, reprice: false, unlist: false });
   });
 
-  it('offers nothing at all where the market is not available, a listing or not', () => {
+  it('offers nothing for an NFT that is not listed while the market is off', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
-    const none = { list: false, reprice: false, unlist: false };
-    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, undefined)).toEqual(none);
-    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual(none);
-    featureFlagsStore.state.flags.isNftMarketEnabled = true;
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, undefined)).toEqual({ list: false, reprice: false, unlist: false });
+  });
+
+  it('with the market off, a listed NFT keeps Unlist and loses Edit price (Ruling P41)', () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual({ list: false, reprice: false, unlist: true });
+  });
+
+  it('offers a watch wallet nothing, a listing or not: the worker would refuse it', () => {
     walletStore.loggedWallet = wallet({ type: WalletType.Watch });
-    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual(none);
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual({ list: false, reprice: false, unlist: false });
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, undefined)).toEqual({ list: false, reprice: false, unlist: false });
+  });
+
+  it('offers nothing on a network with no reviewed deployment, flag on or off', () => {
+    walletStore.loggedWallet = wallet({ network: Network.MAINNET });
+    for (const flag of [true, false]) {
+      featureFlagsStore.state.flags.isNftMarketEnabled = flag;
+      expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING), String(flag)).toEqual({ list: false, reprice: false, unlist: false });
+    }
+  });
+});
+
+describe('the wallet\'s own listings with the market switched off (Ruling P41)', () => {
+  it('stay visible: only a network with a market matters, not the flag or the wallet type', () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    expect(nftMarketListingsVisible()).toBe(true);
+    walletStore.loggedWallet = wallet({ type: WalletType.Ledger });
+    expect(nftMarketListingsVisible()).toBe(true);
+  });
+
+  it('are not shown where the network has no market, or with no wallet', () => {
+    walletStore.loggedWallet = wallet({ network: Network.MAINNET });
+    expect(nftMarketListingsVisible()).toBe(false);
+    walletStore.loggedWallet = null;
+    expect(nftMarketListingsVisible()).toBe(false);
+  });
+
+  it('can be unlisted by any wallet the worker would let sign, flag on or off', () => {
+    for (const flag of [true, false]) {
+      featureFlagsStore.state.flags.isNftMarketEnabled = flag;
+      expect(nftMarketCanUnlist(), String(flag)).toBe(true);
+    }
+  });
+
+  it('cannot be unlisted by a wallet the worker would refuse, or where the network has no market', () => {
+    for (const type of [WalletType.Watch, WalletType.Ledger, WalletType.Trezor, WalletType.Keystone]) {
+      walletStore.loggedWallet = wallet({ type });
+      expect(nftMarketCanUnlist(), type).toBe(false);
+    }
+    walletStore.loggedWallet = wallet({ network: Network.MAINNET });
+    expect(nftMarketCanUnlist()).toBe(false);
+    walletStore.loggedWallet = wallet({ chain: Blockchain.BITCOIN });
+    expect(nftMarketCanUnlist()).toBe(false);
+    walletStore.loggedWallet = null;
+    expect(nftMarketCanUnlist()).toBe(false);
+  });
+
+  it('can be unlisted by a hardware wallet type once the worker lists it', () => {
+    vi.mocked(isNftMarketHardware).mockImplementation((type) => type === WalletType.Ledger);
+    walletStore.loggedWallet = wallet({ type: WalletType.Ledger });
+    expect(nftMarketCanUnlist()).toBe(true);
   });
 });
 

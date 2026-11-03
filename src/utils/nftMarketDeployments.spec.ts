@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blockchain, Network } from '@/models/types';
 import {
+  CIP68_USER_TOKEN_LABEL,
   isNftMarketHardware,
   MAX_LIST_PRICE,
   MAX_LISTING_DEPOSIT,
@@ -17,6 +18,8 @@ import {
   NFT_MARKET_MAX_COLLATERAL_LOVELACE,
   NFT_MARKET_MAX_FEE_LOVELACE,
   NFT_MARKET_MAX_VALIDITY_SLOTS,
+  NFT_UNIT_PATTERN,
+  POLICY_ID_HEX_LENGTH,
   ROYALTY_RATE_CAP,
   type NftMarketDeployment,
 } from './nftMarketDeployments';
@@ -291,5 +294,26 @@ describe('networks — NFT market deployments', () => {
     expect(networks.isNftMarketSupported(Blockchain.BITCOIN, Network.MAINNET)).toBe(false);
     expect(networks.resolveNftMarketDeployments('', '')).toEqual([]);
     expect(networks.isNftMarketSupported('', '')).toBe(false);
+  });
+});
+
+// The unit shape and the CIP-68 label the market accepts are read from here by the worker (the
+// prepare handler and the verifiers) and by the pages, so a button never offers what the worker
+// refuses on shape.
+describe('the NFT unit the market takes', () => {
+  it('is a policy id and an asset name of up to 32 bytes, lower-case hex', () => {
+    const policy = 'ab'.repeat(28);
+    expect(POLICY_ID_HEX_LENGTH).toBe(56);
+    expect(NFT_UNIT_PATTERN.test(policy)).toBe(true);
+    expect(NFT_UNIT_PATTERN.test(`${policy}${'cd'.repeat(32)}`)).toBe(true);
+    expect(NFT_UNIT_PATTERN.test(`${policy}${'cd'.repeat(33)}`)).toBe(false);
+    expect(NFT_UNIT_PATTERN.test(`${policy}c`)).toBe(false);
+    expect(NFT_UNIT_PATTERN.test(`${policy.slice(2)}`)).toBe(false);
+    expect(NFT_UNIT_PATTERN.test(`${policy.toUpperCase()}`)).toBe(false);
+    expect(NFT_UNIT_PATTERN.test('lovelace')).toBe(false);
+  });
+
+  it('lists only the CIP-68 (222) user token', () => {
+    expect(CIP68_USER_TOKEN_LABEL).toBe(222);
   });
 });

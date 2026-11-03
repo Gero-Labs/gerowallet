@@ -80,7 +80,7 @@ import UnlistNftDialog from '@/modules/market/dialogs/UnlistNftDialog.vue';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { useMyListings } from '@/shared/composables/useMyListings';
 import { formatLovelaceAsAda } from '@/shared/utils/format';
-import { nftMarketAvailable, nftMarketBrowseAvailable } from '@/shared/utils/nftMarketAvailability';
+import { nftMarketBrowseAvailable, nftMarketListingsVisible } from '@/shared/utils/nftMarketAvailability';
 
 
 const { t } = useTranslation();
@@ -135,9 +135,13 @@ const policyId = computed(() => props.modalData?.items?.find((token) => /^[0-9a-
 const showViewToggle = computed(() => pickedToken.value === null && !!policyId.value && nftMarketBrowseAvailable());
 const showListings = computed(() => showViewToggle.value && view.value === 'sale');
 
-/** The wallet's own listing of this NFT, where the market is available; the "Listed" badge reads it. */
+/**
+ * The wallet's own listing of this NFT, where its network has a market; the "Listed" badge reads
+ * it. Not behind the `isNftMarketEnabled` flag (Ruling P41): a listing stays visible, and can be
+ * unlisted, with the market switched off.
+ */
 function listingOf(token: CollectionToken): OwnListing | undefined {
-  return nftMarketAvailable() ? byUnit.value.get(String(token.unit).toLowerCase()) : undefined;
+  return nftMarketListingsVisible() ? byUnit.value.get(String(token.unit).toLowerCase()) : undefined;
 }
 
 type MarketSheet = { kind: 'list' | 'reprice' | 'unlist'; unit: string; existing?: OwnListing };
@@ -188,7 +192,8 @@ watch(isDialogVisible, (val) => {
 }
 
 .token-listed--below-scam {
-  top: 28px;
+  /* Under the scam flag: its chip (20px) and its 8px margins, in spacing tokens. */
+  top: calc(var(--g-s-5) + var(--g-s-1));
 }
 
 /* A chip is a control: a solid token, with a hairline, reads on any NFT picture. */

@@ -15,6 +15,7 @@ const TX_CBOR = '84a400';
 const TX_ID = 'ab'.repeat(32);
 const POLICY = 'cd'.repeat(28);
 const UNIT = `${POLICY}4e4654`;
+const OTHER_UNIT = `${'99'.repeat(28)}4f74686572`;
 const LISTING_REF = `${'11'.repeat(32)}#0`;
 const ADA = 1_000_000n;
 
@@ -101,9 +102,17 @@ vi.mock('@/shared/composables/useNftMarketFlow', async (importOriginal) => {
     },
   };
 });
+// The name follows the unit, so a test can tell which NFT a screen resolved.
 vi.mock('@/shared/composables/useCollectibleCollections', () => ({
-  resolveNftUnit: (unit: string) => ({ unit, name: 'Equine Pioneer 04601', img: 'https://img.example/1.png', fingerprint: 'asset1x' }),
+  resolveNftUnit: (unit: string) => ({
+    unit,
+    name: unit.startsWith('99') ? 'Other NFT' : 'Equine Pioneer 04601',
+    img: 'https://img.example/1.png',
+    fingerprint: 'asset1x',
+  }),
 }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('vue-router', () => ({ useRouter: () => router }));
 vi.mock('@/stores/walletStore', async () => {
   const { reactive } = await import('vue');
   return { walletStore: reactive(walletState) };
@@ -203,6 +212,7 @@ describe('UnlistNftDialog', () => {
     flow.prepare.mockReset();
     flow.signAndSubmit.mockReset();
     flow.reset.mockClear();
+    router.push.mockClear();
     store.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: 'Normal' };
     allowedHardware.types = [];
     prepareSucceeds();
@@ -250,6 +260,24 @@ describe('UnlistNftDialog', () => {
     expect(has(wrapper, 'confirm')).toBe(true);
   });
 
+  it('shows the NFT the worker verified, not the one the page asked for', async () => {
+    prepareSucceeds({ ...SUMMARY, unit: OTHER_UNIT });
+    const wrapper = render();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="listing-nft-name"]').text()).toBe('Other NFT');
+    expect(byId(wrapper, 'nft').text()).toBe('NFTOther NFT');
+  });
+
+  it('asks about the listing\'s own NFT until the worker has answered', async () => {
+    flow.prepare.mockImplementation(() => {
+      flow.stage.value = 'preparing';
+      return new Promise(() => {});
+    });
+    const wrapper = render();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="listing-nft-name"]').text()).toBe('Equine Pioneer 04601');
+  });
+
   it('shows the worker\'s verified deposit, not the one the store holds', async () => {
     prepareSucceeds({ ...SUMMARY, depositLovelace: '1620000' });
     const wrapper = render();
@@ -283,6 +311,9 @@ describe('UnlistNftDialog', () => {
     expect(flow.signAndSubmit).toHaveBeenCalledWith({ password: 'hunter2' });
     expect(byId(wrapper, 'done').text()).toContain('Your NFT and deposit are on their way back to your wallet.');
     expect(byId(wrapper, 'done').text()).toContain(TX_ID);
+    // The explorer link is a button of the house kind, not a bare Vuetify one.
+    expect(byId(wrapper, 'explorer').classes()).toContain('g-btn');
+    expect(byId(wrapper, 'explorer').attributes('href')).toBe(`https://explorer.example/${TX_ID}`);
     await byId(wrapper, 'done-button').trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
   });
@@ -374,6 +405,25 @@ describe('UnlistNftDialog', () => {
       expect(byId(wrapper, 'error').text()).toBe('This may have been sent. Check your activity before you try again.');
       expect(has(wrapper, 'retry')).toBe(false);
       expect(has(wrapper, 'refresh')).toBe(false);
+      expect(byId(wrapper, 'activity').text()).toBe('View activity');
+
+      // View activity opens the wallet's activity; it never builds or sends anything again.
+      flow.prepare.mockClear();
+      flow.signAndSubmit.mockClear();
+      await byId(wrapper, 'activity').trigger('click');
+      expect(router.push).toHaveBeenCalledWith({ path: '/transactions' });
+      expect(wrapper.emitted('close')).toHaveLength(1);
+      expect(flow.prepare).not.toHaveBeenCalled();
+      expect(flow.signAndSubmit).not.toHaveBeenCalled();
+    });
+
+    it('offers View activity for a submit that may have gone through, and for nothing else', async () => {
+      for (const code of ['BUILD_FAILED', 'LISTING_NOT_FOUND', 'VERIFY_FAILED']) {
+        prepareFails(code);
+        const wrapper = render();
+        await flushPromises();
+        expect(has(wrapper, 'activity'), code).toBe(false);
+      }
     });
 
     it('never shows a string from the worker or Nexus, only the copy for its code', async () => {

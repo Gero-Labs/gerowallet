@@ -6245,7 +6245,7 @@ export default {
   'nftMarket.actions.editPrice': 'Edit price',
   'nftMarket.actions.unlist': 'Unlist',
   'nftMarket.badge.listed': 'Listed · {price} ADA',
-  'nftMarket.badge.listedCount': '{count} listed',
+  'nftMarket.badge.listedCount': '{count} listed | {count} listed',
   'nftMarket.holdings.listedAda': 'ADA in your listings',
   'nftMarket.holdings.listedBadge': 'In listings',
   'nftMarket.list.subtitle': 'While it is listed, your NFT is held by the market contract. You can unlist it at any time to get it back.',
@@ -6295,4 +6295,6 @@ export default {
   'nftMarket.buy.depositNote': 'The seller\'s deposit of {deposit} ADA goes back to the seller. You do not pay it.',
   'nftMarket.buy.nftAdaNote': 'Your NFT arrives with the small amount of ADA the network requires. It stays yours and is not part of the total.',
   'nftMarket.buy.done': 'Your purchase is on its way. The NFT shows in your wallet once the transaction is confirmed.',
+  'nftMarket.breakdown.depositLocked': 'Deposit (comes back when it sells or you unlist)',
+  'nftMarket.actions.viewActivity': 'View activity',
 }

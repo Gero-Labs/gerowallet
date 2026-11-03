@@ -1,7 +1,7 @@
 import { computed, type ComputedRef } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
-import { nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
+import { nftMarketListingsVisible } from '@/shared/utils/nftMarketAvailability';
 import { findCollectionName, longestCommonStartingSubstring, resolveAsset } from '@/shared/utils/resolver';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
@@ -12,10 +12,14 @@ import { debugLog } from '@/utils/debug';
  * `walletStore.collections` is built from the wallet's spendable UTxOs, and the NFTs it has
  * listed sit at the market contract, outside them. A seller would lose sight of an NFT the moment
  * it is listed, and with it the only place to change its price or take it back, so where the
- * market is available these are added back for display (resolved the way every other asset is,
+ * network has a market these are added back for display (resolved the way every other asset is,
  * from the metadata the sync already fetched for them). The store itself is never touched: nothing
  * that selects inputs or sends an NFT reads this, so a listed NFT can only be listed, repriced or
  * unlisted from here, never sent.
+ *
+ * Not behind the `isNftMarketEnabled` flag (Ruling P41): a listing locks the user's NFT and
+ * deposit, so switching the market off must never hide them. Only what the sheets offer on them
+ * (List, Edit price) follows the flag.
  */
 
 /** An asset of a collection, as `resolveAsset` returns it (the shape the store's collection items have). */
@@ -113,13 +117,18 @@ export function mergeListedCollectibles(
 }
 
 /**
- * The collections right now: the store's, with the listed NFTs added where the market is
- * available. Reads reactive state, so calling it inside a computed or a watch source tracks it.
+ * The collections right now: the store's, with the listed NFTs added where the network has a
+ * market. Reads reactive state, so calling it inside a computed or a watch source tracks it.
  * For code that is not a component (useNftMarketData's singleton); components use the composable.
  */
 export function collectibleCollectionsNow(): Record<string, CollectibleCollection> {
   const base = (walletStore.collections ?? {}) as Record<string, CollectibleCollection>;
-  return nftMarketAvailable() ? mergeListedCollectibles(base, reviveOwnListings(walletStore.listedListings)) : base;
+  return nftMarketListingsVisible() ? mergeListedCollectibles(base, reviveOwnListings(walletStore.listedListings)) : base;
+}
+
+/** The units of the wallet's own listings that are shown (none where the network has no market). Reactive. */
+export function listedUnitsNow(): Set<string> {
+  return nftMarketListingsVisible() ? new Set(reviveOwnListings(walletStore.listedListings).map((listing) => listing.unit)) : new Set();
 }
 
 export function useCollectibleCollections(): ComputedRef<Record<string, CollectibleCollection>> {

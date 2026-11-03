@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
-import { computeRoyalties, royaltyOutputMinUtxo } from './royalties';
+import { computeRoyalties, protocolParameter, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
 
 const ADA = 1_000_000n;
 // Seller and royalty outputs carry a 32-byte inline datum and need about 1.2 ADA (spec 5.5).
@@ -721,5 +721,35 @@ describe('royaltyOutputMinUtxo', () => {
 
   it('scales with the protocol parameter', () => {
     expect(royaltyOutputMinUtxo(8620n)).toBe(2n * 1_155_080n);
+  });
+});
+
+describe('protocolParameter', () => {
+  it('reads a positive whole number given as a number, a bigint or decimal text', () => {
+    expect(protocolParameter(4310)).toBe(4310n);
+    expect(protocolParameter(4310n)).toBe(4310n);
+    expect(protocolParameter('4310')).toBe(4310n);
+  });
+
+  it('reads anything else as none', () => {
+    for (const bad of [0, -5, 4310.5, Number.NaN, Infinity, '', 'abc', '-1', '1'.repeat(16), '4310.5', 0n, -1n, null, undefined, {}, []]) {
+      expect(protocolParameter(bad), String(bad)).toBeUndefined();
+    }
+  });
+});
+
+describe('royaltyMinUtxoFor', () => {
+  it('is the output minimum at the reviewed ceiling when the parameter is missing', () => {
+    expect(royaltyMinUtxoFor(undefined)).toBe(1_155_080n);
+  });
+
+  it('follows a lower parameter', () => {
+    expect(royaltyMinUtxoFor(4000n)).toBe(royaltyOutputMinUtxo(4000n));
+    expect(royaltyMinUtxoFor(4000n)).toBeLessThan(1_155_080n);
+  });
+
+  it('never goes above the ceiling: an inflated figure cannot make every royalty look too small', () => {
+    expect(royaltyMinUtxoFor(999_999n)).toBe(1_155_080n);
+    expect(royaltyMinUtxoFor(4310n)).toBe(1_155_080n);
   });
 });

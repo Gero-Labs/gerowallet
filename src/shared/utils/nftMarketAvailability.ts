@@ -3,25 +3,56 @@ import { cip68Label } from '@/shared/utils/resolver';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
-import type { NftMarketDeployment } from '@/utils/nftMarketDeployments';
+import {
+  CIP68_USER_TOKEN_LABEL,
+  NFT_UNIT_PATTERN,
+  POLICY_ID_HEX_LENGTH,
+  type NftMarketDeployment,
+} from '@/utils/nftMarketDeployments';
 import { canUseNftMarketWallet } from '@/utils/nftMarketGate';
 
 /**
- * Whether Gero's NFT market is offered to the logged wallet: the `isNftMarketEnabled` flag
- * (UI-only, so the feature can ship dark), a network with a reviewed deployment
- * (`NFT_MARKET_ALLOWED_NETWORKS` plus a non-empty list: mainnet's is empty until the audit
- * closes), and a wallet the worker's prepare handlers would not refuse. The last part is
- * `canUseNftMarketWallet`, the one predicate the worker reads too: a password, PassKey or Google
- * Cardano wallet, or a hardware type listed in NFT_MARKET_HARDWARE_WALLET_TYPES (empty). Never a
- * watch wallet.
+ * Whether Gero's NFT market is offered to the logged wallet for NEW business: List, Edit price and
+ * Buy. The `isNftMarketEnabled` flag (UI-only, so the feature can ship dark), a network with a
+ * reviewed deployment (`NFT_MARKET_ALLOWED_NETWORKS` plus a non-empty list: mainnet's is empty
+ * until the audit closes), and a wallet the worker's prepare handlers would not refuse. The last
+ * part is `canUseNftMarketWallet`, the one predicate the worker reads too: a password, PassKey or
+ * Google Cardano wallet, or a hardware type listed in NFT_MARKET_HARDWARE_WALLET_TYPES (empty).
+ * Never a watch wallet.
  *
- * Every surface that shows List, Edit price, Unlist, the "Listed" badge or the listed NFTs asks
- * this, so they agree with each other and with the worker. The signing refusals and the `listed`
- * partition do not: they apply whatever the flag says.
+ * This is the part of the market the flag switches off. What the wallet already has in the market
+ * is not: see `nftMarketListingsVisible` and `nftMarketCanUnlist` (Ruling P41). The signing
+ * refusals and the `listed` partition do not read the flag either: they apply whatever it says.
  */
 export function nftMarketAvailable(): boolean {
   const wallet = walletStore.loggedWallet;
   if (!wallet || !featureFlagsStore.isNftMarketEnabled()) return false;
+  return canUseNftMarketWallet(wallet.chain, wallet.type) && networks.isNftMarketSupported(wallet.chain, wallet.network);
+}
+
+/**
+ * Whether the wallet's own listings are shown (marked "Listed", among its NFTs): a network with a
+ * reviewed deployment, and NOTHING about the flag or the wallet's type. A listing locks the user's
+ * NFT and deposit at the contract, so switching the market off must never make them invisible
+ * (Ruling P41: hiding locked assets with no way out is worse than a partial kill switch). The
+ * wallet's `listedListings` are only ever the ones its own keys own, so a wallet with none has
+ * nothing to show.
+ */
+export function nftMarketListingsVisible(): boolean {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet) return false;
+  return networks.isNftMarketSupported(wallet.chain, wallet.network);
+}
+
+/**
+ * Whether Unlist is offered: a network with a reviewed deployment and a wallet the worker would
+ * not refuse (`canUseNftMarketWallet`), and NOT the flag. A cancel only returns the user's own NFT
+ * and deposit to their own address, so it stays reachable with the market switched off (Ruling
+ * P41). The worker's cancel prepare does not read the flag at all.
+ */
+export function nftMarketCanUnlist(): boolean {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet) return false;
   return canUseNftMarketWallet(wallet.chain, wallet.type) && networks.isNftMarketSupported(wallet.chain, wallet.network);
 }
 
@@ -52,12 +83,6 @@ export function nftMarketDeploymentFor(version: number): NftMarketDeployment | n
   return networks.resolveNftMarketDeployments(wallet.chain, wallet.network).find((d) => d.version === version) ?? null;
 }
 
-/** policy id (28 bytes) then an asset name of up to 32 bytes, the same shape the worker takes. */
-const UNIT = /^[0-9a-f]{56}(?:[0-9a-f]{2}){0,32}$/;
-const POLICY_HEX_LENGTH = 56;
-/** CIP-68 user token: the only CIP-68 label an NFT is listed under. */
-const CIP68_USER_TOKEN_LABEL = 222;
-
 /**
  * Whether an asset can be listed at all: one of a kind (quantity 1), and for CIP-68 only its (222)
  * user token, never the (100) reference token or another label. The worker decides for real
@@ -65,9 +90,9 @@ const CIP68_USER_TOKEN_LABEL = 222;
  */
 export function isListableNft(asset: { unit?: string; quantity?: number | string | bigint } | null | undefined): boolean {
   const unit = typeof asset?.unit === 'string' ? asset.unit.toLowerCase() : '';
-  if (!UNIT.test(unit)) return false;
+  if (!NFT_UNIT_PATTERN.test(unit)) return false;
   if (asset?.quantity !== undefined && Number(asset.quantity) !== 1) return false;
-  const label = cip68Label(unit.slice(POLICY_HEX_LENGTH));
+  const label = cip68Label(unit.slice(POLICY_ID_HEX_LENGTH));
   return label === null || label === CIP68_USER_TOKEN_LABEL;
 }
 
@@ -77,18 +102,16 @@ export interface NftMarketActions {
   unlist: boolean;
 }
 
-const NO_ACTIONS: NftMarketActions = { list: false, reprice: false, unlist: false };
-
 /**
- * Which market actions an NFT's detail offers: List for one that can be listed and is not,
- * Edit price and Unlist for one the wallet has listed (`listing`, from `useMyListings().byUnit`).
- * Nothing at all where the market is not available.
+ * Which market actions an NFT's detail offers: List for one that can be listed and is not, Edit
+ * price and Unlist for one the wallet has listed (`listing`, from `useMyListings().byUnit`).
+ * List and Edit price follow `nftMarketAvailable()` (the flag is theirs); Unlist follows
+ * `nftMarketCanUnlist()` and stays with the flag off (Ruling P41).
  */
 export function nftMarketActionsFor(
   asset: { unit?: string; quantity?: number | string | bigint } | null | undefined,
   listing: OwnListing | undefined,
 ): NftMarketActions {
-  if (!nftMarketAvailable()) return NO_ACTIONS;
-  if (listing) return { list: false, reprice: true, unlist: true };
-  return { list: isListableNft(asset), reprice: false, unlist: false };
+  if (listing) return { list: false, reprice: nftMarketAvailable(), unlist: nftMarketCanUnlist() };
+  return { list: nftMarketAvailable() && isListableNft(asset), reprice: false, unlist: false };
 }

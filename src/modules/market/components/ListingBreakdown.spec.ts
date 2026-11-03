@@ -76,13 +76,13 @@ describe('ListingBreakdown', () => {
       expect(preview.find('[data-testid="breakdown-network-fee"]').exists()).toBe(false);
 
       const verified = render({ deposit: 1_550_000n, networkFee: 213_445n });
-      expect(row(verified, 'deposit')).toBe('Your deposit, returned to you1.55 ADA');
+      expect(row(verified, 'deposit')).toBe('Deposit (comes back when it sells or you unlist)1.55 ADA');
       expect(row(verified, 'network-fee')).toBe('Network Fee0.213445 ADA');
       expect(verified.text()).toContain('It comes back to you when it sells or when you unlist it.');
     });
 
     it('shows a deposit of zero rather than hiding it', () => {
-      expect(row(render({ deposit: 0n }), 'deposit')).toBe('Your deposit, returned to you0 ADA');
+      expect(row(render({ deposit: 0n }), 'deposit')).toBe('Deposit (comes back when it sells or you unlist)0 ADA');
     });
   });
 

@@ -36,6 +36,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
+import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import { MAX_ROYALTIES, ROYALTY_RATE_CAP } from '@/utils/nftMarketDeployments';
 import type { Payee } from './listingDatum';
@@ -259,4 +260,25 @@ export function royaltyOutputMinUtxo(coinsPerUtxoByte: bigint): bigint {
   };
   const size = BigInt(Serialization.TransactionOutput.fromCore(output).toCbor().length / 2);
   return (160n + size) * coinsPerUtxoByte;
+}
+
+/** A protocol parameter from the store: a positive whole number as a number, a bigint or decimal text; else none. */
+export function protocolParameter(raw: unknown): bigint | undefined {
+  let value: bigint | undefined;
+  if (typeof raw === 'bigint') value = raw;
+  else if (typeof raw === 'number' && Number.isSafeInteger(raw)) value = BigInt(raw);
+  else if (typeof raw === 'string' && /^[0-9]{1,15}$/.test(raw)) value = BigInt(raw);
+  return value !== undefined && value > 0n ? value : undefined;
+}
+
+/**
+ * The least a royalty output may hold at the network's `coinsPerUtxoByte` (`protocolParameter`'s
+ * answer: a positive whole number, or undefined for an unusable one), capped at the reviewed
+ * ceiling (DEFAULT_COINS_PER_UTXO_BYTE, as verifyBuy does): an inflated figure in the store must
+ * not make every royalty look too small to keep, and none is the ceiling itself. The one
+ * threshold of the worker's royalty choice and of the list sheet's preview.
+ */
+export function royaltyMinUtxoFor(coinsPerUtxoByte: bigint | undefined): bigint {
+  const live = coinsPerUtxoByte ?? DEFAULT_COINS_PER_UTXO_BYTE;
+  return royaltyOutputMinUtxo(live < DEFAULT_COINS_PER_UTXO_BYTE ? live : DEFAULT_COINS_PER_UTXO_BYTE);
 }

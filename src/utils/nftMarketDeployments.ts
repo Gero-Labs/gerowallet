@@ -110,6 +110,15 @@ export const MIN_LIST_PRICE = 5_000_000n;
  */
 export const MAX_LIST_PRICE = 45_000_000_000_000_000n;
 
+/** Policy id length in hex characters (28 bytes). */
+export const POLICY_ID_HEX_LENGTH = 56;
+
+/** An NFT unit as the market takes it: the policy id (28 bytes) then an asset name of up to 32 bytes, lower-case hex. */
+export const NFT_UNIT_PATTERN = /^[0-9a-f]{56}(?:[0-9a-f]{2}){0,32}$/;
+
+/** CIP-68 user token: the only CIP-68 label an NFT is listed, bought or moved under. */
+export const CIP68_USER_TOKEN_LABEL = 222;
+
 /** Least the seller must receive after fee and royalties, in lovelace (1.5 ADA). */
 export const MIN_SELLER_SHARE = 1_500_000n;
 

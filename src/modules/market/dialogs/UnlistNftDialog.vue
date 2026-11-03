@@ -87,9 +87,9 @@
             {{ flow.submittedTxId.value }}
             <CopyButton x-small :value="flow.submittedTxId.value ?? ''" class="ml-1" />
           </p>
-          <v-btn v-if="txExplorerUrl" variant="text" size="small" :href="txExplorerUrl" target="_blank" rel="noopener noreferrer">
+          <GButton v-if="txExplorerUrl" tier="tertiary" compact :href="txExplorerUrl" target="_blank" rel="noopener noreferrer" data-testid="unlist-nft-explorer">
             {{ t('market.viewOnExplorer') }}
-          </v-btn>
+          </GButton>
         </div>
         <div class="unlist-nft__actions">
           <GButton tier="primary" block data-testid="unlist-nft-done-button" @click="close()">{{ t('common.done') }}</GButton>
@@ -108,6 +108,8 @@
                that may be on chain, offer neither. -->
           <GButton v-if="failureKind === 'retry'" tier="primary" data-testid="unlist-nft-retry" @click="start()">{{ t('common.tryAgain') }}</GButton>
           <GButton v-else-if="failureKind === 'changed'" tier="primary" data-testid="unlist-nft-refresh" @click="start()">{{ t('common.refresh') }}</GButton>
+          <!-- Signed, and the network did not confirm: it may be on chain. Look, never rebuild. -->
+          <GButton v-else-if="failureKind === 'maybeSent'" tier="primary" data-testid="unlist-nft-activity" @click="viewActivity()">{{ t('nftMarket.actions.viewActivity') }}</GButton>
         </div>
       </template>
     </v-card-text>
@@ -127,6 +129,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -142,7 +145,7 @@ import { usePreparedTxCredentials } from '@/shared/composables/usePreparedTxCred
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
 import { formatLovelaceAsAda } from '@/shared/utils/format';
-import { isNftMarketHardware } from '@/utils/nftMarketDeployments';
+import { POLICY_ID_HEX_LENGTH, isNftMarketHardware } from '@/utils/nftMarketDeployments';
 
 /**
  * Takes an NFT off the market: the worker builds and verifies the cancel of the wallet's own
@@ -170,6 +173,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
+const router = useRouter();
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
 const isBT = ref(false);
 const flow = useNftMarketFlow('cancel', { getIsBT: () => isBT.value });
@@ -202,8 +206,11 @@ const busy = credentials.busy;
 
 const ada = (lovelace: bigint): string => formatLovelaceAsAda(lovelace);
 
-const nft = computed(() => resolveNftUnit(props.existing.unit));
-const policyCaption = computed(() => filters.truncate(props.existing.unit.slice(0, 56)));
+// The NFT shown is the one the worker verified (`summary.unit`) once there is a summary: the
+// review is of that transaction, not of what the page asked for.
+const shownUnit = computed(() => summary.value?.unit ?? props.existing.unit);
+const nft = computed(() => resolveNftUnit(shownUnit.value));
+const policyCaption = computed(() => filters.truncate(shownUnit.value.slice(0, POLICY_ID_HEX_LENGTH)));
 
 /** The worker's verified figures. Null if one does not read back. */
 const verified = computed(() => {
@@ -234,6 +241,12 @@ function close(): void {
   if (busy.value) return;
   credentials.clearPassword();
   emit('close');
+}
+
+/** The signed cancel may be on chain: take the seller to their activity. Nothing is rebuilt or re-sent. */
+function viewActivity(): void {
+  close();
+  void router?.push({ path: '/transactions' });
 }
 
 // State is reset when the dialog opens, not when it closes: the content stays as it was while the

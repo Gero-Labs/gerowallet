@@ -12,8 +12,8 @@
       <CopyButton class="ml-1" :value="asset.fingerprint" x-small></CopyButton>
       <ExplorerLink type="asset" :id="asset.fingerprint" x-small />
     </v-card-subtitle>
-    <!-- Gero's NFT market: list this NFT, or change the price of / take down its listing.
-         Only where the market is available (flag, network, wallet): see nftMarketAvailability. -->
+    <!-- Gero's NFT market: list this NFT, or change the price of / take down its listing. List and
+         Edit price need the market on (flag, network, wallet); Unlist stays with the flag off. -->
     <div v-if="hasMarketActions" class="asset-market-actions" data-testid="asset-market-actions">
       <span v-if="listing" class="asset-market-actions__status t-caption" data-testid="asset-listed-status">
         {{ $t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listing.datum.price) }) }}
@@ -130,7 +130,7 @@ import { useMyListings } from '@/shared/composables/useMyListings';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 import { formatLovelaceAsAda } from '@/shared/utils/format';
-import { nftMarketActionsFor, nftMarketAvailable } from '@/shared/utils/nftMarketAvailability';
+import { nftMarketActionsFor, nftMarketListingsVisible } from '@/shared/utils/nftMarketAvailability';
 
 
 
@@ -152,8 +152,8 @@ const emit = defineEmits<{
 }>();
 
 const { byUnit } = useMyListings();
-/** This NFT's own listing, where the market is available. */
-const listing = computed(() => (nftMarketAvailable() ? byUnit.value.get(String(props.asset.unit).toLowerCase()) : undefined));
+/** This NFT's own listing, where its network has a market (with the market switched off too: Ruling P41). */
+const listing = computed(() => (nftMarketListingsVisible() ? byUnit.value.get(String(props.asset.unit).toLowerCase()) : undefined));
 const marketActions = computed(() => nftMarketActionsFor(props.asset, listing.value));
 const hasMarketActions = computed(() => marketActions.value.list || marketActions.value.reprice || marketActions.value.unlist);
 

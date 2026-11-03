@@ -6014,7 +6014,7 @@ export default {
   'nftMarket.actions.editPrice': 'Editar precio',
   'nftMarket.actions.unlist': 'Cancelar publicación',
   'nftMarket.badge.listed': 'Publicado · {price} ADA',
-  'nftMarket.badge.listedCount': '{count} publicados',
+  'nftMarket.badge.listedCount': '{count} publicado | {count} publicados',
   'nftMarket.holdings.listedAda': 'ADA en tus publicaciones',
   'nftMarket.holdings.listedBadge': 'En publicaciones',
   'nftMarket.list.subtitle': 'Mientras esté publicado, tu NFT queda en el contrato del mercado. Puedes cancelar la publicación en cualquier momento para recuperarlo.',
@@ -6064,4 +6064,6 @@ export default {
   'nftMarket.buy.depositNote': 'El depósito del vendedor, {deposit} ADA, vuelve al vendedor. Tú no lo pagas.',
   'nftMarket.buy.nftAdaNote': 'Tu NFT llega con la pequeña cantidad de ADA que exige la red. Sigue siendo tuya y no forma parte del total.',
   'nftMarket.buy.done': 'Tu compra está en camino. El NFT aparecerá en tu billetera cuando se confirme la transacción.',
+  'nftMarket.breakdown.depositLocked': 'Depósito (se te devuelve cuando se vende o cancelas la publicación)',
+  'nftMarket.actions.viewActivity': 'Ver actividad',
 }

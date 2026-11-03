@@ -114,8 +114,7 @@
         <v-chip
           v-if="item.isListed"
           size="x-small" label
-          class="ml-1 flex-shrink-0"
-          style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-text-2); background: var(--g-raised); border: 1px solid var(--g-hairline-2);"
+          class="holdings-listed-chip ml-1 flex-shrink-0"
           data-testid="holdings-listed-badge"
         >
           {{ $t('nftMarket.holdings.listedBadge') }}
@@ -881,6 +880,17 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 120px;
+}
+
+/* The ADA held in the wallet's own listings: a chip is a control, so a solid token with a hairline.
+   `html`-prefixed so it wins the tie with Vuetify's chip sizes (its CSS is emitted twice). */
+html .holdings-listed-chip {
+  height: var(--g-s-4);
+  padding: 0 var(--g-s-1);
+  font-size: 10px;
+  color: var(--g-text-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
 }
 
 /* Allocation progress bar */

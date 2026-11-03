@@ -18,6 +18,7 @@ const TX_CBOR = '84a400';
 const TX_ID = 'ab'.repeat(32);
 const POLICY = 'cd'.repeat(28);
 const UNIT = `${POLICY}4e4654`;
+const OTHER_UNIT = `${'99'.repeat(28)}4f74686572`;
 const LISTING_REF = `${'11'.repeat(32)}#0`;
 const CREATOR_A = `addr_test1qz${'a'.repeat(40)}ac4f9d2e`;
 const CREATOR_B = `addr_test1qz${'b'.repeat(40)}b7e6a1c3`;
@@ -178,9 +179,17 @@ vi.mock('@/modules/market/composables/useListingMarketInfo', async () => {
     },
   };
 });
+// The name follows the unit, so a test can tell which NFT a screen resolved.
 vi.mock('@/shared/composables/useCollectibleCollections', () => ({
-  resolveNftUnit: (unit: string) => ({ unit, name: 'Equine Pioneer 04601', img: 'https://img.example/1.png', fingerprint: 'asset1x' }),
+  resolveNftUnit: (unit: string) => ({
+    unit,
+    name: unit.startsWith('99') ? 'Other NFT' : 'Equine Pioneer 04601',
+    img: 'https://img.example/1.png',
+    fingerprint: 'asset1x',
+  }),
 }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('vue-router', () => ({ useRouter: () => router }));
 vi.mock('@/stores/walletStore', async () => {
   const { reactive } = await import('vue');
   return { walletStore: reactive(walletState) };
@@ -292,6 +301,7 @@ describe('ListNftDialog: a new listing', () => {
     flow.prepare.mockReset();
     flow.signAndSubmit.mockReset();
     flow.reset.mockClear();
+    router.push.mockClear();
     info.load.mockClear();
     info.reset.mockClear();
     info.floorLovelace.value = null;
@@ -616,7 +626,7 @@ describe('ListNftDialog: a new listing', () => {
       expect(review.get('[data-testid="breakdown-fee"]').text()).toBe('Gero fee1.5 ADA');
       expect(review.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}5 ADA`);
       expect(review.get('[data-testid="breakdown-receive"]').text()).toBe('You receive93.4 ADA');
-      expect(review.get('[data-testid="breakdown-deposit"]').text()).toBe('Your deposit, returned to you1.62 ADA');
+      expect(review.get('[data-testid="breakdown-deposit"]').text()).toBe('Deposit (comes back when it sells or you unlist)1.62 ADA');
       expect(review.get('[data-testid="breakdown-network-fee"]').text()).toBe('Network Fee0.17 ADA');
       expect(has(wrapper, 'confirm')).toBe(true);
     });
@@ -655,6 +665,19 @@ describe('ListNftDialog: a new listing', () => {
       expect(has(wrapper, 'done')).toBe(true);
       expect(byId(wrapper, 'done').text()).toContain('Your NFT is being listed.');
       expect(byId(wrapper, 'done').text()).toContain(TX_ID);
+      // The explorer link is a button of the house kind, not a bare Vuetify one.
+      const explorer = byId(wrapper, 'explorer');
+      expect(explorer.classes()).toContain('g-btn');
+      expect(explorer.attributes('href')).toBe(`https://explorer.example/${TX_ID}`);
+    });
+
+    it('shows the NFT the worker verified, not the one the page asked for', async () => {
+      prepareSucceeds({ ...LIST_SUMMARY, unit: OTHER_UNIT });
+      const wrapper = render();
+      expect(wrapper.get('[data-testid="listing-nft-name"]').text()).toBe('Equine Pioneer 04601');
+      await toReview(wrapper);
+      expect(wrapper.get('[data-testid="listing-nft-name"]').text()).toBe('Other NFT');
+      expect(wrapper.get('[data-testid="listing-nft-caption"]').text()).toBe(`${OTHER_UNIT.slice(0, 7)}...${OTHER_UNIT.slice(56 - 6, 56)}`);
     });
 
     it('goes back to the price with what was typed, and the password gone', async () => {
@@ -788,6 +811,38 @@ describe('ListNftDialog: a new listing', () => {
       expect(has(wrapper, 'confirm')).toBe(true);
     });
 
+    it('a submit that may have gone through offers View activity, which opens the wallet\'s activity and never builds again', async () => {
+      flow.signAndSubmit.mockImplementation(async () => {
+        flow.prepared.value = null;
+        flow.failure.value = { code: 'SUBMIT_FAILED' };
+        flow.stage.value = 'idle';
+        return false;
+      });
+      const wrapper = render();
+      await typePrice(wrapper, '100');
+      await byId(wrapper, 'continue').trigger('click');
+      await flushPromises();
+      await wrapper.get('[data-test="password"]').setValue('hunter2');
+      await byId(wrapper, 'confirm').trigger('click');
+      await flushPromises();
+      expect(byId(wrapper, 'activity').text()).toBe('View activity');
+
+      flow.prepare.mockClear();
+      flow.signAndSubmit.mockClear();
+      await byId(wrapper, 'activity').trigger('click');
+      expect(router.push).toHaveBeenCalledWith({ path: '/transactions' });
+      expect(wrapper.emitted('close')).toHaveLength(1);
+      expect(flow.prepare).not.toHaveBeenCalled();
+      expect(flow.signAndSubmit).not.toHaveBeenCalled();
+    });
+
+    it('offers View activity for a submit that may have gone through, and for nothing else', async () => {
+      for (const code of ['BUILD_FAILED', 'NFT_NOT_FOUND', 'VERIFY_FAILED']) {
+        const wrapper = await failWith(code);
+        expect(has(wrapper, 'activity'), code).toBe(false);
+      }
+    });
+
     it('never shows a string from the worker or Nexus, only the copy for its code', async () => {
       const wrapper = await failWith('SOMETHING_NEW_FROM_NEXUS');
       expect(byId(wrapper, 'error').text()).toBe('We could not prepare this transaction. Try again.');
@@ -855,6 +910,7 @@ describe('ListNftDialog: edit price', () => {
     flow.prepare.mockReset();
     flow.signAndSubmit.mockReset();
     flow.reset.mockClear();
+    router.push.mockClear();
     info.load.mockClear();
     info.floorLovelace.value = null;
     info.lastSaleLovelace.value = null;
@@ -893,11 +949,39 @@ describe('ListNftDialog: edit price', () => {
     expect(wrapper.get('[data-testid="breakdown-receive"]').text()).toBe('You receive82.5 ADA');
   });
 
-  it('refuses the price it already has', async () => {
+  it('refuses the price it already has, once the seller has edited the field', async () => {
     const wrapper = render({ existing: EXISTING });
     await typePrice(wrapper, '120.0');
     expect(body(wrapper).text()).toContain('This is already the price. Enter a new one.');
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+  });
+
+  it('opens without an error: the field starts on the current price, which is not the seller\'s mistake', async () => {
+    const wrapper = render({ existing: EXISTING });
+    await flushPromises();
+    expect((priceInput(wrapper).element as HTMLInputElement).value).toBe('120');
+    expect(body(wrapper).text()).not.toContain('This is already the price');
+    // Continue stays off, though: Nexus would build a transaction that changes nothing but the fee.
+    expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+    await byId(wrapper, 'continue').trigger('click');
+    expect(flow.prepare).not.toHaveBeenCalled();
+  });
+
+  it('says it again after editing away and back to the current price', async () => {
+    const wrapper = render({ existing: EXISTING });
+    await typePrice(wrapper, '121');
+    expect(body(wrapper).text()).not.toContain('This is already the price');
+    await typePrice(wrapper, '120');
+    expect(body(wrapper).text()).toContain('This is already the price. Enter a new one.');
+  });
+
+  it('forgets an edit when the sheet reopens: it opens quiet again', async () => {
+    const wrapper = render({ existing: EXISTING });
+    await typePrice(wrapper, '120.0');
+    await wrapper.setProps({ isOpen: false });
+    await wrapper.setProps({ isOpen: true });
+    await flushPromises();
+    expect(body(wrapper).text()).not.toContain('This is already the price');
   });
 
   it('refuses the same things a new listing does: under the minimum, and a price that leaves the seller too little', async () => {
@@ -934,7 +1018,7 @@ describe('ListNftDialog: edit price', () => {
     expect(review.text()).toContain('New price');
     expect(review.get('[data-testid="breakdown-price"]').text()).toBe('Price90 ADA');
     expect(review.get('[data-testid="breakdown-receive"]').text()).toBe('You receive82.5 ADA');
-    expect(review.get('[data-testid="breakdown-deposit"]').text()).toBe('Your deposit, returned to you1.55 ADA');
+    expect(review.get('[data-testid="breakdown-deposit"]').text()).toBe('Deposit (comes back when it sells or you unlist)1.55 ADA');
     expect(review.get('[data-testid="breakdown-network-fee"]').text()).toBe('Network Fee0.35 ADA');
     expect(review.get('[data-testid="list-nft-old-price"]').text()).toBe('Current price120 ADA');
   });
@@ -958,6 +1042,21 @@ describe('ListNftDialog: edit price', () => {
     await flushPromises();
     expect(byId(wrapper, 'error').text()).toContain('This listing changed.');
     expect(has(wrapper, 'refresh')).toBe(true);
+  });
+
+  it('Refresh closes the sheet, which was opened on a listing that is no longer as it was', async () => {
+    prepareFails('LISTING_NOT_FOUND');
+    const wrapper = render({ existing: EXISTING });
+    await typePrice(wrapper, '90');
+    await byId(wrapper, 'continue').trigger('click');
+    await flushPromises();
+
+    flow.prepare.mockClear();
+    await byId(wrapper, 'refresh').trigger('click');
+    await flushPromises();
+    // Reopened after the sync it starts from the listing as it now is; looking again here could not change it.
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(flow.prepare).not.toHaveBeenCalled();
   });
 
   it('cannot price a listing at a deployment this build does not configure', async () => {

@@ -10,8 +10,7 @@
 
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import { listingSplit, type ListingFeeParams, type Payee } from '@/chrome/nftMarket/listingDatum';
-import { computeRoyalties, royaltyOutputMinUtxo } from '@/chrome/nftMarket/royalties';
-import { DEFAULT_COINS_PER_UTXO_BYTE } from '@/shared/utils/txIntentGuard';
+import { computeRoyalties, protocolParameter, royaltyMinUtxoFor } from '@/chrome/nftMarket/royalties';
 import { MAX_LIST_PRICE, MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
 
 // ---------------------------------------------------------------------------------------------
@@ -174,15 +173,10 @@ export function classifyDroppedRoyalties(
 }
 
 /**
- * The least a royalty output may hold, as the worker works it out: at the network's
- * `coinsPerUtxoByte`, capped at the reviewed ceiling so an inflated figure cannot make every
- * royalty look too small. A value that is not a positive whole number is the ceiling itself.
+ * The least a royalty output may hold, from the network's `coinsPerUtxoByte` as the store holds
+ * it: the worker's own function (`royaltyMinUtxoFor`, over its `protocolParameter` reading), so
+ * the preview and the worker's choice of royalties use one threshold.
  */
 export function pageRoyaltyMinUtxo(coinsPerUtxoByte: unknown): bigint {
-  let live: bigint | undefined;
-  if (typeof coinsPerUtxoByte === 'bigint') live = coinsPerUtxoByte;
-  else if (typeof coinsPerUtxoByte === 'number' && Number.isSafeInteger(coinsPerUtxoByte)) live = BigInt(coinsPerUtxoByte);
-  else if (typeof coinsPerUtxoByte === 'string' && /^[0-9]{1,15}$/.test(coinsPerUtxoByte)) live = BigInt(coinsPerUtxoByte);
-  const usable = live !== undefined && live > 0n && live < DEFAULT_COINS_PER_UTXO_BYTE ? live : DEFAULT_COINS_PER_UTXO_BYTE;
-  return royaltyOutputMinUtxo(usable);
+  return royaltyMinUtxoFor(protocolParameter(coinsPerUtxoByte));
 }

@@ -29,7 +29,7 @@
         <dd class="t-heading g-num">{{ ada(sellerReceives) }} ADA</dd>
       </div>
       <div v-if="deposit != null" class="listing-breakdown__row" data-testid="breakdown-deposit">
-        <dt class="t-caption">{{ t('nftMarket.breakdown.deposit') }}</dt>
+        <dt class="t-caption">{{ t('nftMarket.breakdown.depositLocked') }}</dt>
         <dd class="t-body-sm g-num">{{ ada(deposit) }} ADA</dd>
       </div>
       <div v-if="networkFee != null" class="listing-breakdown__row" data-testid="breakdown-network-fee">
@@ -66,8 +66,8 @@ import { MAX_ROYALTIES } from '@/utils/nftMarketDeployments';
  * How a price splits: the price, Gero's fee, each creator royalty with its recipient and the
  * total as the share of the price it effectively is (never the rate the collection asks), and
  * what the seller receives. Shown live while the seller types (a preview) and again on the
- * review of what the worker verified, which adds the deposit that comes back and the network
- * fee. Royalties the listing leaves out are said plainly, a royalty too small to pay apart from
+ * review of what the worker verified, which adds the deposit (locked with the NFT, coming back
+ * when it sells or the seller unlists: not money returned now) and the network fee. Royalties the listing leaves out are said plainly, a royalty too small to pay apart from
  * one beyond the recipient limit; an entry of zero lovelace owed nothing and is not mentioned.
  * Amounts are exact: bigint lovelace in, ADA text out.
  */
