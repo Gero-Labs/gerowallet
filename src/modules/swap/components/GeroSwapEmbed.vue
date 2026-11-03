@@ -132,7 +132,7 @@
         </v-card-text>
       </BaseDialog>
 
-      <SwapMergeDialog v-if="mergeOpen" :open="mergeOpen" @close="mergeOpen = false" @merged="onMerged" />
+      <SwapMergeDialog v-if="mergeOpen" :open="mergeOpen" :cache="mergeCache" @close="mergeOpen = false" @merged="onMerged" />
     </template>
   </div>
 </template>
@@ -144,6 +144,7 @@ import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { swapNeedsMerge } from '../composables/swapMergeNeed';
 import { paymentUtxos } from '@/shared/utils/pendingSpends';
 import SwapMergeDialog from './SwapMergeDialog.vue';
+import { createSweepCache } from '@/api/sweepCache';
 import DialogDrawer from '@/shared/dialogs/DialogDrawer.vue';
 import {
   TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits, type QuotedRoute, type SwapIntent,
@@ -352,6 +353,8 @@ async function currentSwapIntent(): Promise<SwapIntent | null> {
 // a merge under one approval, so only those are offered one.
 const mergeNeeded = ref(false);
 const mergeOpen = ref(false);
+/** Merges the dialog built, kept here so opening it again does not rebuild them (see createSweepCache). */
+const mergeCache = createSweepCache();
 /** The merge sent from here, by its last transaction, until the wallet holds its output. */
 const mergeLanding = ref<string | null>(null);
 const canMerge = computed(() =>
