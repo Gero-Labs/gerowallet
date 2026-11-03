@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { buildTxApprovalSummary, formatLovelace, type ApprovalContext } from './txApprovalSummary';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
+import type { OwnListing } from '@/chrome/nftMarket/ownListings';
+import {
+  approvalContextFromKeys,
+  approvalMarketContext,
+  buildTxApprovalSummary,
+  formatLovelace,
+  type ApprovalContext,
+} from './txApprovalSummary';
 
 const OWN_ADDR = 'addr_test1qpdmx56dml9qtej5vxhejju492w9pfv7j9270wjh0pfe9hdzqxa4r35qhuqx29n693k4gqukhk3lfw37xkp4egvh6raq4d4rzj';
 const CHANGE_ADDR = 'addr_test1qqy44ytv354nqrs0f3hfsecj45w623wgqskt7nx84qd8v6lgxeg90kc8dfzpcg9xl8nuhvdesgq5cz6ejq83vk60hpns2c2kwh';
@@ -27,6 +36,8 @@ const ctx = (over: Partial<ApprovalContext> = {}): ApprovalContext => ({
   ownCcHotKeyHashes: new Set(),
   walletNetworkId: Cardano.NetworkId.Testnet,
   resolveAsset: () => ({ name: 'Token', decimals: 0 }),
+  ownListings: new Map(),
+  listingScriptHashes: new Set(),
   ...over,
 });
 
@@ -241,6 +252,240 @@ describe('buildTxApprovalSummary: what actually leaves the wallet', () => {
     const listing = buildTxApprovalSummary(withRedeemer, ctx({ ownUtxos: [ownUtxo(0, 20_000_000n)] }));
     expect(listing.unmatchedInputCount).toBe(0);
     expect(listing.totals.youPayAda).toBe('10.17');
+  });
+});
+
+// A dApp-built transaction that spends the wallet's own Gero listing, or puts something at a
+// Gero listing script, is signable once the user approves it (dApp market pass), so its approval
+// preview is the only protection: it must say so, from the wallet's own stored listings and the
+// deployments' script hashes, never from anything the dApp supplied.
+describe('buildTxApprovalSummary: Gero market listings', () => {
+  const LISTING_SCRIPT = '9'.repeat(56);
+  const OTHER_SCRIPT = '7'.repeat(56);
+  const NFT = `${'b'.repeat(56)}${Buffer.from('Gero Cat #7').toString('hex')}`;
+  const OTHER_NFT = `${'c'.repeat(56)}${Buffer.from('Gero Cat #8').toString('hex')}`;
+  const LISTING_TX = 'a1'.repeat(32);
+  const OTHER_LISTING_TX = 'b2'.repeat(32);
+  const OWN_REF = `${LISTING_TX}#0`;
+  const FOREIGN_REF = `${OTHER_LISTING_TX}#4`;
+  const KEY_HASH = '0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c';
+  const STAKE_A = '2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c';
+  const STAKE_B = '4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c';
+
+  const key = (hash: string) => ({ hash: Hash28ByteBase16(hash), type: Cardano.CredentialType.KeyHash });
+  const script = (hash: string) => ({ hash: Hash28ByteBase16(hash), type: Cardano.CredentialType.ScriptHash });
+  const baseAt = (hash: string, stake = STAKE_A) =>
+    Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Testnet, script(hash), key(stake)).toAddress().toBech32();
+  const enterpriseAt = (hash: string) =>
+    Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, script(hash)).toAddress().toBech32();
+  // By hand, as marketGuard.spec does: header 0x50 is a pointer address with a script payment
+  // part on a testnet, then the hash and the pointer's three naturals.
+  const pointerAt = (hash: string) => Cardano.Address.fromBytes(HexBlob(`50${hash}010203`)).toBech32();
+  const keyAddress = (hash = KEY_HASH) =>
+    Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Testnet, key(hash), key(STAKE_A)).toAddress().toBech32();
+
+  const ownListing = (ref: string, unit: string, price: bigint): OwnListing => ({
+    ref,
+    unit,
+    datum: { owner: OWN_PAYMENT_HASH, sellerAddress: OWN_ADDR, price, royalties: [], buyer: null },
+    depositLovelace: '2000000',
+    deploymentVersion: 1,
+  });
+  const market = (over: Partial<ApprovalContext> = {}) => ctx({
+    ownListings: new Map([[OWN_REF, ownListing(OWN_REF, NFT, 25_000_000n)]]),
+    listingScriptHashes: new Set([LISTING_SCRIPT]),
+    resolveAsset: (unit) => ({ name: unit === NFT ? 'Gero Cat #7' : 'Token', decimals: 0 }),
+    ...over,
+  });
+  const nftOut = (address: string, unit = NFT) =>
+    ({ address, value: { coins: 2_000_000n, assets: new Map([[unit, 1n]]) } });
+
+  describe('spending the wallet\'s own listing', () => {
+    it('lists each own listing an input spends, with its NFT and its listed price from the stored datum', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: TX_ID, index: 0 }, { txId: LISTING_TX, index: 0 }],
+        outputs: [nftOut(OWN_ADDR), out(CHANGE_ADDR, 9_000_000n)],
+      }), market());
+      expect(s.listedInputs).toEqual([{ ref: OWN_REF, unit: NFT, label: 'Gero Cat #7', priceLovelace: 25_000_000n }]);
+      expect(s.createsListing).toBe(false);
+      expect(s.createdListingCount).toBe(0);
+    });
+
+    it('lists several spent listings in input order, once each', () => {
+      const second = `${'c3'.repeat(32)}#2`;
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: 'c3'.repeat(32), index: 2 }, { txId: LISTING_TX, index: 0 }],
+      }), market({
+        ownListings: new Map([
+          [OWN_REF, ownListing(OWN_REF, NFT, 25_000_000n)],
+          [second, ownListing(second, OTHER_NFT, 7_500_000n)],
+        ]),
+      }));
+      expect(s.listedInputs.map((l) => [l.ref, l.unit, l.priceLovelace])).toEqual([
+        [second, OTHER_NFT, 7_500_000n],
+        [OWN_REF, NFT, 25_000_000n],
+      ]);
+    });
+
+    it('does not call a listing that is not the wallet\'s "your listing" (a stranger\'s, or a fake naming it)', () => {
+      // FOREIGN_REF is a listing UTxO at the script, but the wallet's own-listing check (owner AND
+      // seller must be the wallet) did not accept it, so it is not in ownListings.
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: TX_ID, index: 0 }, { txId: OTHER_LISTING_TX, index: 4 }],
+        outputs: [nftOut(OWN_ADDR, OTHER_NFT), out(CHANGE_ADDR, 9_000_000n)],
+      }), market());
+      expect(FOREIGN_REF).not.toBe(OWN_REF);
+      expect(s.listedInputs).toEqual([]);
+      expect(s.createsListing).toBe(false);
+    });
+
+    it('matches the input by reference whatever the case of the stored key', () => {
+      const s = buildTxApprovalSummary(tx({ inputs: [{ txId: LISTING_TX, index: 0 }] }), market({
+        ownListings: new Map([[OWN_REF.toUpperCase(), ownListing(OWN_REF, NFT, 25_000_000n)]]),
+      }));
+      expect(s.listedInputs).toHaveLength(1);
+    });
+
+    it('does not count reading a listing (reference input) or its output index as a spend', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: TX_ID, index: 0 }, { txId: LISTING_TX, index: 1 }],
+        referenceInputs: [{ txId: LISTING_TX, index: 0 }],
+      }), market());
+      expect(s.listedInputs).toEqual([]);
+    });
+
+    it('never takes the price or the NFT from the transaction: a datum the dApp attached changes nothing', () => {
+      // The listing's own input has no datum in the transaction at all; what is shown is the wallet's
+      // stored listing, so a dApp cannot understate the price by putting another datum in the body.
+      const forged = tx({
+        inputs: [{ txId: LISTING_TX, index: 0 }],
+        outputs: [{ address: OWN_ADDR, value: { coins: 2_000_000n }, datum: { __typename: 'inline', price: 1n } }],
+      });
+      const s = buildTxApprovalSummary(forged, market());
+      expect(s.listedInputs[0]).toMatchObject({ unit: NFT, priceLovelace: 25_000_000n });
+    });
+  });
+
+  describe('creating a listing', () => {
+    it('flags an output at a listing script and counts it', () => {
+      const s = buildTxApprovalSummary(tx({
+        inputs: [{ txId: TX_ID, index: 0 }],
+        outputs: [nftOut(baseAt(LISTING_SCRIPT)), out(CHANGE_ADDR, 9_000_000n)],
+      }), market({ ownListings: new Map() }));
+      expect(s.createsListing).toBe(true);
+      expect(s.createdListingCount).toBe(1);
+      expect(s.listedInputs).toEqual([]);
+    });
+
+    it('flags it whatever the stake part: the wallet\'s own, another key, none, or a pointer', () => {
+      for (const address of [baseAt(LISTING_SCRIPT, STAKE_A), baseAt(LISTING_SCRIPT, STAKE_B), enterpriseAt(LISTING_SCRIPT), pointerAt(LISTING_SCRIPT)]) {
+        const s = buildTxApprovalSummary(tx({ outputs: [nftOut(address)] }), market());
+        expect(s.createsListing).toBe(true);
+        expect(s.createdListingCount).toBe(1);
+      }
+    });
+
+    it('counts every output at a listing script when there are several', () => {
+      const s = buildTxApprovalSummary(tx({
+        outputs: [nftOut(baseAt(LISTING_SCRIPT)), out(CHANGE_ADDR, 1_000_000n), nftOut(enterpriseAt(LISTING_SCRIPT), OTHER_NFT), nftOut(baseAt(LISTING_SCRIPT, STAKE_B), OTHER_NFT)],
+      }), market());
+      expect(s.createsListing).toBe(true);
+      expect(s.createdListingCount).toBe(3);
+    });
+
+    it('is silent for a key address, another script and a key credential carrying the script\'s bytes', () => {
+      const s = buildTxApprovalSummary(tx({
+        outputs: [out(EXT_ADDR, 5_000_000n), out(baseAt(OTHER_SCRIPT), 2_000_000n), out(enterpriseAt(OTHER_SCRIPT), 2_000_000n), out(keyAddress(LISTING_SCRIPT), 2_000_000n)],
+      }), market());
+      expect(s.createsListing).toBe(false);
+      expect(s.createdListingCount).toBe(0);
+    });
+
+    it('says nothing about a script that is not a configured deployment (no hashes configured)', () => {
+      const s = buildTxApprovalSummary(tx({ outputs: [nftOut(baseAt(LISTING_SCRIPT))] }), market({ listingScriptHashes: new Set() }));
+      expect(s.createsListing).toBe(false);
+    });
+  });
+
+  it('shows both when a transaction reprices: spends the listing and creates its replacement', () => {
+    const s = buildTxApprovalSummary(tx({
+      inputs: [{ txId: TX_ID, index: 0 }, { txId: LISTING_TX, index: 0 }],
+      outputs: [nftOut(baseAt(LISTING_SCRIPT)), out(CHANGE_ADDR, 9_000_000n)],
+    }), market());
+    expect(s.listedInputs.map((l) => l.ref)).toEqual([OWN_REF]);
+    expect(s.createsListing).toBe(true);
+    expect(s.createdListingCount).toBe(1);
+  });
+
+  it('reads the same from real CBOR: input refs and addresses as the signer decodes them', () => {
+    const core = tx({
+      inputs: [{ txId: TX_ID, index: 0 }, { txId: LISTING_TX, index: 0 }],
+      outputs: [nftOut(baseAt(LISTING_SCRIPT)), out(CHANGE_ADDR, 9_000_000n)],
+    });
+    const fromCbor = Serialization.Transaction.fromCbor(Serialization.Transaction.fromCore(core).toCbor()).toCore();
+    const s = buildTxApprovalSummary(fromCbor, market());
+    expect(s.listedInputs.map((l) => l.ref)).toEqual([OWN_REF]);
+    expect(s.createdListingCount).toBe(1);
+  });
+
+  describe('a transaction that touches no listing', () => {
+    const body = {
+      inputs: [{ txId: TX_ID, index: 0 }],
+      outputs: [out(EXT_ADDR, 5_000_000n), out(CHANGE_ADDR, 1_234_567n)],
+    };
+
+    it('shows no listing effect even when the wallet has listings and the script is configured', () => {
+      const s = buildTxApprovalSummary(tx(body), market());
+      expect(s.listedInputs).toEqual([]);
+      expect(s.createsListing).toBe(false);
+      expect(s.createdListingCount).toBe(0);
+    });
+
+    it('is otherwise identical with and without the market context', () => {
+      const withMarket = buildTxApprovalSummary(tx(body), market());
+      const without = buildTxApprovalSummary(tx(body), ctx());
+      expect(withMarket).toEqual(without);
+    });
+  });
+
+  describe('approvalMarketContext', () => {
+    it('revives the store\'s decimal-string bigints and keys the listings by lower-case reference', () => {
+      const stored = [{
+        ref: OWN_REF.toUpperCase(),
+        unit: NFT,
+        depositLovelace: '2000000',
+        deploymentVersion: 1,
+        datum: { owner: OWN_PAYMENT_HASH, sellerAddress: OWN_ADDR, price: '25000000', royalties: [{ address: EXT_ADDR, lovelace: '500000' }], buyer: null },
+      }];
+      const result = approvalMarketContext(stored, [{ scriptHash: LISTING_SCRIPT.toUpperCase() }]);
+      expect([...result.ownListings.keys()]).toEqual([OWN_REF]);
+      const listing = result.ownListings.get(OWN_REF);
+      expect(listing?.datum.price).toBe(25_000_000n);
+      expect(listing?.datum.royalties[0].lovelace).toBe(500_000n);
+      expect([...result.listingScriptHashes]).toEqual([LISTING_SCRIPT]);
+    });
+
+    it('is empty for nothing stored and no deployments, and skips a malformed row', () => {
+      for (const empty of [undefined, null, [], 'x']) {
+        const result = approvalMarketContext(empty, []);
+        expect(result.ownListings.size).toBe(0);
+        expect(result.listingScriptHashes.size).toBe(0);
+      }
+      expect(approvalMarketContext([{ ref: 'x' }], []).ownListings.size).toBe(0);
+    });
+
+    it('reaches the summary through approvalContextFromKeys, and defaults to none', () => {
+      const keys = { payment: [{ address: OWN_ADDR, cred: OWN_PAYMENT_HASH }], change: [{ address: CHANGE_ADDR, cred: OWN_PAYMENT_HASH }] };
+      const resolve = () => ({ name: 'Token', decimals: 0 });
+      const withMarket = approvalContextFromKeys(keys, Cardano.NetworkId.Testnet, resolve, {
+        market: approvalMarketContext([ownListing(OWN_REF, NFT, 25_000_000n)], [{ scriptHash: LISTING_SCRIPT }]),
+      });
+      expect(withMarket.ownListings.get(OWN_REF)?.unit).toBe(NFT);
+      expect(withMarket.listingScriptHashes.has(LISTING_SCRIPT)).toBe(true);
+      const bare = approvalContextFromKeys(keys, Cardano.NetworkId.Testnet, resolve);
+      expect(bare.ownListings.size).toBe(0);
+      expect(bare.listingScriptHashes.size).toBe(0);
+    });
   });
 });
 

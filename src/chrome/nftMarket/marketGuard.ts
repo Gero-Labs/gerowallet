@@ -19,8 +19,13 @@
 import { Cardano } from '@cardano-sdk/core';
 import type { NftMarketDeployment } from '@/utils/nftMarketDeployments';
 
-/** The payment credential of any address shape that has one, or null (never throws). */
-function paymentScriptHash(address: string): string | null {
+/**
+ * The payment script hash of any address shape that has a payment credential (base, enterprise,
+ * pointer), or null for a key credential or any other shape (never throws). Shared with the
+ * dApp approval preview (`txApprovalSummary.ts`), so what the user is shown as "creates a
+ * listing" is exactly what the signing guard holds.
+ */
+export function paymentScriptHash(address: string): string | null {
   try {
     const parsed = Cardano.Address.fromString(address);
     const credential = parsed?.asBase()?.getPaymentCredential()

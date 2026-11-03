@@ -257,7 +257,7 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
-import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import filters from '@/shared/utils/filters';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -346,6 +346,12 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
       approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 }), {
         ownUtxos: provenOwnUtxos.value,
         deposits: approvalDepositsFrom(networkStore.epochParams),
+        // The wallet's own Gero listings and the listing scripts, so a transaction that spends
+        // one or creates one is called out (never gated on the isNftMarketEnabled flag).
+        market: approvalMarketContext(
+          walletStore.listedListings,
+          wallet ? networks.resolveNftMarketDeployments(wallet.chain, wallet.network) : [],
+        ),
       }),
     );
   } catch {

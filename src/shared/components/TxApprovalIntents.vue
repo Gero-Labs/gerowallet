@@ -6,6 +6,34 @@
     <div v-if="hasIntents" class="tx-intents mb-3">
       <div class="tx-intents-header text-caption grey--text text-uppercase">{{ $t('signTx.thisTransactionWill') }}</div>
 
+      <!-- Gero market effects come first: a dApp transaction that spends the user's own listing or
+           creates one is signable once approved, so this is where the user is told. The NFT and
+           price shown for a spent listing are the wallet's stored ones, never the dApp's. -->
+      <div v-if="summary.listedInputs.length > 0">
+        <div
+          v-for="listed in summary.listedInputs"
+          :key="'listed-' + listed.ref"
+          class="tx-intent-row"
+          data-testid="tx-intent-listing-spend"
+        >
+          <v-icon size="14" color="warning" class="mr-1">mdi-storefront-minus-outline</v-icon>
+          <div class="tx-intent-text">
+            <div class="warning--text text-caption font-weight-medium">{{ $t('signTx.spendsYourListing') }}</div>
+            <div class="white--text text-caption">{{ $t('signTx.listedFor', { name: listed.label, price: formatLovelace(listed.priceLovelace) }) }}</div>
+            <div class="grey--text text-caption tx-intent-id">{{ listed.unit }}</div>
+          </div>
+        </div>
+        <div class="grey--text text-caption" data-testid="tx-intent-listing-spend-hint">{{ $t('signTx.spendsYourListingHint') }}</div>
+      </div>
+
+      <div v-if="summary.createsListing" data-testid="tx-intent-creates-listing">
+        <div class="tx-intent-row">
+          <v-icon size="14" color="warning" class="mr-1">mdi-storefront-plus-outline</v-icon>
+          <span class="warning--text text-caption font-weight-medium">{{ $t('signTx.createsMarketListing', { count: summary.createdListingCount }, summary.createdListingCount) }}</span>
+        </div>
+        <div class="grey--text text-caption" data-testid="tx-intent-creates-listing-hint">{{ $t('signTx.createsMarketListingHint') }}</div>
+      </div>
+
       <div v-for="(cert, i) in summary.certificates" :key="'cert-' + i" class="tx-intent-row">
         <v-icon size="14" :color="cert.stakeCredentialIsOwn === false ? 'error' : primaryColor" class="mr-1">mdi-certificate-outline</v-icon>
         <div class="tx-intent-text">
@@ -171,7 +199,7 @@ import { computed } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import filters from '@/shared/utils/filters';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import type { TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { formatLovelace, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 
 const props = withDefaults(defineProps<{
   summary: TxApprovalSummary;
@@ -196,7 +224,8 @@ const foreignSignerCount = computed(() => props.summary.requiredSigners.filter(s
 const collateralAtRisk = computed(() => props.summary.collateralAtRiskAda ?? props.summary.totalCollateralAda);
 const hasIntents = computed(() => {
   const s = props.summary;
-  return s.certificates.length > 0 || s.withdrawals.length > 0 || s.votes.length > 0 || s.proposals.length > 0
+  return s.listedInputs.length > 0 || s.createsListing
+    || s.certificates.length > 0 || s.withdrawals.length > 0 || s.votes.length > 0 || s.proposals.length > 0
     || !!s.treasuryDonationAda
     || s.mints.length > 0 || s.collateralCount > 0 || s.referenceInputCount > 0 || s.requiredSigners.length > 0
     || s.validityStartSlot !== null || s.hasMetadata || s.unmatchedInputCount > 0;

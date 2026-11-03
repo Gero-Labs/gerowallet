@@ -20,6 +20,23 @@ describe('signTx approval surfaces share one summary', () => {
     });
   }
 
+  // A dApp transaction that spends the user's own Gero listing or creates one is signable once
+  // approved, so both surfaces must give the summary the wallet's stored listings and the network's
+  // listing scripts (their only protection is the preview), and never behind the UI feature flag:
+  // the signing guard applies whatever the flag says, so the preview must too.
+  for (const file of ['sidepanel/components/DAppOverlay.vue', 'popup/modules/views/SignTx.vue']) {
+    it(`${file} gives the summary the wallet's own listings and the listing scripts, whatever the flag says`, () => {
+      const src = read(file);
+      const at = src.indexOf('approvalMarketContext(');
+      expect(at).toBeGreaterThan(-1);
+      const call = src.slice(at, at + 400);
+      expect(call).toContain('listedListings');
+      expect(call).toContain('networks.resolveNftMarketDeployments(');
+      expect(call).not.toContain('isNftMarketEnabled');
+      expect(src).toMatch(/market: approvalMarketContext\(/);
+    });
+  }
+
   it('the popup blocks Sign (button, PassKey and Enter) until a network mismatch is acknowledged', () => {
     const src = read('popup/modules/views/SignTx.vue');
     const start = src.indexOf('const sign = () => approval.run(async () => {');

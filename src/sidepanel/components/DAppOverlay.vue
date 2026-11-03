@@ -1082,7 +1082,7 @@ import TransactionDetailsCard, {
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
-import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -1942,6 +1942,12 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo, {
       ownUtxos: provenOwnUtxos.value,
       deposits: approvalDepositsFrom(networkStore.epochParams),
+      // The wallet's own Gero listings and the listing scripts, so a transaction that spends
+      // one or creates one is called out (never gated on the isNftMarketEnabled flag).
+      market: approvalMarketContext(
+        WalletStore.state.listedListings,
+        wallet ? networks.resolveNftMarketDeployments(wallet.chain, wallet.network) : [],
+      ),
     }));
   } catch (e) {
     console.error('[DAppOverlay] Failed to summarize signTx:', e);

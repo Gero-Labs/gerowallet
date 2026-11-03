@@ -22,7 +22,7 @@ vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: mocks.begin, end
 vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: mocks.ledger } }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: mocks.trezor }));
 vi.mock('@/chrome/cardanoJsSdkCbor', () => ({ deserializeCardanoJsSdkTx: () => ({ body: { inputs: [], outputs: [], fee: 170000n }, witness: {} }) }));
-vi.mock('@/shared/utils/txApprovalSummary', () => ({ approvalContextFromKeys: () => ({}), buildTxApprovalSummary: () => null, toTransactionDetailsCardProps: () => null }));
+vi.mock('@/shared/utils/txApprovalSummary', () => ({ approvalContextFromKeys: () => ({}), approvalMarketContext: () => ({}), buildTxApprovalSummary: () => null, toTransactionDetailsCardProps: () => null }));
 vi.mock('@/shared/utils/builder', () => ({ diffAssetsFromIncomingToOutgoing: vi.fn(), getPayAndReceiveTokens: vi.fn() }));
 vi.mock('@/shared/utils/keystone', () => ({ createKeystoneSignRequest: vi.fn(), parseSignature: vi.fn() }));
 vi.mock('@/api/cardano-shield-api', () => ({ default: { scanTx: vi.fn() } }));

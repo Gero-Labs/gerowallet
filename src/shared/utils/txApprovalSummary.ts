@@ -1,4 +1,6 @@
 import { Cardano } from '@cardano-sdk/core';
+import { paymentScriptHash } from '@/chrome/nftMarket/marketGuard';
+import { reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
 import { inputRefOf, scriptSpentInputRefs } from './txIntentGuard';
 
 /**
@@ -42,7 +44,24 @@ export interface ApprovalContext {
   ownUtxos?: readonly Cardano.Utxo[];
   /** Protocol deposits for certificates that do not carry their own amount. */
   deposits?: ApprovalDeposits;
+  /**
+   * The wallet's own, verified Gero listings by `txId#index` (lower case), read from
+   * `walletStore.listedListings` and revived (`approvalMarketContext`). An input in this map is
+   * "your listing": its NFT and price come from the datum the wallet stored, never from the
+   * transaction. A listing UTxO not in it (someone else's, or a fake naming the wallet) is not.
+   */
+  ownListings: ReadonlyMap<string, OwnListing>;
+  /**
+   * The payment script hashes (lower-case hex) of every deployed version of the Gero listing
+   * contract on the wallet's network, from `networks.resolveNftMarketDeployments`. An output paid
+   * to one of them, whatever its stake part, creates a market listing. Empty where the market is
+   * unsupported.
+   */
+  listingScriptHashes: ReadonlySet<string>;
 }
+
+/** The market part of an {@link ApprovalContext}: the wallet's listings and the listing scripts. */
+export type ApprovalMarketContext = Pick<ApprovalContext, 'ownListings' | 'listingScriptHashes'>;
 
 export interface ApprovalDeposits {
   /** keyDeposit, for the pre-Conway stake (de)registration certificates. */
@@ -121,6 +140,18 @@ export interface ApprovalMint {
   isBurn: boolean;
 }
 
+/** An input of the transaction that is one of the wallet's own Gero listings. */
+export interface ApprovalListedInput {
+  /** The listing UTxO, `txId#index`. */
+  ref: string;
+  /** Policy id and asset name (hex) of the listed NFT, from the stored listing. */
+  unit: string;
+  /** The NFT's display name (`ctx.resolveAsset`). */
+  label: string;
+  /** The price the wallet's stored datum lists it at, in lovelace. */
+  priceLovelace: bigint;
+}
+
 export interface TxApprovalSummary {
   outputs: ApprovalOutput[];
   feeAda: string;
@@ -164,6 +195,16 @@ export interface TxApprovalSummary {
    * wallet and never returned. Null when the body carries none.
    */
   treasuryDonationAda: string | null;
+  /**
+   * Own Gero listings this transaction spends (cancel or reprice), in input order. Taken from the
+   * wallet's stored listings, never from the transaction's own data. Empty for a transaction that
+   * spends none of them.
+   */
+  listedInputs: ApprovalListedInput[];
+  /** An output is paid to a Gero listing script (a listing is created, whoever owns it). */
+  createsListing: boolean;
+  /** How many outputs are paid to a Gero listing script. */
+  createdListingCount: number;
   totals: {
     totalSendingAda: string;
     feeAda: string;
@@ -288,6 +329,51 @@ function voteChoice(vote: Cardano.Vote): ApprovalVoteChoice {
   if (vote === Cardano.Vote.yes) return 'yes';
   if (vote === Cardano.Vote.no) return 'no';
   return 'abstain';
+}
+
+/**
+ * How the transaction touches the Gero market, for the approval screen. A dApp transaction that
+ * spends one of the wallet's own listings or puts something at a listing script is signable once
+ * the user approves it, so this preview is the user's only protection there. It follows the signing
+ * guard's own rules (marketGuard.ts `findMarketTouch`): inputs only (reference inputs and
+ * collateral are not spent), outputs at a deployed script whatever the stake part.
+ *
+ * What is shown for a spent listing is the wallet's stored one, matched by reference: nothing the
+ * dApp wrote in the transaction decides the NFT or the price, and a listing UTxO the wallet did not
+ * verify as its own (a stranger's, or a fake that names the wallet) is simply not "yours".
+ */
+function marketEffects(
+  tx: Cardano.Tx,
+  outputs: readonly ApprovalOutput[],
+  ctx: ApprovalContext,
+): { listedInputs: ApprovalListedInput[]; createdListingCount: number } {
+  const listedInputs: ApprovalListedInput[] = [];
+  if (ctx.ownListings.size > 0) {
+    const ownByRef = new Map<string, OwnListing>();
+    for (const [ref, listing] of ctx.ownListings) ownByRef.set(ref.toLowerCase(), listing);
+    const seen = new Set<string>();
+    for (const input of tx.body.inputs ?? []) {
+      const ref = inputRefOf(input);
+      const listing = ownByRef.get(ref);
+      if (!listing || seen.has(ref)) continue;
+      seen.add(ref);
+      listedInputs.push({
+        ref,
+        unit: listing.unit,
+        label: ctx.resolveAsset(listing.unit).name,
+        priceLovelace: BigInt(listing.datum.price),
+      });
+    }
+  }
+
+  let createdListingCount = 0;
+  if (ctx.listingScriptHashes.size > 0) {
+    for (const output of outputs) {
+      const hash = paymentScriptHash(output.address);
+      if (hash && ctx.listingScriptHashes.has(hash.toLowerCase())) createdListingCount += 1;
+    }
+  }
+  return { listedInputs, createdListingCount };
 }
 
 export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): TxApprovalSummary {
@@ -459,6 +545,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
     if (held) ownInputLovelace += coinsOf(held);
     else if (!scriptSpent.has(ref)) unmatchedInputCount += 1;
   }
+  const { listedInputs, createdListingCount } = marketEffects(tx, outputs, ctx);
   const ownOutputLovelace = outputs.reduce((sum, o) => (o.isOwn ? sum + o.lovelace : sum), 0n);
   const youPayLovelace = ctx.ownUtxos && unmatchedInputCount === 0
     ? ownInputLovelace - ownOutputLovelace
@@ -498,6 +585,9 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
     unmatchedInputCount: ctx.ownUtxos ? unmatchedInputCount : 0,
     requiresForeignValueAck,
     treasuryDonationAda: donationLovelace > 0n ? formatLovelace(donationLovelace) : null,
+    listedInputs,
+    createsListing: createdListingCount > 0,
+    createdListingCount,
     totals: {
       totalSendingAda: formatLovelace(totalSendingLovelace),
       feeAda,
@@ -521,7 +611,7 @@ export function approvalContextFromKeys(
   } | null | undefined,
   walletNetworkId: Cardano.NetworkId | null,
   resolveAsset: (unit: string) => ApprovalAssetInfo,
-  extras: { ownUtxos?: readonly Cardano.Utxo[]; deposits?: ApprovalDeposits } = {},
+  extras: { ownUtxos?: readonly Cardano.Utxo[]; deposits?: ApprovalDeposits; market?: ApprovalMarketContext } = {},
 ): ApprovalContext {
   const addrs = (list?: Array<{ address?: string }>) => new Set((list ?? []).map((k) => k.address).filter((a): a is string => !!a));
   const creds = (...lists: Array<Array<{ cred: string }> | undefined>) =>
@@ -538,6 +628,27 @@ export function approvalContextFromKeys(
     resolveAsset,
     ownUtxos: extras.ownUtxos,
     deposits: extras.deposits,
+    ownListings: extras.market?.ownListings ?? new Map(),
+    listingScriptHashes: extras.market?.listingScriptHashes ?? new Set(),
+  };
+}
+
+/**
+ * The market part of the approval context, for a UI context: the wallet's own listings as the
+ * store holds them (`walletStore.listedListings`, whose bigint fields are decimal strings outside
+ * the worker, so they are revived here) and the script hashes of the network's deployments
+ * (`networks.resolveNftMarketDeployments`). Never gated on the `isNftMarketEnabled` flag: the
+ * preview applies whatever the flag says, as the signing guard does. A malformed stored row is
+ * skipped; with nothing stored and no deployments both parts are empty and the summary is as
+ * it was before the market existed.
+ */
+export function approvalMarketContext(
+  listedListings: unknown,
+  deployments: ReadonlyArray<{ scriptHash: string }>,
+): ApprovalMarketContext {
+  return {
+    ownListings: new Map(reviveOwnListings(listedListings).map((listing) => [listing.ref.toLowerCase(), listing])),
+    listingScriptHashes: new Set(deployments.map((deployment) => deployment.scriptHash.toLowerCase())),
   };
 }
 
