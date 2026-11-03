@@ -15,6 +15,8 @@
 //    the contract's `Purchase{first_output}` as the only redeemer and exactly that deployment's
 //    reference script as the only reference input; and spend the wallet's own UTxOs, nothing else;
 //    carry no script and no datum of its own in the witness set;
+//  - be for a listing whose datum carries at most MAX_ROYALTIES royalties (the count the wallet
+//    itself writes; a hostile listing with many tiny ones would have the buyer top each up);
 //  - pay, at `first_output`, the datum's seller address exactly its due (share + the listing's
 //    deposit), then one output per royalty, in datum order, each exactly its amount, all ADA only
 //    and tagged with this listing's tag; an output below its min-UTxO is raised to it, and the
@@ -80,6 +82,7 @@ import {
 } from '@/chrome/nftMarket/verifyListing';
 import {
   CIP68_USER_TOKEN_LABEL,
+  MAX_ROYALTIES,
   NFT_MARKET_MAX_COLLATERAL_LOVELACE,
   NFT_MARKET_MAX_FEE_LOVELACE,
   NFT_UNIT_PATTERN as UNIT,
@@ -306,6 +309,11 @@ function listingFacts(listing: ListingDto, ctx: BuyVerifyContext): ListingFacts 
     return refuse('DATUM', (e as Error)?.message ?? 'the datum is not a Gero listing');
   }
   if (datum.buyer !== null) refuse('PRIVATE_LISTING', 'a private listing is not for sale to everyone (public listings only)');
+  // The count the wallet itself never exceeds when it writes a listing. A third party's listing can
+  // carry any number: the contract pays each royalty, every output below min-UTxO is raised at the
+  // buyer's expense, and the raise goes to the royalty address. The chain read proves the datum is
+  // the real one, which a hostile datum is, so this limit is the wallet's own.
+  if (datum.royalties.length > MAX_ROYALTIES) refuse('DATUM', `the listing has more than ${MAX_ROYALTIES} royalties`);
 
   // The row must say what the datum says: the user is shown the row, the contract pays the datum.
   if (BigInt(listing.priceLovelace) !== datum.price) refuse('DATUM', "the listing's price is not its datum's");

@@ -18,6 +18,7 @@ import {
   NFT_MARKET_MAX_COLLATERAL_LOVELACE,
   NFT_MARKET_MAX_FEE_LOVELACE,
   NFT_MARKET_MAX_VALIDITY_SLOTS,
+  MAX_ROYALTIES,
   type NftMarketDeployment,
 } from '@/utils/nftMarketDeployments';
 import { decodeListingDatum, listingFee, listingTag, sellerDue, sellerShare, type ListingDatum, type Payee } from './listingDatum';
@@ -777,6 +778,33 @@ describe('verifyBuy: the listing', () => {
     // The datum decodes (the codec accepts any integer), so it is the buy check that refuses it.
     expect(decodeListingDatum(listingDatumHex(negative), TESTNET).royalties[0].lovelace).toBe(-ADA);
     refusedBy('DATUM', () => verify(buyTx(), intentOf(listingDto(negative))));
+  });
+
+  describe('the number of royalties (MAX_ROYALTIES)', () => {
+    // A hostile third-party listing: the contract pays any number of royalties, each one's output
+    // is raised to min-UTxO at the BUYER's expense, and every raise goes to the attacker's address.
+    // The hash-proven chain read passes such a datum (it is the real one), so this is the wallet's
+    // own limit, the one it keeps when it writes a listing itself.
+    const payees = (count: number): Payee[] =>
+      Array.from({ length: count }, (_, i) => ({ address: baseAddress(TESTNET, `5${i}`.repeat(28), '5f'.repeat(28)), lovelace: 100_000n }));
+
+    it('refuses four royalties, though the contract would pay them and the buyer would top each up', () => {
+      expect(MAX_ROYALTIES).toBe(3);
+      const four = withDatum({ royalties: payees(MAX_ROYALTIES + 1) });
+      refusedBy('DATUM', () => verify(buyTx(undefined, { datum: four }), intentOf(listingDto(four))));
+    });
+
+    it('refuses them even for a hostile datum whose row and chain read agree, and for any larger count', () => {
+      const many = withDatum({ royalties: payees(8) });
+      refusedBy('DATUM', () => verify(buyTx(undefined, { datum: many }), intentOf(listingDto(many), chainFrom(listingDto(many)))));
+    });
+
+    it('still buys with exactly MAX_ROYALTIES, and reports the top-ups', () => {
+      const three = withDatum({ royalties: payees(MAX_ROYALTIES) });
+      const summary = verify(buyTx(undefined, { datum: three }), intentOf(listingDto(three)));
+      expect(summary.royaltiesLovelace).toBe('300000');
+      expect(BigInt(summary.minUtxoTopUpLovelace)).toBeGreaterThan(0n);
+    });
   });
 
   it('refuses a datum that is not a Gero listing', () => {
