@@ -40,6 +40,7 @@ vi.mock('../SwapMergeDialog.vue', () => ({ default: {
 
 import GeroSwapEmbed from '../GeroSwapEmbed.vue';
 import { walletStore } from '@/stores/walletStore';
+import i18n from '@/plugins/i18n';
 
 const widgetEvent = (name: string, payload: unknown) => new CustomEvent(name, { detail: [payload] });
 const quote = { route: { tokenIn: 'lovelace', amountIn: '1', dex: 'MINSWAP_V2' } };
@@ -92,5 +93,16 @@ describe('GeroSwapEmbed merge first', () => {
     walletStore.utxos = [[{ txId: 'merge-final', index: 0 }, { address: 'own', value: { coins: 299_000_000n } }]] as never;
     await flushPromises();
     expect(wrapper.find('.gero-swap-embed__merge').exists()).toBe(false);
+  });
+
+  // The drawer shows the offer, then the merge landing: its name has to fit both.
+  it('names its drawer for the merge itself, whether offered or landing', async () => {
+    const name = i18n.t('swap.mergeTitle');
+    const { wrapper } = await quoteFor('250');
+    expect(wrapper.get('.dialog-drawer').attributes('aria-label')).toBe(name);
+    await wrapper.get('.gero-swap-embed__merge .g-btn').trigger('click');
+    wrapper.findComponent({ name: 'SwapMergeDialog' }).vm.$emit('merged', 'merge-final');
+    await flushPromises();
+    expect(wrapper.get('.dialog-drawer').attributes('aria-label')).toBe(name);
   });
 });

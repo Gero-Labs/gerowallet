@@ -357,7 +357,8 @@ const mergeLanding = ref<string | null>(null);
 const canMerge = computed(() =>
   walletStore.loggedWallet?.type === WalletType.Normal || walletStore.loggedWallet?.type === WalletType.Google);
 const mergeOffered = computed(() => mergeNeeded.value && canMerge.value);
-const mergeDrawerLabel = computed(() => String(i18n.t('swap.mergeNeededTitle')));
+// The drawer holds the offer and then the merge landing: named for the merge, it fits both.
+const mergeDrawerLabel = computed(() => String(i18n.t('swap.mergeTitle')));
 
 function swapUtxos(): Cardano.Utxo[] {
   return paymentUtxos((walletStore.utxos ?? []) as Cardano.Utxo[], walletStore.collateral as Cardano.Utxo | null | undefined, walletStore.transactions);
