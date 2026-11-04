@@ -87,7 +87,7 @@
               color="var(--g-accent)"
               class="max-btn"
               @click="setMax(index)"
-            >MAX</v-btn>
+            >{{ $t('common.max') }}</v-btn>
           </div>
           <!-- Remove button (not for first/native token) -->
           <v-btn

@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { anchorIdentity, isRegisteredDRep } from '@/modules/governance/views/becomeDRep.state';
+import { anchorIdentity, isRegisteredDRep, signedFeeLovelace } from '@/modules/governance/views/becomeDRep.state';
 
 describe('isRegisteredDRep', () => {
   it('is true for a live registration', () => {
@@ -115,5 +117,20 @@ describe('build invalidation (the reported scenario)', () => {
     state.url = 'https://example.org/b.jsonld';
     state.build();
     expect(state.stale).toBe(false);
+  });
+});
+
+describe('signedFeeLovelace', () => {
+  it("shows the fee in the transaction being signed, not the build service's estimate", () => {
+    // Nexus returns estimated_fee next to tx_cbor. A compromised build could report
+    // 0.17 ADA while the bytes pay 4.9; the review step must show what is signed.
+    const tx = { body: { fee: 4_900_000n } } as unknown as Parameters<typeof signedFeeLovelace>[0];
+    expect(signedFeeLovelace(tx)).toBe('4900000');
+  });
+
+  it('is what the review step shows: the view never reads the reported estimate', () => {
+    const view = readFileSync(join(__dirname, 'BecomeDRep.vue'), 'utf8');
+    expect(view).toContain('estimatedFee.value = signedFeeLovelace(txData.value)');
+    expect(view).not.toContain('estimated_fee');
   });
 });

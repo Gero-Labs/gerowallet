@@ -4,11 +4,12 @@ import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { Wallet, Key } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import i18n from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
 import { TxIntentMismatchError, canonicalAddress, scriptSpentInputRefs, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
 import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
-import { historySource, koiosSource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
+import { backendSource, historySource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
 import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHardwareTxSigner';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
 import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
@@ -45,6 +46,23 @@ export interface NativeSwapSignerOptions {
    * that takes almost nothing passes.
    */
   getSpendBound?: () => SpendBound | null | Promise<SpendBound | null>;
+}
+
+/** The protocol's transaction size limit, in bytes, until the epoch parameters are loaded. */
+const DEFAULT_MAX_TX_SIZE = 16_384;
+/** Room the size check leaves for the witnesses still to come: the wallet's and a co-signer's, about 100 bytes each. */
+const WITNESS_ROOM_BYTES = 300;
+
+/**
+ * The aggregator selects inputs largest first with no cap, so a swap from a wallet spread over
+ * small UTxOs can come back larger than any node accepts. Refuse it before it is signed: the
+ * swap screen offers to merge the small UTxOs first (see swapMergeNeed.ts).
+ */
+function assertFitsOneTransaction(unsignedTxCbor: string): void {
+  const limit = networkStore.epochParams?.maxTxSize || DEFAULT_MAX_TX_SIZE;
+  if (unsignedTxCbor.length / 2 + WITNESS_ROOM_BYTES > limit) {
+    throw new TxIntentMismatchError(String(i18n.t('swap.txTooLarge')), ['txTooLarge']);
+  }
 }
 
 function isPrfWallet(w: Wallet | null | undefined): boolean {
@@ -158,7 +176,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
       ];
       const { proven, unproven } = await proveOutputs(refs, [
         historySource(walletStore.transactions as unknown[]),
-        koiosSource(walletStore.loggedWallet?.network),
+        backendSource(walletStore.loggedWallet?.network),
       ]);
       const collateral = walletStore.collateral as Cardano.Utxo | null | undefined;
       const claimed = [...cardanoUtxos(), ...(collateral ? [collateral] : [])];
@@ -191,6 +209,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   }
 
   async function signTx(unsignedTxCbor: string, bound?: SpendBound): Promise<string> {
+    assertFitsOneTransaction(unsignedTxCbor);
     await assertWithinBound(unsignedTxCbor, bound ?? (await opts.getSpendBound?.()) ?? DEFAULT_ORDER_SPEND_BOUND);
     // Hardware wallets sign in the page, so a collateral input borrowed from the Nexus pool
     // gets its co-signature here; password and PRF wallets get it in the worker's SIGN_TX.

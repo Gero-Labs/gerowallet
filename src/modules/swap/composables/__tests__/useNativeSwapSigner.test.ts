@@ -80,6 +80,7 @@ vi.mock('@cardano-sdk/core', async () => {
 import { Serialization } from '@cardano-sdk/core';
 import { useNativeSwapSigner } from '../useNativeSwapSigner';
 import { swapSpendBound } from '../orderSpendBound';
+import i18n from '@/plugins/i18n';
 
 const OWN = 'addr_test1qpdmx56dml9qtej5vxhejju492w9pfv7j9270wjh0pfe9hdzqxa4r35qhuqx29n693k4gqukhk3lfw37xkp4egvh6raq4d4rzj';
 const DEX = 'addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x';
@@ -243,6 +244,19 @@ describe('useNativeSwapSigner', () => {
       .mockResolvedValueOnce({ data: { error: 'bad password' } });
     const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
     await expect(signer.signTx('CBOR')).rejects.toThrow(/bad password|Signing failed/);
+  });
+
+  // The aggregator selects inputs with no cap. A swap from a wallet spread over small
+  // UTxOs can come back larger than any node accepts: refuse it before it is signed.
+  it('refuses a transaction larger than the network accepts, before asking for a password', async () => {
+    const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+    const oversized = 'a'.repeat(2 * 16_384);
+    await expect(signer.signTx(oversized)).rejects.toMatchObject({
+      name: 'TxIntentMismatchError',
+      message: i18n.t('swap.txTooLarge'),
+      violations: ['txTooLarge'],
+    });
+    expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
   });
 
   it('throws when password verification fails', async () => {

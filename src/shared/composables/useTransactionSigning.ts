@@ -3,7 +3,7 @@ import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Ref, ComputedRef, toRefs, ref, computed, watch, getCurrentScope, onScopeDispose, getCurrentInstance, provide } from 'vue';
 import { authorizationScopeKey } from './authorizationScope';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
@@ -17,13 +17,29 @@ import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import snackbar from '@/plugins/snackbar';
-import { friendlyTxError } from '@/shared/utils/txErrors';
+import { friendlyTxError, isMissingInputError } from '@/shared/utils/txErrors';
+import { chainedPrerequisites, SweepChainError, type DecodedMerge, type SweepPrerequisites } from '@/api/sweepPlan';
+import type { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from './useTranslation';
 import { UR } from '@keystonehq/keystone-sdk';
 
 /** The subset of the password field component instance this composable drives. */
 interface PasswordFieldRef {
   showError?: (message: string) => void;
+}
+
+/**
+ * A value as runtime messages carry it, which is as JSON: one bigint fails the whole send
+ * ("Could not serialize message") and a Map arrives empty. Bigints become strings and Maps
+ * objects, as the stores broadcast them.
+ */
+function messageSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value, (_key, item: unknown) => {
+    if (typeof item === 'bigint') return item.toString();
+    if (item instanceof Map) return Object.fromEntries(item);
+    if (item instanceof Set) return Array.from(item);
+    return item;
+  })) as T;
 }
 
 /** Payload for MessageTypes.SIGN_TX — assembled field by field below. */
@@ -44,7 +60,42 @@ export interface TransactionSigningOptions {
   onSuccess?: (txId: string) => void;
   onClose?: () => void;
   active?: () => boolean;
+  /**
+   * A sweep's merges: transactions the payment (`tx`) spends outputs of. Signed under
+   * the same approval and submitted, in order, before it. Software signers only.
+   */
+  prerequisites?: Ref<SweepPrerequisites | null> | ComputedRef<SweepPrerequisites | null>;
+  /** Where a sweep is: the transaction being signed or sent, or waiting for the merges. Null once it ends. */
+  onProgress?: (progress: SweepProgress | null) => void;
+  /** A sweep's failed submission is reported here instead of a snackbar. */
+  onInterrupted?: (stop: SweepStop) => void;
+  /** Return false to keep the dialog open after a successful submit, e.g. to show a done state; defaults to closing. */
+  closeOnSuccess?: () => boolean;
 }
+
+export interface SweepProgress {
+  phase: 'signing' | 'sending' | 'waiting';
+  step: number;
+  total: number;
+}
+
+/** Where a sweep stopped: the transaction that failed, how many there were, how many merges already went out, and the friendly reason. */
+export interface SweepStop {
+  step: number;
+  total: number;
+  mergesSent: number;
+  reason: string;
+}
+
+/** How long a sweep's payment waits for its merges to land after a node did not know them. */
+const SWEEP_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+const SWEEP_CONFIRM_POLL_MS = 2000;
+
+/** A merge's id and where it pays, from its own bytes. */
+const decodeMerge = (cbor: string): DecodedMerge => {
+  const merge = Serialization.Transaction.fromCbor(cbor as HexBlob);
+  return { id: String(merge.getId()), outputAddresses: merge.toCore().body.outputs.map((output) => String(output.address)) };
+};
 
 export interface SigningForm {
   validate: () => Promise<{ valid: boolean }>;
@@ -55,6 +106,10 @@ interface SigningAttempt {
   tx: Cardano.Tx;
   cbor: string;
   password: string;
+  /** A sweep's merges as approved with `tx`, byte for byte as Nexus built them; empty for a single transaction. */
+  prerequisites: { id: string; cbor: string }[];
+  /** Their outputs, which `tx` spends. */
+  prerequisiteOutputs: Cardano.Utxo[];
 }
 
 export interface TransactionSigningReturn {
@@ -125,6 +180,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   let authorizedAttempt: SigningAttempt | null = null;
   let keystoneApproval: { attempt: SigningAttempt; requestId: string } | null = null;
   let submitting = false;
+  // A sweep's merge witnesses, aligned with the attempt's prerequisites, and the merges
+  // already submitted: signing again after a failure does not send those twice.
+  let prerequisiteWitnesses: string[] = [];
+  const submittedPrerequisites = new Set<string>();
   const deferredAuth = new Set<ReturnType<typeof setTimeout>>();
   const captureAuthorization = () => {
     const epoch = authorizationEpoch;
@@ -142,6 +201,13 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
   if (getCurrentInstance()) provide(authorizationScopeKey, { capture: captureAuthorization });
 
+  /** The wallet's own payment and change addresses: the only places a merge may pay. */
+  const ownAddresses = (): Set<string> => new Set(
+    [...(keys.value?.payment ?? []), ...(keys.value?.change ?? [])]
+      .map((key) => key.address)
+      .filter((address): address is string => !!address),
+  );
+
   function beginAttempt(): SigningAttempt | null {
     if (loading.value || disposed || !(options.active?.() ?? true) || !options.tx.value) return null;
     // A manual attempt supersedes delayed autofill callbacks and any other
@@ -151,13 +217,19 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     deferredAuth.clear();
     const current = captureAuthorization();
     const tx = options.tx.value;
+    const sweep = options.prerequisites?.value ?? null;
     let cbor: string;
-    try { cbor = serializeCardanoJsSdkTx(tx); }
+    let prerequisites: SigningAttempt['prerequisites'] = [];
+    try {
+      cbor = serializeCardanoJsSdkTx(tx);
+      if (sweep && sweep.cbors.length > 0) prerequisites = chainedPrerequisites(tx, sweep, decodeMerge, ownAddresses());
+    }
     catch (error) {
-      snackbar.setError(error instanceof Error ? friendlyTxError(error) : t('errors.unknownError'));
+      snackbar.setError(error instanceof SweepChainError ? t('txGuard.builtTxMismatch')
+        : error instanceof Error ? friendlyTxError(error) : t('errors.unknownError'));
       return null;
     }
-    const attempt = { tx, cbor, password: spendingPassword.value, current };
+    const attempt = { tx, cbor, password: spendingPassword.value, current, prerequisites, prerequisiteOutputs: sweep?.outputs ?? [] };
     authorizedAttempt = attempt;
     loading.value = true;
     return attempt;
@@ -214,6 +286,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const resetState = () => {
     authorizationEpoch++;
     authorizedAttempt = null;
+    prerequisiteWitnesses = [];
+    submittedPrerequisites.clear();
     keystoneApproval = null;
     for (const timer of deferredAuth) clearTimeout(timer);
     deferredAuth.clear();
@@ -234,9 +308,34 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     () => loggedWallet.value?.webAuthnCredentialId, () => walletStore.isLocked, () => options.active?.()], () => resetState(), { flush: 'sync' });
   if (getCurrentScope()) onScopeDispose(() => { disposed = true; resetState(); });
 
+  /** One SIGN_TX under the attempt's approval; the worker decides which of the wallet's keys sign. */
+  const requestWitnesses = async (attempt: SigningAttempt, cbor: string, signingUtxos: unknown): Promise<string | undefined> => {
+    const signingData: SignTxRequestData = {
+      txCbor: cbor,
+      partialSign: false,
+      password: attempt.password,
+      utxos: signingUtxos,
+      addresses: keys.value,
+      mergeWitnesses: false,
+    };
+    // For PRF wallets, pass the already-decrypted privateKeyBytes
+    if (isPrfWallet.value && privateKeyBytes.value) {
+      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+    }
+    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_TX,
+      data: signingData,
+    })) as { data?: { witnesses?: string; error?: string }; error?: string } | undefined;
+    // A message the runtime could not send resolves as `{ error }`, with no `data`.
+    if (!witnessResult?.data) throw new Error(witnessResult?.error || t('errors.unknownError'));
+    if (witnessResult.data.error) throw new Error(witnessResult.data.error);
+    return witnessResult.data.witnesses;
+  };
+
   const signTx = async (attempt = beginAttempt()): Promise<boolean> => {
     if (!attempt?.current()) return false;
     loading.value = true;
+    const total = attempt.prerequisites.length + 1;
     try {
       const tx = attempt.tx;
       if (!tx) {
@@ -263,34 +362,31 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       // Serialize the Cardano.Tx to CBOR
       txCbor.value = attempt.cbor;
 
-      // Prepare signing data
-      const signingData: SignTxRequestData = {
-        txCbor: txCbor.value,
-        partialSign: false,
-        password: attempt.password,
-        utxos: utxos.value,
-        addresses: keys.value,
-        mergeWitnesses: false,
-      };
-
-      // For PRF wallets, pass the already-decrypted privateKeyBytes
-      if (isPrfWallet.value && privateKeyBytes.value) {
-        signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+      // A sweep's merges first, under the same approval.
+      const witnesses: string[] = [];
+      for (const [index, prerequisite] of attempt.prerequisites.entries()) {
+        if (!attempt.current()) return false;
+        options.onProgress?.({ phase: 'signing', step: index + 1, total });
+        const witness = await requestWitnesses(attempt, prerequisite.cbor, utxos.value);
+        if (!attempt.current()) return false;
+        // SUBMIT_TX takes a falsy witness as "already signed": never let a merge go out unsigned.
+        if (!witness) throw new Error(t('errors.unknownError'));
+        witnesses.push(witness);
       }
+      prerequisiteWitnesses = witnesses;
+      if (total > 1) options.onProgress?.({ phase: 'signing', step: total, total });
 
       if (!attempt.current()) return false;
-      // Sign the transaction via background message
-      const witnessResult = (await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_TX,
-        data: signingData,
-      })) as { data: { witnesses?: string; error?: string } };
-
+      // The payment spends the merges' outputs, which the wallet's UTxO list does not
+      // hold yet: the worker needs them to tell which key signs those inputs. They are
+      // decoded from the merges' CBOR, bigint coins and all, so they go as the wallet's
+      // own UTxOs arrive from the store.
+      const signingUtxos = attempt.prerequisiteOutputs.length > 0
+        ? [...(utxos.value as Cardano.Utxo[]), ...messageSafe(attempt.prerequisiteOutputs)]
+        : utxos.value;
+      const paymentWitnesses = await requestWitnesses(attempt, attempt.cbor, signingUtxos);
       if (!attempt.current()) return false;
-      if (witnessResult.data.error) {
-        throw new Error(witnessResult.data.error);
-      }
-
-      txWitnesses.value = witnessResult.data.witnesses;
+      txWitnesses.value = paymentWitnesses;
       return true;
     } catch (e) {
       if (!attempt.current()) return false;
@@ -299,6 +395,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       return false;
     } finally {
       if (attempt.current()) loading.value = false;
+      if (total > 1) options.onProgress?.(null);
     }
   };
 
@@ -509,35 +606,72 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
+  const submitSigned = async (cbor: string, witnessHex: string | null | undefined) =>
+    (await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: { txCbor: cbor, witnessHex, utxos: utxos.value },
+    })) as { data: { txId?: string; error?: string } };
+
+  /** Wait until every merge output of the attempt is in the wallet's UTxO set, i.e. the merges are in a block. */
+  const waitForMergeOutputs = async (attempt: SigningAttempt): Promise<boolean> => {
+    const wanted = attempt.prerequisiteOutputs.map(([txIn]) => `${txIn.txId}#${txIn.index}`);
+    const deadline = Date.now() + SWEEP_CONFIRM_TIMEOUT_MS;
+    while (attempt.current() && Date.now() < deadline) {
+      const held = new Set(((utxos.value ?? []) as Cardano.Utxo[]).map(([txIn]) => `${txIn.txId}#${txIn.index}`));
+      if (wanted.every((ref) => held.has(ref))) return true;
+      await new Promise((resolve) => setTimeout(resolve, SWEEP_CONFIRM_POLL_MS));
+    }
+    return false;
+  };
+
   const submitTx = async (attempt = authorizedAttempt): Promise<void> => {
     if (!attempt?.current() || submitting || !txWitnesses.value) return;
     submitting = true;
+    const total = attempt.prerequisites.length + 1;
+    let step = total;
     try {
       loading.value = true;
 
-      const submitResult = (await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SUBMIT_TX,
-        data: {
-          txCbor: attempt.cbor,
-          witnessHex: txWitnesses.value,
-          utxos: utxos.value,
-        },
-      })) as { data: { txId?: string; error?: string } };
+      // A sweep's merges first, in order. One an earlier attempt already sent is not sent again.
+      for (const [index, prerequisite] of attempt.prerequisites.entries()) {
+        step = index + 1;
+        if (submittedPrerequisites.has(prerequisite.id)) continue;
+        options.onProgress?.({ phase: 'sending', step, total });
+        const result = await submitSigned(prerequisite.cbor, prerequisiteWitnesses[index]);
+        if (!attempt.current()) return;
+        if (result.data.error) throw new Error(result.data.error);
+        submittedPrerequisites.add(prerequisite.id);
+      }
 
+      step = total;
+      if (total > 1) options.onProgress?.({ phase: 'sending', step, total });
+      let submitResult = await submitSigned(attempt.cbor, txWitnesses.value);
       if (!attempt.current()) return;
+      if (submitResult.data.error && total > 1 && isMissingInputError(submitResult.data.error)) {
+        // The node this reached has not seen the merges yet. Once they are in a block,
+        // the same signed payment is valid everywhere: send it again.
+        options.onProgress?.({ phase: 'waiting', step, total });
+        if (await waitForMergeOutputs(attempt)) {
+          submitResult = await submitSigned(attempt.cbor, txWitnesses.value);
+          if (!attempt.current()) return;
+        }
+      }
       if (submitResult.data.error) {
         throw new Error(submitResult.data.error);
       }
 
       snackbar.fireSuccess(t(options.successMessageKey, { txId: submitResult.data.txId }));
       options.onSuccess?.(submitResult.data.txId || '');
-      options.onClose?.();
+      if (options.closeOnSuccess?.() ?? true) options.onClose?.();
     } catch (e) {
       if (!attempt.current()) return;
       console.error('Error submitting transaction:', e);
-      snackbar.setError(e instanceof Error ? friendlyTxError(e) : t('errors.unknownError'));
+      const reason = e instanceof Error ? friendlyTxError(e) : t('errors.unknownError');
+      if (total > 1 && options.onInterrupted) options.onInterrupted({ step, total, mergesSent: submittedPrerequisites.size, reason });
+      else snackbar.setError(total > 1 ? t('send.sweepInterrupted', { step, total, reason }) : reason);
     } finally {
       submitting = false;
+      if (total > 1) options.onProgress?.(null);
       if (attempt.current()) {
         loading.value = false;
         isSubmit.value = false;
@@ -553,6 +687,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     const attempt = beginAttempt();
     if (!attempt) return;
     try {
+      // Another device signs one transaction; a sweep is several.
+      if (attempt.prerequisites.length > 0) {
+        snackbar.setError(t('send.sweepSoftwareOnly'));
+        return;
+      }
       const tx = attempt.tx;
       if (!tx) {
         throw new Error(t('common.noTransactionToSign'));
@@ -576,10 +715,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         await submitTx(attempt);
       } else if (result.data.reason === 'expired') {
         snackbar.setError(t('crossDevice.requestExpired'));
-      } else if (result.data.reason === CIP113_SIGN_REFUSAL_MESSAGE) {
+      } else if (result.data.reason === CIP113_SIGN_REFUSAL_MESSAGE || result.data.reason === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) {
         // Refused on THIS device, before the relay — the other device was never asked,
         // so the generic "rejected" would blame a co-signer that never saw the request.
-        snackbar.setError(t('programmableTokens.signRefused'));
+        snackbar.setError(friendlyTxError(new Error(result.data.reason)));
       } else {
         snackbar.setError(t('crossDevice.requestRejected'));
       }
@@ -608,6 +747,13 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     const attempt = beginAttempt();
     if (!attempt) return;
     try {
+      // A sweep is signed under one approval, which only the software signers give;
+      // the UI never builds one for the others.
+      const softwareSigner = loggedWallet.value?.type === WalletType.Normal || loggedWallet.value?.type === WalletType.Google;
+      if (attempt.prerequisites.length > 0 && !softwareSigner) {
+        snackbar.setError(t('send.sweepSoftwareOnly'));
+        return;
+      }
       // MPC (Sign-in-with-Google) wallets are WalletType.Google but sign locally
       // like a Normal wallet — via the session-cached reconstructed key. Without
       // this branch, clicking Sign on an MPC wallet fell through and did nothing.

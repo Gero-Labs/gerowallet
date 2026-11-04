@@ -7,6 +7,7 @@ import { PAIRING_QR_VERSION } from '@/services/crossDevice/pairingQr';
 import { XPROVE_VERSION } from '@/services/crossDevice/proveSession';
 import { NOTIFY_SIGNING_DOMAIN } from '@/services/notify/notifyAuth';
 import { buildSessionSubject } from '@/services/crossDevice/sessionBinding';
+import { DELEGATION_PREFIX, REVOCATION_PREFIX } from './signedResponseRoots';
 
 const hex = (text: string) => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
 
@@ -14,7 +15,7 @@ const STAKE = 'stake1u9ylzsgxaa6xctf4juup682ar3juj85n8tx3hthnljg47zctvm3rc';
 
 describe('reservedSigningDomain', () => {
   it('covers every subject prefix Gero signs today', () => {
-    for (const domain of [DEVICE_REGISTER_DOMAIN, SUPPORT_CHALLENGE_DOMAIN, CROSS_DEVICE_SUBJECT_VERSION, PAIRING_QR_VERSION, XPROVE_VERSION, NOTIFY_SIGNING_DOMAIN]) {
+    for (const domain of [DEVICE_REGISTER_DOMAIN, SUPPORT_CHALLENGE_DOMAIN, CROSS_DEVICE_SUBJECT_VERSION, PAIRING_QR_VERSION, XPROVE_VERSION, NOTIFY_SIGNING_DOMAIN, DELEGATION_PREFIX, REVOCATION_PREFIX]) {
       expect(RESERVED_SIGNING_DOMAINS.some(prefix => domain.startsWith(prefix))).toBe(true);
       expect(reservedSigningDomain(hex(domain))).not.toBeNull();
     }

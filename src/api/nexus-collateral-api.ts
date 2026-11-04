@@ -16,6 +16,7 @@
  */
 
 import axios from 'axios';
+import { installSignedResponses } from './signedResponses';
 
 /**
  * Chain-prefixed nexus network slug (the `network` query-param format its endpoints
@@ -56,6 +57,8 @@ const client = axios.create({
   timeout: 30_000,
   headers: { 'Content-Type': 'application/json' },
 });
+// gero-backend relays Nexus and signs what it relays (build-time mode; off by default).
+installSignedResponses(client, 'gero-backend');
 
 /** Compose `txHash#outputIndex` from a {@link LendResponse}. */
 export function lendRef(lent: LendResponse): string {

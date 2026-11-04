@@ -11,10 +11,12 @@
 import i18n from '@/plugins/i18n';
 import {
   CIP113_SIGN_REFUSAL_MESSAGE,
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
   SUBMIT_API_STORAGE_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
@@ -121,17 +123,26 @@ export function isInsufficientAdaError(message: string): boolean {
 }
 
 /**
- * How much lovelace a rejected build was short, read from the two Nexus shortfall
+ * How much lovelace a rejected build was short, read from the three Nexus shortfall
  * messages the send flow parses: "{ada in inputs: X, ada in outputs: Y, fee Z"
- * (outputs plus fee, minus inputs) and "Available: X lovelace, required: Y lovelace"
- * (required minus available). Undefined for anything else.
+ * (outputs plus fee, minus inputs), "Available: X lovelace, required: Y lovelace"
+ * (required minus available), and the transfer builder's "Required: … ADA (Y lovelace),
+ * available: … ADA (X lovelace)" (required minus available). Undefined for anything else.
  */
 export function shortfallLovelaceFromMessage(message: string): bigint | undefined {
   const inputs = message.match(/ada in inputs:\s*(\d+),\s*ada in outputs:\s*(\d+),\s*fee\s*(\d+)/);
   if (inputs) return BigInt(inputs[2]) + BigInt(inputs[3]) - BigInt(inputs[1]);
   const change = message.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
   if (change) return BigInt(change[2]) - BigInt(change[1]);
+  const transfer = message.match(/Required:\s*[\d.]+\s*ADA\s*\((\d+)\s*lovelace\),\s*available:\s*[\d.]+\s*ADA\s*\((\d+)\s*lovelace\)/);
+  if (transfer) return BigInt(transfer[1]) - BigInt(transfer[2]);
   return undefined;
+}
+
+/** True for a 429 from gero-backend's request limiter, by status on the error or by the words in its message. */
+function isRateLimitError(raw: unknown, message: string): boolean {
+  const status = (raw as { response?: { status?: unknown } } | null)?.response?.status;
+  return status === 429 || /rate_limit_exceeded|too many requests/i.test(message);
 }
 
 /**
@@ -161,9 +172,16 @@ export function friendlyTxError(raw: unknown): string {
   );
   const l = message.toLowerCase();
 
+  // gero-backend's per-IP request limit on /api/tx/*: a 429, kept on the enriched error
+  // by the Nexus client, or its body ("rate_limit_exceeded" / "Too many requests — slow
+  // down") when only the text reached the UI. Never shown raw.
+  if (isRateLimitError(raw, rawMessage)) return i18n.t('errors.rateLimited') as string;
+
   // The CIP-113 signing refusal is thrown from the background as a fixed English
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+  if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
+  if (message === TREZOR_GOVERNANCE_REFUSAL_MESSAGE) return i18n.t('errors.trezorGovernanceRefused') as string;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
   // same as it being rejected -- the localized copy has to keep that uncertainty.
@@ -181,4 +199,13 @@ export function friendlyTxError(raw: unknown): string {
   if (validation) return i18n.t('errors.txRequestRejected', { reason: validation[1].trim() }) as string;
 
   return message;
+}
+
+/**
+ * Whether a submit failed because an input is unknown to the node that took it: spent
+ * already, or the output of a transaction that node has not seen yet (a sweep's
+ * payment reaching a node before the merges it spends).
+ */
+export function isMissingInputError(message: string): boolean {
+  return /BadInputsUTxO|unknown utxo reference/i.test(message);
 }

@@ -84,13 +84,13 @@ describe('proof-server settings: remote-prover consent', () => {
 
   it('asks for Gero Cloud consent in remote mode, and shows it as given once recorded', () => {
     expect(mountPage('remote', null).find('[data-testid="consent-dialog"]').attributes('data-provider')).toBe('cloud');
-    const given = mountPage('remote', { version: 3, acceptedAt: 1, provider: 'cloud' });
+    const given = mountPage('remote', { version: 4, acceptedAt: 1, provider: 'cloud' });
     expect(given.find('[data-testid="ps-consent-card"]').text()).toContain('midnight.proofServerPage.consentGiven');
     expect(given.find('[data-testid="ps-consent-review"]').exists()).toBe(false);
   });
 
   it('consent for the other provider does not count, and local mode needs none', () => {
-    expect(mountPage('zkpaas', { version: 3, acceptedAt: 1, provider: 'cloud' }).find('[data-testid="ps-consent-review"]').exists()).toBe(true);
+    expect(mountPage('zkpaas', { version: 4, acceptedAt: 1, provider: 'cloud' }).find('[data-testid="ps-consent-review"]').exists()).toBe(true);
     expect(mountPage('local', null).find('[data-testid="ps-consent-card"]').exists()).toBe(false);
   });
 });

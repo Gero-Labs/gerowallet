@@ -257,6 +257,9 @@ async function getManifest() {
       'identity',
       'sidePanel',
       'declarativeNetRequest',
+      // The on-device Midnight prover runs in a Worker inside an offscreen
+      // document (src/chains/midnight/midnightDeviceProver.ts).
+      'offscreen',
     ],
     // The MoonPay frame-header rule is a SESSION rule scoped to frames this
     // extension initiates (src/chrome/moonpayFrameRule.ts), not a static ruleset:
