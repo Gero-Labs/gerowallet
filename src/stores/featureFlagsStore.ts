@@ -95,6 +95,10 @@ export interface FeatureFlags {
   // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
   // the background's checks stay on the build-time network gates (cip113Deployments.ts).
   isCip113Enabled: boolean;
+  // NFT rescue (cancelling listings and offers stuck at a closed marketplace's contracts,
+  // Cardano mainnet). Default OFF, ships dark. Gates the UI ONLY: the card that finds them
+  // and the cancel action. The background still verifies every transaction it signs.
+  isNftMarketEnabled: boolean;
   // Multi-account (issue 1307). Default OFF, ships dark. Gates the UI ONLY: the
   // Choose accounts step, Add account and the account switchers. A record already
   // holding an account other than #0 keeps signing for it whatever this says.
@@ -160,6 +164,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isSubmitApiEnabled: false,
     isMidnightShieldedDeviceProvingEnabled: false,
     isCip113Enabled: false,
+    isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
     isCardholderDetailsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
@@ -253,6 +258,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled = featureFlagService.getFlag('isMidnightShieldedDeviceProvingEnabled', false);
     // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
+    // NFT rescue ships DARK (default false); UI-only gate for the stuck-listings card.
+    featureFlagsState.flags.isNftMarketEnabled = featureFlagService.getFlag('isNftMarketEnabled', false);
     // Multi-account ships DARK (default false); UI-only gate.
     featureFlagsState.flags.isMultiAccountEnabled = featureFlagService.getFlag('isMultiAccountEnabled', false);
     // Cardholder-details step ships ON; only an explicit false from the service turns it off.
@@ -361,6 +368,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       featureFlagsState.flags['isCip113Enabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isNftMarketEnabled', (newValue) => {
+      featureFlagsState.flags['isNftMarketEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isMultiAccountEnabled', (newValue) => {
       featureFlagsState.flags['isMultiAccountEnabled'] = newValue === true;
@@ -636,6 +646,16 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the NFT rescue is offered: finding listings and offers stuck at a closed
+   * marketplace's contracts and cancelling them (Cardano mainnet only).
+   * Ships DARK (default false). Gates the UI only; the background verifies every
+   * transaction it signs whatever this says.
+   */
+  isNftMarketEnabled(): boolean {
+    return featureFlagsState.flags.isNftMarketEnabled;
+  },
+
+  /**
    * Check if multi-account (accounts #1..N of one device) is enabled.
    * Ships DARK (default false). Gates the UI only.
    */
@@ -677,6 +697,7 @@ export const featureFlagsStore = {
       isSubmitApiEnabled: false,
       isMidnightShieldedDeviceProvingEnabled: false,
       isCip113Enabled: false,
+      isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
       isCardholderDetailsEnabled: true,
       isKeyEnvelopeV2Enabled: false,

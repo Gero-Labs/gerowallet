@@ -59,6 +59,28 @@ describe('i18n parity', () => {
     expect([...PUSH_LOCALES].sort()).toEqual([...READY_LANGUAGES].sort());
   });
 
+  // The rescue card's limit hints (one cancel transaction takes one marketplace version, and
+  // each version has its own cap): the cap is a placeholder, never a baked-in number, and the
+  // copy never names the closed marketplace.
+  describe.each(READY_LANGUAGES)('rescue limit hints: %s', (lang) => {
+    const dict = locale(lang);
+
+    it('takes the cap as {max} and names no number of its own', () => {
+      expect(placeholders(dict['legacyListings.maxHint']!)).toEqual(['{max}']);
+      expect(dict['legacyListings.maxHint']).not.toMatch(/\d/);
+    });
+
+    it('has the version hint, with no placeholder', () => {
+      expect(dict['legacyListings.versionHint']?.trim()).toBeTruthy();
+      expect(placeholders(dict['legacyListings.versionHint']!)).toEqual([]);
+    });
+
+    it('never names the marketplace anywhere in the rescue copy', () => {
+      const offenders = Object.entries(dict).filter(([key, value]) => key.startsWith('legacyListings.') && /jpg/i.test(value)).map(([key]) => key);
+      expect(offenders).toEqual([]);
+    });
+  });
+
   // The service worker renders pushes from this table alone (no vue-i18n
   // fallback), so a missing key throws for that language's users.
   for (const lang of PUSH_LOCALES.filter((l) => l !== 'us')) {
