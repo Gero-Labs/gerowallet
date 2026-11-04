@@ -430,7 +430,6 @@ export function usePoolSigning(options: {
         tip: tip.value,
         walletContext: {
           keys: keys.value,
-          stakeAddress: loggedWallet.value.stakeAddress || '',
         },
       });
 

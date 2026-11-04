@@ -4,7 +4,8 @@
  * `gero-xdev/v1|DEVICE_REGISTER|…` is the wallet-control proof that registers a
  * device, and over `gero-support/v1|…` it logs into the user's support chat; a
  * site that obtained either through an ordinary sign-message prompt could use it
- * as the user.
+ * as the user. `gero-signing/v1|…` is how Gero's root keys approve the keys that
+ * sign its server answers.
  *
  * Every Gero subject has the shape `gero-<name>/v<N>` followed by `|` or the end,
  * so the pattern covers subjects added later; the list names the current ones
@@ -17,6 +18,8 @@ export const RESERVED_SIGNING_DOMAINS = [
   'gero-xprove/',
   'gero-notify/',
   'gero-support/',
+  // Root approvals of Gero's response-signing keys (signedResponseRoots.ts).
+  'gero-signing/',
 ] as const;
 
 const GERO_SUBJECT = /^gero-[a-z0-9-]+\/v\d+(?:\||$)/;

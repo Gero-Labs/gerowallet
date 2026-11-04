@@ -15,6 +15,23 @@
     </div>
 
     <template v-else>
+      <!-- A sale the largest UTxOs one transaction holds cannot cover: the aggregator would
+           build a swap too large for any node, so the wallet is merged into itself first. In
+           the Swap dialog it opens in a drawer beside it, leaving the widget where it was. -->
+      <DialogDrawer :open="!!(mergeLanding || mergeOffered)" :label="mergeDrawerLabel">
+        <section class="glass-tier gero-swap-embed__merge" role="status">
+          <template v-if="mergeLanding">
+            <v-progress-circular indeterminate size="18" width="2" color="var(--g-accent)" aria-hidden="true" />
+            <p class="t-caption gero-swap-embed__merge-text">{{ $t('swap.mergeLanding') }}</p>
+          </template>
+          <template v-else>
+            <p class="t-body-sm gero-swap-embed__merge-title">{{ $t('swap.mergeNeededTitle') }}</p>
+            <p class="t-caption gero-swap-embed__merge-text">{{ $t('swap.mergeNeededBody', { count: mergeUtxoCount }) }}</p>
+            <GButton tier="primary" class="gero-swap-embed__merge-action" @click="mergeOpen = true">{{ $t('swap.mergeFirst') }}</GButton>
+          </template>
+        </section>
+      </DialogDrawer>
+
       <gero-swap
         ref="geroSwapEl"
         mode="native"
@@ -114,13 +131,21 @@
           </div>
         </v-card-text>
       </BaseDialog>
+
+      <SwapMergeDialog v-if="mergeOpen" :open="mergeOpen" :cache="mergeCache" @close="mergeOpen = false" @merged="onMerged" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { Cardano } from '@cardano-sdk/core';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
+import { swapNeedsMerge } from '../composables/swapMergeNeed';
+import { paymentUtxos } from '@/shared/utils/pendingSpends';
+import SwapMergeDialog from './SwapMergeDialog.vue';
+import { createSweepCache } from '@/api/sweepCache';
+import DialogDrawer from '@/shared/dialogs/DialogDrawer.vue';
 import {
   TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits, type QuotedRoute, type SwapIntent,
 } from '../composables/orderSpendBound';
@@ -320,6 +345,50 @@ async function currentSwapIntent(): Promise<SwapIntent | null> {
   const amountIn = toBaseUnits(typed, decimals);
   return amountIn ? { tokenIn, amountIn } : null;
 }
+
+// ── Merge first: a sale the largest UTxOs one transaction holds cannot cover ──
+// The aggregator selects inputs largest first with no cap, so such a swap comes back too
+// large for any node (the signer refuses it). The wallet offers to merge itself first; the
+// swap goes once that merge is in a block. Only a password, PassKey or Google wallet signs
+// a merge under one approval, so only those are offered one.
+const mergeNeeded = ref(false);
+const mergeOpen = ref(false);
+/** Merges the dialog built, kept here so opening it again does not rebuild them (see createSweepCache). */
+const mergeCache = createSweepCache();
+/** The merge sent from here, by its last transaction, until the wallet holds its output. */
+const mergeLanding = ref<string | null>(null);
+const canMerge = computed(() =>
+  walletStore.loggedWallet?.type === WalletType.Normal || walletStore.loggedWallet?.type === WalletType.Google);
+const mergeOffered = computed(() => mergeNeeded.value && canMerge.value);
+// The drawer holds the offer and then the merge landing: named for the merge, it fits both.
+const mergeDrawerLabel = computed(() => String(i18n.t('swap.mergeTitle')));
+
+function swapUtxos(): Cardano.Utxo[] {
+  return paymentUtxos((walletStore.utxos ?? []) as Cardano.Utxo[], walletStore.collateral as Cardano.Utxo | null | undefined, walletStore.transactions);
+}
+const mergeUtxoCount = computed(() => swapUtxos().length);
+
+async function checkMergeNeed(): Promise<void> {
+  try {
+    const intent = await currentSwapIntent();
+    mergeNeeded.value = !!intent && !mergeLanding.value && swapNeedsMerge(swapUtxos(), intent.tokenIn, intent.amountIn);
+  } catch {
+    mergeNeeded.value = false;
+  }
+}
+
+function onMerged(txId: string): void {
+  mergeLanding.value = txId;
+  mergeNeeded.value = false;
+}
+
+// The merge has landed once the wallet holds an output of its last transaction.
+watch(() => walletStore.utxos, (utxos) => {
+  const landing = mergeLanding.value;
+  if (!landing || !((utxos ?? []) as Cardano.Utxo[]).some(([txIn]) => txIn.txId === landing)) return;
+  mergeLanding.value = null;
+  void checkMergeNeed();
+});
 
 /** The budget for the order being signed, or null (only a signature taking almost nothing passes). */
 async function spendBoundForSignature(): Promise<SpendBound | null> {
@@ -546,6 +615,7 @@ function registerSwapForAlerts(detail: unknown) {
 
 function onQuote(e: Event) {
   quotedRoute = routeFromQuoteEvent(widgetPayload(e));
+  void checkMergeNeed();
 }
 
 function onSwapSubmitted(e: Event) {
@@ -732,6 +802,39 @@ watch(network, async (value) => {
   display: flex;
   justify-content: flex-end;
   gap: var(--g-s-2);
+}
+
+/* A column, so it reads the same in the drawer, the side panel and the page. */
+.gero-swap-embed__merge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4);
+  margin-bottom: var(--g-s-3);
+  text-align: left;
+}
+
+/* In the drawer it is the drawer's only card: no space to keep from the widget below. */
+.dialog-drawer--side .gero-swap-embed__merge {
+  margin-bottom: 0;
+}
+
+.gero-swap-embed__merge-action {
+  margin-top: var(--g-s-2);
+  align-self: stretch;
+}
+
+.gero-swap-embed__merge-title {
+  margin: 0;
+  color: var(--g-text-1);
+  font-weight: 550;
+}
+
+.gero-swap-embed__merge-text {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--g-text-2);
 }
 
 .gero-swap-embed__maintenance {

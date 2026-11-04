@@ -233,7 +233,6 @@ export function useDelegation() {
         implicitCoin,
         walletContext: {
           keys: keys.value,
-          stakeAddress: loggedWallet.value?.stakeAddress || '',
         }
       });
       assertStakeWalletUnchanged(wallet, t);

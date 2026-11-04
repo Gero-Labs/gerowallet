@@ -10,6 +10,16 @@
       :cbor-hex="getCborHex()"
       class="mb-3"
     />
+    <!-- A sweep's stages, in a drawer beside the dialog so the details above never scroll. -->
+    <DialogDrawer :open="!!tx && steps > 1 && active" :label="t('send.sweepHowItGoesOut')">
+      <SweepTimeline
+        v-if="tx && steps > 1"
+        :steps="steps"
+        :utxo-count="utxoCount"
+        :merge-fee="mergeFeeAda"
+        :payment-fee="paymentFeeAda"
+      />
+    </DialogDrawer>
   </v-card>
 </template>
 <script setup lang="ts">
@@ -28,6 +38,12 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
   type TxDetailsRiskBadge,
 } from '@/shared/components/TransactionDetailsCard.vue';
+import SweepTimeline from './sweep/SweepTimeline.vue';
+import DialogDrawer from '@/shared/dialogs/DialogDrawer.vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+// The timeline shows each stage's fee on its own, symbol included (the details card adds
+// the unit to its figures itself, hence the symbol-less formatAda below).
+import { formatAda as formatAdaWithSymbol } from '@/shared/utils/format';
 
 import type { SendRecipient } from '@/models/send-flow.types';
 
@@ -35,9 +51,16 @@ interface Props {
   recipients: SendRecipient[];
   txData?: Cardano.Tx;
   active?: boolean;
+  /** Fees of the merges a sweep sends before this payment, in lovelace: the user pays them too. */
+  additionalFeeLovelace?: number;
+  /** Transactions this send goes out as. Above 1, a sweep's merges go first. */
+  steps?: number;
+  /** UTxOs a sweep spends in all, for the timeline's explanation of the merges. */
+  utxoCount?: number;
 }
 
-const props = withDefaults(defineProps<Props>(), { active: true });
+const props = withDefaults(defineProps<Props>(), { active: true, additionalFeeLovelace: 0, steps: 1, utxoCount: 0 });
+const { t } = useTranslation();
 defineExpose({ isReadyFor });
 
 const loading = ref<boolean>(false);
@@ -107,8 +130,11 @@ const outputRows = computed<TxDetailsOutput[]>(() => {
 
 const feeAda = computed(() => {
   if (!tx.value?.body?.fee) return '0';
-  return formatAda(Number(tx.value.body.fee));
+  return formatAda(Number(tx.value.body.fee) + props.additionalFeeLovelace);
 });
+
+const mergeFeeAda = computed(() => formatAdaWithSymbol(props.additionalFeeLovelace));
+const paymentFeeAda = computed(() => formatAdaWithSymbol(tx.value?.body?.fee ? Number(tx.value.body.fee) : 0));
 
 // Only lovelace leaving the wallet counts as "sending" — change and
 // self-payments are excluded, matching the sidepanel signing summary.
@@ -145,7 +171,7 @@ const withdrawalRow = computed<TxDetailsWithdrawal | null>(() => {
 });
 
 const totals = computed<TxDetailsTotals>(() => {
-  const fee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : 0n;
+  const fee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) + BigInt(props.additionalFeeLovelace) : 0n;
   const net = totalSendingLovelace.value + fee - withdrawnRewardsLovelace.value;
   return {
     totalSendingAda: formatAda(totalSendingLovelace.value),
@@ -264,7 +290,9 @@ watch(
 </script>
 
 <style scoped>
+/* App.vue paints every v-card's background and wins over `transparent`, so this card
+   shows as a panel behind the details and the timeline: inset them from its edges. */
 .summary-step {
-  padding: 8px 0;
+  padding: var(--g-s-2) var(--g-s-3);
 }
 </style>

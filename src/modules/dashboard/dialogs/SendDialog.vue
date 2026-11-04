@@ -19,8 +19,16 @@
     :width="428"
     img-color="var(--g-accent)"
   >
+    <!-- A sweep's payment is out: what went where, instead of closing like a single send.
+         Before the empty-wallet state, since a Max may well have emptied the wallet. -->
+    <template v-if="sweepDone">
+      <v-card-text class="send-dialog-content pa-0">
+        <SweepDone v-bind="sweepDone" @done="resetState(); emit('close')" />
+      </v-card-text>
+    </template>
+
     <!-- Empty wallet state -->
-    <template v-if="isWalletEmpty">
+    <template v-else-if="isWalletEmpty">
       <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
         <div class="empty-wallet-state">
           <v-icon size="64" color="var(--g-text-3)" class="mb-4">mdi-wallet-outline</v-icon>
@@ -105,6 +113,19 @@
                   </v-btn>
                 </div>
 
+                <!-- Max over the request limit: the merges being built, then the plan; or,
+                     when this wallet cannot sweep, what Max sends and what stays behind. In a
+                     drawer beside the dialog, so the recipients never scroll for it. -->
+                <DialogDrawer :open="currentStep === 1 && !!(sweepPreparing || sweep || maxLimit)" :label="t('send.sweepHowItGoesOut')">
+                  <SweepPlanCard
+                    v-if="sweepPreparing || sweep"
+                    :utxo-count="sweepPreparing?.utxoCount ?? sweep?.utxoCount ?? 0"
+                    :merges="sweepPreparing?.total ?? sweep?.merges.length ?? 0"
+                    :preparing="sweepPreparing ? { built: sweepPreparing.built, total: sweepPreparing.total, waiting: sweepPreparing.waiting } : null"
+                  />
+                  <MaxLimitNote v-else-if="maxLimit" v-bind="maxLimit" />
+                </DialogDrawer>
+
                 <!-- Global total: always in the layout so the dialog keeps its height. Empty
                      (dashes) until there is something to build, a shimmer while the fee is
                      being computed, the figures once the transaction is built. -->
@@ -114,6 +135,14 @@
                     <span v-if="feePending" class="g-skeleton global-total__skeleton global-total__skeleton--fee" aria-hidden="true"></span>
                     <span v-else-if="globalTotal.formattedFee && txValid" class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
                     <span v-else class="global-total__fee-label g-num">—</span>
+                  </div>
+                  <!-- A sweep's fee split. It keeps its row while that fee is worked out, as a
+                       shimmer on a caption line, so the box does not grow when the figures land. -->
+                  <div v-if="(sweepPreparing || sweep) && (feePending || sweepFeeBreakdownText)" class="global-total__row global-total__breakdown">
+                    <span class="t-caption g-num">
+                      <span v-if="feePending" class="g-skeleton global-total__skeleton global-total__skeleton--breakdown" aria-hidden="true"></span>
+                      <template v-else>{{ sweepFeeBreakdownText }}</template>
+                    </span>
                   </div>
                   <div v-if="globalTotal.formattedWithdrawal && !feePending" class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
@@ -129,7 +158,6 @@
                     <span v-else class="global-total__ada g-num">—</span>
                   </div>
                   <div v-if="buildError" class="global-total__row global-total__error" role="alert">{{ buildError }}</div>
-                  <div v-else-if="maxLimitNote" class="global-total__row global-total__note">{{ maxLimitNote }}</div>
                 </div>
               </div>
             </div>
@@ -142,6 +170,9 @@
               :recipients="recipients"
               :tx-data="tx"
               :active="isOpen && currentStep === 2"
+              :additional-fee-lovelace="sweepFeeLovelace"
+              :steps="sweepSteps"
+              :utxo-count="sweep?.utxoCount ?? 0"
               @next="handleSign"
               @prev="prevStep"
             />
@@ -162,13 +193,16 @@
 
       <!-- Actions -->
       <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- A sweep in flight, or where it stopped. The auth section below stays mounted
+             (its field holds the password for a retry) but out of sight while it runs. -->
+        <SweepProgressPanel v-if="currentStep === 2 && (sweepProgress || sweepStop)" :progress="sweepProgress" :stop="sweepStop" />
         <!-- Under a "require remote" policy, local signing (password AND passkey)
              is disabled; only "Sign on another device" remains. -->
         <div v-if="currentStep === 2 && requiresRemoteForSend" class="text-caption grey--text text-center mb-2">
           {{ $t('crossDevice.settings.policyRequireHint') }}
         </div>
         <!-- Transaction Authentication Section (step 2 only) -->
-        <div v-else-if="currentStep === 2">
+        <div v-else-if="currentStep === 2" v-show="!sweepProgress" class="send-dialog__auth">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -179,6 +213,7 @@
             :password-label="t('wallet.spendingPassword')"
             :password-rules="passwordRules"
             :submit-text="t('common.confirm')"
+            :passkey-text="sweepStop ? t('common.tryAgain') : undefined"
             :show-bt-toggle="isBTSupported"
             :is-b-t="isBT"
             @update:isBT="isBT = $event"
@@ -223,11 +258,11 @@
             @click="nextStep"
             :disabled="!isValid || txSignLoading || (requiresRemoteForSend && !isSubmit)"
             :loading="txSignLoading"
-          >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
+          >{{ isSubmit ? $t('common.confirm') : sweepStop ? $t('common.tryAgain') : $t('wallet.sign') }}
           </v-btn>
           <!-- Step 2: Sign on another device (flag-gated, dark by default) -->
           <v-btn
-            v-if="currentStep === 2 && canSignOnAnotherDevice"
+            v-if="currentStep === 2 && canSignOnAnotherDevice && !sweep"
             variant="text"
             class="ml-2"
             @click="signOnAnotherDevice()"
@@ -244,15 +279,21 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, shallowRef, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
+import { useTransactionSigning, type SweepProgress, type SweepStop } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
+import SweepPlanCard from '../components/sweep/SweepPlanCard.vue';
+import DialogDrawer from '@/shared/dialogs/DialogDrawer.vue';
+import MaxLimitNote from '../components/sweep/MaxLimitNote.vue';
+import SweepProgressPanel from '../components/sweep/SweepProgressPanel.vue';
+import SweepDone from '../components/sweep/SweepDone.vue';
+import { maxLimitFigures, sweepDoneSummary, sweepFeeBreakdown, type SweepDoneSummary } from '../components/sweep/sweepDialogState';
 import MidnightSendDialog from './MidnightSendDialog.vue';
 import rules from '@/utils/rules';
 import { Blockchain, WalletType } from '@/models/types';
@@ -272,12 +313,18 @@ import {
   InputLimitError,
   type InputSelection,
   type MaxAdaRequest,
+  type NexusCallOptions,
   nexusTxApi,
   type NexusTxAsset,
   type NexusTxInput,
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
+import { shortOnlyByLimit, type SweepPrerequisites } from '@/api/sweepPlan';
+import { buildSweep, type BuiltSweep, type SweepBuildContext } from '@/api/sweepBuild';
+import { combineSweeps, createSweepCache } from '@/api/sweepCache';
+import { refOf } from '@/api/nexusInputSelection';
 import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
+import { withoutPendingSpends } from '@/shared/utils/pendingSpends';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
@@ -291,7 +338,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['close']);
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 
 const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolvedCollections } = toRefs(walletStore)
 const { epochParams } = toRefs(networkStore)
@@ -339,11 +386,73 @@ const maxRecipientIds = ref<Set<string>>(new Set());
 const inputSelection = ref<InputSelection | null>(null);
 /** A build failure the user has to act on, shown under the total. Null while nothing is wrong or a build is in flight. */
 const buildError = ref<string | null>(null);
-/** Max/sweep only reaches the candidates one request may carry: say so rather than silently leaving UTxOs behind. */
-const maxLimitNote = computed(() => {
-  const selection = inputSelection.value;
-  if (!selection?.truncated || maxRecipientIds.value.size === 0) return null;
-  return t('send.inputLimitMaxNote', { max: selection.limit, remaining: selection.total - selection.limit });
+/**
+ * A sweep: when Max, or a typed amount, needs more UTxOs than one Nexus request carries,
+ * the merges (self-transfers) that bring them under the limit, and the UTxO set they came from.
+ */
+const sweep = shallowRef<(BuiltSweep & { key: string; builtAt: number }) | null>(null);
+/**
+ * The ADA, in lovelace over all recipients, that a typed send asked for when the UTxOs
+ * one request carries first fell short of it while the whole wallet did not. At or above
+ * it the payment goes out as a sweep, as Max does; below it, as one transaction again.
+ */
+const amountSweepFrom = ref<bigint | null>(null);
+
+/** The ADA every recipient is sent, in lovelace. */
+function requestedLovelace(): bigint {
+  return recipients.value.reduce((sum: bigint, r: SendRecipient) => {
+    const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    return sum + decimalToBaseUnits(ada?.quantity, ada?.decimals ?? 6);
+  }, BigInt(0));
+}
+const sweepPrerequisites = computed<SweepPrerequisites | null>(() =>
+  sweep.value ? { cbors: sweep.value.mergeCbors, outputs: sweep.value.mergeOutputs } : null);
+/** The merges' fees, which the user pays on top of the payment's. */
+const sweepFeeLovelace = computed(() => Number(sweep.value?.mergeFee ?? BigInt(0)));
+/** Transactions the send goes out as. */
+const sweepSteps = computed(() => (sweep.value ? sweep.value.merges.length + 1 : 1));
+const sweepProgress = ref<SweepProgress | null>(null);
+/**
+ * The merges being built: how many are done, how many the plan has, the UTxOs it spends,
+ * and whether a build is waiting out the server's request limit. Null when none is building.
+ */
+const sweepPreparing = ref<{ built: number; total: number; utxoCount: number; waiting: boolean } | null>(null);
+/** Where the last sweep stopped, until the next attempt starts or the dialog resets. */
+const sweepStop = ref<SweepStop | null>(null);
+/** A sweep whose payment went out: the dialog shows this instead of closing. */
+const sweepDone = ref<SweepDoneSummary | null>(null);
+/**
+ * The merge build in flight: the UTxO set it was planned for, the UTxOs its merges spend (it
+ * still serves a later set that holds all of them, so a second caller awaits it instead of
+ * building merges of its own, whose ids would differ), and when its oldest merge was built.
+ * Its controller stops the build, and any rate-limit wait it is in, when the dialog resets or
+ * its merges stop applying. `superseded` marks the second case: its callers go on with the
+ * sweep that replaced it instead of giving up.
+ */
+interface SweepBuildSlot { key: string; promise: Promise<BuiltSweep>; abort: AbortController; spends: Set<string>; builtAt: number; superseded: boolean }
+let sweepBuild: SweepBuildSlot | null = null;
+/**
+ * The last sweep built, kept for the life of the dialog (not its reset): pressing Max again,
+ * typing an amount or a payment arriving reuses its merges instead of rebuilding them, each
+ * build counting against the server's request limit.
+ */
+const sweepCache = createSweepCache();
+const sweepWalletKey = () => `${loggedWallet.value?.id ?? ''}:${loggedWallet.value?.network ?? ''}`;
+const spentByMerges = (merges: Cardano.Tx[]) => merges.flatMap((tx) => tx.body.inputs.map((input) => `${input.txId}#${input.index}`));
+/**
+ * Merges built longer ago than this are rebuilt the next time Max or a rebuild runs
+ * (nothing rebuilds on a timer). Nexus gives them two hours to land; the node refuses
+ * one signed after that, which the sweep reports as interrupted, and pressing Max
+ * again rebuilds them.
+ */
+const SWEEP_REBUILD_AFTER_MS = 60 * 60 * 1000;
+/** Max without a sweep only reaches the candidates one request may carry: what it sends and what stays behind. */
+const maxLimit = computed(() => maxLimitFigures(inputSelection.value, recipients.value, maxRecipientIds.value, nativeTicker.value));
+
+/** Under the fee row: how a sweep's fee splits between the merges and the payment. */
+const sweepFeeBreakdownText = computed(() => {
+  const split = sweepFeeBreakdown(sweep.value, txValid.value ? tx.value?.body?.fee : undefined);
+  return split ? tc('send.sweepFeeBreakdown', split.merges, { ...split }) : null;
 });
 
 function createEmptyRecipient(): SendRecipient {
@@ -405,8 +514,20 @@ const {
 } = useTransactionSigning({
   active: isSummaryReady,
   tx,
+  prerequisites: sweepPrerequisites,
+  onProgress: (progress) => {
+    sweepProgress.value = progress;
+    // A new attempt: the stop it is retrying no longer applies.
+    if (progress) sweepStop.value = null;
+  },
+  onInterrupted: (stop) => { sweepStop.value = stop; },
+  // The signer asks this right after onSuccess: the dialog stays open exactly when it
+  // has a done panel to show, so the two can never disagree.
+  closeOnSuccess: () => !sweepDone.value,
   successMessageKey: 'wallet.txSubmittedSuccess',
-  onSuccess: () => {
+  onSuccess: (txId) => {
+    // Read off the sweep and payment now: the dialog's state resets behind this.
+    if (sweep.value && tx.value) sweepDone.value = sweepDoneSummary(txId, tx.value, sweep.value, ownAddresses());
     // If this send swept rewards (auto-withdraw), zero the local balance so a
     // second send before the next account sync doesn't re-attach the
     // already-claimed withdrawal (issue 941)
@@ -414,6 +535,22 @@ const {
   },
   onClose: () => emit('close'),
 });
+
+/** The wallet's own payment and change addresses: a payment output there is change, not a recipient. */
+function ownAddresses(): string[] {
+  return [...(keys.value?.payment ?? []), ...(keys.value?.change ?? [])]
+    .map((key: { address?: string }) => key.address)
+    .filter((address): address is string => !!address);
+}
+
+// Leaving the summary (Back, or a rebuilt payment) resets the signer, which forgets the
+// merges it already sent: a stop still on screen would promise to skip them.
+watch([tx, currentStep], () => { sweepStop.value = null; });
+
+/** A sweep is signed under one approval: only signers that give one (password, PassKey, Google), never under a remote-only policy. */
+const canSweep = computed(() =>
+  (loggedWallet.value?.type === WalletType.Normal || loggedWallet.value?.type === WalletType.Google) &&
+  !requiresRemoteForSend.value);
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
@@ -488,7 +625,16 @@ const resetData = () => {
   txValid.value = false;
   buildError.value = null;
   inputSelection.value = null;
+  sweep.value = null;
+  // Merges still being built are for a dialog that is gone: stop them, waits included.
+  sweepBuild?.abort.abort();
+  sweepBuild = null;
+  sweepProgress.value = null;
+  sweepPreparing.value = null;
+  sweepStop.value = null;
+  sweepDone.value = null;
   maxRecipientIds.value = new Set();
+  amountSweepFrom.value = null;
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
 };
@@ -641,11 +787,11 @@ const globalTotal = computed(() => {
     });
   });
 
-  // Extract fee from built tx
+  // Extract fee from built tx, plus a sweep's merge fees: the user pays all of them.
   let feeAda = 0;
   let formattedFee = '';
   if (tx.value?.body?.fee) {
-    const feeLovelace = Number(tx.value.body.fee);
+    const feeLovelace = Number(tx.value.body.fee) + sweepFeeLovelace.value;
     feeAda = feeLovelace / 1_000_000;
     formattedFee = filters.toCurrency(feeLovelace, false, 6, '₳', '', false, 6);
   }
@@ -732,29 +878,150 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
   return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
 }
 
+/** The wallet's UTxOs less those a transaction it already submitted spends (see withoutPendingSpends). */
+function spendableUtxos(): Cardano.Utxo[] {
+  return withoutPendingSpends(utxos.value as Cardano.Utxo[], walletStore.transactions);
+}
+
 /**
- * Candidate inputs for a Nexus request: the whole wallet when it fits the request
- * limit, otherwise the holders of everything the recipients send plus the largest
- * lovelace (see selectInputCandidates). Deterministic, so the max-ada and build
- * calls of one attempt see the same candidates.
+ * Candidate inputs for a Nexus request. With a sweep, the payment spends the merges'
+ * outputs and everything the merges leave. Otherwise the whole wallet when it fits
+ * the request limit, else the holders of everything the recipients send plus the
+ * largest lovelace (see selectInputCandidates). Deterministic, so the max-ada and
+ * build calls of one attempt see the same candidates.
  */
 function nexusInputs(): NexusTxInput[] {
-  const selection = selectInputCandidates(utxos.value as Cardano.Utxo[], {
+  if (sweep.value) {
+    inputSelection.value = null;
+    return [...sweep.value.direct, ...sweep.value.mergeOutputs].map(cardanoUtxoToNexusInput);
+  }
+  const selection = selectInputCandidates(spendableUtxos(), {
     requiredAssets: committedBaseUnitsExcluding(''),
   });
   inputSelection.value = selection;
   return selection.utxos.map(cardanoUtxoToNexusInput);
 }
 
-/** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
-function lovelaceOf(list: Cardano.Utxo[]): bigint {
-  let total = BigInt(0);
-  for (const utxo of list) {
-    try {
-      total += BigInt(String(utxo[1].value.coins ?? 0));
-    } catch { /* an unparseable coin field holds nothing */ }
+/** The UTxO set as one string: a sweep is rebuilt when it changes. */
+function utxoSetKey(list: Cardano.Utxo[]): string {
+  return list.map(([txIn]) => `${txIn.txId}#${txIn.index}`).sort().join(',');
+}
+
+/**
+ * Max, or a typed amount at or above `amountSweepFrom`, on a wallet holding more UTxOs
+ * than one Nexus request carries: the merges that bring them under the limit. Merges built
+ * before are kept while every UTxO they spend is still spendable (see createSweepCache):
+ * pressing Max again, typing an amount, reopening the dialog or a payment arriving costs no
+ * rebuild, and arrivals that push the payment past the limit cost one more merge. Merges
+ * built more than SWEEP_REBUILD_AFTER_MS ago are rebuilt the next time Max or a rebuild
+ * runs, never on a timer: a merge signed after its two-hour window is refused by the node,
+ * which the sweep reports as interrupted, and pressing Max again rebuilds it. Clears the
+ * sweep when none is needed or this wallet cannot sign one. Resolves false when the attempt
+ * was abandoned: the dialog reset while the merges were being built, so the caller has
+ * nothing to go on with.
+ */
+async function ensureSweep(): Promise<boolean> {
+  if (!canSweep.value || (maxRecipientIds.value.size === 0 && amountSweepFrom.value === null)) {
+    sweep.value = null;
+    return true;
   }
-  return total;
+  const available = spendableUtxos();
+  const key = utxoSetKey(available);
+  if (sweep.value?.key === key && Date.now() - sweep.value.builtAt < SWEEP_REBUILD_AFTER_MS) return true;
+  const spendable = new Set(available.map(refOf));
+  // One build at a time: a build in flight whose merges all still apply serves this UTxO set
+  // too, so a concurrent caller waits for it (and picks up what arrived since afterwards)
+  // instead of building merges of its own, whose ids would differ.
+  if (!sweepBuild || ![...sweepBuild.spends].every((ref) => spendable.has(ref))) {
+    // A build whose merges no longer apply is stale whatever this call settles on, a new build
+    // or merges kept from before: stop it now, rather than let it wait out a rate limit for
+    // merges nothing will use, then publish them over the sweep that replaced it.
+    if (sweepBuild) {
+      sweepBuild.superseded = true;
+      sweepBuild.abort.abort();
+      sweepBuild = null;
+      sweepPreparing.value = null;
+    }
+    const step = sweepCache.nextStep(sweepWalletKey(), available, Date.now(), SWEEP_REBUILD_AFTER_MS);
+    if (!step) {
+      sweep.value = null;
+      return true;
+    }
+    if (!step.plan) {
+      sweep.value = { ...step.kept!.built, key, builtAt: step.kept!.builtAt };
+      return true;
+    }
+    const { kept, plan } = step;
+    const keptCount = kept?.built.merges.length ?? 0;
+    const utxoCount = available.length;
+    // The card counts this build's merges only while it owns the slot: a build for a
+    // newer UTxO set takes the slot, and this one's late reports must not move its bar.
+    let slot: SweepBuildSlot | null = null;
+    const abort = new AbortController();
+    const context: SweepBuildContext = {
+      ownAddress: keys.value.payment[0].address,
+      network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+      walletNetwork: loggedWallet.value.network,
+      signal: abort.signal,
+      onMergeBuilt: (built, total) => {
+        if (slot && sweepBuild === slot) sweepPreparing.value = { built: keptCount + built, total: keptCount + total, utxoCount, waiting: false };
+      },
+      // The server asked for a pause: the card keeps its count and says so until the next merge lands.
+      onRateLimited: () => {
+        if (slot && sweepBuild === slot && sweepPreparing.value) sweepPreparing.value = { ...sweepPreparing.value, waiting: true };
+      },
+    };
+    sweepPreparing.value = { built: keptCount, total: keptCount + plan.batches.length, utxoCount, waiting: false };
+    slot = {
+      key,
+      promise: buildSweep(plan, context).then((added) => (kept ? combineSweeps(kept.built, added, utxoCount) : added)),
+      abort,
+      spends: new Set([...spentByMerges(kept?.built.merges ?? []), ...plan.batches.flat().map(refOf)]),
+      builtAt: kept?.builtAt ?? Date.now(),
+      superseded: false,
+    };
+    sweepBuild = slot;
+  }
+  sweep.value = null;
+  const pending = sweepBuild;
+  try {
+    const built = await pending.promise;
+    // The first awaiter publishes the result and clears the slot; a later awaiter of the
+    // same promise finds the slot empty and leaves that result in place.
+    if (sweepBuild === pending) {
+      sweep.value = { ...built, key: pending.key, builtAt: pending.builtAt };
+      sweepCache.remember(sweepWalletKey(), built, pending.builtAt);
+    }
+  } catch (error) {
+    // An aborted build is not a failure: it was superseded (its replacement is taken up
+    // below) or the dialog reset. Only a build that gave up on its own counts.
+    if (!pending.abort.signal.aborted) throw error;
+  } finally {
+    // Whichever way it ended, the build that owns the slot takes its card down with it.
+    if (sweepBuild === pending) {
+      sweepBuild = null;
+      sweepPreparing.value = null;
+    }
+  }
+  // The slot never holds `pending` past the finally, so a build still in it is a newer
+  // one for another UTxO set, started while this one ran; a superseded build was replaced
+  // by that one or by merges kept from before. Go on with that sweep rather than without
+  // one. This recurses only while such a build is pending, so it ends with the first build
+  // to complete unsuperseded.
+  if (pending.superseded || (sweepBuild !== null && sweepBuild !== pending)) return ensureSweep();
+  if (pending.abort.signal.aborted) return false;
+  // Built for an earlier UTxO set that its merges still serve: bring it up to date with what
+  // arrived since. The merges are kept by now, so this builds one more at most.
+  return pending.key === key ? true : ensureSweep();
+}
+
+/**
+ * The max-ada and payment calls that follow a sweep's merges can land in the same
+ * request-limit window the merges filled: they wait it out as the merges did. A
+ * single send passes nothing, as before.
+ */
+function sweepCallOptions(): NexusCallOptions | undefined {
+  return sweep.value ? { rateLimitRetry: true } : undefined;
 }
 
 /**
@@ -780,7 +1047,8 @@ async function buildTx(options?: { selectAll?: boolean }) {
   try {
     const { tx_cbor: txCborHex, estimated_fee } = await nexusTxApi.buildTransferTx(
       request,
-      loggedWallet.value.network
+      loggedWallet.value.network,
+      sweepCallOptions(),
     );
 
     // Reconstruct the Cardano.Tx from CBOR for the signing composable
@@ -817,6 +1085,8 @@ function prevStep() {
  * 2. Read the actual fee from the response, adjust, rebuild once
  */
 async function setMax(recipientId: string, tokenIndex: number) {
+  // A Max already running owns the build (and any sweep it starts): a second click would race it.
+  if (isCalculatingMax.value) return;
   isCalculatingMax.value = true;
   // Invalidate any previously built tx so a stale one can't be submitted if
   // the new build fails (e.g. user came back from the summary step and
@@ -890,6 +1160,18 @@ async function setMax(recipientId: string, tokenIndex: number) {
       return recipientToNexusOutput(r);
     });
 
+  try {
+    if (!(await ensureSweep())) {
+      // The dialog reset while the merges were being built: this Max is over.
+      isCalculatingMax.value = false;
+      return;
+    }
+  } catch (e) {
+    // The merges could not be built: nothing to compute the max from.
+    buildError.value = friendlyTxError(e);
+    isCalculatingMax.value = false;
+    return;
+  }
   let maxInputs: NexusTxInput[];
   try {
     maxInputs = nexusInputs();
@@ -909,7 +1191,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
   try {
     // Step 1: get the max amount preview from /api/tx/max-ada (for UI display)
-    const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
+    const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network, sweepCallOptions());
     const maxLovelace = BigInt(maxResult.max_lovelace);
     const changeMinUtxo = BigInt(maxResult.change_min_utxo);
 
@@ -961,7 +1243,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
         selectAll: true,
         withdrawals: currentRewardWithdrawals(),
       };
-      const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network);
+      const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network, sweepCallOptions());
       const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
       tx.value = transaction.toCore();
       txValid.value = true;
@@ -1023,6 +1305,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
 /** Send entire wallet: all tokens + NFTs are already added by the child, just trigger MAX ADA */
 async function sendEntireWallet(recipientId: string) {
+  // A Max already running owns the recipient and the build: rewriting the recipient now would leave the form ahead of the transaction.
+  if (isCalculatingMax.value) return;
   // Wait for the child's emit to propagate
   await nextTick();
 
@@ -1036,8 +1320,9 @@ async function sendEntireWallet(recipientId: string) {
   if (idx !== -1) {
     const recipient = recipients.value[idx];
 
+    const available = spendableUtxos();
     const totals = new Map<string, bigint>();
-    for (const utxo of (utxos.value as Cardano.Utxo[])) {
+    for (const utxo of available) {
       const raw = utxo[1].value.assets as unknown;
       if (!raw) continue;
       const add = (unit: string, qty: unknown) => {
@@ -1092,7 +1377,7 @@ async function sendEntireWallet(recipientId: string) {
     await nextTick();
 
     debugLog('sendEntireWallet: scanned', {
-      utxoCount: (utxos.value as Cardano.Utxo[]).length,
+      utxoCount: available.length,
       uniqueAssets: totals.size,
       tokensKeptInRecipient: adaOnlyTokens.length,
       collectiblesEmitted: Object.keys(fullCollectibles).length,
@@ -1131,12 +1416,29 @@ async function runBuild(): Promise<void> {
     return;
   }
 
+  // A typed amount that needed a sweep, now lowered under the amount that did: try it as
+  // one transaction again. Raised, it still needs one, so the merges are kept.
+  if (amountSweepFrom.value !== null && requestedLovelace() < amountSweepFrom.value) amountSweepFrom.value = null;
+
+  // A payment built from the previous sweep must not stay signable while the sweep is replaced.
+  txValid.value = false;
+  try {
+    // A reset while the merges were being built leaves nothing to build for.
+    if (!(await ensureSweep())) return;
+  } catch (e) {
+    buildError.value = friendlyTxError(e);
+    txValid.value = false;
+    tx.value = undefined;
+    return;
+  }
+
   try {
     buildError.value = null;
     // When a MAX recipient is tracked, always force selectAll so Nexus uses
     // the same UTxO set as the auto-adjust path — prevents oscillation where
-    // plain build picks a different subset and fails differently.
-    const buildOpts = maxRecipientIds.value.size > 0 ? { selectAll: true } : undefined;
+    // plain build picks a different subset and fails differently. A sweep's payment
+    // takes every candidate too: the signer refuses one that leaves a merge unspent.
+    const buildOpts = maxRecipientIds.value.size > 0 || sweep.value ? { selectAll: true } : undefined;
     await buildTx(buildOpts);
     txValid.value = true;
     recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
@@ -1147,9 +1449,15 @@ async function runBuild(): Promise<void> {
     // problem is fragmentation, and a "need X more ADA" hint would contradict the
     // balance on screen. A wallet short even as a whole gets the real shortfall.
     const selection = inputSelection.value;
-    const shortfall = shortfallLovelaceFromMessage(msg);
-    const outside = selection?.truncated ? lovelaceOf(utxos.value as Cardano.Utxo[]) - lovelaceOf(selection.utxos) : BigInt(0);
-    const fragmented = !!selection?.truncated && shortfall !== undefined && outside >= shortfall;
+    const fragmented = shortOnlyByLimit(shortfallLovelaceFromMessage(msg), selection, spendableUtxos());
+    // The wallet holds the amount, only spread over more UTxOs than one request carries:
+    // send it as Max does, merges first, then one payment. Once per amount: when the retry
+    // still finds no sweep (its token holders leave too few ADA-only UTxOs to merge), asking
+    // again would only repeat it, so it falls through to the message below.
+    if (fragmented && canSweep.value && !sweep.value && amountSweepFrom.value === null) {
+      amountSweepFrom.value = requestedLovelace();
+      return runBuild();
+    }
     if (e instanceof InputLimitError) {
       buildError.value = friendlyTxError(e);
     } else if (fragmented && selection) {
@@ -1252,7 +1560,7 @@ async function runBuild(): Promise<void> {
               utxos: nexusInputs(),
               network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
               withdrawals: currentRewardWithdrawals(),
-            }, loggedWallet.value.network);
+            }, loggedWallet.value.network, sweepCallOptions());
             const maxLovelace = BigInt(maxResult.max_lovelace);
             if (maxLovelace > BigInt(0)) {
               const maxQty = Number(maxLovelace) / 1_000_000;
@@ -1371,10 +1679,12 @@ onMounted(() => {
 });
 </script>
 <style scoped>
-/* ─── Content area ─── */
+/* ─── Content area ───
+   No height of its own: the dialog grows with its content up to the window, and only a
+   window too short for it makes this area scroll. What only some sends need (a sweep's plan,
+   the note on what Max leaves behind) sits in a drawer beside the dialog instead. */
 .send-dialog-content {
   z-index: 1;
-  max-height: 500px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1396,9 +1706,6 @@ onMounted(() => {
 .step-recipients-inner {
   width: 100%;
   min-width: 340px;
-  max-height: 480px;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .add-recipient-link {
@@ -1430,7 +1737,7 @@ onMounted(() => {
 .global-total__ada {
   font-size: 14px;
   font-weight: 600;
-  color: var(--g-accent);
+  color: var(--g-text-1);
 }
 
 .global-total__fiat {
@@ -1443,6 +1750,12 @@ onMounted(() => {
   margin-bottom: 4px;
 }
 
+/* A sweep's fee split, right under the fee it adds up to. */
+.global-total__breakdown {
+  justify-content: flex-end;
+  margin-bottom: var(--g-s-1);
+}
+
 /* Shimmer stand-ins sized like the figures they replace, so the rows keep their height. */
 .global-total__skeleton {
   display: inline-block;
@@ -1452,6 +1765,10 @@ onMounted(() => {
 .global-total__skeleton--total {
   height: 16px;
   width: 128px;
+}
+.global-total__skeleton--breakdown {
+  width: 176px;
+  vertical-align: middle;
 }
 
 /* Separator + its breathing room only when there ARE rows above Total (fee /
@@ -1483,9 +1800,10 @@ onMounted(() => {
   color: var(--g-text-3);
 }
 
+/* A figure, not a warning: the fee reads in the primary tone like the total it feeds. */
 .global-total__fee {
   font-size: 11px;
-  color: var(--g-error) !important;
+  color: var(--g-text-1);
 }
 
 .global-total__withdrawal {

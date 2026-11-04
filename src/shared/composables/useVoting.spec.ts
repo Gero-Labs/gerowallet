@@ -127,10 +127,7 @@ describe('useVoting castVotes', () => {
     expect(args.changeAddress).toBe('addr_test1payment');
     expect(args.epochParams).toEqual({ stakeKeyDeposit: '2000000' });
     expect(args.tip).toEqual({ slot: 1000, time: 1 });
-    expect(args.walletContext).toEqual({
-      keys: (mockWalletStore as { keys: unknown }).keys,
-      stakeAddress: 'stake_test1abc',
-    });
+    expect(args.walletContext).toEqual({ keys: (mockWalletStore as { keys: unknown }).keys });
   });
 
   it('batches several votes into one voter group', async () => {

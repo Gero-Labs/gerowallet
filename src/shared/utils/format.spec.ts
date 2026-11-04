@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { formatLovelaceAsAda, formatPercentOfFraction, formatTokenQuantity } from './format';
+import { formatAda, formatLovelaceAsAda, formatPercentOfFraction, formatTokenQuantity } from './format';
+
+describe('formatAda', () => {
+  it('shows lovelace as grouped ADA with the symbol and up to six decimals', () => {
+    expect(formatAda(1_200_489_603)).toBe('₳1,200.489603');
+    expect(formatAda(1_234_567n)).toBe('₳1.234567');
+  });
+
+  it('drops trailing zeros and shows zero bare', () => {
+    expect(formatAda(400_000)).toBe('₳0.4');
+    expect(formatAda(0)).toBe('₳0');
+  });
+});
 
 describe('formatTokenQuantity', () => {
   // The CIP-113 preprod holdings a tester reported as "2" and "2.57".

@@ -4,7 +4,7 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { CIP113_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import {
   describeSubmitFailure,
   isUnexpectedSubmitResponseError,
@@ -80,6 +80,7 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
+import { carriesSigningCreds, isMarkedToFail, paymentKeyHash } from '@/shared/utils/keyCreds';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
@@ -112,7 +113,7 @@ import {
   midnightPrivateSessionEpoch,
   prepareMidnightPrivateSession,
 } from '@/chains/midnight/midnightPrivateSyncSession';
-import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { resolveDappProvingTarget, walletProverFor, type WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
 import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
@@ -174,6 +175,7 @@ export class WalletBg {
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
 
   encryptedPrivateKey: string;
   passwordLastUpdate: Date;
@@ -232,6 +234,7 @@ export class WalletBg {
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
+    this.firmwareVersion = wallet.firmwareVersion;
     this.api = new Api(wallet, this.provider);
 
     // Chain-specific address derivation
@@ -979,23 +982,32 @@ export class WalletBg {
    * with. The derived set marks nothing as used, and the first sync that does name an
    * address replaces it. It is not persisted, so the cached row only ever holds keys a
    * sync resolved.
+   *
+   * A row missing a key's hash (an older build's) is derived again from the addresses it marks
+   * used, so it keeps those and the gap scan past them: the signers sign nothing for a key whose
+   * hash the key set doesn't carry. A wallet that can't derive its own keys keeps the row it has.
    */
   public async loadCachedKeys() {
+    let cached: Keys | undefined;
     try {
       const db = await this.getDb();
       const table = db.table('addresses');
       const row = await table.where({ address: this.publicKey }).first();
-      if (row?.resolvedKeys) {
-        debugLog('🔑 Loading cached keys from DB');
-        WalletStore.setKeys(row.resolvedKeys);
-        return;
-      }
+      cached = row?.resolvedKeys;
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
     }
-    if (!this.derivesOwnAddress()) return;
-    debugLog('🔑 No cached keys; deriving them locally');
-    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+    // A complete row (or a watch wallet's) is used as it is, with no derivation.
+    const derives = cached && (this.type === WalletType.Watch || carriesSigningCreds(cached)) ? null : this.derivesOwnAddress();
+    if (cached && !derives) {
+      debugLog('🔑 Loading cached keys from DB');
+      WalletStore.setKeys(cached);
+      return;
+    }
+    if (!derives) return;
+    debugLog(cached ? '🔑 Cached keys lack key hashes; deriving them locally' : '🔑 No cached keys; deriving them locally');
+    const used = [...(cached?.payment ?? []), ...(cached?.change ?? [])].flatMap((key) => (key?.used && key.address ? [key.address] : []));
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses(used));
   }
 
   /**
@@ -1609,19 +1621,13 @@ export class WalletBg {
       // programmable-token script address, and the next push would drop them.
       let added = false;
       for (const addr of serverAddresses) {
-        try {
-          // Key credentials only, as on the HD branch below. With the CIP-113 filter
-          // off the server also reports the programmable-token SCRIPT address; absorbing
-          // its hash would make classifyUtxoAddress call those UTxOs spendable.
-          const paymentCred = Cardano.Address.fromString(addr)?.getProps().paymentPart;
-          if (paymentCred?.type === Cardano.CredentialType.ScriptHash) continue;
-          const cred = keyHashFromAddress(addr) as unknown as string;
-          if (cred && !this.watchCredentials.has(cred)) {
-            this.watchCredentials.add(cred);
-            added = true;
-          }
-        } catch {
-          continue;
+        // Key credentials only, as on the HD branch below. With the CIP-113 filter
+        // off the server also reports the programmable-token SCRIPT address; absorbing
+        // its hash would make classifyUtxoAddress call those UTxOs spendable.
+        const cred = paymentKeyHash(addr);
+        if (cred && !this.watchCredentials.has(cred)) {
+          this.watchCredentials.add(cred);
+          added = true;
         }
       }
       if (!added) return null;
@@ -2579,6 +2585,9 @@ export class WalletBg {
       debugLog('CIP-113: refusing to sign, programmable inputs:', programmableInputs);
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
+    // A transaction marked to fail only forfeits its collateral, which an input's witness can
+    // authorise on its own: refused whoever asks, before the root key is decrypted.
+    if (isMarkedToFail(transaction)) throw new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE);
 
     // The Gero NFT market, the same shape: a transaction that creates a listing or spends one of
     // this wallet's own is signed only with an authorization for its exact id (used up below,
@@ -2620,12 +2629,7 @@ export class WalletBg {
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
-    const requiredSigners = analyzeTransactionForSignatures(
-      transaction,
-      utxos,
-      addresses,
-      this.stakeAddress,
-    );
+    const requiredSigners = analyzeTransactionForSignatures(transaction, utxos, addresses);
 
     // Sign with each required key
     for (const signer of requiredSigners) {
@@ -2739,8 +2743,8 @@ export class WalletBg {
    * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
    * proven, unbound tx and return the SEALED hex. Same credential handling
    * and key hygiene as balanceAndSignMidnightUnshieldedTransfer; the DUST fee
-   * proof is generated wallet-side against the user's proof-server
-   * preference (resolveDappProvingTarget), never through Gero Cloud, so the
+   * proof is generated wallet-side, on this device in Gero Cloud mode or on
+   * the user's proof server otherwise, never through Gero Cloud, so the
    * dapp's contract proofs and the wallet's witness stay off our servers.
    */
   async balanceMidnightConnectorTransaction(
@@ -2783,7 +2787,17 @@ export class WalletBg {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
         if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
-        const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+        // The fee proof is the wallet's own DUST spend. In Gero Cloud mode it is
+        // made on this device (Gero Cloud never proves a dapp's transaction, and
+        // the DUST secret must not leave the wallet); otherwise on the proof
+        // server the user chose.
+        let proving: WalletProvingRequest;
+        if (walletProverFor(network, midnightStore.proofServer, 'unshielded') === 'device') {
+          proving = { device: true };
+        } else {
+          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          proving = { url: target.url, headers: target.headers };
+        }
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
@@ -2797,7 +2811,7 @@ export class WalletBg {
           dustRegisteredAt: Number.isFinite(createdMs)
             ? new Date(createdMs)
             : new Date(Date.now() - 90 * 24 * 3_600_000),
-          proving: { url: target.url, headers: target.headers },
+          proving,
         });
         assertSession();
         return { tx: result.txHex };
@@ -3303,7 +3317,7 @@ export class WalletBg {
     outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
     password?: string,
     prfSecret?: Uint8Array,
-    proving?: { url: string; headers?: Record<string, string> },
+    proving?: WalletProvingRequest,
     sponsor?: { walletId: number; password?: string; prfSecret?: Uint8Array },
   ): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
@@ -3455,7 +3469,7 @@ export class WalletBg {
     _amount: bigint,
     _password?: string,
     _prfSecret?: Uint8Array,
-    _proving?: { url: string; headers?: Record<string, string> },
+    _proving?: WalletProvingRequest,
   ): Promise<{ signedTxHex: string; proven: boolean }> {
     return assertNativeNightConversionSupported();
   }

@@ -60,10 +60,9 @@ A send no longer depends on wallet creation time, a generic checkpoint, or
 replaying the network's DUST event history. An unavailable or inconsistent
 projection fails with a retryable error; there is no silent full-replay fallback.
 This change covers DUST fee preparation. Private-note discovery remains in the
-shielded synchronization modules, and proving follows the selected proving path.
-Remote proving retains its existing witness-sharing boundary: an unproven DUST
-spend includes secret witness material, including the DUST secret scalar, for the
-selected prover. Public-only synchronization does not make remote proving local.
+shielded synchronization modules, and proving follows the selected proving path
+(see "Proving" below). Public-only synchronization does not make remote proving
+local.
 
 The server limits each request to 60 seconds, shares the caller's existing
 Midnight connection budget, and caps concurrent projections per sidecar. Tests
@@ -78,3 +77,35 @@ one-byte `ff` prefix, Nexus uses a fixed 765-prefix cover that keeps almost the
 entire original anonymity set; it never narrows to the wallet's next byte. The
 cover excludes nullifiers beginning with four `ff` bytes. Such a nullifier fails
 explicitly until the provider supports it, rather than being treated as unspent.
+
+## Proving
+
+A proof preimage carries the circuit's private inputs. Verified against
+`midnightntwrk/midnight-ledger` at `ledger-8.1.2` (unchanged in ledger 9): a DUST
+spend carries the wallet's `DustSecretKey`, and a Zswap spend (and sign) carries
+the raw `CoinSecretKey`. Both are seed-derived and wallet-wide; the coin secret
+key cannot be rotated, only abandoned by moving funds to a new seed. Whoever
+proves a transaction can therefore spend what it reveals.
+
+| Mode | Public send (DUST fee) | Private send (Zswap + DUST) |
+|---|---|---|
+| Gero Cloud (`remote`, default) | this device | Gero Cloud `/tx/prove-and-submit`, consent-gated; this device with `isMidnightShieldedDeviceProvingEnabled` |
+| local | the user's loopback proof server | same |
+| zkPaaS | Arkhia, consent-gated | same |
+
+- **This device** (`midnightDeviceProver.ts`): zkir-v2 2.1.0 (the prover the Nexus
+  sidecar uses) in a Worker inside an offscreen document, reached over one
+  dedicated port. Ledger-8 networks only; Stagenet keeps Gero Cloud. Keys are
+  pinned to the ledger source's SHA-256 (`midnightZkKeys.ts`): the DUST set ships
+  in the package (`src/assets/midnight-zk`, 3.75 MB), the Zswap set (~29 MB) is
+  fetched from `VITE_MIDNIGHT_ZK_KEYS_URL` and is needed only by the shielded flag.
+  The worker exists only in built pages, not under the Vite dev server.
+- A proven transaction goes to `/tx/submit-proven`, which carries no witness.
+  `/tx/submit` (Gero Cloud proves) is left for the one-off fallback on Stagenet
+  and for an unsealed transaction a dapp submits itself.
+- Submits wait 110 s; a lost reply is settled by looking the transaction up by
+  its ledger identifiers (`midnightSubmitRecovery.ts`). Identifiers are fixed at
+  build time and survive proving and binding.
+- Measured (Apple M4, Node/V8, other sessions running): DUST spend 7.5-9.5 s,
+  Zswap spend 56 s. `MIDNIGHT_PROVE=1 npx vitest run
+  src/chains/midnight/midnightZkKeyMaterial.spec.ts` reproduces them.

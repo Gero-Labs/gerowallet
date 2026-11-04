@@ -2,8 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import i18n from '@/plugins/i18n';
-import { extractNexusErrorMessage, friendlyDappTxError, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
+import { extractNexusErrorMessage, friendlyDappTxError, friendlyTxError, isCollateralError, isInsufficientAdaError, isMissingInputError, shortfallLovelaceFromMessage } from './txErrors';
 import {
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
@@ -146,6 +148,16 @@ describe('friendlyTxError on submit failures', () => {
   });
 });
 
+describe('friendlyTxError on a signing refusal', () => {
+  it('localizes the background\'s refusal of a transaction marked to fail', () => {
+    expect(friendlyTxError(new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE))).toBe(i18n.t('errors.markedToFailRefused'));
+  });
+
+  it('localizes the Trezor refusal of a body it cannot carry', () => {
+    expect(friendlyTxError(new Error(TREZOR_GOVERNANCE_REFUSAL_MESSAGE))).toBe(i18n.t('errors.trezorGovernanceRefused'));
+  });
+});
+
 describe('friendlyTxError on Nexus input limits', () => {
   it('explains a wallet too fragmented for one transaction, with both counts', () => {
     const localized = friendlyTxError(new InputLimitError(439, 200));
@@ -170,6 +182,13 @@ describe('shortfallLovelaceFromMessage', () => {
   it('reads required minus available from a change min-UTxO rejection', () => {
     expect(shortfallLovelaceFromMessage('Insufficient ADA to cover minimum UTXO for change output. Available: 800000 lovelace, required: 1200000 lovelace'))
       .toBe(BigInt(400_000));
+  });
+
+  // Nexus's transfer builder, when the inputs it was offered hold less than the outputs:
+  // the case a wallet spread over more UTxOs than one request carries runs into.
+  it('reads required minus available from a transfer build short of ADA', () => {
+    expect(shortfallLovelaceFromMessage('Insufficient ADA. Required: 15000.170000 ADA (15000170000 lovelace), available: 9112.400000 ADA (9112400000 lovelace)'))
+      .toBe(BigInt(5_887_770_000));
   });
 
   it('returns undefined for anything else', () => {
@@ -211,5 +230,43 @@ describe('friendlyTxError: Submit API', () => {
     const raw = `${SUBMIT_API_ENDPOINT_PREFIX}Wallet could not send the tx. Ogmios rejected tx: The withdrawal amount does not match the reward balance.`;
     expect(friendlyTxError(new Error(raw))).toContain('Your submit endpoint: ');
     expect(friendlyTxError(new Error(raw))).toContain('withdrawal amount does not match');
+  });
+});
+
+describe('friendlyTxError on the request rate limit', () => {
+  // gero-backend's Nexus proxy answers 429 `{"error":"rate_limit_exceeded","message":"Too many
+  // requests — slow down"}`; a sweep on a large wallet hit it (2026-11-02) and the dialog showed
+  // the raw text, em dash mangled. The status may come on the enriched error, the words in the
+  // message, or both.
+  it('localizes a 429 whichever way it arrives', () => {
+    const expected = i18n.t('errors.rateLimited');
+    const enriched = Object.assign(new Error('Too many requests — slow down'), {
+      response: { status: 429, data: { error: 'rate_limit_exceeded', message: 'Too many requests — slow down' } },
+    });
+    expect(friendlyTxError(enriched)).toBe(expected);
+    expect(friendlyTxError(Object.assign(new Error('Request failed with status code 429'), { response: { status: 429 } }))).toBe(expected);
+    expect(friendlyTxError(new Error('Too many requests — slow down'))).toBe(expected);
+    expect(friendlyTxError(new Error(JSON.stringify({ data: { error: 'rate_limit_exceeded', message: 'slow down' }, status: 429 })))).toBe(expected);
+  });
+
+  it('never shows the server text', () => {
+    const localized = friendlyTxError(new Error('Too many requests — slow down'));
+    expect(localized).not.toContain('slow down');
+    expect(localized).not.toBe('errors.rateLimited');
+  });
+});
+
+describe('isMissingInputError', () => {
+  it.each([
+    'BadInputsUTxO',
+    'Ogmios rejected tx: (BadInputsUTxO (fromList [TxIn ...]))',
+    'The transaction contains unknown UTxO references as inputs',
+  ])('recognises %s', (message) => {
+    expect(isMissingInputError(message)).toBe(true);
+  });
+
+  it('does not mistake other refusals for it', () => {
+    expect(isMissingInputError('ValueNotConservedUTxO')).toBe(false);
+    expect(isMissingInputError('OutsideValidityIntervalUTxO')).toBe(false);
   });
 });

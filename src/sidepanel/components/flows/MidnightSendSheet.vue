@@ -379,6 +379,7 @@ import TransactionDetailsCard, {
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { walletStore } from '@/stores/walletStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
+import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
 import { midnightStore } from '@/stores/midnightStore';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
@@ -725,20 +726,28 @@ async function acceptConsent() {
   pendingCredentials.value = null;
   pendingAuthorization = null;
   if (!credentials || !current?.()) { credentials?.prfSecret?.fill(0); return; }
-  const mode = midnightStore.proofServer.mode;
-  if (mode !== 'local' && (mode === 'zkpaas' ? 'zkpaas' : 'cloud') !== consentProvider.value) {
+  // The prover may have changed while the notice was open: decide again.
+  if (sendProver() !== consentProvider.value) {
     await approval.run(() => routeSend(credentials, current));
     return;
   }
   await approval.run(() => submitSend(credentials, current));
 }
+/**
+ * Who proves this public send (midnight-tx.service's rule): in Gero Cloud
+ * mode its DUST fee is proven on this device, so only zkPaaS (and Stagenet,
+ * which this device cannot prove) still needs a consent notice.
+ */
+function sendProver() {
+  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded');
+}
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   if (!current()) { credentials.prfSecret?.fill(0); return; }
-  const mode = midnightStore.proofServer.mode;
-  if (mode !== 'local' && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
+  const prover = sendProver();
+  if ((prover === 'cloud' || prover === 'zkpaas') && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) {
     pendingCredentials.value = credentials;
     pendingAuthorization = current;
-    consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
+    consentProvider.value = prover;
     consentOpen.value = true;
     submitting.value = false;
     return;
@@ -1004,6 +1013,7 @@ const timelineLabels = computed(() => ({
     : t('midnight.send.stageSync')) as string,
   sign: t('midnight.send.stageSign') as string,
   submit: t('midnight.send.stageSubmit') as string,
+  provingDevice: t('midnight.send.stageProvingDevice') as string,
   provingLocal: t('midnight.send.stageProvingLocal') as string,
   provingZkpaas: t('midnight.send.stageProvingZkpaas') as string,
 }));

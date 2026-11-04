@@ -1121,6 +1121,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
 import { midnightStore } from '@/stores/midnightStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
+import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
@@ -3062,7 +3063,7 @@ function rejectMidnightMakeTransfer() {
 
 async function buildMidnightTransferTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
-  approvedProver: 'local' | 'cloud' | 'zkpaas',
+  approvedProver: WalletProver,
 ): Promise<{ tx: string }> {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -3088,24 +3089,25 @@ async function buildMidnightTransferTx(
   );
 }
 
-// The transfer is proved by the user's chosen prover (buildAndSignUnshieldedTransfer).
-// A remote prover receives the DUST-fee proof inputs, so it needs the same
-// consent the wallet's own sends require. The consent dialog records it
-// asynchronously, so the user approves the transfer again afterwards (a PassKey
-// popup must open inside that click).
+// The transfer is proved by the user's chosen prover (buildAndSignUnshieldedTransfer):
+// in Gero Cloud mode its DUST fee is proven on this device. A remote prover
+// (zkPaaS, or Gero Cloud on Stagenet, which this device cannot prove) receives
+// the DUST-fee proof inputs, so it needs the same consent the wallet's own
+// sends require. The consent dialog records it asynchronously, so the user
+// approves the transfer again afterwards (a PassKey popup must open inside
+// that click).
 const transferConsentOpen = ref(false);
-const transferProver = computed<'local' | 'cloud' | 'zkpaas'>(() => {
-  const mode = midnightStore.proofServer.mode;
-  return mode === 'local' ? 'local' : mode === 'zkpaas' ? 'zkpaas' : 'cloud';
-});
+const transferProver = computed<WalletProver>(() =>
+  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded'));
 const transferProverLabel = computed(() => t(
-  transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
-    : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
+  transferProver.value === 'device' ? 'midnight.proofServer.deviceLabel'
+    : transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
+      : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
 ));
 /** True (and the consent dialog opens) when the chosen remote prover has no recorded consent yet. */
 function transferNeedsProvingConsent(): boolean {
   const prover = transferProver.value;
-  if (prover === 'local' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
+  if (prover === 'local' || prover === 'device' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
   transferConsentOpen.value = true;
   return true;
 }

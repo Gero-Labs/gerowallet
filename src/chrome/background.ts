@@ -2,6 +2,9 @@
 import './backgroundLocales';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
+import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
+import { midnightTxIdentifiers } from '@/chains/midnight/midnightTxIdentifiers';
+import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
 import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
@@ -12,7 +15,7 @@ import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
 import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
 import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
 import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
-import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
@@ -76,6 +79,7 @@ import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip
 import { legacyCancelPrepareHandler } from '@/chrome/legacyCancelPrepare';
 import { fetchLegacyListings } from '@/api/legacy-listings-api';
 import { cip113TransferNeedsOwnKey } from '@/chrome/cip113Guard';
+import { isMarkedToFailCbor } from '@/shared/utils/keyCreds';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import type { Cip45Session } from '@/services/cip45/types';
@@ -498,6 +502,9 @@ function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
     }
   }
 }
+
+// The offscreen Midnight prover document's port (midnightDeviceProver.ts).
+chrome.runtime.onConnect.addListener((port) => { acceptMidnightProverPort(port); });
 
 chrome.runtime.onConnect.addListener((port) => {
   if (!port.name.startsWith('mini-gero-dapp-channel')) return;
@@ -1711,6 +1718,22 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
   }
 }
 
+/**
+ * The refusal at a dApp signing entry, before the approval UI opens. Returns the fixed message the
+ * entry sends back (friendlyTxError() localises each), or null:
+ * - a transaction marked to fail (isValid: false), read from its CBOR. It only forfeits its
+ *   collateral, which an input's witness can authorise; no dApp sends one honestly, and no Gero
+ *   flow builds one;
+ * - a CIP-113 programmable input (refusalForProgrammableInputs).
+ * Never reads the Send allowance: every dApp path stays refused.
+ */
+function dappSignRefusal(txCbor: unknown): string | null {
+  if (isMarkedToFailCbor(txCbor)) return MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE;
+  const programmable = refusalForProgrammableInputs(txCbor);
+  if (programmable) debugLog(programmable);
+  return programmable ? CIP113_SIGN_REFUSAL_MESSAGE : null;
+}
+
 /** Why a hardware signer was refused: `reason` for the log, `message` for the page that asked. */
 interface HardwareSignRefusal {
   reason: string;
@@ -1748,9 +1771,13 @@ function marketSignRefusal(txCbor: unknown): string | null {
  * only: the one CIP-113 transfer CIP113_PREPARE_TRANSFER verified passes
  * (refusalForProgrammableInputs otherwise), and so does a market transaction that holds an
  * allowance or a dApp pass (marketSignRefusal). None is used up here (the device may still be
- * declined); they expire on their own. A refusal says which message the page reports.
+ * declined); they expire on their own. A transaction marked to fail is refused whatever it holds.
+ * A refusal says which message the page reports.
  */
 function hardwareSignRefusal(txCbor: unknown): HardwareSignRefusal | null {
+  if (isMarkedToFailCbor(txCbor)) {
+    return { reason: 'refusing to sign a transaction marked to fail', message: MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE };
+  }
   const refusal = refusalForProgrammableInputs(txCbor);
   if (refusal) {
     const wallet = walletManager.getWallet();
@@ -1806,6 +1833,7 @@ app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendRespons
   // A worker this message woke may not have restored the wallet yet, and without it the
   // check would pass everything.
   await booted();
+  // `message` names the refusal, so the page shows why (assertCip113SignAllowed).
   const refusal = hardwareSignRefusal(request.data?.txCbor);
   if (refusal) debugLog(refusal.reason);
   // `message` is what the page throws: CIP-113's or the market's, so each flow can map its own.
@@ -1918,12 +1946,11 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     return signTxReply({ error: APIError.Refused });
   }
 
-  const programmableRefusal = refusalForProgrammableInputs(request.data?.tx);
-  if (programmableRefusal) {
-    debugLog(programmableRefusal);
+  const signRefusal = dappSignRefusal(request.data?.tx);
+  if (signRefusal) {
     // Refused, like the whitelist check above: this returns before the approval UI opens
     // and Gero does hold the key, so the wallet is declining by policy.
-    return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
+    return signTxReply({ error: { code: APIError.Refused.code, info: signRefusal } });
   }
 
   // A transaction creating a Gero listing or spending one of the wallet's own is not refused
@@ -3289,12 +3316,11 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
     const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
 
     // The relay only forwards CBOR, so the receiving device never sees our index.
-    const crossDeviceRefusal = refusalForProgrammableInputs(unsignedCbor);
+    const crossDeviceRefusal = dappSignRefusal(unsignedCbor);
     if (crossDeviceRefusal) {
-      debugLog(crossDeviceRefusal);
       sendResponse({
         id: request.id,
-        data: { decision: 'rejected', reason: CIP113_SIGN_REFUSAL_MESSAGE },
+        data: { decision: 'rejected', reason: crossDeviceRefusal },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -5445,10 +5471,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           case 'cardano_signTx': {
             const wcParams = wcRequest.params || {};
             const wcTx = wcParams.tx || wcParams;
-            const wcProgrammableRefusal = refusalForProgrammableInputs(wcTx);
-            if (wcProgrammableRefusal) {
-              debugLog(wcProgrammableRefusal);
-              await wcService.respondError(topic, id, 4100, CIP113_SIGN_REFUSAL_MESSAGE);
+            const wcSignRefusal = dappSignRefusal(wcTx);
+            if (wcSignRefusal) {
+              await wcService.respondError(topic, id, 4100, wcSignRefusal);
               return;
             }
             // Not refused for a market touch: the approval screen previews it, and the worker
@@ -5777,10 +5802,9 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
       }
       case 'signTx': {
         // The same entry refusal as CIP-30 signTx, before the approval UI opens.
-        const programmableRefusal = refusalForProgrammableInputs(params.tx);
-        if (programmableRefusal) {
-          debugLog(programmableRefusal);
-          fail(APIError.Refused.code, CIP113_SIGN_REFUSAL_MESSAGE);
+        const signRefusal = dappSignRefusal(params.tx);
+        if (signRefusal) {
+          fail(APIError.Refused.code, signRefusal);
           break;
         }
         // Not refused for a market touch: the approval screen previews it, and the worker holds
@@ -5929,14 +5953,17 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
 
 /**
  * Midnight: DUST-balance + sign the unproven unshielded NIGHT-transfer tx
- * Nexus built. Returns the signed-but-unproven tx hex. Sidecar's /tx/finalize
- * handles ZK proving + binding + submission.
+ * Nexus built. With `proving` (`{ device: true }` in Gero Cloud mode, or the
+ * user's proof server) it also proves + binds here, and the page submits the
+ * finished tx to /tx/submit-proven. Without it the tx is returned
+ * signed-but-unproven for Gero Cloud's /tx/finalize (the one-off fallback).
  *
- * Request shape: `{ unprovenTxHex: string, ttlMs: number,
- *                   password?: string, prfSecret?: number[] }`.
- * Response: `{ success: true, signedTxHex, proven, ledgerTxHash? }` —
+ * Request shape: `{ unprovenTxHex: string, ttlMs: number, intendedOutputs,
+ *                   proving?, sponsor?, password?: string, prfSecret?: number[] }`.
+ * Response: `{ success: true, signedTxHex, proven, ledgerTxHash?, txIdentifiers? }` —
  * `ledgerTxHash` only when `proving` made this handler prove + bind locally,
- * since only then is the finalized object in hand (see midnightTxHash.ts).
+ * since only then is the finalized object in hand (see midnightTxHash.ts);
+ * `txIdentifiers` lets the page find the tx on chain if the submit reply is lost.
  */
 app.addToOptions(
   MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
@@ -6017,17 +6044,25 @@ app.addToOptions(
       let ledgerTxHash: string | undefined;
       if (provingArg) {
         const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
-        const result = await proveUnshieldedTransfer({
-          sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
-        });
-        signedTxHex = result.provenTxHex;
-        ledgerTxHash = result.ledgerTxHash;
+        const { midnightActions } = await import('@/stores/midnightStore');
+        // The send timeline shows the fee proof as its own step (no percentage).
+        midnightActions.setSendProgress({ phase: 'proving', percent: -1 });
+        try {
+          const result = await proveUnshieldedTransfer({
+            sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
+          });
+          signedTxHex = result.provenTxHex;
+          ledgerTxHash = result.ledgerTxHash;
+        } finally {
+          midnightActions.setSendProgress(null);
+        }
       }
       if (identity && endpoints) await assertMidnightChainIdentityUnchanged(endpoints, identity);
       assertSession();
+      const txIdentifiers = await midnightTxIdentifiers(signedTxHex, network, !!provingArg);
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex, proven: !!provingArg, ledgerTxHash },
+        data: { success: true, signedTxHex, proven: !!provingArg, ledgerTxHash, txIdentifiers },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -6120,16 +6155,24 @@ function parseMidnightSponsor(value: unknown): { walletId: number; password?: st
 
 /**
  * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
- * requests (WP-P2 local mode; zkPaaS adds `headers`). This crosses the BG
+ * requests (WP-P2 local mode; zkPaaS adds `headers`; `{ device: true }` proves
+ * on this device, which sends nothing anywhere). This crosses the BG
  * message boundary from browser/options/popup context, so it's checked here
  * even though it originates from our own UI: http(s) scheme only, no
  * embedded credentials (a crafted `http://user:pass@host` URL would
  * otherwise smuggle Basic-Auth into the BG's fetch to the "proof server"),
  * and only allowlisted auth headers with sane, injection-free values.
  */
-function parseProvingRequest(value: unknown): { url: string; headers?: Record<string, string> } | undefined {
+function parseProvingRequest(value: unknown): WalletProvingRequest | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== 'object') throw new Error('proving must be an object');
+  // On-device proving (midnightDeviceProver.ts): exactly `{ device: true }`.
+  if ('device' in value) {
+    if ((value as { device?: unknown }).device !== true || Object.keys(value).length !== 1) {
+      throw new Error('proving.device must be exactly { device: true }');
+    }
+    return { device: true };
+  }
   const url = (value as { url?: unknown }).url;
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error('proving.url is required and must be a non-empty string');
@@ -6230,9 +6273,10 @@ app.addToOptions(
         provingArg,
         sponsorArg,
       );
+      const txIdentifiers = await midnightTxIdentifiers(signedTxHex, walletBg.network, proven);
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex, proven, ledgerTxHash },
+        data: { success: true, signedTxHex, proven, ledgerTxHash, txIdentifiers },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -7239,9 +7283,11 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
         throw new Error('This transaction is not proven, and GeroWallet is not set to prove it with Gero Cloud. Prove and seal it before submitting.');
       }
     }
+    // Lets a lost submit reply be settled by finding the tx on chain.
+    const watch = { identifiers: await midnightTxIdentifiers(tx, wallet.network, sealed) };
     const submitted = sealed
-      ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
-      : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+      ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' }, watch)
+      : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' }, watch);
     // Shown to the user as the tx id. The ledger hash when the relay reports
     // one (the finalize path), so it matches what history will show; a sealed
     // tx goes through submit-proven, which never reports one, and falls back

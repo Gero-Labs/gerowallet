@@ -172,12 +172,27 @@ export function createProveService(deps: ProveServiceDeps): ProveService {
     return true;
   }
 
-  async function sendSigned<T extends { sig: string }>(msg: Omit<T, 'sig'>): Promise<void> {
-    try {
-      transport.send(await signProveMessage<T>(msg, identity.privKeyHex) as unknown as ProveMessage);
-    } catch (e) {
-      log(`send failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
+  /**
+   * Tail of the outbound queue for signed frames. Signing is async (WebCrypto
+   * hashes), and two signatures in flight can finish in either order: unqueued,
+   * the 'proving' status runProof signs could overtake the 'queued' status
+   * handleInit was still signing, and the phone would see proving, then queued.
+   * Each frame is signed only once the frame issued before it has gone out, so
+   * frames leave in the order this file issues them.
+   */
+  let sendTail: Promise<void> = Promise.resolve();
+
+  function sendSigned<T extends { sig: string }>(msg: Omit<T, 'sig'>): Promise<void> {
+    const sent = sendTail.then(async () => {
+      try {
+        transport.send(await signProveMessage<T>(msg, identity.privKeyHex) as unknown as ProveMessage);
+      } catch (e) {
+        log(`send failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+    // Only a throwing `log` can reject `sent`; the queue must outlive that.
+    sendTail = sent.catch(() => undefined);
+    return sent;
   }
 
   async function reject(
@@ -312,16 +327,22 @@ export function createProveService(deps: ProveServiceDeps): ProveService {
     if (job.cancelled || active !== job) return; // cancelled while checking health
 
     log(`accept ${init.reqId} from ${init.from.slice(0, 8)} (${init.byteLen}B, ${init.chunkCount} chunks)`);
-    await sendSigned<ProveAccept>({
-      type: 'PROVE_ACCEPT',
-      reqId: init.reqId,
-      nonce: newId(),
-      from: identity.deviceId,
-      to: init.from,
-      ephPub: eph.pubKeyHex,
-      ledgerVersion: deps.ledgerVersion,
-    });
-    await status(job, 'queued');
+    // Queue 'queued' in the same turn as ACCEPT, not after ACCEPT has gone out.
+    // The phone can only seal chunks once it holds ACCEPT's ephPub, so 'proving'
+    // (issued when the last chunk opens) is then always queued behind both, no
+    // matter how fast the phone answers.
+    await Promise.all([
+      sendSigned<ProveAccept>({
+        type: 'PROVE_ACCEPT',
+        reqId: init.reqId,
+        nonce: newId(),
+        from: identity.deviceId,
+        to: init.from,
+        ephPub: eph.pubKeyHex,
+        ledgerVersion: deps.ledgerVersion,
+      }),
+      status(job, 'queued'),
+    ]);
   }
 
   function handleChunk(chunk: ProveChunk): void {

@@ -248,6 +248,9 @@ export const sharedConfig: UserConfig = {
     holdUntilCrawlEnd: true,
   },
   worker: {
+    // ES module workers: the Midnight prover worker (midnightDeviceProverWorker.ts)
+    // loads zkir with a dynamic import, which an IIFE worker bundle cannot split.
+    format: 'es',
     plugins: () => [
       stubEffectApiDocs,
       wasm(),
@@ -365,6 +368,8 @@ export default defineConfig(({ command }) => {
         input: {
           options: r('src/options/index.html'),
           sidepanel: r('src/sidepanel/index.html'),
+          // Offscreen document that hosts the on-device Midnight prover worker.
+          offscreen: r('src/offscreen/midnight-prover.html'),
         },
         onwarn(warning, warn) {
           // Suppress window/window warnings - harmless artifacts from terser minification
@@ -404,6 +409,8 @@ export default defineConfig(({ command }) => {
               // Match manifest resources and background notification URLs, as
               // the dev prepare step does. Clean CI has no old public assets.
               { src: 'src/assets/notifications/*', dest: 'extension/public', flatten: true },
+              // Pinned Midnight DUST-fee proving keys (midnightZkKeys.ts), read by the prover worker.
+              { src: 'src/assets/midnight-zk/*', dest: 'extension/midnight-zk', flatten: true },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',

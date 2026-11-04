@@ -26,7 +26,7 @@ function summaryWith(over: Partial<TxApprovalSummary> = {}): TxApprovalSummary {
   const tx = { id: '0'.repeat(64), body: { inputs: [], outputs: [], fee: 170_000n }, witness: {} } as unknown as Cardano.Tx;
   const base = buildTxApprovalSummary(tx, {
     paymentAddresses: new Set(), changeAddresses: new Set(), ownPaymentKeyHashes: new Set(), ownStakeKeyHashes: new Set(),
-    ownRewardAccounts: new Set(), ownDrepKeyHashes: new Set(), ownCcHotKeyHashes: new Set(), walletNetworkId: Cardano.NetworkId.Testnet,
+    isOwnRewardAccount: () => false, ownDrepKeyHashes: new Set(), ownCcHotKeyHashes: new Set(), ownCcColdKeyHashes: new Set(), walletNetworkId: Cardano.NetworkId.Testnet,
     resolveAsset: () => ({ name: 'Token', decimals: 0 }), ownListings: new Map(), listingScriptHashes: new Set(), listingFees: new Map(), listingDeployments: [],
   });
   return { ...base, ...over };

@@ -35,15 +35,29 @@
       </div>
 
       <template v-else-if="step === 'review'">
+        <!-- A top-up the largest UTxOs one request carries cannot cover goes out as merges and
+             one payment: the merges being built, then the plan with each stage's fee, on screen
+             before the user approves it; while it signs and sends, where it is. -->
+        <SweepPlanCard
+          v-if="sweepPreparing"
+          :utxo-count="sweepPreparing.utxoCount"
+          :merges="sweepPreparing.total"
+          :preparing="{ built: sweepPreparing.built, total: sweepPreparing.total, waiting: sweepPreparing.waiting }"
+        />
+        <SweepTimeline v-else-if="sweepPlan" v-bind="sweepPlan" />
+        <SweepProgressPanel v-if="sweepProgress || sweepStop" :progress="sweepProgress" :stop="sweepStop" />
         <CardSignSection
           ref="signSection"
           :label="t('card.signAndTopUp')"
           :prepare="buildTx"
-          :disabled="!depositAddress"
+          :disabled="!depositAddress || planning"
+          :prerequisites="sweepPrerequisites"
           @busy="busy = $event"
+          @progress="onSweepProgress"
+          @interrupted="sweepStop = $event"
           @submitted="onSubmitted"
         />
-        <GButton tier="tertiary" block :disabled="busy" @click="step = 'amount'">{{ t('common.back') }}</GButton>
+        <GButton tier="tertiary" block :disabled="busy" @click="backToAmount">{{ t('common.back') }}</GButton>
       </template>
 
       <div v-else class="topup__actions">
@@ -55,16 +69,23 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import { HexBlob } from '@cardano-sdk/util';
+import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { usePaymentSweep, type PaymentRequest } from '@/shared/composables/usePaymentSweep';
+import type { SweepProgress, SweepStop } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import cardStore from '@/stores/modules/card';
 import { walletStore } from '@/stores/walletStore';
-import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { NEXUS_MAX_INPUTS, txOutToNexusOutput } from '@/api/nexus-tx-api';
+import { paymentUtxos } from '@/shared/utils/pendingSpends';
+import { formatAda } from '@/shared/utils/format';
+import { debugLog } from '@/utils/debug';
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
+import SweepPlanCard from '@/modules/dashboard/components/sweep/SweepPlanCard.vue';
+import SweepProgressPanel from '@/modules/dashboard/components/sweep/SweepProgressPanel.vue';
+import SweepTimeline from '@/modules/dashboard/components/sweep/SweepTimeline.vue';
 import CardSignSection from '../ui/CardSignSection.vue';
 import AmountInputStep from './top-up/AmountInputStep.vue';
 import SummaryStep from './top-up/SummaryStep.vue';
@@ -88,8 +109,32 @@ const busy = ref(false);
 const txId = ref('');
 const credited = ref(false);
 const watchingBalance = ref(false);
-const signSection = ref<{ reset: () => void } | null>(null);
+const signSection = ref<{ reset: () => void; canSweep: boolean } | null>(null);
 let balanceTimer: ReturnType<typeof setInterval> | null = null;
+
+// A top-up the largest UTxOs one request carries cannot cover, from a wallet that holds it:
+// merges into the wallet first, then the payment, under one approval (see usePaymentSweep).
+const paymentSweep = usePaymentSweep();
+const { preparing: sweepPreparing, prerequisites: sweepPrerequisites } = paymentSweep;
+const sweepProgress = ref<SweepProgress | null>(null);
+const sweepStop = ref<SweepStop | null>(null);
+/** Signing waits while the review finds out whether the top-up needs merges first. */
+const planning = ref(false);
+/** Bumped when a review is left: its plan, still being worked out, no longer counts. */
+let planEpoch = 0;
+
+/** The plan the user approves, each stage's fee included, once its merges and payment are built. */
+const sweepPlan = computed(() => {
+  const built = paymentSweep.sweep.value;
+  const payment = paymentSweep.payment.value;
+  if (!built || !payment) return null;
+  return {
+    steps: built.merges.length + 1,
+    utxoCount: built.utxoCount,
+    mergeFee: formatAda(built.mergeFee),
+    paymentFee: formatAda(BigInt(payment.tx.body.fee)),
+  };
+});
 
 const buyRate = computed(() => {
   const rate = parseFloat(String(cardStore.state.exchangeRate?.buy ?? ''));
@@ -125,12 +170,68 @@ async function freshDepositAddress(): Promise<Cardano.PaymentAddress | null> {
   }
 }
 
+/** Forget a review's sweep: its plan, merges and where it stopped. */
+function leaveReview(): void {
+  planEpoch++;
+  planning.value = false;
+  paymentSweep.reset();
+  sweepProgress.value = null;
+  sweepStop.value = null;
+}
+
 async function toReview(): Promise<void> {
+  leaveReview();
   step.value = 'review';
   depositAddress.value = null;
   loadingAddress.value = true;
   depositAddress.value = await freshDepositAddress();
   loadingAddress.value = false;
+  await planSweep();
+}
+
+function backToAmount(): void {
+  leaveReview();
+  step.value = 'amount';
+}
+
+/** The amount in lovelace, or null when it is not a valid top-up. */
+function amountLovelace(): Cardano.Lovelace | null {
+  const ada = parseFloat(amounts.value.adaAmount);
+  if (!Number.isFinite(ada) || ada < MIN_TOP_UP_ADA) return null;
+  return BigInt(Math.floor(ada * 1_000_000)) as Cardano.Lovelace;
+}
+
+/** The wallet's UTxOs a top-up may spend: not its collateral, nor any a submitted transaction already spends. */
+function spendableUtxos(): Cardano.Utxo[] {
+  return paymentUtxos((walletStore.utxos ?? []) as Cardano.Utxo[], walletStore.collateral as Cardano.Utxo | null | undefined, walletStore.transactions);
+}
+
+function topUpRequest(address: Cardano.PaymentAddress, lovelace: Cardano.Lovelace): PaymentRequest {
+  return {
+    outputs: [txOutToNexusOutput({ address, value: { coins: lovelace, assets: new Map() } })],
+    changeAddress: walletStore.loggedWallet.baseAddress,
+  };
+}
+
+/**
+ * A wallet holding more UTxOs than one request carries may need its top-up sent as a sweep.
+ * Find out at review, so the plan is on screen before the user approves it. A failure here is
+ * left to the build at signing time, which reports it.
+ */
+async function planSweep(): Promise<void> {
+  const address = depositAddress.value;
+  const lovelace = amountLovelace();
+  const utxos = spendableUtxos();
+  if (!address || lovelace === null || utxos.length <= NEXUS_MAX_INPUTS || !signSection.value?.canSweep) return;
+  const epoch = planEpoch;
+  planning.value = true;
+  try {
+    await paymentSweep.build(topUpRequest(address, lovelace), utxos, true);
+  } catch (error) {
+    debugLog('Top-up: no plan at review', error);
+  } finally {
+    if (epoch === planEpoch) planning.value = false;
+  }
 }
 
 async function buildTx(): Promise<Cardano.Tx> {
@@ -142,22 +243,20 @@ async function buildTx(): Promise<Cardano.Tx> {
     throw new Error(t('card.paymentDetailsRefreshed'));
   }
 
-  const ada = parseFloat(amounts.value.adaAmount);
-  if (!Number.isFinite(ada) || ada < MIN_TOP_UP_ADA) throw new Error(t('errors.invalidAmount'));
-  const lovelace = BigInt(Math.floor(ada * 1_000_000)) as Cardano.Lovelace;
+  const lovelace = amountLovelace();
+  if (lovelace === null) throw new Error(t('errors.invalidAmount'));
 
-  const outputs: Cardano.TxOut[] = [{ address, value: { coins: lovelace, assets: new Map() } }];
-  const nexusOutputs = outputs.map(txOutToNexusOutput);
-  const request: BuildTxRequest = {
-    outputs: nexusOutputs,
-    changeAddress: walletStore.loggedWallet.baseAddress,
-    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral, true, {
-      requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
-    }),
-  };
-  const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
-  if (!txCbor) throw new Error(t('errors.buildTransactionFailed'));
-  return Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
+  const planned = !!paymentSweep.sweep.value;
+  const tx = await paymentSweep.build(topUpRequest(address, lovelace), spendableUtxos(), signSection.value?.canSweep ?? false);
+  // A sweep found only now was never on screen: show its plan and let the user approve that.
+  if (!planned && paymentSweep.sweep.value) throw new Error(t('card.topUpSweepReview'));
+  return tx;
+}
+
+function onSweepProgress(progress: SweepProgress | null): void {
+  sweepProgress.value = progress;
+  // A sweep running again replaces where it stopped.
+  if (progress) sweepStop.value = null;
 }
 
 function currentBalance(): number | null {
@@ -204,6 +303,7 @@ function onSubmitted(id: string): void {
 function close(): void {
   if (busy.value) return;
   stopWatching();
+  leaveReview();
   signSection.value?.reset();
   step.value = 'amount';
   amounts.value = { adaAmount: '', eurAmount: '' };

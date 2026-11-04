@@ -63,15 +63,19 @@ describe('NFT market signing wiring', () => {
 
   it('the hardware refusal includes the market refusal, with its own message', () => {
     const body = functionBody(bg, 'function hardwareSignRefusal(');
+    // A transaction marked to fail is refused first, whatever allowance it holds.
+    expect(body.indexOf('isMarkedToFailCbor(txCbor)')).toBeGreaterThan(-1);
+    expect(body.indexOf('isMarkedToFailCbor(txCbor)')).toBeLessThan(body.indexOf('refusalForProgrammableInputs(txCbor)'));
+    expect(body).toContain('MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE');
     expect(body).toContain('marketSignRefusal(txCbor)');
     expect(body).toContain('NFT_MARKET_SIGN_REFUSAL_MESSAGE');
     expect(body).toContain('CIP113_SIGN_REFUSAL_MESSAGE');
   });
 
-  it('the dApp refusal of programmable inputs never reads the market guard', () => {
-    const body = functionBody(bg, 'function refusalForProgrammableInputs(');
-    expect(body).not.toMatch(/Market/);
-    expect(bg.match(/refusalForProgrammableInputs\(/g)!.length).toBeGreaterThan(4);
+  it('the dApp refusals never read the market guard', () => {
+    expect(functionBody(bg, 'function refusalForProgrammableInputs(')).not.toMatch(/Market/);
+    expect(functionBody(bg, 'function dappSignRefusal(')).not.toMatch(/Market/);
+    expect(bg.match(/dappSignRefusal\(/g)!.length).toBeGreaterThan(3);
     // The market refusal is used by the hardware refusal only (its definition and that call).
     expect(bg.match(/marketSignRefusal\(/g)).toHaveLength(2);
   });
@@ -88,7 +92,7 @@ describe('NFT market signing wiring', () => {
     it('CIP-30 signTx opens it after the whitelist and CIP-113 checks, and drops it when the request is answered', () => {
       const entry = bg.slice(bg.indexOf('app.add(METHOD.signTx,'), bg.indexOf('app.add(METHOD.submitTx,'));
       const whitelist = entry.indexOf('WalletStore.isWhitelisted(request.origin)');
-      const cip113 = entry.indexOf('refusalForProgrammableInputs(request.data?.tx)');
+      const cip113 = entry.indexOf('dappSignRefusal(request.data?.tx)');
       const open = entry.indexOf('openDappMarketPass(walletManager.getWallet(), request.data?.tx)');
       const firstPrompt = entry.indexOf('const handleMiniGeroSignTx');
       expect(whitelist).toBeGreaterThan(-1);
@@ -104,7 +108,7 @@ describe('NFT market signing wiring', () => {
 
     it('CIP-45 signTx opens it after its CIP-113 refusal and drops it however the request ends', () => {
       const entry = bg.slice(bg.indexOf("      case 'signTx': {\n        // The same entry refusal as CIP-30"), bg.indexOf("      case 'signData': {\n        if (reservedSigningDomain(params.payload))"));
-      const cip113 = entry.indexOf('refusalForProgrammableInputs(params.tx)');
+      const cip113 = entry.indexOf('dappSignRefusal(params.tx)');
       const open = entry.indexOf('openDappMarketPass(walletManager.getWallet(), params.tx)');
       expect(cip113).toBeGreaterThan(-1);
       expect(open).toBeGreaterThan(cip113);
@@ -114,7 +118,7 @@ describe('NFT market signing wiring', () => {
     it('WalletConnect cardano_signTx opens it after its CIP-113 refusal and drops it however the request ends', () => {
       const start = bg.indexOf("case 'cardano_signTx': {");
       const entry = bg.slice(start, bg.indexOf("case 'cardano_signData': {", start));
-      const cip113 = entry.indexOf('refusalForProgrammableInputs(wcTx)');
+      const cip113 = entry.indexOf('dappSignRefusal(wcTx)');
       const open = entry.indexOf('openDappMarketPass(walletManager.getWallet(), wcTx)');
       expect(cip113).toBeGreaterThan(-1);
       expect(open).toBeGreaterThan(cip113);

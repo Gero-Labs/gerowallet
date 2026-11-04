@@ -7,19 +7,19 @@
 // from it succeeds on chain and Nexus keeps the difference. `verifyBuy` therefore refuses unless
 // this independently read UTxO says the same thing.
 //
-// Why PROVEN: a first version asked Koios `utxo_info` what the UTxO holds, which
-// made Koios a trusted party for its content. A transaction id is the blake2b-256 hash of the
+// Why PROVEN: a first version asked a server what the UTxO holds, which made that
+// server a trusted party for its content. A transaction id is the blake2b-256 hash of the
 // transaction body, so the CBOR of the transaction that created `txHash#index` proves that
 // output's address, value and inline datum, whoever served the CBOR. This reads it through the
-// wallet's hash-proven path (`provenInputs.ts`: Koios `tx_cbor`, kept only if the body hashes to
-// the id asked for) and takes output `index` from it. Koios can still refuse to answer or lie
+// wallet's hash-proven path (`provenInputs.ts`: gero-backend's transaction CBOR, kept only if the body hashes to
+// the id asked for) and takes output `index` from it. The server can still refuse to answer or lie
 // about what exists (both fail the buy), but it can no longer make the wallet believe a
 // different listing than the one on chain.
 //
 // Spent-ness is NOT proven and not asked: a spent listing is still readable from its creating
 // transaction, and a buy that spends it fails phase 1 on submission at no cost to the buyer (the
 // collateral is only taken when a script runs). The earlier `utxo_info` `is_spent` check was
-// dropped with the call, since it could be kept only as a second Koios request whose content we
+// dropped with the call, since it could be kept only as a second request whose content we
 // would not trust for anything else.
 //
 // Fails closed and strictly: an HTTP error, a timeout (while connecting or while reading the
@@ -28,9 +28,8 @@
 // answer.
 
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { KOIOS_URLS } from '@/api/spo-api';
 import type { ListingRef } from '@/api/nft-market-api';
-import { koiosSource, provenTxOutput } from '@/shared/utils/provenInputs';
+import { backendSource, provenTxOutput } from '@/shared/utils/provenInputs';
 import { NFT_MARKET_ALLOWED_NETWORKS } from '@/utils/nftMarketDeployments';
 
 /** What the chain holds at the listing's out-ref. */
@@ -50,14 +49,14 @@ export interface ListingChainUtxo {
 }
 
 export type ListingUtxoErrorCode =
-  /** The network is not one the market runs on, or has no Koios host. */
+  /** The network is not one the market runs on. */
   | 'UNSUPPORTED_NETWORK'
-  /** Koios could not be reached, timed out (also while the body was being read), or answered with an HTTP error. */
+  /** gero-backend could not be reached, timed out (also while the body was being read), or answered with an HTTP error. */
   | 'UNREACHABLE'
-  /** The transaction is unknown to Koios, or it created no output at that index. */
+  /** The transaction is unknown to gero-backend, or it created no output at that index. */
   | 'NOT_FOUND'
   /**
-   * Koios answered, but not with something that proves the UTxO: a body that is not JSON, bytes
+   * gero-backend answered, but not with something that proves the UTxO: a body that is not JSON, bytes
    * that are not a transaction or do not hash to the id asked for, or an output of the wrong shape.
    */
   | 'MALFORMED';
@@ -78,11 +77,10 @@ function malformed(detail: string): never {
 /**
  * Read the UTxO `ref` from the creating transaction's CBOR on `network`, proven against the
  * transaction id. Throws ListingUtxoError, never returns a guess. Only the networks the market
- * runs on are asked about, each on its own Koios host.
+ * runs on are asked about.
  */
 export async function fetchListingUtxoProven(ref: ListingRef, network: string): Promise<ListingChainUtxo> {
-  // The allow-list comes first: `KOIOS_URLS[network]` alone would answer for any inherited key.
-  if (!NFT_MARKET_ALLOWED_NETWORKS.includes(network) || !KOIOS_URLS[network]) {
+  if (!NFT_MARKET_ALLOWED_NETWORKS.includes(network)) {
     throw new ListingUtxoError('UNSUPPORTED_NETWORK', `the market is not served on ${String(network)}`);
   }
   const txHash = typeof ref?.txHash === 'string' ? ref.txHash.toLowerCase() : '';
@@ -92,24 +90,24 @@ export async function fetchListingUtxoProven(ref: ListingRef, network: string): 
 
   let cbor: string | undefined;
   try {
-    cbor = (await koiosSource(network)([txHash])).get(txHash);
+    cbor = (await backendSource(network)([txHash])).get(txHash);
   } catch (e) {
     // `Response.json()` rejects with a SyntaxError for a body that is not JSON; everything else
     // (no connection, an HTTP error, the timeout firing while the body is still being read) is
-    // Koios not answering.
-    if ((e as Error | undefined)?.name === 'SyntaxError') malformed('the Koios answer is not JSON');
-    throw new ListingUtxoError('UNREACHABLE', 'Koios could not be reached or did not answer in time');
+    // gero-backend not answering.
+    if ((e as Error | undefined)?.name === 'SyntaxError') malformed('the gero-backend answer is not JSON');
+    throw new ListingUtxoError('UNREACHABLE', 'gero-backend could not be reached or did not answer in time');
   }
-  // Koios answers an unknown transaction with an empty list.
-  if (!cbor) throw new ListingUtxoError('NOT_FOUND', 'Koios does not know the transaction that created this UTxO');
+  // gero-backend leaves out a transaction it does not know, as does a build with no backend URL.
+  if (!cbor) throw new ListingUtxoError('NOT_FOUND', 'gero-backend does not know the transaction that created this UTxO');
 
   const proven = provenTxOutput(cbor, txHash, ref.outputIndex);
   if (!proven.output) {
     switch (proven.failure) {
       case 'undecodable':
-        return malformed('the bytes Koios served are not a transaction');
+        return malformed('the bytes gero-backend served are not a transaction');
       case 'wrong-transaction':
-        return malformed('the bytes Koios served do not hash to the transaction id of the listing');
+        return malformed('the bytes gero-backend served do not hash to the transaction id of the listing');
       default:
         throw new ListingUtxoError('NOT_FOUND', 'the transaction that created this listing has no such output');
     }

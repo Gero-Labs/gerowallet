@@ -1,23 +1,31 @@
-import { CIP113_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+
+/** The refusals the worker names (hardwareSignRefusal), each a fixed message friendlyTxError() localises. */
+const KNOWN_REFUSALS: ReadonlySet<string> = new Set([
+  CIP113_SIGN_REFUSAL_MESSAGE,
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
+  NFT_MARKET_SIGN_REFUSAL_MESSAGE,
+]);
 
 /**
  * Asks the worker whether `txCbor` may be signed, before a signer that runs in a document
  * (Ledger, Keystone, Trezor over WebUSB) puts it on the device. The refusal index
  * (refusalForProgrammableInputs), Gero's own Send allowance and the market guard's allowance live
- * in the worker, which the page cannot read, so it asks. Throws the worker's refusal message on a
- * refusal (the market's when the worker says so, CIP113_SIGN_REFUSAL_MESSAGE otherwise: the page
- * never repeats any other text the answer carries), and `noAnswer` when the worker does not
- * answer: without an answer, nothing is signed.
+ * in the worker, which the page cannot read, so it asks; the worker also refuses a transaction
+ * marked to fail. Throws the refusal the worker names (CIP113_SIGN_REFUSAL_MESSAGE when it names
+ * none it knows: the page never repeats any other text the answer carries), and `noAnswer` when
+ * the worker does not answer: without an answer, nothing is signed.
  */
 export async function assertCip113SignAllowed(txCbor: string, noAnswer: string): Promise<void> {
   const preflight = (await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.CIP113_SIGN_PREFLIGHT,
     data: { txCbor },
-  })) as { data?: { success?: boolean; refused?: boolean; message?: string } };
+  })) as { data?: { success?: boolean; refused?: boolean; message?: unknown } };
   if (preflight?.data?.refused) {
-    throw new Error(preflight.data.message === NFT_MARKET_SIGN_REFUSAL_MESSAGE ? NFT_MARKET_SIGN_REFUSAL_MESSAGE : CIP113_SIGN_REFUSAL_MESSAGE);
+    const message = preflight.data.message;
+    throw new Error(typeof message === 'string' && KNOWN_REFUSALS.has(message) ? message : CIP113_SIGN_REFUSAL_MESSAGE);
   }
   if (preflight?.data?.success !== true) throw new Error(noAnswer);
 }
