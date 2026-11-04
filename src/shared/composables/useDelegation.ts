@@ -13,6 +13,7 @@ import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import { delegationCertificates, signsSeparateStakeCertificates } from '@/shared/utils/stakeCertificates';
 import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 
@@ -101,29 +102,37 @@ export function useDelegation() {
 
       // Trezor can't sign the combined Conway certs (StakeVoteDelegCert /
       // StakeVoteRegDelegCert) that nexus emits, so it always uses the client-side
-      // @cardano-sdk builder below (separate certs). Software + Ledger use nexus.
+      // @cardano-sdk builder below. Software + Ledger use nexus. Trezor and Ledger
+      // get separate certs: Ledger's Cardano app 7 refuses the combined ones (#1431).
       const isTrezorWallet = loggedWallet.value?.type === WalletType.Trezor;
+      const separate = signsSeparateStakeCertificates(loggedWallet.value?.type);
+      // Already registered with a DRep → pool-only stake delegation. Otherwise the
+      // first delegation also abstains, registering the stake key when inactive.
+      const hasDrep = isRegistered && !!stakingAccount.drep_id;
+      const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
 
       // Nexus migration: build the delegation server-side for software + Ledger.
       if (featureFlagsStore.isNexusDelegateEnabled() && !isTrezorWallet) {
-        const hasDrep = !!stakingAccount.drep_id;
-        const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
         const nexusReq = {
           stakeAddress: loggedWallet.value.stakeAddress,
           changeAddress: keys.value.payment[0].address,
           utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
         };
-        const { tx_cbor } = isRegistered && hasDrep
-          // Already registered with a DRep → pool-only stake delegation.
+        const { tx_cbor } = hasDrep
           ? await nexusTxApi.buildDelegationTx(
               { ...nexusReq, poolId },
               loggedWallet.value.network
             )
-          // First delegation (register the stake key when inactive) → combined pool +
-          // abstain vote, matching the client's StakeVoteRegistrationDelegation /
-          // StakeVoteDelegation. Deposit is folded server-side.
+          // Pool + abstain vote, matching the client's certificates below. Deposit is
+          // folded server-side.
           : await nexusTxApi.buildVoteDelegationTx(
-              { ...nexusReq, poolId, drepId: 'drep_always_abstain', includeStakeRegistration: !isRegistered },
+              {
+                ...nexusReq,
+                poolId,
+                drepId: 'drep_always_abstain',
+                includeStakeRegistration: !isRegistered,
+                ...(separate && { certificateEncoding: 'separate' as const }),
+              },
               loggedWallet.value.network
             );
         assertStakeWalletUnchanged(wallet, t);
@@ -133,95 +142,22 @@ export function useDelegation() {
         return;
       }
 
-      const certificates: Cardano.Certificate[] = [];
-
       // Create stake credential from the key hash
       const stakeCredential: Cardano.Credential = {
         type: Cardano.CredentialType.KeyHash,
         hash: keys.value.stake[0].cred,
       };
 
-      const poolIdBech32 = Cardano.PoolId(selectedPool.value.pool_id_bech32);
-
       // Use proper deposit from epoch parameters - ensure BigInt conversion
       const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
-
-      let implicitCoin = BigInt(0);
-
-      if (!isRegistered) {
-        // Need to register a stake key first, then delegate
-        if (isTrezorWallet) {
-          // Trezor: Use separate certificates
-          // 1. Registration
-          certificates.push({
-            __typename: Cardano.CertificateType.Registration,
-            stakeCredential,
-            deposit: stakeKeyDepositLovelace,
-          });
-          // 2. Pool delegation
-          certificates.push({
-            __typename: Cardano.CertificateType.StakeDelegation,
-            stakeCredential,
-            poolId: poolIdBech32,
-          });
-          // 3. Vote delegation (abstain by default)
-          certificates.push({
-            __typename: Cardano.CertificateType.VoteDelegation,
-            stakeCredential,
-            dRep: {
-              __typename: 'AlwaysAbstain',
-            } as Cardano.AlwaysAbstain,
-          });
-        } else {
-          // Other wallets: Use combined Conway certificate
-          certificates.push({
-            __typename: Cardano.CertificateType.StakeVoteRegistrationDelegation,
-            stakeCredential,
-            poolId: poolIdBech32,
-            dRep: {
-              __typename: 'AlwaysAbstain',
-            } as Cardano.AlwaysAbstain,
-            deposit: stakeKeyDepositLovelace,
-          });
-        }
-        implicitCoin = stakeKeyDepositLovelace; // Deposit required
-      } else if (!stakingAccount.drep_id) {
-        // Delegate to pool and abstain by default
-        if (isTrezorWallet) {
-          // Trezor: Use separate certificates
-          // 1. Pool delegation
-          certificates.push({
-            __typename: Cardano.CertificateType.StakeDelegation,
-            stakeCredential,
-            poolId: poolIdBech32,
-          });
-          // 2. Vote delegation (abstain by default)
-          certificates.push({
-            __typename: Cardano.CertificateType.VoteDelegation,
-            stakeCredential,
-            dRep: {
-              __typename: 'AlwaysAbstain',
-            } as Cardano.AlwaysAbstain,
-          });
-        } else {
-          // Other wallets: Use combined Conway certificate
-          certificates.push({
-            __typename: Cardano.CertificateType.StakeVoteDelegation,
-            stakeCredential,
-            poolId: poolIdBech32,
-            dRep: {
-              __typename: 'AlwaysAbstain',
-            } as Cardano.AlwaysAbstain,
-          });
-        }
-      } else {
-        // Just delegate to pool, no registration needed (works for all wallets)
-        certificates.push({
-          __typename: Cardano.CertificateType.StakeDelegation,
-          stakeCredential,
-          poolId: poolIdBech32,
-        });
-      }
+      const certificates = delegationCertificates({
+        stakeCredential,
+        registrationDeposit: isRegistered ? undefined : stakeKeyDepositLovelace,
+        poolId,
+        dRep: hasDrep ? undefined : ({ __typename: 'AlwaysAbstain' } as Cardano.AlwaysAbstain),
+        separate,
+      });
+      const implicitCoin = isRegistered ? 0n : stakeKeyDepositLovelace; // Deposit required
 
       // Build the delegation transaction with wallet context for accurate fee estimation
       const built = await buildCardanoTransaction({

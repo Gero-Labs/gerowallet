@@ -5,6 +5,7 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import { delegationCertificates, signsSeparateStakeCertificates } from '@/shared/utils/stakeCertificates';
 import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
@@ -25,8 +26,9 @@ import { debugLog } from '@/utils/debug';
  *
  * The Nexus-vs-local branch is inherited from that surface and matters: Trezor
  * cannot sign the combined Conway certificates Nexus emits, so it keeps the
- * client-side builder. First-time stake registration folds the deposit in on
- * both paths.
+ * client-side builder. Trezor and Ledger get separate certificates (Ledger's
+ * Cardano app 7 refuses the combined ones, issue 1431). First-time stake
+ * registration folds the deposit in on both paths.
  */
 
 /** The shape `DRepDelegateDialog` reads. `hex` + `has_script` drive the certificate. */
@@ -103,19 +105,7 @@ export function useDRepDelegation(): UseDRepDelegation {
       };
       const registered = isStakeKeyRegistered(await refreshStakeAccount(wallet, t));
       const stakeKeyDeposit = BigInt(epochParams.stakeKeyDeposit);
-
-      const certificate: Cardano.Certificate = registered
-        ? ({
-            __typename: Cardano.CertificateType.VoteDelegation,
-            stakeCredential,
-            dRep,
-          } as Cardano.VoteDelegationCertificate)
-        : ({
-            __typename: Cardano.CertificateType.VoteRegistrationDelegation,
-            stakeCredential,
-            dRep,
-            deposit: stakeKeyDeposit,
-          } as Cardano.VoteRegistrationDelegationCertificate);
+      const separate = signsSeparateStakeCertificates(wallet.type);
 
       if (featureFlagsStore.isNexusVoteDelegationEnabled() && wallet.type !== WalletType.Trezor) {
         const { tx_cbor } = await nexusTxApi.buildVoteDelegationTx(
@@ -125,6 +115,7 @@ export function useDRepDelegation(): UseDRepDelegation {
             changeAddress: keys.payment[0].address,
             utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
             includeStakeRegistration: !registered,
+            ...(separate && { certificateEncoding: 'separate' as const }),
           },
           wallet.network,
         );
@@ -133,7 +124,12 @@ export function useDRepDelegation(): UseDRepDelegation {
         tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
       } else {
         const built = await buildCardanoTransaction({
-          certificates: [certificate],
+          certificates: delegationCertificates({
+            stakeCredential,
+            registrationDeposit: registered ? undefined : stakeKeyDeposit,
+            dRep,
+            separate,
+          }),
           utxos: walletStore.utxos as Cardano.Utxo[],
           epochParams,
           changeAddress: keys.payment[0].address,
