@@ -197,6 +197,12 @@ export enum MessageTypes {
   // signed once. Answers { success, result: { txCbor, txId, summary } } or { success: false,
   // error, errorCode }. Extension-page-only (senderTrust).
   CIP113_PREPARE_TRANSFER = 'CIP113_PREPARE_TRANSFER',
+  // NFT rescue: cancel the wallet's own stuck listings and offers at the closed marketplace's
+  // two legacy contracts. { refs: ['txHash#index', ...] } (1 to 10) → the worker checks the
+  // refs belong to the wallet, has Nexus build the cancel, and verifies the CBOR (legacyCancelVerify).
+  // Answers { success, result: { txCbor, txId, summary } } or { success: false, error, errorCode }.
+  // The page then signs those exact bytes. Extension-page-only (senderTrust).
+  LEGACY_LISTING_PREPARE_CANCEL = 'LEGACY_LISTING_PREPARE_CANCEL',
   // Submit API (Settings → Advanced): the per-wallet custom Cardano submit endpoint.
   // Extension-page-only (addToOptions, default-deny for content scripts); each acts on
   // the logged-in wallet and refuses a request naming another wallet id.

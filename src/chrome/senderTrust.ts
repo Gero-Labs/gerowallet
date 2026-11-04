@@ -44,6 +44,8 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'TREZOR',
   // Builds the one CIP-113 transfer the worker will sign (Gero's own Send).
   'CIP113_PREPARE_TRANSFER',
+  // Builds the one legacy-marketplace cancel the wallet will sign (NFT rescue).
+  'LEGACY_LISTING_PREPARE_CANCEL',
   // Submit API (Settings > Advanced): where the wallet sends its signed transactions, and the auth header value.
   'SET_SUBMIT_API',
   'TEST_SUBMIT_API',
