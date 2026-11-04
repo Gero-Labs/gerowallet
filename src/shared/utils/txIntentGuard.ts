@@ -446,12 +446,15 @@ export interface StakeCertificateExpectation {
   poolId?: string;
   /** A vote delegation to exactly this DRep must appear. */
   drep?: DRepTarget;
+  /** Only separate certificates: the signer can't sign the combined ones (issue 1431). */
+  separate?: boolean;
 }
 
 /**
  * Accepts the stake certificates of a registration, deregistration, pool
  * delegation and/or vote delegation of the wallet's own credential, in any of
- * the encodings Conway allows (separate certificates or the combined ones).
+ * the encodings Conway allows (separate certificates or the combined ones), or
+ * with `separate` in separate certificates only.
  */
 export function stakeCertificatesMatch(exp: StakeCertificateExpectation) {
   const poolId = exp.poolId ? normalizePoolId(exp.poolId) : null;
@@ -467,6 +470,13 @@ export function stakeCertificatesMatch(exp: StakeCertificateExpectation) {
         dRep?: Cardano.DelegateRepresentative;
       };
       if (!sameCredential(c.stakeCredential, exp.stakeCredential)) return false;
+      const combined = [
+        Cardano.CertificateType.StakeVoteDelegation,
+        Cardano.CertificateType.StakeRegistrationDelegation,
+        Cardano.CertificateType.VoteRegistrationDelegation,
+        Cardano.CertificateType.StakeVoteRegistrationDelegation,
+      ].includes(c.__typename);
+      if (exp.separate && combined) return false;
       const wantsReg = [
         Cardano.CertificateType.StakeRegistration,
         Cardano.CertificateType.Registration,

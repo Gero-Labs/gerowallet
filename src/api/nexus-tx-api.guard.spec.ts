@@ -83,6 +83,33 @@ describe('nexusTxApi refuses a built transaction that differs from the request',
     await expect(nexusTxApi.buildDelegationTx(request, 'Preprod')).rejects.toMatchObject({ violations: ['unexpectedCertificate'] });
   });
 
+  it('refuses a combined certificate when separate ones were asked for', async () => {
+    const request = {
+      stakeAddress: STAKE, poolId: POOL, drepId: 'drep_always_abstain', changeAddress: OWN, utxos: [UTXO],
+      includeStakeRegistration: true,
+    };
+    const abstain = { __typename: 'AlwaysAbstain' } as Cardano.DelegateRepresentative;
+    const combined = cbor({
+      outputs: [out(OWN, 97_800_000n)],
+      certificates: [{ __typename: Cardano.CertificateType.StakeVoteRegistrationDelegation, stakeCredential: keyCred('b'), poolId: POOL, dRep: abstain, deposit: 2_000_000n }],
+    });
+    const separate = cbor({
+      outputs: [out(OWN, 97_800_000n)],
+      certificates: [
+        { __typename: Cardano.CertificateType.Registration, stakeCredential: keyCred('b'), deposit: 2_000_000n },
+        { __typename: Cardano.CertificateType.StakeDelegation, stakeCredential: keyCred('b'), poolId: POOL },
+        { __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: keyCred('b'), dRep: abstain },
+      ],
+    });
+    nexusReturns(combined);
+    await expect(nexusTxApi.buildVoteDelegationTx(request, 'Preprod')).resolves.toBeTruthy();
+    nexusReturns(separate);
+    await expect(nexusTxApi.buildVoteDelegationTx({ ...request, certificateEncoding: 'separate' }, 'Preprod')).resolves.toBeTruthy();
+    nexusReturns(combined);
+    await expect(nexusTxApi.buildVoteDelegationTx({ ...request, certificateEncoding: 'separate' }, 'Preprod'))
+      .rejects.toMatchObject({ violations: ['unexpectedCertificate'] });
+  });
+
   it('does not take an address in the UTxO list as the wallet\'s change', async () => {
     // gero-sync lists a UTxO at the attacker's address; Nexus pays the attacker as "change".
     const poisoned = { ...transfer, utxos: [UTXO, { txHash: TX, outputIndex: 1, address: ATTACKER, lovelace: '1000000' }] };

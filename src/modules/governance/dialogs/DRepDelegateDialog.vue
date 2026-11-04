@@ -237,6 +237,7 @@ import assets from '@/utils/assets';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import { walletStore } from '@/stores/walletStore';
 import { buildCip149AuxiliaryData } from '@/shared/utils/builder';
+import { stakeRegistrationDeposit } from '@/shared/utils/stakeCertificates';
 import { toSafeLinks } from '@/shared/utils/externalLink';
 import { toInAppImageUrl } from '@/modules/governance/utils/govAnchor';
 import type { PendingDRep } from '@/shared/utils/pendingDelegation';
@@ -365,18 +366,10 @@ const telegramLogo = assets.telegramSvg;
 const depositFee = computed(() => {
   if (!props.tx?.body) return 0;
 
-  // Check for vote registration certificate with deposit
-  const registrationCert: Cardano.Certificate = props.tx.body.certificates?.find(
-    (cert: Cardano.Certificate) =>
-      cert.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation ||
-      cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
-      cert.__typename === Cardano.CertificateType.VoteDelegation
-  );
-
-  // For DRep delegation, check if there's a deposit required
-  if (registrationCert && 'deposit' in registrationCert && registrationCert.deposit) {
-    return Number(registrationCert.deposit);
-  }
+  // The stake key registration's deposit: a combined certificate, or the separate
+  // Registration that Ledger and Trezor sign (issue 1431).
+  const stakeDeposit = stakeRegistrationDeposit(props.tx.body.certificates);
+  if (stakeDeposit > 0n) return Number(stakeDeposit);
 
   // Also check for governance deposit in certificates
   const drepRegistration = props.tx.body.certificates?.find(
