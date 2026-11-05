@@ -229,6 +229,7 @@ import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { DappRisk, DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { signRefusalText } from '@/shared/utils/txErrors';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
@@ -280,6 +281,11 @@ import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
+/** A signing error as the user sees it: the worker's and the signers' fixed refusals in their language, anything else as it is. */
+const signErrorText = (e: unknown, fallback: string): string => {
+  const message = getErrorMessage(e, '');
+  return signRefusalText(message) ?? (message || fallback);
+};
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const utxos = computed(() => loggedWallet.value?.chain === Blockchain.CARDANO ? walletStore.utxos as Cardano.Utxo[] : []);
 
@@ -745,7 +751,7 @@ const sign = () => approval.run(async () => {
         } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
           debugLog('[KEYSTONE-SIGN] Error:', e);
-          snackbar.setError(getErrorMessage(e) || t('wallet.keystoneSigningFailed'));
+          snackbar.setError(signErrorText(e, t('wallet.keystoneSigningFailed')));
         }
       }
     } catch (e: unknown) {
@@ -763,7 +769,7 @@ const sign = () => approval.run(async () => {
         }
       } else {
         debugLog('[SIGN] Transaction error:', e);
-        snackbar.setError(getErrorMessage(e));
+        snackbar.setError(signErrorText(e, t('errors.unknownError')));
       }
     } finally {
       txSignLoading.value = false;
