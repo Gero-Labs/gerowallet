@@ -6030,6 +6030,8 @@ export default {
   'bitcoin.unconfirmedAmount': '+{amount} unbestätigt',
   'bitcoin.etaMinutes': '~{minutes} Min.',
   'bitcoin.feeSpeed': 'Gebührenstufe',
+  'bitcoin.feeRatesLoading': 'Aktuelle Netzwerkgebühren werden abgerufen...',
+  'bitcoin.feeRatesFallback': 'Die aktuellen Netzwerkgebühren konnten nicht abgerufen werden. Dies sind Standardsätze, die höher oder niedriger sein können, als das Netzwerk verlangt.',
   'common.showPassword': 'Passwort anzeigen',
   'common.hidePassword': 'Passwort verbergen',
   'bitcoin.psbtFeeUnknown': 'Die Gebühr kann nicht angezeigt werden: Diese Transaktion gibt Coins aus, deren Beträge sie nicht enthält.',
