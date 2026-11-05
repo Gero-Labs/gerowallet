@@ -1,5 +1,7 @@
 // Keep first: lands every locale before its reader (see backgroundLocales.ts).
 import './backgroundLocales';
+// Next: wraps fetch before anything can call it (signed-response check).
+import '@/api/signedFetchInstall';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
@@ -29,7 +31,7 @@ import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/wal
 import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
 import { embeddingSite, promptSite } from '@/chrome/originBinding';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
-import { RESERVED_SIGN_DATA_MESSAGE, reservedSigningDomain } from '@/shared/utils/reservedSigningDomains';
+import { INVALID_SIGN_DATA_PAYLOAD_MESSAGE, RESERVED_SIGN_DATA_MESSAGE, signDataRefusal } from '@/shared/utils/reservedSigningDomains';
 import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
@@ -1607,8 +1609,13 @@ app.add(METHOD.signData, (request, sendResponse) => {
   if (!WalletStore.isWhitelisted(request.origin)) {
     return signDataReply({ error: APIError.Refused });
   }
-  // Gero's own proofs (device registration, support login) are signData too.
-  if (reservedSigningDomain(request.data?.payload)) {
+  // Gero's own proofs (device registration, support login) are signData too, and a
+  // payload that is not plain hex could smuggle one past that check.
+  const signDataRefused = signDataRefusal(request.data?.payload);
+  if (signDataRefused === 'invalid') {
+    return signDataReply({ error: { code: APIError.InvalidRequest.code, info: INVALID_SIGN_DATA_PAYLOAD_MESSAGE } });
+  }
+  if (signDataRefused === 'reserved') {
     return signDataReply({ error: { code: APIError.Refused.code, info: RESERVED_SIGN_DATA_MESSAGE } });
   }
 
@@ -5369,8 +5376,10 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'cardano_signData': {
             const wcParams = wcRequest.params || {};
-            if (reservedSigningDomain(wcParams.payload)) {
-              await wcService.respondError(topic, id, 4100, RESERVED_SIGN_DATA_MESSAGE);
+            const wcRefused = signDataRefusal(wcParams.payload);
+            if (wcRefused) {
+              await wcService.respondError(topic, id, 4100,
+                wcRefused === 'invalid' ? INVALID_SIGN_DATA_PAYLOAD_MESSAGE : RESERVED_SIGN_DATA_MESSAGE);
               return;
             }
             await routeWcSigningRequest(
@@ -5698,7 +5707,12 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'signData': {
-        if (reservedSigningDomain(params.payload)) {
+        const cip45Refused = signDataRefusal(params.payload);
+        if (cip45Refused === 'invalid') {
+          fail(APIError.InvalidRequest.code, INVALID_SIGN_DATA_PAYLOAD_MESSAGE);
+          break;
+        }
+        if (cip45Refused === 'reserved') {
           fail(APIError.Refused.code, RESERVED_SIGN_DATA_MESSAGE);
           break;
         }

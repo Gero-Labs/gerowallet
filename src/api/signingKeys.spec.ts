@@ -17,8 +17,10 @@ import {
 
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
 const toHex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-const ROOT_SEED = hexToBytes(vectors.root.seedHex);
-const ROOT = hexToBytes(vectors.root.publicKeyHex);
+const [KEY_A, KEY_B] = vectors.root.keys;
+const SEED_A = hexToBytes(KEY_A.seedHex);
+const SEED_B = hexToBytes(KEY_B.seedHex);
+const ROOTS = [hexToBytes(KEY_A.publicKeyHex), hexToBytes(KEY_B.publicKeyHex)];
 const OTHER_SEED = new Uint8Array(32).fill(9);
 const BASE = 'https://api.gerowallet.io';
 const HOST = 'api.gerowallet.io';
@@ -26,7 +28,7 @@ const KEY = hexToBytes(vectors.signingPublicKeyHex);
 /** Inside every delegation built below. */
 const NOW_MS = Date.parse('2026-11-20T00:00:00Z');
 
-async function cip8(statement: string, seed: Uint8Array = ROOT_SEED): Promise<string> {
+async function cip8(statement: string, seed: Uint8Array = SEED_A): Promise<string> {
   const protectedMap = MS.HeaderMap.new();
   protectedMap.set_algorithm_id(MS.Label.from_algorithm_id(MS.AlgorithmId.EdDSA));
   const builder = MS.COSESign1Builder.new(
@@ -37,19 +39,20 @@ async function cip8(statement: string, seed: Uint8Array = ROOT_SEED): Promise<st
   return toHex(builder.build(await ed25519.signAsync(builder.make_data_to_sign().to_bytes(), seed)).to_bytes());
 }
 
-async function delegation(kid: string, opts: { seed?: Uint8Array; from?: string; until?: string } = {}): Promise<SignedStatement> {
+/** A delegation's entries, one per signer (both roots unless `seeds` says otherwise). */
+async function delegation(kid: string, opts: { seeds?: Uint8Array[]; from?: string; until?: string } = {}): Promise<SignedStatement[]> {
   const statement = buildDelegationStatement({
     kid,
     service: 'gero-backend',
-    hosts: [HOST],
+    host: HOST,
     from: opts.from ?? '2026-11-01',
     until: opts.until ?? '2027-01-30',
     publicKeyHex: vectors.signingPublicKeyHex,
   });
-  return { statement, coseSign1: await cip8(statement, opts.seed) };
+  return Promise.all((opts.seeds ?? [SEED_A, SEED_B]).map(async (seed) => ({ statement, coseSign1: await cip8(statement, seed) })));
 }
 
-async function revocation(kids: string[], seed: Uint8Array = ROOT_SEED): Promise<SignedStatement> {
+async function revocation(kids: string[], seed: Uint8Array = SEED_A): Promise<SignedStatement> {
   const statement = buildRevocationStatement('2026-11-15', kids);
   return { statement, coseSign1: await cip8(statement, seed) };
 }
@@ -64,7 +67,7 @@ function server(body: () => unknown, status = 200) {
 
 function keys(fetchImpl: typeof fetch, extra: Partial<ConstructorParameters<typeof SigningKeys>[0]> = {}) {
   let now = NOW_MS;
-  const store = new SigningKeys({ roots: [ROOT], baseUrl: BASE, fetchImpl, bundled: [], nowMs: () => now, ...extra });
+  const store = new SigningKeys({ roots: ROOTS, baseUrl: BASE, fetchImpl, bundled: [], nowMs: () => now, ...extra });
   return { store, advance: (ms: number) => (now += ms) };
 }
 
@@ -88,40 +91,61 @@ describe('SigningKeys', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('resolves a delegation a root signed, and stores the verified copy privately', async () => {
+  it('resolves a delegation both roots signed, and stores the verified copy privately', async () => {
     const d = await delegation('backend-2026-11');
-    const { store } = keys(server(() => ({ version: 1, delegations: [d], revocations: [] })));
+    const { store } = keys(server(() => ({ version: 1, delegations: d, revocations: [] })));
     const resolver = await store.resolver('gero-backend');
     expect(resolver.resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
     expect(resolver.resolve('backend-2026-11', 'evil.example', nowSeconds)).toBeUndefined();
-    expect(await getPrivate(STORE_KEY)).toEqual({ fetchedAt: NOW_MS, delegations: [d], revoked: [] });
+    expect(await getPrivate(STORE_KEY)).toEqual({ fetchedAt: NOW_MS, delegations: d, revoked: [] });
+  });
+
+  it('needs both roots: one root signing, or the same root twice, approves nothing', async () => {
+    const [a, b] = await delegation('backend-2026-11');
+    let served: SignedStatement[] = [a, ...(await delegation('backend-2026-11', { seeds: [SEED_A] }))];
+    const { store, advance } = keys(server(() => ({ delegations: served })));
+    expect((await store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toBeUndefined();
+    expect(await getPrivate(STORE_KEY)).toMatchObject({ delegations: [] });
+    served = [a, b];
+    advance(RETRY_EMPTY_MS);
+    expect((await store.refetchForUnknownKey('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
   });
 
   it('ignores statements no pinned root signed, and anything malformed', async () => {
-    const forged = await delegation('forged', { seed: OTHER_SEED });
+    const forged = await delegation('forged', { seeds: [SEED_A, OTHER_SEED] });
     const good = await delegation('backend-2026-11');
-    const { store } = keys(server(() => ({ delegations: [forged, { statement: 1 }, 'x', null, good], revocations: 'nope' })));
+    const { store } = keys(server(() => ({ delegations: [...forged, { statement: 1 }, 'x', null, ...good], revocations: 'nope' })));
     const resolver = await store.resolver('gero-backend');
     expect(resolver.resolve('forged', HOST, nowSeconds)).toBeUndefined();
     expect(resolver.resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
-    expect((await getPrivate<{ delegations: unknown[] }>(STORE_KEY))?.delegations).toEqual([good]);
+    expect((await getPrivate<{ delegations: unknown[] }>(STORE_KEY))?.delegations).toEqual(good);
   });
 
-  it('drops a delegation the server stops serving', async () => {
-    let served = [await delegation('backend-2026-11')];
-    const { store, advance } = keys(server(() => ({ delegations: served })));
+  it('keeps an approved key the server stops serving or buries in junk: only a revocation removes it', async () => {
+    const d = await delegation('backend-2026-11');
+    // Inside the 64 KiB answer limit, so it is read and verified.
+    const junk = Array.from({ length: 60 }, (_, i) => ({ statement: `${d[0].statement}x${i}`, coseSign1: d[0].coseSign1 }));
+    let served: unknown[] = d;
+    const fetchImpl = server(() => ({ delegations: served }));
+    const { store, advance } = keys(fetchImpl);
     expect((await store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
-    served = [];
-    advance(REFRESH_AFTER_MS);
-    await store.resolver('gero-backend'); // stale: refreshes in the background
-    await vi.waitFor(async () => expect((await getPrivate<{ delegations: unknown[] }>(STORE_KEY))?.delegations).toEqual([]));
-    expect((await store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds + 1)).toBeUndefined();
+    for (const next of [[], junk]) {
+      served = next;
+      advance(REFRESH_AFTER_MS);
+      const calls = fetchImpl.mock.calls.length;
+      await store.resolver('gero-backend'); // stale: refreshes in the background
+      await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(calls + 1));
+      await vi.waitFor(async () => expect((await getPrivate<{ fetchedAt: number }>(STORE_KEY))?.fetchedAt).toBe(NOW_MS + (calls * REFRESH_AFTER_MS)));
+      expect((await store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
+      expect((await getPrivate<{ delegations: unknown[] }>(STORE_KEY))?.delegations).toEqual(d);
+    }
+    expect((await keys(server(() => ({ delegations: [] }))).store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
   });
 
   it('never un-revokes: a revocation the server stops serving still counts, here and after a reload', async () => {
     const d = await delegation('backend-2026-11');
     let revocations = [await revocation(['backend-2026-11'])];
-    const fetchImpl = server(() => ({ delegations: [d], revocations }));
+    const fetchImpl = server(() => ({ delegations: d, revocations }));
     const { store, advance } = keys(fetchImpl);
     expect((await store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toBeUndefined();
     revocations = [];
@@ -132,12 +156,21 @@ describe('SigningKeys', () => {
 
     const reloaded = keys(fetchImpl).store;
     expect((await reloaded.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toBeUndefined();
+    // A revoked delegation is not kept either.
+    expect(await getPrivate(STORE_KEY)).toMatchObject({ delegations: [], revoked: ['backend-2026-11'] });
+  });
+
+  it('a revocation from one root removes a key both roots approved', async () => {
+    const d = await delegation('backend-2026-11');
+    const revoked = await revocation(['backend-2026-11'], SEED_B);
+    const { store } = keys(server(() => ({ delegations: d, revocations: [revoked] })));
+    expect((await store.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toBeUndefined();
   });
 
   it('applies revocations shipped in the release, ignoring ones no root signed', async () => {
     const d1 = await delegation('backend-2026-11');
     const d2 = await delegation('backend-2026-12');
-    const { store } = keys(server(() => ({ delegations: [d1, d2] })), {
+    const { store } = keys(server(() => ({ delegations: [...d1, ...d2] })), {
       bundled: [await revocation(['backend-2026-11']), await revocation(['backend-2026-12'], OTHER_SEED)],
     });
     const resolver = await store.resolver('gero-backend');
@@ -147,20 +180,20 @@ describe('SigningKeys', () => {
 
   it('verifies the stored copy again on load: a root no longer pinned takes its delegations with it', async () => {
     const d = await delegation('backend-2026-11');
-    await setPrivate(STORE_KEY, { fetchedAt: NOW_MS, delegations: [d], revoked: [] });
+    await setPrivate(STORE_KEY, { fetchedAt: NOW_MS, delegations: d, revoked: [] });
     const fetchImpl = server(() => ({ delegations: [] }));
     const withRoot = keys(fetchImpl).store;
     expect((await withRoot.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toEqual(KEY);
     expect(fetchImpl).not.toHaveBeenCalled(); // fresh copy
 
     const otherRoot = await ed25519.getPublicKeyAsync(OTHER_SEED);
-    const rotated = keys(server(() => ({ delegations: [] })), { roots: [otherRoot] }).store;
+    const rotated = keys(server(() => ({ delegations: [] })), { roots: [ROOTS[0], otherRoot] }).store;
     expect((await rotated.resolver('gero-backend')).resolve('backend-2026-11', HOST, nowSeconds)).toBeUndefined();
   });
 
   it('keeps the stored copy when the server is unreachable', async () => {
     const d = await delegation('backend-2026-11');
-    await setPrivate(STORE_KEY, { fetchedAt: NOW_MS - REFRESH_AFTER_MS, delegations: [d], revoked: [] });
+    await setPrivate(STORE_KEY, { fetchedAt: NOW_MS - REFRESH_AFTER_MS, delegations: d, revoked: [] });
     const fetchImpl = vi.fn(async () => {
       throw new TypeError('Failed to fetch');
     });
@@ -172,7 +205,7 @@ describe('SigningKeys', () => {
 
   it('drops expired delegations', async () => {
     const d = await delegation('backend-2026-09', { from: '2026-09-01', until: '2026-11-15' });
-    const { store } = keys(server(() => ({ delegations: [d] })));
+    const { store } = keys(server(() => ({ delegations: d })));
     expect((await store.resolver('gero-backend')).resolve('backend-2026-09', HOST, nowSeconds)).toBeUndefined();
   });
 
@@ -195,7 +228,7 @@ describe('SigningKeys', () => {
     await store.resolver('gero-backend');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
 
-    served = [await delegation('backend-2026-12')];
+    served = await delegation('backend-2026-12');
     advance(RETRY_EMPTY_MS);
     expect((await store.refetchForUnknownKey('gero-backend')).resolve('backend-2026-12', HOST, nowSeconds)).toEqual(KEY);
     expect(fetchImpl).toHaveBeenCalledTimes(2);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as ed25519 from '@noble/ed25519';
 import * as MS from '@emurgo/cardano-message-signing-browser';
 import vectors from '@/shared/utils/signedResponse.vectors.json';
-import { verifyDelegation } from '@/shared/utils/signedResponseRoots';
+import { verifyDelegations } from '@/shared/utils/signedResponseRoots';
 import { addDays, checkCeremonySignature, coseKeyPublicKey, splitList, textToHex, utcDay } from './ceremony';
 
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
@@ -17,8 +17,10 @@ function coseKey(publicKey: Uint8Array): string {
   return toHex(key.to_bytes());
 }
 
-const ROOT = hexToBytes(vectors.root.publicKeyHex);
-const { statement, coseSign1 } = vectors.root.delegation;
+const [KEY_A, KEY_B] = vectors.root.keys;
+const ROOT = hexToBytes(KEY_A.publicKeyHex);
+const { statement, entries } = vectors.root.delegation;
+const { coseSign1 } = entries[0];
 
 describe('signing ceremony helpers', () => {
   it('works in UTC days', () => {
@@ -42,10 +44,14 @@ describe('signing ceremony helpers', () => {
 
   it('accepts a signature that verifies, says whether its key is pinned, and prints the entry', async () => {
     const result = await checkCeremonySignature(statement, coseSign1.toUpperCase(), coseKey(ROOT), []);
-    expect(result).toEqual({ ok: true, rootPublicKeyHex: vectors.root.publicKeyHex, pinned: false, entry: { statement, coseSign1 } });
-    expect(await checkCeremonySignature(statement, coseSign1, coseKey(ROOT), [vectors.root.publicKeyHex.toUpperCase()])).toMatchObject({ pinned: true });
-    // What the page prints verifies exactly as the wallet verifies it.
-    expect(await verifyDelegation(statement, coseSign1, [ROOT])).toBeDefined();
+    expect(result).toEqual({ ok: true, rootPublicKeyHex: KEY_A.publicKeyHex, pinned: false, entry: { statement, coseSign1 } });
+    expect(await checkCeremonySignature(statement, coseSign1, coseKey(ROOT), [KEY_A.publicKeyHex.toUpperCase()])).toMatchObject({ pinned: true });
+    // What the two holders' pages print verifies exactly as the wallet verifies it.
+    const second = await checkCeremonySignature(statement, entries[1].coseSign1, coseKey(hexToBytes(KEY_B.publicKeyHex)), []);
+    if (!result.ok || !second.ok) throw new Error('both holders should verify');
+    const roots = [ROOT, hexToBytes(KEY_B.publicKeyHex)];
+    expect(await verifyDelegations([result.entry, second.entry], roots)).toHaveLength(1);
+    expect(await verifyDelegations([result.entry], roots)).toEqual([]);
   });
 
   it('refuses a signature by another key than the device reported, or over another text', async () => {

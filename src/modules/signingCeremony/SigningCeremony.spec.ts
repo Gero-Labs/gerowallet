@@ -34,7 +34,7 @@ enableAutoUnmount(afterEach);
 
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
 const toHex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-const ROOT_SEED = hexToBytes(vectors.root.seedHex);
+const ROOT_SEED = hexToBytes(vectors.root.keys[0].seedHex);
 const STAKE = 'stake1u9ylzsgxaa6xctf4juup682ar3juj85n8tx3hthnljg47zctvm3rc';
 
 /** What a device returns from signData over `payloadHex`: a COSE_Sign1 and the COSE_Key. */
@@ -83,8 +83,21 @@ describe('SigningCeremony', () => {
     await fill('ceremony-kid', 'backend-2026-11');
     await fill('ceremony-key', vectors.signingPublicKeyHex);
     expect(statementText()).toBe(
-      `gero-signing/v1|delegation|kid=backend-2026-11|service=gero-backend|hosts=api.gerowallet.io|from=2026-11-03|until=2027-02-01|key=${vectors.signingPublicKeyHex}`,
+      `gero-signing/v1|delegation|kid=backend-2026-11|service=gero-backend|host=api.gerowallet.io|from=2026-11-03|until=2027-02-01|key=${vectors.signingPublicKeyHex}`,
     );
+    expect(wrapper.find('[data-testid="ceremony-approvals"]').text()).toBe('signingCeremony.bothSign');
+  });
+
+  it('takes exactly one host', async () => {
+    login(WalletType.Ledger);
+    mountPage();
+    await fill('ceremony-kid', 'backend-2026-11');
+    await fill('ceremony-key', vectors.signingPublicKeyHex);
+    await fill('ceremony-host', 'api.gerowallet.io, api2.gerowallet.io');
+    expect(statementText()).toBe('');
+    expect(wrapper.find('[data-testid="ceremony-host"]').text()).toContain('signingCeremony.hostRule');
+    await fill('ceremony-host', 'sync.gerowallet.io');
+    expect(statementText()).toContain('|host=sync.gerowallet.io|');
   });
 
   it('signs with the stake key on a Ledger, checks the signature and prints the entry', async () => {
@@ -105,7 +118,7 @@ describe('SigningCeremony', () => {
     const [address, payloadHex] = vi.mocked(ledger.signData).mock.calls[0];
     expect(address).toBe(STAKE);
     expect(Buffer.from(payloadHex, 'hex').toString('utf8')).toBe(statement);
-    expect(wrapper.find('[data-testid="ceremony-root-key"]').text()).toBe(vectors.root.publicKeyHex);
+    expect(wrapper.find('[data-testid="ceremony-root-key"]').text()).toBe(vectors.root.keys[0].publicKeyHex);
     expect(wrapper.find('[data-testid="ceremony-pinned"]').text()).toBe('signingCeremony.notPinned');
     const entry = JSON.parse(wrapper.find('[data-testid="ceremony-entry"]').text()) as { statement: string; coseSign1: string };
     expect(entry.statement).toBe(statement);
@@ -136,6 +149,7 @@ describe('SigningCeremony', () => {
     await wrapper.find('[data-testid="ceremony-kind"] button:nth-child(2)').trigger('click');
     await fill('ceremony-revoked', 'backend-2026-08, backend-2026-05');
     expect(statementText()).toBe('gero-signing/v1|revocation|issued=2026-11-03|revoked=backend-2026-08,backend-2026-05');
+    expect(wrapper.find('[data-testid="ceremony-approvals"]').text()).toBe('signingCeremony.oneRevokes');
     await wrapper.find('[data-testid="ceremony-sign"]').trigger('click');
     await vi.waitFor(async () => {
       await flushPromises();

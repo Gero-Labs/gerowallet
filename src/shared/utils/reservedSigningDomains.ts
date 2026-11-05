@@ -25,6 +25,25 @@ export const RESERVED_SIGNING_DOMAINS = [
 const GERO_SUBJECT = /^gero-[a-z0-9-]+\/v\d+(?:\||$)/;
 
 export const RESERVED_SIGN_DATA_MESSAGE = 'Gero does not sign messages reserved for its own protocols';
+export const INVALID_SIGN_DATA_PAYLOAD_MESSAGE = 'The message to sign must be hex-encoded bytes';
+
+/** Whether a sign-message payload is plain hex bytes: pairs of hex digits and nothing else. */
+export function isHexPayload(payload: unknown): payload is string {
+  return typeof payload === 'string' && /^(?:[0-9a-fA-F]{2})*$/.test(payload);
+}
+
+/**
+ * Why a dApp's sign-message payload must be refused, or null to let it through.
+ *
+ * A payload that is not plain hex is refused first. The signers decode hex leniently
+ * (`Buffer.from(x, 'hex')` drops an odd last digit and stops at the first non-hex
+ * character, and a byte array passes through), so `hex(reserved text) + "0"` would
+ * get past the reserved-domain check below and still sign the reserved bytes.
+ */
+export function signDataRefusal(payload: unknown): 'invalid' | 'reserved' | null {
+  if (!isHexPayload(payload)) return 'invalid';
+  return reservedSigningDomain(payload) ? 'reserved' : null;
+}
 
 function hexToText(hex: string): string | null {
   if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) return null;

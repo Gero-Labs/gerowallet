@@ -77,28 +77,50 @@ vi.mock('@cardano-sdk/core', async () => {
   };
 });
 
-import { Serialization } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { useNativeSwapSigner } from '../useNativeSwapSigner';
 import { swapSpendBound } from '../orderSpendBound';
+import ledger from '@/shared/utils/ledger';
 import i18n from '@/plugins/i18n';
 
-const OWN = 'addr_test1qpdmx56dml9qtej5vxhejju492w9pfv7j9270wjh0pfe9hdzqxa4r35qhuqx29n693k4gqukhk3lfw37xkp4egvh6raq4d4rzj';
-const DEX = 'addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x';
+// A mainnet wallet: its payment and stake keys, and the base address it derives from them.
+const PAY = '5867c3b8e27840f556ac268b781578b14c5661fc63ee720dbeab663f';
+const STAKE = '11223344556677889900aabbccddeeff00112233445566778899aabb';
+const THIEF = 'ab'.repeat(28);
+const keyCred = (hash: string) => ({ type: Cardano.CredentialType.KeyHash, hash: hash as Cardano.Credential['hash'] });
+const baseAddress = (pay: string, stake: string) =>
+  Cardano.BaseAddress.fromCredentials(Cardano.NetworkId.Mainnet, keyCred(pay), keyCred(stake)).toAddress().toBech32();
+const OWN = baseAddress(PAY, STAKE);
+// Minswap V2's order address (cardano-market-data MinswapV2TxBuilder.getOrderAddress).
+const DEX = 'addr1w8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcnqst2ctf';
+const FEE_ADDRESS = 'addr1q9cp2rvkjw0f75nsqyq5nhgp37e4w4hujqh8jmlju2zfscsem9ng9drvumcdpcrx7x9xygw68v8sxlhrftrnpqd045tqwrfqf7';
 const TOKEN = `${'a'.repeat(56)}474552`;
 const TX = 'f'.repeat(64);
 
-// A 100 ADA wallet UTxO, sold for TOKEN: `toDex` lovelace goes to the order script, the rest returns.
-function orderTx(toDex: bigint, extraAssetToDex?: [string, bigint]) {
+type Data = Cardano.PlutusData;
+const C = (alt: number, ...fields: Data[]): Data => ({ constructor: BigInt(alt), fields: { items: fields } });
+const B = (hex: string): Data => Uint8Array.from(Buffer.from(hex, 'hex'));
+const plutusAddress = (pay: string, stake: string) => C(0, C(0, B(pay)), C(0, C(0, C(0, B(stake)))));
+/** The Minswap V2 order datum the aggregator writes (MinswapV2TxBuilder.assembleOrderDatum), paying `receiver`. */
+const minswapV2Datum = (receiver = PAY, canceller = PAY) => C(0,
+  C(0, B(canceller)), plutusAddress(receiver, STAKE), C(0), plutusAddress(receiver, STAKE), C(0),
+  C(0, B('f5'.repeat(28)), B('82'.repeat(32))), C(0, C(1), C(0, 50_000_000n), 1_000n, C(1)), 2_000_000n, C(1));
+
+interface Output {
+  address: string;
+  value: { coins: bigint; assets?: Map<string, bigint> };
+  datum?: Data;
+}
+
+// A 100 ADA wallet UTxO, sold for TOKEN: `toDex` lovelace goes to a Minswap V2 order for the wallet, the rest returns.
+function orderTx(toDex: bigint, extraAssetToDex?: [string, bigint], datum: Data = minswapV2Datum()) {
   const assets = new Map(extraAssetToDex ? [extraAssetToDex] : []);
+  const outputs: Output[] = [
+    { address: DEX, value: { coins: toDex, assets }, datum },
+    { address: OWN, value: { coins: 100_000_000n - toDex - 200_000n } },
+  ];
   return {
-    body: {
-      inputs: [{ txId: TX, index: 0 }],
-      outputs: [
-        { address: DEX, value: { coins: toDex, assets } },
-        { address: OWN, value: { coins: 100_000_000n - toDex - 200_000n } },
-      ],
-      fee: 200_000n,
-    },
+    body: { inputs: [{ txId: TX, index: 0 }], outputs, fee: 200_000n },
     witness: {},
   };
 }
@@ -114,7 +136,7 @@ describe('useNativeSwapSigner', () => {
   describe('refuses an order that takes more than the quote allows', () => {
     beforeEach(() => {
       // The wallet's own address comes from its derived keys, never from the UTxO list.
-      walletState.loggedWallet = { type: 'Normal', baseAddress: OWN };
+      walletState.loggedWallet = { type: 'Normal', baseAddress: OWN, network: 'Mainnet' };
       proof.answer = null;
     });
     // 50 ADA typed: the leg is 5.5 ADA of DEX overhead and the 1.2 ADA minimum service fee.
@@ -125,7 +147,7 @@ describe('useNativeSwapSigner', () => {
       sendToBackgroundFromOptions
         .mockResolvedValueOnce({ data: { success: true } })
         .mockResolvedValueOnce({ data: { witnesses: 'WIT' } });
-      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
+      const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
       return signer.signTx('CBOR');
     };
 
@@ -141,6 +163,7 @@ describe('useNativeSwapSigner', () => {
       vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => orderTx(90_000_000n) } as never);
       walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
       const { signer } = useNativeSwapSigner({
+        orderBuilder: 'swapAggregator',
         getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: async () => bound,
       });
       await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['spendExceeded'] });
@@ -161,14 +184,14 @@ describe('useNativeSwapSigner', () => {
         [{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }],
         [{ txId: TX, index: 1 }, { address: OWN, value: { coins: 0n, assets: new Map([[TOKEN, 5n]]) } }],
       ];
-      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
+      const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
       await expect(signer.signTx('CBOR')).rejects.toMatchObject({ violations: ['spendExceeded'] });
     });
 
     it('without a quote, refuses an order that sends ADA away', async () => {
       vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => orderTx(10_000_000n) } as never);
       walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
-      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+      const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
       await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
     });
 
@@ -197,20 +220,91 @@ describe('useNativeSwapSigner', () => {
         [{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }],
         [{ txId: TX, index: 5 }, { address: DEX, value: { coins: 1_000_000n } }],
       ];
-      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
-      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ violations: ['spendExceeded'] });
+      const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound });
+      // Not change, and not an order either: an order script output with no datum.
+      await expect(signer.signTx('CBOR')).rejects.toMatchObject({ violations: ['spendExceeded', 'foreignOrderRecipient'] });
     });
 
     it('refuses a transaction it cannot decode', async () => {
       vi.mocked(Serialization.Transaction.fromCbor).mockImplementationOnce(() => { throw new Error('bad cbor'); });
-      const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+      const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
       await expect(signer.signTx('CBOR')).rejects.toMatchObject({ name: 'TxIntentMismatchError' });
       expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
     });
   });
 
+  describe('refuses an order that pays anyone but the wallet, within its budget', () => {
+    beforeEach(() => {
+      walletState.loggedWallet = { type: 'Normal', baseAddress: OWN, network: 'Mainnet' };
+      walletState.utxos = [[{ txId: TX, index: 0 }, { address: OWN, value: { coins: 100_000_000n } }]];
+      proof.answer = null;
+    });
+    // 50 ADA typed: the budget is 56.7 ADA, and the fee output may carry the 1.2 ADA minimum.
+    const bound = swapSpendBound({ tokenIn: 'lovelace', amountIn: 50_000_000n });
+    const signerFor = (orderBuilder: 'swapAggregator' | 'realfi' = 'swapAggregator') =>
+      useNativeSwapSigner({ orderBuilder, getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array(), getSpendBound: () => bound }).signer;
+    const sign = (core: unknown, orderBuilder?: 'swapAggregator' | 'realfi') => {
+      vi.mocked(Serialization.Transaction.fromCbor).mockReturnValueOnce({ toCore: () => core } as never);
+      sendToBackgroundFromOptions
+        .mockResolvedValueOnce({ data: { success: true } })
+        .mockResolvedValueOnce({ data: { witnesses: 'WIT' } });
+      return signerFor(orderBuilder).signTx('CBOR');
+    };
+    /** `toDex` (55.5 ADA) to the order, the aggregator fee, the rest back to the wallet. */
+    const withFee = (fee: bigint, datum?: Data, toDex = 55_500_000n) => {
+      const core = orderTx(toDex, undefined, datum);
+      core.body.outputs.splice(1, 0, { address: FEE_ADDRESS, value: { coins: fee } });
+      core.body.outputs[2].value = { coins: 100_000_000n - toDex - fee - 200_000n };
+      return core;
+    };
+    const refused = (violations: string[]) => ({
+      name: 'TxIntentMismatchError',
+      message: i18n.t('txGuard.orderMismatch'),
+      violations,
+    });
+
+    it('signs a genuine order with the aggregator fee', async () => {
+      await expect(sign(withFee(1_200_000n))).resolves.toBe('WIT');
+    });
+
+    it('refuses an order whose datum pays out to someone else, before asking for anything', async () => {
+      await expect(sign(withFee(1_200_000n, minswapV2Datum(THIEF)))).rejects.toMatchObject(refused(['foreignOrderRecipient']));
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('refuses an order someone else can cancel', async () => {
+      await expect(sign(withFee(1_200_000n, minswapV2Datum(PAY, THIEF)))).rejects.toMatchObject(refused(['foreignOrderRecipient']));
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('refuses part of the budget sent to a key address dressed as a fee', async () => {
+      const core = withFee(1_200_000n);
+      core.body.outputs[1] = { address: baseAddress(THIEF, STAKE), value: { coins: 1_200_000n } };
+      await expect(sign(core)).rejects.toMatchObject(refused(['foreignOrderRecipient']));
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('refuses an aggregator fee over the cap, though the order stays within its budget', async () => {
+      // 54.7 ADA to the order and 2 ADA of fee: exactly the 56.7 ADA budget, but the fee is over 1.2 ADA.
+      await expect(sign(withFee(2_000_000n, undefined, 54_700_000n))).rejects.toMatchObject(refused(['foreignOrderRecipient', 'spendExceeded']));
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('as the RealFi signer, refuses a DEX order and the aggregator fee', async () => {
+      await expect(sign(withFee(1_200_000n), 'realfi')).rejects.toMatchObject(refused(['foreignOrderRecipient']));
+      expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
+    });
+
+    it('refuses a redirected order on a Ledger before the device sees it', async () => {
+      walletState.loggedWallet = { type: 'Ledger', baseAddress: OWN, network: 'Mainnet', chain: 'Cardano' };
+      vi.mocked(ledger.txToLedger).mockClear();
+      await expect(sign(withFee(1_200_000n, minswapV2Datum(THIEF)))).rejects.toMatchObject(refused(['foreignOrderRecipient']));
+      expect(ledger.txToLedger).not.toHaveBeenCalled();
+    });
+  });
+
   it('getAddresses maps walletStore.keys + baseAddress', async () => {
-    const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
     expect(await signer.getAddresses()).toEqual({ used: ['addr_p', 'addr_c'], change: 'addr_base' });
   });
 
@@ -218,7 +312,7 @@ describe('useNativeSwapSigner', () => {
     sendToBackgroundFromOptions
       .mockResolvedValueOnce({ data: { success: true } })              // VERIFY_SPENDING_PASSWORD
       .mockResolvedValueOnce({ data: { witnesses: 'WIT' } });          // SIGN_TX
-    const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
     const wit = await signer.signTx('CBOR');
     expect(wit).toBe('WIT');
     const signCall = sendToBackgroundFromOptions.mock.calls.at(-1)![0];
@@ -231,7 +325,7 @@ describe('useNativeSwapSigner', () => {
   it('PRF path: SIGN_TX with privateKeyBytes, no password', async () => {
     walletState.loggedWallet = { type: 'Normal', encryptionMethod: 'prf', baseAddress: 'addr_base' };
     sendToBackgroundFromOptions.mockResolvedValueOnce({ data: { witnesses: 'WIT2' } });
-    const { signer } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array([1, 2, 3]) });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => '', getPrfBytes: async () => new Uint8Array([1, 2, 3]) });
     expect(await signer.signTx('CBOR')).toBe('WIT2');
     const call = sendToBackgroundFromOptions.mock.calls.at(-1)![0];
     expect(call.data.privateKeyBytes).toEqual([1, 2, 3]);
@@ -242,14 +336,14 @@ describe('useNativeSwapSigner', () => {
     sendToBackgroundFromOptions
       .mockResolvedValueOnce({ data: { success: true } })
       .mockResolvedValueOnce({ data: { error: 'bad password' } });
-    const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
     await expect(signer.signTx('CBOR')).rejects.toThrow(/bad password|Signing failed/);
   });
 
   // The aggregator selects inputs with no cap. A swap from a wallet spread over small
   // UTxOs can come back larger than any node accepts: refuse it before it is signed.
   it('refuses a transaction larger than the network accepts, before asking for a password', async () => {
-    const { signer } = useNativeSwapSigner({ getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'pw', getPrfBytes: async () => new Uint8Array() });
     const oversized = 'a'.repeat(2 * 16_384);
     await expect(signer.signTx(oversized)).rejects.toMatchObject({
       name: 'TxIntentMismatchError',
@@ -261,14 +355,14 @@ describe('useNativeSwapSigner', () => {
 
   it('throws when password verification fails', async () => {
     sendToBackgroundFromOptions.mockResolvedValueOnce({ data: { success: false } });
-    const { signer } = useNativeSwapSigner({ getPassword: async () => 'wrong', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => 'wrong', getPrfBytes: async () => new Uint8Array() });
     await expect(signer.signTx('CBOR')).rejects.toThrow();
     expect(sendToBackgroundFromOptions).toHaveBeenCalledTimes(1); // never reaches SIGN_TX
   });
 
   it('dispatches Ledger wallets to the client-side Ledger branch (not SIGN_TX)', async () => {
     walletState.loggedWallet = { type: 'Ledger', baseAddress: 'addr_base', chain: 'Cardano', network: 'Mainnet' };
-    const { signer } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
     const wit = await signer.signTx('CBOR');
     expect(wit).toBe('LEDGER_TREZOR_WIT');
     expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
@@ -280,7 +374,7 @@ describe('useNativeSwapSigner', () => {
     // and the WebUSB dispatchTrezor helper is never invoked.
     walletState.loggedWallet = { type: 'Trezor', baseAddress: 'addr_base' };
     sendToBackgroundFromOptions.mockResolvedValueOnce({ data: { success: true, signatures: [] } });
-    const { signer } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
+    const { signer } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
     const wit = await signer.signTx('CBOR');
     expect(wit).toBe('LEDGER_TREZOR_WIT');
     const call = sendToBackgroundFromOptions.mock.calls.at(-1)![0];
@@ -291,7 +385,7 @@ describe('useNativeSwapSigner', () => {
 
   it('dispatches Keystone wallets to the QR flow; onKeystoneScan resolves signTx', async () => {
     walletState.loggedWallet = { type: 'Keystone', baseAddress: 'addr_base' };
-    const { signer, keystone } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
+    const { signer, keystone } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
     const pending = signer.signTx('CBOR');
     // The order is checked (inputs proven) before the QR dialog opens.
     await vi.waitFor(() => expect(keystone.keystoneShow.value).toBe(true));
@@ -302,7 +396,7 @@ describe('useNativeSwapSigner', () => {
 
   it('failKeystone rejects signTx with the provided error message (not "cancelled")', async () => {
     walletState.loggedWallet = { type: 'Keystone', baseAddress: 'addr_base' };
-    const { signer, keystone } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
+    const { signer, keystone } = useNativeSwapSigner({ orderBuilder: 'swapAggregator', getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
     const pending = signer.signTx('CBOR');
     await vi.waitFor(() => expect(keystone.keystoneShow.value).toBe(true));
     keystone.failKeystone('bad QR code');

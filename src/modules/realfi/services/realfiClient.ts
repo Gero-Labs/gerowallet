@@ -12,6 +12,7 @@
 
 import axios, { type AxiosInstance } from 'axios';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
+import { installSignedResponses } from '@/api/signedResponses';
 import {
   EMPTY_POINTS,
   EMPTY_REFERRALS,
@@ -246,6 +247,8 @@ const nexusAxios = axios.create({
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
+// gero-backend relays Nexus and signs what it relays (build-time mode; off by default).
+installSignedResponses(nexusAxios, 'gero-backend');
 
 export function createNexusReadClient(http: AxiosInstance, network: string): RealFiReadClient {
   async function read(view: string, params: Record<string, unknown>): Promise<unknown> {

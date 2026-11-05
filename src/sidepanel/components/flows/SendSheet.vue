@@ -588,6 +588,7 @@ import { useChainContext } from '../../composables/useChainContext';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
+import { confirmTokenDecimals } from '@/shared/utils/verifiedDecimals';
 import { matchIntendedOutputs } from '@/shared/utils/txIntentGuard';
 
 const { themeColors } = useChainContext();
@@ -1108,9 +1109,16 @@ async function buildTransaction() {
     let coinsAmount = decimalToBaseUnits(adaAmount.value, 6);
     if (coinsAmount < 0n) coinsAmount = 0n;
 
-    // Extra tokens
+    // Extra tokens. Each typed amount becomes base units with the decimals gero-backend
+    // confirms (verifiedDecimals.ts); a refusal stops the build here, with its reason.
+    const confirmed = await awaitFreshApproval(() => confirmTokenDecimals(
+      extraTokens.value
+        .filter((token) => /[1-9]/.test(String(token.sendAmount ?? '')))
+        .map((token) => ({ unit: String(token.unit), decimals: token.decimals ?? 0 })),
+      loggedWallet.value,
+    ), current);
     for (const token of extraTokens.value) {
-      const quantity = decimalToBaseUnits(token.sendAmount, token.decimals ?? 0);
+      const quantity = decimalToBaseUnits(token.sendAmount, confirmed.get(String(token.unit)) ?? token.decimals ?? 0);
       if (quantity <= 0n) continue;
       assetsMap.set(token.unit as Cardano.AssetId, quantity);
     }
