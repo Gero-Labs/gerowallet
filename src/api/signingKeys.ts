@@ -4,14 +4,21 @@
  * gero-backend serves the root-signed statements at `GET /api/signing/delegations`.
  * That answer is not trusted: every statement is checked against the pinned roots
  * here (signedResponseRoots.ts), so whoever serves it can only withhold approvals,
- * never add one. It is fetched with `fetch` rather than a checked axios client, since
- * it is what those checks need.
+ * never add one. A delegation needs both roots' entries; a revocation needs one. It is
+ * fetched with `fetch` rather than a checked axios client, since it is what those
+ * checks need.
  *
- *  - Delegations: the verified set the server serves now replaces the stored one, so
- *    a delegation it stops serving stops counting. A failed fetch keeps what is stored.
+ *  - Delegations only grow until they expire or are revoked: the stored entries and
+ *    every fetched one count together. A server (or anyone in between) that stops
+ *    serving one, serves an empty list or pads it with junk cannot take an approved key
+ *    away; a revocation is the only way, and the runbook says to revoke, never to just
+ *    stop serving.
  *  - Revocations only ever grow: the stored ones, the ones shipped in this release
  *    (BUNDLED_REVOCATIONS) and every verified one fetched. A server that stops serving
  *    one cannot bring a key back.
+ *
+ * Every entry is verified before anything is capped, so padding cannot push a real
+ * entry out.
  *
  * The verified copy lives in the extension-origin store (privateStore.ts), never in
  * chrome.storage.local, which content scripts can rewrite. Stored delegations are
@@ -25,17 +32,15 @@ import type { KeyResolver } from '@/shared/utils/signedResponse';
 import {
   delegationResolver,
   pinnedRoots,
-  verifyDelegation,
+  verifyDelegations,
   verifyRevocationList,
   type Delegation,
+  type SignedStatement,
   type SigningService,
 } from '@/shared/utils/signedResponseRoots';
 import { debugLog } from '@/utils/debug';
 
-export interface SignedStatement {
-  statement: string;
-  coseSign1: string;
-}
+export type { SignedStatement };
 
 /**
  * Revocations shipped in this release, so a revoked key stays revoked for wallets that
@@ -53,7 +58,10 @@ export const MIN_REFETCH_MS = 5 * 60_000;
 export const RETRY_EMPTY_MS = 30_000;
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 64 * 1024;
-const MAX_ENTRIES = 32;
+/** Entries read from one list. 64 KiB holds about 150, so in practice every entry is read. */
+const MAX_ENTRIES_READ = 256;
+/** Approved delegations kept; the ones lasting longest win. */
+const MAX_DELEGATIONS_KEPT = 64;
 
 interface StoredKeys {
   fetchedAt: number;
@@ -76,7 +84,20 @@ function isSignedStatement(value: unknown): value is SignedStatement {
 }
 
 function statementList(value: unknown): SignedStatement[] {
-  return Array.isArray(value) ? value.slice(0, MAX_ENTRIES).filter(isSignedStatement) : [];
+  return Array.isArray(value) ? value.filter(isSignedStatement).slice(0, MAX_ENTRIES_READ) : [];
+}
+
+/** `lists` concatenated, each statement-and-signature pair once. */
+function uniqueEntries(...lists: SignedStatement[][]): SignedStatement[] {
+  const seen = new Set<string>();
+  const out: SignedStatement[] = [];
+  for (const entry of lists.flat()) {
+    const key = `${entry.statement}\n${entry.coseSign1}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ statement: entry.statement, coseSign1: entry.coseSign1 });
+  }
+  return out;
 }
 
 /** One context's view of the approved keys. */
@@ -87,7 +108,9 @@ export class SigningKeys {
   private readonly bundled: readonly SignedStatement[];
   private readonly nowMs: () => number;
 
-  private delegations: Array<{ signed: SignedStatement; delegation: Delegation }> = [];
+  private delegations: Delegation[] = [];
+  /** The verified entries behind `delegations`, as stored. */
+  private entries: SignedStatement[] = [];
   private revoked = new Set<string>();
   private fetchedAt = 0;
   private lastAttempt = Number.NEGATIVE_INFINITY;
@@ -134,7 +157,7 @@ export class SigningKeys {
   }
 
   private current(service: SigningService): KeyResolver {
-    return delegationResolver(service, this.delegations.map((d) => d.delegation), new Set(this.revoked));
+    return delegationResolver(service, this.delegations, new Set(this.revoked));
   }
 
   private load(): Promise<void> {
@@ -156,18 +179,22 @@ export class SigningKeys {
       const verified = await verifyRevocationList(list.statement, list.coseSign1, this.roots);
       verified?.revoked.forEach((kid) => this.revoked.add(kid));
     }
-    this.delegations = await this.verifiedDelegations(statementList(stored?.delegations));
+    await this.adopt(statementList(stored?.delegations));
     this.fetchedAt = typeof stored?.fetchedAt === 'number' && stored.fetchedAt <= this.nowMs() ? stored.fetchedAt : 0;
   }
 
-  private async verifiedDelegations(list: SignedStatement[]) {
+  /**
+   * Verifies `candidates` together with the entries already held and keeps every
+   * delegation both roots approved that has neither expired nor been revoked.
+   */
+  private async adopt(candidates: SignedStatement[]): Promise<void> {
     const nowSeconds = this.nowMs() / 1000;
-    const out: Array<{ signed: SignedStatement; delegation: Delegation }> = [];
-    for (const signed of list) {
-      const delegation = await verifyDelegation(signed.statement, signed.coseSign1, this.roots);
-      if (delegation && nowSeconds < delegation.notAfter) out.push({ signed, delegation });
-    }
-    return out;
+    const approved = (await verifyDelegations(uniqueEntries(this.entries, candidates), this.roots))
+      .filter((a) => nowSeconds < a.delegation.notAfter && !this.revoked.has(a.delegation.kid))
+      .sort((a, b) => b.delegation.notAfter - a.delegation.notAfter)
+      .slice(0, MAX_DELEGATIONS_KEPT);
+    this.delegations = approved.map((a) => a.delegation);
+    this.entries = approved.flatMap((a) => a.entries);
   }
 
   private refresh(): Promise<void> {
@@ -205,17 +232,19 @@ export class SigningKeys {
       const verified = await verifyRevocationList(list.statement, list.coseSign1, this.roots);
       verified?.revoked.forEach((kid) => this.revoked.add(kid));
     }
-    this.delegations = await this.verifiedDelegations(statementList(body.delegations));
+    await this.adopt(statementList(body.delegations));
     this.fetchedAt = this.nowMs();
     try {
-      // Another context (the worker, a dashboard) may have stored revocations this one has not seen.
+      // Another context (the worker, a dashboard) may have stored entries and revocations
+      // this one has not seen: keep them too.
       const stored = await getPrivate<StoredKeys>(STORE_KEY);
       for (const kid of Array.isArray(stored?.revoked) ? stored.revoked : []) {
         if (typeof kid === 'string') this.revoked.add(kid);
       }
+      await this.adopt(statementList(stored?.delegations));
       await setPrivate(STORE_KEY, {
         fetchedAt: this.fetchedAt,
-        delegations: this.delegations.map((d) => d.signed),
+        delegations: this.entries,
         revoked: [...this.revoked],
       } satisfies StoredKeys);
     } catch (error) {

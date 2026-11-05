@@ -1,5 +1,7 @@
 // Keep first: lands every locale before its reader (see backgroundLocales.ts).
 import './backgroundLocales';
+// Next: wraps fetch before anything can call it (signed-response check).
+import '@/api/signedFetchInstall';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';

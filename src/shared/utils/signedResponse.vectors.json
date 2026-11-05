@@ -4,7 +4,9 @@
     "/api/nexus/api/tx/",
     "/api/nexus/api/collateral/",
     "/api/nexus/api/aggregator/",
+    "/api/nexus/api/realfi/",
     "/api/assets/handle",
+    "/api/assets/info",
     "/api/pools",
     "/api/dreps",
     "/api/mpc/"
@@ -22,7 +24,8 @@
         "method": "POST",
         "path": "/api/nexus/api/tx/build/delegation",
         "query": "network=MAINNET",
-        "body": "{\"stakeAddress\":\"stake1uxyz\",\"poolId\":\"pool1abc\"}"
+        "body": "{\"stakeAddress\":\"stake1uxyz\",\"poolId\":\"pool1abc\"}",
+        "nonce": "f-02WyME8TqPZiKZlyJ2Pw"
       },
       "response": {
         "status": 200,
@@ -31,9 +34,9 @@
       "expected": {
         "requestDigest": "sha-256=:FP1k7mAq/D+w4VMeOKIs1gtM7LIRCVUkZKE9Yikgifw=:",
         "bodyDigest": "sha-256=:uX69uHW6OrKDIlHW6AZe0jAPK8VBl3I9vaLZrQQL7Ek=:",
-        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signatureBase": "\"@method\";req: POST\n\"@path\";req: /api/nexus/api/tx/build/delegation\n\"@query\";req: ?network=MAINNET\n\"@status\": 200\n\"gero-request-digest\": sha-256=:FP1k7mAq/D+w4VMeOKIs1gtM7LIRCVUkZKE9Yikgifw=:\n\"gero-body-digest\": sha-256=:uX69uHW6OrKDIlHW6AZe0jAPK8VBl3I9vaLZrQQL7Ek=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signature": "gero=:wNgpG+zlQjt1BYtdgIAxKi/tD1l4QSquS5IHKILrPZ+kNa7IrQxAobN6Upv8uGKdIS2CwACcBcUwXbJqRDbQBQ==:"
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: POST\n\"@path\";req: /api/nexus/api/tx/build/delegation\n\"@query\";req: ?network=MAINNET\n\"gero-request-nonce\";req: f-02WyME8TqPZiKZlyJ2Pw\n\"@status\": 200\n\"gero-request-digest\": sha-256=:FP1k7mAq/D+w4VMeOKIs1gtM7LIRCVUkZKE9Yikgifw=:\n\"gero-body-digest\": sha-256=:uX69uHW6OrKDIlHW6AZe0jAPK8VBl3I9vaLZrQQL7Ek=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:C90hRnX5cDtZxe2jHh6tueaPF213cVt1p1bnGTXwOvFiuRgGTvPfZeRVMKIsU7YGzEDIQRly4wpp3GGgHVjGCQ==:"
       }
     },
     {
@@ -42,7 +45,8 @@
         "method": "GET",
         "path": "/api/pools",
         "query": "",
-        "body": ""
+        "body": "",
+        "nonce": "CJt269C4boQvZC8bfJL5OQ"
       },
       "response": {
         "status": 200,
@@ -51,9 +55,9 @@
       "expected": {
         "requestDigest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:",
         "bodyDigest": "sha-256=:SWO9Wb4a99JYunq3IjLjcYOUiUrIjcFKmDxXeQSGjFs=:",
-        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signatureBase": "\"@method\";req: GET\n\"@path\";req: /api/pools\n\"@query\";req: ?\n\"@status\": 200\n\"gero-request-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-body-digest\": sha-256=:SWO9Wb4a99JYunq3IjLjcYOUiUrIjcFKmDxXeQSGjFs=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signature": "gero=:atPilKUreZUip8WSZ0dqSp+DCaOxZO94O2oBW6nkruyXtRJ2xSdOtVdYqybWPbmNdyQvL5n/8x2ourqtYVCFDQ==:"
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: GET\n\"@path\";req: /api/pools\n\"@query\";req: ?\n\"gero-request-nonce\";req: CJt269C4boQvZC8bfJL5OQ\n\"@status\": 200\n\"gero-request-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-body-digest\": sha-256=:SWO9Wb4a99JYunq3IjLjcYOUiUrIjcFKmDxXeQSGjFs=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:1Rl2pjXHLWZdm3YrnDm7Zl4CqqBj6kuhioaS+SQwHp7bjVralIJsp9kLOkbF0NDonK+OBMziaLoV9GuGdiDgCw==:"
       }
     },
     {
@@ -62,7 +66,8 @@
         "method": "GET",
         "path": "/api/assets/handle",
         "query": "name=alice&network=MAINNET",
-        "body": ""
+        "body": "",
+        "nonce": "VfVRLeJ1vy56O23i0LB3XA"
       },
       "response": {
         "status": 404,
@@ -71,9 +76,9 @@
       "expected": {
         "requestDigest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:",
         "bodyDigest": "sha-256=:wT5zZx37aG2O9ayD2RsE7w7DbMv+Fp60RwjzQVBWBRE=:",
-        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signatureBase": "\"@method\";req: GET\n\"@path\";req: /api/assets/handle\n\"@query\";req: ?name=alice&network=MAINNET\n\"@status\": 404\n\"gero-request-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-body-digest\": sha-256=:wT5zZx37aG2O9ayD2RsE7w7DbMv+Fp60RwjzQVBWBRE=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signature": "gero=:+Tg0UVmLlgmueO5EXPWg7l0i93T5qhguWeuAsZ7109T1D7ugl2vpPG+dwkEd1BRWGv46GIvCQpRKJGL9yj4IDA==:"
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: GET\n\"@path\";req: /api/assets/handle\n\"@query\";req: ?name=alice&network=MAINNET\n\"gero-request-nonce\";req: VfVRLeJ1vy56O23i0LB3XA\n\"@status\": 404\n\"gero-request-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-body-digest\": sha-256=:wT5zZx37aG2O9ayD2RsE7w7DbMv+Fp60RwjzQVBWBRE=:\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:vSmOglYoUKIPU1k8Jmzsy7X1FN9CwAKHU5SedIRr6RqPFyizVxxCVbEAhyb49ihNDVYgGIbFCTuTaxnUoci7CQ==:"
       }
     },
     {
@@ -82,7 +87,8 @@
         "method": "POST",
         "path": "/api/nexus/api/collateral/lend",
         "query": "network=PREPROD",
-        "body": "{\"ref\":\"aa#0\"}"
+        "body": "{\"ref\":\"aa#0\"}",
+        "nonce": "azqLwd6_XSKuA-TToS81lg"
       },
       "response": {
         "status": 204,
@@ -92,18 +98,35 @@
       "expected": {
         "requestDigest": "sha-256=:Qit39J4OCdOomppEK5hz2UWv2eTG6FbHPrO4t7Cl+zs=:",
         "bodyDigest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:",
-        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\" \"gero-chain-tip\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signatureBase": "\"@method\";req: POST\n\"@path\";req: /api/nexus/api/collateral/lend\n\"@query\";req: ?network=PREPROD\n\"@status\": 204\n\"gero-request-digest\": sha-256=:Qit39J4OCdOomppEK5hz2UWv2eTG6FbHPrO4t7Cl+zs=:\n\"gero-body-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-chain-tip\": 171234567,0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\" \"gero-chain-tip\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
-        "signature": "gero=:0bnufEJ7COsZ1StAhDI2kCEHJBqG//V66YdmLD8na4h7x9JgEG6DJan7QL5pdYkUgNy3sYAdYpXz5QTJd/dbAg==:"
+        "signatureInput": "gero=(\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\" \"gero-chain-tip\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signatureBase": "\"@method\";req: POST\n\"@path\";req: /api/nexus/api/collateral/lend\n\"@query\";req: ?network=PREPROD\n\"gero-request-nonce\";req: azqLwd6_XSKuA-TToS81lg\n\"@status\": 204\n\"gero-request-digest\": sha-256=:Qit39J4OCdOomppEK5hz2UWv2eTG6FbHPrO4t7Cl+zs=:\n\"gero-body-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"gero-chain-tip\": 171234567,0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0\n\"@signature-params\": (\"@method\";req \"@path\";req \"@query\";req \"gero-request-nonce\";req \"@status\" \"gero-request-digest\" \"gero-body-digest\" \"gero-chain-tip\");created=1761955200;expires=1761955500;keyid=\"backend-test\";alg=\"ed25519\";tag=\"gero-v1\"",
+        "signature": "gero=:/TkN0XFrJS+Q7WZPSLme9NB2K0BD/uLTp8CRW7rwmjpOWksARCj9ThkYQW/C2tA5V90mMRodiNxTybgQzcZ2AQ==:"
       }
     }
   ],
   "root": {
-    "seedHex": "5283550a723d36b62f6dcc4a039f9d2c0b1699b1cf2e08c6efcd41ba1a71da41",
-    "publicKeyHex": "bb220f3860d6b7270cf43f47946dd19f5c695b2939ea786a397250f124b9c987",
+    "keys": [
+      {
+        "seedHex": "5283550a723d36b62f6dcc4a039f9d2c0b1699b1cf2e08c6efcd41ba1a71da41",
+        "publicKeyHex": "bb220f3860d6b7270cf43f47946dd19f5c695b2939ea786a397250f124b9c987"
+      },
+      {
+        "seedHex": "6a523727d61272ca0ee6f975f1a6cd71275763fc29367cb6f34f2a8c84f4529f",
+        "publicKeyHex": "e59bf836624ddfe1d9976f4cab816f805ab788e410e7c6fac8a53338af9e9c04"
+      }
+    ],
     "delegation": {
-      "statement": "gero-signing/v1|delegation|kid=backend-test|service=gero-backend|hosts=api.gerowallet.io|from=2025-10-01|until=2025-12-30|key=1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0",
-      "coseSign1": "84582aa201276761646472657373581de1c93df850c777b862f29f5ac849170346436f4997c3e3e3708cf20e28a166686173686564f458be6765726f2d7369676e696e672f76317c64656c65676174696f6e7c6b69643d6261636b656e642d746573747c736572766963653d6765726f2d6261636b656e647c686f7374733d6170692e6765726f77616c6c65742e696f7c66726f6d3d323032352d31302d30317c756e74696c3d323032352d31322d33307c6b65793d31653233636437373131323466623036393364636336643332326430356661636130333461636137656434396561306465386331623433383563383263336130584094563f1ba185f6aa82b0b482161e2fe2318f398bb18320cda54819a5fb642d934bd5fd0c13304d578706358f76924ebda5cb8bf6601225ac59d6eb285bda3909"
+      "statement": "gero-signing/v1|delegation|kid=backend-test|service=gero-backend|host=api.gerowallet.io|from=2025-10-01|until=2025-12-30|key=1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0",
+      "entries": [
+        {
+          "statement": "gero-signing/v1|delegation|kid=backend-test|service=gero-backend|host=api.gerowallet.io|from=2025-10-01|until=2025-12-30|key=1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0",
+          "coseSign1": "84582aa201276761646472657373581de1c93df850c777b862f29f5ac849170346436f4997c3e3e3708cf20e28a166686173686564f458bd6765726f2d7369676e696e672f76317c64656c65676174696f6e7c6b69643d6261636b656e642d746573747c736572766963653d6765726f2d6261636b656e647c686f73743d6170692e6765726f77616c6c65742e696f7c66726f6d3d323032352d31302d30317c756e74696c3d323032352d31322d33307c6b65793d3165323363643737313132346662303639336463633664333232643035666163613033346163613765643439656130646538633162343338356338326333613058400e1b84e448ef78aa8c77cd48203f372a3cdb95334aa04da70003492ece2a89ec67b5001bab3aa158d1b66ab026f58e153d034925eedb3fa862785900e6ded60d"
+        },
+        {
+          "statement": "gero-signing/v1|delegation|kid=backend-test|service=gero-backend|host=api.gerowallet.io|from=2025-10-01|until=2025-12-30|key=1e23cd771124fb0693dcc6d322d05faca034aca7ed49ea0de8c1b4385c82c3a0",
+          "coseSign1": "84582aa201276761646472657373581de1efbc5332ba741abe0a8dc95df60f0f35ed66939b95845d0396cb1a4ba166686173686564f458bd6765726f2d7369676e696e672f76317c64656c65676174696f6e7c6b69643d6261636b656e642d746573747c736572766963653d6765726f2d6261636b656e647c686f73743d6170692e6765726f77616c6c65742e696f7c66726f6d3d323032352d31302d30317c756e74696c3d323032352d31322d33307c6b65793d3165323363643737313132346662303639336463633664333232643035666163613033346163613765643439656130646538633162343338356338326333613058407a5a2a1df99c178734881fa2a144f53108a09a25053868a87d4e6db4822d64d92d11d24bcca8dd875be397770dcfeced8bd9a18d2950eeb9c8c0936fdc33db0e"
+        }
+      ]
     },
     "revocation": {
       "statement": "gero-signing/v1|revocation|issued=2025-11-15|revoked=backend-2025-08,backend-2025-05",

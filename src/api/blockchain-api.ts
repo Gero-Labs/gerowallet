@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { Blockchain, Network, PaginationParams, PaginatedResponse, Tip } from '@/models/types';
+import type { DRepRecord } from '@/shared/utils/drepStats';
+import { installSignedResponses } from './signedResponses';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
@@ -10,6 +12,24 @@ const axiosInstance = axios.create({
     'Access-Control-Allow-Origin': '*',
   },
 });
+// Pools and DReps decide where a delegation or a vote goes: gero-backend signs them
+// (build-time mode; off by default).
+installSignedResponses(axiosInstance, 'gero-backend');
+
+/** An `/api/dreps` row: the fields the wallet reads, plus whatever else the server sends. */
+export type DRepRow = DRepRecord & Record<string, unknown>;
+
+function isNotFound(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
+}
+
+/** A DRep's CIP-119 given name, plain or JSON-LD (`{ "@value": ... }`). */
+function drepGivenName(drep: DRepRecord): string {
+  const given = drep.metadata?.meta_json?.body?.['givenName'];
+  if (typeof given === 'string') return given;
+  const value = given && typeof given === 'object' ? (given as Record<string, unknown>)['@value'] : undefined;
+  return typeof value === 'string' ? value : 'N/A';
+}
 
 export default {
   async getPoolById(poolId: string, chain: string, network: string) {
@@ -21,8 +41,8 @@ export default {
       );
       if (status === 200) return data;
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (isNotFound(error)) {
         return null;
       }
       throw parseHttpError(error);
@@ -38,7 +58,7 @@ export default {
       );
       if (status === 200) return data;
       return [];
-    } catch (error: any | AxiosError) {
+    } catch (error: unknown) {
       console.warn('Failed to fetch pool history:', error);
       return [];
     }
@@ -48,7 +68,7 @@ export default {
     params: PaginationParams = {},
     chain: string,
     network: string
-  ): Promise<PaginatedResponse<any>> {
+  ) {
     const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain).toUpperCase() || '';
     const networkEnum: string = Object.keys(Network).find(key => Network[key] === network).toUpperCase() || '';
     try {
@@ -98,8 +118,8 @@ export default {
         };
       }
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (isNotFound(error)) {
         return {
           items: [],
           meta: {
@@ -118,7 +138,7 @@ export default {
     params: PaginationParams = {},
     chain: string,
     network: string
-  ): Promise<PaginatedResponse<any>> {
+  ): Promise<PaginatedResponse<DRepRow>> {
     const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain) || '';
     const networkEnum: string = Object.keys(Network).find(key => Network[key] === network) || '';
     try {
@@ -152,17 +172,14 @@ export default {
         }
 
         // Otherwise, wrap raw array in pagination format (fallback with client-side pagination)
-        const allDReps = data || [];
+        const allDReps: DRepRow[] = data || [];
 
         // Client-side filtering if search is provided
         let filteredDReps = allDReps;
         if (params.search && params.search.trim()) {
           const searchTerm = params.search.toLowerCase();
-          filteredDReps = allDReps.filter((drep: any) => {
-            const name =
-              drep.metadata?.meta_json?.body?.givenName?.['@value'] ||
-              drep.metadata?.meta_json?.body?.givenName ||
-              'N/A';
+          filteredDReps = allDReps.filter((drep) => {
+            const name = drepGivenName(drep);
             const id = drep.drep_id || '';
 
             return name.toLowerCase().includes(searchTerm) || id.toLowerCase().includes(searchTerm);
@@ -189,8 +206,8 @@ export default {
         };
       }
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (isNotFound(error)) {
         return {
           items: [],
           meta: {
@@ -214,8 +231,8 @@ export default {
       );
       if (status === 200) return data;
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (isNotFound(error)) {
         return null;
       }
       throw parseHttpError(error);
@@ -243,7 +260,7 @@ export default {
       const { data, status } = await axiosInstance.post('/api/sync2', syncRequest);
       if (status === 200) return data;
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
+    } catch (error: unknown) {
       console.error('REST sync failed:', error);
       throw parseHttpError(error);
     }

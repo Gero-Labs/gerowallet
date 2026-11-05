@@ -4,19 +4,23 @@
  * Two root keys, held offline on hardware wallets (one by each holder), approve
  * the online signing keys by signing a short statement through Cardano message
  * signing (CIP-8). The wallet pins the roots' public keys and accepts a signing
- * key only through a delegation one of them signed:
+ * key only through a delegation BOTH of them signed (REQUIRED_DELEGATION_APPROVALS),
+ * so one tricked or compromised holder cannot approve a key alone:
  *
  *   gero-signing/v1|delegation|kid=backend-2026-11|service=gero-backend|
- *     hosts=api.gerowallet.io|from=2026-11-01|until=2027-01-30|key=<64 hex>
+ *     host=api.gerowallet.io|from=2026-11-01|until=2027-01-30|key=<64 hex>
  *
- * (one line, no spaces). `from` and `until` are UTC days; the key is valid from the
- * start of `from` until the start of `until`. A revocation, signed the same way,
- * withdraws key ids early:
+ * (one line, no spaces). Each holder's signature is its own `{statement, coseSign1}`
+ * entry; entries with the same statement count together. `from` and `until` are UTC
+ * days; the key is valid from the start of `from` until the start of `until`. One
+ * host per delegation: the signature does not cover the host, so a key approved for
+ * two hosts could have one host's answer served for the other's. A revocation, signed
+ * by either root alone, withdraws key ids early:
  *
  *   gero-signing/v1|revocation|issued=2026-11-15|revoked=backend-2026-11,backend-2026-08
  *
  * Both are short enough (at most MAX_STATEMENT_BYTES) for a Ledger to show the whole
- * text and sign it unhashed, so the holder reads the key id, hosts, dates and key on
+ * text and sign it unhashed, so the holder reads the key id, host, dates and key on
  * the device itself. A hashed signature is never accepted: the device would have shown
  * only a hash, and a hashed CIP-8 signature is the same bytes as a signature over the
  * 28-byte hash sent as an ordinary message.
@@ -38,6 +42,15 @@ import type { KeyResolver } from './signedResponse';
  * Never add a test key here.
  */
 export const PINNED_ROOT_KEYS: readonly string[] = [];
+
+/** Distinct pinned roots that must sign the same delegation statement. */
+export const REQUIRED_DELEGATION_APPROVALS = 2;
+
+/** One root's CIP-8 signature over one statement, as published and stored. */
+export interface SignedStatement {
+  statement: string;
+  coseSign1: string;
+}
 
 /** The reserved domain every root statement starts with. */
 export const SIGNING_DOMAIN = 'gero-signing/v1';
@@ -62,7 +75,7 @@ export interface Delegation {
   kid: string;
   publicKey: Uint8Array;
   service: SigningService;
-  hosts: string[];
+  host: string;
   notBefore: number;
   notAfter: number;
 }
@@ -81,7 +94,7 @@ const KID = '[A-Za-z0-9._-]{1,32}';
 const HOST = '[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?';
 const DAY = '\\d{4}-\\d{2}-\\d{2}';
 const DELEGATION_RE = new RegExp(
-  `^${literal(DELEGATION_PREFIX)}kid=(${KID})\\|service=(gero-backend|gero-sync)\\|hosts=(${HOST}(?:,${HOST})*)` +
+  `^${literal(DELEGATION_PREFIX)}kid=(${KID})\\|service=(gero-backend|gero-sync)\\|host=(${HOST})` +
     `\\|from=(${DAY})\\|until=(${DAY})\\|key=([0-9a-f]{64})$`,
 );
 const REVOCATION_RE = new RegExp(`^${literal(REVOCATION_PREFIX)}issued=(${DAY})\\|revoked=(${KID}(?:,${KID})*)$`);
@@ -131,14 +144,12 @@ export function daySeconds(day: string): number | undefined {
 export function parseDelegationStatement(statement: string): Delegation | undefined {
   const m = DELEGATION_RE.exec(statement);
   if (!m) return undefined;
-  const [, kid, service, hostList, from, until, keyHex] = m;
+  const [, kid, service, host, from, until, keyHex] = m;
   const notBefore = daySeconds(from);
   const notAfter = daySeconds(until);
   if (notBefore === undefined || notAfter === undefined || notAfter <= notBefore) return undefined;
   if (notAfter - notBefore > MAX_DELEGATION_DAYS * DAY_SECONDS) return undefined;
-  const hosts = hostList.split(',');
-  if (new Set(hosts).size !== hosts.length) return undefined;
-  return { kid, publicKey: hexToBytes(keyHex)!, service: service as SigningService, hosts, notBefore, notAfter };
+  return { kid, publicKey: hexToBytes(keyHex)!, service: service as SigningService, host, notBefore, notAfter };
 }
 
 /** The revocation a statement states (its signature not checked), or undefined. */
@@ -153,7 +164,7 @@ export function parseRevocationStatement(statement: string): RevocationList | un
 function checkLength(statement: string): string {
   const bytes = new TextEncoder().encode(statement).length;
   if (bytes > MAX_STATEMENT_BYTES) {
-    throw new Error(`Statement is ${bytes} bytes; a Ledger shows at most ${MAX_STATEMENT_BYTES}. Shorten the key id.`);
+    throw new Error(`Statement is ${bytes} bytes; a Ledger shows at most ${MAX_STATEMENT_BYTES}. Shorten the key id or host.`);
   }
   return statement;
 }
@@ -161,7 +172,7 @@ function checkLength(statement: string): string {
 export interface DelegationFields {
   kid: string;
   service: SigningService;
-  hosts: readonly string[];
+  host: string;
   /** First UTC day, `YYYY-MM-DD`. */
   from: string;
   /** UTC day the key stops being valid, `YYYY-MM-DD`. */
@@ -172,10 +183,10 @@ export interface DelegationFields {
 /** Writes a delegation statement; throws for any field the verifier would refuse. */
 export function buildDelegationStatement(fields: DelegationFields): string {
   const statement =
-    `${DELEGATION_PREFIX}kid=${fields.kid}|service=${fields.service}|hosts=${fields.hosts.join(',')}` +
+    `${DELEGATION_PREFIX}kid=${fields.kid}|service=${fields.service}|host=${fields.host}` +
     `|from=${fields.from}|until=${fields.until}|key=${fields.publicKeyHex.toLowerCase()}`;
   if (!isKeyId(fields.kid)) throw new Error('Key id: 1 to 32 letters, digits, dot, dash or underscore');
-  if (!fields.hosts.length || !fields.hosts.every(isHost)) throw new Error('Hosts: lower-case host names');
+  if (!isHost(fields.host)) throw new Error('Host: one lower-case host name');
   if (!/^[0-9a-f]{64}$/i.test(fields.publicKeyHex)) throw new Error('Public key: 64 hex characters (32 bytes)');
   if (!parseDelegationStatement(statement)) {
     throw new Error(`Dates: real UTC days, until after from, at most ${MAX_DELEGATION_DAYS} days apart`);
@@ -244,18 +255,39 @@ export async function rootSigning(
   return undefined;
 }
 
-/** A delegation `coseSign1Hex` proves, or undefined. */
-export async function verifyDelegation(
-  statement: string,
-  coseSign1Hex: string,
-  roots: readonly Uint8Array[],
-): Promise<Delegation | undefined> {
-  const delegation = parseDelegationStatement(statement);
-  if (!delegation || !(await rootSigning(statement, coseSign1Hex, roots))) return undefined;
-  return delegation;
+export interface ApprovedDelegation {
+  delegation: Delegation;
+  /** The entries that verified, one per approving root. */
+  entries: SignedStatement[];
 }
 
-/** A revocation list `coseSign1Hex` proves, or undefined. */
+/**
+ * The delegations `entries` prove: every statement signed by at least
+ * REQUIRED_DELEGATION_APPROVALS distinct roots. An entry that does not verify, or a
+ * second signature by the same root, adds nothing.
+ */
+export async function verifyDelegations(
+  entries: readonly SignedStatement[],
+  roots: readonly Uint8Array[],
+): Promise<ApprovedDelegation[]> {
+  if (roots.length < REQUIRED_DELEGATION_APPROVALS) return [];
+  const byStatement = new Map<string, { delegation: Delegation; signers: Map<string, SignedStatement> }>();
+  for (const entry of entries) {
+    const delegation = parseDelegationStatement(entry.statement);
+    if (!delegation) continue;
+    const root = await rootSigning(entry.statement, entry.coseSign1, roots);
+    if (!root) continue;
+    const group = byStatement.get(entry.statement) ?? { delegation, signers: new Map<string, SignedStatement>() };
+    const signer = bytesToHex(root);
+    if (!group.signers.has(signer)) group.signers.set(signer, entry);
+    byStatement.set(entry.statement, group);
+  }
+  return [...byStatement.values()]
+    .filter((group) => group.signers.size >= REQUIRED_DELEGATION_APPROVALS)
+    .map((group) => ({ delegation: group.delegation, entries: [...group.signers.values()] }));
+}
+
+/** A revocation list `coseSign1Hex` proves (one root is enough), or undefined. */
 export async function verifyRevocationList(
   statement: string,
   coseSign1Hex: string,
@@ -287,7 +319,7 @@ export function delegationResolver(
         (d) =>
           d.kid === keyid &&
           d.service === service &&
-          d.hosts.includes(hostname.toLowerCase()) &&
+          d.host === hostname.toLowerCase() &&
           d.notBefore <= nowSeconds &&
           nowSeconds < d.notAfter,
       );

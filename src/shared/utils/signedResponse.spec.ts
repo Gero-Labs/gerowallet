@@ -4,6 +4,8 @@ import {
   buildSignatureBase,
   dictionaryMember,
   digestHeaderValue,
+  isRequestNonce,
+  newRequestNonce,
   parseSignatureInput,
   verifySignedResponse,
   type KeyResolver,
@@ -33,12 +35,23 @@ function signedHeaders(v: Vector): Record<string, string> {
   return headers;
 }
 
-function exchange(v: Vector, change: { url?: string; method?: string; requestBody?: string; status?: number; body?: string; headers?: Record<string, string | undefined> } = {}): SignedExchange {
+interface Change {
+  url?: string;
+  method?: string;
+  requestBody?: string;
+  nonce?: string | undefined;
+  status?: number;
+  body?: string;
+  headers?: Record<string, string | undefined>;
+}
+
+function exchange(v: Vector, change: Change = {}): SignedExchange {
   const headers = { ...signedHeaders(v), ...change.headers };
   const url = change.url ?? `${HOST}${v.request.path}${v.request.query ? `?${v.request.query}` : ''}`;
   const requestBody = change.requestBody ?? v.request.body;
+  const nonce = 'nonce' in change ? change.nonce : v.request.nonce;
   return {
-    request: { method: change.method ?? v.request.method, url, body: requestBody ? utf8(requestBody) : undefined },
+    request: { method: change.method ?? v.request.method, url, body: requestBody ? utf8(requestBody) : undefined, nonce },
     response: {
       status: change.status ?? v.response.status,
       header: (name) => headers[name.toLowerCase()],
@@ -59,6 +72,7 @@ describe('signed responses (gero-v1)', () => {
           method: v.request.method,
           path: v.request.path,
           query: v.request.query,
+          nonce: v.request.nonce,
           status: v.response.status,
           requestDigest: v.expected.requestDigest,
           bodyDigest: v.expected.bodyDigest,
@@ -125,7 +139,7 @@ describe('signed responses (gero-v1)', () => {
 
   describe('refusals', () => {
     const v = vectors.cases[0];
-    const verify = (change: Parameters<typeof exchange>[1], nowSeconds = NOW) =>
+    const verify = (change: Change, nowSeconds = NOW) =>
       verifySignedResponse(exchange(v, change), { keys, nowSeconds });
 
     it('reports an unsigned response', async () => {
@@ -152,6 +166,24 @@ describe('signed responses (gero-v1)', () => {
       expect(await verify({ status: 201 })).toEqual({ ok: false, reason: 'bad-signature' });
     });
 
+    it('refuses an answer to another request with the same path and body (another nonce)', async () => {
+      expect(await verify({ nonce: newRequestNonce() })).toEqual({ ok: false, reason: 'bad-signature' });
+    });
+
+    it('cannot check a request sent without a well-formed nonce', async () => {
+      for (const nonce of [undefined, '', 'short', 'x'.repeat(65), 'not base64url!!!!!!']) {
+        expect(await verify({ nonce })).toEqual({ ok: false, reason: 'unverifiable-request' });
+      }
+    });
+
+    it('makes a fresh, well-formed nonce for every request', () => {
+      const nonces = new Set(Array.from({ length: 50 }, () => newRequestNonce()));
+      expect(nonces.size).toBe(50);
+      for (const nonce of nonces) expect(isRequestNonce(nonce)).toBe(true);
+      expect(isRequestNonce(vectors.cases[0].request.nonce)).toBe(true);
+      expect(isRequestNonce('a'.repeat(15))).toBe(false);
+    });
+
     it('refuses a key it cannot resolve, including on another host', async () => {
       expect(await verify({ url: `https://evil.example${v.request.path}?${v.request.query}` })).toEqual({ ok: false, reason: 'unknown-key' });
     });
@@ -174,6 +206,7 @@ describe('signed responses (gero-v1)', () => {
         v.expected.signatureInput.replace('tag="gero-v1"', 'tag="gero-v2"'),
         v.expected.signatureInput.replace('"@status" ', ''),
         v.expected.signatureInput.replace('"@method";req "@path";req', '"@path";req "@method";req'),
+        v.expected.signatureInput.replace(' "gero-request-nonce";req', ''),
         v.expected.signatureInput.replace(';tag="gero-v1"', ';tag="gero-v1";nonce="x"'),
         v.expected.signatureInput.replace('gero=', 'other='),
       ];

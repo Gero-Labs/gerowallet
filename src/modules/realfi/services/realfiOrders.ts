@@ -10,6 +10,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import type { Cardano } from '@cardano-sdk/core';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
+import { installSignedResponses } from '@/api/signedResponses';
 import type { SmallestUnit } from '../types';
 
 export type RealFiOrderKind = 'stake' | 'unstake' | 'claim' | 'cancel';
@@ -160,6 +161,9 @@ const nexusAxios = axios.create({
   timeout: 45000,
   headers: { 'Content-Type': 'application/json' },
 });
+// The built transaction is what the user signs: gero-backend signs it as it relays it
+// (build-time mode; off by default).
+installSignedResponses(nexusAxios, 'gero-backend');
 
 export interface BuildContext {
   /** Wallet network as stored on the wallet ('Mainnet', 'Preprod'). */
