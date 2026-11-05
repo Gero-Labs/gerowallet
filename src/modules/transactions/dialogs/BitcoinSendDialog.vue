@@ -83,50 +83,61 @@
 
         <!-- ════ Step 2: fee ════ -->
         <div v-else-if="currentStep === 2" key="step2" class="btc-send__body">
-          <div class="btc-fees" role="radiogroup" :aria-label="t('bitcoin.feeSpeed')">
-            <button
-              v-for="tier in feeTiers"
-              :key="tier.key"
-              type="button"
-              role="radio"
-              :aria-checked="selectedFeePriority === tier.key ? 'true' : 'false'"
-              :class="['glass-tier', 'btc-fee', { 'btc-fee--selected': selectedFeePriority === tier.key }]"
-              @click="selectedFeePriority = tier.key"
-            >
-              <span class="btc-fee__top">
-                <span class="btc-fee__name">{{ tier.label }}</span>
-                <span class="btc-fee__dots" aria-hidden="true">
-                  <span v-for="d in 3" :key="d" :class="['btc-fee__dot', { 'btc-fee__dot--lit': d <= tier.dots }]" />
+          <div v-if="!feeRates" class="btc-notice" role="status">
+            <v-progress-circular indeterminate size="16" width="2" />
+            <span class="btc-notice__text">{{ $t('bitcoin.feeRatesLoading') }}</span>
+          </div>
+          <template v-else>
+            <!-- The network's rates could not be fetched: never pay the built-in ones silently -->
+            <div v-if="feeRates.fallback" class="btc-notice btc-notice--warning" role="status">
+              <v-icon size="small">mdi-alert-outline</v-icon>
+              <span class="btc-notice__text">{{ $t('bitcoin.feeRatesFallback') }}</span>
+            </div>
+            <div class="btc-fees" role="radiogroup" :aria-label="t('bitcoin.feeSpeed')">
+              <button
+                v-for="tier in feeTiers"
+                :key="tier.key"
+                type="button"
+                role="radio"
+                :aria-checked="selectedFeePriority === tier.key ? 'true' : 'false'"
+                :class="['glass-tier', 'btc-fee', { 'btc-fee--selected': selectedFeePriority === tier.key }]"
+                @click="selectedFeePriority = tier.key"
+              >
+                <span class="btc-fee__top">
+                  <span class="btc-fee__name">{{ tier.label }}</span>
+                  <span class="btc-fee__dots" aria-hidden="true">
+                    <span v-for="d in 3" :key="d" :class="['btc-fee__dot', { 'btc-fee__dot--lit': d <= tier.dots }]" />
+                  </span>
                 </span>
-              </span>
-              <span class="btc-fee__rate g-num">{{ $t('bitcoin.feeRateValue', { value: feeEstimates[tier.key] }) }}</span>
-              <span class="t-caption">{{ tier.time }}</span>
-              <span class="t-caption g-num">≈ {{ formatBtc(estimatedFeeSatsFor(tier.key)) }}</span>
-            </button>
-          </div>
+                <span class="btc-fee__rate g-num">{{ $t('bitcoin.feeRateValue', { value: feeRates[tier.key] }) }}</span>
+                <span class="t-caption">{{ tier.time }}</span>
+                <span class="t-caption g-num">≈ {{ formatBtc(estimatedFeeSatsFor(tier.key)) }}</span>
+              </button>
+            </div>
 
-          <dl class="btc-summary">
-            <div class="btc-summary__row">
-              <dt>{{ $t('send.amount') }}</dt>
-              <dd class="g-num">{{ formatBtc(amountInSats) }} {{ ticker }}</dd>
-            </div>
-            <div class="btc-summary__row">
-              <dt>{{ $t('send.estimatedFee') }}</dt>
-              <dd class="g-num">
-                {{ formatBtc(estimatedFeeSats) }} {{ ticker }}
-                <span class="btc-summary__sub">{{ $t('bitcoin.satsValue', { value: formatSats(estimatedFeeSats) }) }}</span>
-              </dd>
-            </div>
-            <div class="btc-summary__row btc-summary__row--total">
-              <dt>{{ $t('send.total') }}</dt>
-              <dd class="g-num">{{ formatBtc(totalAmount) }} {{ ticker }}</dd>
-            </div>
-          </dl>
+            <dl class="btc-summary">
+              <div class="btc-summary__row">
+                <dt>{{ $t('send.amount') }}</dt>
+                <dd class="g-num">{{ formatBtc(amountInSats) }} {{ ticker }}</dd>
+              </div>
+              <div class="btc-summary__row">
+                <dt>{{ $t('send.estimatedFee') }}</dt>
+                <dd class="g-num">
+                  {{ formatBtc(estimatedFeeSats) }} {{ ticker }}
+                  <span class="btc-summary__sub">{{ $t('bitcoin.satsValue', { value: formatSats(estimatedFeeSats) }) }}</span>
+                </dd>
+              </div>
+              <div class="btc-summary__row btc-summary__row--total">
+                <dt>{{ $t('send.total') }}</dt>
+                <dd class="g-num">{{ formatBtc(totalAmount) }} {{ ticker }}</dd>
+              </div>
+            </dl>
 
-          <div v-if="totalAmount > availableBalance" class="btc-notice btc-notice--error">
-            <v-icon size="small">mdi-alert-circle-outline</v-icon>
-            {{ $t('send.insufficientBalance') }}
-          </div>
+            <div v-if="totalAmount > availableBalance" class="btc-notice btc-notice--error">
+              <v-icon size="small">mdi-alert-circle-outline</v-icon>
+              {{ $t('send.insufficientBalance') }}
+            </div>
+          </template>
         </div>
 
         <!-- ════ Step 3: review and send ════ -->
@@ -253,7 +264,7 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import { formatBtc, formatSats } from '@/shared/utils/format';
 import { calculateTxSize } from '@/chains/bitcoin/bitcoinCoinSelection';
-import { FeePriority } from '@/chains/bitcoin/bitcoinFeeEstimator';
+import type { FeeTiers } from '@/chains/bitcoin/bitcoinFeeEstimator';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 
 const { t } = useTranslation();
@@ -290,9 +301,9 @@ const amountBtc = ref('');
 const password = ref('');
 const showPassword = ref(false);
 
-// Fee selection
+// Fee selection: the network's rates, null until they arrive
 const selectedFeePriority = ref<'fast' | 'medium' | 'slow'>('medium');
-const feeEstimates = ref({ fast: 50, medium: 25, slow: 10 });
+const feeRates = ref<FeeTiers | null>(null);
 
 const feeTiers = computed(() => [
   { key: 'fast' as const,   label: t('send.fast'),   time: t('bitcoin.etaMinutes', { minutes: 10 }), dots: 3 },
@@ -360,8 +371,10 @@ function estimateInputCount(): number {
 
 // Fee for a specific tier
 function estimatedFeeSatsFor(tier: 'fast' | 'medium' | 'slow'): number {
+  if (!feeRates.value) return 0;
   const inputCount = estimateInputCount();
-  return calculateTxSize(inputCount, 2) * feeEstimates.value[tier];
+  // Whole sats, rounded up as the worker rounds the fee it pays
+  return Math.ceil(calculateTxSize(inputCount, 2) * feeRates.value[tier]);
 }
 
 // Estimated fee for selected tier
@@ -389,7 +402,7 @@ const privateKeyBytes = ref<Uint8Array | null>(null);
 const isStepValid = computed(() => {
   switch (currentStep.value) {
     case 1: return !!recipientAddress.value && !!amountBtc.value && !addressError.value && !amountError.value;
-    case 2: return totalAmount.value <= availableBalance.value;
+    case 2: return !!feeRates.value && totalAmount.value <= availableBalance.value;
     case 3:
       if (isHardwareWallet.value) return true;
       if (isPrfWallet.value) return !!privateKeyBytes.value;
@@ -432,16 +445,11 @@ function setMaxAmount() {
   }
 }
 
+// The wallet network's current rates, or the estimator's built-in fallback (flagged on the fee step)
 async function updateFeeEstimate() {
   try {
-    const { getBitcoinFeeEstimator } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
-    const estimator = getBitcoinFeeEstimator();
-    const [fast, medium, slow] = await Promise.all([
-      estimator.getFeeEstimate(FeePriority.FAST),
-      estimator.getFeeEstimate(FeePriority.MEDIUM),
-      estimator.getFeeEstimate(FeePriority.SLOW),
-    ]);
-    feeEstimates.value = { fast: fast.feeRate, medium: medium.feeRate, slow: slow.feeRate };
+    const { getBitcoinFeeEstimatorFor } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
+    feeRates.value = await getBitcoinFeeEstimatorFor(loggedWallet.value?.network || 'Mainnet').getFeeTiers();
   } catch (e) {
     console.error('Failed to fetch fee estimates:', e);
   }
@@ -476,14 +484,14 @@ async function authenticateWithPassKey() {
 }
 
 async function confirmSend() {
-  if (!isStepValid.value || loading.value) return;
+  if (!isStepValid.value || loading.value || !feeRates.value) return;
   loading.value = true;
   txStatus.value = { type: 'info', message: t('send.buildingTransaction') };
   try {
     const signingData: Record<string, unknown> = {
       recipientAddress: recipientAddress.value,
       amount: amountInSats.value,
-      feeRate: feeEstimates.value[selectedFeePriority.value],
+      feeRate: feeRates.value[selectedFeePriority.value],
     };
 
     if (isPrfWallet.value && privateKeyBytes.value) {
@@ -518,6 +526,7 @@ function closeDialog() {
   showPassword.value = false;
   privateKeyBytes.value = null;
   selectedFeePriority.value = 'medium';
+  feeRates.value = null;
   txStatus.value = { type: 'info', message: '' };
   addressError.value = '';
   amountError.value = '';
@@ -858,6 +867,11 @@ watch(() => props.modelValue, (val) => { if (val) updateFeeEstimate(); });
   border-color: var(--g-error-line);
   background: var(--g-error-fill);
   color: var(--g-error);
+}
+.btc-notice--warning {
+  border-color: var(--g-warning-line);
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 /* ── Navigation ─────────────────────────────────────────── */

@@ -6135,6 +6135,8 @@ export default {
   'bitcoin.unconfirmedAmount': '+{amount} unconfirmed',
   'bitcoin.etaMinutes': '~{minutes} min',
   'bitcoin.feeSpeed': 'Fee speed',
+  'bitcoin.feeRatesLoading': 'Getting current network fees...',
+  'bitcoin.feeRatesFallback': "Couldn't get current network fees. These are default rates and may be higher or lower than the network needs.",
   'common.showPassword': 'Show password',
   'common.hidePassword': 'Hide password',
   'bitcoin.psbtFeeUnknown': 'The fee can\'t be shown: this transaction spends coins whose amounts it doesn\'t include.',

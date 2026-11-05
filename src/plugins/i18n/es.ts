@@ -5904,6 +5904,8 @@ export default {
   'bitcoin.unconfirmedAmount': '+{amount} sin confirmar',
   'bitcoin.etaMinutes': '~{minutes} min',
   'bitcoin.feeSpeed': 'Velocidad de la comisión',
+  'bitcoin.feeRatesLoading': 'Obteniendo las comisiones de red actuales...',
+  'bitcoin.feeRatesFallback': 'No se pudieron obtener las comisiones de red actuales. Estas son tasas predeterminadas y pueden ser más altas o más bajas de lo que la red necesita.',
   'common.showPassword': 'Mostrar contraseña',
   'common.hidePassword': 'Ocultar contraseña',
   'bitcoin.psbtFeeUnknown': 'No se puede mostrar la comisión: esta transacción gasta monedas cuyos montos no incluye.',
