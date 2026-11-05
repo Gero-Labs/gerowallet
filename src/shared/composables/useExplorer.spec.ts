@@ -70,6 +70,14 @@ describe('useExplorer', () => {
     expect(explorerUrl('tx', TX)).toBe(`https://preview.cardanoscan.io/transaction/${TX}`);
   });
 
+  it('does not offer mainnet-only Super Cardano to a testnet wallet', async () => {
+    logIn(Blockchain.CARDANO, Network.PREPROD);
+    const { explorerOptions, setExplorer } = useExplorer();
+    expect(explorerOptions.value.map(option => option.id)).not.toContain('supercardano');
+    await setExplorer('supercardano');
+    expect(mockSetWalletConfiguration).not.toHaveBeenCalled();
+  });
+
   it('refuses an explorer the wallet is not offered', async () => {
     logIn(Blockchain.CARDANO, Network.MAINNET);
     await useExplorer().setExplorer('etherscan');

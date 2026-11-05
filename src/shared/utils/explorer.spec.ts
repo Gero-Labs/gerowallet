@@ -65,6 +65,20 @@ describe('getExplorerUrl: chosen Cardano explorer', () => {
     expect(cardano('policy', 'ab12', 'poolpm')).toBe('https://pool.pm/policy/ab12');
   });
 
+  it('builds Super Cardano links on mainnet', () => {
+    expect(cardano('tx', TX, 'supercardano')).toBe(`https://supercardano.com/tx/${TX}`);
+    expect(cardano('block', '14162062', 'supercardano')).toBe('https://supercardano.com/block/14162062');
+    expect(cardano('epoch', '660', 'supercardano')).toBe('https://supercardano.com/epoch/660');
+    expect(cardano('address', 'addr1q9', 'supercardano')).toBe('https://supercardano.com/address/addr1q9');
+    expect(cardano('stake', 'stake1uxyz', 'supercardano')).toBe('https://supercardano.com/stake/stake1uxyz');
+    expect(cardano('pool', POOL_HEX, 'supercardano')).toBe(`https://supercardano.com/pool/${POOL_HEX}`);
+    expect(cardano('pool', POOL_BECH32, 'supercardano')).toBe(`https://supercardano.com/pool/${POOL_BECH32}`);
+    expect(cardano('asset', 'asset1abc', 'supercardano')).toBe('https://supercardano.com/token/asset1abc');
+    expect(cardano('asset', 'ab12cd', 'supercardano')).toBe('https://supercardano.com/token/ab12cd');
+    expect(cardano('policy', 'ab12', 'supercardano')).toBe('https://supercardano.com/policy/ab12');
+    expect(cardano('drep', DREP_HEX, 'supercardano')).toBe(`https://supercardano.com/drep/${DREP}`);
+  });
+
   it('falls back to Cexplorer for an entity the chosen explorer has no page for', () => {
     expect(cardano('tx', TX, 'poolpm')).toBe(`https://cexplorer.io/tx/${TX}`);
     expect(cardano('drep', DREP, 'poolpm', Network.PREPROD)).toBe(`https://preprod.cexplorer.io/drep/${DREP}`);
@@ -102,6 +116,8 @@ describe('getExplorerUrl: governance actions', () => {
       expect(cardano('govAction', input)).toBe(`https://cexplorer.io/gov/action/${GOV_TX}%230`);
       expect(cardano('govAction', input, 'cardanoscan')).toBe(`https://cardanoscan.io/govAction/${GOV_TX}00`);
       expect(cardano('govAction', input, 'adastat')).toBe(`https://adastat.net/governances/${GOV_TX}00`);
+      expect(cardano('govAction', input, 'supercardano'))
+        .toBe(`https://supercardano.com/governance-action/${GOV_TX}00`);
     }
   });
 
@@ -152,12 +168,24 @@ describe('getExplorerUrl: other chains', () => {
 });
 
 describe('explorersFor / resolveExplorerId', () => {
-  it('offers four explorers on every Cardano network and marks pool.pm partial', () => {
-    for (const network of [Network.MAINNET, Network.PREPROD, Network.PREVIEW]) {
+  it('offers five explorers on mainnet and marks pool.pm partial', () => {
+    const options = explorersFor(Blockchain.CARDANO, Network.MAINNET);
+    expect(options.map(o => o.id)).toEqual(['cexplorer', 'cardanoscan', 'adastat', 'poolpm', 'supercardano']);
+    expect(options.filter(o => o.partial).map(o => o.id)).toEqual(['poolpm']);
+  });
+
+  it('offers four explorers on the testnets, without mainnet-only Super Cardano', () => {
+    for (const network of [Network.PREPROD, Network.PREVIEW]) {
       const options = explorersFor(Blockchain.CARDANO, network);
       expect(options.map(o => o.id)).toEqual(['cexplorer', 'cardanoscan', 'adastat', 'poolpm']);
       expect(options.filter(o => o.partial).map(o => o.id)).toEqual(['poolpm']);
     }
+  });
+
+  it('defaults a Super Cardano choice on a testnet to Cexplorer', () => {
+    expect(resolveExplorerId(Blockchain.CARDANO, Network.MAINNET, 'supercardano')).toBe('supercardano');
+    expect(resolveExplorerId(Blockchain.CARDANO, Network.PREPROD, 'supercardano')).toBe('cexplorer');
+    expect(cardano('tx', TX, 'supercardano', Network.PREVIEW)).toBe(`https://preview.cexplorer.io/tx/${TX}`);
   });
 
   it('offers no choice on chains with one explorer or none', () => {
