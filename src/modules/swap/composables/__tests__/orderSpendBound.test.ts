@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ORDER_OVERHEAD_MAX_LOVELACE, SERVICE_FEE_MIN_LOVELACE, TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits,
+  DEFAULT_ORDER_SPEND_BOUND, ORDER_OVERHEAD_MAX_LOVELACE, SERVICE_FEE_MIN_LOVELACE, TOKEN_SALE_LIMIT_ADA, aggregatorFeeCap,
+  routeFromQuoteEvent, swapSpendBound, toBaseUnits,
 } from '../orderSpendBound';
 
 const ADA = 1_000_000n;
@@ -59,4 +60,35 @@ describe('typed amounts', () => {
     expect(toBaseUnits('1', 1.5)).toBeNull();
   });
 
+});
+
+describe('aggregator fee cap', () => {
+  /** What cardano-market-data charges an ADA sale: max(ceil(amount x 0.001), 0.5 ADA), floored to a 1.2 ADA output. */
+  const builderFee = (amountIn: bigint) => {
+    const rated = (amountIn + 999n) / 1_000n;
+    const fee = rated > 500_000n ? rated : 500_000n;
+    return fee > 1_200_000n ? fee : 1_200_000n;
+  };
+
+  it('is the 1.2 ADA minimum output for an ordinary swap', () => {
+    expect(aggregatorFeeCap(swapSpendBound({ tokenIn: 'lovelace', amountIn: 50n * ADA }))).toBe(SERVICE_FEE_MIN_LOVELACE);
+  });
+
+  it('never falls below what the aggregator charges an ADA sale, and exceeds it by about a thousandth at most', () => {
+    for (const amountIn of [1n, 2n * ADA, 1_199n * ADA, 1_200n * ADA, 1_201n * ADA, 12_345_678_901n, 100_000n * ADA, 10n ** 15n]) {
+      const fee = builderFee(amountIn);
+      const cap = aggregatorFeeCap(swapSpendBound({ tokenIn: 'lovelace', amountIn }));
+      expect(cap).toBeGreaterThanOrEqual(fee);
+      // The budget also holds the order leg (overhead and the fee itself), so 10 bps of that rides on top.
+      expect(cap - fee).toBeLessThanOrEqual(fee / 1_000n + ORDER_OVERHEAD_MAX_LOVELACE / 1_000n + 1n);
+    }
+  });
+
+  it('is the minimum for a token sale, whatever its size: the wallet has no ADA side to trust', () => {
+    expect(aggregatorFeeCap(swapSpendBound({ tokenIn: TOKEN, amountIn: 10n ** 15n }))).toBe(SERVICE_FEE_MIN_LOVELACE);
+  });
+
+  it('is the minimum without a quote', () => {
+    expect(aggregatorFeeCap(DEFAULT_ORDER_SPEND_BOUND)).toBe(SERVICE_FEE_MIN_LOVELACE);
+  });
 });

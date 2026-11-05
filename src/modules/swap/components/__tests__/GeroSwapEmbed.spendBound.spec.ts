@@ -11,10 +11,10 @@ vi.mock('@/modules/market/composables/useMarketData', () => ({
 }));
 
 // Captures what the embed hands the signer, so the budget can be read as signing would.
-const signerOptions = vi.hoisted(() => ({ current: null as null | { getSpendBound?: () => Promise<SpendBound | null> } }));
+const signerOptions = vi.hoisted(() => ({ current: null as null | { getSpendBound?: () => Promise<SpendBound | null>; orderBuilder?: string } }));
 const sharedSignTx = vi.hoisted(() => vi.fn());
 vi.mock('../../composables/useNativeSwapSigner', () => ({
-  useNativeSwapSigner: (opts: { getSpendBound?: () => Promise<SpendBound | null> }) => {
+  useNativeSwapSigner: (opts: { getSpendBound?: () => Promise<SpendBound | null>; orderBuilder?: string }) => {
     signerOptions.current = opts;
     return {
       signer: { meta: { name: 'Gero' }, signTx: sharedSignTx },
@@ -78,6 +78,11 @@ beforeEach(() => {
 });
 
 describe('GeroSwapEmbed spend budget', () => {
+  it('signs only what pays the wallet, an aggregator order for it, or the aggregator fee', () => {
+    mountWithInput('50');
+    expect(signerOptions.current?.orderBuilder).toBe('swapAggregator');
+  });
+
   it('has no budget before a quote', async () => {
     mountWithInput('50');
     expect(await budget()).toBeNull();
