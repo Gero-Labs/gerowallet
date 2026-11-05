@@ -44,7 +44,12 @@ export type TxIntentViolation =
   /** The UTxO list describes an input differently from the transaction that created it. */
   | 'misreportedInput'
   /** Larger than the protocol's transaction size limit: every node would refuse it. */
-  | 'txTooLarge';
+  | 'txTooLarge'
+  /**
+   * An order transaction pays someone other than the wallet, a recognised order
+   * for the wallet, or the aggregator's capped fee (orderRecipients.ts).
+   */
+  | 'foreignOrderRecipient';
 
 /**
  * Upper bound for the network fee of a transaction built for the wallet. The

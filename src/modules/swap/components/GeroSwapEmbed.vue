@@ -405,6 +405,7 @@ const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPrfBytes,
   getIsBT: () => isBT.value,
   getSpendBound: spendBoundForSignature,
+  orderBuilder: 'swapAggregator',
 });
 
 // Why the wallet last refused to sign, for onSwapError: the widget reports a signer
