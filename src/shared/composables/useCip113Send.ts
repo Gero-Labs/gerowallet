@@ -11,6 +11,7 @@ import {
   type PreparedTxStage,
 } from '@/shared/composables/usePreparedTxFlow';
 import type { Cip113TransferSummary } from '@/chrome/cip113VerifyTransfer';
+import { confirmTokenDecimals, TokenDecimalsError, type DecimalsTarget } from '@/shared/utils/verifiedDecimals';
 
 /**
  * Gero's own Send of a CIP-113 programmable token, page side (options and side panel).
@@ -55,6 +56,13 @@ export interface Cip113SendIntent {
   /** Base units. */
   quantity: string;
   recipientAddress: string;
+  /**
+   * The decimals the typed amount became `quantity` with. gero-backend confirms them before
+   * the worker builds anything (verifiedDecimals.ts); they are not sent to the worker.
+   */
+  decimals: number;
+  /** The wallet whose chain and network gero-backend is asked about. */
+  wallet: DecimalsTarget | null | undefined;
 }
 
 /** Credentials for the signature: the spending password, or a PassKey wallet's decrypted root key. Google and hardware wallets need neither. */
@@ -71,11 +79,15 @@ export const CIP113_SEND_WRONG_PASSWORD = PREPARED_TX_WRONG_PASSWORD;
 export const CIP113_SEND_EXPIRED = PREPARED_TX_EXPIRED;
 export const CIP113_SEND_SIGN_FAILED = PREPARED_TX_SIGN_FAILED;
 export const CIP113_SEND_SUBMIT_FAILED = PREPARED_TX_SUBMIT_FAILED;
+/** gero-backend states other decimals for the token than the ones the amount was typed with. */
+export const CIP113_SEND_DECIMALS_MISMATCH = 'DECIMALS_MISMATCH';
+/** gero-backend could not confirm the token's decimals. */
+export const CIP113_SEND_DECIMALS_UNVERIFIED = 'DECIMALS_UNVERIFIED';
 
 /**
  * The i18n key explaining a failure. Every key named here exists in us/de/es
- * (`programmableTokens.send.error.*`, and the shared wrong-password message); unknown
- * codes fall back to the generic one.
+ * (`programmableTokens.send.error.*`, the shared wrong-password and token-decimals
+ * messages); unknown codes fall back to the generic one.
  */
 export function cip113SendErrorKey(code: string): string {
   switch (code) {
@@ -96,6 +108,10 @@ export function cip113SendErrorKey(code: string): string {
     case CIP113_SEND_SIGN_FAILED:
     case CIP113_SEND_SUBMIT_FAILED:
       return `programmableTokens.send.error.${code}`;
+    case CIP113_SEND_DECIMALS_MISMATCH:
+      return 'txGuard.tokenDecimalsMismatch';
+    case CIP113_SEND_DECIMALS_UNVERIFIED:
+      return 'txGuard.tokenDecimalsUnverified';
     case 'INVALID_REQUEST':
     case 'LOGIC_BYTES_UNAVAILABLE':
     case 'CIP68_REFERENCE_TOKEN':
@@ -117,8 +133,22 @@ export function useCip113Send(options: Cip113SendOptions = {}) {
     failureFields: ['maxSingleTransfer'],
   });
 
-  /** Have the worker build and verify the transfer. True when a summary is ready to review. */
-  function prepare(intent: Cip113SendIntent): Promise<boolean> {
+  /**
+   * Have the worker build and verify the transfer. True when a summary is ready to review.
+   * The decimals the amount was typed with are confirmed first; nothing is built without that.
+   */
+  async function prepare(intent: Cip113SendIntent): Promise<boolean> {
+    flow.failure.value = null;
+    flow.prepared.value = null;
+    flow.stage.value = 'preparing';
+    try {
+      await confirmTokenDecimals([{ unit: intent.unit, decimals: intent.decimals }], intent.wallet);
+    } catch (e) {
+      flow.stage.value = 'idle';
+      const mismatch = e instanceof TokenDecimalsError && e.problem === 'mismatch';
+      flow.failure.value = { code: mismatch ? CIP113_SEND_DECIMALS_MISMATCH : CIP113_SEND_DECIMALS_UNVERIFIED };
+      return false;
+    }
     return flow.prepare(MessageTypes.CIP113_PREPARE_TRANSFER, {
       unit: intent.unit,
       quantity: intent.quantity,
