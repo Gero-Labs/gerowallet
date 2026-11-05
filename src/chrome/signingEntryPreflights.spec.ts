@@ -9,7 +9,7 @@ import { join } from 'node:path';
  * - signTx: the entry refusal (dappSignRefusal): a transaction marked to fail,
  *   then the CIP-113 refusal (refusalForProgrammableInputs). Ledger and Keystone
  *   sign in the page, so the entry check is the only one the prompt gets.
- * - signData: the reserved-subject refusal (reservedSigningDomain), so no dApp
+ * - signData: the payload refusal (signDataRefusal: not plain hex, or a reserved subject), so no dApp
  *   or peer gets one of Gero's own proofs signed.
  */
 
@@ -67,8 +67,8 @@ describe('signTx entry points run the entry refusal first', () => {
   });
 });
 
-describe('signData entry points refuse Gero\'s reserved subjects first', () => {
-  it('CIP-30 signData', () => checksBefore(handler('METHOD.signData'), 'reservedSigningDomain(request.data?.payload)', 'sendToMiniGero('));
-  it('WalletConnect cardano_signData', () => checksBefore(caseBlock(walletConnect, 'cardano_signData'), 'reservedSigningDomain(wcParams.payload)', 'routeWcSigningRequest('));
-  it('CIP-45 signData', () => checksBefore(caseBlock(cip45, 'signData'), 'reservedSigningDomain(params.payload)', 'routeCip45SigningRequest('));
+describe('signData entry points refuse a non-hex payload and Gero\'s reserved subjects first', () => {
+  it('CIP-30 signData', () => checksBefore(handler('METHOD.signData'), 'signDataRefusal(request.data?.payload)', 'sendToMiniGero('));
+  it('WalletConnect cardano_signData', () => checksBefore(caseBlock(walletConnect, 'cardano_signData'), 'signDataRefusal(wcParams.payload)', 'routeWcSigningRequest('));
+  it('CIP-45 signData', () => checksBefore(caseBlock(cip45, 'signData'), 'signDataRefusal(params.payload)', 'routeCip45SigningRequest('));
 });

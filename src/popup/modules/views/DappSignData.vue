@@ -195,6 +195,7 @@ import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
+import { isHexPayload } from '@/shared/utils/reservedSigningDomains';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, parseDataSignature } from '@/shared/utils/keystone';
 import { accountIndexFromKeys, deriveSigningAccountKey, resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccount';
@@ -741,7 +742,9 @@ const backKeystoneScan = () => {
 const init = async () => {
   try {
     const requestData = await controller.value.requestData();
-    if (requestData?.data?.payload) {
+    // Only plain hex is shown (or signed: the builder refuses anything else), so the
+    // prompt can never show a lenient decode of bytes other than the ones signed.
+    if (isHexPayload(requestData?.data?.payload)) {
       message.value = Buffer.from(requestData.data.payload, 'hex').toString('utf-8');
     }
     request.value = requestData;
