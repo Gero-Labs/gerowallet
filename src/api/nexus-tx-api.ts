@@ -167,8 +167,10 @@ export interface BuildDelegationTxRequest {
  * `poolId` present → combined pool+vote (StakeVoteDelegCert / StakeVoteRegDelegCert);
  * `includeStakeRegistration` → prepend registration, deposit folded server-side.
  * `compensationBasisPoints` adds the CIP-149 donation metadata.
- * `certificateEncoding: 'separate'` emits Trezor-signable individual certs — leave
- * unset (combined) for software/Ledger; Trezor stays on the client builder for now.
+ * `certificateEncoding: 'separate'` emits individual certs, which Trezor and Ledger's
+ * Cardano app 7 need: Ledger sends it, and the built tx is then refused if it carries
+ * a combined cert. Leave unset (combined) for software wallets; Trezor stays on the
+ * client builder for now.
  */
 export interface BuildVoteDelegationTxRequest {
   stakeAddress: string;
@@ -927,7 +929,8 @@ export const nexusTxApi = {
    * (VoteDelegCert / StakeVoteDelegCert / StakeVoteRegDelegCert / VoteRegDelegCert)
    * from `poolId` + `includeStakeRegistration`; the deposit is folded server-side.
    * Emits COMBINED certs by default — Trezor cannot sign those, so keep Trezor on
-   * the client builder. Returns CBOR for client signing.
+   * the client builder; Ledger asks for `certificateEncoding: 'separate'`. Returns
+   * CBOR for client signing.
    */
   async buildVoteDelegationTx(
     request: BuildVoteDelegationTxRequest,
@@ -947,6 +950,7 @@ export const nexusTxApi = {
         drep: parseDRepTarget(request.drepId),
         poolId: request.poolId,
         registration: request.includeStakeRegistration ? 'allowed' : undefined,
+        separate: request.certificateEncoding === 'separate',
       }),
     }));
   },

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import i18n from '@/plugins/i18n';
-import { extractNexusErrorMessage, friendlyDappTxError, friendlyTxError, isCollateralError, isInsufficientAdaError, isMissingInputError, shortfallLovelaceFromMessage } from './txErrors';
+import { extractNexusErrorMessage, friendlyDappTxError, friendlyTxError, isCollateralError, isInsufficientAdaError, isMissingInputError, signRefusalText, shortfallLovelaceFromMessage } from './txErrors';
 import {
   MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
   TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
@@ -124,12 +124,21 @@ describe('friendlyTxError on submit failures', () => {
     expect(friendlyTxError(NFT_MARKET_SIGN_REFUSAL_MESSAGE)).toBe(localized);
   });
 
-  it('keeps the market copy for the dApp approval screens only: every friendlyTxError call there is the dApp one', () => {
-    for (const file of ['../../sidepanel/components/DAppOverlay.vue', '../../popup/modules/views/SignTx.vue']) {
-      const source = readFileSync(join(__dirname, file), 'utf8');
-      expect(source, file).toContain('friendlyDappTxError(');
-      expect(source.replace(/friendlyDappTxError/g, ''), file).not.toMatch(/friendlyTxError\(/);
-    }
+  it('keeps the market copy for the dApp approval screens only: the side panel and the popup both ask for it', () => {
+    const read = (file: string) => readFileSync(join(__dirname, file), 'utf8');
+    const overlay = read('../../sidepanel/components/DAppOverlay.vue');
+    expect(overlay).toContain('friendlyDappTxError(');
+    expect(overlay.replace(/friendlyDappTxError/g, '')).not.toMatch(/friendlyTxError\(/);
+    // The popup shows device errors as they are, so it reads the refusals alone.
+    const popup = read('../../popup/modules/views/SignTx.vue');
+    expect(popup).toContain('signRefusalText(message, { marketApproval: true })');
+    expect(popup).not.toMatch(/friendlyTxError\(|friendlyDappTxError\(/);
+  });
+
+  it('signRefusalText words the market refusal for its caller and leaves any other message alone', () => {
+    expect(signRefusalText(NFT_MARKET_SIGN_REFUSAL_MESSAGE, { marketApproval: true })).toBe('This took too long. Start it again.');
+    expect(signRefusalText(NFT_MARKET_SIGN_REFUSAL_MESSAGE)).toBe('This transaction touches an NFT listing, so it can only be signed from the market screens.');
+    expect(signRefusalText('Device rejected synthetic test request', { marketApproval: true })).toBeUndefined();
   });
 
   it('drops our prefix from a plain-text node rejection', () => {

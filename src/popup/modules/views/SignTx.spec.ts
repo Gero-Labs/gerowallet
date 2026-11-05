@@ -47,11 +47,19 @@ vi.mock('@/shared/components/TransactionDetailsCard.vue', () => ({ default: { te
 vi.mock('@/shared/components/ToggleSwitch.vue', () => ({ default: { template: '<div />' } }));
 
 import SignTx from './SignTx.vue';
+import { Serialization } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
-import { TxSignError } from '@/chrome/config';
-import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import {
+  CIP113_SIGN_REFUSAL_MESSAGE,
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
+  NFT_MARKET_SIGN_REFUSAL_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
+  TxSignError,
+} from '@/chrome/config';
+import { createKeystoneSignRequest } from '@/shared/utils/keystone';
+import i18n from '@/plugins/i18n';
 
 enableAutoUnmount(afterEach);
 beforeEach(() => {
@@ -68,8 +76,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 const devices = ['ledger', 'trezor-bridge', 'trezor-webusb'] as const;
-async function render(device: typeof devices[number] | 'keystone') {
-  walletStore.loggedWallet.type = device === 'ledger' ? WalletType.Ledger : device === 'keystone' ? WalletType.Keystone : WalletType.Trezor;
+const walletTypes = { ledger: WalletType.Ledger, 'trezor-bridge': WalletType.Trezor, 'trezor-webusb': WalletType.Trezor, keystone: WalletType.Keystone };
+async function render(device: keyof typeof walletTypes) {
+  walletStore.loggedWallet.type = walletTypes[device];
   featureFlagsStore.state.flags.isTrezorWebUsbEnabled = device === 'trezor-webusb';
   const view = mount(SignTx, { global: {
     stubs: {
@@ -188,5 +197,59 @@ describe('Cardano signing: a transaction whose summary cannot be built', () => {
     const view = await render('ledger');
     expect(view.find('[data-testid="tx-decode-failed-banner"]').exists()).toBe(false);
     expect(signButton(view).attributes('disabled')).toBeUndefined();
+  });
+});
+
+describe('signing errors', () => {
+  // How each signer reports a failure: Ledger's call rejects (the worker preflight throws in
+  // txToLedger), Trezor answers `success: false` with the message, from the worker or the page.
+  const fail = (device: typeof devices[number], message?: string) => {
+    if (device === 'ledger') mocks.ledger.mockRejectedValueOnce(message === undefined ? {} : new Error(message));
+    else (device === 'trezor-webusb' ? mocks.trezor : mocks.background).mockResolvedValueOnce({ data: { success: false, error: message } });
+  };
+  const sign = async (device: keyof typeof walletTypes) => {
+    const view = await render(device);
+    await button(view, 'wallet.sign').trigger('click');
+    await flushPromises();
+  };
+
+  it.each([
+    ['ledger', MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, 'errors.markedToFailRefused'],
+    ['ledger', CIP113_SIGN_REFUSAL_MESSAGE, 'programmableTokens.signRefused'],
+    ['ledger', NFT_MARKET_SIGN_REFUSAL_MESSAGE, 'nftMarket.error.expired'],
+    ['trezor-webusb', NFT_MARKET_SIGN_REFUSAL_MESSAGE, 'nftMarket.error.expired'],
+    ['trezor-bridge', TREZOR_GOVERNANCE_REFUSAL_MESSAGE, 'errors.trezorGovernanceRefused'],
+    ['trezor-webusb', TREZOR_GOVERNANCE_REFUSAL_MESSAGE, 'errors.trezorGovernanceRefused'],
+    ['trezor-bridge', MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, 'errors.markedToFailRefused'],
+  ] as const)('%s shows the refusal "%s" in the user\'s language', async (device, refusal, key) => {
+    fail(device, refusal);
+    await sign(device);
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(i18n.t(key));
+    expect(i18n.t(key)).not.toBe(refusal);
+  });
+
+  it('Keystone shows the worker\'s refusal in the user\'s language', async () => {
+    const tx = Serialization.Transaction.fromCore({
+      id: undefined as never,
+      body: { inputs: [{ txId: 'a'.repeat(64) as never, index: 0 }], outputs: [], fee: 170000n },
+      witness: { signatures: new Map() },
+    }).toCbor();
+    mocks.request.mockResolvedValue({ data: { tx } });
+    vi.mocked(createKeystoneSignRequest).mockRejectedValueOnce(new Error(CIP113_SIGN_REFUSAL_MESSAGE));
+    await sign('keystone');
+    expect(createKeystoneSignRequest).toHaveBeenCalledTimes(1);
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(i18n.t('programmableTokens.signRefused'));
+  });
+
+  it.each(devices)('%s keeps any other device error as the device gave it', async device => {
+    fail(device, 'Device rejected synthetic test request');
+    await sign(device);
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith('Device rejected synthetic test request');
+  });
+
+  it('shows the localized unknown error when the failure carries no message', async () => {
+    fail('ledger');
+    await sign('ledger');
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith('errors.unknownError');
   });
 });

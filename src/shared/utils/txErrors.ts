@@ -155,6 +155,24 @@ function isRateLimitError(raw: unknown, message: string): boolean {
 }
 
 /**
+ * A signing refusal in the user's language, or undefined for any other message. The worker
+ * and the hardware signers refuse with fixed English strings (`src/chrome/config.ts`), which
+ * a non-English user would otherwise see raw. A signer screen that shows device errors as they
+ * are (the popup) uses this alone; friendlyTxError applies it before its build/submit mappings.
+ */
+export function signRefusalText(message: string, options: FriendlyTxErrorOptions = {}): string | undefined {
+  if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+  if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
+  if (message === TREZOR_GOVERNANCE_REFUSAL_MESSAGE) return i18n.t('errors.trezorGovernanceRefused') as string;
+  // A dApp's market transaction reaches the market's refusal when the approval it was previewed under
+  // has run out (`marketApproval`; useNftMarketFlow maps the same text for Gero's own market flows).
+  // Any other screen (a plain Send to a listing script, staking, ...) gets the honest "only from the
+  // market screens".
+  const marketRefusal = marketSignRefusalKey(message, options.marketApproval ? 'market' : 'other');
+  return marketRefusal ? i18n.t(marketRefusal) as string : undefined;
+}
+
+/**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
@@ -186,22 +204,12 @@ export function friendlyTxError(raw: unknown, options: FriendlyTxErrorOptions = 
   // down") when only the text reached the UI. Never shown raw.
   if (isRateLimitError(raw, rawMessage)) return i18n.t('errors.rateLimited') as string;
 
-  // The CIP-113 signing refusal is thrown from the background as a fixed English
-  // string, so it has to be mapped back to a key here or a non-English user sees it raw.
-  if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
-  if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
-  if (message === TREZOR_GOVERNANCE_REFUSAL_MESSAGE) return i18n.t('errors.trezorGovernanceRefused') as string;
-
-  // The market's signing refusal is the same kind of fixed string. A dApp's market transaction
-  // reaches it when the approval it was previewed under has run out (`marketApproval`; useNftMarketFlow
-  // maps the same text for Gero's own market flows). Any other screen (a plain Send to a listing
-  // script, staking, ...) gets the honest "only from the market screens".
-  const marketRefusal = marketSignRefusalKey(message, options.marketApproval ? 'market' : 'other');
-  if (marketRefusal) return i18n.t(marketRefusal) as string;
+  const refusal = signRefusalText(message, options);
+  if (refusal) return refusal;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
   // same as it being rejected -- the localized copy has to keep that uncertainty.
-  // Same fixed-English-string contract as the CIP-113 refusal above.
+  // Same fixed-English-string contract as the signing refusals above.
   if (message.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE)) return i18n.t('errors.submitUnconfirmed') as string;
 
   // Nexus's shared collateral pool is exhausted — transient infra, retryable.
