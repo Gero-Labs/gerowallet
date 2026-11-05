@@ -134,7 +134,7 @@
       :unit="programmableSendToken.unit"
       :ticker="programmableSendToken.ticker"
       :name="programmableSendToken.name"
-      :decimals="programmableSendToken.decimals"
+      :decimals="rowDecimals(programmableSendToken)"
     />
   </div>
 </template>
@@ -148,7 +148,7 @@ import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { Blockchain, Network } from '@/models/types';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useAdaLovelace } from '../composables/useAdaLovelace';
-import { listedTokens, type ListableToken } from '../composables/listedTokens';
+import { listedTokens, tokenRowDecimals, type ListableToken } from '../composables/listedTokens';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
@@ -186,7 +186,9 @@ interface HomeTokenRow {
   price?: number;
   change?: number | null;
   quantity?: number | string | bigint;
+  /** Only on the pinned ADA row; a wallet token states them in `metadata` (read through rowDecimals). */
   decimals?: number;
+  metadata?: { ticker?: string; decimals?: number };
   /** The locked (CIP-113) row of a token, which TokenList lists apart from an ordinary holding. */
   isProgrammable?: boolean;
   cip113Registered?: boolean;
@@ -280,8 +282,16 @@ function formatPrice(price: number): string {
   });
 }
 
+/**
+ * A row's decimals as its TokenList row reads them; 0 (base units, as that row shows them) when
+ * the row states none. The sheet's balance, its value and its Send all count with this one figure.
+ */
+function rowDecimals(token: HomeTokenRow): number {
+  return tokenRowDecimals(token) ?? 0;
+}
+
 function formatDetailAmount(token: HomeTokenRow): string {
-  const decimals = token.decimals ?? 6;
+  const decimals = rowDecimals(token);
   let amount = Number(token.quantity);
   if (decimals > 0) {
     amount = amount / Math.pow(10, decimals);
@@ -294,7 +304,7 @@ function formatDetailAmount(token: HomeTokenRow): string {
 
 function formatDetailValue(token: HomeTokenRow): string {
   if (!token.price) return '--';
-  const decimals = token.decimals ?? 6;
+  const decimals = rowDecimals(token);
   let amount = Number(token.quantity);
   if (decimals > 0) {
     amount = amount / Math.pow(10, decimals);
