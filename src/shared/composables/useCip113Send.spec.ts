@@ -3,8 +3,10 @@
 // bytes they carry are what is checked.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { send, walletState, deviceSign, signerOptions, cosign, prompt } = vi.hoisted(() => ({
+const { send, walletState, deviceSign, signerOptions, cosign, prompt, getAssetsInfo } = vi.hoisted(() => ({
   send: vi.fn(),
+  // gero-backend's asset info (POST /api/assets/info), where the token's decimals are confirmed.
+  getAssetsInfo: vi.fn(),
   walletState: {
     keys: { payment: [{ address: 'addr_p', cred: 'p', path: "m/1852'/1815'/0'/0/0" }], change: [], stake: [] },
     utxos: [['fee-utxo']] as unknown[],
@@ -36,15 +38,22 @@ vi.mock('@/shared/utils/witnessSets', () => ({
   mergeWitnessSets: async (user: string, extra: string) => `${user}+${extra}`,
 }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: prompt }));
+vi.mock('@/api/api', () => ({ Api: class { getAssetsInfo(units: string[]) { return getAssetsInfo(units); } } }));
 
 import { cip113SendErrorKey, useCip113Send } from './useCip113Send';
 import { MessageTypes } from '@/models/MessageTypes';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { clearConfirmedDecimals } from '@/shared/utils/verifiedDecimals';
 
 const TX_CBOR = '84a400d9010281825820aa';
 const TX_ID = 'ab'.repeat(32);
 const SUMMARY = { txId: TX_ID, fee: '352696', moduleId: 'freeze-and-seize' };
-const INTENT = { unit: 'cd'.repeat(28) + '4d', quantity: '1000000', recipientAddress: 'addr_test1recipient' };
+const WORKER_INTENT = { unit: 'cd'.repeat(28) + '4d', quantity: '1000000', recipientAddress: 'addr_test1recipient' };
+const INTENT = { ...WORKER_INTENT, decimals: 6, wallet: { chain: 'Cardano', network: 'Preprod' } };
+
+/** gero-backend answers for the token with this registry entry. */
+const backendStates = (metadata: Record<string, unknown> | null) =>
+  getAssetsInfo.mockImplementation(async (units: string[]) => ({ status: 200, data: units.filter((u) => u === INTENT.unit).map((asset) => ({ asset, metadata })) }));
 
 type Handler = (data: Record<string, unknown>) => unknown;
 function respond(handlers: Partial<Record<string, Handler>>) {
@@ -62,6 +71,9 @@ describe('useCip113Send', () => {
   beforeEach(() => {
     send.mockReset();
     walletState.loggedWallet = undefined;
+    clearConfirmedDecimals();
+    getAssetsInfo.mockReset();
+    backendStates({ ticker: 'M', decimals: 6 });
   });
 
   it('prepares, verifies the password, signs and submits the CBOR untouched, in that order', async () => {
@@ -85,12 +97,32 @@ describe('useCip113Send', () => {
       MessageTypes.SUBMIT_TX,
     ]);
     const [prepareCall, , signCall, submitCall] = send.mock.calls.map(([message]) => message as { data: Record<string, unknown> });
-    // The page sends intent only, never inputs.
-    expect(prepareCall.data).toEqual(INTENT);
+    // The page sends intent only, never inputs, once gero-backend confirmed the decimals.
+    expect(prepareCall.data).toEqual(WORKER_INTENT);
+    expect(getAssetsInfo).toHaveBeenCalledWith([INTENT.unit]);
     expect(signCall.data).toMatchObject({ txCbor: TX_CBOR, password: 'secret', utxos: walletState.utxos, addresses: walletState.keys });
     expect(submitCall.data).toEqual({ txCbor: TX_CBOR, witnessHex: 'WITNESSES' });
     expect(flow.submittedTxId.value).toBe(TX_ID);
     expect(flow.stage.value).toBe('done');
+  });
+
+  it('confirms the decimals before the worker builds, and builds nothing when they are wrong', async () => {
+    respond({ [MessageTypes.CIP113_PREPARE_TRANSFER]: prepared });
+    const flow = useCip113Send();
+
+    backendStates(null); // the backend states 0 decimals; the amount was typed with 6
+    expect(await flow.prepare(INTENT)).toBe(false);
+    expect(flow.failure.value).toEqual({ code: 'DECIMALS_MISMATCH' });
+    expect(cip113SendErrorKey('DECIMALS_MISMATCH')).toBe('txGuard.tokenDecimalsMismatch');
+
+    clearConfirmedDecimals();
+    getAssetsInfo.mockRejectedValue(new Error('Network Error'));
+    expect(await flow.prepare(INTENT)).toBe(false);
+    expect(flow.failure.value).toEqual({ code: 'DECIMALS_UNVERIFIED' });
+    expect(cip113SendErrorKey('DECIMALS_UNVERIFIED')).toBe('txGuard.tokenDecimalsUnverified');
+
+    expect(send).not.toHaveBeenCalled();
+    expect(flow.stage.value).toBe('idle');
   });
 
   it('signs a PassKey wallet with its decrypted key, and wipes the key afterwards', async () => {

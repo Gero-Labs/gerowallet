@@ -150,6 +150,7 @@ import {
   TOKEN_SALE_LIMIT_ADA, routeFromQuoteEvent, swapSpendBound, toBaseUnits, type QuotedRoute, type SwapIntent,
 } from '../composables/orderSpendBound';
 import { TxIntentMismatchError, type SpendBound } from '@/shared/utils/txIntentGuard';
+import { confirmTokenDecimals, TokenDecimalsError } from '@/shared/utils/verifiedDecimals';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
@@ -342,7 +343,13 @@ async function currentSwapIntent(): Promise<SwapIntent | null> {
   // The decimals the widget converted the typed amount with: ours, through resolveToken.
   const decimals = tokenIn === 'lovelace' ? 6 : (await resolveToken(tokenIn))?.decimals;
   if (typeof decimals !== 'number') return null;
-  const amountIn = toBaseUnits(typed, decimals);
+  // They come from the catalogue and gero-sync: the budget is sized with the ones gero-backend
+  // confirms, and a token whose decimals it does not confirm gets none (verifiedDecimals.ts).
+  const confirmed = tokenIn === 'lovelace'
+    ? decimals
+    : (await confirmTokenDecimals([{ unit: tokenIn, decimals }], walletStore.loggedWallet)).get(tokenIn);
+  if (typeof confirmed !== 'number') return null;
+  const amountIn = toBaseUnits(typed, confirmed);
   return amountIn ? { tokenIn, amountIn } : null;
 }
 
@@ -395,7 +402,9 @@ async function spendBoundForSignature(): Promise<SpendBound | null> {
   try {
     const intent = await currentSwapIntent();
     return intent ? swapSpendBound(intent) : null;
-  } catch {
+  } catch (e) {
+    // Said as itself, not as the order exceeding a near-zero budget.
+    if (e instanceof TokenDecimalsError) throw e;
     return null;
   }
 }
@@ -430,6 +439,10 @@ const signer = {
     try {
       return await sharedSigner.signTx(unsignedTxCbor);
     } catch (e) {
+      if (e instanceof TokenDecimalsError) {
+        signRefusal = e.message;
+        throw e;
+      }
       if (!(e instanceof TxIntentMismatchError)) throw e;
       const refused = refusalFor(e);
       signRefusal = refused.message;

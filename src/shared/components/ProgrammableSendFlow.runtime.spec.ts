@@ -9,8 +9,10 @@ const UNIT = 'cd'.repeat(28) + '4d69636b79';
 const TX_CBOR = '84a400';
 const TX_ID = 'ab'.repeat(32);
 
-const { send, walletState, deviceSign, device } = vi.hoisted(() => ({
+const { send, walletState, deviceSign, device, getAssetsInfo } = vi.hoisted(() => ({
   send: vi.fn(),
+  // gero-backend's asset info (POST /api/assets/info), where the token's decimals are confirmed.
+  getAssetsInfo: vi.fn(),
   deviceSign: vi.fn(),
   // What the page handed the device signer, and the Keystone dialog's switch.
   device: { options: undefined as { getIsBT?: () => boolean } | undefined, keystoneShow: undefined as { value: boolean } | undefined },
@@ -23,6 +25,7 @@ const { send, walletState, deviceSign, device } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: (...args: unknown[]) => send(...args) } }));
+vi.mock('@/api/api', () => ({ Api: class { getAssetsInfo(units: string[]) { return getAssetsInfo(units); } } }));
 vi.mock('@/stores/walletStore', async () => {
   const { reactive } = await import('vue');
   return { walletStore: reactive(walletState) };
@@ -31,7 +34,7 @@ vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string, params?: Record<string, unknown>) => (params ? `${key} ${JSON.stringify(params)}` : key) }),
 }));
 vi.mock('@/shared/composables/useExplorer', () => ({ useExplorer: () => ({ explorerUrl: (_: string, id: string) => (id ? `https://explorer/${id}` : '') }) }));
-vi.mock('@/utils/networks', () => ({ default: { resolveNetwork: () => ({ currencyTicker: 'tADA' }) } }));
+vi.mock('@/utils/networks', () => ({ default: { resolveNetwork: () => ({ currencyTicker: 'tADA' }), resolveDefaultProvider: () => 1 } }));
 // The password field's PassKey autofill needs WebAuthn; a plain input stands in for it.
 vi.mock('@/shared/components/PassKeyPasswordField.vue', () => ({
   default: {
@@ -71,8 +74,13 @@ vi.mock('@/shared/dialogs/KeystoneSignDialog.vue', () => ({
 import ProgrammableSendFlow from './ProgrammableSendFlow.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
+import { clearConfirmedDecimals } from '@/shared/utils/verifiedDecimals';
 
 enableAutoUnmount(afterEach);
+
+/** gero-backend answers for UNIT with this registry entry. */
+const backendStates = (metadata: Record<string, unknown> | null) =>
+  getAssetsInfo.mockImplementation(async (units: string[]) => ({ status: 200, data: units.filter((u) => u === UNIT).map((asset) => ({ asset, metadata })) }));
 
 const SUMMARY = {
   txId: TX_ID,
@@ -121,6 +129,9 @@ describe('ProgrammableSendFlow', () => {
 
   beforeEach(() => {
     send.mockReset();
+    clearConfirmedDecimals();
+    getAssetsInfo.mockReset();
+    backendStates({ ticker: 'MICKY', decimals: 6 });
     store.programmableTokens = { [UNIT]: { unit: UNIT, quantity: '21000000', isProgrammable: true, cip113Registered: true } };
     store.loggedWallet = { id: 1, chain: 'Cardano', network: 'Preprod', type: 'Normal' };
   });
@@ -143,6 +154,8 @@ describe('ProgrammableSendFlow', () => {
     await flushPromises();
 
     expect((send.mock.calls[0][0] as { data: unknown }).data).toEqual({ unit: UNIT, quantity: '1500000', recipientAddress: 'addr_test1qrecipient' });
+    // The decimals 1.5 became base units with, confirmed by gero-backend first.
+    expect(getAssetsInfo).toHaveBeenCalledWith([UNIT]);
     const review = wrapper.get('[data-testid="programmable-send-review"]').text();
     expect(review).toContain('1.5 MICKY');
     expect(review).toContain('addr_test1zprogrammable');
@@ -181,6 +194,30 @@ describe('ProgrammableSendFlow', () => {
     await fillForm(wrapper, '5', '');
     expect(continueButton().attributes('disabled')).toBeDefined();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it('asks the worker for nothing when gero-backend states other decimals for the token', async () => {
+    // 0 decimals: "1.5" was converted with 6, a million times what the token's own figure gives.
+    backendStates(null);
+    const wrapper = render();
+    await fillForm(wrapper, '1.5');
+    await wrapper.get('[data-testid="programmable-send-continue"]').trigger('click');
+    await flushPromises();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="programmable-send-error"]').text()).toContain('txGuard.tokenDecimalsMismatch');
+    expect(wrapper.find('[data-testid="programmable-send-review"]').exists()).toBe(false);
+  });
+
+  it('asks the worker for nothing when gero-backend cannot confirm the decimals', async () => {
+    getAssetsInfo.mockRejectedValue(new Error('Network Error'));
+    const wrapper = render();
+    await fillForm(wrapper, '1.5');
+    await wrapper.get('[data-testid="programmable-send-continue"]').trigger('click');
+    await flushPromises();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="programmable-send-error"]').text()).toContain('txGuard.tokenDecimalsUnverified');
   });
 
   it("explains the worker's refusal, with the most one transfer can send", async () => {

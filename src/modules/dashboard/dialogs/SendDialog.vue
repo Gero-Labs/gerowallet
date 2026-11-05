@@ -301,6 +301,7 @@ import { Collectible, SendRecipient, Token } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import { baseUnitsToDecimalString, decimalToBaseUnits } from '@/shared/utils/amount';
+import { confirmTokenDecimals } from '@/shared/utils/verifiedDecimals';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -834,8 +835,12 @@ const globalTotal = computed(() => {
   };
 });
 
-/** Build Nexus output format from a recipient. Optionally override lovelace (for max-ada). */
-function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
+/**
+ * Build Nexus output format from a recipient. Optionally override lovelace (for max-ada).
+ * `confirmed` (from confirmedRecipientDecimals) holds the decimals gero-backend confirmed
+ * per token unit; a transaction that may be signed converts typed token amounts with them.
+ */
+function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string, confirmed?: ReadonlyMap<string, number>) {
   const address = r.resolvedAddress ?? r.address;
   let lovelace = overrideLovelace ?? '0';
   const assets: NexusTxAsset[] = [];
@@ -849,7 +854,8 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
     .forEach((token: Token) => {
       // Treat missing decimals as 0 — otherwise a no-metadata fungible would
       // be silently dropped from the output and end up in change.
-      const decimals = token.decimals != null ? token.decimals : 0;
+      const confirmedDecimals = token.ticker === nativeTicker.value ? undefined : confirmed?.get(String(token.unit));
+      const decimals = confirmedDecimals ?? (token.decimals != null ? token.decimals : 0);
       // String-shift, not float multiply: 0.29 * 100 floors to 28 (issue 933)
       const qty = decimalToBaseUnits(token.quantity, decimals);
       if (token.ticker === nativeTicker.value) {
@@ -876,6 +882,21 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
   });
 
   return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
+}
+
+/**
+ * The decimals gero-backend confirms for every token amount typed for a recipient
+ * (verifiedDecimals.ts), before any transaction that may be signed is built from them.
+ * Throws TokenDecimalsError, so nothing is built, when they differ from the ones the wallet
+ * holds or cannot be confirmed.
+ */
+function confirmedRecipientDecimals(): Promise<Map<string, number>> {
+  return confirmTokenDecimals(
+    recipients.value.flatMap((r: SendRecipient) => r.selectedTokens
+      .filter((tk: Token) => tk?.unit && tk.ticker !== nativeTicker.value && /[1-9]/.test(String(tk.quantity ?? '')))
+      .map((tk: Token) => ({ unit: String(tk.unit), decimals: tk.decimals != null ? tk.decimals : 0 }))),
+    loggedWallet.value,
+  );
 }
 
 /** The wallet's UTxOs less those a transaction it already submitted spends (see withoutPendingSpends). */
@@ -1033,7 +1054,8 @@ async function buildTx(options?: { selectAll?: boolean }) {
   );
   if (!allValid) return;
 
-  const nexusOutputs = recipients.value.map((r: SendRecipient) => recipientToNexusOutput(r));
+  const confirmed = await confirmedRecipientDecimals();
+  const nexusOutputs = recipients.value.map((r: SendRecipient) => recipientToNexusOutput(r, undefined, confirmed));
 
   const request: BuildTxRequest = {
     outputs: nexusOutputs,
@@ -1220,6 +1242,9 @@ async function setMax(recipientId: string, tokenIndex: number) {
     // the same calculation as max-ada (no mismatch between two separate computations)
     let adjustedLovelace: bigint = maxLovelace;
     const tryBuild = async (loveOverride?: string): Promise<void> => {
+      // This transaction may be signed: its token amounts convert with confirmed decimals.
+      // A refusal ends Max here, and the plain rebuild below then says why.
+      const confirmed = await confirmedRecipientDecimals();
       const buildOutputs = recipients.value
         .filter((r: SendRecipient) => {
           if (r.id === recipientId) return true;
@@ -1228,11 +1253,11 @@ async function setMax(recipientId: string, tokenIndex: number) {
         })
         .map((r: SendRecipient) => {
           if (r.id === recipientId) {
-            const out = recipientToNexusOutput(r, loveOverride ?? '0');
+            const out = recipientToNexusOutput(r, loveOverride ?? '0', confirmed);
             if (!out.address || !isPaymentAddress(out.address)) out.address = changeAddr;
             return out;
           }
-          return recipientToNexusOutput(r);
+          return recipientToNexusOutput(r, undefined, confirmed);
         });
 
       const buildRequest: BuildTxRequest = {
