@@ -196,6 +196,25 @@ describe('ProgrammableSendFlow', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  // Issue 1441: the side panel passed no decimals, which this form counted as 0, so it said
+  // "Available: 4200 LOCK" for 42 LOCK and read "42" as 42 base units.
+  it('reads no amount without the token\'s decimals, and asks for nothing', async () => {
+    const wrapper = mount(ProgrammableSendFlow, {
+      attachTo: document.body,
+      props: { unit: UNIT, ticker: 'MICKY' } as never,
+      global: { plugins: [createTestVuetify()], config: { warnHandler: () => {} } },
+    });
+    expect(wrapper.text()).not.toContain('21000000');
+
+    await fillForm(wrapper, '42');
+    const continueButton = wrapper.get('[data-testid="programmable-send-continue"]');
+    expect(continueButton.attributes('disabled')).toBeDefined();
+    await continueButton.trigger('click');
+    await flushPromises();
+    expect(getAssetsInfo).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('asks the worker for nothing when gero-backend states other decimals for the token', async () => {
     // 0 decimals: "1.5" was converted with 6, a million times what the token's own figure gives.
     backendStates(null);

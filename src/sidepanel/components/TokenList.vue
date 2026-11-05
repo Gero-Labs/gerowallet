@@ -187,7 +187,7 @@ import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
 import { formatTokenQuantity, formatUsd } from '@/shared/utils/format';
-import { listedTokens } from '../composables/listedTokens';
+import { listedTokens, tokenRowDecimals } from '../composables/listedTokens';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -401,14 +401,14 @@ function getTokenChange(token: TokenLike): number | null {
 function getTokenFiatValue(token: TokenLike): number {
   const price = getTokenPrice(token);
   if (!price) return 0;
-  const decimals = token.metadata?.decimals ?? 0;
+  const decimals = tokenRowDecimals(token) ?? 0;
   let amount = Number(token.quantity || 0);
   if (decimals > 0) amount = amount / Math.pow(10, decimals);
   return amount * price;
 }
 
 function formatTokenAmount(token: TokenLike): string {
-  const decimals = token.metadata?.decimals ?? 0;
+  const decimals = tokenRowDecimals(token) ?? 0;
   let amount = Number(token.quantity || 0);
   if (decimals > 0) amount = amount / Math.pow(10, decimals);
   return formatTokenQuantity(amount, decimals);
