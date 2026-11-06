@@ -68,7 +68,7 @@
                 placeholder="0.00000000"
                 @input="validateAmount"
               />
-              <GButton tier="tertiary" compact @click="setMaxAmount()">{{ $t('common.max') }}</GButton>
+              <GButton tier="tertiary" compact :disabled="!feeRates" @click="setMaxAmount()">{{ $t('common.max') }}</GButton>
             </span>
             <span v-if="amountError" class="btc-field__error">{{ amountError }}</span>
             <span v-else-if="amountInSats > 0" class="t-caption g-num">{{ amountLine(amountInSats) }}</span>
@@ -438,6 +438,8 @@ async function pasteAddress() {
 }
 
 function setMaxAmount() {
+  // Without the rates the fee reads 0 and Max would fill in the whole balance
+  if (!feeRates.value) return;
   const maxAmount = Number(availableBalance.value - BigInt(estimatedFeeSats.value));
   if (maxAmount > 0) {
     amountBtc.value = (maxAmount / 100000000).toFixed(8);
@@ -532,7 +534,10 @@ function closeDialog() {
   amountError.value = '';
 }
 
-watch(() => props.modelValue, (val) => { if (val) updateFeeEstimate(); });
+// Immediate: the quick-action state outlives this dialog, so it can mount already open
+watch(() => props.modelValue, (val) => { if (val) updateFeeEstimate(); }, { immediate: true });
+// An amount typed before the rates arrived was checked against a fee of 0
+watch(feeRates, () => { if (amountBtc.value) validateAmount(); });
 </script>
 
 <style scoped lang="scss">
