@@ -81,6 +81,59 @@ describe('i18n parity', () => {
     });
   });
 
+  // The market's warnings and sheets. The "holds more" warning also shows for an output that holds
+  // no NFT at all, so it may not say "more than the one NFT"; the German keeps one word for a
+  // listing that sits stuck ("festsitzen"); the market copy never names the closed marketplace.
+  describe.each(READY_LANGUAGES)('market copy: %s', (lang) => {
+    const dict = locale(lang);
+
+    it('says the listing does not hold exactly one NFT, which is true for no NFT at all as well as for extras', () => {
+      const text = dict['signTx.listingHoldsMore']!;
+      expect(text).not.toMatch(/more than the one NFT|mehr als das eine NFT|más que el único NFT/i);
+      expect(text).toMatch(/exactly one NFT|genau ein NFT|exactamente un NFT/i);
+    });
+
+    it('never names the marketplace anywhere in the market copy', () => {
+      const offenders = Object.entries(dict).filter(([key, value]) => key.startsWith('nftMarket.') && /jpg/i.test(value)).map(([key]) => key);
+      expect(offenders).toEqual([]);
+    });
+
+    // The lookalike warning is useless without the real collection's policy ID: it is the one
+    // thing that tells a copy from the original.
+    it('keeps the real collection\'s name and policy ID in the lookalike warning', () => {
+      expect(placeholders(dict['nftMarket.browse.lookalike']!)).toEqual(['{name}', '{policyId}']);
+    });
+
+    // The purchase sheet's figures are the worker's, never baked into the copy.
+    it('takes the purchase sheet\'s amounts as placeholders and names no number of its own', () => {
+      expect(placeholders(dict['nftMarket.buy.depositNote']!)).toEqual(['{deposit}']);
+      expect(placeholders(dict['nftMarket.buy.priceDiffers']!)).toEqual(['{price}', '{shown}']);
+      for (const key of ['nftMarket.buy.depositNote', 'nftMarket.buy.priceDiffers', 'nftMarket.buy.minUtxoNote', 'nftMarket.buy.nftAdaNote']) {
+        expect(dict[key], key).not.toMatch(/\d/);
+      }
+    });
+  });
+
+  it('addresses German users formally in the browse and buy copy, as the rest of the market copy does', () => {
+    const de = locale('de');
+    const keys = Object.keys(de).filter((key) => key.startsWith('nftMarket.browse.') || key.startsWith('nftMarket.buy.'));
+    expect(keys.length).toBeGreaterThan(0);
+    const informal = keys.filter((key) => /\b(du|dein\w*|dich|dir)\b/i.test(de[key]!));
+    expect(informal).toEqual([]);
+  });
+
+  // The count of listed NFTs is a plural: Spanish says "1 publicado", never "1 publicados".
+  it('gives the listed count a singular and a plural form', () => {
+    const forms = (lang: string) => locale(lang)['nftMarket.badge.listedCount']!.split('|').map((form) => form.trim());
+    for (const lang of READY_LANGUAGES) expect(forms(lang), lang).toHaveLength(2);
+    expect(forms('es')).toEqual(['{count} publicado', '{count} publicados']);
+  });
+
+  it('keeps "sitzt fest" for a stuck NFT in German, as the other listing warnings do', () => {
+    expect(locale('de')['signTx.listingNeverSells']).toContain('sitzt fest');
+    expect(locale('de')['signTx.listingNeverSells']).not.toContain('festgesetzt');
+  });
+
   // The service worker renders pushes from this table alone (no vue-i18n
   // fallback), so a missing key throws for that language's users.
   for (const lang of PUSH_LOCALES.filter((l) => l !== 'us')) {

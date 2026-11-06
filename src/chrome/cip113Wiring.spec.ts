@@ -46,11 +46,11 @@ describe('CIP-113 signing wiring', () => {
   // The allowance covers one verified CIP-113 transfer; it never lets a transaction marked to fail through.
   it('the hardware refusal keeps any refusal but the CIP-113 one before it reads the allowance', () => {
     const body = functionBody(bg, 'function hardwareSignRefusal(');
-    const kept = body.indexOf('if (refusal !== CIP113_SIGN_REFUSAL_MESSAGE) return refusal;');
+    const kept = body.indexOf('if (isMarkedToFailCbor(txCbor))');
     expect(kept).toBeGreaterThan(-1);
     expect(kept).toBeLessThan(body.indexOf('hasCip113SignAllowance('));
-    expect(section(bg, 'app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT,')).toContain('message: refusal');
-    expect(section(bg, 'app.addToOptions(MessageTypes.TREZOR,')).toContain('throw new Error(trezorRefusal)');
+    expect(section(bg, 'app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT,')).toContain('message: refusal.message');
+    expect(section(bg, 'app.addToOptions(MessageTypes.TREZOR,')).toContain('throw new Error(trezorRefusal.message)');
   });
 
   it('the prepare handler grants the allowance only for what prepareCip113Transfer verified', () => {

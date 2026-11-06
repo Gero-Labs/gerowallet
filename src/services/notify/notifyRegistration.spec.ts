@@ -55,6 +55,7 @@ function fakeServer() {
     async getPrefs(walletTag) { calls.push({ m: 'GET /prefs', path: walletTag }); failing('GET /prefs'); if (!server.links.has(walletTag)) throw new NotifyError(404, 'wallet_not_registered'); return server.prefs; },
     async putPrefs(walletTag, body) { calls.push({ m: 'PUT /prefs', path: walletTag, body }); return { ...PREFS, device: body.device ?? PREFS.device }; },
     async watchOrders(walletTag, body) { calls.push({ m: 'POST /orders', path: walletTag, body }); failing('POST /orders'); return { watching: body.txHashes.length }; },
+    async watchListings(walletTag, body) { calls.push({ m: 'POST /listings', path: walletTag, body }); failing('POST /listings'); return { watching: body.listingRefs.length }; },
     async clockOffsetMs() { return 0; },
   };
   return { server, calls, client };
@@ -515,6 +516,51 @@ describe('swap order watches (§4.9)', () => {
     const m = await optedIn();
     m.fake.server.fail.push({ m: 'POST /orders', error: new NotifyError(404, 'wallet_not_registered') });
     expect(await m.reg.watchOrders({ walletId: 4, ownerPkh: PKH, txHashes: [TX] })).toEqual({ result: 'not_registered' });
+    expect((await m.store.getWallet(4))?.registeredAt).toBeNull();
+  });
+});
+
+describe('Gero NFT listing watches (gero-sync POST /device/wallets/{tag}/listings)', () => {
+  const PKH = 'ab'.repeat(28);
+  const REF = `${'cd'.repeat(32)}#1`;
+
+  it('a registered wallet POSTs the owner pkh and the listing refs under its wallet tag', async () => {
+    const m = await optedIn();
+    m.fake.calls.length = 0;
+    const tag = (await m.store.getWallet(4))!.walletTag;
+    expect(await m.reg.watchListings({ walletId: 4, ownerPkh: PKH, listingRefs: [REF] })).toEqual({ result: 'ok', watching: 1 });
+    expect(m.fake.calls).toEqual([{ m: 'POST /listings', path: tag, body: { ownerPkh: PKH, listingRefs: [REF] } }]);
+  });
+
+  it('a wallet that is not registered for notifications makes no call and says so', async () => {
+    const m = machine();
+    expect(await m.reg.watchListings({ walletId: 4, ownerPkh: PKH, listingRefs: [REF] })).toEqual({ result: 'not_registered' });
+    expect(m.fake.calls).toEqual([]);
+  });
+
+  it('a 422 limit_exceeded (listingWatches) is non-fatal: failed, logged, one call, no retry', async () => {
+    const m = await optedIn();
+    m.fake.calls.length = 0;
+    m.fake.server.fail.push({ m: 'POST /listings', error: new NotifyError(422, 'limit_exceeded', { limit: 'listingWatches' }) });
+    expect(await m.reg.watchListings({ walletId: 4, ownerPkh: PKH, listingRefs: [REF] })).toEqual({ result: 'failed' });
+    expect(m.fake.calls.filter((c) => c.m === 'POST /listings')).toHaveLength(1);
+    expect(m.logs.some((l) => l.includes('limit_exceeded'))).toBe(true);
+    // The wallet is still registered: only the watch was refused.
+    expect((await m.store.getWallet(4))?.registeredAt).not.toBeNull();
+  });
+
+  it('any other client error is logged and reported as failed, without a retry', async () => {
+    const m = await optedIn();
+    m.fake.calls.length = 0;
+    m.fake.server.fail.push({ m: 'POST /listings', error: new NotifyError(500, 'http_500') });
+    expect(await m.reg.watchListings({ walletId: 4, ownerPkh: PKH, listingRefs: [REF] })).toEqual({ result: 'failed' });
+    expect(m.fake.calls.filter((c) => c.m === 'POST /listings')).toHaveLength(1);
+  });
+
+  it('a link the server dropped marks the wallet unregistered', async () => {
+    const m = await optedIn();
+    m.fake.server.fail.push({ m: 'POST /listings', error: new NotifyError(404, 'wallet_not_registered') });
+    expect(await m.reg.watchListings({ walletId: 4, ownerPkh: PKH, listingRefs: [REF] })).toEqual({ result: 'not_registered' });
     expect((await m.store.getWallet(4))?.registeredAt).toBeNull();
   });
 });

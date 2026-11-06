@@ -101,6 +101,19 @@ export interface WatchOrdersBody {
   txHashes: string[];
 }
 
+/**
+ * `POST …/listings` body (gero-sync NotifyApi.postListings): 1-20 unique Gero market listing outputs
+ * (`<64 hex tx hash>#<index>`, no leading zero in the index, at most five digits) the wallet made with
+ * `ownerPkh`, the payment key hash Nexus must name as the listing's owner before the server pushes
+ * `nft_sold`. 202 `{ watching }` counts the rows inserted (a ref already watched counts 0); a request that
+ * would pass the wallet's pending-watch cap is 422 `limit_exceeded` with `details.limit = "listingWatches"`
+ * and keeps nothing. Cardano mainnet and preprod only (422 `unsupported_network` otherwise).
+ */
+export interface WatchListingsBody {
+  ownerPkh: string;
+  listingRefs: string[];
+}
+
 /** The stored DeviceRegisterProof; the server ignores the extra `stakeAddress` (§3.7). */
 export interface WalletProof {
   coseSign1: string;

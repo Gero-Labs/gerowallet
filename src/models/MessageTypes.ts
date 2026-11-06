@@ -187,6 +187,10 @@ export enum MessageTypes {
   NOTIFY_INBOX_READ = 'NOTIFY_INBOX_READ', // page -> worker: one e, or all (B-M3 bell)
   NOTIFY_INBOX_CLEAR = 'NOTIFY_INBOX_CLEAR',
   NOTIFY_WATCH_ORDERS = 'NOTIFY_WATCH_ORDERS', // swap widget -> worker: register a submitted swap for fill/cancel alerts
+  // Market dialog -> worker, after a list, reprice or move went through: have gero-sync watch the new Gero
+  // listing for a sale (`nft_sold`). `{ walletId?, ownerPkh?, listingRefs }`; the worker uses the LOGGED wallet and
+  // a listing it verified itself, and only compares what the page names (listingWatch.ts). Extension pages only.
+  NOTIFY_WATCH_LISTINGS = 'NOTIFY_WATCH_LISTINGS',
   NOTIFY_INTRO_ANSWER = 'NOTIFY_INTRO_ANSWER', // page -> worker: the offer to turn notifications on was answered (notifyIntro.ts)
   // The CIP-113 signing refusal for a signer outside the worker (Trezor over WebUSB,
   // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.
@@ -203,6 +207,21 @@ export enum MessageTypes {
   // Answers { success, result: { txCbor, txId, summary } } or { success: false, error, errorCode }.
   // The page then signs those exact bytes. Extension-page-only (senderTrust).
   LEGACY_LISTING_PREPARE_CANCEL = 'LEGACY_LISTING_PREPARE_CANCEL',
+  // Gero NFT market: the worker turns what the user asked for into one verified, unsigned market
+  // transaction (nftMarket/marketPrepare.ts) and allows exactly that transaction id to be signed
+  // once. The page sends the thing and the price, never an address, key or input:
+  //   LIST     { unit, priceLovelace (decimal text), confirmRoyaltyAboveCap? }
+  //   REPRICE  { ref: 'txHash#index', priceLovelace, confirmRoyaltyAboveCap? }
+  //   CANCEL   { ref }
+  //   BUY      { ref }
+  //   MIGRATE  { legacyRef, priceLovelace, confirmRoyaltyAboveCap? }   (mainnet only)
+  // Answers { success, result: { txCbor, txId, summary } } or { success: false, error, errorCode,
+  // ...details }; the page then signs those exact bytes. Extension-page-only (senderTrust).
+  NFT_MARKET_PREPARE_LIST = 'NFT_MARKET_PREPARE_LIST',
+  NFT_MARKET_PREPARE_REPRICE = 'NFT_MARKET_PREPARE_REPRICE',
+  NFT_MARKET_PREPARE_CANCEL = 'NFT_MARKET_PREPARE_CANCEL',
+  NFT_MARKET_PREPARE_BUY = 'NFT_MARKET_PREPARE_BUY',
+  NFT_MARKET_PREPARE_MIGRATE = 'NFT_MARKET_PREPARE_MIGRATE',
   // Submit API (Settings → Advanced): the per-wallet custom Cardano submit endpoint.
   // Extension-page-only (addToOptions, default-deny for content scripts); each acts on
   // the logged-in wallet and refuses a request naming another wallet id.

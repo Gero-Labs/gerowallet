@@ -396,7 +396,7 @@ const synced = computed(() => link.value?.prefs?.synced ?? { categoriesOff: [], 
 const categoriesOff = computed(() => synced.value.categoriesOff);
 // A prefs reply from an older server lacks the field.
 const typesOff = computed(() => synced.value.typesOff ?? []);
-const CATEGORY_LABEL: Record<string, string> = { funds: 'notify.category.funds', staking: 'notify.category.staking', swap: 'notify.category.swap', adam: 'notify.category.adam', governance: 'notify.category.governance' };
+const CATEGORY_LABEL: Record<string, string> = { funds: 'notify.category.funds', staking: 'notify.category.staking', swap: 'notify.category.swap', adam: 'notify.category.adam', governance: 'notify.category.governance', nft: 'notify.category.nft' };
 /** Open question 6: show a category served on ANY transport for the wallet's network; hide one served nowhere. */
 const categories = computed(() => {
   const c = config.value;

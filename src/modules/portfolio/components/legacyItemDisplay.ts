@@ -25,3 +25,14 @@ export function legacyItemName(item: LegacyListingItem, meta: ReadonlyMap<string
 export function legacyItemImage(item: LegacyListingItem, meta: ReadonlyMap<string, LegacyItemMeta>): string | undefined {
   return item.assets.map((asset) => meta.get(asset.unit)?.image).find(Boolean);
 }
+
+/**
+ * The unit of the one NFT a stuck item holds, or null for anything that is not a listing of exactly
+ * one NFT: an offer (ADA only), or a bundle (several assets, or several of one). Only such a listing
+ * can be moved to Gero: the worker refuses the rest (OFFER_NOT_MOVABLE, NOT_SINGLE_NFT).
+ */
+export function singleNftUnit(item: LegacyListingItem): string | null {
+  if (item.kind !== 'listing' || item.assets.length !== 1) return null;
+  const [asset] = item.assets;
+  return asset.quantity === '1' ? asset.unit : null;
+}

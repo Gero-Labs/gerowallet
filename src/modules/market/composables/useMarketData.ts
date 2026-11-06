@@ -62,6 +62,9 @@ export interface MarketToken {
   // Visible but not sendable. Carry it wherever isSnekFun travels — missing here
   // means the verified-only filter silently strips the row.
   isProgrammable?: boolean;
+  /** Holdings rows only: the ADA held by the wallet's own Gero listings (their deposits), owned
+   *  but not spendable until the listing is bought or cancelled. */
+  isListed?: boolean;
   /** Holdings rows only: locked at the PLB address AND listed in the CIP-113 registry (issue 1267). */
   cip113Registered?: boolean;
   // Stable row identity: a unit can appear twice (spendable + locked), and `unit`

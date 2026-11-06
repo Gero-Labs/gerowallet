@@ -6,6 +6,15 @@
 export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-113 programmable tokens';
 
 /**
+ * What every Gero NFT market signing path reports once a transaction touching a Gero listing is
+ * refused (WalletBg.signTx, the hardware preflight, the dApp paths). Fixed English, thrown from the
+ * background (which has no i18n), so a page can map it back to its own copy, as it does for the
+ * CIP-113 refusal. Here, not in marketAllowance.ts, so pages can read it without importing the
+ * worker's allowance state.
+ */
+export const NFT_MARKET_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign a market transaction that was not prepared and checked by this wallet';
+
+/**
  * The refusal for a transaction marked to fail (isValid: false). Such a transaction skips its
  * scripts and forfeits its collateral, and no dApp sends one honestly: listing a wallet UTxO as
  * collateral, and another at the same key as an input, would take it. Same fixed-English-string

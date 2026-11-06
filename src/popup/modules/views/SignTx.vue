@@ -49,12 +49,35 @@
         <!-- Same effects list and network guard as the side panel: certificates,
              withdrawals, votes, proposals, mint/burn, collateral, reference
              inputs, required signers, validity, and a blocking network banner. -->
+        <!-- The summary could not be built from the transaction (blocking): Sign waits for the same
+             explicit acknowledgement the side panel asks for. -->
+        <v-alert
+          v-if="txDecodeFailed"
+          type="error"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+          data-testid="tx-decode-failed-banner"
+        >
+          <div class="font-weight-bold">{{ $t('signTx.decodeFailedTitle') }}</div>
+          <div class="text-caption">{{ $t('signTx.decodeFailedBody') }}</div>
+          <v-checkbox
+            v-model="decodeFailedAck"
+            color="error"
+            hide-details
+            theme="dark"
+            density="compact"
+            class="mt-2"
+            :label="$t('signTx.decodeFailedAck')"
+          />
+        </v-alert>
         <TxApprovalIntents
           v-if="approvalSummary"
           class="mt-2"
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:market-ack="marketAck"
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
         />
@@ -258,7 +281,7 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
-import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import filters from '@/shared/utils/filters';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -281,10 +304,13 @@ import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
-/** A signing error as the user sees it: the worker's and the signers' fixed refusals in their language, anything else as it is. */
+/**
+ * A signing error as the user sees it: the worker's and the signers' fixed refusals in their language, anything else as it is.
+ * `marketApproval`: on this screen the market refusal means a dApp's market approval ran out.
+ */
 const signErrorText = (e: unknown, fallback: string): string => {
   const message = getErrorMessage(e, '');
-  return signRefusalText(message) ?? (message || fallback);
+  return signRefusalText(message, { marketApproval: true }) ?? (message || fallback);
 };
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const utxos = computed(() => loggedWallet.value?.chain === Blockchain.CARDANO ? walletStore.utxos as Cardano.Utxo[] : []);
@@ -352,6 +378,12 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
       approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 }), {
         ownUtxos: provenOwnUtxos.value,
         deposits: approvalDepositsFrom(networkStore.epochParams),
+        // The wallet's own Gero listings and the listing scripts, so a transaction that spends
+        // one or creates one is called out (never gated on the isNftMarketEnabled flag).
+        market: approvalMarketContext(
+          walletStore.listedListings,
+          wallet ? networks.resolveNftMarketDeployments(wallet.chain, wallet.network) : [],
+        ),
       }),
     );
   } catch {
@@ -363,14 +395,24 @@ const approvalCard = computed(() =>
 );
 const networkMismatchAck = ref(false);
 const foreignValueAck = ref(false);
+// A Gero listing this transaction creates that pays someone else (or whose terms are unreadable or
+// off), or a spent listing whose NFT does not come back to the wallet.
+const marketAck = ref(false);
 const inputsMisreportedAck = ref(false);
+// A transaction was sent but its summary could not be built (a decode failure): the user would be
+// signing blind, so Sign waits for an explicit acknowledgement, as in the side panel.
+const txDecodeFailed = computed(() => !!request.value?.data?.tx && !approvalSummary.value);
+const decodeFailedAck = ref(false);
 // Sign is blocked until a network mismatch, a deposit refund or collateral return
-// to someone else, and a misstated input are explicitly acknowledged.
+// to someone else, a risky Gero listing, and a misstated input are explicitly acknowledged,
+// and until an undecodable transaction is.
 const signBlocked = computed(() =>
-  !!approvalSummary.value
-  && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
-    || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
-    || (inputsMisreported.value && !inputsMisreportedAck.value)),
+  (txDecodeFailed.value && !decodeFailedAck.value)
+  || (!!approvalSummary.value
+    && (((approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch) && !networkMismatchAck.value)
+      || (approvalSummary.value.requiresForeignValueAck && !foreignValueAck.value)
+      || (approvalSummary.value.requiresMarketAck && !marketAck.value)
+      || (inputsMisreported.value && !inputsMisreportedAck.value))),
 );
 
 const txAutoSubmit = computed(() => {
