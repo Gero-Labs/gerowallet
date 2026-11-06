@@ -52,6 +52,7 @@ vi.mock('@/shared/components/GButton/GButton.vue', () => ({
 import BitcoinSendDialog from './BitcoinSendDialog.vue';
 import { Messaging } from '@/chrome/messaging';
 import { getBitcoinFeeEstimatorFor } from '@/chains/bitcoin/bitcoinFeeEstimator';
+import { calculateTxSize } from '@/chains/bitcoin/bitcoinCoinSelection';
 
 const send = vi.mocked(Messaging.sendToBackgroundFromOptions);
 
@@ -66,9 +67,9 @@ function deferred<T>() {
 
 let wrapper: VueWrapper;
 
-function mountDialog() {
+function mountDialog(modelValue = false) {
   wrapper = mount(BitcoinSendDialog, {
-    props: { modelValue: false },
+    props: { modelValue },
     global: {
       config: {
         globalProperties: mockGlobalProperties({
@@ -167,5 +168,64 @@ describe('BitcoinSendDialog fee rates (issue 1440)', () => {
 
     expect(wrapper.text()).toContain('bitcoin.feeRatesFallback');
     expect(wrapper.text()).toContain('bitcoin.feeRateValue:10');
+  });
+});
+
+// Issue 1447: Max before the rates arrived filled in the whole balance (a fee of 0),
+// step 1 let it through and step 2 then refused it as over the balance.
+describe('BitcoinSendDialog Max before the fee rates (issue 1447)', () => {
+  // The mocked wallet's one 1,000,000-sat UTxO, less the medium (17 sat/vB) fee for 1 input, 2 outputs
+  const MAX_AT_17 = ((1_000_000 - Math.ceil(calculateTxSize(1, 2) * 17)) / 1e8).toFixed(8);
+  const amountInput = () => wrapper.find<HTMLInputElement>('input[type="number"]');
+
+  it('keeps Max off until the rates arrive, then leaves room for the fee', async () => {
+    const rates = deferred<BitcoinFeeEstimates>();
+    getFeeEstimates.mockReturnValue(rates.promise);
+    mountDialog();
+    await wrapper.setProps({ modelValue: true });
+    await wrapper.find('input.g-mono').setValue('bc1qrecipient');
+    await settle();
+
+    expect(button('common.max').attributes('disabled')).toBeDefined();
+    expect(amountInput().element.value).toBe('');
+
+    rates.resolve(LIVE);
+    await settle();
+    await button('common.max').trigger('click');
+    await settle();
+
+    expect(amountInput().element.value).toBe(MAX_AT_17);
+    await button('common.continue').trigger('click');
+    await settle();
+    expect(button('common.continue').attributes('disabled')).toBeUndefined();
+  });
+
+  it('checks an amount typed before the rates again once they arrive', async () => {
+    const rates = deferred<BitcoinFeeEstimates>();
+    getFeeEstimates.mockReturnValue(rates.promise);
+    mountDialog();
+    await wrapper.setProps({ modelValue: true });
+    await wrapper.find('input.g-mono').setValue('bc1qrecipient');
+    await amountInput().setValue('0.01');
+    await settle();
+    expect(wrapper.text()).not.toContain('send.insufficientBalance');
+
+    rates.resolve(LIVE);
+    await settle();
+
+    expect(wrapper.text()).toContain('send.insufficientBalance');
+    expect(button('common.continue').attributes('disabled')).toBeDefined();
+  });
+
+  // The quick-action state outlives the dialog, so it can mount open (Send left open
+  // across a switch to a Bitcoin wallet): the rates must load without a close and reopen.
+  it('loads the rates when it is mounted already open', async () => {
+    getFeeEstimates.mockResolvedValue(LIVE);
+    mountDialog(true);
+
+    // The estimator is a dynamic import, so this waits rather than counting microtasks
+    await vi.waitFor(() => expect(getFeeEstimates).toHaveBeenCalled());
+    await settle();
+    expect(button('common.max').attributes('disabled')).toBeUndefined();
   });
 });
