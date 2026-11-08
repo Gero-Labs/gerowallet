@@ -4,6 +4,7 @@
 // the worker's verified figures, so this is the preview, held to the same arithmetic.
 import { describe, expect, it } from 'vitest';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
+import { computeRoyalties } from '@/chrome/nftMarket/royalties';
 import { NFT_MARKET_DEPLOYMENTS_PREPROD, MAX_LIST_PRICE } from '@/utils/nftMarketDeployments';
 import {
   adaInputText,
@@ -11,7 +12,6 @@ import {
   pageRoyaltyMinUtxo,
   parseAdaPrice,
   previewNewListing,
-  previewRepricedListing,
 } from './listingPreview';
 
 const ADA = 1_000_000n;
@@ -255,44 +255,37 @@ describe('classifyDroppedRoyalties', () => {
   });
 });
 
-describe('previewRepricedListing: a new price, the same royalties', () => {
-  const ROYALTIES = [{ address: CREATOR_A, lovelace: 5n * ADA }];
+describe('a reprice is previewed as a new listing at its new price', () => {
+  // The collection's 5%: 5 ADA when listed at 100 ADA. A reprice never keeps that amount.
+  const FIVE = terms([{ address: CREATOR_A, rate: 0.05 }]);
+  const entry = (address: string, lovelace: bigint) => ({ address, lovelace });
 
-  it('keeps each royalty amount and moves only the fee and the seller\'s share', () => {
-    const p = previewRepricedListing(50n * ADA, ROYALTIES, V1)!;
-    expect(p.fee).toBe(1_500_000n);
-    expect(p.royalties).toEqual(ROYALTIES);
-    expect(p.royaltiesTotal).toBe(5n * ADA);
-    expect(p.sellerReceives).toBe(50n * ADA - 1_500_000n - 5n * ADA);
-    expect(p.issue).toBeNull();
-    expect(p.overCap).toBe(false);
-    expect(p.dropped).toEqual([]);
+  it('works the royalty out again at the new price: up with a raise, down with a cut', () => {
+    expect(preview(300n * ADA, FIVE)!.royalties).toEqual([entry(CREATOR_A, 15n * ADA)]);
+    const cut = preview(40n * ADA, FIVE)!;
+    expect(cut.royalties).toEqual([entry(CREATOR_A, 2n * ADA)]);
+    expect(cut.royaltyFraction).toBe(0.05);
+    // The kept 5 ADA would have been 12.5% of 40 ADA and asked for a confirmation; the recomputed 2 ADA does not.
+    expect(cut.overCap).toBe(false);
   });
 
-  it('refuses a price under the minimum, one above the maximum, and one that leaves the seller under 1.5 ADA', () => {
-    expect(previewRepricedListing(4n * ADA, [], V1)!.issue).toBe('PRICE_TOO_LOW');
-    expect(previewRepricedListing(MAX_LIST_PRICE + 1n, [], V1)!.issue).toBe('PRICE_TOO_HIGH');
-    // 6 ADA: fee 1.5, the fixed 5 ADA royalty leaves -0.5.
-    expect(previewRepricedListing(6n * ADA, ROYALTIES, V1)!.issue).toBe('SELLER_SHARE_TOO_LOW');
+  it('leaves out a royalty that falls under min-UTxO at the new price', () => {
+    const low = preview(20n * ADA, FIVE)!;
+    expect(low.royalties).toEqual([]);
+    expect(low.dropped).toEqual([entry(CREATOR_A, 1n * ADA)]);
+    expect(low.sellerReceives).toBe(20n * ADA - 1_500_000n);
   });
 
-  it('shows the royalty as a share of the NEW price', () => {
-    expect(previewRepricedListing(50n * ADA, ROYALTIES, V1)!.royaltyFraction).toBe(0.1);
-  });
-
-  it('is over the cap when the kept royalties are more than 10% of the NEW price: a cut in price raises their share', () => {
-    // 5 ADA is 5% of 100 ADA, exactly 10% of 50 ADA (not over) and 12.5% of 40 ADA.
-    expect(previewRepricedListing(100n * ADA, ROYALTIES, V1)!.overCap).toBe(false);
-    expect(previewRepricedListing(50n * ADA, ROYALTIES, V1)!.overCap).toBe(false);
-    expect(previewRepricedListing(50n * ADA - 1n, ROYALTIES, V1)!.overCap).toBe(true);
-    const cut = previewRepricedListing(40n * ADA, ROYALTIES, V1)!;
-    expect(cut.overCap).toBe(true);
-    expect(cut.royaltiesTotal).toBe(5n * ADA);
-    expect(cut.royaltyFraction).toBe(0.125);
-  });
-
-  it('is never over the cap with no royalties', () => {
-    expect(previewRepricedListing(5n * ADA, [], V1)!.overCap).toBe(false);
+  it('is the worker\'s computation: the same entries, drops and cap answer as computeRoyalties at that price', () => {
+    const info = terms([{ address: CREATOR_A, rate: 0.01, min: 6n * ADA }, { address: CREATOR_B, rate: 0.004 }], 'cip102');
+    for (const price of [40n * ADA, 120n * ADA, 400n * ADA]) {
+      const asked = computeRoyalties(price, info, { confirmAboveCap: false, minUtxo: MIN_UTXO });
+      const applied = computeRoyalties(price, info, { confirmAboveCap: true, minUtxo: MIN_UTXO });
+      const p = preview(price, info)!;
+      expect(p.overCap, String(price)).toBe(asked.needsConfirmation);
+      expect(p.royalties, String(price)).toEqual(applied.royalties);
+      expect(p.dropped, String(price)).toEqual(applied.dropped);
+    }
   });
 });
 

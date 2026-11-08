@@ -13,6 +13,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 import {
   MAX_LISTING_DEPOSIT,
+  MAX_ROYALTIES,
   MIN_LIST_PRICE,
   MIN_SELLER_SHARE,
   NFT_MARKET_DEPLOYMENTS_PREPROD,
@@ -36,6 +37,7 @@ import {
   type ListIntent,
   type MarketVerifyContext,
   type MarketVerifyRule,
+  type RepriceIntent,
 } from './verifyListing';
 
 const TESTNET = Cardano.NetworkId.Testnet;
@@ -283,7 +285,9 @@ function validCancel(): Cardano.Tx {
 }
 const cancelTx = (edit: (tx: Cardano.Tx) => void = () => undefined) => build(validCancel(), edit);
 
-const REPRICED: ListingDatum = { ...DATUM, price: 80n * ADA };
+/** The royalties a new listing at 80 ADA carries for the collection's 5% (the old listing's were 5 ADA at 100 ADA). */
+const REPRICED_ROYALTIES: Payee[] = [{ address: ROYALTY_ADDRESS, lovelace: 4n * ADA }];
+const REPRICED: ListingDatum = { ...DATUM, price: 80n * ADA, royalties: REPRICED_ROYALTIES };
 
 /** The valid reprice: the cancel's inputs, and the same listing again at the same address, new price. */
 function validReprice(): Cardano.Tx {
@@ -297,7 +301,7 @@ function validReprice(): Cardano.Tx {
 const repriceTx = (edit: (tx: Cardano.Tx) => void = () => undefined) => build(validReprice(), edit);
 
 const CANCEL_INTENT = { ref: LISTING_REF, returnAddress: RECEIVE };
-const REPRICE_INTENT = { ref: LISTING_REF, price: 80n * ADA };
+const REPRICE_INTENT: RepriceIntent = { ref: LISTING_REF, price: 80n * ADA, royalties: REPRICED_ROYALTIES };
 
 type Built = { cbor: string; id: string };
 const verifyL = (tx: Built, intent: ListIntent = LIST_INTENT, ctx = context()) => verifyList(tx.cbor, tx.id, intent, ctx);
@@ -917,20 +921,22 @@ describe('verifyCancel: fee and collateral', () => {
 // ---------------------------------------------------------------------------------------------
 
 describe('verifyReprice: the valid reprice', () => {
-  it('accepts a new price at the same address and summarises it', () => {
+  it('accepts a new price at the same address with the royalties computed for it, and summarises it', () => {
     const tx = repriceTx();
     expect(verifyR(tx)).toEqual({
       txId: tx.id,
       ref: LISTING_REF,
       unit: UNIT_222,
       oldPriceLovelace: '100000000',
+      oldDepositLovelace: '2000000',
       priceLovelace: '80000000',
       listingAddress: LISTING_V1,
       listingOutputIndex: 0,
       deploymentVersion: 1,
+      royalties: [{ address: ROYALTY_ADDRESS, lovelace: '4000000' }],
       marketFeeLovelace: '1500000',
-      royaltiesLovelace: '5000000',
-      sellerReceivesLovelace: '73500000',
+      royaltiesLovelace: '4000000',
+      sellerReceivesLovelace: '74500000',
       depositLovelace: '2000000',
       networkFeeLovelace: '400000',
     });
@@ -986,14 +992,24 @@ describe('verifyReprice: the new listing output', () => {
     refusedBy('LISTING', () => verifyR(repriceTx(), REPRICE_INTENT, context({ stakeKeyHash: SECOND_STAKE, ownKeyHashes: new Set([OWNER, OWNER_B, STAKE, SECOND_STAKE]) })));
   });
 
-  it('refuses a value other than the NFT once plus the same deposit', () => {
+  it('refuses a value other than the NFT once plus a deposit within a new listing\'s bounds', () => {
     refusedBy('NFT', () => verifyR(repriceTx((tx) => {
       tx.body.outputs[0].value.assets = new Map([[Cardano.AssetId(UNIT_222), 1n], [Cardano.AssetId(OTHER_UNIT), 1n]]) as Cardano.TokenMap;
     })));
     refusedBy('NFT', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].value.assets = assets(OTHER_UNIT); })));
     refusedBy('NFT', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].value.assets = assets(UNIT_222, 2n); })));
-    refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = DEPOSIT + 1n; })));
-    refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = DEPOSIT - 1n; })));
+    refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = 0n; })));
+    refusedBy('LISTING', () => verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = MAX_LISTING_DEPOSIT + 1n; })));
+  });
+
+  it('accepts a deposit that grows or shrinks with the new datum (a new listing\'s deposit), and says what it was', () => {
+    // More royalties need a larger output: the wallet's own inputs pay the difference.
+    const grown = verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = DEPOSIT + 300_000n; }));
+    expect(grown).toMatchObject({ depositLovelace: '2300000', oldDepositLovelace: '2000000' });
+    // Fewer: the rest comes back as change to the wallet's own address.
+    const shrunk = verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = DEPOSIT - 600_000n; }));
+    expect(shrunk).toMatchObject({ depositLovelace: '1400000', oldDepositLovelace: '2000000' });
+    expect(verifyR(repriceTx((tx) => { tx.body.outputs[0].value.coins = MAX_LISTING_DEPOSIT; })).depositLovelace).toBe('5000000');
   });
 
   it('refuses a datum hash, no datum, and bytes that are no listing', () => {
@@ -1005,12 +1021,39 @@ describe('verifyReprice: the new listing output', () => {
     refusedBy('DATUM', () => verifyR(repriceWithDatum('d87980')));
   });
 
-  it('refuses a reprice that also changes the royalties', () => {
+  it('refuses royalties that are not exactly the ones computed for the new price, the old fixed amounts first among them', () => {
     const other = (royalties: Payee[]) => repriceWithDatum(listingDatumHex({ ...REPRICED, royalties }));
+    // The old listing's 5 ADA, carried over unchanged: what a seller who listed low and raised the price would want.
+    refusedBy('DATUM', () => verifyR(other(ROYALTIES)));
     refusedBy('DATUM', () => verifyR(other([])));
-    refusedBy('DATUM', () => verifyR(other([{ address: ROYALTY_ADDRESS, lovelace: 4n * ADA }])));
-    refusedBy('DATUM', () => verifyR(other([{ address: ROYALTY_ADDRESS_2, lovelace: 5n * ADA }])));
-    refusedBy('DATUM', () => verifyR(other([...ROYALTIES, { address: ROYALTY_ADDRESS_2, lovelace: 1n * ADA }])));
+    refusedBy('DATUM', () => verifyR(other([{ address: ROYALTY_ADDRESS, lovelace: 4n * ADA - 1n }])));
+    refusedBy('DATUM', () => verifyR(other([{ address: ROYALTY_ADDRESS_2, lovelace: 4n * ADA }])));
+    refusedBy('DATUM', () => verifyR(other([...REPRICED_ROYALTIES, { address: ROYALTY_ADDRESS_2, lovelace: 1n * ADA }])));
+    // And the other way round: a datum with the old amounts against an intent that computed none.
+    refusedBy('DATUM', () => verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, royalties: ROYALTIES })), { ...REPRICE_INTENT, royalties: [] }));
+  });
+
+  it('accepts the royalties computed at a higher and at a lower price, in their order', () => {
+    const at = (price: bigint, royalties: Payee[]) =>
+      verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, price, royalties })), { ref: LISTING_REF, price, royalties });
+    // Raised to 300 ADA: 5% is 15 ADA, and a second recipient now clears min-UTxO.
+    const higher = at(300n * ADA, [{ address: ROYALTY_ADDRESS, lovelace: 15n * ADA }, { address: ROYALTY_ADDRESS_2, lovelace: 1_500_000n }]);
+    expect(higher.royalties).toEqual([
+      { address: ROYALTY_ADDRESS, lovelace: '15000000' },
+      { address: ROYALTY_ADDRESS_2, lovelace: '1500000' },
+    ]);
+    expect(higher.royaltiesLovelace).toBe('16500000');
+    // Cut to 40 ADA: 2 ADA, never the old 5.
+    expect(at(40n * ADA, [{ address: ROYALTY_ADDRESS, lovelace: 2n * ADA }]).royaltiesLovelace).toBe('2000000');
+    // No royalty left at the new price.
+    expect(at(40n * ADA, []).royalties).toEqual([]);
+  });
+
+  it('holds the new royalties to a listing\'s limits even when the datum matches the intent', () => {
+    const four = Array.from({ length: MAX_ROYALTIES + 1 }, () => ({ address: ROYALTY_ADDRESS, lovelace: 1n * ADA }));
+    refusedBy('DATUM', () => verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, royalties: four })), { ...REPRICE_INTENT, royalties: four }));
+    const zero = [{ address: ROYALTY_ADDRESS, lovelace: 0n }];
+    refusedBy('DATUM', () => verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, royalties: zero })), { ...REPRICE_INTENT, royalties: zero }));
   });
 
   it('refuses a reprice that changes the owner, the seller address or the buyer', () => {
@@ -1032,11 +1075,12 @@ describe('verifyReprice: the new listing output', () => {
     refusedBy('DATUM', () => verifyR(repriceTx(), { ...REPRICE_INTENT, price: 81n * ADA }));
     const low = MIN_LIST_PRICE - 1n;
     refusedBy('DATUM', () => verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, price: low })), { ...REPRICE_INTENT, price: low }));
-    // Old royalties of 5 ADA and the 1.5 ADA fee floor leave 1.5 ADA at 8 ADA and less below it.
+    // New royalties of 5 ADA and the 1.5 ADA fee floor leave 1.5 ADA at 8 ADA and less below it.
+    const heavy = { royalties: ROYALTIES };
     const short = 8n * ADA - 1n;
-    refusedBy('DATUM', () => verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, price: short })), { ...REPRICE_INTENT, price: short }));
+    refusedBy('DATUM', () => verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, ...heavy, price: short })), { ...REPRICE_INTENT, ...heavy, price: short }));
     const exact = 8n * ADA;
-    expect(verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, price: exact })), { ...REPRICE_INTENT, price: exact }).sellerReceivesLovelace).toBe('1500000');
+    expect(verifyR(repriceWithDatum(listingDatumHex({ ...REPRICED, ...heavy, price: exact })), { ...REPRICE_INTENT, ...heavy, price: exact }).sellerReceivesLovelace).toBe('1500000');
   });
 
   it('refuses any other output that is not the wallet\'s', () => {

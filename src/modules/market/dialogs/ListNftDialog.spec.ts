@@ -60,20 +60,25 @@ const LIST_SUMMARY = {
   dropped: [] as { address: string; lovelace: string }[],
   invalidRecipients: 0,
 };
+/** What the worker verified for a reprice of EXISTING to 90 ADA: the collection's 5% worked out again (4.5 ADA, not the old 6). */
 const REPRICE_SUMMARY = {
   txId: TX_ID,
   ref: LISTING_REF,
   unit: UNIT,
   oldPriceLovelace: '120000000',
+  oldDepositLovelace: '1550000',
   listingAddress: 'addr_test1listing',
   listingOutputIndex: 0,
   deploymentVersion: 1,
   priceLovelace: '90000000',
   marketFeeLovelace: '1500000',
-  royaltiesLovelace: '6000000',
-  sellerReceivesLovelace: '82500000',
+  royaltiesLovelace: '4500000',
+  sellerReceivesLovelace: '84000000',
   depositLovelace: '1550000',
   networkFeeLovelace: '350000',
+  royalties: [{ address: CREATOR_A, lovelace: '4500000' }],
+  dropped: [] as { address: string; lovelace: string }[],
+  invalidRecipients: 0,
 };
 
 type FlowStage = 'idle' | 'preparing' | 'review' | 'signing' | 'submitting' | 'done';
@@ -914,8 +919,8 @@ describe('ListNftDialog: edit price', () => {
     info.load.mockClear();
     info.floorLovelace.value = null;
     info.lastSaleLovelace.value = null;
-    info.royalties.value = null;
-    info.royaltiesState.value = 'idle';
+    // The collection's terms today: 5%, as when EXISTING was listed (6 ADA at 120 ADA).
+    royaltiesAre(FIVE_PERCENT);
     store.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: 'Normal' };
     allowedHardware.types = [];
     prepareSucceeds(REPRICE_SUMMARY);
@@ -925,28 +930,67 @@ describe('ListNftDialog: edit price', () => {
     document.body.replaceChildren();
   });
 
-  it('is a reprice of the existing listing: titled so, no royalty terms read, the current price filled in', async () => {
+  it('is a reprice of the existing listing: titled so, the collection\'s royalty terms read, the current price filled in', async () => {
     const wrapper = render({ existing: EXISTING });
     await flushPromises();
 
     expect(flow.action).toBe('reprice');
-    expect(info.options).toEqual({ royalties: false });
+    expect(info.options).toEqual({ royalties: true });
+    expect(info.load).toHaveBeenCalled();
     expect(wrapper.get('[data-test="dialog-title"]').text()).toBe('Edit price');
     expect((priceInput(wrapper).element as HTMLInputElement).value).toBe('120');
     expect(body(wrapper).text()).toContain('Current price');
     expect(body(wrapper).text()).toContain('120 tADA');
   });
 
-  it('keeps the listing\'s royalties and moves only the fee and what the seller keeps', async () => {
+  it('says the royalties and the deposit are worked out again for the new price, never that they stay', async () => {
+    const wrapper = render({ existing: EXISTING });
+    await flushPromises();
+    const subtitle = wrapper.get('[data-test="dialog-subtitle"]').text();
+    expect(subtitle).toBe('Change the price of this listing. The royalties and the deposit are worked out again for the new price, as for a new listing.');
+    expect(body(wrapper).text()).not.toMatch(/stay as they are/);
+  });
+
+  it('works the royalties out again at the new price, from the collection\'s terms, as a new listing would carry them', async () => {
     const wrapper = render({ existing: EXISTING });
     await typePrice(wrapper, '90');
 
     expect(wrapper.get('[data-testid="breakdown-price"]').text()).toBe('Price90 tADA');
     expect(wrapper.get('[data-testid="breakdown-fee"]').text()).toBe('Gero fee1.5 tADA');
-    // The royalty keeps its 6 ADA, now a larger share of a smaller price.
-    expect(wrapper.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}6 tADA`);
-    expect(wrapper.get('[data-testid="breakdown-royalties-total"]').text()).toBe('Royalties, 6.67% of the price6 tADA');
-    expect(wrapper.get('[data-testid="breakdown-receive"]').text()).toBe('You receive82.5 tADA');
+    // 5% of 90 ADA, not the listing's 6 ADA.
+    expect(wrapper.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}4.5 tADA`);
+    expect(wrapper.get('[data-testid="breakdown-royalties-total"]').text()).toBe('Royalties, 5% of the price4.5 tADA');
+    expect(wrapper.get('[data-testid="breakdown-receive"]').text()).toBe('You receive84 tADA');
+
+    // Raised to 300 ADA: 15 ADA.
+    await typePrice(wrapper, '300');
+    expect(wrapper.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}15 tADA`);
+  });
+
+  it('leaves out a royalty too small to pay at the new price, and says so', async () => {
+    const wrapper = render({ existing: EXISTING });
+    // 5% of 20 ADA is 1 ADA: under the least a royalty output may hold.
+    await typePrice(wrapper, '20');
+    expect(wrapper.find('[data-testid="breakdown-royalty"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="breakdown-dropped-small"]')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="breakdown-receive"]').text()).toBe('You receive18.5 tADA');
+  });
+
+  it('waits for the collection\'s terms and never reprices without them', async () => {
+    info.royalties.value = null;
+    info.royaltiesState.value = 'loading';
+    const wrapper = render({ existing: EXISTING });
+    await typePrice(wrapper, '90');
+    expect(has(wrapper, 'royalties-loading')).toBe(true);
+    expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+
+    info.royaltiesState.value = 'failed';
+    await flushPromises();
+    expect(byId(wrapper, 'royalties-error').text()).toContain('royalty');
+    expect(has(wrapper, 'royalties-retry')).toBe(true);
+    expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
+    await byId(wrapper, 'continue').trigger('click');
+    expect(flow.prepare).not.toHaveBeenCalled();
   });
 
   it('refuses the price it already has, once the seller has edited the field', async () => {
@@ -985,38 +1029,49 @@ describe('ListNftDialog: edit price', () => {
   });
 
   it('refuses the same things a new listing does: under the minimum, and a price that leaves the seller too little', async () => {
+    // A 1% royalty with a 4 ADA minimum: at 6 ADA the fee and the royalty leave 0.5 ADA.
+    royaltiesAre({ source: 'cip102', rate: 0.01, recipients: [{ address: CREATOR_A, rate: 0.01, minFeeLovelace: 4n * ADA, maxFeeLovelace: null }] });
     const wrapper = render({ existing: EXISTING });
     await typePrice(wrapper, '4');
     expect(body(wrapper).text()).toContain('The price is too low. The minimum is 5 tADA.');
-    // 6 ADA: fee 1.5 and the fixed 6 ADA royalty leave nothing.
     await typePrice(wrapper, '6');
     expect(body(wrapper).text()).toContain('After the market fee and royalties you would receive less than 1.5 tADA. Raise the price.');
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
   });
 
-  describe('royalties that stay in lovelace', () => {
-    // EXISTING keeps a 6 ADA royalty: 5% of 120 ADA, 12% of 50 ADA, exactly 10% of 60 ADA.
-    it('does not ask while the kept royalties are no more than 10% of the new price', async () => {
+  describe('royalties above the usual 10% at the new price', () => {
+    it('does not ask after a deep cut when the collection asks 5%: the old 6 ADA would have been 12% of 50 ADA', async () => {
       const wrapper = render({ existing: EXISTING });
-      await typePrice(wrapper, '90');
+      await typePrice(wrapper, '50');
       expect(has(wrapper, 'royalty-confirm')).toBe(false);
-      await typePrice(wrapper, '60');
-      expect(has(wrapper, 'royalty-confirm')).toBe(false);
+      expect(wrapper.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}2.5 tADA`);
       expect(byId(wrapper, 'continue').attributes('disabled')).toBeUndefined();
     });
 
-    it('asks for the seller\'s confirmation when a cut makes them more, in the reprice\'s own words, and keeps Continue off', async () => {
+    it('asks, in the words a new listing uses, when the collection\'s terms are above it at the new price, and keeps Continue off', async () => {
+      royaltiesAre(TWELVE_PERCENT);
       const wrapper = render({ existing: EXISTING });
       await typePrice(wrapper, '50');
 
       expect(byId(wrapper, 'royalty-confirm').text()).toContain('I agree to pay 6 tADA in royalties, 12% of the price');
-      expect(body(wrapper).text()).toContain('The royalties stay as they are, so at this price they take more than usual. Check the amounts before you confirm.');
+      expect(body(wrapper).text()).toContain('This collection takes more in royalties than usual. Check the amounts before you confirm.');
       expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
       await byId(wrapper, 'continue').trigger('click');
       expect(flow.prepare).not.toHaveBeenCalled();
     });
 
+    it('asks when a CIP-102 minimum makes a modest rate more than 10% of a lower price', async () => {
+      // 1% with a 6 ADA minimum: 5% of 120 ADA, 12% of 50 ADA.
+      royaltiesAre({ source: 'cip102', rate: 0.01, recipients: [{ address: CREATOR_A, rate: 0.01, minFeeLovelace: 6n * ADA, maxFeeLovelace: null }] });
+      const wrapper = render({ existing: EXISTING });
+      await typePrice(wrapper, '121');
+      expect(has(wrapper, 'royalty-confirm')).toBe(false);
+      await typePrice(wrapper, '50');
+      expect(byId(wrapper, 'royalty-confirm').text()).toContain('I agree to pay 6 tADA in royalties, 12% of the price');
+    });
+
     it('lets the seller continue once they agree, and tells the worker so', async () => {
+      royaltiesAre(TWELVE_PERCENT);
       const wrapper = render({ existing: EXISTING });
       await typePrice(wrapper, '50');
       await wrapper.get('[data-testid="list-nft-royalty-confirm"] input').setValue(true);
@@ -1029,6 +1084,7 @@ describe('ListNftDialog: edit price', () => {
     });
 
     it('asks again when the price changes: the agreement was to those amounts', async () => {
+      royaltiesAre(TWELVE_PERCENT);
       const wrapper = render({ existing: EXISTING });
       await typePrice(wrapper, '50');
       await wrapper.get('[data-testid="list-nft-royalty-confirm"] input').setValue(true);
@@ -1036,7 +1092,7 @@ describe('ListNftDialog: edit price', () => {
       await typePrice(wrapper, '40');
 
       expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
-      expect(byId(wrapper, 'royalty-confirm').text()).toContain('6 tADA in royalties, 15% of the price');
+      expect(byId(wrapper, 'royalty-confirm').text()).toContain('4.8 tADA in royalties, 12% of the price');
     });
 
     it('shows the worker\'s own request when it asks for the confirmation itself', async () => {
@@ -1066,7 +1122,7 @@ describe('ListNftDialog: edit price', () => {
     expect(flow.prepare).toHaveBeenCalledWith({ ref: LISTING_REF, priceLovelace: 90n * ADA });
   });
 
-  it('reviews the worker\'s figures with the old price beside the new one, the deposit staying put', async () => {
+  it('reviews the worker\'s figures with the old price beside the new one: its royalties and deposit at the new price', async () => {
     const wrapper = render({ existing: EXISTING });
     await typePrice(wrapper, '90');
     await byId(wrapper, 'continue').trigger('click');
@@ -1075,10 +1131,41 @@ describe('ListNftDialog: edit price', () => {
     const review = byId(wrapper, 'review');
     expect(review.text()).toContain('New price');
     expect(review.get('[data-testid="breakdown-price"]').text()).toBe('Price90 tADA');
-    expect(review.get('[data-testid="breakdown-receive"]').text()).toBe('You receive82.5 tADA');
+    expect(review.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}4.5 tADA`);
+    expect(review.get('[data-testid="breakdown-receive"]').text()).toBe('You receive84 tADA');
     expect(review.get('[data-testid="breakdown-deposit"]').text()).toBe('Deposit (comes back when it sells or you unlist)1.55 tADA');
     expect(review.get('[data-testid="breakdown-network-fee"]').text()).toBe('Network Fee0.35 tADA');
     expect(review.get('[data-testid="list-nft-old-price"]').text()).toBe('Current price120 tADA');
+    // The deposit did not move: nothing to say about it.
+    expect(has(wrapper, 'deposit-change')).toBe(false);
+  });
+
+  it('shows the worker\'s royalties, never the listing\'s old ones, and what it left out', async () => {
+    prepareSucceeds({ ...REPRICE_SUMMARY, royalties: [], royaltiesLovelace: '0', sellerReceivesLovelace: '88500000', dropped: [{ address: CREATOR_A, lovelace: '900000' }] });
+    const wrapper = render({ existing: EXISTING });
+    await typePrice(wrapper, '90');
+    await byId(wrapper, 'continue').trigger('click');
+    await flushPromises();
+    const review = byId(wrapper, 'review');
+    expect(review.find('[data-testid="breakdown-royalty"]').exists()).toBe(false);
+    expect(review.findAll('[data-testid="breakdown-dropped-small"]')).toHaveLength(1);
+  });
+
+  it('says when the deposit goes up or down, and who pays or gets the difference', async () => {
+    prepareSucceeds({ ...REPRICE_SUMMARY, depositLovelace: '1810000' });
+    const up = render({ existing: EXISTING });
+    await typePrice(up, '90');
+    await byId(up, 'continue').trigger('click');
+    await flushPromises();
+    expect(byId(up, 'deposit-change').text()).toBe('The deposit goes up from 1.55 tADA to 1.81 tADA. Your wallet pays the difference.');
+    up.unmount();
+
+    prepareSucceeds({ ...REPRICE_SUMMARY, depositLovelace: '1290000' });
+    const down = render({ existing: EXISTING });
+    await typePrice(down, '90');
+    await byId(down, 'continue').trigger('click');
+    await flushPromises();
+    expect(byId(down, 'deposit-change').text()).toBe('The deposit goes down from 1.55 tADA to 1.29 tADA. The difference comes back to your wallet.');
   });
 
   it('says the price change is on its way when it is done', async () => {

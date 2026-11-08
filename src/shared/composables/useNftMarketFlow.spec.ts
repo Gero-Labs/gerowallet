@@ -415,7 +415,7 @@ describe('failure states', () => {
       expect(flow.royaltyConfirmation.value).toBeNull();
     });
 
-    it('a reprice asks too (its royalties stay in lovelace, so a lower price raises their share) and sends the confirmation on the next prepare', async () => {
+    it('a reprice asks too (its royalties are computed again at the new price, as a list\'s) and sends the confirmation on the next prepare', async () => {
       respond({
         [MessageTypes.NFT_MARKET_PREPARE_REPRICE]: refusal('ROYALTY_CONFIRMATION_REQUIRED', {
           effectiveRoyaltyLovelace: '5000000',

@@ -55,8 +55,8 @@ import { MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
  *                   Send the user to their activity; never offer a retry.
  *   wrongPassword   the spending password was wrong: stay on the review and ask again.
  *   confirmRoyalty  the list, reprice or move needs the seller's confirmation of royalties above the
- *                   usual limit (a reprice keeps its royalties as lovelace, so a lower price raises
- *                   their share): `royaltyConfirmation` has the amounts; prepare again with
+ *                   usual limit (a reprice's are computed again at its new price, as a list's):
+ *                   `royaltyConfirmation` has the amounts; prepare again with
  *                   `confirmRoyaltyAboveCap: true` once they agree.
  *   refused         the same request fails the same way (a rule, a price, a wallet that is not
  *                   allowed): say why, offer no retry.
