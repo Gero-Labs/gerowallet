@@ -26,7 +26,13 @@ function waitForRetry(milliseconds: number, signal: AbortSignal): Promise<void> 
   });
 }
 
-export function createDustLightTransport(endpoints: MidnightNetworkEndpoints, signal: AbortSignal): DustLightTransport {
+/**
+ * @param onActivity called each time Nexus answers (any status) and each time a reply body has
+ *   been read, so the caller can tell a slow sync from a stalled one.
+ */
+export function createDustLightTransport(
+  endpoints: MidnightNetworkEndpoints, signal: AbortSignal, onActivity: () => void = () => {},
+): DustLightTransport {
   const url = `${endpoints.nexusBaseUrl}/api/midnight/midnight-${endpoints.sdkNetworkId}/dust/light-sync`;
   async function request<T>(body: { operation: string } & Record<string, unknown>): Promise<T> {
     const attempt = async (token: string) => fetch(url, {
@@ -39,13 +45,18 @@ export function createDustLightTransport(endpoints: MidnightNetworkEndpoints, si
     for (;;) {
       signal.throwIfAborted();
       const response = await attempt(token);
+      onActivity();
       if ((response.status === 401 || response.status === 403) && !refreshed) {
         await response.body?.cancel();
         token = await withMidnightAbort(reauthenticateNexus(), signal);
         refreshed = true;
         continue;
       }
-      if (response.ok) return response.json();
+      if (response.ok) {
+        const result: T = await response.json();
+        onActivity();
+        return result;
+      }
       const delay = response.status === 429 && rateLimitRetries < MAX_RATE_LIMIT_RETRIES
         ? retryDelay(response.headers.get('Retry-After'), rateLimitRetries) : null;
       await response.body?.cancel();

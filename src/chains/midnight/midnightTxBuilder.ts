@@ -81,6 +81,42 @@ export type DustBalanceableTransaction =
   | ledger.UnprovenTransaction
   | ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
 
+/**
+ * Longest silence allowed while preparing a DUST fee: no reply from Nexus and no sync step.
+ * A slow device on a long DUST history can need many minutes for one pass, and every attempt
+ * starts from zero, so the sync is bounded by silence and by the transaction's TTL rather than
+ * by a flat time (gero-ios#241: a flat 120 s stopped every send on a slow device). Keep this
+ * well under the mobile apps' 150 s watchdog (`dustSyncInactivityLimit`) so the sync reports
+ * its own timeout first.
+ */
+export const DUST_SYNC_INACTIVITY_MS = 60_000;
+
+/**
+ * While replies keep arriving, repeat the last progress step at most this often. A pass can
+ * spend minutes between steps, and callers watching progress for silence (the mobile apps'
+ * watchdogs) must still see a live sync.
+ */
+const DUST_SYNC_PROGRESS_REPEAT_MS = 10_000;
+
+/** Aborts `controller` after `inactivityMs` without activity, or at `deadline`, whichever comes first. */
+function watchDustSync(controller: AbortController, inactivityMs: number, deadline: number) {
+  let lastActivity = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Measured from the last activity when the timer fires, not from when it was set: long
+  // synchronous ledger work holds the timer back, and the activity just before it counts.
+  const check = () => {
+    const now = Date.now();
+    const remaining = Math.min(lastActivity + inactivityMs, deadline) - now;
+    if (remaining <= 0) { timer = undefined; controller.abort(); return; }
+    timer = setTimeout(check, remaining);
+  };
+  check();
+  return {
+    activity: () => { lastActivity = Date.now(); },
+    stop: () => { if (timer !== undefined) clearTimeout(timer); timer = undefined; },
+  };
+}
+
 /** Nexus supplies compact public projections; only key-dependent work stays local. */
 export async function syncDustWalletAndBalanceFees(
   args: SyncDustAndBalanceFeesArgs,
@@ -92,13 +128,31 @@ export async function syncDustWalletAndBalanceFees(
   if (!Number.isFinite(args.ttl.getTime()) || args.ttl.getTime() <= Date.now()) throw new Error('Midnight transaction expiry must be in the future');
   const key = DustSecretKey.fromSeed(args.dustSecretSeed);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  // A fee for a transaction past its TTL is useless, so the TTL bounds the whole preparation.
+  const watchdog = watchDustSync(controller, DUST_SYNC_INACTIVITY_MS, args.ttl.getTime());
+  let lastStep: { percent: number; detail: string } | undefined;
+  let lastReportAt = 0;
+  const report = (percent: number, detail: string) => {
+    lastReportAt = Date.now();
+    try { args.onDustSyncProgress?.(percent, detail); } catch { /* advisory */ }
+  };
+  const progress = (percent: number, detail: string) => {
+    watchdog.activity();
+    lastStep = { percent, detail };
+    report(percent, detail);
+  };
+  const reply = () => {
+    watchdog.activity();
+    if (lastStep && Date.now() - lastReportAt >= DUST_SYNC_PROGRESS_REPEAT_MS) report(lastStep.percent, lastStep.detail);
+  };
   try {
     const identity = await readVerifiedMidnightChainIdentity(args.endpoints, controller.signal);
+    watchdog.activity();
     const { state, block } = await reconstructDustState(dustLedger8, key, args.sdkNetworkId,
-      createDustLightTransport(args.endpoints, controller.signal), args.onDustSyncProgress);
+      createDustLightTransport(args.endpoints, controller.signal, reply), progress);
     controller.signal.throwIfAborted();
     const fee = balanceLightDust8(state, key, args.sdkNetworkId, txs, args.ttl, new Date(block.timestamp), block.ledgerParameters);
+    watchdog.activity();
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal);
     debugLog('🌙 DUST fee prepared from verified compact state');
     return fee;
@@ -106,7 +160,7 @@ export async function syncDustWalletAndBalanceFees(
     if (controller.signal.aborted) throw new Error('DUST synchronization timed out. Please try again shortly.');
     throw error;
   } finally {
-    clearTimeout(timeout);
+    watchdog.stop();
     controller.abort();
     key.clear();
   }
