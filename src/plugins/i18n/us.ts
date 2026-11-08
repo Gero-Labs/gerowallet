@@ -5418,6 +5418,8 @@ export default {
   'realfi.unstaking.from': 'from {amount}',
   'realfi.unstaking.opens': 'Claimable {date} · in {wait}',
   'realfi.unstaking.progress': 'Cooldown progress',
+  'realfi.unstakeOnRealfi': 'Unstake on RealFi',
+  'realfi.unstakeOnRealfiNote': 'Unstaking happens in RealFi\'s app for now. Gero can\'t yet check where an unstake sends your USDrf during its cooldown, so it won\'t sign one.',
   'realfi.duration.dh': '{d}d {h}h',
   'realfi.duration.hm': '{h}h {m}m',
   'realfi.duration.m': '{m}m',
