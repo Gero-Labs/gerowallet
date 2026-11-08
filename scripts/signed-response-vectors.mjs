@@ -8,6 +8,7 @@
  * (src/test/resources/signed-response/vectors.json). Each implementation must
  * rebuild every `signatureBase` and, from the test seed, every `signature`
  * byte for byte (Ed25519 is deterministic). The wallet must also verify them.
+ * Every case carries the request's Gero-Request-Nonce, which the signature covers.
  *
  * Every key here is a TEST key derived from a public label. None of them may ever
  * be pinned in a shipped build or configured on a server.
@@ -28,15 +29,18 @@ const testSeed = (label) => sha256(utf8(label));
 
 const SIGNING_SEED = testSeed('gero-v1 TEST signing key; never use in production');
 const SIGNING_PUB = ed.getPublicKey(SIGNING_SEED);
+// Two TEST roots: a delegation needs both (REQUIRED_DELEGATION_APPROVALS in the wallet).
 const ROOT_SEED = testSeed('gero-v1 TEST root key; never pin in a shipped build');
 const ROOT_PUB = ed.getPublicKey(ROOT_SEED);
+const ROOT_B_SEED = testSeed('gero-v1 TEST second root key; never pin in a shipped build');
+const ROOT_B_PUB = ed.getPublicKey(ROOT_B_SEED);
 const KEYID = 'backend-test';
 
 const digestHeader = (bytes) => `sha-256=:${b64(sha256(bytes))}:`;
 
 /** The covered components, in order. Chain tip only when the response carries it. */
 function components(withTip) {
-  const list = ['"@method";req', '"@path";req', '"@query";req', '"@status"', '"gero-request-digest"', '"gero-body-digest"'];
+  const list = ['"@method";req', '"@path";req', '"@query";req', '"gero-request-nonce";req', '"@status"', '"gero-request-digest"', '"gero-body-digest"'];
   if (withTip) list.push('"gero-chain-tip"');
   return list;
 }
@@ -45,11 +49,12 @@ function signatureParams(withTip, created, expires, keyid) {
   return `(${components(withTip).join(' ')});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519";tag="gero-v1"`;
 }
 
-function signatureBase({ method, path, query, status, requestDigest, bodyDigest, chainTip, params }) {
+function signatureBase({ method, path, query, nonce, status, requestDigest, bodyDigest, chainTip, params }) {
   const lines = [
     `"@method";req: ${method}`,
     `"@path";req: ${path}`,
     `"@query";req: ${query ? `?${query}` : '?'}`,
+    `"gero-request-nonce";req: ${nonce}`,
     `"@status": ${status}`,
     `"gero-request-digest": ${requestDigest}`,
     `"gero-body-digest": ${bodyDigest}`,
@@ -91,7 +96,9 @@ const SIGNED_PATH_PREFIXES = [
   '/api/nexus/api/tx/',
   '/api/nexus/api/collateral/',
   '/api/nexus/api/aggregator/',
+  '/api/nexus/api/realfi/',
   '/api/assets/handle',
+  '/api/assets/info',
   '/api/pools',
   '/api/dreps',
   '/api/mpc/',
@@ -110,6 +117,12 @@ const out = {
   root: {},
 };
 
+// The wallet sends a fresh Gero-Request-Nonce with every request it checks; a vector's is fixed.
+const nonceFor = (i) => Buffer.from(sha256(utf8(`gero-v1 TEST request nonce ${i}`)).subarray(0, 16)).toString('base64url');
+cases.forEach((c, i) => {
+  c.request.nonce = nonceFor(i);
+});
+
 for (const c of cases) {
   const withTip = c.response.chainTip !== undefined;
   const requestDigest = digestHeader(utf8(c.request.body));
@@ -119,6 +132,7 @@ for (const c of cases) {
     method: c.request.method,
     path: c.request.path,
     query: c.request.query,
+    nonce: c.request.nonce,
     status: c.response.status,
     requestDigest,
     bodyDigest,
@@ -141,28 +155,35 @@ for (const c of cases) {
 // Root statements (see signedResponseRoots.ts): one line, at most 197 bytes so a Ledger
 // shows the whole text and signs it unhashed. Each is signed as the CIP-8 COSE_Sign1 a
 // Ledger, Trezor or Keystone returns from signData.
-const rewardAddress = new Uint8Array([0xe1, ...blake2b(ROOT_PUB, { dkLen: 28 })]);
-
-function cip8(statement) {
+function cip8(statement, seed, pub) {
   if (utf8(statement).length > 197) throw new Error(`statement too long for a Ledger: ${statement}`);
+  const rewardAddress = new Uint8Array([0xe1, ...blake2b(pub, { dkLen: 28 })]);
   const protectedMap = MS.HeaderMap.new();
   protectedMap.set_algorithm_id(MS.Label.from_algorithm_id(MS.AlgorithmId.EdDSA));
   protectedMap.set_header(MS.Label.new_text('address'), MS.CBORValue.new_bytes(rewardAddress));
   const headers = MS.Headers.new(MS.ProtectedHeaderMap.new(protectedMap), MS.HeaderMap.new());
   const builder = MS.COSESign1Builder.new(headers, utf8(statement), false);
-  const coseSign1 = builder.build(ed.sign(builder.make_data_to_sign().to_bytes(), ROOT_SEED));
+  const coseSign1 = builder.build(ed.sign(builder.make_data_to_sign().to_bytes(), seed));
   return { statement, coseSign1: hex(coseSign1.to_bytes()) };
 }
 
+// Covers CREATED: valid from the start of 2025-10-01 until the start of 2025-12-30 (90 days).
+const delegationStatement =
+  `gero-signing/v1|delegation|kid=${KEYID}|service=gero-backend|host=api.gerowallet.io` +
+  `|from=2025-10-01|until=2025-12-30|key=${hex(SIGNING_PUB)}`;
+
 out.root = {
-  seedHex: hex(ROOT_SEED),
-  publicKeyHex: hex(ROOT_PUB),
-  // Covers CREATED: valid from the start of 2025-10-01 until the start of 2025-12-30 (90 days).
-  delegation: cip8(
-    `gero-signing/v1|delegation|kid=${KEYID}|service=gero-backend|hosts=api.gerowallet.io` +
-      `|from=2025-10-01|until=2025-12-30|key=${hex(SIGNING_PUB)}`,
-  ),
-  revocation: cip8('gero-signing/v1|revocation|issued=2025-11-15|revoked=backend-2025-08,backend-2025-05'),
+  keys: [
+    { seedHex: hex(ROOT_SEED), publicKeyHex: hex(ROOT_PUB) },
+    { seedHex: hex(ROOT_B_SEED), publicKeyHex: hex(ROOT_B_PUB) },
+  ],
+  // One entry per root; the delegation counts only with both.
+  delegation: {
+    statement: delegationStatement,
+    entries: [cip8(delegationStatement, ROOT_SEED, ROOT_PUB), cip8(delegationStatement, ROOT_B_SEED, ROOT_B_PUB)],
+  },
+  // A revocation needs one root.
+  revocation: cip8('gero-signing/v1|revocation|issued=2025-11-15|revoked=backend-2025-08,backend-2025-05', ROOT_SEED, ROOT_PUB),
 };
 
 process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);

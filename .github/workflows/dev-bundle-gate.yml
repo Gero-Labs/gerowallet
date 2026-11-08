@@ -87,6 +87,16 @@ jobs:
           node-version: '24.19.0'
           cache: 'npm'
 
+      # node-hid (Node-only Ledger transport from @cardano-sdk/hardware-ledger; the
+      # extension uses WebHID) downloads a prebuilt binary from GitHub releases and
+      # compiles from source when that fails, as it did on 2026-11-08 (504s). These
+      # headers let that fallback build. Non-fatal: npm ci still passes if the download works.
+      - name: Install node-hid build dependencies
+        continue-on-error: true
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 libusb-1.0-0-dev libudev-dev
+
       - name: Install dependencies
         run: npm ci
 

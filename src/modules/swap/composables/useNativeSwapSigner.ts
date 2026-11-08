@@ -7,13 +7,14 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import i18n from '@/plugins/i18n';
 import { debugLog } from '@/utils/debug';
-import { TxIntentMismatchError, canonicalAddress, scriptSpentInputRefs, verifySpendBound, type SpendBound } from '@/shared/utils/txIntentGuard';
+import { TxIntentMismatchError, canonicalAddress, scriptSpentInputRefs, verifySpendBound, type SpendBound, type TxIntentViolation } from '@/shared/utils/txIntentGuard';
+import { verifyOrderRecipients, type OrderBuilder } from '@/shared/utils/orderRecipients';
 import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
 import { backendSource, historySource, outputRef, proveOutputs, sameOutput } from '@/shared/utils/provenInputs';
 import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHardwareTxSigner';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
 import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
-import { DEFAULT_ORDER_SPEND_BOUND } from './orderSpendBound';
+import { DEFAULT_ORDER_SPEND_BOUND, aggregatorFeeCap } from './orderSpendBound';
 
 /**
  * Native `Signer` for the embedded `<gero-swap>` widget — dispatches signing across
@@ -46,6 +47,13 @@ export interface NativeSwapSignerOptions {
    * that takes almost nothing passes.
    */
   getSpendBound?: () => SpendBound | null | Promise<SpendBound | null>;
+  /**
+   * Who builds what this signer signs: the swap aggregator (the `<gero-swap>`
+   * widget) or RealFi through Nexus. Decides which order scripts, and whether an
+   * aggregator fee output, a transaction may pay (orderRecipients.ts); everything
+   * else must pay the wallet.
+   */
+  orderBuilder: OrderBuilder;
 }
 
 /** The protocol's transaction size limit, in bytes, until the epoch parameters are loaded. */
@@ -156,8 +164,10 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   }
 
   /**
-   * Refuse a transaction that takes more from the wallet than `bound` allows.
-   * The aggregator and Nexus build these orders; the wallet decides what it signs.
+   * Refuse a transaction that takes more from the wallet than `bound` allows, or
+   * that pays anyone but the wallet, a recognised order for the wallet, or the
+   * aggregator's capped fee (verifyOrderRecipients). The aggregator and Nexus build
+   * these orders; the wallet decides what it signs.
    *
    * Nothing here takes gero-sync's word, since it is the same backend trust domain
    * as the builder. Own addresses are the ones the wallet derives itself, and the
@@ -166,9 +176,17 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
    * cannot be proven, or that the UTxO list describes differently, refuses the order.
    */
   async function assertWithinBound(unsignedTxCbor: string, bound: SpendBound): Promise<void> {
-    let violations;
+    let violations: TxIntentViolation[] | null;
     try {
       const tx = Serialization.Transaction.fromCbor(unsignedTxCbor as never).toCore();
+      const ownAddresses = derivedOwnAddresses(walletStore.keys, walletStore.loggedWallet?.baseAddress);
+      // Who receives the outputs does not depend on the inputs, so it is checked whatever the proof says.
+      const recipients = verifyOrderRecipients(tx, {
+        builder: opts.orderBuilder,
+        network: walletStore.loggedWallet?.network,
+        ownAddresses,
+        maxFeeLovelace: opts.orderBuilder === 'swapAggregator' ? aggregatorFeeCap(bound) : undefined,
+      });
       const scriptSpent = scriptSpentInputRefs(tx);
       const refs = [
         ...(tx.body.inputs ?? []).map(outputRef).filter((ref) => !scriptSpent.has(ref)),
@@ -184,11 +202,11 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
         const actual = proven.get(outputRef(txIn));
         return !!actual && !sameOutput(txOut, actual);
       });
+      let spend: TxIntentViolation[];
       if (unproven.length > 0 || misreported) {
         debugLog('Native signer: could not prove the inputs of the order', { unproven: unproven.length, misreported });
-        violations = [unproven.length > 0 ? 'unprovenInput' as const : 'misreportedInput' as const];
+        spend = [unproven.length > 0 ? 'unprovenInput' : 'misreportedInput'];
       } else {
-        const ownAddresses = derivedOwnAddresses(walletStore.keys, walletStore.loggedWallet?.baseAddress);
         const own = new Set(ownAddresses.map(canonicalAddress));
         const ownUtxos: Cardano.Utxo[] = [];
         for (const [ref, txOut] of proven) {
@@ -196,14 +214,15 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
           const [txId, index] = ref.split('#');
           ownUtxos.push([{ txId: txId as Cardano.TransactionId, index: Number(index), address: txOut.address }, txOut]);
         }
-        violations = verifySpendBound(tx, { ownAddresses, ownUtxos }, bound);
+        spend = verifySpendBound(tx, { ownAddresses, ownUtxos }, bound);
       }
+      violations = [...new Set([...spend, ...recipients])];
     } catch (e) {
       debugLog('Native signer: could not verify the order', e);
       violations = null;
     }
     if (!violations || violations.length > 0) {
-      if (violations) debugLog('Native signer: refused an order over its budget', violations);
+      if (violations) debugLog('Native signer: refused an order', violations);
       throw new TxIntentMismatchError(String(i18n.t('txGuard.orderMismatch')), violations ?? []);
     }
   }

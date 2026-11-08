@@ -13,7 +13,7 @@
         <template v-if="kind === 'delegation'">
           <v-text-field v-model.trim="kid" :label="t('signingCeremony.keyId')" :error-messages="fieldErrors.kid" density="compact" variant="outlined" data-testid="ceremony-kid" />
           <v-select v-model="service" :items="services" :label="t('signingCeremony.service')" density="compact" variant="outlined" attach />
-          <v-text-field v-model.trim="hosts" :label="t('signingCeremony.hosts')" :error-messages="fieldErrors.hosts" density="compact" variant="outlined" />
+          <v-text-field v-model.trim="host" :label="t('signingCeremony.host')" :error-messages="fieldErrors.host" density="compact" variant="outlined" data-testid="ceremony-host" />
           <v-row dense>
             <v-col cols="6">
               <v-text-field v-model.trim="from" :label="t('signingCeremony.from')" placeholder="YYYY-MM-DD" :error-messages="fieldErrors.from" density="compact" variant="outlined" />
@@ -36,6 +36,9 @@
           {{ statementError }}
         </v-alert>
         <p class="t-caption mt-2">{{ t('signingCeremony.checkOnDevice') }}</p>
+        <p class="t-caption mt-1" data-testid="ceremony-approvals">
+          {{ kind === 'delegation' ? t('signingCeremony.bothSign') : t('signingCeremony.oneRevokes') }}
+        </p>
 
         <div class="mt-4">
           <v-alert v-if="!isHardwareCardano" type="warning" variant="text" density="compact" class="px-0" data-testid="ceremony-unsupported">
@@ -122,7 +125,9 @@ import { addDays, checkCeremonySignature, splitList, textToHex, utcDay, type Cer
  * Signing page for the two root-key holders (no navigation entry: open
  * `#/signing-ceremony`). It builds a delegation or revocation statement, has the
  * logged hardware wallet sign it with its stake key, checks the signature as every
- * wallet will, and prints the entry for gero-backend's delegations file.
+ * wallet will, and prints the entry for gero-backend's delegations file. Wallets
+ * accept a delegation only once both holders have signed the same text (one entry
+ * each); one holder's revocation is enough.
  *
  * Hardware wallets only: a root key that ever sat in a password wallet is a key
  * that has been on a computer.
@@ -139,7 +144,7 @@ const today = utcDay(Date.now());
 const kind = ref<Kind>('delegation');
 const kid = ref('');
 const service = ref<SigningService>('gero-backend');
-const hosts = ref('api.gerowallet.io');
+const host = ref('api.gerowallet.io');
 const from = ref(today);
 const days = ref(90);
 const publicKeyHex = ref('');
@@ -156,13 +161,13 @@ const isHardwareCardano = computed(() =>
 );
 const stakeAddress = computed<string | undefined>(() => keys.value?.stake?.[0]?.address);
 
-type Field = 'kid' | 'hosts' | 'from' | 'days' | 'key' | 'issued' | 'revoked';
+type Field = 'kid' | 'host' | 'from' | 'days' | 'key' | 'issued' | 'revoked';
 
 const fieldErrors = computed(() => {
   const errors: Partial<Record<Field, string>> = {};
   if (kind.value === 'delegation') {
     if (kid.value && !isKeyId(kid.value)) errors.kid = t('signingCeremony.keyIdRule');
-    if (!splitList(hosts.value).every(isHost)) errors.hosts = t('signingCeremony.hostsRule');
+    if (!isHost(host.value)) errors.host = t('signingCeremony.hostRule');
     if (daySeconds(from.value) === undefined) errors.from = t('signingCeremony.dayRule');
     if (!Number.isInteger(days.value) || days.value < 1 || days.value > MAX_DELEGATION_DAYS) {
       errors.days = t('signingCeremony.daysRule', { max: MAX_DELEGATION_DAYS });
@@ -181,9 +186,8 @@ const built = computed<{ statement: string; tooLong: boolean }>(() => {
   try {
     if (kind.value === 'delegation') {
       const until = addDays(from.value, days.value);
-      const hostList = splitList(hosts.value);
-      if (!kid.value || !publicKeyHex.value || !until || hostList.length === 0) return { statement: '', tooLong: false };
-      return { statement: buildDelegationStatement({ kid: kid.value, service: service.value, hosts: hostList, from: from.value, until, publicKeyHex: publicKeyHex.value }), tooLong: false };
+      if (!kid.value || !publicKeyHex.value || !until) return { statement: '', tooLong: false };
+      return { statement: buildDelegationStatement({ kid: kid.value, service: service.value, host: host.value, from: from.value, until, publicKeyHex: publicKeyHex.value }), tooLong: false };
     }
     const kids = splitList(revokedKids.value);
     if (kids.length === 0) return { statement: '', tooLong: false };

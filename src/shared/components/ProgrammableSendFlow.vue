@@ -2,7 +2,7 @@
   <div class="programmable-send" data-testid="programmable-send">
     <!-- Step 1: what to send, and to whom. The worker chooses the UTxOs. -->
     <template v-if="step === 'form'">
-      <p class="t-caption mb-3">
+      <p v-if="decimals !== null" class="t-caption mb-3">
         {{ t('common.available') }}: <span class="g-num">{{ heldDisplay }}</span> {{ tokenLabel }}
       </p>
       <v-text-field
@@ -18,7 +18,7 @@
         data-testid="programmable-send-amount"
       >
         <template #append-inner>
-          <v-btn variant="text" size="small" :disabled="busy" @click="setMax()">{{ t('common.max') }}</v-btn>
+          <v-btn variant="text" size="small" :disabled="busy || decimals === null" @click="setMax()">{{ t('common.max') }}</v-btn>
         </template>
       </v-text-field>
       <v-text-field
@@ -198,8 +198,12 @@ const props = defineProps<{
   unit: string;
   ticker?: string;
   name?: string;
-  /** The token's decimals; 0 when unknown, so amounts are in base units. */
-  decimals?: number;
+  /**
+   * The token's decimals, which the host resolves (0 for a token known to have none). Without a
+   * whole number here the form reads no amount: a missing value used to count as 0 and read
+   * "42" as 42 base units (issue 1441).
+   */
+  decimals: number;
 }>();
 
 const emit = defineEmits<{
@@ -218,7 +222,8 @@ const { explorerUrl } = useExplorer();
 const amountInput = ref('');
 const recipientInput = ref('');
 
-const decimals = computed(() => (Number.isSafeInteger(props.decimals) && (props.decimals ?? 0) >= 0 ? props.decimals ?? 0 : 0));
+/** Null when the host gave no usable decimals: then nothing is shown, read or sent. */
+const decimals = computed<number | null>(() => (Number.isSafeInteger(props.decimals) && props.decimals >= 0 ? props.decimals : null));
 const tokenLabel = computed(() => props.ticker || props.name || '');
 const policyId = computed(() => props.unit.slice(0, 56));
 
@@ -231,11 +236,11 @@ const held = computed<bigint>(() => {
     return 0n;
   }
 });
-const heldDisplay = computed(() => baseUnitsToDecimalString(held.value, decimals.value));
+const heldDisplay = computed(() => (decimals.value === null ? '' : baseUnitsToDecimalString(held.value, decimals.value)));
 
-const quantity = computed(() => decimalToBaseUnits(amountInput.value, decimals.value));
+const quantity = computed(() => (decimals.value === null ? 0n : decimalToBaseUnits(amountInput.value, decimals.value)));
 const amountError = computed(() => {
-  if (!amountInput.value.trim()) return [];
+  if (!amountInput.value.trim() || decimals.value === null) return [];
   if (exceedsDecimals(amountInput.value, decimals.value)) {
     return [t('programmableTokens.send.tooManyDecimals', { decimals: decimals.value })];
   }
@@ -244,7 +249,7 @@ const amountError = computed(() => {
   return [];
 });
 const formReady = computed(() =>
-  quantity.value > 0n && amountError.value.length === 0 && recipientInput.value.trim().length > 0,
+  decimals.value !== null && quantity.value > 0n && amountError.value.length === 0 && recipientInput.value.trim().length > 0,
 );
 
 const step = computed(() => {
@@ -272,7 +277,7 @@ const failureText = computed(() => {
   const failure = flow.failure.value;
   if (!failure) return '';
   const max = failure.maxSingleTransfer
-    ? `${baseUnitsToDecimalString(BigInt(failure.maxSingleTransfer), decimals.value)} ${tokenLabel.value}`
+    ? `${baseUnitsToDecimalString(BigInt(failure.maxSingleTransfer), decimals.value ?? 0)} ${tokenLabel.value}`
     : '';
   return t(cip113SendErrorKey(failure.code), { max });
 });
@@ -282,7 +287,7 @@ const adaTicker = computed(() => networks.resolveNetwork(wallet.value?.chain ?? 
 const txExplorerUrl = computed(() => explorerUrl('tx', flow.submittedTxId.value));
 
 function formatToken(baseUnits: string): string {
-  return baseUnitsToDecimalString(BigInt(baseUnits), decimals.value);
+  return baseUnitsToDecimalString(BigInt(baseUnits), decimals.value ?? 0);
 }
 
 function formatAda(lovelace: string | undefined): string {
@@ -294,12 +299,14 @@ function setMax(): void {
 }
 
 async function review(): Promise<void> {
-  if (!formReady.value || busy.value) return;
+  if (!formReady.value || busy.value || decimals.value === null) return;
   credentials.begin();
   await flow.prepare({
     unit: props.unit,
     quantity: quantity.value.toString(),
     recipientAddress: recipientInput.value.trim(),
+    decimals: decimals.value,
+    wallet: wallet.value,
   });
 }
 

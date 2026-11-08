@@ -36,7 +36,8 @@ const props = defineProps<{
   unit: string;
   ticker?: string;
   name?: string;
-  decimals?: number;
+  /** Resolved by the host; ProgrammableSendFlow reads no amount without them. */
+  decimals: number;
 }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 

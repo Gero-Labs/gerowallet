@@ -7,15 +7,16 @@
  *   Gero-Body-Digest:    sha-256=:<SHA-256 of the body as the wallet receives it, decompressed>:
  *   Gero-Request-Digest: sha-256=:<SHA-256 of the request body the server read>:
  *   Gero-Chain-Tip:      <slot>,<block hash>          (optional, chain-state answers only)
- *   Signature-Input:     gero=("@method";req "@path";req "@query";req "@status"
- *                          "gero-request-digest" "gero-body-digest"[ "gero-chain-tip"]);
+ *   Signature-Input:     gero=("@method";req "@path";req "@query";req "gero-request-nonce";req
+ *                          "@status" "gero-request-digest" "gero-body-digest"[ "gero-chain-tip"]);
  *                          created=<s>;expires=<s>;keyid="<kid>";alg="ed25519";tag="gero-v1"
  *   Signature:           gero=:<base64 Ed25519 signature over the signature base>:
  *
- * The signature covers the request's method, path and query, and the digest of
- * the body the wallet sent, so a signed answer to one request cannot be served
- * as the answer to another. `created` and `expires` bound how long it may be
- * replayed for the identical request.
+ * The signature covers the request's method, path and query, the digest of the body
+ * the wallet sent, and the random `Gero-Request-Nonce` the wallet sent with this very
+ * request. A signed answer therefore fits one request only: it cannot be served as the
+ * answer to another, replayed later, or made in advance by someone who could sign for a
+ * while (a key misused, then switched off) and kept for use afterwards.
  *
  * Only this exact form of the `gero` signature is accepted: any other component
  * list, parameter order or algorithm is refused, so the signature base rebuilt
@@ -37,11 +38,27 @@ const BASE_COMPONENTS = [
   '"@method";req',
   '"@path";req',
   '"@query";req',
+  '"gero-request-nonce";req',
   '"@status"',
   '"gero-request-digest"',
   '"gero-body-digest"',
 ] as const;
 const TIP_COMPONENT = '"gero-chain-tip"';
+
+/** The request header carrying the wallet's per-request nonce, covered by the signature. */
+export const REQUEST_NONCE_HEADER = 'Gero-Request-Nonce';
+const NONCE_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
+/** A fresh nonce for one request: 16 random bytes, base64url without padding. */
+export function newRequestNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return base64FromBytes(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Whether `value` is a nonce this profile accepts. */
+export function isRequestNonce(value: unknown): value is string {
+  return typeof value === 'string' && NONCE_RE.test(value);
+}
 
 /** Clock skew allowed on `created` and `expires`. */
 export const SIGNED_RESPONSE_SKEW_SECONDS = 120;
@@ -80,6 +97,8 @@ export interface SignedExchange {
     url: string;
     /** The request body as sent; undefined or empty for none. Undefined is not "unknown". */
     body: Uint8Array | undefined;
+    /** The `Gero-Request-Nonce` this request was sent with. Required. */
+    nonce: string | undefined;
   };
   response: {
     status: number;
@@ -227,6 +246,7 @@ export interface SignatureBaseParts {
   path: string;
   /** The raw query string without `?`; empty for none. */
   query: string;
+  nonce: string;
   status: number;
   requestDigest: string;
   bodyDigest: string;
@@ -240,6 +260,7 @@ export function buildSignatureBase(parts: SignatureBaseParts): string {
     `"@method";req: ${parts.method.toUpperCase()}`,
     `"@path";req: ${parts.path || '/'}`,
     `"@query";req: ?${parts.query}`,
+    `"gero-request-nonce";req: ${parts.nonce}`,
     `"@status": ${parts.status}`,
     `"gero-request-digest": ${parts.requestDigest}`,
     `"gero-body-digest": ${parts.bodyDigest}`,
@@ -291,6 +312,8 @@ async function verify(exchange: SignedExchange, options: VerifyOptions): Promise
   } catch {
     return { ok: false, reason: 'unverifiable-request' };
   }
+  // Without the nonce the wallet sent, nothing ties the answer to this request.
+  if (!isRequestNonce(request.nonce)) return { ok: false, reason: 'unverifiable-request' };
 
   const publicKey = options.keys.resolve(input.keyid, url.hostname, options.nowSeconds);
   if (!publicKey || publicKey.length !== 32) return { ok: false, reason: 'unknown-key' };
@@ -319,6 +342,7 @@ async function verify(exchange: SignedExchange, options: VerifyOptions): Promise
     method: request.method,
     path: url.pathname,
     query: url.search.startsWith('?') ? url.search.slice(1) : url.search,
+    nonce: request.nonce,
     status: response.status,
     requestDigest,
     bodyDigest,

@@ -8,6 +8,27 @@ export interface ListableToken {
   cip113Registered?: boolean;
 }
 
+/** Where a side-panel token row can state its decimals. */
+export interface DecimalsRow {
+  decimals?: unknown;
+  metadata?: { decimals?: unknown } | null;
+}
+
+function decimalsCount(value: unknown): number | undefined {
+  const n = typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value.trim()) : value;
+  return typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : undefined;
+}
+
+/**
+ * A side-panel token row's decimals, or undefined when the row states none. The pinned ADA row
+ * carries them at the top level; a wallet token only in its metadata. The list, the token sheet
+ * and the sheet's Send all read them here (issue 1441: the sheet read the top level alone and
+ * divided every token by 10^6), and each caller picks its own default for undefined.
+ */
+export function tokenRowDecimals(row: DecimalsRow | null | undefined): number | undefined {
+  return decimalsCount(row?.decimals) ?? decimalsCount(row?.metadata?.decimals);
+}
+
 /**
  * The tokens the side panel lists below the pinned ADA row: the wallet's spendable tokens and
  * its CIP-113 holdings, minus ADA itself, scams and unverified tokens. A registered CIP-113

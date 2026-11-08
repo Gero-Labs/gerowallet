@@ -140,7 +140,9 @@ let previouslyFocused: HTMLElement | null = null;
 const { markSheetOpened, markSheetClosed } = useSheetVisibility();
 let holdsOpenCredit = false; // guards against double-increment/decrement
 
-watch(() => props.modelValue, async (val) => {
+// Immediate: a parent may mount this sheet already open (v-if and v-model set
+// in the same tick, issue 1439). A sheet mounted closed has nothing to dismiss.
+watch(() => props.modelValue, async (val, oldVal) => {
   if (val) {
     if (!holdsOpenCredit) { holdsOpenCredit = true; markSheetOpened(); }
     previouslyFocused = document.activeElement as HTMLElement | null;
@@ -159,10 +161,10 @@ watch(() => props.modelValue, async (val) => {
     }
     await nextTick();
     focusIntoSheet();
-  } else {
+  } else if (oldVal !== undefined) {
     animateDismiss();
   }
-});
+}, { immediate: true });
 
 function measureSheet() {
   if (sheetRef.value) sheetHeight.value = sheetRef.value.offsetHeight;
