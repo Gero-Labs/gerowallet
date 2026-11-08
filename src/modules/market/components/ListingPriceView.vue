@@ -4,7 +4,7 @@
     <dl v-if="currentPrice != null" class="listing-price-view__old glass-tier">
       <div class="listing-price-view__hint" :data-testid="`${testid}-old-price`">
         <dt class="t-caption">{{ t('nftMarket.reprice.current') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(currentPrice) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(currentPrice) }} {{ ticker }}</dd>
       </div>
     </dl>
 
@@ -12,11 +12,11 @@
     <dl v-if="f.floorLovelace !== null || f.lastSaleLovelace !== null" class="listing-price-view__hints">
       <div v-if="f.floorLovelace !== null" class="listing-price-view__hint listing-price-view__hint--column" :data-testid="`${testid}-floor`">
         <dt class="t-caption">{{ t('portfolio.floorPrice') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(f.floorLovelace) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(f.floorLovelace) }} {{ ticker }}</dd>
       </div>
       <div v-if="f.lastSaleLovelace !== null" class="listing-price-view__hint listing-price-view__hint--column" :data-testid="`${testid}-last-sale`">
         <dt class="t-caption">{{ t('portfolio.lastSale') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(f.lastSaleLovelace) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(f.lastSaleLovelace) }} {{ ticker }}</dd>
       </div>
     </dl>
 
@@ -27,7 +27,7 @@
       variant="outlined"
       density="comfortable"
       autocomplete="off"
-      suffix="ADA"
+      :suffix="ticker"
       :error-messages="f.priceErrors"
       :disabled="busy"
       :data-testid="`${testid}-price`"
@@ -72,7 +72,7 @@
       <v-alert type="warning" variant="tonal" density="compact">{{ t(isReprice ? 'nftMarket.reprice.royaltyConfirmation' : 'nftMarket.error.royaltyConfirmation') }}</v-alert>
       <v-checkbox
         v-model="f.confirmed"
-        :label="t('nftMarket.list.royaltyConfirm', { amount: f.confirmation.ada, percent: f.confirmation.percent })"
+        :label="t('nftMarket.list.royaltyConfirm', { ticker, amount: f.confirmation.ada, percent: f.confirmation.percent })"
         density="compact"
         hide-details
         color="var(--g-accent)"
@@ -84,6 +84,7 @@
 
 <script setup lang="ts">
 import { reactive } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import ListingBreakdown from '@/modules/market/components/ListingBreakdown.vue';
 import type { ListingPriceForm } from '@/modules/market/composables/useListingPriceForm';
@@ -121,6 +122,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'submit'): void }>();
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 // One reactive view of the form (a plain object of refs): the template reads and writes it like state.
 const f = reactive(props.form);
 const ada = (lovelace: bigint): string => formatLovelaceAsAda(lovelace);

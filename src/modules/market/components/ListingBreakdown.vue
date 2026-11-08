@@ -3,13 +3,18 @@
     <dl class="listing-breakdown__rows glass-tier">
       <div class="listing-breakdown__row" data-testid="breakdown-price">
         <dt class="t-caption">{{ t('common.price') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(price) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(price) }} {{ ticker }}</dd>
       </div>
       <div class="listing-breakdown__row" data-testid="breakdown-fee">
         <dt class="t-caption">{{ t('nftMarket.breakdown.fee') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(fee) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(fee) }} {{ ticker }}</dd>
       </div>
+      <!-- The total first, then what each recipient gets (indented under it). -->
       <template v-if="royalties.length > 0">
+        <div class="listing-breakdown__row" data-testid="breakdown-royalties-total">
+          <dt class="t-caption">{{ t('nftMarket.breakdown.royalties', { percent: royaltyPercent }) }}</dt>
+          <dd class="t-body-sm g-num">{{ ada(royaltiesTotal) }} {{ ticker }}</dd>
+        </div>
         <div
           v-for="(royalty, index) in royalties"
           :key="`${index}:${royalty.address}`"
@@ -17,24 +22,20 @@
           data-testid="breakdown-royalty"
         >
           <dt class="t-caption" :title="royalty.address">{{ t('nftMarket.breakdown.royalty', { address: shortAddress(royalty.address) }) }}</dt>
-          <dd class="t-body-sm g-num">{{ ada(royalty.lovelace) }} ADA</dd>
-        </div>
-        <div class="listing-breakdown__row" data-testid="breakdown-royalties-total">
-          <dt class="t-caption">{{ t('nftMarket.breakdown.royalties', { percent: royaltyPercent }) }}</dt>
-          <dd class="t-body-sm g-num">{{ ada(royaltiesTotal) }} ADA</dd>
+          <dd class="t-body-sm g-num">{{ ada(royalty.lovelace) }} {{ ticker }}</dd>
         </div>
       </template>
       <div class="listing-breakdown__row listing-breakdown__row--total" data-testid="breakdown-receive">
         <dt class="t-body-sm">{{ t('nftMarket.breakdown.youReceive') }}</dt>
-        <dd class="t-heading g-num">{{ ada(sellerReceives) }} ADA</dd>
+        <dd class="t-heading g-num">{{ ada(sellerReceives) }} {{ ticker }}</dd>
       </div>
       <div v-if="deposit != null" class="listing-breakdown__row" data-testid="breakdown-deposit">
         <dt class="t-caption">{{ t('nftMarket.breakdown.depositLocked') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(deposit) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(deposit) }} {{ ticker }}</dd>
       </div>
       <div v-if="networkFee != null" class="listing-breakdown__row" data-testid="breakdown-network-fee">
         <dt class="t-caption">{{ t('signTx.networkFee') }}</dt>
-        <dd class="t-body-sm g-num">{{ ada(networkFee) }} ADA</dd>
+        <dd class="t-body-sm g-num">{{ ada(networkFee) }} {{ ticker }}</dd>
       </div>
     </dl>
     <p v-if="deposit != null" class="listing-breakdown__note t-caption" data-testid="breakdown-deposit-hint">
@@ -43,10 +44,10 @@
 
     <!-- Royalties the listing leaves out, said in plain words: the creators will not be paid these. -->
     <p v-for="(entry, index) in leftOut.tooSmall" :key="`small:${index}`" class="listing-breakdown__note t-caption" data-testid="breakdown-dropped-small">
-      {{ t('nftMarket.breakdown.droppedTooSmall', { amount: ada(entry.lovelace), address: shortAddress(entry.address) }) }}
+      {{ t('nftMarket.breakdown.droppedTooSmall', { ticker, amount: ada(entry.lovelace), address: shortAddress(entry.address) }) }}
     </p>
     <p v-for="(entry, index) in leftOut.tooMany" :key="`many:${index}`" class="listing-breakdown__note t-caption" data-testid="breakdown-dropped-many">
-      {{ t('nftMarket.breakdown.droppedTooMany', { amount: ada(entry.lovelace), address: shortAddress(entry.address), max: MAX_ROYALTIES }) }}
+      {{ t('nftMarket.breakdown.droppedTooMany', { ticker, amount: ada(entry.lovelace), address: shortAddress(entry.address), max: MAX_ROYALTIES }) }}
     </p>
     <p v-if="invalidRecipients > 0" class="listing-breakdown__note t-caption" data-testid="breakdown-invalid">
       {{ tc('nftMarket.breakdown.invalidRecipients', invalidRecipients, { count: invalidRecipients }) }}
@@ -56,6 +57,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { classifyDroppedRoyalties, shareOfPrice } from '@/modules/market/utils/listingPreview';
 import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -88,6 +90,7 @@ const props = withDefaults(defineProps<{
 }>(), { dropped: () => [], minUtxo: () => 0n, invalidRecipients: 0, deposit: null, networkFee: null });
 
 const { t, tc } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 const ada = (lovelace: bigint): string => formatLovelaceAsAda(lovelace);
 const shortAddress = (address: string): string => (address.length > 30 ? `${address.slice(0, 15)}…${address.slice(-8)}` : address);

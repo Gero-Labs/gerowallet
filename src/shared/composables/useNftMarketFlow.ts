@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, type Ref } from 'vue';
+import { currencyTickerNow } from '@/modules/market/composables/useNativeCurrency';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import i18n, { getLocaleCode } from '@/plugins/i18n';
@@ -186,9 +187,9 @@ export function describeNftMarketFailure(
     case 'TOO_MANY_ROYALTIES':
       return is('refused', 'nftMarket.error.tooManyRoyalties');
     case 'PRICE_TOO_LOW':
-      return is('refused', 'nftMarket.error.priceTooLow', { min: adaText(MIN_LIST_PRICE) });
+      return is('refused', 'nftMarket.error.priceTooLow', { ticker: currencyTickerNow(), min: adaText(MIN_LIST_PRICE) });
     case 'SELLER_SHARE_TOO_LOW':
-      return is('refused', 'nftMarket.error.sellerShareTooLow', { min: adaText(MIN_SELLER_SHARE) });
+      return is('refused', 'nftMarket.error.sellerShareTooLow', { ticker: currencyTickerNow(), min: adaText(MIN_SELLER_SHARE) });
 
     // The listing cannot be used here.
     case 'PRIVATE_LISTING':

@@ -290,11 +290,11 @@ describe('failure states', () => {
   it('shows the minimum price and the minimum seller share in ADA', () => {
     expect(describeNftMarketFailure('list', { code: 'PRICE_TOO_LOW' }).message).toEqual({
       key: 'nftMarket.error.priceTooLow',
-      params: { min: '5' },
+      params: { ticker: 'ADA', min: '5' },
     });
     expect(describeNftMarketFailure('list', { code: 'SELLER_SHARE_TOO_LOW' }).message).toEqual({
       key: 'nftMarket.error.sellerShareTooLow',
-      params: { min: '1.5' },
+      params: { ticker: 'ADA', min: '1.5' },
     });
   });
 

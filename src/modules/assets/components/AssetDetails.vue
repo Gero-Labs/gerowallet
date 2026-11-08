@@ -16,7 +16,7 @@
          Edit price need the market on (flag, network, wallet); Unlist stays with the flag off. -->
     <div v-if="hasMarketActions" class="asset-market-actions" data-testid="asset-market-actions">
       <span v-if="listing" class="asset-market-actions__status t-caption" data-testid="asset-listed-status">
-        {{ $t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listing.datum.price) }) }}
+        {{ $t('nftMarket.badge.listed', { ticker, price: formatLovelaceAsAda(listing.datum.price) }) }}
       </span>
       <GButton v-if="marketActions.list" tier="primary" compact data-testid="asset-list" @click="emit('list')">
         {{ $t('nftMarket.actions.list') }}
@@ -127,6 +127,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -135,18 +136,18 @@ import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 import { formatLovelaceAsAda } from '@/shared/utils/format';
 import { nftMarketActionsFor, nftMarketListingsVisible } from '@/shared/utils/nftMarketAvailability';
+import { assetFilesOf, isImageMediaType } from '@/modules/assets/utils/assetFiles';
 
-
-
-interface AssetFile { src: string; mediaType: string }
 interface DetailAsset {
   name: string;
   unit: string;
   fingerprint: string;
   quantity?: number | string;
-  onchain_metadata?: { image?: string; mediaType?: string; files?: AssetFile[]; [key: string]: unknown };
+  // CIP-25: `image` and a file's `src` may be a string or, past 64 bytes, an array of chunks.
+  onchain_metadata?: { image?: string | string[]; mediaType?: string; files?: unknown[]; [key: string]: unknown };
 }
 const props = defineProps<{ asset: DetailAsset; totalAssets?: number }>();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 // The market's actions are the host's to carry out (it hosts the sheets); this only says which apply.
 const emit = defineEmits<{
@@ -171,41 +172,21 @@ const metadata = computed(() => {
   return props.asset.onchain_metadata
 });
 
-const files = computed(() => {
-  const files: AssetFile[] = []
-  if (props.asset && props.asset.onchain_metadata) {
-    let image = ''
-    let mediaType = ''
-    if (props.asset.onchain_metadata.image) {
-      image = props.asset.onchain_metadata.image
-    }
-    if (props.asset.onchain_metadata.mediaType) {
-      mediaType = props.asset.onchain_metadata.mediaType
-    }
-    if (image) {
-      files.push({ src: image, mediaType })
-    }
-    if (props.asset.onchain_metadata.files) {
-      props.asset.onchain_metadata.files.forEach(file => {
-        if (files.find(f => f.src === file.src) == null) {
-          files.push(file)
-        }
-      })
-    }
-  }
-  return files
-});
+const files = computed(() => assetFilesOf(props.asset?.onchain_metadata));
 
 function openInNewTab() {
-  window.open(assets.resolveIcon(files.value[selectedFile.value].src), '_blank')
+  const src = files.value[selectedFile.value]?.src
+  // An inline image is already shown in full; opened as a page, an SVG's scripts would run.
+  if (!src || src.startsWith('data:')) return
+  window.open(assets.resolveIcon(src), '_blank')
 }
 
 function forceReRender() {
   autoGrowHack.value = !autoGrowHack.value
 }
 
-function isImage(mediaType) {
-  return (mediaType === '' || mediaType === 'image/png' || mediaType === 'image/webp' || mediaType === 'image/jpeg' || mediaType === 'image/gif')
+function isImage(mediaType: string) {
+  return isImageMediaType(mediaType)
 }
 
 function isAudio(mediaType) {

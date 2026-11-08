@@ -39,19 +39,19 @@
         <div class="tx-intent-text">
           <div class="warning--text text-caption font-weight-medium">{{ $t('signTx.createsMarketListing') }}</div>
           <template v-if="listing.datum === 'ok' && listing.priceLovelace !== null">
-            <div class="white--text text-caption">{{ $t('signTx.listingPrice', { price: formatLovelace(listing.priceLovelace) }) }}</div>
+            <div class="white--text text-caption">{{ $t('signTx.listingPrice', { ticker, price: formatLovelace(listing.priceLovelace) }) }}</div>
             <div
               v-if="listing.royaltyCount > 0 && listing.royaltyTotalLovelace !== null"
               class="text-caption"
               :class="listing.tooManyRoyalties || listing.highRoyalties ? 'error--text' : 'grey--text'"
               data-testid="tx-intent-listing-royalties"
-            >{{ $t('signTx.listingRoyalties', { count: listing.royaltyCount, total: formatLovelace(listing.royaltyTotalLovelace) }, listing.royaltyCount) }}</div>
+            >{{ $t('signTx.listingRoyalties', { ticker, count: listing.royaltyCount, total: formatLovelace(listing.royaltyTotalLovelace) }, listing.royaltyCount) }}</div>
             <div v-if="neverSells(listing)" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-never-sells">{{ $t('signTx.listingNeverSells') }}</div>
             <div
               v-else-if="listing.sellerShareLovelace !== null"
               class="text-caption"
               :class="listing.lowSellerShare ? 'error--text' : 'grey--text'"
-            >{{ $t('signTx.listingSellerReceives', { amount: formatLovelace(listing.sellerShareLovelace) }) }}</div>
+            >{{ $t('signTx.listingSellerReceives', { ticker, amount: formatLovelace(listing.sellerShareLovelace) }) }}</div>
             <div v-if="listing.buyerIsOther" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-buyer-other">{{ $t('signTx.listingBuyerOther') }}</div>
             <div v-else-if="listing.hasBuyer" class="grey--text text-caption" data-testid="tx-intent-listing-private">{{ $t('signTx.listingPrivate') }}</div>
             <div v-if="!listing.ownerIsOwn" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-owner-not-you">{{ $t('signTx.listingOwnerNotYou') }}</div>
@@ -64,7 +64,7 @@
           <div v-else class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-datum-problem">{{ $t(DATUM_PROBLEM_KEYS[listing.datum]) }}</div>
           <!-- What the output holds is judged whatever its datum says. -->
           <div v-if="listing.holdsOtherAssets" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-holds-more">{{ $t('signTx.listingHoldsMore') }}</div>
-          <div v-if="listing.depositTooHigh" class="error--text text-caption" data-testid="tx-intent-listing-deposit-high">{{ $t('signTx.listingDepositHigh', { amount: formatLovelace(listing.depositLovelace), max: formatLovelace(MAX_LISTING_DEPOSIT) }) }}</div>
+          <div v-if="listing.depositTooHigh" class="error--text text-caption" data-testid="tx-intent-listing-deposit-high">{{ $t('signTx.listingDepositHigh', { ticker, amount: formatLovelace(listing.depositLovelace), max: formatLovelace(MAX_LISTING_DEPOSIT) }) }}</div>
           <div v-if="listing.untrackedByGero" class="error--text text-caption font-weight-medium" data-testid="tx-intent-listing-not-tracked">{{ $t('signTx.listingNotTracked') }}</div>
           <div v-if="!listingWarns(listing)" class="grey--text text-caption" data-testid="tx-intent-creates-listing-hint">{{ $t('signTx.createsMarketListingHint') }}</div>
         </div>
@@ -254,6 +254,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { Cardano } from '@cardano-sdk/core';
 import filters from '@/shared/utils/filters';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -279,6 +280,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 const networkMismatch = computed(() => props.summary.bodyNetworkMismatch || props.summary.outputNetworkMismatch);
 const foreignSignerCount = computed(() => props.summary.requiredSigners.filter(s => !s.isOwn).length);

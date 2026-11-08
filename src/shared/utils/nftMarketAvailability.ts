@@ -146,5 +146,17 @@ export function nftMarketActionsFor(
     const unlist = nftMarketCanUnlist();
     return { list: false, reprice: nftMarketAvailable(), unlist, unlistElsewhere: !unlist && hardwareListingLocked() };
   }
-  return { list: nftMarketAvailable() && isListableNft(asset), reprice: false, unlist: false, unlistElsewhere: false };
+  return { list: nftMarketAvailable() && isListableNft(asset) && walletHoldsNft(asset?.unit), reprice: false, unlist: false, unlistElsewhere: false };
+}
+
+/**
+ * Whether the NFT is in the wallet right now. A detail opened before it was sold or sent away
+ * keeps the NFT on screen, and must not keep offering List. `walletStore.collections` lists held
+ * NFTs only (the wallet's listings are merged in elsewhere), keyed by policy ID.
+ */
+function walletHoldsNft(unit: string | undefined): boolean {
+  if (!unit) return false;
+  const wanted = unit.toLowerCase();
+  const collections = (walletStore.collections ?? {}) as Record<string, { items?: { unit?: string }[] } | undefined>;
+  return (collections[wanted.slice(0, POLICY_ID_HEX_LENGTH)]?.items ?? []).some((item) => String(item?.unit).toLowerCase() === wanted);
 }

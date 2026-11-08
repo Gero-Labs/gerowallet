@@ -88,7 +88,7 @@ describe('CollectiblesTab', () => {
     const wrapper = render();
 
     expect(cardNames(wrapper).sort()).toEqual(['Ape1', 'Cats']);
-    expect(listedBadge(cardFor(wrapper, 'Ape1')).text()).toBe('Listed · 120 ADA');
+    expect(listedBadge(cardFor(wrapper, 'Ape1')).text()).toBe('Listed · 120 tADA');
     expect(listedBadge(cardFor(wrapper, 'Cats')).exists()).toBe(false);
   });
 
@@ -121,7 +121,7 @@ describe('CollectiblesTab', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
     const wrapper = render();
     expect(cardNames(wrapper).sort()).toEqual(['Ape1', 'Cats']);
-    expect(listedBadge(cardFor(wrapper, 'Ape1')).text()).toBe('Listed · 120 ADA');
+    expect(listedBadge(cardFor(wrapper, 'Ape1')).text()).toBe('Listed · 120 tADA');
   });
 
   it('is exactly the store\'s collections on a network with no market', () => {
@@ -140,6 +140,6 @@ describe('CollectiblesTab', () => {
 
     const names = wrapper.findAll('.token-image').map((c) => c.text());
     expect(names).toHaveLength(2);
-    expect(wrapper.find('[data-testid="token-listed-badge"]').text()).toBe('Listed · 90.5 ADA');
+    expect(wrapper.find('[data-testid="token-listed-badge"]').text()).toBe('Listed · 90.5 tADA');
   });
 });

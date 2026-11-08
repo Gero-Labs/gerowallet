@@ -121,9 +121,9 @@ describe('the rows', () => {
     const els = rowEls(wrapper);
     expect(els).toHaveLength(2);
     expect(els[0].get('[data-testid="listing-name"]').text()).toBe('Cool Cat #0');
-    expect(els[0].get('[data-testid="listing-price"]').text()).toBe('120 ADA');
+    expect(els[0].get('[data-testid="listing-price"]').text()).toBe('120 tADA');
     expect(els[0].findComponent({ name: 'VImg' }).props('src')).toBe('https://img.example/0.png');
-    expect(els[1].get('[data-testid="listing-price"]').text()).toBe('1,234.567891 ADA');
+    expect(els[1].get('[data-testid="listing-price"]').text()).toBe('1,234.567891 tADA');
     for (const el of els) {
       expect(el.get('[data-testid="listing-policy"]').text()).toContain(filters.truncate(POLICY));
     }
@@ -330,7 +330,7 @@ describe('who may buy what', () => {
   });
 
   describe('a row that contradicts its datum is not shown and not offered, and is counted among the listings that could not be shown', () => {
-    it('a bait price: the list says 10 ADA and the datum 120', async () => {
+    it('a bait price: the list says 10 tADA and the datum 120', async () => {
       const bait = { ...listingRow({ index: 4 }), priceLovelace: (10n * 1_000_000n).toString() };
       listings.mockResolvedValue(page([listingRow({ index: 0 }), bait]));
       const wrapper = render();

@@ -48,14 +48,19 @@ const LISTING: OwnListing = {
   deploymentVersion: 1,
 };
 
+// The wallet holds the NFTs the List tests offer (its own collections, which list held NFTs only).
+const HOLDINGS = { [POLICY]: { items: [{ unit: UNIT }, { unit: CIP68_222 }, { unit: CIP68_100 }] } };
+
 beforeEach(() => {
   walletStore.loggedWallet = wallet();
+  walletStore.collections = HOLDINGS;
   featureFlagsStore.state.flags.isNftMarketEnabled = true;
 });
 
 afterEach(() => {
   featureFlagsStore.state.flags.isNftMarketEnabled = false;
   walletStore.loggedWallet = null;
+  walletStore.collections = {};
   vi.mocked(isNftMarketHardware).mockReset();
   vi.mocked(isNftMarketHardware).mockImplementation((type, allowed = []) => typeof type === 'string' && allowed.includes(type));
 });
@@ -201,6 +206,18 @@ describe('nftMarketActionsFor', () => {
   });
 
   it('offers Edit price and Unlist, not List, for an NFT that is listed', () => {
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual({ list: false, reprice: true, unlist: true, unlistElsewhere: false });
+  });
+
+  it('offers nothing for an NFT the wallet no longer holds and has not listed: sold, or sent away', () => {
+    walletStore.collections = {};
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, undefined)).toEqual({ list: false, reprice: false, unlist: false, unlistElsewhere: false });
+    walletStore.collections = { [POLICY]: { items: [{ unit: CIP68_222 }] } };
+    expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, undefined).list).toBe(false);
+  });
+
+  it('still offers Edit price and Unlist for a listed NFT, which is at the contract and not in the wallet', () => {
+    walletStore.collections = {};
     expect(nftMarketActionsFor({ unit: UNIT, quantity: 1 }, LISTING)).toEqual({ list: false, reprice: true, unlist: true, unlistElsewhere: false });
   });
 

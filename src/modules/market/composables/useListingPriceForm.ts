@@ -1,4 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import { currencyTickerNow } from '@/modules/market/composables/useNativeCurrency';
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import type { OwnListing } from '@/chrome/nftMarket/ownListings';
 import { useListingMarketInfo, type ListingInfoState } from '@/modules/market/composables/useListingMarketInfo';
@@ -187,9 +188,9 @@ export function useListingPriceForm(options: ListingPriceFormOptions): ListingPr
     // the sheet opens on that price: say it only once the seller has edited the field.
     if (samePrice.value) return priceTouched.value ? [t('nftMarket.reprice.samePrice')] : [];
     switch (issue.value) {
-      case 'PRICE_TOO_LOW': return [t('nftMarket.error.priceTooLow', { min: ada(MIN_LIST_PRICE) })];
-      case 'PRICE_TOO_HIGH': return [t('nftMarket.list.priceTooHigh', { max: ada(MAX_LIST_PRICE) })];
-      case 'SELLER_SHARE_TOO_LOW': return [t('nftMarket.error.sellerShareTooLow', { min: ada(MIN_SELLER_SHARE) })];
+      case 'PRICE_TOO_LOW': return [t('nftMarket.error.priceTooLow', { ticker: currencyTickerNow(), min: ada(MIN_LIST_PRICE) })];
+      case 'PRICE_TOO_HIGH': return [t('nftMarket.list.priceTooHigh', { ticker: currencyTickerNow(), max: ada(MAX_LIST_PRICE) })];
+      case 'SELLER_SHARE_TOO_LOW': return [t('nftMarket.error.sellerShareTooLow', { ticker: currencyTickerNow(), min: ada(MIN_SELLER_SHARE) })];
       default: return [];
     }
   });

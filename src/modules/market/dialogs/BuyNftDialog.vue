@@ -42,30 +42,30 @@
           <p class="buy-nft__heading t-label">{{ t('nftMarket.buy.review') }}</p>
 
           <v-alert v-if="priceDiffers" type="warning" variant="tonal" density="compact" class="mb-2" data-testid="buy-nft-price-differs">
-            {{ t('nftMarket.buy.priceDiffers', { price: ada(verified.price), shown: ada(shownPrice!) }) }}
+            {{ t('nftMarket.buy.priceDiffers', { ticker, price: ada(verified.price), shown: ada(shownPrice!) }) }}
           </v-alert>
 
           <dl class="buy-nft__rows glass-tier">
             <div class="buy-nft__row" data-testid="buy-nft-price">
               <dt class="t-caption">{{ t('common.price') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.price) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.price) }} {{ ticker }}</dd>
             </div>
             <div class="buy-nft__row" data-testid="buy-nft-network-fee">
               <dt class="t-caption">{{ t('signTx.networkFee') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.networkFee) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.networkFee) }} {{ ticker }}</dd>
             </div>
             <div class="buy-nft__row" data-testid="buy-nft-top-up">
               <dt class="t-caption">{{ t('nftMarket.buy.minUtxo') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.topUp) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.topUp) }} {{ ticker }}</dd>
             </div>
             <div class="buy-nft__row buy-nft__row--total" data-testid="buy-nft-total">
               <dt class="t-caption">{{ t('nftMarket.buy.total') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.total) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.total) }} {{ ticker }}</dd>
             </div>
           </dl>
 
           <p class="buy-nft__note t-caption" data-testid="buy-nft-deposit-note">
-            {{ t('nftMarket.buy.depositNote', { deposit: ada(verified.deposit) }) }}
+            {{ t('nftMarket.buy.depositNote', { ticker, deposit: ada(verified.deposit) }) }}
           </p>
           <p v-if="verified.topUp > 0n" class="buy-nft__note t-caption" data-testid="buy-nft-top-up-note">
             {{ t('nftMarket.buy.minUtxoNote') }}
@@ -160,6 +160,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -224,6 +225,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
 const isBT = ref(false);
 const flow = useNftMarketFlow('buy', { getIsBT: () => isBT.value });

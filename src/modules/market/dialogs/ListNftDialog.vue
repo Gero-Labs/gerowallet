@@ -29,7 +29,7 @@
           <dl v-if="verified.oldPrice !== null" class="list-nft__old glass-tier">
             <div class="list-nft__old-row" data-testid="list-nft-old-price">
               <dt class="t-caption">{{ t('nftMarket.reprice.current') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.oldPrice) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.oldPrice) }} {{ ticker }}</dd>
             </div>
           </dl>
           <ListingBreakdown
@@ -148,6 +148,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -201,6 +202,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 const router = useRouter();
 const isReprice = props.existing !== undefined;
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.

@@ -28,7 +28,7 @@
               <!-- Listed on Gero's market: the price it is listed at. -->
               <div v-if="listingOf(token)" class="token-listed" :class="{ 'token-listed--below-scam': token.isScam }">
                 <v-chip size="x-small" label class="token-listed__chip px-2 ma-2" data-testid="token-listed-badge">
-                  {{ t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listingOf(token)!.datum.price) }) }}
+                  {{ t('nftMarket.badge.listed', { ticker, price: formatLovelaceAsAda(listingOf(token)!.datum.price) }) }}
                 </v-chip>
               </div>
               <div class="collectible-text-container">
@@ -72,6 +72,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
@@ -85,6 +86,7 @@ import { nftMarketBrowseAvailable, nftMarketListingsVisible } from '@/shared/uti
 
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 type CollectionToken = InstanceType<typeof AssetDetails>['$props']['asset'] & { metadata?: unknown; img?: string; policy_id?: string; isScam?: boolean };
 // `policyId` names a collection the wallet holds nothing of (`items` empty); a held one takes it from its NFTs.

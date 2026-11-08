@@ -335,15 +335,15 @@ describe('MoveToGeroDialog: the price', () => {
     expect(info.load).toHaveBeenCalled();
   });
 
-  it('shows the same breakdown the list sheet does: 100 ADA with a 5% royalty is fee 1.5, royalty 5, you receive 93.5', async () => {
+  it('shows the same breakdown the list sheet does: 100 tADA with a 5% royalty is fee 1.5, royalty 5, you receive 93.5', async () => {
     const wrapper = render();
     await typePrice(wrapper, '100');
 
     const breakdown = wrapper.get('[data-testid="listing-breakdown"]');
-    expect(breakdown.get('[data-testid="breakdown-price"]').text()).toBe('Price100 ADA');
-    expect(breakdown.get('[data-testid="breakdown-fee"]').text()).toBe('Gero fee1.5 ADA');
-    expect(breakdown.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}5 ADA`);
-    expect(breakdown.get('[data-testid="breakdown-receive"]').text()).toBe('You receive93.5 ADA');
+    expect(breakdown.get('[data-testid="breakdown-price"]').text()).toBe('Price100 tADA');
+    expect(breakdown.get('[data-testid="breakdown-fee"]').text()).toBe('Gero fee1.5 tADA');
+    expect(breakdown.get('[data-testid="breakdown-royalty"]').text()).toBe(`Royalty to ${SHORT_A}5 tADA`);
+    expect(breakdown.get('[data-testid="breakdown-receive"]').text()).toBe('You receive93.5 tADA');
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeUndefined();
   });
 
@@ -352,15 +352,15 @@ describe('MoveToGeroDialog: the price', () => {
     info.lastSaleLovelace.value = 120_500_000n;
     const wrapper = render();
     await flushPromises();
-    expect(byId(wrapper, 'floor').text()).toContain('90 ADA');
-    expect(byId(wrapper, 'last-sale').text()).toContain('120.5 ADA');
+    expect(byId(wrapper, 'floor').text()).toContain('90 tADA');
+    expect(byId(wrapper, 'last-sale').text()).toContain('120.5 tADA');
   });
 
-  it('refuses 4 ADA and what is not a price, and Continue stays off', async () => {
+  it('refuses 4 tADA and what is not a price, and Continue stays off', async () => {
     const wrapper = render();
     await typePrice(wrapper, '4');
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
-    expect(body(wrapper).text()).toContain('The price is too low. The minimum is 5 ADA.');
+    expect(body(wrapper).text()).toContain('The price is too low. The minimum is 5 tADA.');
     await byId(wrapper, 'continue').trigger('click');
     expect(flow.prepare).not.toHaveBeenCalled();
 
@@ -369,7 +369,7 @@ describe('MoveToGeroDialog: the price', () => {
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
   });
 
-  it('refuses a price that leaves the seller under 1.5 ADA after the fee and the royalties', async () => {
+  it('refuses a price that leaves the seller under 1.5 tADA after the fee and the royalties', async () => {
     const wrapper = render();
     await typePrice(wrapper, '5');
     // 5 ADA: fee 1.5, royalty 0.25: the seller keeps 3.25, so it is allowed...
@@ -377,7 +377,7 @@ describe('MoveToGeroDialog: the price', () => {
     royaltiesAre({ source: 'cip27', rate: 0.5, recipients: [{ address: CREATOR_A, rate: 0.5, minFeeLovelace: null, maxFeeLovelace: null }] });
     await flushPromises();
     // ...and at 50% royalties it is not.
-    expect(body(wrapper).text()).toContain('you would receive less than 1.5 ADA');
+    expect(body(wrapper).text()).toContain('you would receive less than 1.5 tADA');
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
   });
 
@@ -403,7 +403,7 @@ describe('MoveToGeroDialog: the price', () => {
     await typePrice(wrapper, '100');
 
     expect(has(wrapper, 'royalty-warning')).toBe(true);
-    expect(byId(wrapper, 'royalty-warning').text()).toContain('I agree to pay 12 ADA in royalties, 12% of the price');
+    expect(byId(wrapper, 'royalty-warning').text()).toContain('I agree to pay 12 tADA in royalties, 12% of the price');
     expect(byId(wrapper, 'continue').attributes('disabled')).toBeDefined();
 
     await byId(wrapper, 'royalty-confirm').find('input').setValue(true);
@@ -456,10 +456,10 @@ describe('MoveToGeroDialog: prepare and review', () => {
 
     const review = byId(wrapper, 'review');
     expect(review.text()).toContain('Your Gero listing');
-    expect(review.get('[data-testid="breakdown-price"]').text()).toBe('Price100 ADA');
-    expect(review.get('[data-testid="breakdown-receive"]').text()).toBe('You receive93.5 ADA');
-    expect(review.get('[data-testid="breakdown-deposit"]').text()).toContain('1.55 ADA');
-    expect(review.get('[data-testid="breakdown-network-fee"]').text()).toContain('0.413445 ADA');
+    expect(review.get('[data-testid="breakdown-price"]').text()).toBe('Price100 tADA');
+    expect(review.get('[data-testid="breakdown-receive"]').text()).toBe('You receive93.5 tADA');
+    expect(review.get('[data-testid="breakdown-deposit"]').text()).toContain('1.55 tADA');
+    expect(review.get('[data-testid="breakdown-network-fee"]').text()).toContain('0.413445 tADA');
     expect(has(wrapper, 'sponsored')).toBe(true);
     // Back returns to the price, which keeps what was typed.
     await byId(wrapper, 'back').trigger('click');

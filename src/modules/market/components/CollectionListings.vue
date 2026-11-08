@@ -74,7 +74,7 @@
             </p>
           </div>
           <div class="collection-listings__buy">
-            <p class="t-body-sm g-num" data-testid="listing-price">{{ row.price }} ADA</p>
+            <p class="t-body-sm g-num" data-testid="listing-price">{{ row.price }} {{ ticker }}</p>
             <GButton
               v-if="canBuy && row.buyable && !row.pending"
               tier="secondary"
@@ -128,6 +128,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ExplorerLink from '@/shared/components/ExplorerLink.vue';
@@ -180,6 +181,7 @@ import { walletStore } from '@/stores/walletStore';
 const props = defineProps<{ policyId: string }>();
 
 const { t, tc } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 const available = computed(() => nftMarketBrowseAvailable());
 /** Whether this wallet may be offered Buy at all. */

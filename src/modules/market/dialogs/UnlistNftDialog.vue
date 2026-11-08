@@ -33,11 +33,11 @@
             </div>
             <div class="unlist-nft__row" data-testid="unlist-nft-deposit">
               <dt class="t-caption">{{ t('nftMarket.breakdown.deposit') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.deposit) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.deposit) }} {{ ticker }}</dd>
             </div>
             <div class="unlist-nft__row" data-testid="unlist-nft-network-fee">
               <dt class="t-caption">{{ t('signTx.networkFee') }}</dt>
-              <dd class="t-body-sm g-num">{{ ada(verified.networkFee) }} ADA</dd>
+              <dd class="t-body-sm g-num">{{ ada(verified.networkFee) }} {{ ticker }}</dd>
             </div>
           </dl>
           <p class="unlist-nft__note t-caption">{{ t('nftMarket.breakdown.depositHint') }}</p>
@@ -129,6 +129,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -173,6 +174,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 const router = useRouter();
 // Ledger only: Bluetooth when the user picks it for this signature, USB otherwise.
 const isBT = ref(false);

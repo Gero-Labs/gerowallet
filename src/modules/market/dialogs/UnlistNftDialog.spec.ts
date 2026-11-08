@@ -254,8 +254,8 @@ describe('UnlistNftDialog', () => {
     expect(review.text()).toContain('You get back');
     expect(wrapper.get('[data-testid="listing-nft-name"]').text()).toBe('Equine Pioneer 04601');
     expect(review.get('[data-testid="unlist-nft-nft"]').text()).toBe('NFTEquine Pioneer 04601');
-    expect(review.get('[data-testid="unlist-nft-deposit"]').text()).toBe('Your deposit, returned to you1.55 ADA');
-    expect(review.get('[data-testid="unlist-nft-network-fee"]').text()).toBe('Network Fee0.312345 ADA');
+    expect(review.get('[data-testid="unlist-nft-deposit"]').text()).toBe('Your deposit, returned to you1.55 tADA');
+    expect(review.get('[data-testid="unlist-nft-network-fee"]').text()).toBe('Network Fee0.312345 tADA');
     expect(review.text()).toContain('The deposit is locked with your NFT. It comes back to you when it sells or when you unlist it.');
     expect(has(wrapper, 'confirm')).toBe(true);
   });
@@ -282,7 +282,7 @@ describe('UnlistNftDialog', () => {
     prepareSucceeds({ ...SUMMARY, depositLovelace: '1620000' });
     const wrapper = render();
     await flushPromises();
-    expect(byId(wrapper, 'deposit').text()).toBe('Your deposit, returned to you1.62 ADA');
+    expect(byId(wrapper, 'deposit').text()).toBe('Your deposit, returned to you1.62 tADA');
   });
 
   it('shows that Gero lends the collateral when the summary says so', async () => {

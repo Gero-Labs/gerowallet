@@ -255,10 +255,10 @@ describe('BuyNftDialog', () => {
 
       const review = byId(wrapper, 'review');
       expect(review.text()).toContain('Your purchase');
-      expect(byId(wrapper, 'price').text()).toBe('Price120 ADA');
-      expect(byId(wrapper, 'network-fee').text()).toBe('Network Fee0.312345 ADA');
-      expect(byId(wrapper, 'top-up').text()).toBe('Top-up to the network minimum0.15508 ADA');
-      expect(byId(wrapper, 'total').text()).toBe('You pay in total120.467425 ADA');
+      expect(byId(wrapper, 'price').text()).toBe('Price120 tADA');
+      expect(byId(wrapper, 'network-fee').text()).toBe('Network Fee0.312345 tADA');
+      expect(byId(wrapper, 'top-up').text()).toBe('Top-up to the network minimum0.15508 tADA');
+      expect(byId(wrapper, 'total').text()).toBe('You pay in total120.467425 tADA');
     });
 
     it('takes the total from the summary and adds nothing up itself', async () => {
@@ -266,21 +266,21 @@ describe('BuyNftDialog', () => {
       prepareSucceeds({ ...SUMMARY, totalOutflowLovelace: '987654321' });
       const wrapper = render();
       await flushPromises();
-      expect(byId(wrapper, 'total').text()).toBe('You pay in total987.654321 ADA');
+      expect(byId(wrapper, 'total').text()).toBe('You pay in total987.654321 tADA');
     });
 
     it('shows the price the worker verified, not the one the list showed', async () => {
       prepareSucceeds({ ...SUMMARY, priceLovelace: (150n * ADA).toString(), totalOutflowLovelace: (150n * ADA + 312345n).toString() });
       const wrapper = render();
       await flushPromises();
-      expect(byId(wrapper, 'price').text()).toBe('Price150 ADA');
+      expect(byId(wrapper, 'price').text()).toBe('Price150 tADA');
     });
 
     it('says the listing\'s deposit goes back to the seller and the buyer does not pay it, with the verified amount', async () => {
       prepareSucceeds({ ...SUMMARY, depositLovelace: '1620000' });
       const wrapper = render();
       await flushPromises();
-      expect(byId(wrapper, 'deposit-note').text()).toBe('The seller\'s deposit of 1.62 ADA goes back to the seller. You do not pay it.');
+      expect(byId(wrapper, 'deposit-note').text()).toBe('The seller\'s deposit of 1.62 tADA goes back to the seller. You do not pay it.');
     });
 
     it('says the NFT\'s own ADA stays the buyer\'s and is not in the total', async () => {
@@ -292,7 +292,7 @@ describe('BuyNftDialog', () => {
     it('explains a top-up only when there is one', async () => {
       const wrapper = render();
       await flushPromises();
-      expect(byId(wrapper, 'top-up').text()).toBe('Top-up to the network minimum0 ADA');
+      expect(byId(wrapper, 'top-up').text()).toBe('Top-up to the network minimum0 tADA');
       expect(has(wrapper, 'top-up-note')).toBe(false);
 
       prepareSucceeds({ ...SUMMARY, minUtxoTopUpLovelace: '155080', totalOutflowLovelace: (120n * ADA + 312345n + 155080n).toString() });
@@ -305,7 +305,7 @@ describe('BuyNftDialog', () => {
       prepareSucceeds({ ...SUMMARY, priceLovelace: (150n * ADA).toString() });
       const wrapper = render();
       await flushPromises();
-      expect(byId(wrapper, 'price-differs').text()).toBe('The price is 150 ADA, not the 120 ADA the list showed. Check it before you confirm.');
+      expect(byId(wrapper, 'price-differs').text()).toBe('The price is 150 tADA, not the 120 tADA the list showed. Check it before you confirm.');
     });
 
     it('does not warn when they agree', async () => {

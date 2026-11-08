@@ -99,12 +99,15 @@ const badgeOf = (card: ReturnType<typeof cardFor>) => card.find('[data-testid="t
 
 beforeEach(() => {
   walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Normal } as never;
+  // The wallet holds the collection's NFTs that are not listed (a listed one is at the contract).
+  walletStore.collections = { [POLICY]: { items: [{ unit: FREE_UNIT }] }, [CIP68_100_UNIT.slice(0, 56)]: { items: [{ unit: CIP68_100_UNIT }] } };
   walletStore.listedListings = [storeListing(LISTED_UNIT)];
   featureFlagsStore.state.flags.isNftMarketEnabled = true;
 });
 afterEach(() => {
   featureFlagsStore.state.flags.isNftMarketEnabled = false;
   walletStore.loggedWallet = null;
+  walletStore.collections = {};
   walletStore.listedListings = [];
   document.body.replaceChildren();
 });
@@ -112,18 +115,18 @@ afterEach(() => {
 describe('the listed badge', () => {
   it('marks an NFT the wallet has listed with its price, and leaves the others alone', () => {
     const wrapper = render();
-    expect(badgeOf(cardFor(wrapper, 'Listed')).text()).toBe('Listed · 120 ADA');
+    expect(badgeOf(cardFor(wrapper, 'Listed')).text()).toBe('Listed · 120 tADA');
     expect(badgeOf(cardFor(wrapper, 'Free')).exists()).toBe(false);
   });
 
   it('shows the price exactly, to the lovelace', () => {
     walletStore.listedListings = [storeListing(LISTED_UNIT, '1234567891')];
-    expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 1,234.567891 ADA');
+    expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 1,234.567891 tADA');
   });
 
   it('stays with the market switched off: a listing locks the NFT, so it is never hidden', () => {
     featureFlagsStore.state.flags.isNftMarketEnabled = false;
-    expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 120 ADA');
+    expect(badgeOf(cardFor(render(), 'Listed')).text()).toBe('Listed · 120 tADA');
   });
 
   it('shows nothing on a network with no market', () => {
@@ -156,11 +159,20 @@ describe('the actions of an NFT', () => {
     expect(wrapper.find('[data-testid="asset-listed-status"]').exists()).toBe(false);
   });
 
+  it('takes List away once the NFT leaves the wallet while its detail is open: sold or sent, nothing to list', async () => {
+    const wrapper = render();
+    await open(wrapper, 'Free');
+    walletStore.collections = {};
+    await flushPromises();
+    expect(wrapper.find('[data-testid="asset-list"]').exists()).toBe(false);
+    expect(actions(wrapper).exists()).toBe(false);
+  });
+
   it('offers Edit price and Unlist for a listed NFT, with its price, and no List', async () => {
     const wrapper = render();
     await open(wrapper, 'Listed');
 
-    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 ADA');
+    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 tADA');
     expect(wrapper.get('[data-testid="asset-edit-price"]').text()).toBe('Edit price');
     expect(wrapper.get('[data-testid="asset-unlist"]').text()).toBe('Unlist');
     expect(wrapper.find('[data-testid="asset-list"]').exists()).toBe(false);
@@ -171,7 +183,7 @@ describe('the actions of an NFT', () => {
     const wrapper = render();
     await open(wrapper, 'Listed');
 
-    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 ADA');
+    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 tADA');
     expect(wrapper.get('[data-testid="asset-unlist"]').text()).toBe('Unlist');
     expect(wrapper.find('[data-testid="asset-edit-price"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="asset-list"]').exists()).toBe(false);
@@ -205,7 +217,7 @@ describe('the actions of an NFT', () => {
     const wrapper = render();
     await open(wrapper, 'Listed');
 
-    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 ADA');
+    expect(wrapper.get('[data-testid="asset-listed-status"]').text()).toBe('Listed · 120 tADA');
     expect(wrapper.get('[data-testid="asset-unlist-elsewhere"]').text()).toBe('Unlist from the app you used to list it.');
     expect(wrapper.find('[data-testid="asset-unlist"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="asset-edit-price"]').exists()).toBe(false);

@@ -65,6 +65,7 @@
 
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import { useCollectibleCollections } from '@/shared/composables/useCollectibleCollections';
@@ -92,6 +93,7 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits(['rowClick']);
 
 const { t, tc } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 // The wallet's collections, with the NFTs it has listed added back where Gero's market is
 // available: a listed NFT is locked at the market contract and so absent from the store's own.
@@ -138,7 +140,7 @@ function listedBadgeText(collection: CollectionEntry): string {
   const listed = collection.items.map((item) => byUnit.value.get(String(item.unit).toLowerCase())).filter((listing) => listing !== undefined);
   if (listed.length === 0) return '';
   if (listed.length === 1 && collection.items.length === 1) {
-    return t('nftMarket.badge.listed', { price: formatLovelaceAsAda(listed[0]!.datum.price) });
+    return t('nftMarket.badge.listed', { ticker: ticker.value, price: formatLovelaceAsAda(listed[0]!.datum.price) });
   }
   return tc('nftMarket.badge.listedCount', listed.length, { count: listed.length });
 }

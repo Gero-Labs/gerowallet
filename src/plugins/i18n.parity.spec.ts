@@ -104,10 +104,11 @@ describe('i18n parity', () => {
       expect(placeholders(dict['nftMarket.browse.lookalike']!)).toEqual(['{name}', '{policyId}']);
     });
 
-    // The purchase sheet's figures are the worker's, never baked into the copy.
+    // The purchase sheet's figures are the worker's, never baked into the copy, and so is the
+    // currency: ADA on mainnet, tADA on a testnet.
     it('takes the purchase sheet\'s amounts as placeholders and names no number of its own', () => {
-      expect(placeholders(dict['nftMarket.buy.depositNote']!)).toEqual(['{deposit}']);
-      expect(placeholders(dict['nftMarket.buy.priceDiffers']!)).toEqual(['{price}', '{shown}']);
+      expect(placeholders(dict['nftMarket.buy.depositNote']!)).toEqual(['{deposit}', '{ticker}']);
+      expect(placeholders(dict['nftMarket.buy.priceDiffers']!)).toEqual(['{price}', '{shown}', '{ticker}', '{ticker}']);
       for (const key of ['nftMarket.buy.depositNote', 'nftMarket.buy.priceDiffers', 'nftMarket.buy.minUtxoNote', 'nftMarket.buy.nftAdaNote']) {
         expect(dict[key], key).not.toMatch(/\d/);
       }

@@ -143,8 +143,8 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
     const row = w.find('[data-testid="tx-intent-creates-listing"]');
     expect(row.exists()).toBe(true);
     expect(row.text()).toContain('signTx.createsMarketListing');
-    expect(row.text()).toContain('signTx.listingPrice|{"price":"25.00"}');
-    expect(row.text()).toContain('signTx.listingSellerReceives|{"amount":"23.50"}');
+    expect(row.text()).toContain('signTx.listingPrice|{"ticker":"ADA","price":"25.00"}');
+    expect(row.text()).toContain('signTx.listingSellerReceives|{"ticker":"ADA","amount":"23.50"}');
     expect(row.find('v-icon-stub').attributes('color')).toBe('warning');
     expect(row.find('.warning--text').exists()).toBe(true);
     // Benign only because owner and seller are the wallet's and nothing warns.
@@ -193,7 +193,7 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
   it('shows the royalty count and total, plain when modest', () => {
     const w = mountWith(withMarket([createdListing({ royaltyCount: 2, royaltyTotalLovelace: 4_000_000n })]));
     const line = w.find('[data-testid="tx-intent-listing-royalties"]');
-    expect(line.text()).toBe('signTx.listingRoyalties|{"count":2,"total":"4.00"}|plural=2');
+    expect(line.text()).toBe('signTx.listingRoyalties|{"ticker":"ADA","count":2,"total":"4.00"}|plural=2');
     expect(line.classes()).not.toContain('error--text');
     expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(false);
   });
@@ -255,7 +255,7 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
   it('shows what the seller keeps, and the low-share warning, for a positive share below the floor', () => {
     const w = mountWith(withMarket([createdListing({ sellerShareLovelace: 1_490_000n, lowSellerShare: true })]));
     const row = w.find('[data-testid="tx-intent-creates-listing"]');
-    expect(row.text()).toContain('signTx.listingSellerReceives|{"amount":"1.49"}');
+    expect(row.text()).toContain('signTx.listingSellerReceives|{"ticker":"ADA","amount":"1.49"}');
     expect(row.find('[data-testid="tx-intent-listing-low-share"]').exists()).toBe(true);
     expect(row.find('[data-testid="tx-intent-listing-never-sells"]').exists()).toBe(false);
   });
@@ -282,7 +282,7 @@ describe('TxApprovalIntents: creating a Gero listing', () => {
   it('names the deposit when it is above what a listing locks', () => {
     const w = mountWith(withMarket([createdListing({ depositLovelace: 500_000_000n, depositTooHigh: true })]));
     const line = w.find('[data-testid="tx-intent-listing-deposit-high"]');
-    expect(line.text()).toBe('signTx.listingDepositHigh|{"amount":"500.00","max":"5.00"}');
+    expect(line.text()).toBe('signTx.listingDepositHigh|{"ticker":"ADA","amount":"500.00","max":"5.00"}');
     expect(line.classes()).toContain('error--text');
     expect(w.find('[data-testid="tx-market-risk-banner"]').exists()).toBe(true);
     expect(mountWith(withMarket([createdListing()])).find('[data-testid="tx-intent-listing-deposit-high"]').exists()).toBe(false);

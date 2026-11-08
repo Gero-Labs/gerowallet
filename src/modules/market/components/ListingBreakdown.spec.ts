@@ -5,6 +5,8 @@
 // copy is the real English table, so a mistyped key shows up as a raw key.
 import { afterEach, describe, expect, it } from 'vitest';
 import { enableAutoUnmount, mount } from '@vue/test-utils';
+import { Blockchain, Network, WalletType } from '@/models/types';
+import { walletStore } from '@/stores/walletStore';
 import ListingBreakdown from './ListingBreakdown.vue';
 
 enableAutoUnmount(afterEach);
@@ -48,6 +50,26 @@ describe('ListingBreakdown', () => {
     const rows = wrapper.findAll('[data-testid="breakdown-royalty"]').map((r) => r.text());
     expect(rows).toEqual([`Royalty to ${SHORT_A}5 ADA`, `Royalty to ${SHORT_B}2.5 ADA`]);
     expect(row(wrapper, 'royalties-total')).toBe('Royalties, 7.5% of the price7.5 ADA');
+  });
+
+  it('names the network\'s currency: tADA on preprod, ADA on mainnet', () => {
+    try {
+      walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.PREPROD, type: WalletType.Normal } as never;
+      expect(row(render(), 'price')).toBe('Price100 tADA');
+      walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
+      expect(row(render(), 'price')).toBe('Price100 ADA');
+    } finally {
+      walletStore.loggedWallet = null;
+    }
+  });
+
+  it('puts the royalties total first, with each recipient\'s line under it', () => {
+    const wrapper = render({
+      royalties: [{ address: CREATOR_A, lovelace: 5n * ADA }, { address: CREATOR_B, lovelace: 2_500_000n }],
+      sellerReceives: 91n * ADA,
+    });
+    const order = wrapper.findAll('[data-testid^="breakdown-"]').map((r) => r.attributes('data-testid'));
+    expect(order.slice(0, 5)).toEqual(['breakdown-price', 'breakdown-fee', 'breakdown-royalties-total', 'breakdown-royalty', 'breakdown-royalty']);
   });
 
   it('shows the royalty as the share of the price it effectively is, not the rate the collection asks', () => {
