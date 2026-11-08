@@ -21,7 +21,10 @@
 //    redeemer, the listing's own deployment script as the only reference input, signed by exactly
 //    the listing's owner (a key of the wallet), plus the wallet's own UTxOs for the fee; a cancel
 //    returns the NFT to the return address and everything else to the wallet; a reprice pays the
-//    same NFT and deposit back to the same listing address with the old datum except the price;
+//    same NFT back to the same listing address with the old owner, seller and buyer, the new price
+//    and exactly the royalties the worker computed for that price (a new listing's: the old
+//    amounts are never carried over), and a deposit within a new listing's bounds (it follows the
+//    new datum, so it may grow, paid by the wallet, or shrink, the rest returned to the wallet);
 //  - pay a fee of at most NFT_MARKET_MAX_FEE_LOVELACE and, if a script fails anyway, lose at most
 //    NFT_MARKET_MAX_COLLATERAL_LOVELACE of the wallet's own collateral, or none when it is the
 //    Nexus pool UTxO Nexus said it lent;
@@ -141,14 +144,28 @@ export interface ListSummary extends PricedSummary {
   royalties: { address: string; lovelace: string }[];
 }
 
+/** What the user asked to reprice: one of the wallet's own listings, at a new price. */
+export interface RepriceIntent {
+  ref: string;
+  price: bigint;
+  /**
+   * Exactly the `royalties` array `computeRoyalties` returned for the NEW price from the
+   * collection's current terms, in its order: what a new listing at that price would carry.
+   */
+  royalties: Payee[];
+}
+
 export interface RepriceSummary extends PricedSummary {
   txId: string;
   ref: string;
   unit: string;
   oldPriceLovelace: string;
+  /** What the old listing held: the new `depositLovelace` may be more (the wallet pays) or less (it gets the rest back). */
+  oldDepositLovelace: string;
   listingAddress: string;
   listingOutputIndex: number;
   deploymentVersion: number;
+  royalties: { address: string; lovelace: string }[];
   sponsoredCollateralRef?: string;
 }
 
@@ -349,13 +366,15 @@ export function verifyCancel(
 
 /**
  * Check `txCbor` as the reprice of the wallet's own listing `intent.ref` to `intent.price`: the
- * cancel's rules for the input, and one new listing at the SAME address with the same NFT and
- * deposit, whose datum is the old one except for the price. Throws MarketVerifyError.
+ * cancel's rules for the input, and one new listing at the SAME address with the same NFT, whose
+ * datum keeps the old owner, seller and buyer and carries the new price and exactly the royalties
+ * the worker computed for it (`intent.royalties`, as a list's intent does), with a deposit within a
+ * new listing's bounds. Throws MarketVerifyError.
  */
 export function verifyReprice(
   txCbor: string,
   txHash: string,
-  intent: { ref: string; price: bigint },
+  intent: RepriceIntent,
   ctx: MarketVerifyContext,
 ): RepriceSummary {
   const { serialized, tx, txId } = readTransaction(txCbor, txHash, refuse);
@@ -376,20 +395,22 @@ export function verifyReprice(
   if (listingStakeKey(created.out, deployment) !== stakeKey) refuse('LISTING', "the new listing's stake key is not the account's");
   if (created.out.scriptReference !== undefined) refuse('LISTING', 'the new listing carries a reference script');
 
-  // Value: the same NFT once and the same deposit.
+  // Value: the same NFT once and a new listing's deposit for the new datum, bounded as a list's is.
+  // The difference to the old deposit is the wallet's (its own inputs pay it, or its change gets it
+  // back): checkOutputs already holds every other output to the wallet's own addresses.
   checkNftValue(created.out, listing.unit.toLowerCase());
-  const deposit = BigInt(listing.depositLovelace);
-  if (created.out.value.coins !== deposit) refuse('LISTING', 'the deposit is not the old listing\'s');
+  const deposit = created.out.value.coins;
+  if (deposit <= 0n || deposit > MAX_LISTING_DEPOSIT) refuse('LISTING', 'the deposit is zero or above the cap');
 
-  // Datum: the old one except for the price.
+  // Datum: the old owner, seller and buyer; the new price and the royalties computed for it.
   const old = listing.datum;
   const datum = readInlineDatum(serialized, created.index, created.out, ctx);
   if (typeof intent.price !== 'bigint' || datum.price !== intent.price) refuse('DATUM', 'the price is not the one asked for');
   if (datum.price < MIN_LIST_PRICE) refuse('DATUM', 'the price is below the minimum');
   if (datum.owner !== old.owner.toLowerCase()) refuse('DATUM', 'the owner changed');
   if (!sameAddress(datum.sellerAddress, old.sellerAddress)) refuse('DATUM', 'the seller address changed');
-  const oldRoyalties = old.royalties.map((r) => ({ address: r.address, lovelace: BigInt(r.lovelace) }));
-  if (!sameRoyalties(datum.royalties, oldRoyalties)) refuse('DATUM', 'the royalties changed');
+  // A new listing's royalties at the new price, exactly: never the old datum's amounts.
+  if (!sameRoyalties(datum.royalties, intent.royalties)) refuse('DATUM', 'the royalties are not exactly the ones computed for the new price');
   if ((datum.buyer?.toLowerCase() ?? null) !== (old.buyer?.toLowerCase() ?? null)) refuse('DATUM', 'the buyer changed');
   checkRoyaltyLimits(datum.royalties);
   if (sellerShare(datum, deployment) < MIN_SELLER_SHARE) refuse('DATUM', 'the seller would receive less than the minimum');
@@ -402,9 +423,11 @@ export function verifyReprice(
     ref: listing.ref,
     unit: listing.unit,
     oldPriceLovelace: BigInt(old.price).toString(),
+    oldDepositLovelace: BigInt(listing.depositLovelace).toString(),
     listingAddress: String(created.out.address),
     listingOutputIndex: created.index,
     deploymentVersion: deployment.version,
+    royalties: datum.royalties.map((r) => ({ address: r.address, lovelace: r.lovelace.toString() })),
     ...priced(datum.price, deposit, body.fee, economics(datum, deployment)),
     ...(sponsored ? { sponsoredCollateralRef: ctx.sponsoredCollateralRef } : {}),
   };

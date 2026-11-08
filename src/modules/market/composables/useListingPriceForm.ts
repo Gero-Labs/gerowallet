@@ -7,7 +7,6 @@ import {
   pageRoyaltyMinUtxo,
   parseAdaPrice,
   previewNewListing,
-  previewRepricedListing,
   type ListingPreview,
 } from '@/modules/market/utils/listingPreview';
 import i18n, { getLocaleCode } from '@/plugins/i18n';
@@ -29,13 +28,13 @@ import { MAX_LIST_PRICE, MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMar
  *    (listingPreview.ts); the worker re-derives everything and the review shows ITS figures
  *    (`verifiedFigures`);
  *  - a collection whose royalties pass the usual 10% (judged on the effective amount) needs the
- *    seller's agreement before anything is built (`needsConfirmation`, `confirmed`); so does a
- *    reprice whose kept royalties pass it at the new price (they stay as lovelace amounts, so a cut
- *    in price raises their share).
+ *    seller's agreement before anything is built (`needsConfirmation`, `confirmed`).
  *
- * The caller owns the flow (prepare, sign, submit), the credentials and the failure copy. A new
- * listing (and a move) is priced against the newest deployment and the collection's royalty terms;
- * a reprice (`existing`) against the listing's own deployment and the royalties already in its datum.
+ * The caller owns the flow (prepare, sign, submit), the credentials and the failure copy. Every
+ * sheet is priced against the collection's CURRENT royalty terms at the typed price, as a new
+ * listing is: a reprice (`existing`) carries the royalties a new listing at its new price would,
+ * never the amounts in its old datum. A new listing (and a move) is priced against the newest
+ * deployment, a reprice against the listing's own (its fee).
  */
 
 export interface ListingPriceFormOptions {
@@ -61,6 +60,8 @@ export interface VerifiedFigures {
   invalidRecipients: number;
   /** A reprice: the price it replaces. */
   oldPrice: bigint | null;
+  /** A reprice: the deposit the old listing held (the new one is `deposit`). */
+  oldDeposit: bigint | null;
 }
 
 /** The fields of a verified list, reprice or migrate summary the review reads (each is lovelace as decimal text). */
@@ -74,26 +75,29 @@ export interface PricedSummaryLike {
   dropped?: { address: string; lovelace: string }[];
   invalidRecipients?: number;
   oldPriceLovelace?: string;
+  oldDepositLovelace?: string;
 }
 
 /**
- * The worker's verified figures as the breakdown reads them. A reprice's summary names no
- * royalties, so they come from the listing it changes. Null when a figure does not read back.
+ * The worker's verified figures as the breakdown reads them: every one from the summary, a
+ * reprice's royalties too (the ones computed for its new price). Null when a figure does not
+ * read back.
  */
-export function verifiedFigures(summary: PricedSummaryLike | null | undefined, existing?: OwnListing): VerifiedFigures | null {
+export function verifiedFigures(summary: PricedSummaryLike | null | undefined): VerifiedFigures | null {
   if (!summary) return null;
   const lovelaceOf = (value: string): bigint => BigInt(value);
   try {
     return {
       price: lovelaceOf(summary.priceLovelace),
       fee: lovelaceOf(summary.marketFeeLovelace),
-      royalties: summary.royalties ? summary.royalties.map((r) => ({ address: r.address, lovelace: lovelaceOf(r.lovelace) })) : [...(existing?.datum.royalties ?? [])],
+      royalties: summary.royalties ? summary.royalties.map((r) => ({ address: r.address, lovelace: lovelaceOf(r.lovelace) })) : [],
       sellerReceives: lovelaceOf(summary.sellerReceivesLovelace),
       deposit: lovelaceOf(summary.depositLovelace),
       networkFee: lovelaceOf(summary.networkFeeLovelace),
       dropped: summary.dropped ? summary.dropped.map((r) => ({ address: r.address, lovelace: lovelaceOf(r.lovelace) })) : [],
       invalidRecipients: summary.invalidRecipients ?? 0,
       oldPrice: summary.oldPriceLovelace !== undefined ? lovelaceOf(summary.oldPriceLovelace) : null,
+      oldDeposit: summary.oldDepositLovelace !== undefined ? lovelaceOf(summary.oldDepositLovelace) : null,
     };
   } catch {
     return null;
@@ -142,7 +146,8 @@ export function useListingPriceForm(options: ListingPriceFormOptions): ListingPr
   const isReprice = options.existing?.() !== undefined;
   const existing = (): OwnListing | undefined => options.existing?.();
 
-  const market = useListingMarketInfo(options.unit, { royalties: !isReprice });
+  // A reprice is priced against the collection's terms as they are now, exactly as a new listing.
+  const market = useListingMarketInfo(options.unit, { royalties: true });
   const { royaltiesState, floorLovelace, lastSaleLovelace } = market;
 
   const priceText = ref('');
@@ -165,8 +170,6 @@ export function useListingPriceForm(options: ListingPriceFormOptions): ListingPr
     const amount = price.value;
     const d = deployment.value;
     if (amount === null || !d) return null;
-    const own = existing();
-    if (own) return previewRepricedListing(amount, own.datum.royalties, d);
     const terms: RoyaltyInfo | null = market.royalties.value;
     return terms ? previewNewListing(amount, terms, d, { minUtxo: minUtxo.value }) : null;
   });
@@ -214,7 +217,7 @@ export function useListingPriceForm(options: ListingPriceFormOptions): ListingPr
     && preview.value !== null
     && issue.value === null
     && !samePrice.value
-    && (isReprice || royaltiesState.value === 'ready')
+    && royaltiesState.value === 'ready'
     && (!needsConfirmation.value || confirmed.value),
   );
 

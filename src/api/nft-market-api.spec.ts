@@ -613,6 +613,7 @@ const CANCEL: NftMarketCancelBuildRequest = {
 const REPRICE: NftMarketRepriceBuildRequest = {
   listingRef: LISTING_REF,
   priceLovelace: '90000000',
+  royalties: ROYALTY_PAYEES,
   feeInputs: [FEE_INPUT],
   changeAddress: CHANGE,
   allowSponsoredCollateral: false,

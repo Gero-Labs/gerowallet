@@ -43,6 +43,10 @@
             :deposit="verified.deposit"
             :network-fee="verified.networkFee"
           />
+          <!-- A reprice's deposit is a new listing's for its new datum: say when it moves, and which way the difference goes. -->
+          <p v-if="depositChange" class="list-nft__deposit-change t-caption" data-testid="list-nft-deposit-change">
+            {{ depositChange }}
+          </p>
         </div>
         <p v-if="summary.sponsoredCollateralRef" class="list-nft__sponsored t-caption" data-testid="list-nft-sponsored">
           <v-icon size="16" color="var(--g-success)">mdi-shield-check-outline</v-icon>
@@ -121,7 +125,6 @@
           :form="form"
           testid="list-nft"
           :busy="busy"
-          :is-reprice="isReprice"
           :current-price="isReprice && existing ? existing.datum.price : null"
           @submit="review()"
         />
@@ -265,7 +268,15 @@ watch(priceText, () => {
 // ---- The review ----------------------------------------------------------------------------
 
 /** The worker's verified figures, as the breakdown reads them. Null if a figure does not read back. */
-const verified = computed(() => verifiedFigures(summary.value, props.existing));
+const verified = computed(() => verifiedFigures(summary.value));
+
+/** A reprice whose new deposit differs from the old listing's: up, the wallet pays the difference; down, it gets it back. */
+const depositChange = computed(() => {
+  const figures = verified.value;
+  if (!figures || figures.oldDeposit === null || figures.oldDeposit === figures.deposit) return '';
+  const params = { from: ada(figures.oldDeposit), to: ada(figures.deposit), ticker: ticker.value };
+  return t(figures.deposit > figures.oldDeposit ? 'nftMarket.reprice.depositUp' : 'nftMarket.reprice.depositDown', params);
+});
 
 const failureText = computed(() => {
   const message = flow.failureMessage.value;
@@ -301,9 +312,9 @@ async function retry(): Promise<void> {
 
 /**
  * Something changed (an NFT moved, a listing was bought, repriced elsewhere). A new listing looks
- * again, from the price. A reprice was opened on the listing the page held (its price, its
- * royalties) and looking again cannot change that, so it closes: reopened after the sync, it
- * starts from the listing as it now is.
+ * again, from the price. A reprice was opened on the listing the page held (its ref, its price)
+ * and looking again cannot change that, so it closes: reopened after the sync, it starts from the
+ * listing as it now is.
  */
 function refresh(): void {
   if (isReprice) {
@@ -368,6 +379,11 @@ watch(() => props.isOpen, (open) => { if (open) start(); }, { immediate: true })
     margin: 0;
     color: var(--g-text-1);
   }
+}
+
+.list-nft__deposit-change {
+  margin: var(--g-s-2) 0 0;
+  color: var(--g-text-2);
 }
 
 .list-nft__sponsored {

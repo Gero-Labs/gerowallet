@@ -10,7 +10,7 @@
 
 import type { RoyaltyInfo } from '@/api/nft-market-api';
 import { listingSplit, type ListingFeeParams, type Payee } from '@/chrome/nftMarket/listingDatum';
-import { computeRoyalties, protocolParameter, royaltiesAboveCap, royaltyMinUtxoFor } from '@/chrome/nftMarket/royalties';
+import { computeRoyalties, protocolParameter, royaltyMinUtxoFor } from '@/chrome/nftMarket/royalties';
 import { MAX_LIST_PRICE, MIN_LIST_PRICE, MIN_SELLER_SHARE } from '@/utils/nftMarketDeployments';
 
 // ---------------------------------------------------------------------------------------------
@@ -119,7 +119,9 @@ function assemble(
  * The preview of a NEW listing at `price` for a collection's royalty terms: the royalty entries
  * (CIP-27 or CIP-102, clamped, those under min-UTxO and beyond three left out), the fee, and
  * what the seller keeps. Null for a price of zero or less (nothing to show yet). Above the 10%
- * cap the entries shown are what would be paid once the seller has confirmed.
+ * cap the entries shown are what would be paid once the seller has confirmed. A reprice is
+ * previewed with it too (its listing's own deployment as `fee`): its new listing carries what a
+ * new listing at the new price would, as the worker computes it.
  */
 export function previewNewListing(
   price: bigint,
@@ -142,20 +144,6 @@ export function previewNewListing(
     // computeRoyalties throws only for a price that is not positive, which is ruled out above.
     return assemble(price, [], fee, { dropped: [], invalidRecipients: 0, overCap: false, malformed: true });
   }
-}
-
-/**
- * The preview of a new price for a listing that already exists: its royalties keep their amounts
- * (a reprice changes only the price), so only the fee and the seller's share move. A cut in price
- * raises the royalties' share of it, so `overCap` is judged on the kept amounts against the NEW
- * price, exactly as the worker does (the seller confirms, as for a new listing). Null for a price
- * of zero or less.
- */
-export function previewRepricedListing(price: bigint, royalties: readonly Payee[], fee: ListingFeeParams): ListingPreview | null {
-  if (typeof price !== 'bigint' || price <= 0n) return null;
-  const kept = [...royalties];
-  const total = kept.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
-  return assemble(price, kept, fee, { dropped: [], invalidRecipients: 0, overCap: royaltiesAboveCap(total, price) });
 }
 
 /**

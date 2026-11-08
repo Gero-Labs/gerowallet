@@ -348,12 +348,15 @@ export interface NftMarketCancelBuildRequest {
 
 /**
  * Gero market reprice build request (`POST /api/tx/build/nft-market/reprice`). The new
- * listing keeps the old datum's owner, seller address, royalties and buyer; only the price
- * changes.
+ * listing keeps the old datum's owner, seller address and buyer; the price is new, and so are
+ * the royalties: the worker computes them for the new price from the collection's current terms,
+ * exactly as for a list. Nexus sizes the deposit as a new listing's, the difference to the old
+ * one paid from, or returned to, the wallet.
  */
 export interface NftMarketRepriceBuildRequest {
   listingRef: NftMarketListingRef;
   priceLovelace: string;
+  royalties: NftMarketRoyaltyPayee[];
   feeInputs: NexusTxInput[];
   changeAddress: string;
   allowSponsoredCollateral?: boolean;

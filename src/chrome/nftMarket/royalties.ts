@@ -117,8 +117,8 @@ const CAP_UNITS: bigint = (() => {
 /**
  * Whether `royaltiesLovelace` is more than ROYALTY_RATE_CAP of `price`, compared exactly in bigint
  * (cross-multiplied, so nothing is rounded: for the 10% cap this is royalties x 10 > price). The
- * one test of "above the usual limit", used for a new listing's computed royalties and for a
- * reprice, whose royalties keep their lovelace amounts while the price changes.
+ * one test of "above the usual limit", used for the computed royalties of a new listing, a move and
+ * a reprice (whose royalties are computed again at its new price).
  */
 export function royaltiesAboveCap(royaltiesLovelace: bigint, price: bigint): boolean {
   return royaltiesLovelace * RATE_SCALE > price * CAP_UNITS;

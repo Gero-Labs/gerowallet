@@ -286,14 +286,18 @@ function cancelBody(): Cardano.Tx {
 const cancelTx = (edit?: (tx: Cardano.Tx) => void): Built => build(cancelBody(), edit);
 
 const REPRICED_PRICE = 80n * ADA;
-const repriceTx = (edit?: (tx: Cardano.Tx) => void): Built => {
+/** The collection's 5% at 80 ADA: what a new listing at that price carries (the listing's own 5 ADA was 5% of 100 ADA). */
+const REPRICED_ROYALTIES: Payee[] = [{ address: ROYALTY_ADDRESS, lovelace: 4n * ADA }];
+/** A reprice of OWN_LISTING to `price` with `royalties` in the new datum, holding `deposit`. */
+const repriceTxAt = (price: bigint, royalties: Payee[], deposit = DEPOSIT, edit?: (tx: Cardano.Tx) => void): Built => {
   const tx = cancelBody();
   tx.body.outputs = [
-    listingOutput(LISTING_V1, { ...DATUM, price: REPRICED_PRICE }),
+    listingOutput(LISTING_V1, { ...DATUM, price, royalties }, UNIT_222, deposit),
     { address: Cardano.PaymentAddress(CHANGE), value: { coins: 9_600_000n } },
   ];
   return build(tx, edit);
 };
+const repriceTx = (edit?: (tx: Cardano.Tx) => void): Built => repriceTxAt(REPRICED_PRICE, REPRICED_ROYALTIES, DEPOSIT, edit);
 
 /** The cancel with the lent Nexus pool UTxO as its collateral. */
 const pooledCancelTx = (): Built => cancelTx((tx) => {
@@ -628,7 +632,7 @@ describe('every kind replies once, with the verified transaction', () => {
     expect(calls.reprice).not.toHaveBeenCalled();
   });
 
-  it('reprice: the new price goes to Nexus; the reply carries the old and new prices', async () => {
+  it('reprice: the new price and the royalties computed for it go to Nexus; the reply carries the old and new prices', async () => {
     const tx = repriceTx();
     const { deps, calls } = rig({ built: response(tx) });
     const data = await reply('reprice', REPRICE_REQUEST, deps);
@@ -637,15 +641,23 @@ describe('every kind replies once, with the verified transaction', () => {
     expect(data.result?.summary).toMatchObject({
       ref: LISTING_REF,
       oldPriceLovelace: '100000000',
+      oldDepositLovelace: '2000000',
       priceLovelace: '80000000',
+      royalties: [{ address: ROYALTY_ADDRESS, lovelace: '4000000' }],
+      royaltiesLovelace: '4000000',
+      dropped: [],
+      invalidRecipients: 0,
       listingAddress: LISTING_V1,
       deploymentVersion: 1,
     });
+    // The terms are the listed NFT's own policy's, read now: never the listing's old amounts.
+    expect(deps.royalties).toHaveBeenCalledWith(POLICY, Network.PREPROD);
     const [request, network] = calls.reprice.mock.calls[0] as [Record<string, unknown>, string];
     expect(network).toBe(Network.PREPROD);
     expect(request).toMatchObject({
       listingRef: { txHash: LISTING_TX, outputIndex: 0 },
       priceLovelace: '80000000',
+      royalties: [{ address: ROYALTY_ADDRESS, lovelace: '4000000' }],
       changeAddress: RECEIVE,
       allowSponsoredCollateral: true,
     });
@@ -1162,7 +1174,7 @@ describe('the context the verifiers are given comes from the logged account and 
     const repricing = rig({ built: response(repriceTx()) });
     await reply('reprice', REPRICE_REQUEST, repricing.deps);
     const [, , repriceIntent, repriceCtx] = vi.mocked(verifyReprice).mock.calls[0];
-    expect(repriceIntent).toEqual({ ref: LISTING_REF, price: REPRICED_PRICE });
+    expect(repriceIntent).toEqual({ ref: LISTING_REF, price: REPRICED_PRICE, royalties: REPRICED_ROYALTIES });
     expect(repriceCtx.ownKeyHashes).toEqual(new Set([OWNER, OWNER_B, STAKE]));
   });
 
@@ -1619,85 +1631,152 @@ describe('reprice and cancel', () => {
     expect(r.calls.reprice).not.toHaveBeenCalled();
   });
 
-  it('a reprice that leaves the seller under the minimum share (the royalties stay) is SELLER_SHARE_TOO_LOW', async () => {
-    // 5 ADA price, 1.5 ADA fee, the listing's 5 ADA royalty: the seller would owe money.
-    const r = rig();
-    const data = await reply('reprice', { ref: LISTING_REF, priceLovelace: MIN_LIST_PRICE.toString() }, r.deps);
-    expect(data.errorCode).toBe('SELLER_SHARE_TOO_LOW');
-    expect(r.calls.reprice).not.toHaveBeenCalled();
-  });
-
-  describe('royalties that stay in lovelace (interim safeguard)', () => {
-    // The listing's royalty is 5 ADA and a reprice keeps it, so a lower price makes it a larger
-    // share: at 40 ADA it is 12.5%, over the 10% cap, and the seller has not agreed to that.
-    const repriceAt = (price: bigint): Built => {
-      const tx = cancelBody();
-      tx.body.outputs = [
-        listingOutput(LISTING_V1, { ...DATUM, price }),
-        { address: Cardano.PaymentAddress(CHANGE), value: { coins: 9_600_000n } },
-      ];
-      return build(tx);
-    };
+  describe('royalties worked out again at the new price, as a new listing would carry them', () => {
     const request = (price: bigint, extra: Record<string, unknown> = {}) => ({ ref: LISTING_REF, priceLovelace: price.toString(), ...extra });
+    const sentRoyalties = (r: ReturnType<typeof rig>) => (r.calls.reprice.mock.calls[0][0] as Record<string, unknown>)['royalties'];
+    // 12% to one recipient: above the 10% cap at any price.
+    const TWELVE: RoyaltyInfo = {
+      source: 'cip27',
+      rate: 0.12,
+      recipients: [{ address: ROYALTY_ADDRESS, rate: 0.12, minFeeLovelace: null, maxFeeLovelace: null }],
+    };
 
-    it('a price that makes the old royalties more than 10% of it needs the seller\'s confirmation, and the reply says what they cost', async () => {
-      const r = rig({ built: response(repriceAt(40n * ADA)) });
+    it('a raise recomputes them up: 5% of 300 ADA is 15 ADA, not the listing\'s 5', async () => {
+      const r = rig({ built: response(repriceTxAt(300n * ADA, [{ address: ROYALTY_ADDRESS, lovelace: 15n * ADA }])) });
+      const data = await reply('reprice', request(300n * ADA), r.deps);
+      expect(data.success).toBe(true);
+      expect(sentRoyalties(r)).toEqual([{ address: ROYALTY_ADDRESS, lovelace: '15000000' }]);
+      expect(data.result?.summary).toMatchObject({ royaltiesLovelace: '15000000', priceLovelace: '300000000' });
+    });
+
+    it('a cut recomputes them down: 5% of 40 ADA is 2 ADA, and no confirmation is asked (the old 5 ADA would have been 12.5%)', async () => {
+      const r = rig({ built: response(repriceTxAt(40n * ADA, [{ address: ROYALTY_ADDRESS, lovelace: 2n * ADA }])) });
       const data = await reply('reprice', request(40n * ADA), r.deps);
+      expect(data.success).toBe(true);
+      expect(sentRoyalties(r)).toEqual([{ address: ROYALTY_ADDRESS, lovelace: '2000000' }]);
+    });
+
+    it('the terms are the collection\'s current ones: a listing made under other terms reprices under today\'s', async () => {
+      const r = rig({ royalties: NO_ROYALTY, built: response(repriceTxAt(REPRICED_PRICE, [])) });
+      const data = await reply('reprice', REPRICE_REQUEST, r.deps);
+      expect(data.success).toBe(true);
+      expect(sentRoyalties(r)).toEqual([]);
+    });
+
+    it('a royalty under min-UTxO at the new price is dropped, and the reply says so', async () => {
+      const info: RoyaltyInfo = {
+        source: 'cip27',
+        rate: 0.06,
+        recipients: [
+          { address: ROYALTY_ADDRESS, rate: 0.05, minFeeLovelace: null, maxFeeLovelace: null },
+          { address: ROYALTY_ADDRESS_2, rate: 0.01, minFeeLovelace: null, maxFeeLovelace: null },
+        ],
+      };
+      // At 300 ADA the 1% is 3 ADA and kept; at 80 ADA it is 0.8 ADA, under min-UTxO, and left out.
+      const high = rig({
+        royalties: info,
+        built: response(repriceTxAt(300n * ADA, [{ address: ROYALTY_ADDRESS, lovelace: 15n * ADA }, { address: ROYALTY_ADDRESS_2, lovelace: 3n * ADA }])),
+      });
+      expect((await reply('reprice', request(300n * ADA), high.deps)).success).toBe(true);
+      expect(sentRoyalties(high)).toEqual([{ address: ROYALTY_ADDRESS, lovelace: '15000000' }, { address: ROYALTY_ADDRESS_2, lovelace: '3000000' }]);
+      const low = rig({ royalties: info, built: response(repriceTx()) });
+      const data = await reply('reprice', REPRICE_REQUEST, low.deps);
+      expect(data.success).toBe(true);
+      expect(sentRoyalties(low)).toEqual([{ address: ROYALTY_ADDRESS, lovelace: '4000000' }]);
+      expect(data.result?.summary).toMatchObject({ dropped: [{ address: ROYALTY_ADDRESS_2, lovelace: '800000' }], invalidRecipients: 0 });
+    });
+
+    it('above the cap at the new price nothing is built until the seller confirms, and the reply says what it would cost, as for a list', async () => {
+      const r = rig({ royalties: TWELVE });
+      const data = await reply('reprice', REPRICE_REQUEST, r.deps);
       expect(data).toMatchObject({
         success: false,
         errorCode: 'ROYALTY_CONFIRMATION_REQUIRED',
-        effectiveRoyaltyLovelace: '5000000',
-        effectiveRoyaltyRate: '0.125000',
+        effectiveRoyaltyLovelace: '9600000',
+        effectiveRoyaltyRate: '0.120000',
+        royaltyRate: '0.120000',
       });
-      // Nothing is built, nothing may be signed.
       expect(r.calls.reprice).not.toHaveBeenCalled();
       expect(r.deps.grantAllowance).not.toHaveBeenCalled();
     });
 
-    it('with the confirmation it builds and verifies as before', async () => {
-      const tx = repriceAt(40n * ADA);
-      const r = rig({ built: response(tx) });
-      const data = await reply('reprice', request(40n * ADA, { confirmRoyaltyAboveCap: true }), r.deps);
+    it('a CIP-102 minimum can push a modest rate over the cap at a lower price only', async () => {
+      // 1% with a 6 ADA minimum: 6% of 100 ADA, but 15% of 40 ADA.
+      const floor: RoyaltyInfo = {
+        source: 'cip102',
+        rate: 0.01,
+        recipients: [{ address: ROYALTY_ADDRESS, rate: 0.01, minFeeLovelace: 6_000_000n, maxFeeLovelace: null }],
+      };
+      const high = rig({ royalties: floor, built: response(repriceTxAt(100n * ADA, [{ address: ROYALTY_ADDRESS, lovelace: 6n * ADA }])) });
+      expect((await reply('reprice', request(100n * ADA), high.deps)).success).toBe(true);
+      const low = rig({ royalties: floor });
+      expect(await reply('reprice', request(40n * ADA), low.deps)).toMatchObject({
+        errorCode: 'ROYALTY_CONFIRMATION_REQUIRED',
+        effectiveRoyaltyLovelace: '6000000',
+        effectiveRoyaltyRate: '0.150000',
+      });
+      expect(low.calls.reprice).not.toHaveBeenCalled();
+    });
+
+    it('with the confirmation the entries are applied as they are', async () => {
+      const r = rig({ royalties: TWELVE, built: response(repriceTxAt(REPRICED_PRICE, [{ address: ROYALTY_ADDRESS, lovelace: 9_600_000n }])) });
+      const data = await reply('reprice', { ...REPRICE_REQUEST, confirmRoyaltyAboveCap: true }, r.deps);
       expect(data.success).toBe(true);
-      expect(data.result?.summary).toMatchObject({ priceLovelace: '40000000', oldPriceLovelace: '100000000' });
-      expect(r.calls.reprice).toHaveBeenCalledTimes(1);
+      expect(sentRoyalties(r)).toEqual([{ address: ROYALTY_ADDRESS, lovelace: '9600000' }]);
       expect(r.deps.grantAllowance).toHaveBeenCalledTimes(1);
     });
 
     it('only a true confirmation counts', async () => {
       for (const value of ['true', 1, 'yes', {}]) {
-        const r = rig({ built: response(repriceAt(40n * ADA)) });
-        const data = await reply('reprice', request(40n * ADA, { confirmRoyaltyAboveCap: value }), r.deps);
+        const r = rig({ royalties: TWELVE });
+        const data = await reply('reprice', { ...REPRICE_REQUEST, confirmRoyaltyAboveCap: value }, r.deps);
         expect(data.errorCode, String(value)).toBe('ROYALTY_CONFIRMATION_REQUIRED');
         expect(r.calls.reprice).not.toHaveBeenCalled();
       }
     });
 
-    it('exactly 10% of the new price is not asked about; one lovelace less price is', async () => {
-      const atCap = rig({ built: response(repriceAt(50n * ADA)) });
-      expect((await reply('reprice', request(50n * ADA), atCap.deps)).success).toBe(true);
-      const over = rig({ built: response(repriceAt(50n * ADA - 1n)) });
-      expect((await reply('reprice', request(50n * ADA - 1n), over.deps)).errorCode).toBe('ROYALTY_CONFIRMATION_REQUIRED');
-      expect(over.calls.reprice).not.toHaveBeenCalled();
+    it('terms that cannot be read are ROYALTIES_UNREADABLE and contradictory ones ROYALTIES_MALFORMED: never a reprice without royalties', async () => {
+      const unreadable = rig({ royalties: new Error('timeout of 30000ms exceeded') });
+      expect((await reply('reprice', REPRICE_REQUEST, unreadable.deps)).errorCode).toBe('ROYALTIES_UNREADABLE');
+      expect(unreadable.calls.reprice).not.toHaveBeenCalled();
+      const malformed = rig({ royalties: { source: 'cip27', rate: 0.5, recipients: [{ address: ROYALTY_ADDRESS, rate: 0.05, minFeeLovelace: null, maxFeeLovelace: null }] } });
+      expect((await reply('reprice', REPRICE_REQUEST, malformed.deps)).errorCode).toBe('ROYALTIES_MALFORMED');
+      expect(malformed.calls.reprice).not.toHaveBeenCalled();
     });
 
-    it('a raise or a modest cut, and a listing with no royalties at any price, is not asked about', async () => {
-      const raised = rig({ built: response(repriceAt(150n * ADA)) });
-      expect((await reply('reprice', request(150n * ADA), raised.deps)).success).toBe(true);
-      const none: OwnListing = { ...OWN_LISTING, datum: { ...DATUM, royalties: [] } };
-      const noRoyalty = rig({
-        built: response(repriceAt(MIN_LIST_PRICE)),
-        state: { utxos: [NFT_UTXO, FEE_UTXO], keys: KEYS, collateral: null, listedListings: [none], coinsPerUtxoByte: 4310 },
+    it('the seller\'s share is held against the new royalties and the listing\'s own deployment, and confirming cannot get past it', async () => {
+      // A 2 ADA minimum on a 5 ADA reprice leaves 5 - 1.5 - 2 = 1.5 ADA: enough. 2,000,001 is not.
+      const minRoyalty = (lovelace: bigint): RoyaltyInfo => ({
+        source: 'cip102',
+        rate: 0.01,
+        recipients: [{ address: ROYALTY_ADDRESS, rate: 0.01, minFeeLovelace: lovelace, maxFeeLovelace: null }],
       });
-      const data = await reply('reprice', request(MIN_LIST_PRICE), noRoyalty.deps);
-      expect(data.errorCode).not.toBe('ROYALTY_CONFIRMATION_REQUIRED');
+      const atMin = request(MIN_LIST_PRICE, { confirmRoyaltyAboveCap: true });
+      const exact = rig({ royalties: minRoyalty(2_000_000n) });
+      expect((await reply('reprice', atMin, exact.deps)).errorCode).not.toBe('SELLER_SHARE_TOO_LOW');
+      expect(exact.calls.reprice).toHaveBeenCalled();
+      const under = rig({ royalties: minRoyalty(2_000_001n) });
+      expect((await reply('reprice', atMin, under.deps)).errorCode).toBe('SELLER_SHARE_TOO_LOW');
+      expect(under.calls.reprice).not.toHaveBeenCalled();
+      // The old listing's own 5 ADA no longer counts: 5 ADA with the collection's 5% (0.25 ADA, dropped) builds.
+      const plain = rig({ built: response(repriceTxAt(MIN_LIST_PRICE, [])) });
+      expect((await reply('reprice', request(MIN_LIST_PRICE), plain.deps)).success).toBe(true);
     });
 
-    it('the seller\'s share is refused first: confirming cannot make an unsellable price listable', async () => {
-      const r = rig();
-      const data = await reply('reprice', request(MIN_LIST_PRICE, { confirmRoyaltyAboveCap: true }), r.deps);
-      expect(data.errorCode).toBe('SELLER_SHARE_TOO_LOW');
-      expect(r.calls.reprice).not.toHaveBeenCalled();
+    it('the worker refuses a built reprice whose royalties are not the ones it computed, the old fixed amounts first among them', async () => {
+      // Nexus carried the listing's 5 ADA over to 80 ADA instead of the 4 ADA computed for it.
+      const kept = rig({ built: response(repriceTxAt(REPRICED_PRICE, ROYALTIES)) });
+      expect(await reply('reprice', REPRICE_REQUEST, kept.deps)).toMatchObject({ errorCode: 'VERIFY_FAILED', error: 'DATUM' });
+      expect(kept.deps.grantAllowance).not.toHaveBeenCalled();
+      const none = rig({ built: response(repriceTxAt(REPRICED_PRICE, [])) });
+      expect(await reply('reprice', REPRICE_REQUEST, none.deps)).toMatchObject({ errorCode: 'VERIFY_FAILED', error: 'DATUM' });
+    });
+
+    it('the deposit follows the new datum: one that grew or shrank is accepted, and the reply says what it was', async () => {
+      const grown = rig({ built: response(repriceTxAt(REPRICED_PRICE, REPRICED_ROYALTIES, DEPOSIT + 250_000n)) });
+      expect((await reply('reprice', REPRICE_REQUEST, grown.deps)).result?.summary).toMatchObject({ depositLovelace: '2250000', oldDepositLovelace: '2000000' });
+      const shrunk = rig({ built: response(repriceTxAt(REPRICED_PRICE, REPRICED_ROYALTIES, DEPOSIT - 500_000n)) });
+      expect((await reply('reprice', REPRICE_REQUEST, shrunk.deps)).result?.summary).toMatchObject({ depositLovelace: '1500000', oldDepositLovelace: '2000000' });
     });
   });
 

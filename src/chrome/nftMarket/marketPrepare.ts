@@ -9,7 +9,8 @@
 //   list     { unit, priceLovelace, confirmRoyaltyAboveCap? }   the worker finds the UTxO holding
 //            the NFT, takes `owner` from its payment key and the stake credential from the
 //            account's own base address, computes the royalties from the NFT's own policy
-//   reprice  { ref, priceLovelace, confirmRoyaltyAboveCap? }     ref must be one of the wallet's own listings; its royalties keep their lovelace
+//   reprice  { ref, priceLovelace, confirmRoyaltyAboveCap? }     ref must be one of the wallet's own listings; its royalties are
+//            computed again at the new price from the collection's current terms, exactly as for a list
 //   cancel   { ref }                                             the NFT returns to the wallet's receive address
 //   buy      { ref }                                             the listing is read twice (Nexus, and the chain, proven
 //                                                                against the transaction id) and the buy is checked against both
@@ -41,8 +42,7 @@
 //   ROYALTIES_UNREADABLE        the collection's royalty terms could not be read (never listed without them)
 //   ROYALTIES_MALFORMED         the terms contradict themselves
 //   ROYALTY_CONFIRMATION_REQUIRED  above ROYALTY_RATE_CAP; details: effectiveRoyaltyLovelace, effectiveRoyaltyRate, royaltyRate.
-//                               A reprice asks too: its royalties stay as they are in lovelace, so a lower price makes them a
-//                               larger share (the listing's own royalties over the NEW price; no royaltyRate, no collection read)
+//                               A list, a reprice (at the NEW price) and a migrate ask the same way
 //   LISTING_NOT_FOUND           reprice/cancel: not among the wallet's own listings; buy: Nexus or the chain has no such listing
 //   LISTING_UNREADABLE          the listing (or the legacy lookup) could not be read or did not read back whole
 //   OWN_LISTING                 buy: the listing is the wallet's own
@@ -88,7 +88,7 @@ import { listingSplit } from './listingDatum';
 import { ListingUtxoError, type ListingChainUtxo } from './listingChainUtxo';
 import { findMarketTouch } from './marketGuard';
 import { reviveOwnListings, type OwnListing } from './ownListings';
-import { computeRoyalties, protocolParameter, royaltiesAboveCap, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
+import { computeRoyalties, protocolParameter, royaltyMinUtxoFor, royaltyOutputMinUtxo } from './royalties';
 import { verifyBuy, type BuySummary } from './verifyBuy';
 import {
   MarketVerifyError,
@@ -101,6 +101,7 @@ import {
   type ListIntent,
   type ListSummary,
   type MarketVerifyContext,
+  type RepriceIntent,
   type RepriceSummary,
 } from './verifyListing';
 import { verifyMigrate, type MigrateSummary } from './verifyMigrate';
@@ -199,7 +200,7 @@ export interface RoyaltyNotes {
 
 export type MarketSummary =
   | (ListSummary & RoyaltyNotes)
-  | RepriceSummary
+  | (RepriceSummary & RoyaltyNotes)
   | CancelSummary
   | BuySummary
   | (MigrateSummary & RoyaltyNotes);
@@ -586,11 +587,20 @@ interface ChosenRoyalties extends RoyaltyNotes {
 }
 
 /**
- * The royalties of a new listing, from the NFT's OWN policy only: read, computed (royalties.ts),
- * and held to what the seller must still receive. Above the cap nothing is built until the
- * seller has confirmed, and the refusal carries what it would cost so the page can show it.
+ * The royalties of a new listing at `price`, from the NFT's OWN policy only: read, computed
+ * (royalties.ts), and held to what the seller must still receive under `deployment`'s fee (the
+ * newest for a list or a move, the listing's own for a reprice). Above the cap nothing is built
+ * until the seller has confirmed, and the refusal carries what it would cost so the page can show
+ * it. The one rule for a list, a move and a reprice: a reprice carries what a new listing at its
+ * new price would, never the old listing's amounts.
  */
-async function chooseRoyalties(s: Session, unit: string, price: bigint, confirmAboveCap: boolean): Promise<ChosenRoyalties> {
+async function chooseRoyalties(
+  s: Session,
+  unit: string,
+  price: bigint,
+  confirmAboveCap: boolean,
+  deployment: NftMarketDeployment = s.newest,
+): Promise<ChosenRoyalties> {
   let info: RoyaltyInfo;
   try {
     info = await s.deps.royalties(unit.slice(0, POLICY_HEX_LENGTH), s.network);
@@ -623,28 +633,12 @@ async function chooseRoyalties(s: Session, unit: string, price: bigint, confirmA
     });
   }
 
-  checkSellerShare(price, s.newest, computed.royalties);
+  checkSellerShare(price, deployment, computed.royalties);
   return {
     royalties: computed.royalties,
     dropped: computed.dropped.map((entry) => ({ address: entry.address, lovelace: entry.lovelace.toString() })),
     invalidRecipients: computed.invalidRecipients,
   };
-}
-
-/**
- * A reprice keeps the listing's royalties as lovelace amounts, so a lower price makes them a larger
- * share of it: 5 ADA is 5% of 100 ADA and 12.5% of 40 ADA. Above ROYALTY_RATE_CAP of the NEW price
- * nothing is built until the seller has confirmed, as for a new listing, and the refusal carries
- * what the royalties would cost so the page can show it. (Re-deriving them from the collection's
- * terms at the new price is a different design: this is the interim guard.)
- */
-function checkKeptRoyalties(price: bigint, royalties: readonly { lovelace: bigint }[], confirmed: boolean): void {
-  const total = royalties.reduce((sum, royalty) => sum + royalty.lovelace, 0n);
-  if (confirmed || !royaltiesAboveCap(total, price)) return;
-  throw new MarketPrepareError('ROYALTY_CONFIRMATION_REQUIRED', 'The royalties are above the usual limit at this price and need the seller\'s confirmation', {
-    effectiveRoyaltyLovelace: total.toString(),
-    effectiveRoyaltyRate: fractionText(total, price),
-  });
 }
 
 const royaltyRequest = (royalties: ChosenRoyalties) =>
@@ -737,6 +731,14 @@ function ownListing(s: Session, ref: string): OwnListing {
   return listing;
 }
 
+/**
+ * A reprice is a cancel and a new listing in one transaction (the contract checks nothing about the
+ * new output), so the new listing carries what a new listing at the NEW price would: its royalties
+ * are computed again from the collection's current terms by the list's own path (`chooseRoyalties`:
+ * the same drops, the same cap and confirmation, the seller's share under the listing's own
+ * deployment), and the verifier holds the built datum to exactly those. Keeping the old amounts
+ * would let a seller list low and raise the price to pay less royalty, and overpay after a cut.
+ */
 async function prepareReprice(s: Session, request: unknown): Promise<MarketPrepared> {
   const body = readRecord(request);
   const { ref, listingRef } = readRef(body['ref']);
@@ -744,23 +746,26 @@ async function prepareReprice(s: Session, request: unknown): Promise<MarketPrepa
   const confirmAboveCap = body['confirmRoyaltyAboveCap'] === true;
   checkPrice(price);
   const listing = ownListing(s, ref);
-  // The royalties stay as they are (a reprice changes only the price), so the new price must still
-  // leave the seller their share, and a cut in price must not push them past the usual limit unasked.
+  // The listing stays at its own deployment, so its fee is the one the seller's share is held to.
   const deployment = s.deployments.find((d) => d.version === listing.deploymentVersion);
   if (!deployment) throw new MarketPrepareError('VERIFY_FAILED', 'LISTING');
-  checkSellerShare(price, deployment, listing.datum.royalties);
-  checkKeptRoyalties(price, listing.datum.royalties, confirmAboveCap);
+  // The unit is the verified listing's own (never the page's), so the terms are its policy's.
+  const unit = String(listing.unit).toLowerCase();
+  if (!UNIT.test(unit)) throw new MarketPrepareError('VERIFY_FAILED', 'NFT');
+  const royalties = await chooseRoyalties(s, unit, price, confirmAboveCap, deployment);
 
+  const intent: RepriceIntent = { ref, price, royalties: royalties.royalties };
   const verified = await buildAndVerify(
     s,
     () => s.deps.build.reprice({
       listingRef,
       priceLovelace: price.toString(),
+      royalties: royaltyRequest(royalties),
       feeInputs: feeInputs(s),
       changeAddress: s.baseAddress,
       allowSponsoredCollateral: true,
     }, s.network),
-    (built, ctx) => verifyReprice(built.tx_cbor, built.tx_hash, { ref, price }, ctx),
+    (built, ctx) => ({ ...verifyReprice(built.tx_cbor, built.tx_hash, intent, ctx), ...notes(royalties) }),
   );
   // verifyReprice refuses a datum whose owner is not the old listing's, so the new output keeps that owner.
   return finish(s, verified, { outputIndex: verified.summary.listingOutputIndex, ownerPkh: listing.datum.owner.toLowerCase() });
