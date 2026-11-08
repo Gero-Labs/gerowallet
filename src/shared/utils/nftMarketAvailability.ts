@@ -69,6 +69,17 @@ export function nftMarketBrowseAvailable(): boolean {
   return networks.isNftMarketSupported(wallet.chain, wallet.network);
 }
 
+/**
+ * The collection a pasted policy ID or NFT unit names, where the market can be browsed: its policy
+ * ID, or null. It lets a wallet open the listings of a collection it holds nothing of (search, a
+ * `?nft=` link), which its own collectibles could never offer.
+ */
+export function nftMarketBrowsePolicy(text: string): string | null {
+  const value = text.trim().toLowerCase();
+  if (!NFT_UNIT_PATTERN.test(value) || !nftMarketBrowseAvailable()) return null;
+  return value.slice(0, POLICY_ID_HEX_LENGTH);
+}
+
 /** The deployment a NEW listing goes to: the newest version on the logged wallet's network, or null where there is none. */
 export function nftMarketNewestDeployment(): NftMarketDeployment | null {
   const wallet = walletStore.loggedWallet;

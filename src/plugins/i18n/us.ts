@@ -6349,6 +6349,7 @@ export default {
   'nftMarket.breakdown.droppedTooMany': 'A royalty of {amount} ADA to {address} is left out. A listing can pay at most {max} royalty recipients.',
   'nftMarket.breakdown.invalidRecipients': '{count} royalty recipient has no valid address and is left out. | {count} royalty recipients have no valid address and are left out.',
   'nftMarket.browse.forSale': 'For sale',
+  'nftMarket.browse.notHeldTitle': 'NFTs for sale',
   'nftMarket.browse.yours': 'In your wallet',
   'nftMarket.browse.sortPrice': 'Price: low to high',
   'nftMarket.browse.sortRecent': 'Recently listed',

@@ -17,6 +17,7 @@ import {
   nftMarketActionsFor,
   nftMarketAvailable,
   nftMarketBrowseAvailable,
+  nftMarketBrowsePolicy,
   nftMarketCanUnlist,
   nftMarketDeploymentFor,
   nftMarketListingsVisible,
@@ -142,6 +143,35 @@ describe('nftMarketBrowseAvailable', () => {
     walletStore.loggedWallet = wallet({ type: WalletType.Watch });
     expect(nftMarketBrowseAvailable()).toBe(true);
     expect(nftMarketAvailable()).toBe(false);
+  });
+});
+
+describe('nftMarketBrowsePolicy', () => {
+  it('reads the collection from a pasted policy ID', () => {
+    expect(nftMarketBrowsePolicy(POLICY)).toBe(POLICY);
+  });
+
+  it('reads the collection from a pasted NFT unit: the policy ID is its first 56 characters', () => {
+    expect(nftMarketBrowsePolicy(UNIT)).toBe(POLICY);
+    expect(nftMarketBrowsePolicy(CIP68_222)).toBe(POLICY);
+  });
+
+  it('takes a paste as it comes: surrounding spaces and upper case', () => {
+    expect(nftMarketBrowsePolicy(`  ${UNIT.toUpperCase()}\n`)).toBe(POLICY);
+  });
+
+  it('reads nothing from text that is not a policy ID or an NFT unit', () => {
+    for (const text of ['', 'cool cats', POLICY.slice(0, 55), `${POLICY}4`, `${POLICY}${'41'.repeat(33)}`, `${POLICY.slice(0, 54)}zz`, `${POLICY} 4e4654`]) {
+      expect(nftMarketBrowsePolicy(text), text).toBeNull();
+    }
+  });
+
+  it('reads nothing where the market cannot be browsed: flag off, or a network with no reviewed deployment', () => {
+    featureFlagsStore.state.flags.isNftMarketEnabled = false;
+    expect(nftMarketBrowsePolicy(POLICY)).toBeNull();
+    featureFlagsStore.state.flags.isNftMarketEnabled = true;
+    walletStore.loggedWallet = wallet({ network: Network.MAINNET });
+    expect(nftMarketBrowsePolicy(POLICY)).toBeNull();
   });
 });
 

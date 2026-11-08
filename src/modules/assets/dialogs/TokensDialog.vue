@@ -1,11 +1,12 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="handleClose"
               :img="tokensData?.[0]?.img || null"
-              :title="modalData ? `${modalData.name} (${Number(modalData.quantity || modalData.items.length).toLocaleString('en-US')})` : ''"
-              :subtitle="description" :subtitle2="tokensData?.[0]?.policy_id || ''" :width="696" :min-height="646" :height="646">
+              :title="title"
+              :subtitle="description" :subtitle2="tokensData?.[0]?.policy_id || policyId || ''" :width="696" :min-height="646" :height="646">
     <v-card-text class="pa-3 justify-center text-center" style="z-index: 1">
         <!-- Gero's NFT market: the NFTs the wallet holds of this collection, or the collection's open
-             listings. Browsing needs no key, so it is offered to every wallet where the market runs. -->
+             listings. Browsing needs no key, so it is offered to every wallet where the market runs.
+             A collection the wallet holds nothing of (opened by policy ID) shows its listings only. -->
         <div v-if="showViewToggle" class="tokens-view" data-testid="tokens-view">
           <v-btn-toggle v-model="view" mandatory density="compact" divided variant="outlined">
             <v-btn value="yours" size="small" data-testid="tokens-view-yours">{{ t('nftMarket.browse.yours') }}</v-btn>
@@ -86,7 +87,8 @@ import { nftMarketBrowseAvailable, nftMarketListingsVisible } from '@/shared/uti
 const { t } = useTranslation();
 
 type CollectionToken = InstanceType<typeof AssetDetails>['$props']['asset'] & { metadata?: unknown; img?: string; policy_id?: string; isScam?: boolean };
-const props = defineProps<{ modalData?: { name: string; quantity?: string | number; description?: string | string[]; items: CollectionToken[] } }>();
+// `policyId` names a collection the wallet holds nothing of (`items` empty); a held one takes it from its NFTs.
+const props = defineProps<{ modalData?: { name: string; quantity?: string | number; description?: string | string[]; items: CollectionToken[]; policyId?: string } }>();
 
 const emit = defineEmits(['close']);
 
@@ -117,6 +119,16 @@ const isDialogVisible = computed(() => {
   return !!props.modalData;
 });
 
+/** None of the collection's NFTs are in the wallet: it was opened by policy ID, to browse its listings. */
+const holdsNone = computed(() => !props.modalData?.items?.length);
+
+const title = computed(() => {
+  const data = props.modalData;
+  if (!data) return '';
+  if (holdsNone.value) return data.name;
+  return `${data.name} (${Number(data.quantity || data.items.length).toLocaleString('en-US')})`;
+});
+
 const handleTokenClick = (token: CollectionToken) => {
   pickedToken.value = token;
 };
@@ -128,12 +140,21 @@ const { byUnit } = useMyListings();
 /** What the dialog shows of the collection: the NFTs the wallet holds, or the collection's open listings. */
 const view = ref<'yours' | 'sale'>('yours');
 
-/** The collection's policy ID, from its NFTs (the dialog's data names none of its own). */
-const policyId = computed(() => props.modalData?.items?.find((token) => /^[0-9a-f]{56}$/.test(String(token.policy_id)))?.policy_id);
+const POLICY_ID = /^[0-9a-f]{56}$/;
 
-/** The choice between the wallet's NFTs and the collection's listings: where the market can be browsed, and not over an NFT's detail. */
-const showViewToggle = computed(() => pickedToken.value === null && !!policyId.value && nftMarketBrowseAvailable());
-const showListings = computed(() => showViewToggle.value && view.value === 'sale');
+/** The collection's policy ID: from its NFTs, or the one it was opened by when the wallet holds none. */
+const policyId = computed(() => {
+  const fromItems = props.modalData?.items?.find((token) => POLICY_ID.test(String(token.policy_id)))?.policy_id;
+  if (fromItems) return fromItems;
+  const named = props.modalData?.policyId;
+  return named && POLICY_ID.test(named) ? named : undefined;
+});
+
+/** The collection's listings can be shown: a known policy, where the market can be browsed, and not over an NFT's detail. */
+const canBrowse = computed(() => pickedToken.value === null && !!policyId.value && nftMarketBrowseAvailable());
+/** The choice between the wallet's NFTs and the collection's listings: only when the wallet has NFTs of it to show. */
+const showViewToggle = computed(() => canBrowse.value && !holdsNone.value);
+const showListings = computed(() => canBrowse.value && (holdsNone.value || view.value === 'sale'));
 
 /**
  * The wallet's own listing of this NFT, where its network has a market; the "Listed" badge reads
@@ -169,13 +190,15 @@ const handleClose = () => {
   emit('close');
 };
 
+// Opens on the wallet's NFTs, or on the listings when it holds none, so the listings stay on screen
+// if its NFTs of the collection arrive while the dialog is open.
 watch(isDialogVisible, (val) => {
   marketSheet.value = null;
   if (val) {
     pickedToken.value = null;
-    view.value = 'yours';
+    view.value = holdsNone.value ? 'sale' : 'yours';
   }
-});
+}, { immediate: true });
 </script>
 <style scoped>
 .tokens-view {

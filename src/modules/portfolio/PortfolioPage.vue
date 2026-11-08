@@ -385,7 +385,7 @@
             </div>
 
             <!-- NFT Dialog (for table view clicks) -->
-            <TokensDialog @close="nftDialogData = null" :modalData="nftDialogData" />
+            <TokensDialog @close="closeNftCollection" :modalData="nftDialogData" />
           </v-card>
         </v-col>
       </v-row>
@@ -464,6 +464,7 @@ import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
+import { nftMarketBrowsePolicy } from '@/shared/utils/nftMarketAvailability';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
 import snackbar from '@/plugins/snackbar';
@@ -958,8 +959,37 @@ function openNftCollection(policyId: string) {
   const col = (collections.value || {})[policyId];
   if (col) {
     nftDialogData.value = col as NftCollection;
+  } else if (nftMarketBrowsePolicy(policyId) === policyId) {
+    // Not held (search or a link named it): Gero's market can still show the collection's listings.
+    nftDialogData.value = { name: t('nftMarket.browse.notHeldTitle'), items: [], policyId };
   }
 }
+
+/**
+ * Close the collection, and drop the `?nft=` that may have opened it: the page is kept alive, so a
+ * link left in place would make the next identical search a no-op.
+ */
+function closeNftCollection() {
+  nftDialogData.value = null;
+  const query = instance?.proxy?.$route?.query;
+  if (query?.['nft']) {
+    const rest = { ...query };
+    delete rest['nft'];
+    instance?.proxy?.$router?.replace({ query: rest }).catch(() => {});
+  }
+}
+
+// A link can open a collection before the wallet's NFTs have loaded: once they have and it holds
+// some of it, show them (the dialog stays on the listings).
+watch(
+  () => {
+    const open = nftDialogData.value;
+    return open?.policyId && !open.items.length ? (collections.value || {})[open.policyId] : undefined;
+  },
+  (col) => {
+    if (col) nftDialogData.value = col as NftCollection;
+  },
+);
 
 function openSwap(token: MarketToken) {
   swapToken.value = token;

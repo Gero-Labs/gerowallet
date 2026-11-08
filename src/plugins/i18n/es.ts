@@ -6118,6 +6118,7 @@ export default {
   'nftMarket.breakdown.droppedTooMany': 'Una regalía de {amount} ADA para {address} se omite. Una publicación puede pagar como máximo a {max} beneficiarios de regalías.',
   'nftMarket.breakdown.invalidRecipients': '{count} beneficiario de regalías no tiene una dirección válida y se omite. | {count} beneficiarios de regalías no tienen una dirección válida y se omiten.',
   'nftMarket.browse.forSale': 'En venta',
+  'nftMarket.browse.notHeldTitle': 'NFT en venta',
   'nftMarket.browse.yours': 'En tu billetera',
   'nftMarket.browse.sortPrice': 'Precio: de menor a mayor',
   'nftMarket.browse.sortRecent': 'Publicados recientemente',

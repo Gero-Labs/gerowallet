@@ -6242,6 +6242,7 @@ export default {
   'nftMarket.breakdown.droppedTooMany': 'Eine Royalty von {amount} ADA an {address} wird weggelassen. Ein Angebot kann höchstens {max} Royalty-Empfänger bezahlen.',
   'nftMarket.breakdown.invalidRecipients': '{count} Royalty-Empfänger hat keine gültige Adresse und wird weggelassen. | {count} Royalty-Empfänger haben keine gültige Adresse und werden weggelassen.',
   'nftMarket.browse.forSale': 'Zum Verkauf',
+  'nftMarket.browse.notHeldTitle': 'NFTs zum Verkauf',
   'nftMarket.browse.yours': 'In Ihrer Wallet',
   'nftMarket.browse.sortPrice': 'Preis: aufsteigend',
   'nftMarket.browse.sortRecent': 'Zuletzt angeboten',
