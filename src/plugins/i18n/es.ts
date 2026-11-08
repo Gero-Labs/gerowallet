@@ -5228,6 +5228,8 @@ export default {
   'realfi.unstaking.from': 'de {amount}',
   'realfi.unstaking.opens': 'Disponible para cobrar el {date} · en {wait}',
   'realfi.unstaking.progress': 'Progreso del período de espera',
+  'realfi.unstakeOnRealfi': 'Retirar del staking en RealFi',
+  'realfi.unstakeOnRealfiNote': 'Por ahora, el retiro del staking se hace en la app de RealFi. Gero todavía no puede verificar a dónde envía tus USDrf un retiro durante su período de espera, así que no lo firma.',
   'realfi.duration.dh': '{d} d {h} h',
   'realfi.duration.hm': '{h} h {m} min',
   'realfi.duration.m': '{m} min',
