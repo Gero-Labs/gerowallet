@@ -11,8 +11,11 @@ import { signsOnDevice, useHardwareTxSigner } from '@/shared/composables/useHard
 import hardwareLoading from '@/plugins/hardwareLoading';
 
 /**
- * The page side of a transaction the background worker prepares: Gero's own Send of a
- * programmable token and the rescue of a closed marketplace's listings both run it.
+ * The page side of a transaction the background worker prepares. Three flows run it:
+ * Gero's own Send of a programmable token (its own wrapper composable, which keeps that
+ * protocol's names out of this file), the rescue of a closed marketplace's listings
+ * (`useLegacyRescue`) and the Gero NFT market's list, reprice, cancel, buy and move
+ * (`useNftMarketFlow`).
  *
  * The page never builds or handles inputs. It asks the worker to prepare (the caller picks the
  * message and its data: the worker chooses the inputs, has Nexus build, verifies the CBOR
@@ -59,6 +62,19 @@ export interface PreparedTxFlowOptions<TFailure extends PreparedTxFailure = Prep
    */
   refusalMessage?: string;
   /**
+   * Reads the text of a failed SUBMIT_TX. A code returned means the network refused the
+   * transaction for that stated reason (a spent input, say): it was not sent, so the failure
+   * carries that code instead of "may have been sent", and the prepared transaction is dropped.
+   * Left out, or when it returns nothing, a failed submit stays unconfirmed.
+   */
+  submitRefusalCode?: (message: string) => string | undefined;
+  /**
+   * Codes this flow's own caller produces after a transaction is prepared (what `submitRefusalCode`
+   * returns). A worker reply carrying one is not believed: it is a failed build, as a reply that
+   * carries one of this file's own codes is.
+   */
+  ownCodes?: readonly string[];
+  /**
    * Extra string fields of the worker's failure reply to copy onto `failure` beside the code
    * (the caller's own `TFailure` fields, e.g. a limit the user can act on).
    */
@@ -79,6 +95,15 @@ export const PREPARED_TX_WRONG_PASSWORD = 'WRONG_PASSWORD';
 export const PREPARED_TX_EXPIRED = 'EXPIRED';
 export const PREPARED_TX_SIGN_FAILED = 'SIGN_FAILED';
 export const PREPARED_TX_SUBMIT_FAILED = 'SUBMIT_FAILED';
+
+/** What the worker answers when it could not build, and what a code the page itself uses becomes at prepare time. */
+const PREPARE_BUILD_FAILED = 'BUILD_FAILED';
+const PAGE_OWN_CODES: ReadonlySet<string> = new Set([
+  PREPARED_TX_WRONG_PASSWORD,
+  PREPARED_TX_EXPIRED,
+  PREPARED_TX_SIGN_FAILED,
+  PREPARED_TX_SUBMIT_FAILED,
+]);
 
 export function usePreparedTxFlow<
   TSummary extends { sponsoredCollateralRef?: string },
@@ -110,6 +135,17 @@ export function usePreparedTxFlow<
     return details as Partial<TFailure>;
   }
 
+  /**
+   * The code of a failed prepare. Nothing was signed or submitted yet, so a reply that carries a code
+   * this flow uses for those later stages (a worker passing a builder's code through, say) cannot
+   * mean what the code means there: it would read as a password prompt, an expiry, or "may have
+   * been sent". Those are a failed build.
+   */
+  function prepareFailureCode(code: unknown): string {
+    if (typeof code !== 'string') return PREPARE_BUILD_FAILED;
+    return PAGE_OWN_CODES.has(code) || options.ownCodes?.includes(code) ? PREPARE_BUILD_FAILED : code;
+  }
+
   /** Have the worker build and verify the transaction. True when a summary is ready to review. */
   async function prepare(method: MessageTypes, data: unknown): Promise<boolean> {
     failure.value = null;
@@ -122,7 +158,7 @@ export function usePreparedTxFlow<
     const result = replyData?.result;
     if (!replyData?.success || !result?.txCbor || !result.txId || !result.summary) {
       stage.value = 'idle';
-      return fail(typeof replyData?.errorCode === 'string' ? replyData.errorCode : 'BUILD_FAILED', replyData ? failureDetails(replyData) : {});
+      return fail(prepareFailureCode(replyData?.errorCode), replyData ? failureDetails(replyData) : {});
     }
     prepared.value = { txCbor: result.txCbor, txId: result.txId, summary: result.summary };
     stage.value = 'review';
@@ -198,7 +234,14 @@ export function usePreparedTxFlow<
         method: MessageTypes.SUBMIT_TX,
         data: { txCbor: transaction.txCbor, witnessHex },
       })) as Reply<{ txId?: string; error?: string }>;
-      if (!submitted?.data?.txId) return unconfirmed();
+      if (!submitted?.data?.txId) {
+        const refused = typeof submitted?.data?.error === 'string' ? options.submitRefusalCode?.(submitted.data.error) : undefined;
+        if (!refused) return unconfirmed();
+        // The network said no, for a reason the caller recognised: nothing is on its way.
+        prepared.value = null;
+        stage.value = 'idle';
+        return fail(refused);
+      }
       submittedTxId.value = submitted.data.txId;
       stage.value = 'done';
       return true;

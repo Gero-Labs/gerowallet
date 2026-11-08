@@ -1,13 +1,17 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type WatchStopHandle } from 'vue';
-import marketApi, { type NftCollectionStats } from '@/api/market-api';
-import { walletStore } from '@/stores/walletStore';
+import type { NftCollectionStats } from '@/api/market-api';
+import { loadTopNftCollections } from '@/modules/market/composables/useTopNftCollections';
+import { collectibleCollectionsNow, listedUnitsNow } from '@/shared/composables/useCollectibleCollections';
 
 export interface NftCollectionDisplay {
   policyId: string;
   policyIdShort: string;
   name: string;
   img: string;
+  /** NFTs of the collection IN the wallet. The ones it has listed on Gero's market are not held: see `listedCount`. */
   quantity: number;
+  /** NFTs of the collection the wallet has listed (locked at the market contract until sold or unlisted). */
+  listedCount: number;
   isScam: boolean;
   description: string;
   // Market data (optional — may not be available from backend)
@@ -16,8 +20,16 @@ export interface NftCollectionDisplay {
   totalVolumeLovelace: number | null;
   saleCount: number | null;
   // Computed
+  /**
+   * Floor price times every NFT the wallet owns of the collection, the listed ones INCLUDED: a
+   * listed NFT is still the user's (it comes back if it is unlisted, and its sale is theirs), the
+   * way the ADA locked in listings stays in the portfolio total. The table shows them as listed.
+   */
   floorValueLovelace: number | null;
 }
+
+/** Every NFT of the collection the wallet owns: held plus listed. */
+const ownedCount = (c: Pick<NftCollectionDisplay, 'quantity' | 'listedCount'>): number => (c.quantity || 0) + (c.listedCount || 0);
 
 const collections = ref<NftCollectionDisplay[]>([]);
 const loading = ref(false);
@@ -51,7 +63,7 @@ export function useNftMarketData() {
       const s = statsCache.get(col.policyId);
       if (s) {
         const floor = s.floorPriceLovelace ?? null;
-        const qty = col.quantity || 0;
+        const qty = ownedCount(col);
         return {
           ...col,
           name: s.name || col.name,
@@ -73,31 +85,39 @@ export function useNftMarketData() {
     fetchInFlight = true;
     loading.value = true;
     try {
-      // Start from walletStore.collections (populated by chain sync — always available)
-      const walletCollections = walletStore.collections || {};
-      const entries = Object.entries(walletCollections) as [string, any][];
+      // Start from walletStore.collections (populated by chain sync — always available), with
+      // the NFTs the wallet has listed on Gero's market added back where it is available.
+      const walletCollections = collectibleCollectionsNow();
+      const entries = Object.entries(walletCollections);
 
       if (entries.length === 0) {
         collections.value = [];
         return;
       }
 
-      // Build base list from wallet data (walletStore.collections already contains only NFTs)
+      // Build base list from wallet data (walletStore.collections already contains only NFTs).
+      // `collectibleCollectionsNow` counts a listed NFT in its collection's quantity: the table's
+      // "Held" must not, so those are taken out of it and counted as listed.
+      const listedUnits = listedUnitsNow();
       const baseCollections: NftCollectionDisplay[] = entries
-        .map(([policyId, col]) => ({
-          policyId,
-          policyIdShort: policyId.slice(0, 12) + '...',
-          name: col.name || policyId.slice(0, 8) + '...',
-          img: col.img || '',
-          quantity: col.quantity || col.items?.length || 0,
-          isScam: col.isScam || false,
-          description: '',
-          floorPriceLovelace: null,
-          lastSalePriceLovelace: null,
-          totalVolumeLovelace: null,
-          saleCount: null,
-          floorValueLovelace: null,
-        }));
+        .map(([policyId, col]) => {
+          const listedCount = (col.items ?? []).filter((entry) => listedUnits.has(String(entry.unit).toLowerCase())).length;
+          return {
+            policyId,
+            policyIdShort: policyId.slice(0, 12) + '...',
+            name: col.name || policyId.slice(0, 8) + '...',
+            img: col.img || '',
+            quantity: Math.max(0, (col.quantity || col.items?.length || 0) - listedCount),
+            listedCount,
+            isScam: col.isScam || false,
+            description: '',
+            floorPriceLovelace: null,
+            lastSalePriceLovelace: null,
+            totalVolumeLovelace: null,
+            saleCount: null,
+            floorValueLovelace: null,
+          };
+        });
 
       // Show immediately, merging anything already cached.
       applyCachedStats(baseCollections);
@@ -113,16 +133,15 @@ export function useNftMarketData() {
       // show anyway. That per-collection loop was the source of the console spam.
       const uncachedIds = new Set(uncached.map(c => c.policyId));
       let bulkOk = false;
-      try {
-        const topCollections = await marketApi.getNftCollections('volume', 200);
-        if (Array.isArray(topCollections)) {
-          bulkOk = true;
-          for (const tc of topCollections) {
-            if (tc.policyId && uncachedIds.has(tc.policyId)) statsCache.set(tc.policyId, tc);
-          }
+      // The same list the market page's lookalike warning compares names against: one shared
+      // request. null = the bulk endpoint is unavailable — leave collections un-enriched and
+      // retry next round.
+      const topCollections = await loadTopNftCollections();
+      if (topCollections) {
+        bulkOk = true;
+        for (const tc of topCollections) {
+          if (tc.policyId && uncachedIds.has(tc.policyId)) statsCache.set(tc.policyId, tc);
         }
-      } catch {
-        // Bulk endpoint unavailable — leave collections un-enriched and retry next round.
       }
 
       // After a successful bulk pass, cache everything else as "no data" so we never
@@ -149,14 +168,14 @@ export function useNftMarketData() {
   const totalFloorValue = computed(() => {
     return collections.value.reduce((sum, c) => {
       if (!c.floorPriceLovelace) return sum;
-      return sum + (c.floorPriceLovelace * (c.quantity || 0)) / 1_000_000;
+      return sum + (c.floorPriceLovelace * ownedCount(c)) / 1_000_000;
     }, 0);
   });
 
   // Re-fetch when wallet collections change (e.g. wallet switch) — register only once
   if (!nftWatcherRegistered) {
     nftWatcherRegistered = true;
-    nftWatcherStop = watch(() => walletStore.collections, () => {
+    nftWatcherStop = watch(() => collectibleCollectionsNow(), () => {
       // Coalesce bursts of sync updates (which fire on every tip) into one fetch.
       if (fetchDebounce) clearTimeout(fetchDebounce);
       fetchDebounce = setTimeout(() => { fetchDebounce = null; fetchUserNftCollections(); }, 600);

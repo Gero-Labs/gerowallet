@@ -17,6 +17,7 @@ import { Blockchain, type Wallet } from '@/models/types';
 import { scoreMatch } from '@/shared/utils/searchScore';
 import { drepResults, governanceActionResults, governancePageResults } from '@/shared/utils/governanceSearch';
 import { actionResults, pageResults, searchGates, settingResults, type SearchGate } from '@/shared/utils/walletSearchIndex';
+import { nftMarketBrowsePolicy } from '@/shared/utils/nftMarketAvailability';
 import { cnightUnit } from '@/shared/utils/cnightAssets';
 
 /** Whether the logged-in wallet holds a positive balance of `unit`. */
@@ -307,6 +308,21 @@ export function useGlobalSearch() {
           _score: score,
         }));
       found.push(...nftMatches);
+
+      // A pasted policy ID or NFT unit of a collection the wallet holds nothing of: Gero's market
+      // can still show its listings (a held one is the row above, listings included).
+      const browsePolicy = nftMarketBrowsePolicy(q);
+      if (browsePolicy && !nftCollections.value.some(c => c.policyId === browsePolicy)) {
+        found.push({
+          type: 'nft',
+          id: browsePolicy,
+          title: t('nftMarket.browse.notHeldTitle'),
+          subtitle: `${t('transactions.policyId')} ${browsePolicy.slice(0, 12)}...${browsePolicy.slice(-6)}`,
+          icon: 'mdi-storefront-outline',
+          data: { policyId: browsePolicy },
+          _score: 100,
+        });
+      }
 
       type CollectionItem = { unit?: string; name?: string; img?: string };
       const walletCollections = (walletStore.collections || {}) as Record<string, { name?: string; items?: CollectionItem[] }>;

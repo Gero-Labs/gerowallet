@@ -17,7 +17,7 @@ import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
 import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
 import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
 import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
-import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
@@ -69,6 +69,14 @@ import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
+import { grantMarketSignAllowance, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
+import { marketPrepareHandler, type MarketHandlerDeps } from '@/chrome/nftMarket/marketPrepare';
+import { rememberVerifiedListing, watchListingsHandler, type ListingWatchDeps } from '@/chrome/nftMarket/listingWatch';
+import { fetchListingUtxoProven } from '@/chrome/nftMarket/listingChainUtxo';
+import { nftMarketApi } from '@/api/nft-market-api';
+import NetworkStore from '@/stores/networkStore';
+import { openDappMarketPass } from '@/chrome/nftMarket/dappMarketPass';
+import { transactionFromSignRequest } from '@/chrome/signTxRequest';
 import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
 import { legacyCancelPrepareHandler } from '@/chrome/legacyCancelPrepare';
 import { fetchLegacyListings } from '@/api/legacy-listings-api';
@@ -1733,24 +1741,97 @@ function dappSignRefusal(txCbor: unknown): string | null {
   return programmable ? CIP113_SIGN_REFUSAL_MESSAGE : null;
 }
 
-/**
- * dappSignRefusal for a hardware signer, which Gero's own Send reaches through an extension page
- * only: the one transfer CIP113_PREPARE_TRANSFER verified passes the CIP-113 refusal. Its
- * allowance is not used up (the device may still be declined); it expires on its own. A
- * transaction marked to fail is refused whatever the allowance.
- */
-function hardwareSignRefusal(txCbor: unknown): string | null {
-  const refusal = dappSignRefusal(txCbor);
-  if (refusal !== CIP113_SIGN_REFUSAL_MESSAGE) return refusal;
-  const wallet = walletManager.getWallet();
-  try {
-    const tx = deserializeCardanoJsSdkTx(txCbor as string);
-    if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) return null;
-  } catch {
-    // Unparseable: keep the refusal.
-  }
-  return refusal;
+/** Why a hardware signer was refused: `reason` for the log, `message` for the page that asked. */
+interface HardwareSignRefusal {
+  reason: string;
+  message: string;
 }
+
+/**
+ * The market half of the hardware refusal: a transaction that creates a Gero listing or spends
+ * one of this wallet's own is signed on a device only with an authorization for its exact id
+ * (marketAllowance.ts): the allowance a market prepare handler granted, or the pass a dApp
+ * signing entry opened for the request (whose approval screen previews the listing). It is
+ * only read here: the device may still be declined, and both go on their own.
+ */
+function marketSignRefusal(txCbor: unknown): string | null {
+  if (typeof txCbor !== 'string' || !txCbor) return null;
+  const wallet = walletManager.getWallet();
+  if (!wallet?.findMarketTouch) return null;
+  try {
+    const tx = deserializeCardanoJsSdkTx(txCbor);
+    const hits = wallet.findMarketTouch(tx);
+    // OX Agent: Authorization prevented by refusing a device signature for a market transaction without an allowance or dApp pass
+    if (hits.length > 0 && !hasMarketAuthorization(wallet.id, tx.id, hits)) {
+      return `NFT market: refusing to sign, unverified market transaction ${hits.join(', ')}`;
+    }
+    return null;
+  } catch (e) {
+    // Unparseable here means the signer would fail anyway, as for CIP-113 above.
+    debugLog('NFT market preflight could not parse transaction:', e);
+    return null;
+  }
+}
+
+/**
+ * The refusals for a hardware signer, which Gero's own flows reach through an extension page
+ * only: the one CIP-113 transfer CIP113_PREPARE_TRANSFER verified passes
+ * (refusalForProgrammableInputs otherwise), and so does a market transaction that holds an
+ * allowance or a dApp pass (marketSignRefusal). None is used up here (the device may still be
+ * declined); they expire on their own. A transaction marked to fail is refused whatever it holds.
+ * A refusal says which message the page reports.
+ */
+function hardwareSignRefusal(txCbor: unknown): HardwareSignRefusal | null {
+  if (isMarkedToFailCbor(txCbor)) {
+    return { reason: 'refusing to sign a transaction marked to fail', message: MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE };
+  }
+  const refusal = refusalForProgrammableInputs(txCbor);
+  if (refusal) {
+    const wallet = walletManager.getWallet();
+    let allowed = false;
+    try {
+      const tx = deserializeCardanoJsSdkTx(txCbor as string);
+      if (wallet && hasCip113SignAllowance(wallet.id, tx.id, wallet.findProgrammableInputs(tx))) allowed = true;
+    } catch {
+      // Unparseable: keep the refusal.
+    }
+    if (!allowed) return { reason: refusal, message: CIP113_SIGN_REFUSAL_MESSAGE };
+  }
+  const market = marketSignRefusal(txCbor);
+  return market ? { reason: market, message: NFT_MARKET_SIGN_REFUSAL_MESSAGE } : null;
+}
+
+// What the Gero NFT market's prepare handlers need from the worker. The page sends the NFT or the
+// listing and a price; everything else (the wallet's addresses, keys, UTxOs, listings and the
+// protocol parameter) is read here, never from the request.
+const marketPrepareDeps: MarketHandlerDeps = {
+  booted,
+  getWallet: () => walletManager.getWallet(),
+  // Cardano only: the handlers refuse any other chain.
+  getState: () => ({
+    utxos: (WalletStore.state.utxos ?? []) as Cardano.Utxo[],
+    keys: WalletStore.state.keys,
+    collateral: WalletStore.state.collateral,
+    listedListings: WalletStore.state.listedListings,
+    coinsPerUtxoByte: NetworkStore.state.epochParams?.coinsPerUtxoByte,
+  }),
+  deployments: (chain, network) => networks.resolveNftMarketDeployments(chain, network),
+  build: {
+    list: (buildRequest, network) => nexusTxApi.buildNftMarketList(buildRequest, network),
+    reprice: (buildRequest, network) => nexusTxApi.buildNftMarketReprice(buildRequest, network),
+    cancel: (buildRequest, network) => nexusTxApi.buildNftMarketCancel(buildRequest, network),
+    buy: (buildRequest, network) => nexusTxApi.buildNftMarketBuy(buildRequest, network),
+    migrate: (buildRequest, network) => nexusTxApi.buildNftMarketMigrate(buildRequest, network),
+  },
+  lookupListing: (ref, network) => nftMarketApi.listing(ref, network),
+  lookupChainUtxo: (ref, network) => fetchListingUtxoProven(ref, network),
+  lookupLegacy: (ownerPkhs, network) => fetchLegacyListings(ownerPkhs, network),
+  royalties: (policyId, network) => nftMarketApi.royalties(policyId, network),
+  markNexusLent,
+  grantAllowance: grantMarketSignAllowance,
+  // The listing a verified list, reprice or move creates, for the sale alert (NOTIFY_WATCH_LISTINGS).
+  rememberListing: rememberVerifiedListing,
+};
 
 // The same refusal for a signer outside the worker: Ledger, Keystone and Trezor over WebUSB
 // sign in a document (ledger.ts, keystone.ts, trezorDispatch.ts), which cannot read the
@@ -1761,9 +1842,11 @@ app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendRespons
   await booted();
   // `message` names the refusal, so the page shows why (assertCip113SignAllowed).
   const refusal = hardwareSignRefusal(request.data?.txCbor);
+  if (refusal) debugLog(refusal.reason);
+  // `message` is what the page throws: CIP-113's or the market's, so each flow can map its own.
   sendResponse({
     id: request.id,
-    data: { success: true, refused: refusal !== null, ...(refusal ? { message: refusal } : {}) },
+    data: { success: true, refused: refusal !== null, ...(refusal ? { message: refusal.message } : {}) },
     target: TARGET,
     sender: SENDER.extension,
   });
@@ -1830,9 +1913,36 @@ app.addToOptions(MessageTypes.LEGACY_LISTING_PREPARE_CANCEL, legacyCancelPrepare
   markNexusLent,
 }));
 
+// Gero NFT market: list, reprice, cancel, buy and move a legacy listing. The worker chooses every
+// address, key and input, has Nexus build, verifies the CBOR (verifyListing, verifyBuy,
+// verifyMigrate), allows that exact transaction id to be signed once (marketAllowance) and
+// returns the bytes untouched for the page to sign. Extension pages only (senderTrust).
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_LIST, marketPrepareHandler('list', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_REPRICE, marketPrepareHandler('reprice', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_CANCEL, marketPrepareHandler('cancel', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_BUY, marketPrepareHandler('buy', marketPrepareDeps));
+app.addToOptions(MessageTypes.NFT_MARKET_PREPARE_MIGRATE, marketPrepareHandler('migrate', marketPrepareDeps));
+
+// The sale alert for a listing the wallet just made (list, reprice, move): the page asks, the worker
+// decides. The wallet is the logged one, the listing one the worker verified (or one of the wallet's own
+// verified listings), the owner that listing's datum owner and a key of this account (listingWatch.ts).
+// Non-fatal for the page: `{ result: 'ok' | 'not_registered' | 'failed' }`. Extension pages only (senderTrust).
+const listingWatchDeps: ListingWatchDeps = {
+  booted,
+  getWallet: () => walletManager.getWallet(),
+  getState: () => ({
+    keys: WalletStore.state.keys,
+    listedListings: WalletStore.state.listedListings,
+  }),
+  // The same union of keys the wallet recognises its own listings by (WalletBg.ownListingIdentity).
+  derivedPaymentKeyHashes: () => walletManager.getWallet()?.derivePaymentCredentials() ?? [],
+  watch: (input) => notifyActions.watchListings(input),
+};
+app.addToOptions(MessageTypes.NOTIFY_WATCH_LISTINGS, watchListingsHandler(listingWatchDeps));
+
 app.add(METHOD.signTx, async (request, sendResponse) => {
   // Same consent re-check as signData before the witness set is released.
-  const signTxReply = guardedSignReply(request, sendResponse);
+  let signTxReply = guardedSignReply(request, sendResponse);
   // Same fast-path/whitelist split as signData above. Use ONLY the relay-set
   // `request.origin` (stamped to the true window.origin in messaging.ts) — never
   // the page-supplied `request.data.origin`, which a malicious site can set to a
@@ -1849,6 +1959,17 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     // and Gero does hold the key, so the wallet is declining by policy.
     return signTxReply({ error: { code: APIError.Refused.code, info: signRefusal } });
   }
+
+  // A transaction creating a Gero listing or spending one of the wallet's own is not refused
+  // here: the approval screen previews it. The worker holds a pass for exactly this CBOR while
+  // the prompt is open, so the page's SIGN_TX of it can be signed, and drops it when the request
+  // is answered, however it ends (approved, rejected, or no answer at all: the pass also expires).
+  const dropMarketPass = openDappMarketPass(walletManager.getWallet(), request.data?.tx);
+  const answerSignTx = signTxReply;
+  signTxReply = (opts) => {
+    dropMarketPass();
+    answerSignTx(opts);
+  };
 
   // Explicit fields only (see signData): the prompt must be built from the tx
   // the page asked to sign, not from extra page-supplied fields.
@@ -3095,18 +3216,10 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
-      // Handle both legacy (tx object) and new (txCbor string) formats
-      let transaction;
-      if (request.data.txCbor) {
-        // New format: deserialize CBOR to Cardano.Tx object
-        transaction = deserializeCardanoJsSdkTx(request.data.txCbor);
-      } else if (request.data.tx) {
-        // Legacy format: use transaction object directly
-        console.log('Using legacy transaction object');
-        transaction = request.data.tx;
-      } else {
-        throw new Error('No transaction data provided (neither tx nor txCbor)');
-      }
+      // The transaction comes from its CBOR and nothing else: signTx signs `transaction.id` while
+      // the CIP-113 and market guards read `transaction.body`, so the id must be the hash of the
+      // body parsed here. A request carrying a transaction object (the old `tx` field) is refused.
+      const transaction = transactionFromSignRequest(request.data);
 
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
       const privateKeyBytes = resolveSignPrivateKeyBytes(
@@ -4519,7 +4632,10 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
 
       // Trezor signs here rather than through WalletBg.signTx, so it needs its own check.
       const trezorRefusal = hardwareSignRefusal(txCbor);
-      if (trezorRefusal) throw new Error(trezorRefusal);
+      if (trezorRefusal) {
+        debugLog(trezorRefusal.reason);
+        throw new Error(trezorRefusal.message);
+      }
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
 
@@ -5367,11 +5483,18 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
               await wcService.respondError(topic, id, 4100, wcSignRefusal);
               return;
             }
-            await routeWcSigningRequest(
-              'signTx',
-              { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
-              topic, id, POPUP.signTx, [470, 852], chainId, wcVerify,
-            );
+            // Not refused for a market touch: the approval screen previews it, and the worker
+            // holds a pass for exactly this CBOR until the request is answered (CIP-30 signTx).
+            const dropMarketPass = openDappMarketPass(walletManager.getWallet(), wcTx);
+            try {
+              await routeWcSigningRequest(
+                'signTx',
+                { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
+                topic, id, POPUP.signTx, [470, 852], chainId, wcVerify,
+              );
+            } finally {
+              dropMarketPass();
+            }
             return;
           }
           case 'cardano_signData': {
@@ -5693,6 +5816,9 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
           fail(APIError.Refused.code, signRefusal);
           break;
         }
+        // Not refused for a market touch: the approval screen previews it, and the worker holds
+        // a pass for exactly this CBOR until the request is answered (CIP-30 signTx).
+        const dropMarketPass = openDappMarketPass(walletManager.getWallet(), params.tx);
         try {
           const result = await routeCip45SigningRequest(
             'signTx',
@@ -5703,6 +5829,8 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
           reply({ success: true, result });
         } catch (err) {
           fail(TxSignError.UserDeclined.code, getErrorMessage(err) || TxSignError.UserDeclined.info);
+        } finally {
+          dropMarketPass();
         }
         break;
       }

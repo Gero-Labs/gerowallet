@@ -248,9 +248,9 @@ function paysToKey(address: string): boolean {
  * The UTxOs at the wallet's own key addresses, or any address whose payment credential is a
  * key. A UTxO at a script address (the legacy contracts carry the wallet's stake key, so they
  * can reach the wallet's synced UTxOs) is never a fee input or the wallet's own collateral.
- * An address that cannot be read is left out.
+ * An address that cannot be read is left out. The NFT market's prepare handlers use the same set.
  */
-function keyAddressUtxos(utxos: readonly Cardano.Utxo[] | null | undefined, ownAddresses: ReadonlySet<string>): Cardano.Utxo[] {
+export function keyAddressUtxos(utxos: readonly Cardano.Utxo[] | null | undefined, ownAddresses: ReadonlySet<string>): Cardano.Utxo[] {
   return (utxos ?? []).filter((utxo) => {
     const address = String(utxo?.[1]?.address ?? '');
     return ownAddresses.has(address) || paysToKey(address);

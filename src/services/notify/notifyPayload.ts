@@ -33,6 +33,8 @@ export interface PushDetails {
   orderRef?: string;
   proposalRef?: string;
   drepId?: string;
+  /** A Gero market listing output, `<64 hex tx hash>#<index>` (nft_sold). */
+  listingRef?: string;
 }
 
 export interface PushPayload {
@@ -92,6 +94,7 @@ function sanitizeDetails(raw: unknown): PushDetails | undefined {
   if (isInt(raw['epoch']) && (raw['epoch'] as number) >= 0) out.epoch = raw['epoch'] as number;
   const deviceId = str(raw['deviceId']); if (deviceId && HEX32.test(deviceId)) out.deviceId = deviceId;
   const orderRef = str(raw['orderRef']); if (orderRef && /^[0-9a-f]{64}#[0-9]+$/.test(orderRef)) out.orderRef = orderRef;
+  const listingRef = str(raw['listingRef']); if (listingRef && /^[0-9a-f]{64}#[0-9]+$/.test(listingRef)) out.listingRef = listingRef;
   const proposalRef = str(raw['proposalRef']); if (proposalRef && proposalRef.length <= 128) out.proposalRef = proposalRef;
   const drepId = str(raw['drepId']); if (drepId && /^drep1[a-z0-9]{6,}$/.test(drepId)) out.drepId = drepId;
   return Object.keys(out).length ? out : undefined;

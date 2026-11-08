@@ -1,10 +1,20 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="handleClose"
               :img="tokensData?.[0]?.img || null"
-              :title="modalData ? `${modalData.name} (${Number(modalData.quantity || modalData.items.length).toLocaleString('en-US')})` : ''"
-              :subtitle="description" :subtitle2="tokensData?.[0]?.policy_id || ''" :width="696" :min-height="646" :height="646">
+              :title="title"
+              :subtitle="description" :subtitle2="tokensData?.[0]?.policy_id || policyId || ''" :width="696" :min-height="646" :height="646">
     <v-card-text class="pa-3 justify-center text-center" style="z-index: 1">
-        <v-row v-if="pickedToken === null">
+        <!-- Gero's NFT market: the NFTs the wallet holds of this collection, or the collection's open
+             listings. Browsing needs no key, so it is offered to every wallet where the market runs.
+             A collection the wallet holds nothing of (opened by policy ID) shows its listings only. -->
+        <div v-if="showViewToggle" class="tokens-view" data-testid="tokens-view">
+          <v-btn-toggle v-model="view" mandatory density="compact" divided variant="outlined">
+            <v-btn value="yours" size="small" data-testid="tokens-view-yours">{{ t('nftMarket.browse.yours') }}</v-btn>
+            <v-btn value="sale" size="small" data-testid="tokens-view-sale">{{ t('nftMarket.browse.forSale') }}</v-btn>
+          </v-btn-toggle>
+        </div>
+        <CollectionListings v-if="showListings" :policy-id="policyId!" />
+        <v-row v-else-if="pickedToken === null">
           <v-col cols="6" xl="3" lg="3" md="3" sm="4" v-for="(token, index) in displayedTokens" :key="index" class="pa-1">
             <v-card variant="outlined" class="pa-0 token-image" @click="handleTokenClick(token)"
                     :style="{ backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${token.img})`,border: '1px solid #444', backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '8px' }">
@@ -15,30 +25,72 @@
                   </v-icon>{{ t('assets.scamToken') }}
                 </v-chip>
               </div>
+              <!-- Listed on Gero's market: the price it is listed at. -->
+              <div v-if="listingOf(token)" class="token-listed" :class="{ 'token-listed--below-scam': token.isScam }">
+                <v-chip size="x-small" label class="token-listed__chip px-2 ma-2" data-testid="token-listed-badge">
+                  {{ t('nftMarket.badge.listed', { ticker, price: formatLovelaceAsAda(listingOf(token)!.datum.price) }) }}
+                </v-chip>
+              </div>
               <div class="collectible-text-container">
                 <span class="collectible-text">{{ token.name }}</span>
               </div>
             </v-card>
           </v-col>
         </v-row>
-      <AssetDetails :asset="pickedToken" v-else ref="assetDetailsRef" />
+      <AssetDetails
+        :asset="pickedToken"
+        v-else
+        ref="assetDetailsRef"
+        @list="openSheet('list')"
+        @edit-price="openSheet('reprice')"
+        @unlist="openSheet('unlist')"
+      />
     </v-card-text>
     <v-card-actions class="justify-center py-0">
       <v-btn variant="text" elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">{{ t('common.back') }}</v-btn>
     </v-card-actions>
+
+    <!-- Gero's NFT market: the sheets are mounted for one NFT and one action at a time, and taken
+         away on close, so each starts clean. They live here, not in AssetDetails, so the NFT on
+         screen outlives the sheet's own "done" screen while the sync catches up. -->
+    <ListNftDialog
+      v-if="marketSheet && marketSheet.kind !== 'unlist'"
+      :key="`${marketSheet.kind}:${marketSheet.unit}`"
+      :is-open="true"
+      :unit="marketSheet.unit"
+      :existing="marketSheet.existing"
+      @close="closeSheet()"
+    />
+    <UnlistNftDialog
+      v-else-if="marketSheet && marketSheet.existing"
+      :key="`unlist:${marketSheet.unit}`"
+      :is-open="true"
+      :existing="marketSheet.existing"
+      @close="closeSheet()"
+    />
   </BaseDialog>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
+import CollectionListings from '@/modules/market/components/CollectionListings.vue';
+import ListNftDialog from '@/modules/market/dialogs/ListNftDialog.vue';
+import UnlistNftDialog from '@/modules/market/dialogs/UnlistNftDialog.vue';
+import type { OwnListing } from '@/chrome/nftMarket/ownListings';
+import { useMyListings } from '@/shared/composables/useMyListings';
+import { formatLovelaceAsAda } from '@/shared/utils/format';
+import { nftMarketBrowseAvailable, nftMarketListingsVisible } from '@/shared/utils/nftMarketAvailability';
 
 
 const { t } = useTranslation();
+const { currencyTicker: ticker } = useNativeCurrency();
 
 type CollectionToken = InstanceType<typeof AssetDetails>['$props']['asset'] & { metadata?: unknown; img?: string; policy_id?: string; isScam?: boolean };
-const props = defineProps<{ modalData?: { name: string; quantity?: string | number; description?: string | string[]; items: CollectionToken[] } }>();
+// `policyId` names a collection the wallet holds nothing of (`items` empty); a held one takes it from its NFTs.
+const props = defineProps<{ modalData?: { name: string; quantity?: string | number; description?: string | string[]; items: CollectionToken[]; policyId?: string } }>();
 
 const emit = defineEmits(['close']);
 
@@ -69,8 +121,67 @@ const isDialogVisible = computed(() => {
   return !!props.modalData;
 });
 
+/** None of the collection's NFTs are in the wallet: it was opened by policy ID, to browse its listings. */
+const holdsNone = computed(() => !props.modalData?.items?.length);
+
+const title = computed(() => {
+  const data = props.modalData;
+  if (!data) return '';
+  if (holdsNone.value) return data.name;
+  return `${data.name} (${Number(data.quantity || data.items.length).toLocaleString('en-US')})`;
+});
+
 const handleTokenClick = (token: CollectionToken) => {
   pickedToken.value = token;
+};
+
+// ---- Gero's NFT market ---------------------------------------------------------------------
+
+const { byUnit } = useMyListings();
+
+/** What the dialog shows of the collection: the NFTs the wallet holds, or the collection's open listings. */
+const view = ref<'yours' | 'sale'>('yours');
+
+const POLICY_ID = /^[0-9a-f]{56}$/;
+
+/** The collection's policy ID: from its NFTs, or the one it was opened by when the wallet holds none. */
+const policyId = computed(() => {
+  const fromItems = props.modalData?.items?.find((token) => POLICY_ID.test(String(token.policy_id)))?.policy_id;
+  if (fromItems) return fromItems;
+  const named = props.modalData?.policyId;
+  return named && POLICY_ID.test(named) ? named : undefined;
+});
+
+/** The collection's listings can be shown: a known policy, where the market can be browsed, and not over an NFT's detail. */
+const canBrowse = computed(() => pickedToken.value === null && !!policyId.value && nftMarketBrowseAvailable());
+/** The choice between the wallet's NFTs and the collection's listings: only when the wallet has NFTs of it to show. */
+const showViewToggle = computed(() => canBrowse.value && !holdsNone.value);
+const showListings = computed(() => canBrowse.value && (holdsNone.value || view.value === 'sale'));
+
+/**
+ * The wallet's own listing of this NFT, where its network has a market; the "Listed" badge reads
+ * it. Not behind the `isNftMarketEnabled` flag: a listing stays visible, and can be
+ * unlisted, with the market switched off.
+ */
+function listingOf(token: CollectionToken): OwnListing | undefined {
+  return nftMarketListingsVisible() ? byUnit.value.get(String(token.unit).toLowerCase()) : undefined;
+}
+
+type MarketSheet = { kind: 'list' | 'reprice' | 'unlist'; unit: string; existing?: OwnListing };
+const marketSheet = ref<MarketSheet | null>(null);
+
+/** Open the list, edit-price or unlist sheet for the NFT on screen. Edit price and Unlist need its listing. */
+function openSheet(kind: MarketSheet['kind']): void {
+  const token = pickedToken.value;
+  if (!token) return;
+  const unit = String(token.unit).toLowerCase();
+  const existing = kind === 'list' ? undefined : listingOf(token);
+  if (kind !== 'list' && !existing) return;
+  marketSheet.value = { kind, unit, existing };
+}
+
+const closeSheet = () => {
+  marketSheet.value = null;
 };
 
 const handleClose = () => {
@@ -81,14 +192,42 @@ const handleClose = () => {
   emit('close');
 };
 
+// Opens on the wallet's NFTs, or on the listings when it holds none, so the listings stay on screen
+// if its NFTs of the collection arrive while the dialog is open.
 watch(isDialogVisible, (val) => {
+  marketSheet.value = null;
   if (val) {
-    console.log("tokensData", JSON.stringify(tokensData.value));
     pickedToken.value = null;
+    view.value = holdsNone.value ? 'sale' : 'yours';
   }
-});
+}, { immediate: true });
 </script>
 <style scoped>
+.tokens-view {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--g-s-3);
+}
+
+/* The "Listed" badge sits in the card's top-left corner, below the scam flag when there is one. */
+.token-listed {
+  position: absolute;
+  top: 0;
+  display: flex;
+}
+
+.token-listed--below-scam {
+  /* Under the scam flag: its chip (20px) and its 8px margins, in spacing tokens. */
+  top: calc(var(--g-s-5) + var(--g-s-1));
+}
+
+/* A chip is a control: a solid token, with a hairline, reads on any NFT picture. */
+.token-listed__chip {
+  color: var(--g-text-1);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+}
+
 .close-button {
   position: absolute;
   top: 10px;

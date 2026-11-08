@@ -188,7 +188,7 @@
            with a way to get them back. Only on the Collectibles view, and only when there are any. -->
       <v-row v-if="activeView === 'collectibles' && legacyListingsCount > 0" no-gutters>
         <v-col cols="12" class="pa-2">
-          <LegacyListingsCard @get-back="openLegacyRescue" />
+          <LegacyListingsCard @get-back="openLegacyRescue" @move-to-gero="openMoveToGero" />
         </v-col>
       </v-row>
 
@@ -385,7 +385,7 @@
             </div>
 
             <!-- NFT Dialog (for table view clicks) -->
-            <TokensDialog @close="nftDialogData = null" :modalData="nftDialogData" />
+            <TokensDialog @close="closeNftCollection" :modalData="nftDialogData" />
           </v-card>
         </v-col>
       </v-row>
@@ -411,6 +411,9 @@
       <!-- Get stuck marketplace items back. Hosted here, not in the card: a cancel that empties
            the list removes the card, and this dialog's "done" screen must outlive it. -->
       <LegacyCancelDialog :is-open="legacyRescueOpen" :refs="legacyRescueRefs" @close="legacyRescueOpen = false" />
+
+      <!-- Move one stuck listing straight into a Gero listing. Hosted here for the same reason. -->
+      <MoveToGeroDialog :is-open="moveToGeroOpen" :legacy-ref="moveToGeroRef" @close="moveToGeroOpen = false" />
     </template>
   </div>
 </template>
@@ -429,7 +432,8 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
-import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
+import { useCollectibleCollections } from '@/shared/composables/useCollectibleCollections';
+import { walletStore, hasLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
@@ -444,6 +448,7 @@ import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import LegacyListingsCard from '@/modules/portfolio/components/LegacyListingsCard.vue';
 import LegacyCancelDialog from '@/modules/portfolio/components/LegacyCancelDialog.vue';
+import MoveToGeroDialog from '@/modules/portfolio/components/MoveToGeroDialog.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
@@ -459,6 +464,7 @@ import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
+import { nftMarketBrowsePolicy } from '@/shared/utils/nftMarketAvailability';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
 import snackbar from '@/plugins/snackbar';
@@ -509,7 +515,10 @@ const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, collections, bitcoinBalance } = toRefs(walletStore);
+const { loggedWallet, transactions, account, bitcoinBalance } = toRefs(walletStore);
+// The wallet's NFT collections, with the ones it has listed on Gero's market added back where the
+// market is available: a listed NFT is locked at the contract, outside the store's own.
+const collections = useCollectibleCollections();
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 
@@ -557,6 +566,15 @@ const legacyRescueRefs = ref<string[]>([]);
 function openLegacyRescue(refs: string[]) {
   legacyRescueRefs.value = refs;
   legacyRescueOpen.value = true;
+}
+
+// Moving one stuck listing into a Gero listing (the card offers it only where the market is live).
+const moveToGeroOpen = ref(false);
+const moveToGeroRef = ref('');
+
+function openMoveToGero(ref: string) {
+  moveToGeroRef.value = ref;
+  moveToGeroOpen.value = true;
 }
 
 // DUST registration dialog state — only relevant when chain === Midnight.
@@ -648,10 +666,11 @@ const isWalletEmpty = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
   }
-  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share is subtracted
-  // from it in the store — so a wallet holding nothing but programmable UTxOs reads
-  // exactly '0' here and would get the "no funds" hero over a funded portfolio.
-  if (hasProgrammableLockedLovelace()) return false;
+  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share and the deposits of
+  // the wallet's own Gero listings are subtracted from it in the store — so a wallet holding
+  // nothing but programmable UTxOs or listings reads exactly '0' here and would get the
+  // "no funds" hero over a funded portfolio.
+  if (hasLockedLovelace()) return false;
   return !account.value || account.value?.controlled_amount === '0';
 });
 
@@ -875,7 +894,7 @@ const displayedTokens = computed(() => {
   // too, or the locked row is dropped and the balance reads short.
   const seen = new Set<string>();
   tokens = tokens.filter(t => {
-    const key = tokenRowKey(t.unit, t.isProgrammable);
+    const key = tokenRowKey(t.unit, t.isProgrammable, t.isListed);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -940,8 +959,37 @@ function openNftCollection(policyId: string) {
   const col = (collections.value || {})[policyId];
   if (col) {
     nftDialogData.value = col as NftCollection;
+  } else if (nftMarketBrowsePolicy(policyId) === policyId) {
+    // Not held (search or a link named it): Gero's market can still show the collection's listings.
+    nftDialogData.value = { name: t('nftMarket.browse.notHeldTitle'), items: [], policyId };
   }
 }
+
+/**
+ * Close the collection, and drop the `?nft=` that may have opened it: the page is kept alive, so a
+ * link left in place would make the next identical search a no-op.
+ */
+function closeNftCollection() {
+  nftDialogData.value = null;
+  const query = instance?.proxy?.$route?.query;
+  if (query?.['nft']) {
+    const rest = { ...query };
+    delete rest['nft'];
+    instance?.proxy?.$router?.replace({ query: rest }).catch(() => {});
+  }
+}
+
+// A link can open a collection before the wallet's NFTs have loaded: once they have and it holds
+// some of it, show them (the dialog stays on the listings).
+watch(
+  () => {
+    const open = nftDialogData.value;
+    return open?.policyId && !open.items.length ? (collections.value || {})[open.policyId] : undefined;
+  },
+  (col) => {
+    if (col) nftDialogData.value = col as NftCollection;
+  },
+);
 
 function openSwap(token: MarketToken) {
   swapToken.value = token;

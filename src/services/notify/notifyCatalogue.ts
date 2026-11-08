@@ -12,6 +12,7 @@ export const NOTIFY_ALERT_TYPES: readonly NotifyAlertType[] = [
   { id: 'reward', category: 'staking', security: false },
   { id: 'swap_filled', category: 'swap', security: false },
   { id: 'swap_cancelled', category: 'swap', security: false },
+  { id: 'nft_sold', category: 'nft', security: false },
   { id: 'adam_proposal', category: 'adam', security: false },
   { id: 'drep_retired', category: 'governance', security: false },
   { id: 'drep_inactive', category: 'governance', security: false },

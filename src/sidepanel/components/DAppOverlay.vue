@@ -142,6 +142,7 @@
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:market-ack="marketAck"
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
           :primary-color="primaryColor"
@@ -1082,7 +1083,7 @@ import TransactionDetailsCard, {
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
-import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -1094,7 +1095,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network, Blockchain } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
-import { friendlyTxError } from '@/shared/utils/txErrors';
+import { friendlyDappTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -1943,6 +1944,12 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo, {
       ownUtxos: provenOwnUtxos.value,
       deposits: approvalDepositsFrom(networkStore.epochParams),
+      // The wallet's own Gero listings and the listing scripts, so a transaction that spends
+      // one or creates one is called out (never gated on the isNftMarketEnabled flag).
+      market: approvalMarketContext(
+        WalletStore.state.listedListings,
+        wallet ? networks.resolveNftMarketDeployments(wallet.chain, wallet.network) : [],
+      ),
     }));
   } catch (e) {
     console.error('[DAppOverlay] Failed to summarize signTx:', e);
@@ -2007,6 +2014,11 @@ const networkMismatchAck = ref(false);
 // another address (blocking, acknowledged in TxApprovalIntents).
 const foreignValueAck = ref(false);
 
+// A Gero listing this transaction creates that pays someone else (or whose terms are unreadable
+// or off), or a spent listing whose NFT does not come back to the wallet (blocking, acknowledged
+// in TxApprovalIntents). A dApp can list the user's NFT with itself as owner and seller.
+const marketAck = ref(false);
+
 // The UTxO list misstated an input this transaction spends (blocking,
 // acknowledged in TxApprovalIntents; amounts already use the proven values).
 const inputsMisreportedAck = ref(false);
@@ -2026,6 +2038,7 @@ const signTxBlocked = computed(() =>
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
   || (!!approvalSummary.value?.requiresForeignValueAck && !foreignValueAck.value)
+  || (!!approvalSummary.value?.requiresMarketAck && !marketAck.value)
   || (inputsMisreported.value && !inputsMisreportedAck.value)
   || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
@@ -2179,6 +2192,7 @@ watch(currentRequest, () => {
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
   foreignValueAck.value = false;
+  marketAck.value = false;
   inputsMisreportedAck.value = false;
   highRiskAck.value = false;
 });
@@ -2194,6 +2208,9 @@ function rejectSign() {
 // MPC (Google) wallets reach here too — they carry no spending password (the
 // background resolves the session-cached key), so only require one for non-MPC.
 async function signNormal() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2227,7 +2244,7 @@ async function signNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Normal sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2237,6 +2254,9 @@ async function signNormal() {
 
 // ── PRF wallet: PassKey signing ──
 async function signPrf() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2290,7 +2310,7 @@ async function signPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2393,6 +2413,9 @@ async function signLedgerViaBleWindow(txCbor: string, cip45Authorization?: Cip45
 
 // ── Ledger wallet signing ──
 async function signLedger() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2435,7 +2458,7 @@ async function signLedger() {
     if (e instanceof StaleApprovalError) return;
     ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] Ledger sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Ledger signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
@@ -2446,6 +2469,9 @@ async function signLedger() {
 
 // ── Trezor wallet signing ──
 async function signTrezor() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2485,7 +2511,7 @@ async function signTrezor() {
     if (message.includes('Failure_ActionCancelled') || message.includes('cancelled')) {
       signError.value = 'Transaction cancelled on Trezor';
     } else {
-      signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Trezor signing failed';
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Trezor signing failed';
     }
   } finally {
     signing.value = false;
@@ -2497,6 +2523,9 @@ async function signTrezor() {
 
 // ── Keystone wallet signing ──
 async function signKeystone() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2521,7 +2550,7 @@ async function signKeystone() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Failed to create Keystone sign request';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Failed to create Keystone sign request';
   }
 
   });
@@ -2635,7 +2664,7 @@ async function signDataKeystone() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || t('wallet.keystoneSigningFailed');
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('wallet.keystoneSigningFailed');
   }
 
   });
@@ -2711,7 +2740,7 @@ async function signDataNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2793,7 +2822,7 @@ async function signDataPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2871,7 +2900,7 @@ async function signDataHw() {
     if (e instanceof StaleApprovalError) return;
     if (!isTrezor) ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] HW sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
@@ -2956,7 +2985,7 @@ async function signMidnightDataNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -3010,7 +3039,7 @@ async function signMidnightDataPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
