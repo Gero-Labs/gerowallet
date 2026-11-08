@@ -137,7 +137,7 @@
                 <p v-if="apyLabel && !showYieldChart" class="t-caption realfi-hero__apy">
                   {{ apyLabel }}
                 </p>
-                <p v-if="canTransact && canUnstake" class="t-caption realfi-hero__apy">
+                <p v-if="canTransact && !ordersLocked && canUnstake" class="t-caption realfi-hero__apy">
                   {{ $t('realfi.unstakeOnRealfiNote') }}
                 </p>
               </div>
