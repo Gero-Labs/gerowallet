@@ -5313,6 +5313,8 @@ export default {
   'realfi.unstaking.from': 'aus {amount}',
   'realfi.unstaking.opens': 'Beanspruchbar ab {date} · in {wait}',
   'realfi.unstaking.progress': 'Fortschritt der Wartezeit',
+  'realfi.unstakeOnRealfi': 'Auf RealFi entstaken',
+  'realfi.unstakeOnRealfiNote': 'Das Entstaken läuft vorerst in der App von RealFi. Gero kann noch nicht prüfen, wohin ein Unstaking deine USDrf während der Wartezeit schickt, deshalb signiert Gero es nicht.',
   'realfi.duration.dh': '{d} T. {h} Std.',
   'realfi.duration.hm': '{h} Std. {m} Min.',
   'realfi.duration.m': '{m} Min.',
