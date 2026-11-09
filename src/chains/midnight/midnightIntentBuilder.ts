@@ -129,9 +129,13 @@ type IntentOfferView = {
 type IntentView = {
   readonly guaranteedUnshieldedOffer?: IntentOfferView;
   readonly fallibleUnshieldedOffer?: IntentOfferView;
+  readonly actions?: ReadonlyArray<unknown>;
+  readonly dustActions?: unknown;
 };
 export type IntentTxView = {
   readonly intents?: Map<number, unknown>;
+  readonly guaranteedOffer?: unknown;
+  readonly fallibleOffer?: Map<number, unknown>;
   imbalances(segment: number): Map<ledger.TokenType, bigint>;
 };
 
@@ -144,7 +148,8 @@ export interface ExpectedIntentOutput {
 
 /**
  * Refuse a built intent that is not exactly what the user approved: one
- * intent at `segmentId`, a guaranteed unshielded offer only, inputs spent
+ * intent at `segmentId`, a guaranteed unshielded offer only (no contract
+ * or DUST actions, no shielded offers, even balanced ones), inputs spent
  * only from the wallet, every requested output present, every other output
  * change to the wallet, and a guaranteed-section imbalance of exactly
  * `+given - wanted` per colour with nothing shielded. The SDK built it from
@@ -167,8 +172,14 @@ export function assertIntentMatchesRequest(
   if (!intents || intents.size !== 1 || !intents.has(args.segmentId)) {
     throw new Error('The built intent is not a single intent at the requested segment');
   }
+  if (tx.guaranteedOffer || (tx.fallibleOffer && tx.fallibleOffer.size > 0)) {
+    throw new Error('The built intent has an unexpected shielded offer');
+  }
   const intent = intents.get(args.segmentId) as IntentView;
   if (intent.fallibleUnshieldedOffer) throw new Error('The built intent has an unexpected fallible offer');
+  if ((intent.actions?.length ?? 0) > 0 || intent.dustActions) {
+    throw new Error('The built intent has unexpected contract or DUST actions');
+  }
   const offer = intent.guaranteedUnshieldedOffer;
   if (!offer) throw new Error('The built intent has no unshielded offer');
 

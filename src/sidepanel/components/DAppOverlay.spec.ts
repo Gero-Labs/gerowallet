@@ -72,6 +72,7 @@ import DAppOverlay from './DAppOverlay.vue';
 import WalletStore from '@/stores/walletStore';
 import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
 import { geroStore } from '@/stores/geroStore';
+import { midnightStore } from '@/stores/midnightStore';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
@@ -431,6 +432,28 @@ describe('Midnight makeIntent: the approval shows what the wallet gives and asks
     expect(wrapper.text()).toContain(OTHER);
     expect(wrapper.text()).not.toContain(OWN);
     expect(wrapper.find('[data-testid="midnight-intent-fees"]').text()).toBe('midnight.connector.transferFeesNote');
+  });
+
+  it('decides a want is the wallet’s own from this page when the worker did not know its address', () => {
+    const req = intentRequest(true);
+    req.payload.data.desiredOutputs = req.payload.data.desiredOutputs.map(({ toSelf: _toSelf, ...want }) => want) as never;
+    (midnightStore as { addresses?: { unshielded: string } }).addresses = { unshielded: OWN };
+    try {
+      overlay.currentRequest.value = req as never;
+      const wrapper = render();
+      expect(wrapper.findAll('[data-testid="midnight-intent-want-other"]')).toHaveLength(1);
+      expect(wrapper.text()).toContain(OTHER);
+      expect(wrapper.text()).not.toContain(OWN);
+    } finally {
+      delete (midnightStore as { addresses?: unknown }).addresses;
+    }
+  });
+
+  it('warns for every want when neither side knows the wallet’s address', () => {
+    const req = intentRequest(true);
+    req.payload.data.desiredOutputs = req.payload.data.desiredOutputs.map(({ toSelf: _toSelf, ...want }) => want) as never;
+    overlay.currentRequest.value = req as never;
+    expect(render().findAll('[data-testid="midnight-intent-want-other"]')).toHaveLength(2);
   });
 
   it('says the wallet does not pay the fee when the dapp asks it not to', () => {

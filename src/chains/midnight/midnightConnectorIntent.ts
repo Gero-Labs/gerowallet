@@ -157,14 +157,21 @@ export function expectedIntentImbalances(request: Pick<ConnectorIntentRequest, '
 
 /**
  * The first colour the wallet's synced unshielded UTxOs cannot cover, or
- * `undefined` when every input is covered. Lets the worker answer
- * `InsufficientFunds` without prompting; the builder's coin selection is the
- * authoritative check.
+ * `undefined` when every input is covered OR the UTxO view is not known yet.
+ * Lets the worker answer `InsufficientFunds` without prompting; the builder's
+ * coin selection is the authoritative check.
+ *
+ * `lastSync` gates it: the worker's store starts with no UTxOs after every
+ * service-worker restart and after a wallet switch, and only a validated sync
+ * message for the logged wallet sets `lastSync` (after the snapshot's UTxOs
+ * are applied). Without that gate a funded wallet would be told it is broke.
  */
 export function uncoveredIntentInput(
   inputs: ReadonlyArray<ConnectorIntentInput>,
-  utxos: ReadonlyArray<MidnightUnshieldedUtxo>,
+  view: { readonly lastSync: number | null; readonly utxos: ReadonlyArray<MidnightUnshieldedUtxo> },
 ): ConnectorIntentInput | undefined {
+  if (view.lastSync === null) return undefined;
+  const { utxos } = view;
   let night = 0n;
   for (const utxo of utxos) if (isNativeNight(utxo.tokenType)) night += utxo.value;
   // Indexer colours may arrive in either case; inputs are lower-case.

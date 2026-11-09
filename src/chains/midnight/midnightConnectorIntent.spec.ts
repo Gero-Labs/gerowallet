@@ -134,7 +134,7 @@ describe('expectedIntentImbalances', () => {
 
 describe('uncoveredIntentInput', () => {
   it('returns the first input the synced UTxOs cannot cover', () => {
-    const utxos = [utxo('', 20n), utxo(NIGHT_RAW_TOKEN_TYPE, 15n), utxo(FOO, 3n)];
+    const utxos = { lastSync: 1, utxos: [utxo('', 20n), utxo(NIGHT_RAW_TOKEN_TYPE, 15n), utxo(FOO, 3n)] };
     expect(uncoveredIntentInput([{ type: NIGHT_RAW_TOKEN_TYPE, value: '35' }], utxos)).toBeUndefined();
     expect(uncoveredIntentInput([{ type: NIGHT_RAW_TOKEN_TYPE, value: '36' }], utxos)).toEqual({ type: NIGHT_RAW_TOKEN_TYPE, value: '36' });
     // Indexer colours may be upper-case; inputs are normalized to lower-case.
@@ -143,6 +143,12 @@ describe('uncoveredIntentInput', () => {
   });
 
   it('covers a want-only intent with no inputs', () => {
-    expect(uncoveredIntentInput([], [])).toBeUndefined();
+    expect(uncoveredIntentInput([], { lastSync: 1, utxos: [] })).toBeUndefined();
+  });
+
+  it('says nothing before the first sync (worker restart, wallet switch): the empty UTxO list is not known', () => {
+    expect(uncoveredIntentInput([{ type: NIGHT_RAW_TOKEN_TYPE, value: '1' }], { lastSync: null, utxos: [] })).toBeUndefined();
+    expect(uncoveredIntentInput([{ type: NIGHT_RAW_TOKEN_TYPE, value: '1' }], { lastSync: 1, utxos: [] }))
+      .toEqual({ type: NIGHT_RAW_TOKEN_TYPE, value: '1' });
   });
 });

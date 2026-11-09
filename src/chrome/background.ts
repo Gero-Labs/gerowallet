@@ -7734,17 +7734,19 @@ app.add(MIDNIGHT_METHOD.makeIntent, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
     return true;
   }
-  if (uncoveredIntentInput(validation.inputs, midnightStoreSync.utxos)) {
+  if (uncoveredIntentInput(validation.inputs, midnightStoreSync)) {
     reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this intent gives') });
     return true;
   }
+  // Unknown right after a worker restart: `toSelf` is then left for the
+  // panel to decide from its own store.
   const ownAddress = (midnightStoreSync.addresses.unshielded ?? '').toLowerCase();
   const payload = {
     data: {
       desiredInputs: validation.inputs.map((input) => ({ kind: 'unshielded', ...input })),
       // `toSelf` drives the approval's warning for a want paid to someone else.
       desiredOutputs: validation.outputs.map((output) => ({
-        ...output, toSelf: !!ownAddress && output.recipient.toLowerCase() === ownAddress,
+        ...output, toSelf: ownAddress ? output.recipient.toLowerCase() === ownAddress : undefined,
       })),
       options: { intentId: validation.intentId, payFees: validation.payFees },
       ttlMinutes: Math.round(CONNECTOR_INTENT_TTL_MS / 60_000),

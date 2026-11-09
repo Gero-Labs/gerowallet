@@ -3444,9 +3444,16 @@ const intentGives = computed<ConnectorDesiredOutput[]>(() => (
     ? intentPayload.value.desiredInputs.map((input) => ({ kind: input.kind, type: input.type, value: input.value, recipient: '' }))
     : []
 ));
-const intentWants = computed<IntentWant[]>(() => (
-  Array.isArray(intentPayload.value.desiredOutputs) ? intentPayload.value.desiredOutputs : []
-));
+// `toSelf` is undefined when the worker did not know the wallet's address yet
+// (just after it restarted); decide it from this page's store, and when that
+// is unknown too, warn (a wrongly shown warning is the safe side).
+const intentWants = computed<IntentWant[]>(() => {
+  const wants = Array.isArray(intentPayload.value.desiredOutputs) ? intentPayload.value.desiredOutputs : [];
+  const own = (midnightStore.addresses?.unshielded ?? '').toLowerCase();
+  return wants.map((want) => (typeof want.toSelf === 'boolean'
+    ? want
+    : { ...want, toSelf: !!own && want.recipient.toLowerCase() === own }));
+});
 const intentGivesNight = computed(() => intentGives.value.some((o) => !o.type || /^0+$/.test(o.type)));
 const intentPaysFees = computed(() => intentPayload.value.options?.payFees === true);
 const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 60);

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
-import { buildConnectorIntent, IntentInsufficientFundsError } from './midnightIntentBuilder';
+import { assertIntentMatchesRequest, buildConnectorIntent, IntentInsufficientFundsError } from './midnightIntentBuilder';
 import type { BuildConnectorIntentDeps, IntentSdkWallet } from './midnightIntentBuilder';
 import type { ConnectorIntentRequest } from './midnightConnectorIntent';
 
@@ -187,5 +187,74 @@ describe('buildConnectorIntent', () => {
     const { deps } = fakeDeps(async () => swapTx(HONEST_OUTPUTS));
     await expect(buildConnectorIntent({ ...base, sdkNetworkId: 'stagenet', request: REQUEST }, deps)).rejects.toThrow('Stagenet');
     expect(deps.startUnshieldedWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('assertIntentMatchesRequest', () => {
+  const OWN = WALLET_ADDRESS;
+  const PAYEE = STRANGER;
+  type View = Parameters<typeof assertIntentMatchesRequest>[0];
+
+  /** A plain view of a built intent at segment 3: give 30 NIGHT (50 in, 20 back), want 7 FOO. */
+  function view(over: { intent?: Record<string, unknown>; tx?: Record<string, unknown>; outputs?: Output[]; imbalances?: Array<[string, bigint]> } = {}): View {
+    const intent = {
+      guaranteedUnshieldedOffer: {
+        inputs: [{ owner: WALLET_KEY }],
+        outputs: over.outputs ?? [{ value: 20n, owner: OWN, type: NIGHT }, { value: 7n, owner: PAYEE, type: FOO }],
+      },
+      actions: [],
+      dustActions: undefined,
+      ...over.intent,
+    };
+    const imbalances = over.imbalances ?? [[NIGHT, 30n], [FOO, -7n]];
+    return {
+      intents: new Map([[3, intent]]),
+      imbalances: (segment: number) => new Map(segment === 0
+        ? imbalances.map(([raw, value]) => [{ tag: 'unshielded', raw } as ledger.TokenType, value])
+        : []),
+      ...over.tx,
+    } as View;
+  }
+  const args = (outputs = [{ owner: PAYEE, type: FOO, value: 7n }]) => ({
+    segmentId: 3,
+    request: {
+      inputs: [{ type: NIGHT, value: '30' }],
+      outputs: outputs.map((o) => ({ kind: 'unshielded' as const, type: o.type, value: o.value.toString(), recipient: 'r' })),
+    },
+    expectedOutputs: outputs,
+    ownAddress: OWN,
+  });
+
+  it('accepts the exact approved intent', () => {
+    expect(() => assertIntentMatchesRequest(view(), args())).not.toThrow();
+  });
+
+  it('refuses a balanced extra part the swap never has: contract actions, DUST actions, shielded offers', () => {
+    expect(() => assertIntentMatchesRequest(view({ intent: { actions: [{}] } }), args())).toThrow('contract or DUST actions');
+    expect(() => assertIntentMatchesRequest(view({ intent: { dustActions: {} } }), args())).toThrow('contract or DUST actions');
+    expect(() => assertIntentMatchesRequest(view({ tx: { guaranteedOffer: {} } }), args())).toThrow('shielded offer');
+    expect(() => assertIntentMatchesRequest(view({ tx: { fallibleOffer: new Map([[3, {}]]) } }), args())).toThrow('shielded offer');
+  });
+
+  it('needs each of two identical wants present twice', () => {
+    const twice = [{ owner: PAYEE, type: FOO, value: 7n }, { owner: PAYEE, type: FOO, value: 7n }];
+    const once = view({ imbalances: [[NIGHT, 30n], [FOO, -14n]] });
+    expect(() => assertIntentMatchesRequest(once, { ...args(twice), request: { ...args(twice).request } })).toThrow('missing a requested output');
+    const both = view({
+      outputs: [{ value: 20n, owner: OWN, type: NIGHT }, { value: 7n, owner: PAYEE, type: FOO }, { value: 7n, owner: PAYEE, type: FOO }],
+      imbalances: [[NIGHT, 30n], [FOO, -14n]],
+    });
+    expect(() => assertIntentMatchesRequest(both, args(twice))).not.toThrow();
+  });
+
+  it('nets a want in the same colour as the give', () => {
+    // Give 30 NIGHT, want 10 NIGHT paid to the payee: the intent shows +20 NIGHT.
+    const wants = [{ owner: PAYEE, type: NIGHT, value: 10n }];
+    const intent = view({
+      outputs: [{ value: 20n, owner: OWN, type: NIGHT }, { value: 10n, owner: PAYEE, type: NIGHT }],
+      imbalances: [[NIGHT, 20n]],
+    });
+    expect(() => assertIntentMatchesRequest(intent, args(wants))).not.toThrow();
+    expect(() => assertIntentMatchesRequest(view({ imbalances: [[NIGHT, 30n]] }), args(wants))).toThrow();
   });
 });
