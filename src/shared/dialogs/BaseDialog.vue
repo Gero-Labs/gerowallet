@@ -61,7 +61,10 @@
                 <span>{{ titleInfo }}</span>
               </v-tooltip>
             </v-list-item-title>
-            <v-list-item-subtitle style="white-space: normal; word-break: break-word">
+            <!-- Never clamped: `lines="two"` gives Vuetify's subtitle a 2-line clamp, which cut
+                 explanations off with nothing to recover them ("Signing does…" in the cashback
+                 claim prompt hid "Signing does not move any funds."). -->
+            <v-list-item-subtitle style="white-space: normal; word-break: break-word; -webkit-line-clamp: unset;">
               {{subtitle}}
             </v-list-item-subtitle>
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
