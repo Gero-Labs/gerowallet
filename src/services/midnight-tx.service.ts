@@ -375,6 +375,33 @@ export async function balanceConnectorTransaction(
 }
 
 /**
+ * DApp-connector `makeIntent`: the background builds the approved swap intent
+ * from `request` (the dapp's validated request, as the approval showed it),
+ * re-validating it first, and returns it sealed.
+ */
+export async function buildConnectorIntent(
+  request: { desiredInputs: unknown; desiredOutputs: unknown; options: unknown },
+  credentials: MidnightSendCredentials,
+  current: () => boolean = () => true,
+): Promise<{ tx: string }> {
+  assertCurrentApproval(current);
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.BUILD_MIDNIGHT_CONNECTOR_INTENT,
+    data: {
+      ...request,
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+    },
+  }) as { data: { success: boolean; tx?: string; error?: string; code?: string } };
+  assertCurrentApproval(current);
+  if (!response?.data?.success || !response.data.tx) {
+    // `code` is a connector error code (InsufficientFunds) the panel relays on decline.
+    throw Object.assign(new Error(response?.data?.error || 'Building the intent failed'), { code: response?.data?.code });
+  }
+  return { tx: response.data.tx };
+}
+
+/**
  * Optimistically insert a just-submitted tx into the store as `pending` so it
  * shows in history immediately, before gero-sync indexes and pushes it back.
  * Best-effort: a failure here is silent (gero-sync backfills the confirmed

@@ -119,6 +119,8 @@ import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt }
 import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
 import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
+import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
+import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
 import {
   assertNativeNightConversionSupported,
@@ -2824,6 +2826,85 @@ export class WalletBg {
     }
   }
 
+  /**
+   * DApp Connector `makeIntent`: build the purposefully imbalanced swap
+   * intent the user approved (what the wallet gives, what it wants) and
+   * return it SEALED. `request` must come from `validateConnectorIntentRequest`.
+   * Same credential handling, key hygiene and fee proving as
+   * balanceMidnightConnectorTransaction; nothing is proved when the dapp asks
+   * the wallet not to pay fees.
+   */
+  async buildMidnightConnectorIntent(
+    request: ConnectorIntentRequest,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ tx: string; segmentId: number }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('buildMidnightConnectorIntent called on non-Midnight wallet');
+    }
+
+    const network = this.network;
+    const { walletStore } = await import('@/stores/walletStore');
+    const assertSession = captureMidnightSigningSession(this.id, network, () => ({
+      walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = await this.openMnemonicWithPassword(password);
+    }
+
+    try {
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
+      try {
+        assertSession();
+        const endpoints = getMidnightEndpoints(network);
+        if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
+        // Same prover choice as the connector balance: the fee is the wallet's
+        // own DUST spend, proved on this device in Gero Cloud mode.
+        let proving: WalletProvingRequest;
+        if (walletProverFor(network, midnightStore.proofServer, 'unshielded') === 'device') {
+          proving = { device: true };
+        } else {
+          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          proving = { url: target.url, headers: target.headers };
+        }
+        const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+        const result = await buildConnectorIntent({
+          sdkNetworkId: endpoints.sdkNetworkId,
+          endpoints,
+          request,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          dustRegisteredAt: Number.isFinite(createdMs)
+            ? new Date(createdMs)
+            : new Date(Date.now() - 90 * 24 * 3_600_000),
+          proving,
+        });
+        assertSession();
+        return { tx: result.txHex, segmentId: result.segmentId };
+      } finally {
+        derived.unshieldedSecretKey.fill(0); derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0); derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+    }
+  }
+
   async startMidnightPrivateSync(password?: string, prfSecret?: Uint8Array): Promise<void> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('Private token synchronization requires a Midnight wallet');
@@ -2982,8 +3063,8 @@ export class WalletBg {
 
   /**
    * DApp Connector `signData` — signs arbitrary dapp-supplied bytes with the
-   * NightExternal (unshielded) key, per @midnight-ntwrk/dapp-connector-api
-   * v4.0.1 (`keyType: 'unshielded'` is the only value the spec currently
+   * NightExternal (unshielded) key, per @midnightntwrk/dapp-connector-api
+   * v4.1.0 (`keyType: 'unshielded'` is the only value the spec currently
    * defines). Distinct from `signMidnightSegments` (which signs Nexus-built
    * TRANSACTION segments) — this signs arbitrary APPLICATION data, so per the
    * spec's own security requirement it must be prefixed with
@@ -2996,10 +3077,8 @@ export class WalletBg {
    * Returns the exact bytes that were cryptographically signed (prefix +
    * data, hex-encoded) as `data`, so a third party can independently verify
    * `signature` against `verifyingKey` without needing to know the prefixing
-   * rule out-of-band. The wire type (`Signature`) has no `scheme` field in
-   * the 4.0.1 package we're pinned to — see the build plan doc §3.1 — so we
-   * omit it; the spec's own default when absent is `schnorr_bip340`, which is
-   * exactly what this signs with.
+   * rule out-of-band. The background handler adds `scheme: 'schnorr_bip340'`
+   * (4.1.0's optional `Signature.scheme`), which is what this signs with.
    */
   async signMidnightConnectorData(
     dataBytes: Uint8Array,

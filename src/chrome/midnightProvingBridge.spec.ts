@@ -3,7 +3,7 @@ import { MIDNIGHT_METHOD } from '@/chrome/config';
 import { PROVING_UPLOAD_CHUNK_CHARS, decodeBase64, encodeBase64 } from '@/chrome/midnightProvingWire';
 import type { ProvingUploadChunkRequest } from '@/chrome/midnightProvingWire';
 import { createDappProvingProvider, encodeBase64Async } from './midnightProvingBridge';
-import type { KeyMaterialProvider } from '@midnight-ntwrk/dapp-connector-api';
+import type { KeyMaterialProvider } from '@midnightntwrk/dapp-connector-api';
 
 function bytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
