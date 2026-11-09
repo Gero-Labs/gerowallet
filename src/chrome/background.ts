@@ -114,6 +114,10 @@ import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
 // namespace const regresses behind its first reader.
 import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-sync.service';
+// Already evaluated before this module: midnight-sync.service imports it
+// statically. makeIntent reads it synchronously so its pre-prompt checks
+// keep the dapp's click as the gesture that opens the panel.
+import { midnightStore as midnightStoreSync } from '@/stores/midnightStore';
 // Same reasoning, same guard. Each of these is background-only (absent from the
 // options graph) and none reaches back to this module. Their own ledger wasm
 // imports stay lazy inside them.
@@ -125,6 +129,8 @@ import {
   isSealedMidnightTransaction,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
+import { uncoveredIntentInput, validateConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
+import { CONNECTOR_INTENT_TTL_MS, IntentInsufficientFundsError } from '@/chains/midnight/midnightIntentBuilder';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
 import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
 import * as provingParkModule from '@/chrome/midnightProvingPark';
@@ -6128,6 +6134,47 @@ app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sen
   return true;
 });
 
+/**
+ * Side panel → background for the DApp Connector's makeIntent (the panel has
+ * shown what the wallet gives and wants and taken the credential). The
+ * request is validated again here: the worker builds only what passes the
+ * same checks the approval was gated on. Returns the sealed tx hex.
+ */
+app.addToOptions(MessageTypes.BUILD_MIDNIGHT_CONNECTOR_INTENT, async (request, sendResponse) => {
+  let prfBytes: Uint8Array | undefined;
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('BUILD_MIDNIGHT_CONNECTOR_INTENT called on non-Midnight wallet');
+    const { desiredInputs, desiredOutputs, options, password, prfSecret } = request.data || {};
+    const validation = validateConnectorIntentRequest({ desiredInputs, desiredOutputs, options }, walletBg.network);
+    if (validation.ok === false) throw new Error(validation.reason);
+    if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
+    if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
+      || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+      throw new Error('Invalid PassKey authorization');
+    }
+    prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const { ok: _ok, ...intentRequest } = validation;
+    const result = await walletBg.buildMidnightConnectorIntent(intentRequest, password, prfBytes);
+    sendResponse({ id: request.id, data: { success: true, tx: result.tx }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: {
+        success: false,
+        error: getErrorMessage(error),
+        ...(error instanceof IntentInsufficientFundsError ? { code: MidnightErrorCode.InsufficientFunds } : {}),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } finally {
+    prfBytes?.fill(0);
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendResponse) => {
   let prfBytes: Uint8Array | undefined;
   try {
@@ -6704,7 +6751,7 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1)
+// Midnight DApp Connector (@midnightntwrk/dapp-connector-api v4.1.0)
 //
 // Phase 1: discovery + connect + all read getters + signData +
 // submitTransaction. Grounded in an internal spec-vs-shipped-package
@@ -7646,6 +7693,74 @@ app.add(MIDNIGHT_METHOD.provingProve, (request, sendResponse) => handleMidnightD
  * proves + binds server-side. Shielded/mixed outputs and payFees:false reject
  * with InvalidRequest BEFORE the user is prompted (validateMakeTransferInputs).
  */
+/**
+ * DApp Connector `makeIntent` (dapp-connector-api 4.1.0): a purposefully
+ * imbalanced, SEALED swap intent — what the wallet gives (`desiredInputs`)
+ * against what it wants (`desiredOutputs`), for a counterparty to fill.
+ *
+ * Public (unshielded) legs on ledger-8 networks only. Shielded legs, Stagenet,
+ * give-only intents and malformed options reject with InvalidRequest, and a
+ * give the synced UTxOs cannot cover with InsufficientFunds, all BEFORE the
+ * user is prompted. Validation is synchronous so the request is handed to the
+ * panel while the dapp's click still counts as a gesture; without one it is
+ * parked like balanceUnsealedTransaction.
+ */
+app.add(MIDNIGHT_METHOD.makeIntent, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Fast-pathed past the content whitelist pre-check, so enforce connect-first here.
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  const validation = validateConnectorIntentRequest(data, currentWallet.network);
+  if (validation.ok === false) {
+    reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+    return true;
+  }
+  if (uncoveredIntentInput(validation.inputs, midnightStoreSync.utxos)) {
+    reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this intent gives') });
+    return true;
+  }
+  const ownAddress = (midnightStoreSync.addresses.unshielded ?? '').toLowerCase();
+  const payload = {
+    data: {
+      desiredInputs: validation.inputs.map((input) => ({ kind: 'unshielded', ...input })),
+      // `toSelf` drives the approval's warning for a want paid to someone else.
+      desiredOutputs: validation.outputs.map((output) => ({
+        ...output, toSelf: !!ownAddress && output.recipient.toLowerCase() === ownAddress,
+      })),
+      options: { intentId: validation.intentId, payFees: validation.payFees },
+      ttlMinutes: Math.round(CONNECTOR_INTENT_TTL_MS / 60_000),
+    },
+    ...promptSite(origin, send),
+  };
+  parkMidnightRequest(MIDNIGHT_METHOD.makeIntent, payload, tabId)
+    .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
+    .catch(err => reply({
+      // Never Rejected on internal/panel failure (only a real user decline,
+      // or the panel's InsufficientFunds after a failed build, arrives coded).
+      error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to build the intent'),
+    }));
+  return true;
+});
+
 app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
   const { id, origin, send, data } = request;
   const reply = (opts: ReplyOpts) => {
@@ -7738,7 +7853,14 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA, async (request, send
     const result = await walletBg.signMidnightConnectorData(new Uint8Array(dataBytes), password, prfBytes);
     sendResponse({
       id: request.id,
-      data: { success: true, signature: { data: result.dataHex, signature: result.signatureHex, verifyingKey: result.verifyingKeyHex } },
+      // 4.1.0 `Signature.scheme`: optional, but naming it lets a dapp skip the
+      // default-scheme fallback. The key is BIP-340 x-only (32 bytes).
+      data: {
+        success: true,
+        signature: {
+          data: result.dataHex, signature: result.signatureHex, verifyingKey: result.verifyingKeyHex, scheme: 'schnorr_bip340',
+        },
+      },
       target: TARGET,
       sender: SENDER.extension,
     });

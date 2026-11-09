@@ -167,6 +167,10 @@ export enum MessageTypes {
   // dapp's proven, unbound tx + the user's credential to the background,
   // which funds, fee-pays, signs and seals it (walletBg.balanceMidnightConnectorTransaction).
   BALANCE_MIDNIGHT_CONNECTOR_TX = 'BALANCE_MIDNIGHT_CONNECTOR_TX',
+  // Side panel → background: build, sign and seal the DApp Connector
+  // `makeIntent` swap intent the user approved. The worker re-validates the
+  // request and answers `{ tx, segmentId }`.
+  BUILD_MIDNIGHT_CONNECTOR_INTENT = 'BUILD_MIDNIGHT_CONNECTOR_INTENT',
   // Sent by ChangePasswordDialog after a spending-password change. The DB
   // ciphertext is rotated, but the in-memory copies still hold the OLD blob:
   // the background WalletBg (used to sign) and walletStore.loggedWallet (used to

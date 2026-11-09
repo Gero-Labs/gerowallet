@@ -404,6 +404,74 @@ describe('Midnight balanceUnsealedTransaction: the approval names who gets paid'
   });
 });
 
+describe('Midnight makeIntent: the approval shows what the wallet gives and asks for', () => {
+  const OWN = 'mn_addr_preprod1ownxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  const OTHER = 'mn_addr_preprod1otherxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  const intentRequest = (payFees: boolean) => ({
+    requestId: 'intent-1', method: 'midnight_makeIntent',
+    payload: { website: 'https://dapp.example', data: {
+      desiredInputs: [{ kind: 'unshielded', type: '0'.repeat(64), value: '30000000' }],
+      desiredOutputs: [
+        { kind: 'unshielded', type: 'ab'.repeat(32), value: '7', recipient: OWN, toSelf: true },
+        { kind: 'unshielded', type: 'ab'.repeat(32), value: '2', recipient: OTHER, toSelf: false },
+      ],
+      options: { intentId: 'random', payFees },
+      ttlMinutes: 60,
+    } },
+  });
+
+  it('lists the give and the wants, and warns only for a want paid to another address', () => {
+    overlay.currentRequest.value = intentRequest(true) as never;
+    const wrapper = render();
+
+    expect(wrapper.findAll('[data-testid="midnight-intent-give"]')).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid="midnight-intent-want"]')).toHaveLength(2);
+    const warnings = wrapper.findAll('[data-testid="midnight-intent-want-other"]');
+    expect(warnings).toHaveLength(1);
+    expect(wrapper.text()).toContain(OTHER);
+    expect(wrapper.text()).not.toContain(OWN);
+    expect(wrapper.find('[data-testid="midnight-intent-fees"]').text()).toBe('midnight.connector.transferFeesNote');
+  });
+
+  it('says the wallet does not pay the fee when the dapp asks it not to', () => {
+    overlay.currentRequest.value = intentRequest(false) as never;
+    const wrapper = render();
+    expect(wrapper.find('[data-testid="midnight-intent-fees"]').text()).toBe('midnight.connector.intentFeesNotPaid');
+  });
+
+  it('builds from the request it showed and approves the sealed tx', async () => {
+    mocks.send.mockResolvedValue({ data: { success: true, tx: 'sealed-intent' } });
+    overlay.currentRequest.value = intentRequest(true) as never;
+    const wrapper = render();
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    await button(wrapper, 'approve').trigger('click');
+    await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledWith({ tx: 'sealed-intent' }));
+
+    const shown = intentRequest(true).payload.data;
+    expect(mocks.send).toHaveBeenCalledWith({
+      method: 'BUILD_MIDNIGHT_CONNECTOR_INTENT',
+      data: {
+        desiredInputs: shown.desiredInputs, desiredOutputs: shown.desiredOutputs, options: shown.options,
+        password: 'password', prfSecret: undefined,
+      },
+    });
+  });
+
+  it('answers InsufficientFunds, not Rejected, when the user declines after an insufficient-funds build', async () => {
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough funds', code: 'InsufficientFunds' } });
+    overlay.currentRequest.value = intentRequest(true) as never;
+    const wrapper = render();
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    await button(wrapper, 'approve').trigger('click');
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalled());
+    await flushPromises();
+
+    await button(wrapper, 'reject').trigger('click');
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(JSON.parse(mocks.reject.mock.calls.at(-1)![0])).toMatchObject({ code: 'InsufficientFunds' });
+  });
+});
+
 describe('dApp Bitcoin PSBT: signing waits on the review', () => {
   const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
   // Fixed test vectors — never used to hold funds.

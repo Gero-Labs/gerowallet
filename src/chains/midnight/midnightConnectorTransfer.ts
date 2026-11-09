@@ -11,6 +11,23 @@ export type MidnightConnectorTransferValidation =
   | { ok: true; outputs: MidnightConnectorOutput[] }
   | { ok: false; reason: string };
 
+/** The bech32m prefix of an unshielded address on `network` (`mn_addr` on mainnet). */
+export function unshieldedAddressPrefix(network: string): string {
+  const sdkNetwork = network.toLowerCase();
+  return sdkNetwork === 'mainnet' ? 'mn_addr' : `mn_addr_${sdkNetwork}`;
+}
+
+/** True for a bech32m unshielded address with `prefix` and a 32-byte payload. */
+export function isUnshieldedRecipient(recipient: unknown, prefix: string): recipient is string {
+  try {
+    if (typeof recipient !== 'string') return false;
+    const decoded = bech32m.decode(recipient, 1024);
+    return decoded.prefix === prefix && bech32m.fromWords(decoded.words).length === 32;
+  } catch {
+    return false;
+  }
+}
+
 /** Validate and normalize public outputs before displaying a signing prompt. */
 export function validateMidnightConnectorTransfer(data: unknown, network: string): MidnightConnectorTransferValidation {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, reason: 'Invalid transfer request' };
@@ -32,7 +49,7 @@ export function validateMidnightConnectorTransfer(data: unknown, network: string
   if (!['mainnet', 'preprod', 'stagenet', 'testnet'].includes(sdkNetwork)) {
     return { ok: false, reason: 'Unsupported Midnight network' };
   }
-  const prefix = sdkNetwork === 'mainnet' ? 'mn_addr' : `mn_addr_${sdkNetwork}`;
+  const prefix = unshieldedAddressPrefix(sdkNetwork);
   const outputs: MidnightConnectorOutput[] = [];
   for (const raw of request.desiredOutputs) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, reason: 'Each desiredOutput must be an object' };
@@ -47,11 +64,7 @@ export function validateMidnightConnectorTransfer(data: unknown, network: string
     if (typeof output.value !== 'string' || !/^[0-9]{1,80}$/.test(output.value) || BigInt(output.value) <= 0n) {
       return { ok: false, reason: 'Amount must be a positive decimal integer' };
     }
-    try {
-      if (typeof output.recipient !== 'string') throw new Error();
-      const decoded = bech32m.decode(output.recipient, 1024);
-      if (decoded.prefix !== prefix || bech32m.fromWords(decoded.words).length !== 32) throw new Error();
-    } catch {
+    if (!isUnshieldedRecipient(output.recipient, prefix)) {
       return { ok: false, reason: 'Recipient must be a valid public address on the connected Midnight network' };
     }
     outputs.push({ kind: 'unshielded', type: type.toLowerCase(), value: BigInt(output.value).toString(), recipient: output.recipient as string });

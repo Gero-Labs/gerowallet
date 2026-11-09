@@ -817,6 +817,113 @@
         </template>
       </div>
 
+      <!-- Midnight: makeIntent — a swap offer the wallet seals, left incomplete for a counterparty -->
+      <div v-else-if="currentRequest.method === 'midnight_makeIntent'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-swap-horizontal</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('midnight.connector.intentTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="grey--text text-caption mb-3">{{ $t('midnight.connector.intentBody') }}</p>
+
+          <p class="white--text text-caption font-weight-bold mb-1">{{ $t('midnight.connector.intentGive') }}</p>
+          <div v-for="(o, i) in intentGives" :key="'give' + i" class="d-flex justify-end mb-2" data-testid="midnight-intent-give">
+            <span class="white--text text-caption font-weight-bold">{{ outputAmountDisplay(o) }} {{ outputTicker(o) }}</span>
+          </div>
+          <p v-if="intentGives.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.intentGiveNothing') }}</p>
+
+          <p class="white--text text-caption font-weight-bold mt-3 mb-1">{{ $t('midnight.connector.intentWant') }}</p>
+          <div v-for="(o, i) in intentWants" :key="'want' + i" class="mb-2" data-testid="midnight-intent-want">
+            <div class="d-flex justify-end">
+              <span class="white--text text-caption font-weight-bold">{{ outputAmountDisplay(o) }} {{ outputTicker(o) }}</span>
+            </div>
+            <template v-if="!o.toSelf">
+              <div class="d-flex align-start" data-testid="midnight-intent-want-other">
+                <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+                <span class="warning--text text-caption">{{ $t('midnight.connector.intentWantToOther') }}</span>
+              </div>
+              <span class="grey--text text-caption g-mono" style="word-break: break-all;">{{ o.recipient }}</span>
+            </template>
+          </div>
+
+          <div class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
+          </div>
+          <div v-if="intentGivesNight" class="d-flex align-start mt-1">
+            <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
+          </div>
+          <p class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-fees">
+            {{ intentPaysFees ? $t('midnight.connector.transferFeesNote') : $t('midnight.connector.intentFeesNotPaid') }}
+          </p>
+          <div v-if="intentPaysFees" class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.connector.transferProvedBy', { prover: transferProverLabel }) }}</span>
+          </div>
+          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            variant="outlined" density="compact" theme="dark"
+            class="password-input"
+            @click:append-inner="showPassword = !showPassword"
+            @keyup.enter="signMidnightIntentNormal"
+          />
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightIntent">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              variant="flat"
+              :loading="signing"
+              :disabled="!spendingPassword"
+              @click="signMidnightIntentNormal"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightIntent">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              variant="flat"
+              :loading="signing"
+              @click="signMidnightIntentPrf"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Midnight has no hardware-wallet signing support — decline only. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightIntent">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
       <!-- Midnight: the dapp needs shielded balances; the private-note scan must run first -->
       <div v-else-if="currentRequest.method === 'midnight_privateBalanceAccess'" class="dapp-sign-data">
         <div class="dapp-identity mb-4">
@@ -1192,6 +1299,7 @@ function queuedItemMethod(item: DAppRequest): string {
     midnight_signData: 'miniGero.signDataRequest',
     midnight_makeTransfer: 'miniGero.transferRequest',
     midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
+    midnight_makeIntent: 'miniGero.intentRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
   return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
@@ -2057,6 +2165,7 @@ watch(loggedWallet, (newWallet, oldWallet) => {
   else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
   else if (currentRequest.value.method === 'midnight_makeTransfer') rejectMidnightMakeTransfer();
   else if (currentRequest.value.method === 'midnight_balanceUnsealedTransaction') rejectMidnightBalance();
+  else if (currentRequest.value.method === 'midnight_makeIntent') rejectMidnightIntent();
   else reject('wallet_changed');
 });
 
@@ -2955,6 +3064,8 @@ function onEscapeReject() {
     rejectMidnightMakeTransfer();
   } else if (currentRequest.value?.method === 'midnight_balanceUnsealedTransaction') {
     rejectMidnightBalance();
+  } else if (currentRequest.value?.method === 'midnight_makeIntent') {
+    rejectMidnightIntent();
   } else if (currentRequest.value?.method === 'midnight_privateBalanceAccess') {
     rejectMidnightPrivateBalance();
   } else if (currentRequest.value?.method === 'midnight_provingServer') {
@@ -3307,6 +3418,136 @@ async function signMidnightBalancePrf() {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF balanceUnsealedTransaction error:', e);
     signError.value = (e as Error)?.message || 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+
+  });
+}
+
+// ── Midnight DApp Connector: makeIntent ───────────────────────────────────
+// A swap offer: the wallet gives `desiredInputs` and asks for
+// `desiredOutputs`, sealed but left imbalanced for a counterparty. The
+// background validated the request before prompting and validates it again
+// when it builds; the panel only passes it back with the credential.
+type IntentWant = ConnectorDesiredOutput & { toSelf?: boolean };
+type IntentPayload = {
+  desiredInputs?: Array<{ kind: string; type: string; value: string }>;
+  desiredOutputs?: IntentWant[];
+  options?: { intentId?: number | 'random'; payFees?: boolean };
+  ttlMinutes?: number;
+};
+const intentPayload = computed<IntentPayload>(() => (currentRequest.value?.payload?.data as IntentPayload | undefined) ?? {});
+// Inputs render through the same colour-aware helpers as transfer outputs.
+const intentGives = computed<ConnectorDesiredOutput[]>(() => (
+  Array.isArray(intentPayload.value.desiredInputs)
+    ? intentPayload.value.desiredInputs.map((input) => ({ kind: input.kind, type: input.type, value: input.value, recipient: '' }))
+    : []
+));
+const intentWants = computed<IntentWant[]>(() => (
+  Array.isArray(intentPayload.value.desiredOutputs) ? intentPayload.value.desiredOutputs : []
+));
+const intentGivesNight = computed(() => intentGives.value.some((o) => !o.type || /^0+$/.test(o.type)));
+const intentPaysFees = computed(() => intentPayload.value.options?.payFees === true);
+const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 60);
+// Set when a build fails because the wallet cannot cover the give, so a
+// decline after that tells the dapp why instead of a plain Rejected.
+const intentFailureCode = ref<string | null>(null);
+watch(() => currentRequest.value?.requestId, () => { intentFailureCode.value = null; });
+
+function rejectMidnightIntent() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  const insufficient = intentFailureCode.value === MidnightErrorCode.InsufficientFunds;
+  intentFailureCode.value = null;
+  reject(insufficient
+    ? midnightError(MidnightErrorCode.InsufficientFunds, 'The wallet cannot cover what this intent gives')
+    : midnightError(MidnightErrorCode.Rejected, 'User declined the intent request'));
+}
+
+async function buildMidnightIntentTx(
+  credentials: { password?: string; prfSecret?: Uint8Array },
+): Promise<{ tx: string }> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  const { desiredInputs, desiredOutputs, options } = intentPayload.value;
+  const { buildConnectorIntent } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
+  return buildConnectorIntent({ desiredInputs, desiredOutputs, options }, credentials, approvalCurrent);
+}
+
+/** Shows the failure; an insufficient-funds build is remembered for the decline. */
+function showIntentError(e: unknown, fallback: string) {
+  const code = (e as { code?: unknown })?.code;
+  intentFailureCode.value = typeof code === 'string' ? code : null;
+  signError.value = intentFailureCode.value === MidnightErrorCode.InsufficientFunds
+    ? t('errors.insufficientBalance')
+    : (e as Error)?.message || fallback;
+}
+
+async function signMidnightIntentNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  if (!currentRequest.value || !spendingPassword.value) return;
+  // Never deliver this tx to a superseded request (see signMidnightTransferNormal).
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightIntentTx({ password: spendingPassword.value })), approvalCurrent);
+    if (currentRequest.value?.requestId !== reqId) return;
+    intentFailureCode.value = null;
+    approve({ tx });
+    spendingPassword.value = '';
+  } catch (e) {
+    if (e instanceof StaleApprovalError) return;
+    console.error('[DApp] Midnight makeIntent error:', e);
+    showIntentError(e, 'Building the intent failed');
+  } finally {
+    signing.value = false;
+  }
+
+  });
+}
+
+async function signMidnightIntentPrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  if (!currentRequest.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    // Same cross-window PassKey popup as signMidnightBalancePrf.
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    const prfBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    })), approvalCurrent);
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightIntentTx({ prfSecret: prfBytes })), approvalCurrent);
+    if (currentRequest.value?.requestId !== reqId) return;
+    intentFailureCode.value = null;
+    approve({ tx });
+  } catch (e) {
+    if (e instanceof StaleApprovalError) return;
+    console.error('[DApp] Midnight PRF makeIntent error:', e);
+    showIntentError(e, 'PassKey signing failed');
   } finally {
     signing.value = false;
   }
