@@ -9,11 +9,34 @@ import { createDustLightTransport } from './midnightDustLightTransport';
 import { dustLedger9, balanceLightDust9 } from './midnightDustLightLedger9';
 import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 
+/** Deserialize unproven ledger-9 transaction bytes; throws when they are not one. */
+export function readLedger9UnprovenTransaction(bytes: Uint8Array): ledger.UnprovenTransaction {
+  return ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', bytes);
+}
+
+/** Throws unless `tx` was built for `network`: the generation tag alone does not validate the embedded network ID. */
+export function assertLedger9TransactionNetwork(network: string, tx: ledger.UnprovenTransaction): void {
+  ledger.Transaction.fromParts(network.toLowerCase()).merge(tx);
+}
+
+/**
+ * True when `bytes` are an unproven ledger-9 transaction for `network`. On a
+ * network this build signs with ledger 8, that tells "the network moved to a
+ * newer ledger" apart from bytes that are simply unreadable.
+ */
+export function isLedger9TransactionFor(network: string, bytes: Uint8Array): boolean {
+  try {
+    assertLedger9TransactionNetwork(network, readLedger9UnprovenTransaction(bytes));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function deserializeLedger9Transaction(network: string, hex: string): ledger.UnprovenTransaction {
   if (midnightLedgerVersion(network) !== 9) throw new Error('Ledger 9 requires Midnight Stagenet');
-  const tx: ledger.UnprovenTransaction = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', strictMidnightHex(hex));
-  // The generation tag alone does not validate the embedded network ID.
-  ledger.Transaction.fromParts('stagenet').merge(tx);
+  const tx = readLedger9UnprovenTransaction(strictMidnightHex(hex));
+  assertLedger9TransactionNetwork('stagenet', tx);
   return tx;
 }
 

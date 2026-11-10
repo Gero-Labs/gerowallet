@@ -162,18 +162,61 @@ export function verifyMidnightDustRegistration(
   return [...violations];
 }
 
-/** Thrown before signing when a Nexus-built Midnight transaction is not what was asked for. Nothing was signed. */
+/**
+ * Thrown before signing when a Nexus-built Midnight transaction decodes but is
+ * not what was asked for (or was built for another network). Nothing was signed.
+ */
 export const MIDNIGHT_BUILT_TX_MISMATCH = 'MIDNIGHT_BUILT_TX_MISMATCH';
+/** Thrown before signing when the built transaction cannot be decoded at all. Nothing was signed. */
+export const MIDNIGHT_BUILT_TX_UNREADABLE = 'MIDNIGHT_BUILT_TX_UNREADABLE';
+/**
+ * Thrown before signing when the built transaction cannot be decoded with the
+ * ledger this build uses for the network, but decodes with a newer one: the
+ * network moved to a ledger this build does not sign for. Nothing was signed.
+ */
+export const MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED = 'MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED';
 
-function refuse(what: string, detail: unknown): never {
-  debugLog(`Midnight ${what}: refused a Nexus-built transaction`, detail);
-  throw new Error(MIDNIGHT_BUILT_TX_MISMATCH);
+/** The guard's refusal codes, each mapped to its own copy by the UI. */
+export type MidnightBuiltTxRefusal =
+  | typeof MIDNIGHT_BUILT_TX_MISMATCH
+  | typeof MIDNIGHT_BUILT_TX_UNREADABLE
+  | typeof MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED;
+
+/** The transaction bytes do not decode under the network's ledger. */
+export class MidnightBuiltTxUnreadableError extends Error {
+  /** True when the bytes decode under a newer ledger than this build signs with for the network. */
+  readonly newerLedger: boolean;
+  constructor(newerLedger: boolean) {
+    super(newerLedger ? MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED : MIDNIGHT_BUILT_TX_UNREADABLE);
+    this.name = 'MidnightBuiltTxUnreadableError';
+    this.newerLedger = newerLedger;
+  }
+}
+
+function refuse(what: string, detail: unknown, code: MidnightBuiltTxRefusal = MIDNIGHT_BUILT_TX_MISMATCH): never {
+  debugLog(`Midnight ${what}: refused a Nexus-built transaction (${code})`, detail);
+  throw new Error(code);
+}
+
+/**
+ * Decode the built transaction for a check. Undecodable bytes are refused with
+ * {@link MIDNIGHT_BUILT_TX_UNREADABLE} or {@link MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED};
+ * bytes that decode for another network with {@link MIDNIGHT_BUILT_TX_MISMATCH}.
+ */
+async function decodeForCheck(what: string, sdkNetworkId: string, unprovenTxHex: string): Promise<MidnightTxView> {
+  try {
+    return await decodeUnprovenMidnightTransaction(sdkNetworkId, unprovenTxHex);
+  } catch (e) {
+    if (e instanceof MidnightBuiltTxUnreadableError) return refuse(what, e.message, e.message as MidnightBuiltTxRefusal);
+    return refuse(what, e);
+  }
 }
 
 /**
  * Throws {@link MIDNIGHT_BUILT_TX_MISMATCH} unless `unprovenTxHex` is exactly the
  * unshielded send `requested` (the outputs of the wallet's build request).
- * Anything that cannot be decoded is refused rather than signed blind.
+ * Anything that cannot be decoded is refused rather than signed blind, with
+ * {@link MIDNIGHT_BUILT_TX_UNREADABLE} or {@link MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED}.
  */
 export async function assertMidnightTransferMatches(
   sdkNetworkId: string,
@@ -181,14 +224,21 @@ export async function assertMidnightTransferMatches(
   own: MidnightOwnKeys,
   requested: ReadonlyArray<{ address: string; amount: string; token: string }>,
 ): Promise<void> {
-  let violations: MidnightBuiltTxViolation[];
+  let outputs: MidnightIntendedOutput[];
   try {
     const decode = await midnightAddressDecoder(sdkNetworkId);
-    const outputs = requested.map((o) => {
+    outputs = requested.map((o) => {
       if (!/^[0-9]+$/.test(String(o.amount))) throw new Error('Invalid amount');
       return { recipientHex: decode.unshieldedHex(o.address), tokenRaw: rawTokenOf(o.token), amount: BigInt(o.amount) };
     });
-    violations = verifyMidnightTransfer(await decodeUnprovenMidnightTransaction(sdkNetworkId, unprovenTxHex), own, outputs);
+  } catch (e) {
+    // The request itself does not decode: refused as before, never signed.
+    return refuse('send', e);
+  }
+  const tx = await decodeForCheck('send', sdkNetworkId, unprovenTxHex);
+  let violations: MidnightBuiltTxViolation[];
+  try {
+    violations = verifyMidnightTransfer(tx, own, outputs);
   } catch (e) {
     return refuse('send', e);
   }
@@ -197,7 +247,8 @@ export async function assertMidnightTransferMatches(
 
 /**
  * Throws {@link MIDNIGHT_BUILT_TX_MISMATCH} unless `unprovenTxHex` is a native
- * NIGHT registration of the wallet's own NIGHT for `dustReceiverBech32`.
+ * NIGHT registration of the wallet's own NIGHT for `dustReceiverBech32`, and
+ * the unreadable codes when it cannot be decoded (see {@link assertMidnightTransferMatches}).
  */
 export async function assertMidnightDustRegistrationMatches(
   sdkNetworkId: string,
@@ -205,26 +256,58 @@ export async function assertMidnightDustRegistrationMatches(
   own: MidnightOwnKeys,
   dustReceiverBech32: string,
 ): Promise<void> {
+  let dustKey: bigint;
+  try {
+    dustKey = (await midnightAddressDecoder(sdkNetworkId)).dustPublicKey(dustReceiverBech32);
+  } catch (e) {
+    return refuse('DUST registration', e);
+  }
+  const tx = await decodeForCheck('DUST registration', sdkNetworkId, unprovenTxHex);
   let violations: MidnightBuiltTxViolation[];
   try {
-    const dustKey = (await midnightAddressDecoder(sdkNetworkId)).dustPublicKey(dustReceiverBech32);
-    violations = verifyMidnightDustRegistration(await decodeUnprovenMidnightTransaction(sdkNetworkId, unprovenTxHex), own, dustKey);
+    violations = verifyMidnightDustRegistration(tx, own, dustKey);
   } catch (e) {
     return refuse('DUST registration', e);
   }
   if (violations.length > 0) refuse('DUST registration', violations);
 }
 
-/** Decode an unproven transaction under `sdkNetworkId`'s ledger and prove it belongs to that network. */
+/**
+ * Decode an unproven transaction under `sdkNetworkId`'s ledger and prove it
+ * belongs to that network. Bytes that do not decode throw
+ * {@link MidnightBuiltTxUnreadableError}; on a ledger-8 network it says whether
+ * they decode as a ledger-9 transaction for the same network. A transaction
+ * that decodes but was built for another network throws a plain error.
+ */
 export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, hex: string): Promise<MidnightTxView> {
   const { midnightLedgerVersion, strictMidnightHex } = await import('./midnightLedger');
-  if (midnightLedgerVersion(sdkNetworkId) === 9) {
-    const { deserializeLedger9Transaction } = await import('./midnightLedger9');
-    return deserializeLedger9Transaction(sdkNetworkId, hex) as unknown as MidnightTxView;
+  const version = midnightLedgerVersion(sdkNetworkId);
+  let bytes: Uint8Array;
+  try {
+    bytes = strictMidnightHex(hex);
+  } catch {
+    throw new MidnightBuiltTxUnreadableError(false);
+  }
+  if (version === 9) {
+    const { readLedger9UnprovenTransaction, assertLedger9TransactionNetwork } = await import('./midnightLedger9');
+    let tx: ReturnType<typeof readLedger9UnprovenTransaction>;
+    try {
+      tx = readLedger9UnprovenTransaction(bytes);
+    } catch {
+      // No newer ledger in this build to try.
+      throw new MidnightBuiltTxUnreadableError(false);
+    }
+    assertLedger9TransactionNetwork(sdkNetworkId, tx);
+    return tx as unknown as MidnightTxView;
   }
   const ledger = await import('@midnight-ntwrk/ledger-v8');
-  const tx: import('@midnight-ntwrk/ledger-v8').UnprovenTransaction =
-    ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', strictMidnightHex(hex));
+  let tx: import('@midnight-ntwrk/ledger-v8').UnprovenTransaction;
+  try {
+    tx = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', bytes);
+  } catch {
+    const { isLedger9TransactionFor } = await import('./midnightLedger9');
+    throw new MidnightBuiltTxUnreadableError(isLedger9TransactionFor(sdkNetworkId, bytes));
+  }
   // The ledger refuses to merge transactions of different networks.
   ledger.Transaction.fromParts(sdkNetworkId.toLowerCase()).merge(tx);
   return tx as unknown as MidnightTxView;

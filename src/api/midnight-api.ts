@@ -27,6 +27,7 @@ import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import { recoverLostSubmit, type MidnightSubmitWatch } from './midnightSubmitRecovery';
+import { midnightApiErrorFromResponse, toMidnightApiError } from './midnightApiError';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -1135,9 +1136,15 @@ export class MidnightApi {
     }
   }
 
-  /** A lost reply becomes a lookup of the transaction by `watch.identifiers`; a real failure throws as it always did. */
+  /**
+   * A lost reply becomes a lookup of the transaction by `watch.identifiers`; a
+   * real failure throws a readable {@link MidnightApiError} (midnightApiError.ts).
+   */
   private resolveSubmitError(error: unknown, watch?: MidnightSubmitWatch): Promise<SubmitMidnightTxResponse> {
-    return recoverLostSubmit(error, watch, { graphql: (query, variables) => this.graphql(query, variables) });
+    return recoverLostSubmit(error, watch, {
+      graphql: (query, variables) => this.graphql(query, variables),
+      network: this.network,
+    });
   }
 
   // ─── Native send: build / submit ──────────────────────────────────────────
@@ -1159,10 +1166,10 @@ export class MidnightApi {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/build-unshielded');
       const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, request);
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 
@@ -1189,10 +1196,10 @@ export class MidnightApi {
         ttlMs: request.ttlMs,
       };
       const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, wireBody);
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 
@@ -1218,7 +1225,7 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
         timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
       });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
       return this.resolveSubmitError(error, watch);
@@ -1251,7 +1258,7 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
         timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
       });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
       return this.resolveSubmitError(error, watch);
@@ -1282,7 +1289,7 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
         timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
       });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
       return this.resolveSubmitError(error, watch);
@@ -1347,14 +1354,14 @@ export class MidnightApi {
         tx_hash: string;
         signature_payload_hex: string;
       }>(url, wireBody, { timeout: 90_000 });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return {
         unprovenTxHex: data.unproven_tx_hex,
         txHash: data.tx_hash,
         signaturePayloadHex: data.signature_payload_hex,
       };
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 
@@ -1379,10 +1386,10 @@ export class MidnightApi {
         tx_hash: string;
         status: 'Submitted' | 'InBlock' | 'Finalized';
       }>(url, wireBody, { timeout: 90_000 });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return { txHash: data.tx_hash, status: data.status };
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 }

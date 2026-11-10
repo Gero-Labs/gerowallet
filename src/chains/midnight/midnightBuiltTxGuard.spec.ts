@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import * as legacy from '@midnight-ntwrk/ledger-v8';
 import { DustAddress, UnshieldedAddress, MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format';
 import fixture from './fixtures/nexus-ledger-signing.json';
+import * as ledger9 from '@midnightntwrk/ledger-v9';
 import {
+  MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED,
+  MIDNIGHT_BUILT_TX_MISMATCH,
+  MIDNIGHT_BUILT_TX_UNREADABLE,
+  MidnightBuiltTxUnreadableError,
+  assertMidnightDustRegistrationMatches,
+  assertMidnightTransferMatches,
   decodeUnprovenMidnightTransaction,
   midnightAddressDecoder,
   rawTokenOf,
@@ -110,5 +117,55 @@ describe('Midnight address and token decoding for the check', () => {
     expect(rawTokenOf('NIGHT')).toBe(NIGHT);
     expect(rawTokenOf('AB'.repeat(32))).toBe('ab'.repeat(32));
     expect(() => rawTokenOf('USDM')).toThrow();
+  });
+});
+
+describe('a built transaction that cannot be read is refused apart from one that does not match', () => {
+  // Both refusals throw before walletBg reaches its signing call (midnightBuiltTxChecks.spec.ts
+  // pins that order), so nothing is signed in either case.
+  const hexOf = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
+  const ownBech = (network: string) => MidnightBech32m.encode(network, new UnshieldedAddress(Buffer.from(OWN_ADDRESS, 'hex'))).asString();
+  const toSelf = (network: string, amount = '10') => [{ address: ownBech(network), amount, token: 'NIGHT' }];
+  const nightVector = (network: string) => fixture.transfers.find((v) => v.network === network && v.token === NIGHT)!;
+  const dustAddress = (network: string) => DustAddress.encodePublicKey(network, REGISTERED_DUST_KEY);
+
+  it.each(['mainnet', 'preprod'])('%s: content that differs is still MIDNIGHT_BUILT_TX_MISMATCH', async (network) => {
+    const vector = nightVector(network);
+    await expect(assertMidnightTransferMatches(network, vector.unprovenTxHex, own, toSelf(network))).resolves.toBeUndefined();
+    await expect(assertMidnightTransferMatches(network, vector.unprovenTxHex, own, toSelf(network, '11')))
+      .rejects.toThrow(MIDNIGHT_BUILT_TX_MISMATCH);
+  });
+
+  it.each(['mainnet', 'preprod', 'stagenet'])('%s: bytes no ledger reads are MIDNIGHT_BUILT_TX_UNREADABLE', async (network) => {
+    await expect(assertMidnightTransferMatches(network, 'deadbeef', own, toSelf(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
+    await expect(assertMidnightTransferMatches(network, 'not hex', own, toSelf(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
+  });
+
+  it.each(['mainnet', 'preprod'])('%s: a ledger-9 transaction for the network is MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED', async (network) => {
+    const hex = hexOf(ledger9.Transaction.fromParts(network).serialize());
+    await expect(assertMidnightTransferMatches(network, hex, own, toSelf(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED);
+    await expect(assertMidnightDustRegistrationMatches(network, hex, own, dustAddress(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED);
+  });
+
+  it('a ledger-9 transaction for another network is not read as an upgrade', async () => {
+    const hex = hexOf(ledger9.Transaction.fromParts('stagenet').serialize());
+    await expect(assertMidnightTransferMatches('mainnet', hex, own, toSelf('mainnet'))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
+  });
+
+  it('a ledger-8 transaction for another network decodes, so it is a mismatch', async () => {
+    const hex = hexOf(legacy.Transaction.fromParts('preprod').serialize());
+    await expect(assertMidnightTransferMatches('mainnet', hex, own, toSelf('mainnet'))).rejects.toThrow(MIDNIGHT_BUILT_TX_MISMATCH);
+  });
+
+  it('a DUST registration that cannot be read is MIDNIGHT_BUILT_TX_UNREADABLE', async () => {
+    await expect(assertMidnightDustRegistrationMatches('stagenet', 'deadbeef', own, dustAddress('stagenet'))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
+    await expect(assertMidnightDustRegistrationMatches(fixture.registration.network, fixture.registration.unprovenTxHex, own, dustAddress(fixture.registration.network)))
+      .resolves.toBeUndefined();
+  });
+
+  it('decoding reports which unreadable case it is', async () => {
+    await expect(decodeUnprovenMidnightTransaction('preprod', 'deadbeef')).rejects.toBeInstanceOf(MidnightBuiltTxUnreadableError);
+    const newer = await decodeUnprovenMidnightTransaction('preprod', hexOf(ledger9.Transaction.fromParts('preprod').serialize())).catch((e: unknown) => e);
+    expect(newer).toMatchObject({ newerLedger: true, message: MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED });
   });
 });

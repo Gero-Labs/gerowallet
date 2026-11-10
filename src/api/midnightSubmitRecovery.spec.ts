@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AxiosError } from 'axios';
-import { parseHttpError } from '@/shared/utils/parser';
+import { MidnightApiError } from './midnightApiError';
 import {
   MidnightSubmitUnconfirmedError,
   SUBMITTED_TX_QUERY,
@@ -9,7 +9,7 @@ import {
 } from './midnightSubmitRecovery';
 
 // Only `create` is replaced: AxiosError and isAxiosError stay real so the
-// classification and parseHttpError see genuine axios errors.
+// classification and the typed error see genuine axios errors.
 const { post } = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock('axios', async (importOriginal) => {
   const actual = await importOriginal<typeof import('axios')>();
@@ -79,15 +79,25 @@ describe('recoverLostSubmit', () => {
   const recover = (error: unknown, watch: { identifiers?: readonly string[] } | undefined = { identifiers: [ID] }, clock = fakeClock(), extra = {}) =>
     recoverLostSubmit(error, watch, { graphql, ...clock, ...extra });
 
-  it.each([400, 401, 409, 500])('rethrows a real HTTP %i exactly as before, without polling', async (status) => {
+  it.each([400, 401, 409, 500])('rethrows a real HTTP %i as a readable typed error, without polling', async (status) => {
     const error = withStatus(status);
-    await expect(recover(error)).rejects.toBe(parseHttpError(error));
+    const thrown = await recover(error).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(MidnightApiError);
+    expect(thrown).toMatchObject({ kind: 'server', status, message: 'x' });
     expect(graphql).not.toHaveBeenCalled();
   });
 
-  it('rethrows a non-axios error exactly as before, without polling', async () => {
-    const error = new Error('token');
-    await expect(recover(error)).rejects.toBe(parseHttpError(error));
+  it('rethrows a non-axios error as "no answer", without polling', async () => {
+    const thrown = await recover(new Error('token')).catch((e: unknown) => e);
+    expect(thrown).toMatchObject({ name: 'MidnightApiError', kind: 'noAnswer' });
+    expect(graphql).not.toHaveBeenCalled();
+  });
+
+  it('names the network in the network upgrade sentence', async () => {
+    const error = withStatus(501, { errorCode: 'MIDNIGHT_NETWORK_UPGRADING', message: 'paused' });
+    const thrown = await recoverLostSubmit(error, { identifiers: [ID] }, { graphql, network: 'Preprod' }).catch((e: unknown) => e);
+    expect(thrown).toMatchObject({ kind: 'networkUpgrading', status: 501 });
+    expect((thrown as Error).message).toBe('midnight.errors.networkUpgrading');
     expect(graphql).not.toHaveBeenCalled();
   });
 
@@ -196,7 +206,7 @@ describe('recoverLostSubmit', () => {
 
   it('still rethrows a real failure when there are no identifiers', async () => {
     const error = withStatus(400);
-    await expect(recoverLostSubmit(error, undefined, { graphql })).rejects.toBe(parseHttpError(error));
+    await expect(recoverLostSubmit(error, undefined, { graphql })).rejects.toMatchObject({ kind: 'server', status: 400, message: 'x' });
   });
 });
 
@@ -225,11 +235,23 @@ describe('MidnightApi submit routes', () => {
       expect(config).toEqual({ timeout: 110000 });
     });
 
-    it('rethrows a real failure as parseHttpError did, without polling', async () => {
-      const error = withStatus(409);
-      post.mockRejectedValueOnce(error);
-      await expect(call({ identifiers: [ID] })).rejects.toBe(parseHttpError(error));
+    it('rethrows a real failure as a readable typed error, without polling', async () => {
+      post.mockRejectedValueOnce(withStatus(409));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ name: 'MidnightApiError', kind: 'server', status: 409, message: 'x' });
       expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it('turns a 501 MIDNIGHT_NETWORK_UPGRADING into the network upgrade error, without polling', async () => {
+      post.mockRejectedValueOnce(withStatus(501, { status: 501, errorCode: 'MIDNIGHT_NETWORK_UPGRADING', message: 'paused' }));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ kind: 'networkUpgrading', network: 'Preprod' });
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it('turns LEDGER_MISMATCH into its own kind, by code or by message', async () => {
+      post.mockRejectedValueOnce(withStatus(500, { message: 'LEDGER_MISMATCH' }));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ kind: 'ledgerMismatch' });
+      post.mockRejectedValueOnce(withStatus(409, { errorCode: 'LEDGER_MISMATCH', message: 'changed' }));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ kind: 'ledgerMismatch' });
     });
 
     it('looks the transaction up through the indexer passthrough after a lost reply', async () => {

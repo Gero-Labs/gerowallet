@@ -379,9 +379,20 @@
           </div>
         </div>
 
-        <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3">
+        <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3" data-test="midnight-send-error">
           {{ errorMessage }}
         </div>
+        <!-- The network's ledger changed under the build: a fresh build may go
+             through. PRF wallets retry with the PassKey button above. -->
+        <v-btn
+          v-if="canRetryLedgerMismatch"
+          variant="text"
+          size="small"
+          color="var(--g-accent)"
+          class="mb-2"
+          data-test="midnight-send-try-again"
+          @click="retryLedgerMismatch()"
+        >{{ t('common.tryAgain') }}</v-btn>
 
         <div>
           <v-btn
@@ -474,6 +485,7 @@ import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
 import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
+import { midnightApiErrorKind } from '@/api/midnightApiError';
 
 interface Props {
   isOpen: boolean;
@@ -723,6 +735,10 @@ const amount = ref('');
 const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
+/** The last send failed with LEDGER_MISMATCH: "Try again" builds it from scratch. */
+const ledgerMismatch = ref(false);
+const canRetryLedgerMismatch = computed(() =>
+  ledgerMismatch.value && !!errorMessage.value && !isPrfWallet.value && !!password.value && !sending.value);
 
 // ── Send progress timeline ──
 // High-level stage of the in-flight send, driven by sendUnshieldedNight's
@@ -1052,12 +1068,14 @@ async function nextStep() {
 function prevStep() {
   approval.invalidate();
   errorMessage.value = null;
+  ledgerMismatch.value = false;
   localProverUnavailable.value = false;
   currentStep.value = 1;
 }
 
 function preflight(): boolean {
   errorMessage.value = null;
+  ledgerMismatch.value = false;
   if (loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
     errorMessage.value = 'Not a Midnight wallet';
     return false;
@@ -1072,6 +1090,18 @@ function hasFreshConsent(provider: MidnightRemoteProver): boolean {
 async function submitWithPassword() {
   if (!preflight() || isPrfWallet.value) return;
   await approval.run(() => routeSend({ password: password.value }, approval.capture()));
+}
+
+/** A new build request for the same send, after the network's ledger changed. */
+async function retryLedgerMismatch() {
+  ledgerMismatch.value = false;
+  await submitWithPassword();
+}
+
+/** Show a failed send: the error's readable message, and whether a fresh build may help. */
+function showSendError(e: unknown) {
+  errorMessage.value = e instanceof Error ? e.message : String(e);
+  ledgerMismatch.value = midnightApiErrorKind(e) === 'ledgerMismatch';
 }
 
 async function onPasskeyPrfOutput(prfBytes: Uint8Array) {
@@ -1296,7 +1326,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
     emit('close');
   } catch (e) {
     if (!current()) return;
-    errorMessage.value = e instanceof Error ? e.message : String(e);
+    showSendError(e);
   } finally {
     sponsor?.prfSecret?.fill(0);
     sending.value = false;
@@ -1359,7 +1389,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       proverFallbackReason.value = (e as { reason?: ProvingUnconfiguredTarget['reason'] }).reason;
       localProverUnavailable.value = true;
     } else {
-      errorMessage.value = e instanceof Error ? e.message : String(e);
+      showSendError(e);
     }
   } finally {
     sponsor?.prfSecret?.fill(0);

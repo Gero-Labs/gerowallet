@@ -9,7 +9,7 @@
  * (`Transaction.identifiers()`, identical before and after proving) and this
  * module asks the indexer whether the transaction arrived.
  */
-import { parseHttpError } from '@/shared/utils/parser';
+import { toMidnightApiError } from './midnightApiError';
 import type { SubmitMidnightTxResponse } from './midnight-api';
 
 /** What a caller knows about the transaction it is submitting, enough to find it again. */
@@ -67,6 +67,8 @@ export function isLostReply(error: unknown): boolean {
 export interface SubmitRecoveryDeps {
   /** Indexer GraphQL passthrough (`MidnightApi.graphql`). */
   graphql: (query: string, variables: Record<string, unknown>) => Promise<unknown>;
+  /** The wallet network (`Mainnet`, ...), named in the readable error. */
+  network?: string;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   intervalMs?: number;
@@ -128,15 +130,16 @@ export async function awaitSubmittedTx(
 }
 
 /**
- * Called from a submit method's `catch`. A real failure is rethrown exactly as
- * before (`parseHttpError`); a lost reply becomes a lookup of the transaction.
+ * Called from a submit method's `catch`. A real failure is rethrown as a
+ * readable {@link import('./midnightApiError').MidnightApiError}; a lost reply
+ * becomes a lookup of the transaction.
  */
 export async function recoverLostSubmit(
   error: unknown,
   watch: MidnightSubmitWatch | undefined,
   deps: SubmitRecoveryDeps,
 ): Promise<SubmitMidnightTxResponse> {
-  if (!isLostReply(error)) throw parseHttpError(error);
+  if (!isLostReply(error)) throw toMidnightApiError(error, deps.network);
   const identifier = watch?.identifiers?.[0];
   if (!identifier) throw new MidnightSubmitUnconfirmedError();
   return awaitSubmittedTx(identifier, deps);
