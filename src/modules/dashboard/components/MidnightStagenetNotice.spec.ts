@@ -15,7 +15,7 @@ import us from '@/plugins/i18n/us';
 import de from '@/plugins/i18n/de';
 import es from '@/plugins/i18n/es';
 
-const stubs = { 'v-icon': true };
+const stubs = { 'v-icon': { template: '<i class="v-icon-stub" />' } };
 const setWallet = (chain: string, network: string) => {
   (walletStore as { loggedWallet: { chain: string; network: string } | null }).loggedWallet = { chain, network };
 };
@@ -28,14 +28,18 @@ describe('Midnight Stagenet notice (issue 1477, step 1)', () => {
     const notice = w.get('[data-test="midnight-stagenet-notice"]');
     expect(notice.get('.stagenet-notice__text').text()).toBe(
       'Midnight Stagenet is being retired. Your wallet will move to Preview, a new test network. '
-      + 'Stagenet tokens and history don\'t carry over. Get new tNIGHT from the Preview faucet.',
+      + 'Stagenet tokens and history don\'t carry over. Get new tNIGHT from the Preview faucet(opens in a new tab).',
     );
     const link = notice.get('[data-test="midnight-stagenet-faucet"]');
-    expect(link.text()).toBe('Preview faucet');
+    // The visible name, the external-link glyph, and the new tab said to screen readers only.
+    expect(link.text()).toBe('Preview faucet(opens in a new tab)');
+    expect(link.get('.g-sr-only').text()).toBe('(opens in a new tab)');
+    expect(link.find('.v-icon-stub').exists()).toBe(true);
     expect(link.attributes('href')).toBe(MIDNIGHT_PREVIEW_FAUCET_URL);
     expect(link.attributes('target')).toBe('_blank');
     expect(link.attributes('rel')).toContain('noopener');
-    expect(notice.attributes('role')).toBe('status');
+    // Standing information, not a live update: a note, never announced on its own.
+    expect(notice.attributes('role')).toBe('note');
   });
 
   it('points at a real https faucet for Preview, not the Stagenet one', () => {
@@ -69,11 +73,13 @@ describe('Midnight Stagenet notice (issue 1477, step 1)', () => {
     }
   });
 
-  it('is mounted on the Midnight dashboard and in the side panel, next to the network upgrade banner', () => {
+  it('is one of the notices the slot shows on the Midnight dashboard and in the side panel', () => {
     const src = join(__dirname, '../../..');
     const portfolio = readFileSync(join(src, 'modules/portfolio/PortfolioPage.vue'), 'utf8');
     const home = readFileSync(join(src, 'sidepanel/pages/HomePage.vue'), 'utf8');
-    expect(portfolio).toMatch(/<MidnightNetworkUpgradeBanner class="portfolio-upgrade-banner" \/>[\s\S]{0,200}<MidnightStagenetNotice class="portfolio-upgrade-banner" \/>/);
-    expect(home).toMatch(/<MidnightNetworkUpgradeBanner v-if="isMidnight" class="home-upgrade-banner" \/>[\s\S]{0,200}<MidnightStagenetNotice v-if="isMidnight" class="home-upgrade-banner" \/>/);
+    const slot = readFileSync(join(src, 'modules/dashboard/components/MidnightNoticeSlot.vue'), 'utf8');
+    expect(portfolio).toContain('<MidnightNoticeSlot class="portfolio-upgrade-banner" />');
+    expect(home).toContain('<MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner" />');
+    expect(slot).toContain('stagenet: MidnightStagenetNotice,');
   });
 });

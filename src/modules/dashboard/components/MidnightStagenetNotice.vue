@@ -3,7 +3,7 @@
        Preview, a new chain, so nothing on it carries over. Said before the move,
        with the faucet for new tNIGHT. Renders nothing for any other wallet, so a
        parent's spacing class lands only on the banner. -->
-  <div v-if="isStagenet" class="stagenet-notice" role="status" data-test="midnight-stagenet-notice">
+  <div v-if="isStagenet" class="stagenet-notice" role="note" data-test="midnight-stagenet-notice">
     <v-icon size="20" color="warning" class="stagenet-notice__icon" aria-hidden="true">mdi-alert-circle-outline</v-icon>
     <p class="stagenet-notice__text t-body-sm">
       {{ sentence.before }}<a
@@ -12,7 +12,7 @@
         target="_blank"
         rel="noopener noreferrer"
         data-test="midnight-stagenet-faucet"
-      >{{ t('midnight.stagenet.faucetLink') }}</a>{{ sentence.after }}
+      >{{ t('midnight.stagenet.faucetLink') }}<v-icon size="13" class="stagenet-notice__external" aria-hidden="true">mdi-open-in-new</v-icon><span class="g-sr-only">{{ t('midnight.stagenet.opensNewTab') }}</span></a>{{ sentence.after }}
     </p>
   </div>
 </template>
@@ -21,13 +21,12 @@
 import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_PREVIEW_FAUCET_URL } from '@/chains/midnight/midnightConfig';
+import { isMidnightStagenetWallet } from './midnightStagenet';
 
 const { t } = useTranslation();
 
-const isStagenet = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT
-  && walletStore.loggedWallet?.network === Network.STAGENET);
+const isStagenet = computed(() => isMidnightStagenetWallet(walletStore.loggedWallet));
 
 /**
  * The sentence around the link. The link text is its own key and the sentence
@@ -56,8 +55,9 @@ const sentence = computed(() => {
   border-radius: var(--g-r-card);
 }
 
+/* Same offset as the sibling banners in the notice slot. */
 .stagenet-notice__icon {
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .stagenet-notice__text {
@@ -77,5 +77,10 @@ const sentence = computed(() => {
 
 .stagenet-notice__link:hover {
   text-decoration-thickness: 2px;
+}
+
+.stagenet-notice__external {
+  margin-left: 2px;
+  vertical-align: -1px;
 }
 </style>

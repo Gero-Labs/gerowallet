@@ -5562,6 +5562,7 @@ export default {
   'midnight.upgrade.registrationPaused': 'DUST registration on {network} is paused while GeroWallet moves to the new version.',
   'midnight.stagenet.retiring': 'Midnight Stagenet is being retired. Your wallet will move to Preview, a new test network. Stagenet tokens and history don\'t carry over. Get new tNIGHT from the {faucet}.',
   'midnight.stagenet.faucetLink': 'Preview faucet',
+  'midnight.stagenet.opensNewTab': '(opens in a new tab)',
   'midnight.dustNoCollateral': 'This registration needs a small ADA-only UTxO for network collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
   'midnight.resetSyncCache': 'Reset sync cache',
   'midnight.resetSyncCacheDone': 'Sync cache cleared. Re-syncing from the start.',

@@ -6,12 +6,9 @@
          showing NIGHT/DUST as line items. Dust registration dialog is opened
          from a header-action button so the Register CTA stays accessible. -->
     <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
-      <!-- Shown only while sends on this network are paused for a network upgrade;
-           renders nothing (and takes no space) otherwise. -->
-      <MidnightNetworkUpgradeBanner class="portfolio-upgrade-banner" />
-      <!-- Stagenet wallets only: Stagenet is being retired and the wallet will
-           move to Preview. Renders nothing for any other network. -->
-      <MidnightStagenetNotice class="portfolio-upgrade-banner" />
+      <!-- The Midnight notices above the balance, at most two by precedence
+           (MidnightNoticeSlot.vue); renders nothing (and takes no space) otherwise. -->
+      <MidnightNoticeSlot class="portfolio-upgrade-banner" />
       <v-row no-gutters class="hero-row">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <MidnightPortfolioChart />
@@ -460,8 +457,7 @@ import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTra
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
 import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
-import MidnightNetworkUpgradeBanner from '@/modules/dashboard/components/MidnightNetworkUpgradeBanner.vue';
-import MidnightStagenetNotice from '@/modules/dashboard/components/MidnightStagenetNotice.vue';
+import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
 import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
 import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
 import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';
@@ -1271,7 +1267,7 @@ function closeDustRegistration() {
 </script>
 
 <style scoped>
-/* The network upgrade and Stagenet banners' slot: the grid's own gutter, only when one shows. */
+/* The Midnight notice slot: the grid's own gutter, only when a notice shows. */
 .portfolio-upgrade-banner {
   margin: var(--g-s-2) var(--g-s-2) 0;
 }
