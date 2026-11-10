@@ -161,16 +161,15 @@ describe('Refreshing across a worker restart', () => {
 
     const restarted = await load('background');
     restarted.midnightActions.setActive(addresses('abc'));
-    // A send right after the restart: the only row in this worker's memory, and
-    // written over the persisted history.
+    // A send right after the restart: the only row in this worker's memory. It is
+    // saved with the previous history, not over it (midnightStore.ts bootStandIn).
     restarted.midnightActions.applyTransaction({
       hash: 'ee'.repeat(32), type: 'send', token: 'NIGHT', amount: 9n, counterparty: 'mn_addr_preprod1to',
       timestamp: Date.now(), status: 'pending', fee: 0n, isShielded: false,
     });
     await settle();
-    // The persisted history is this worker's now: the pending row alone.
     const cached = await restarted.cache.readStoreCache(['midnightStore.transactions']);
-    expect(JSON.parse(cached.get('midnightStore.transactions')!.json)).toHaveLength(1);
+    expect(JSON.parse(cached.get('midnightStore.transactions')!.json)).toHaveLength(21);
 
     // As the sync service's reset callback decides: a pending row alone is not data in memory.
     const { hasDataToKeep } = await import('@/chains/midnight/midnightRefresh');

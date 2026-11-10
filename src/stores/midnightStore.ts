@@ -428,6 +428,8 @@ const persister = new StorePersister(midnightStore as unknown as Record<string, 
   // Per-wallet chain state is keyed by the active unshielded address.
   scope: (state) => (typeof state['activeWalletKey'] === 'string' ? state['activeWalletKey'] : null),
   redact: (field, value) => (field === 'proofServer' ? withoutProofServerCredentials(value) : value),
+  // After a restart, the previous worker's values until this one has its own (see bootStandIn).
+  standIn: (field, value) => bootStandIn(field, value),
   trustedFields: ['proofServer', 'shieldedProvingConsent'],
 });
 
@@ -790,9 +792,20 @@ let bootRecord: {
   transactions: MidnightTransaction[];
   utxos: MidnightUnshieldedUtxo[];
   refreshSnapshot: MidnightRefreshSnapshot | null;
+  /** The bulk fields above were read (IndexedDB answered in time). */
+  bulkRead: boolean;
 } | null = null;
 /** Settles once the boot read above has landed. */
 let bootRead: Promise<void> = Promise.resolve();
+/** Dropped (or its wallet removed) before the boot read landed: not kept when it does. */
+let bootDropped = false;
+const bootForgotten = new Set<string>();
+
+/** Let go of the previous worker's record, also if its read is still to land. */
+function dropBootRecord(): void {
+  bootRecord = null;
+  bootDropped = true;
+}
 
 const bgDurableTouched = {
   proofServer: false,
@@ -838,19 +851,74 @@ if (context === 'background') {
       midnightStore.chainIdentity = hydrateChainIdentity(stored.chainIdentity);
     }
     // What the previous worker left, kept aside (never into the store: sync owns
-    // per-wallet state). The bulk fields are read in the same step, so no write
-    // of this worker can land first (the persister holds writes until it ends).
+    // per-wallet state). The bulk fields follow from IndexedDB, in the same step,
+    // so no write of this worker can land first (the persister holds writes until
+    // it ends, or for 3 s at most).
+    const bootKey = typeof stored.activeWalletKey === 'string' ? stored.activeWalletKey : null;
+    if (bootDropped || (bootKey && bootForgotten.has(bootKey))) return;
     bootRecord = {
-      activeWalletKey: typeof stored.activeWalletKey === 'string' ? stored.activeWalletKey : null,
+      activeWalletKey: bootKey,
       balances: hydrateBalances(stored.balances),
       dustState: hydrateDustState(stored.dustState),
       tip: { hash: stored.tip?.hash ?? null, height: stored.tip?.height ?? 0, timestamp: stored.tip?.timestamp ?? 0 },
       refreshing: hydrateRefreshStatus(stored.refreshing),
-      transactions: hydrateTransactions(stored.transactions),
-      utxos: hydrateUtxos(stored.utxos),
-      refreshSnapshot: hydrateRefreshSnapshot(stored.refreshSnapshot),
+      transactions: [],
+      utxos: [],
+      refreshSnapshot: null,
+      bulkRead: false,
     };
-  }, { migrate: true, bulk: true }).catch(() => undefined);
+  }, {
+    migrate: true,
+    bulk: (record) => {
+      const stored = record as Partial<MidnightStore>;
+      const boot = bootRecord;
+      if (!boot || boot.activeWalletKey !== (typeof stored.activeWalletKey === 'string' ? stored.activeWalletKey : null)) return;
+      boot.transactions = hydrateTransactions(stored.transactions);
+      boot.utxos = hydrateUtxos(stored.utxos);
+      boot.refreshSnapshot = hydrateRefreshSnapshot(stored.refreshSnapshot);
+      boot.bulkRead = true;
+    },
+  }).catch(() => undefined);
+}
+
+/** The previous worker's history rows this worker may still show and save in place of its own. */
+function bootRowsToKeep(boot: NonNullable<typeof bootRecord>): MidnightTransaction[] {
+  return boot.transactions;
+}
+
+/**
+ * While the previous worker's record is held for the active wallet and this
+ * worker has none of that data of its own yet (a restart, before sync delivers
+ * any), the value saved, and sent to the views, for an emptied per-wallet field
+ * is the record's: the first write after a restart (setActive's) must not save
+ * zero balances over the stored ones, nor a send recorded meanwhile the history.
+ * History this worker holds is kept, and the record's rows it lacks are added.
+ */
+function bootStandIn(field: string, value: unknown): unknown {
+  const boot = bootRecord;
+  const key = midnightStore.activeWalletKey;
+  if (!boot || !key || boot.activeWalletKey !== key) return value;
+  switch (field) {
+    case 'balances': return hasDataToKeep(midnightStore.balances, []) ? value : boot.balances;
+    case 'dustState': return midnightStore.dustState ?? boot.dustState;
+    case 'tip': return midnightStore.tip.hash ? value : { ...midnightStore.tip, ...boot.tip };
+    case 'utxos': return boot.bulkRead && midnightStore.utxos.length === 0 ? boot.utxos : value;
+    case 'transactions': {
+      if (!boot.bulkRead || midnightStore.transactions.some((tx) => tx.status !== 'pending')) return value;
+      const own = new Set(midnightStore.transactions.map(txRowKey));
+      return [...midnightStore.transactions, ...bootRowsToKeep(boot).filter((tx) => !own.has(txRowKey(tx)))]
+        .sort((a, b) => b.timestamp - a.timestamp);
+    }
+    default: return value;
+  }
+}
+
+/** `updates` as they go out to the views, with the stand-ins above. */
+function withBootStandIns(updates: Partial<MidnightStore>): Partial<MidnightStore> {
+  if (!bootRecord) return updates;
+  const out: Record<string, unknown> = { ...updates };
+  for (const key of Object.keys(updates)) out[key] = bootStandIn(key, (updates as Record<string, unknown>)[key]);
+  return out as Partial<MidnightStore>;
 }
 
 /**
@@ -1019,7 +1087,7 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
   // Apply to in-memory state in background context
   applyUpdates(updates);
 
-  const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
+  const serializedUpdates = JSON.parse(JSON.stringify(withBootStandIns(updates), serializeValue));
   backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
   persister.markDirty(Object.keys(updates));
@@ -1147,6 +1215,9 @@ export const midnightActions = {
     bgDurableTouched.chainIdentity = true;
     // "Refreshing" (midnightRefresh.ts): what was on screen is kept, in the same
     // broadcast as the wipe, so no view ever renders the empty state in between.
+    // The previous worker's record has served (what it showed is the snapshot now),
+    // and the emptied fields below are this reset's own, saved as they are.
+    dropBootRecord();
     const updates: Partial<MidnightStore> = {
       ...refreshStartFields(options.reason ?? null, options.persisted ?? null),
       chainIdentity: identity, privateSyncStatus: 'idle', privateSyncProgress: null, lastSync: null, tip: { ...EMPTY_TIP },
@@ -1156,8 +1227,6 @@ export const midnightActions = {
     };
     Object.assign(midnightStore, updates);
     broadcastFromBackground(updates, true);
-    // The previous worker's record has served: what it showed is the snapshot now.
-    bootRecord = null;
   },
   /**
    * Keep what is on screen for a rebuild that doesn't go through a chain reset
@@ -1195,7 +1264,9 @@ export const midnightActions = {
         shieldedTokens: { ...snapshot.balances.shieldedTokens },
       };
       const live = midnightStore.transactions;
-      const keptShielded = snapshot.transactions.filter((tx) => tx.isShielded
+      // Rows the scan will deliver again; never a pending row, which live history
+      // holds if it is still wanted (the user may have dismissed it).
+      const keptShielded = snapshot.transactions.filter((tx) => tx.isShielded && tx.status !== 'pending'
         && !live.some((t) => txRowKey(t) === txRowKey(tx)));
       if (keptShielded.length) {
         midnightStore.transactions = [...live, ...keptShielded].sort((a, b) => b.timestamp - a.timestamp);
@@ -1223,8 +1294,10 @@ export const midnightActions = {
     // A rebuild was running: what the wallet showed before it.
     if (boot.refreshSnapshot) return boot.refreshSnapshot;
     if (!hasDataToKeep(boot.balances, boot.transactions)) return null;
+    // No pending rows: the record may hold one the user has dismissed since, and a
+    // send still pending is the reset's to keep, not the snapshot's.
     return {
-      balances: boot.balances, transactions: [...boot.transactions], utxos: [...boot.utxos],
+      balances: boot.balances, transactions: boot.transactions.filter((tx) => tx.status !== 'pending'), utxos: [...boot.utxos],
       dustState: boot.dustState, tip: { ...boot.tip },
     };
   },
@@ -1233,7 +1306,7 @@ export const midnightActions = {
    * previous worker's record read at boot is no longer needed.
    */
   releaseBootRecord() {
-    bootRecord = null;
+    dropBootRecord();
   },
   /**
    * A refresh the previous worker was running when it stopped: back into
@@ -1372,6 +1445,11 @@ export const midnightActions = {
    * wallet is the active one; its own state stays.
    */
   forgetWallet(address: string) {
+    // The previous worker's record of a removed wallet must not reach a re-import of its seed.
+    if (address) {
+      bootForgotten.add(address);
+      if (bootRecord?.activeWalletKey === address) bootRecord = null;
+    }
     if (!address || midnightStore.activeWalletKey !== address) return;
     const wiped = {
       isActive: false,
@@ -1397,7 +1475,7 @@ export const midnightActions = {
   },
 
   clear() {
-    bootRecord = null;
+    dropBootRecord();
     Object.assign(midnightStore, {
       isActive: false,
       networkStatus: 'disconnected',
