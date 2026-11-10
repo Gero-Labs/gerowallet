@@ -153,19 +153,28 @@
             block
             size="large"
             class="geroButton"
-            :disabled="!dustAddress || writesPaused"
+            :disabled="!dustAddress"
+            :aria-disabled="writesPaused ? 'true' : undefined"
+            :aria-describedby="writesPaused ? 'dust-register-paused' : undefined"
             data-test="dust-register"
             @click="startRegistration"
           >
             <v-icon start>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
-          <!-- Native registration on this network is paused (midnightWriteGate.ts).
+          <!-- Native registration on this network is paused (midnightWriteGate.ts):
+               Register stays, held but focusable, with this reason linked to it.
                The Cardano-held NIGHT sources below stay available. -->
-          <div v-if="writesPaused" class="writes-paused-note t-caption mt-2" data-test="dust-register-paused">
-            <v-icon size="14" color="warning">mdi-pause-circle-outline</v-icon>
-            <span>{{ t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}</span>
-          </div>
+          <GNote
+            v-if="writesPaused"
+            id="dust-register-paused"
+            icon="mdi-pause-circle-outline"
+            role="status"
+            class="mt-2"
+            data-test="dust-register-paused"
+          >
+            {{ t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+          </GNote>
 
           <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
                sources panel), with the external portal kept as a low-prominence
@@ -254,6 +263,7 @@
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
@@ -856,16 +866,5 @@ void props;
   font-size: 12px;
   font-weight: 500;
   color: var(--g-text-1);
-}
-/* A paused action: the warning glyph and text on the muted warning pair. */
-.writes-paused-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--g-s-1);
-  padding: var(--g-s-2) var(--g-s-3);
-  color: var(--g-warning);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
 }
 </style>

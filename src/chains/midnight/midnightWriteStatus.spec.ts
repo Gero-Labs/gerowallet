@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({ status: vi.fn() }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getWriteStatus: mocks.status }) }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 
-import { assertMidnightWritesOpen, refreshMidnightWriteStatus, resetMidnightWriteStatusForTests } from './midnightWriteStatus';
+import {
+  MIDNIGHT_STATUS_UNSUPPORTED_RETRY_MS, assertMidnightWritesOpen, refreshMidnightWriteStatus, resetMidnightWriteStatusForTests,
+} from './midnightWriteStatus';
 import { isMidnightNetworkUpgrading, noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from './midnightWriteGate';
 
 beforeEach(() => {
@@ -45,11 +47,30 @@ describe('the status read', () => {
     await expect(isMidnightNetworkUpgrading('Mainnet')).resolves.toBe(false);
   });
 
-  it('does not ask a server without the route again', async () => {
+  it('after a 404, clears a status pause and asks again only after the back-off', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      await noteMidnightNetworkUpgrading('Mainnet', 'status');
+      mocks.status.mockResolvedValue({ kind: 'unknown', unsupported: true });
+      await refreshMidnightWriteStatus('Mainnet', { force: true });
+      await expect(isMidnightNetworkUpgrading('Mainnet')).resolves.toBe(false);
+      await refreshMidnightWriteStatus('Mainnet', { force: true });
+      expect(mocks.status).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(Date.now() + MIDNIGHT_STATUS_UNSUPPORTED_RETRY_MS + 1);
+      mocks.status.mockResolvedValue({ kind: 'closed', reason: 'NETWORK_UPGRADING' });
+      await refreshMidnightWriteStatus('Mainnet', { force: true });
+      expect(mocks.status).toHaveBeenCalledTimes(2);
+      await expect(isMidnightNetworkUpgrading('Mainnet')).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a 404 leaves a remembered 501 in place', async () => {
+    await noteMidnightNetworkUpgrading('Preprod', 'response');
     mocks.status.mockResolvedValue({ kind: 'unknown', unsupported: true });
-    await refreshMidnightWriteStatus('Mainnet', { force: true });
-    await refreshMidnightWriteStatus('Mainnet', { force: true });
-    expect(mocks.status).toHaveBeenCalledTimes(1);
+    await refreshMidnightWriteStatus('Preprod', { force: true });
+    await expect(isMidnightNetworkUpgrading('Preprod')).resolves.toBe(true);
   });
 
   it('reuses a read from the last 30 s unless forced', async () => {

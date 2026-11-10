@@ -7327,7 +7327,10 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
   }
   // Sends on this network are paused for a network upgrade (midnightWriteGate.ts):
   // answer at once, with the same sentence the wallet shows, before any request.
+  // The side panel's site tracker shows the refusal too.
   if (await isMidnightNetworkUpgrading(wallet.network)) {
+    const { midnightActions } = await import('@/stores/midnightStore');
+    midnightActions.recordSiteActivity(request.origin as string, { type: 'submit-failed', reason: 'paused' });
     sendResponse({
       id: request.id,
       error: midnightApiError(MidnightErrorCode.InternalError, readableMidnightError('networkUpgrading', {}, wallet.network)),

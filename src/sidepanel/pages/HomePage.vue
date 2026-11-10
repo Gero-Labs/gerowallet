@@ -22,9 +22,20 @@
     </template>
 
     <template v-else>
+      <!-- Midnight: sends and DUST registration on this network are paused for a
+           network upgrade (midnightWriteGate.ts). Renders nothing otherwise. -->
+      <MidnightNetworkUpgradeBanner v-if="isMidnight" class="home-upgrade-banner" />
+
       <BalanceSection @buy-sell="handleBuySell" />
 
-      <QuickActions @action="handleAction" />
+      <QuickActions
+        :disabled-ids="midnightSendPaused ? ['send'] : []"
+        :described-by="midnightSendPaused ? 'home-send-paused' : undefined"
+        @action="handleAction"
+      />
+      <p v-if="midnightSendPaused" id="home-send-paused" class="home-send-paused t-caption" data-testid="home-send-paused">
+        {{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(walletStore.loggedWallet?.network) }) }}
+      </p>
 
       <!-- Midnight: a connected site's transaction in flight (Prove → Fund → Submit) -->
       <MiniSiteActivity v-if="isMidnight" />
@@ -154,6 +165,9 @@ import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
+import MidnightNetworkUpgradeBanner from '@/modules/dashboard/components/MidnightNetworkUpgradeBanner.vue';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
 import MiniProofServerWidget from '../components/MiniProofServerWidget.vue';
@@ -209,6 +223,8 @@ function openProgrammableSend() {
 }
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+/** Sends on this Midnight network are paused for a network upgrade: Send stays visible, held, with the reason under it. */
+const midnightSendPaused = useMidnightNetworkUpgrading(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
 
 // Mirrors the dashboard's isEmptyMainnet exactly (mini-gero must mirror the
 // dashboard, never approximate): mainnet Cardano whose account row is absent
@@ -247,6 +263,7 @@ function handleAction(id: string) {
   switch (id) {
     case 'send':
       if (isMidnight.value) {
+        if (midnightSendPaused.value) return;
         showMidnightSend.value = true;
       } else {
         showSend.value = true;
@@ -334,6 +351,18 @@ function formatAdaPrice(price: number): string {
 </script>
 
 <style scoped>
+/* The network upgrade banner, on the panel's gutter. */
+.home-upgrade-banner {
+  margin: var(--g-s-3) var(--g-s-3) 0;
+}
+
+/* Why Send is held: under the actions, before the widgets. */
+.home-send-paused {
+  margin: 0 var(--g-s-4) var(--g-s-3);
+  color: var(--g-text-2);
+  text-align: center;
+}
+
 .home-page {
   display: flex;
   flex-direction: column;

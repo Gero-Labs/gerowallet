@@ -15,8 +15,11 @@
 
 export type SiteActivityStep = 'proving' | 'funding' | 'submitting' | 'submitted' | 'failed';
 
-/** Why a transaction stopped — short codes the panel turns into copy. */
-export type SiteFailureReason = 'proof-server' | 'declined' | 'other';
+/**
+ * Why a transaction stopped — short codes the panel turns into copy.
+ * `paused`: sends on the network are paused for a network upgrade (midnightWriteGate.ts).
+ */
+export type SiteFailureReason = 'proof-server' | 'declined' | 'paused' | 'other';
 
 export interface MidnightSiteActivity {
   /** The site's origin, e.g. `https://dareu-preprod.vercel.app`. */
@@ -107,7 +110,7 @@ export function isSiteActivityVisible(activity: MidnightSiteActivity | null, now
 }
 
 const STEPS: ReadonlySet<string> = new Set<SiteActivityStep>(['proving', 'funding', 'submitting', 'submitted', 'failed']);
-const REASONS: ReadonlySet<string> = new Set<SiteFailureReason>(['proof-server', 'declined', 'other']);
+const REASONS: ReadonlySet<string> = new Set<SiteFailureReason>(['proof-server', 'declined', 'paused', 'other']);
 
 /** Persisted record; only the exact shape survives a cold start. */
 export function hydrateSiteActivity(stored: unknown): MidnightSiteActivity | null {

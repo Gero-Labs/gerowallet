@@ -37,6 +37,11 @@
 
           <v-expand-transition>
             <div v-show="step === 1" class="step-body">
+              <!-- Sends on this network are paused (midnightWriteGate.ts): said up front,
+                   before the user fills in anything. Review and Confirm stay held. -->
+              <GNote v-if="writesPaused" icon="mdi-pause-circle-outline" role="status" class="mb-3" data-test="midnight-send-paused-start">
+                {{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+              </GNote>
               <div class="quick-row">
                 <v-btn size="x-small" variant="outlined" :color="primaryColor" @click="showQR = true">
                   <v-icon size="x-small" class="mr-1">mdi-qrcode</v-icon>{{ $t('wallet.qrScan') }}
@@ -236,33 +241,44 @@
               </div>
 
               <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
-                   verified on preprod, the old "reset" was an estimator bug). -->
-              <GNote v-if="!isDustLow" icon="mdi-information-outline" class="mt-3">
-                {{ $t('midnight.send.dustResetWarning') }}
-              </GNote>
-              <!-- Low-DUST hint: informational while any DUST remains (the tiny
-                   fee still clears); red only when DUST is genuinely empty. -->
-              <GNote v-else-if="isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
-                {{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
-              </GNote>
-              <div v-else class="midnight-info-note mt-3">
-                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
-                <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
-              </div>
+                   verified on preprod, the old "reset" was an estimator bug).
+                   None while sends are paused: nothing is sent, so no fee. -->
+              <template v-if="!writesPaused">
+                <GNote v-if="!isDustLow" icon="mdi-information-outline" class="mt-3">
+                  {{ $t('midnight.send.dustResetWarning') }}
+                </GNote>
+                <!-- Low-DUST hint: informational while any DUST remains (the tiny
+                     fee still clears); red only when DUST is genuinely empty. -->
+                <GNote v-else-if="isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+                  {{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
+                </GNote>
+                <div v-else class="midnight-info-note mt-3">
+                  <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+                  <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
+                </div>
+              </template>
 
               <!-- Sends on this network are paused (midnightWriteGate.ts): the button
-                   stays, disabled, with the reason, and the password step can't open. -->
-              <div v-if="writesPaused" class="midnight-dust-note mt-3" data-test="midnight-send-paused">
-                <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
-                <span>{{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}</span>
-              </div>
+                   stays, held but focusable (aria-disabled), with the reason linked
+                   to it, and the password step can't open. -->
+              <GNote
+                v-if="writesPaused"
+                id="midnight-sheet-send-paused"
+                icon="mdi-pause-circle-outline"
+                role="status"
+                class="mt-3"
+                data-test="midnight-send-paused"
+              >
+                {{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+              </GNote>
 
               <div class="step-actions-row mt-4">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
                 <GButton
                   tier="primary"
                   class="flex-grow-1 ml-2"
-                  :disabled="writesPaused"
+                  :aria-disabled="writesPaused ? 'true' : undefined"
+                  :aria-describedby="writesPaused ? 'midnight-sheet-send-paused' : undefined"
                   data-test="midnight-send-confirm"
                   @click="goToStep(4)"
                 >

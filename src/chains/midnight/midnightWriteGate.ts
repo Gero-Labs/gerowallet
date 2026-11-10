@@ -18,15 +18,23 @@
  * (A remote feature flag was the ticket's second trigger. The flag channel
  * carries one boolean per flag with no per-network values, so none is wired.)
  *
- * The record lives in chrome.storage.session: shared by the worker, the
- * dashboard and the side panel, cleared with the browser session, and not
- * readable by content scripts.
+ * Each network's entry lives under its own chrome.storage.session key
+ * (`midnightWriteGate:<network>`): shared by the worker, the dashboard and the
+ * side panel, cleared with the browser session, and not readable by content
+ * scripts. A status-read pause lapses after STATUS_GATE_TTL_MS without a new
+ * read, and goes when the status route answers 404.
  */
 import { computed, reactive, type ComputedRef } from 'vue';
 
 export const MIDNIGHT_WRITE_GATE_KEY = 'midnightWriteGate';
 /** How long a 501 alone keeps a network paused before the next attempt asks the server again. */
 export const RESPONSE_GATE_TTL_MS = 30 * 60_000;
+/**
+ * How long a status-read pause holds without being confirmed. The status is
+ * re-read every 5 minutes while a Midnight wallet is open; if those reads stop,
+ * the pause lapses instead of holding until the browser restarts.
+ */
+export const STATUS_GATE_TTL_MS = 15 * 60_000;
 
 export type MidnightWriteGateSource = 'status' | 'response';
 
@@ -46,20 +54,20 @@ export function isPausedIn(record: MidnightWriteGateRecord | null | undefined, n
   if (!network) return false;
   const entry = record?.[midnightGateKey(network)];
   if (!entry) return false;
-  if (entry.source === 'response') return now - entry.at < RESPONSE_GATE_TTL_MS;
-  return true;
+  return now - entry.at < (entry.source === 'response' ? RESPONSE_GATE_TTL_MS : STATUS_GATE_TTL_MS);
 }
 
 /** Pure: the record after a status read or a write outcome. */
 export function nextGateRecord(
   record: MidnightWriteGateRecord,
   network: string,
-  change: { paused: true; source: MidnightWriteGateSource; at: number } | { paused: false },
+  change: { paused: true; source: MidnightWriteGateSource; at: number } | { paused: false; onlySource?: MidnightWriteGateSource },
 ): MidnightWriteGateRecord {
   const key = midnightGateKey(network);
   if (!key) return record;
-  if (!change.paused) {
+  if (change.paused === false) {
     if (!(key in record)) return record;
+    if (change.onlySource && record[key]?.source !== change.onlySource) return record;
     const rest = { ...record };
     delete rest[key];
     return rest;
@@ -69,17 +77,17 @@ export function nextGateRecord(
   return { ...record, [key]: { source: change.source, at: change.at } };
 }
 
-function readRecord(value: unknown): MidnightWriteGateRecord {
-  if (!value || typeof value !== 'object') return {};
-  const out: MidnightWriteGateRecord = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const e = entry as Partial<MidnightWriteGateEntry> | null;
-    if (e && (e.source === 'status' || e.source === 'response') && typeof e.at === 'number') out[key] = { source: e.source, at: e.at };
-  }
-  return out;
+function readEntry(value: unknown): MidnightWriteGateEntry | null {
+  const e = value as Partial<MidnightWriteGateEntry> | null;
+  return e && typeof e === 'object' && (e.source === 'status' || e.source === 'response') && typeof e.at === 'number'
+    ? { source: e.source, at: e.at } : null;
 }
 
-type SessionArea = { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
+type SessionArea = {
+  get(key: string | null): Promise<Record<string, unknown>>;
+  set(items: Record<string, unknown>): Promise<void>;
+  remove(key: string): Promise<void>;
+};
 
 function sessionArea(): SessionArea | null {
   try {
@@ -95,16 +103,24 @@ function sessionArea(): SessionArea | null {
 const mirror = reactive({ record: {} as MidnightWriteGateRecord, now: Date.now() });
 let expiryTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Re-evaluate when the earliest remembered 501 runs out, so the buttons re-enable on time. */
+/** Re-evaluate when the earliest pause runs out, so the buttons re-enable on time. */
 function scheduleExpiry(): void {
   if (expiryTimer) clearTimeout(expiryTimer);
   expiryTimer = null;
   const ends = Object.values(mirror.record)
-    .filter((e) => e.source === 'response')
-    .map((e) => e.at + RESPONSE_GATE_TTL_MS)
+    .map((e) => e.at + (e.source === 'response' ? RESPONSE_GATE_TTL_MS : STATUS_GATE_TTL_MS))
     .filter((t) => t > Date.now());
   if (!ends.length) return;
   expiryTimer = setTimeout(() => { mirror.now = Date.now(); scheduleExpiry(); }, Math.min(...ends) - Date.now() + 50);
+}
+
+function applyMirrorEntry(key: string, entry: MidnightWriteGateEntry | null): void {
+  const next = { ...mirror.record };
+  if (entry) next[key] = entry;
+  else delete next[key];
+  mirror.record = next;
+  mirror.now = Date.now();
+  scheduleExpiry();
 }
 
 function applyMirror(record: MidnightWriteGateRecord): void {
@@ -113,24 +129,39 @@ function applyMirror(record: MidnightWriteGateRecord): void {
   scheduleExpiry();
 }
 
+const storageKeyOf = (network: string) => `${MIDNIGHT_WRITE_GATE_KEY}:${midnightGateKey(network)}`;
+const networkKeyOf = (storageKey: string) => (storageKey.startsWith(`${MIDNIGHT_WRITE_GATE_KEY}:`)
+  ? storageKey.slice(MIDNIGHT_WRITE_GATE_KEY.length + 1) : null);
+
 let mirrorStarted = false;
-/** A change event (or our own write) landed: the first read, if still pending, is older than it. */
-let mirrorUpdated = false;
+/** Keys a change event (or our own write) already set: the first read must not overwrite them. */
+const mirrorTouched = new Set<string>();
 function startMirror(): void {
   if (mirrorStarted) return;
   mirrorStarted = true;
-  mirrorUpdated = false;
+  mirrorTouched.clear();
   const area = sessionArea();
   if (!area) return;
   try {
     chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'session' || !(MIDNIGHT_WRITE_GATE_KEY in changes)) return;
-      mirrorUpdated = true;
-      applyMirror(readRecord(changes[MIDNIGHT_WRITE_GATE_KEY]?.newValue));
+      if (areaName !== 'session') return;
+      for (const [storageKey, change] of Object.entries(changes)) {
+        const key = networkKeyOf(storageKey);
+        if (!key) continue;
+        mirrorTouched.add(key);
+        applyMirrorEntry(key, readEntry(change?.newValue));
+      }
     });
   } catch { /* no change events here: the mirror keeps its first read */ }
-  void area.get(MIDNIGHT_WRITE_GATE_KEY).then((items) => {
-    if (!mirrorUpdated) applyMirror(readRecord(items?.[MIDNIGHT_WRITE_GATE_KEY]));
+  void area.get(null).then((items) => {
+    const record: MidnightWriteGateRecord = { ...mirror.record };
+    for (const [storageKey, value] of Object.entries(items ?? {})) {
+      const key = networkKeyOf(storageKey);
+      if (!key || mirrorTouched.has(key)) continue;
+      const entry = readEntry(value);
+      if (entry) record[key] = entry;
+    }
+    applyMirror(record);
   }, () => undefined);
 }
 
@@ -142,13 +173,15 @@ export function useMidnightNetworkUpgrading(network: () => string | undefined | 
 
 // ── Reads and writes ──────────────────────────────────────────────────────
 
-/** The current state, read from the shared record (not the mirror, which may lag one event). */
+/** The current state, read from session storage (not the mirror, which may lag one event). */
 export async function isMidnightNetworkUpgrading(network: string): Promise<boolean> {
   const area = sessionArea();
   if (!area) return isPausedIn(mirror.record, network, Date.now());
   try {
-    const items = await area.get(MIDNIGHT_WRITE_GATE_KEY);
-    return isPausedIn(readRecord(items?.[MIDNIGHT_WRITE_GATE_KEY]), network, Date.now());
+    const storageKey = storageKeyOf(network);
+    const items = await area.get(storageKey);
+    const entry = readEntry(items?.[storageKey]);
+    return isPausedIn(entry ? { [midnightGateKey(network)]: entry } : {}, network, Date.now());
   } catch {
     return false;
   }
@@ -156,21 +189,31 @@ export async function isMidnightNetworkUpgrading(network: string): Promise<boole
 
 let writeChain: Promise<void> = Promise.resolve();
 
-/** Serialised read-modify-write, so two notes from one context never undo each other. */
+/**
+ * Serialised read-modify-write of one network's key, so two notes from one
+ * context never undo each other. Each network has its own session-storage key.
+ */
 function update(network: string, change: Parameters<typeof nextGateRecord>[2]): Promise<void> {
+  const key = midnightGateKey(network);
   writeChain = writeChain.then(async () => {
+    if (!key) return;
     const area = sessionArea();
     if (!area) {
       applyMirror(nextGateRecord(mirror.record, network, change));
       return;
     }
     try {
-      const items = await area.get(MIDNIGHT_WRITE_GATE_KEY);
-      const current = readRecord(items?.[MIDNIGHT_WRITE_GATE_KEY]);
+      const storageKey = storageKeyOf(network);
+      const items = await area.get(storageKey);
+      const currentEntry = readEntry(items?.[storageKey]);
+      const current: MidnightWriteGateRecord = currentEntry ? { [key]: currentEntry } : {};
       const next = nextGateRecord(current, network, change);
-      if (next !== current) await area.set({ [MIDNIGHT_WRITE_GATE_KEY]: next });
-      mirrorUpdated = true;
-      applyMirror(next);
+      if (next !== current) {
+        if (next[key]) await area.set({ [storageKey]: next[key] });
+        else await area.remove(storageKey);
+      }
+      mirrorTouched.add(key);
+      applyMirrorEntry(key, next[key] ?? null);
     } catch {
       // Storage unavailable: the server still refuses, it just says so later.
     }
@@ -188,9 +231,15 @@ export function noteMidnightWritesOpen(network: string): Promise<void> {
   return update(network, { paused: false });
 }
 
+/** The status route is gone (404): a pause it set no longer has a source. A remembered 501 stays. */
+export function clearMidnightStatusPause(network: string): Promise<void> {
+  return update(network, { paused: false, onlySource: 'status' });
+}
+
 /** Test hook. */
 export function resetMidnightWriteGateForTests(): void {
   applyMirror({});
   writeChain = Promise.resolve();
   mirrorStarted = false;
+  mirrorTouched.clear();
 }

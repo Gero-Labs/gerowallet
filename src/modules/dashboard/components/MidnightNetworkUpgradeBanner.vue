@@ -1,21 +1,22 @@
 <template>
   <!-- Sends and DUST registration on this network are paused for a network
-       upgrade (midnightWriteGate.ts). Reads, Receive and history are unaffected. -->
+       upgrade (midnightWriteGate.ts). Reads, Receive and history are unaffected.
+       Renders nothing otherwise, so a parent's spacing class lands only on the banner. -->
   <div v-if="paused" class="upgrade-banner" role="status" data-test="midnight-upgrade-banner">
-    <v-icon size="20" color="warning" class="upgrade-banner__icon">mdi-pause-circle-outline</v-icon>
+    <v-icon size="20" color="warning" class="upgrade-banner__icon" aria-hidden="true">mdi-pause-circle-outline</v-icon>
     <div class="upgrade-banner__body">
       <div class="upgrade-banner__title t-body">{{ t('midnight.upgrade.title') }}</div>
       <div class="upgrade-banner__text t-body-sm">{{ t('midnight.errors.networkUpgrading', { network }) }}</div>
+      <a
+        class="upgrade-banner__link t-body-sm"
+        :href="LEARN_MORE_URL"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {{ t('common.learnMore') }}
+        <v-icon size="13" aria-hidden="true">mdi-open-in-new</v-icon>
+      </a>
     </div>
-    <a
-      class="upgrade-banner__link t-body-sm"
-      :href="LEARN_MORE_URL"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {{ t('common.learnMore') }}
-      <v-icon size="13">mdi-open-in-new</v-icon>
-    </a>
   </div>
 </template>
 
@@ -53,8 +54,11 @@ const paused = useMidnightNetworkUpgrading(() => walletNetwork.value);
 }
 
 .upgrade-banner__body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
+  max-width: 72ch;
 }
 
 .upgrade-banner__title {
@@ -66,9 +70,12 @@ const paused = useMidnightNetworkUpgrading(() => walletNetwork.value);
   color: var(--g-text-2);
 }
 
+/* After the text, inside the body: a link, so underlined. */
 .upgrade-banner__link {
+  align-self: flex-start;
+  margin-top: var(--g-s-1);
   color: var(--g-accent);
   white-space: nowrap;
-  text-decoration: none;
+  text-decoration: underline;
 }
 </style>

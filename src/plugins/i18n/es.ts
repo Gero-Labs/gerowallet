@@ -5360,7 +5360,7 @@ export default {
   'midnight.errors.noAnswer': 'Midnight no respondió. No se envió nada. Inténtalo de nuevo.',
   'midnight.errors.submitUnconfirmed': 'Gero dejó de esperar a la red, pero esta transacción todavía puede completarse. Revisa tu actividad antes de volver a enviar.',
   'midnight.upgrade.title': 'Actualización de la red de Midnight',
-  'midnight.upgrade.sendPaused': 'Los envíos en {network} están en pausa mientras GeroWallet pasa a la nueva versión.',
+  'midnight.upgrade.sendPaused': 'Los envíos y el registro de DUST en {network} están en pausa mientras GeroWallet pasa a la nueva versión.',
   'midnight.upgrade.registrationPaused': 'El registro de DUST en {network} está en pausa mientras GeroWallet pasa a la nueva versión.',
   'midnight.dustNoCollateral': 'Este registro necesita un pequeño UTxO solo con ADA como colateral de red, pero todo tu ADA está agrupado con tokens. Envía unos 6 ADA a tu propia dirección de billetera para crear uno y luego inténtalo de nuevo.',
   'midnight.resetSyncCache': 'Restablecer caché de sincronización',

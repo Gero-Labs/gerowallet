@@ -6,10 +6,9 @@
          showing NIGHT/DUST as line items. Dust registration dialog is opened
          from a header-action button so the Register CTA stays accessible. -->
     <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
-      <!-- Shown only while sends on this network are paused for a network upgrade. -->
-      <div class="pa-2 pb-0">
-        <MidnightNetworkUpgradeBanner />
-      </div>
+      <!-- Shown only while sends on this network are paused for a network upgrade;
+           renders nothing (and takes no space) otherwise. -->
+      <MidnightNetworkUpgradeBanner class="portfolio-upgrade-banner" />
       <v-row no-gutters class="hero-row">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <MidnightPortfolioChart />
@@ -1268,6 +1267,11 @@ function closeDustRegistration() {
 </script>
 
 <style scoped>
+/* The network upgrade banner's slot: the grid's own gutter, only when it shows. */
+.portfolio-upgrade-banner {
+  margin: var(--g-s-2) var(--g-s-2) 0;
+}
+
 /* ── Filter toolbar (single row: chips + search + menu) ──────────────────────── */
 
 .filter-toolbar {

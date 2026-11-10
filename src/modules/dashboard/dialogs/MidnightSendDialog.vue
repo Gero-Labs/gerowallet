@@ -378,12 +378,12 @@
           </div>
         </div>
 
-        <!-- Sends on this network are paused (midnightWriteGate.ts): the button stays,
-             disabled, with the reason beside it, and step 2 can't be opened. -->
-        <div v-if="writesPaused" class="midnight-dust-note mb-2" role="status" data-test="midnight-send-paused">
-          <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
-          <span>{{ t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}</span>
-        </div>
+        <!-- Sends on this network are paused (midnightWriteGate.ts): Continue stays,
+             held but focusable (aria-disabled), with this reason linked to it, and
+             step 2 can't be opened. -->
+        <GNote v-if="writesPaused" id="midnight-send-paused" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-paused">
+          {{ t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+        </GNote>
         <!-- Not an error: sends are paused on this network, or this build can't sign
              for the network's ledger. The amber note, and the CTA is disabled. -->
         <GNote v-else-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-blocked">

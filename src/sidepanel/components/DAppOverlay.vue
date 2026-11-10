@@ -666,7 +666,8 @@
             <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <!-- No DUST fee while sends are paused: nothing is sent. -->
+          <p v-if="!midnightWritesPaused" class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
           <!-- Who proves this transfer: the user's own setting, never silently Gero Cloud. -->
           <div class="d-flex align-start mt-2" data-testid="midnight-transfer-prover">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
@@ -677,10 +678,9 @@
         <!-- Sends on this network are paused (midnightWriteGate.ts): the reason in place
              of Approve, no password or PassKey. Closing tells the dapp why. -->
         <template v-if="midnightWritesPaused">
-          <div class="midnight-paused-note t-caption mb-2 mt-3" data-testid="midnight-writes-paused">
-            <v-icon size="14" color="warning">mdi-pause-circle-outline</v-icon>
-            <span>{{ midnightWritesPausedReason }}</span>
-          </div>
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
           <div class="action-buttons">
             <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
           </div>
@@ -773,15 +773,14 @@
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <p v-if="!midnightWritesPaused" class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
         </div>
 
         <!-- Same pause as makeTransfer above. -->
         <template v-if="midnightWritesPaused">
-          <div class="midnight-paused-note t-caption mb-2 mt-3" data-testid="midnight-writes-paused">
-            <v-icon size="14" color="warning">mdi-pause-circle-outline</v-icon>
-            <span>{{ midnightWritesPausedReason }}</span>
-          </div>
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
           <div class="action-buttons">
             <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
           </div>
@@ -884,7 +883,7 @@
             <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-fees">
+          <p v-if="!(midnightWritesPaused && intentPaysFees)" class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-fees">
             {{ intentPaysFees ? $t('midnight.connector.transferFeesNote') : $t('midnight.connector.intentFeesNotPaid') }}
           </p>
           <div v-if="intentPaysFees" class="d-flex align-start mt-2">
@@ -894,7 +893,17 @@
           <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Same pause as makeTransfer above. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -1248,6 +1257,7 @@ import { MidnightErrorCode } from '@/chrome/config';
 import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -3082,7 +3092,10 @@ function rejectMidnightSignData() {
 // calling reject() bare for those two methods.
 function onEscapeReject() {
   approval.invalidate();
-  if (currentRequest.value?.method === 'midnight_connect') {
+  if (midnightWritesPaused.value && MIDNIGHT_PAUSABLE_METHODS.has(currentRequest.value?.method ?? '')) {
+    // Same answer as Close: the dapp learns why, not that the user declined.
+    declineMidnightWhilePaused();
+  } else if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {
     rejectMidnightSignData();
@@ -3373,10 +3386,13 @@ function rejectMidnightBalance() {
 }
 
 // ── Midnight network upgrade (midnightWriteGate.ts) ─────────────────────────
-// While sends on the wallet's network are paused, makeTransfer and
-// balanceUnsealedTransaction show the reason instead of Approve, and the dapp
-// gets InternalError with the same sentence: a server-side state, not a
-// request the dapp got wrong.
+// While sends on the wallet's network are paused, makeTransfer,
+// balanceUnsealedTransaction and makeIntent show the reason instead of
+// Approve, and the dapp gets InternalError with the same sentence (on Close
+// and on Escape): a server-side state, not a request the dapp got wrong.
+const MIDNIGHT_PAUSABLE_METHODS: ReadonlySet<string> = new Set([
+  'midnight_makeTransfer', 'midnight_balanceUnsealedTransaction', 'midnight_makeIntent',
+]);
 const midnightWritesPaused = useMidnightNetworkUpgrading(() => (
   loggedWallet.value?.chain === Blockchain.MIDNIGHT ? loggedWallet.value?.network : ''
 ));
@@ -3544,6 +3560,7 @@ async function signMidnightIntentNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   // Never deliver this tx to a superseded request (see signMidnightTransferNormal).
   const reqId = currentRequest.value.requestId;
@@ -3570,6 +3587,7 @@ async function signMidnightIntentPrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
@@ -3926,18 +3944,6 @@ function approveWcSession() {
 
 /* Replaces the unconditional "confirm the URL" nag: it only appears when the
    hostname actually contains punycode or non-ASCII characters. */
-/* Midnight network upgrade: the reason in place of Approve, on the muted warning pair. */
-.midnight-paused-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--g-s-1);
-  padding: var(--g-s-2) var(--g-s-3);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
-  color: var(--g-warning);
-}
-
 .suspicious-host {
   display: flex;
   align-items: center;

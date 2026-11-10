@@ -35,10 +35,18 @@ describe('Midnight network upgrade banner', () => {
     expect(banner.text()).toContain('midnight.errors.networkUpgrading:Midnight Preprod');
     expect(banner.find('a').attributes('href')).toBe('https://midnight.network/blog');
     expect(banner.find('a').attributes('rel')).toContain('noopener');
+    // Learn more sits inside the body, after the sentence.
+    expect(banner.find('.upgrade-banner__body a').exists()).toBe(true);
+    expect(banner.attributes('role')).toBe('status');
 
     await noteMidnightWritesOpen('Preprod');
     await flushPromises();
     expect(w.find('[data-test="midnight-upgrade-banner"]').exists()).toBe(false);
+  });
+
+  it('renders nothing while open, so a spacing class from the parent takes no room', () => {
+    const w = mount(MidnightNetworkUpgradeBanner, { attrs: { class: 'slot' }, global: { stubs } });
+    expect(w.find('.slot').exists()).toBe(false);
   });
 
   it('is per network', async () => {
