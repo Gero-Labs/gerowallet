@@ -57,6 +57,13 @@ describe('announcement envelope verification', () => {
     expect(await verdict(await signEditorial(editorial()), both)).toBe('unknown_key');
   });
 
+  it('accepts nothing under a key id that is listed twice in one tier', async () => {
+    const other = '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c';
+    const twice: VerifyKeys = { editorial: [TEST_KEYS.editorial[0]!, { keyId: 'vec-ed', publicKeyHex: other }], feed: TEST_KEYS.feed };
+    expect(await verdict(await signEditorial(editorial()), twice)).toBe('unknown_key');
+    expect(await verdict(await signFeed(feed()), twice)).toBeNull();
+  });
+
   it('accepts nothing at all with no key pinned', async () => {
     const none: VerifyKeys = { editorial: [], feed: [] };
     expect(await verdict(await signEditorial(editorial()), none)).toBe('unknown_key');
@@ -87,7 +94,7 @@ describe('the shared announcement vectors', () => {
   };
 
   it('are all here', () => {
-    expect(file.vectors).toHaveLength(42);
+    expect(file.vectors).toHaveLength(54);
     expect(file.domain).toBe('gero-announcement-v1\n');
   });
 

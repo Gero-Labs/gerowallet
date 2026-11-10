@@ -54,6 +54,33 @@ describe('announcement content rules', () => {
     expect(ofEditorial((d) => { d['severity'] = 'urgent'; })).toBe('bad_severity');
   });
 
+  it('parse the payload as the server parses it', () => {
+    const doc = JSON.stringify(editorial());
+    const raw = (s: string) => { const r = check(new TextEncoder().encode(s), 'editorial', NOW); return r.ok === false ? r.refusal : null; };
+    expect(raw(doc)).toBeNull();
+    // Nothing after the document. Whitespace is not something.
+    expect(raw(`${doc}{}`)).toBe('bad_json');
+    expect(raw(`${doc}x`)).toBe('bad_json');
+    expect(raw(`${doc}\n `)).toBeNull();
+    // No byte order mark, and UTF-8 only.
+    expect(raw(`\uFEFF${doc}`)).toBe('bad_json');
+    const utf16 = new Uint8Array(doc.length * 2);
+    for (let i = 0; i < doc.length; i++) { utf16[i * 2] = doc.charCodeAt(i) & 0xff; utf16[i * 2 + 1] = doc.charCodeAt(i) >> 8; }
+    const asUtf16 = check(utf16, 'editorial', NOW);
+    expect(asUtf16.ok === false ? asUtf16.refusal : null).toBe('bad_json');
+    // A number is an integer by its value, within the range a client holds exactly.
+    expect(raw(doc.replace('"v":1', '"v":1.0'))).toBeNull();
+    expect(raw(doc.replace('"v":1', '"v":1.5'))).toBe('bad_version');
+    expect(raw(doc.replace('"v":1', '"v":18446744073709551617'))).toBe('bad_version');
+    expect(raw(doc.replace('"v":1', '"v":1e400'))).toBe('bad_version');
+    expect(raw(doc.replace(/"ts":\d+/, '"ts":9007199254740993').replace(/"exp":\d+/, '"exp":9007199254741993'))).toBe('bad_time');
+    expect(raw(doc.replace('"bytes":4', '"bytes":4.0'))).toBeNull();
+    expect(raw(doc.replace('"bytes":4', '"bytes":4.5'))).toBe('bad_media');
+    // A repeated key takes its last value.
+    expect(raw(`{"v":2,${doc.slice(1)}`)).toBeNull();
+    expect(raw(`${doc.slice(0, -1)},"v":2}`)).toBe('bad_version');
+  });
+
   it('check the times', () => {
     expect(ofEditorial((d) => { d['exp'] = 'tomorrow'; })).toBe('bad_time');
     expect(ofEditorial((d) => { d['exp'] = d['ts']; })).toBe('bad_time');
