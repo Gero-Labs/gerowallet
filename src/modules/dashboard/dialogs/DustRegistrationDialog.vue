@@ -18,6 +18,11 @@
         <v-spacer />
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
+      <!-- Midnight data is paused: the relay can't show a registration yet. Its own
+           line, not the pill's short help slot. -->
+      <p v-if="pausedNoteShown" class="paused-note t-body-sm" data-test="dust-paused-note">
+        {{ t('midnight.dataPaused.cnightPending') }}
+      </p>
 
       <!-- Incoming DUST from a Cardano wallet just registered to this address
            (bound to a Cardano stake credential, so the status pill above, which
@@ -26,7 +31,7 @@
         <span class="status-dot status-dot--pending"></span>
         <span>{{ t('midnight.cnightIncomingPending', { count: incomingCnightPending }) }}</span>
         <v-spacer />
-        <span class="status-pill-help">{{ t('midnight.relayFewHours') }}</span>
+        <span class="status-pill-help" data-test="incoming-pending-help">{{ pendingHelp }}</span>
       </div>
 
       <!-- Hero card: the DUST recipient address. This is the thing the user is
@@ -275,6 +280,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
@@ -382,10 +388,19 @@ const statusLabel = computed(() => {
   }
 });
 
+// While Midnight data is paused the relay cannot show a registration, so
+// "a few hours" would be a promise the wallet cannot keep.
+const { paused: midnightDataPaused } = useMidnightDataFreshness();
+// The pill keeps its short help; while paused that help is dropped and the
+// sentence goes on its own line under the pill.
+const pendingHelp = computed(() => (midnightDataPaused.value ? '' : t('midnight.relayFewHours')));
+const pausedNoteShown = computed(() => midnightDataPaused.value
+  && (registrationStatus.value === 'Pending' || incomingCnightPending.value > 0));
+
 const statusHelp = computed(() => {
   switch (registrationStatus.value) {
     case 'Registered': return '';
-    case 'Pending': return t('midnight.relayFewHours');
+    case 'Pending': return pendingHelp.value;
     case 'Invalid': return '';
     default: return '';
   }
@@ -872,5 +887,9 @@ void props;
   font-size: 12px;
   font-weight: 500;
   color: var(--g-text-1);
+}
+/* "Midnight data is paused" under the status pill, on the spacing grid. */
+.paused-note {
+  margin: var(--g-s-2) 0 0;
 }
 </style>

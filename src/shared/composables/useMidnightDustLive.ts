@@ -44,6 +44,7 @@ import { getMidnightApi } from '@/api/midnight-api';
 import { debugLog } from '@/utils/debug';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
 import { dustAccountStateHasSignal } from '@/chains/midnight/midnightDustBalance';
+import { isMidnightDataPaused } from '@/chains/midnight/midnightDataFreshness';
 
 // Shared module-scope state — one source of truth across all consumers.
 const polledBalance = ref<bigint>(0n);
@@ -240,6 +241,12 @@ export interface MidnightDustLive {
    * The fallback's "no enumerable stakes" exit asks nothing, so it does not settle.
    */
   readonly settled: ComputedRef<boolean>;
+  /**
+   * Midnight data is paused (the tip's block is more than ten minutes old, see
+   * midnightDataFreshness.ts). The balance is then the last reading, not ticked
+   * forward, and views label it as an estimate.
+   */
+  readonly estimate: ComputedRef<boolean>;
 }
 
 export function useMidnightDustLive(): MidnightDustLive {
@@ -266,6 +273,10 @@ export function useMidnightDustLive(): MidnightDustLive {
   // read uses (`midnightDustBalance.ts`).
   const pathBSupersedesA = computed(() => pathBRegistered.value && pathBIsDestinationWide.value);
 
+  // While Midnight data is paused, extrapolating from the local clock would
+  // show a battery rising on data that is not moving: hold the last reading.
+  const dataPaused = computed(() => isMidnightDataPaused(midnightStore.tip, nowTickMs.value));
+
   const pathABalance = computed<bigint>(() => {
     // No successful poll yet, or the poll was hollow (see pathAPollHasSignal)
     // — fall back to the gero-sync snapshot the registration dialog already
@@ -273,7 +284,7 @@ export function useMidnightDustLive(): MidnightDustLive {
     // generating (the Nexus dust poll can silently 404 on auth-token
     // expiry — see catch above).
     if (!pathAPollHasSignal()) return midnightStore.dustState?.current ?? 0n;
-    const elapsedMs = Math.max(0, nowTickMs.value - polledAsOfMs.value);
+    const elapsedMs = dataPaused.value ? 0 : Math.max(0, nowTickMs.value - polledAsOfMs.value);
     const extra = (polledGenerating.value * BigInt(elapsedMs)) / 1000n;
     let live = polledBalance.value + extra;
     if (polledCap.value > 0n && live > polledCap.value) live = polledCap.value;
@@ -284,7 +295,7 @@ export function useMidnightDustLive(): MidnightDustLive {
   // rate over elapsed time since the last Path-B poll, same shape as Path A.
   const pathBBalanceExtrapolated = computed<bigint>(() => {
     const asOf = pathBAsOfMs.value;
-    const elapsedMs = asOf > 0 ? Math.max(0, nowTickMs.value - asOf) : 0;
+    const elapsedMs = asOf > 0 && !dataPaused.value ? Math.max(0, nowTickMs.value - asOf) : 0;
     const extra = (pathBRate.value * BigInt(elapsedMs)) / 1000n;
     let live = pathBBalance.value + extra;
     if (pathBCap.value > 0n && live > pathBCap.value) live = pathBCap.value;
@@ -323,5 +334,6 @@ export function useMidnightDustLive(): MidnightDustLive {
     // forever even though the battery itself is showing real Path-B charge.
     hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null || pathBAsOfMs.value !== 0),
     settled: computed(() => (polledAsOfMs.value !== 0 || midnightStore.dustState != null) && pathBBatchAsOfMs.value !== 0),
+    estimate: dataPaused,
   };
 }
