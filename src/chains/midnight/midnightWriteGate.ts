@@ -25,6 +25,7 @@
  * read, and goes when the status route answers 404.
  */
 import { computed, reactive, type ComputedRef } from 'vue';
+import { Network } from '@/models/types';
 
 export const MIDNIGHT_WRITE_GATE_KEY = 'midnightWriteGate';
 /** How long a 501 alone keeps a network paused before the next attempt asks the server again. */
@@ -72,8 +73,9 @@ export function nextGateRecord(
     delete rest[key];
     return rest;
   }
-  // A status read outranks a remembered 501, never the other way round.
-  if (change.source === 'response' && record[key]?.source === 'status') return record;
+  // A live status-read pause outranks a 501, never the other way round. An
+  // expired one doesn't: the 501 replaces it, or the network would read open.
+  if (change.source === 'response' && record[key]?.source === 'status' && isPausedIn(record, network, change.at)) return record;
   return { ...record, [key]: { source: change.source, at: change.at } };
 }
 
@@ -84,7 +86,7 @@ function readEntry(value: unknown): MidnightWriteGateEntry | null {
 }
 
 type SessionArea = {
-  get(key: string | null): Promise<Record<string, unknown>>;
+  get(keys: string | string[]): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
   remove(key: string): Promise<void>;
 };
@@ -153,7 +155,9 @@ function startMirror(): void {
       }
     });
   } catch { /* no change events here: the mirror keeps its first read */ }
-  void area.get(null).then((items) => {
+  // Only the gate's own keys, one per network name the wallet knows: never the
+  // whole session area, which also holds unrelated secrets.
+  void area.get(Object.values(Network).map(storageKeyOf)).then((items) => {
     const record: MidnightWriteGateRecord = { ...mirror.record };
     for (const [storageKey, value] of Object.entries(items ?? {})) {
       const key = networkKeyOf(storageKey);

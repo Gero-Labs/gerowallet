@@ -3414,7 +3414,7 @@ async function buildMidnightBalanceTx(
   const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
   if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
   const { balanceConnectorTransaction } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return balanceConnectorTransaction(data.tx, credentials, approvalCurrent);
+  return balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent);
 }
 
 async function signMidnightBalanceNormal() {
@@ -3544,7 +3544,7 @@ async function buildMidnightIntentTx(
   if (!approvalCurrent()) throw new StaleApprovalError();
   const { desiredInputs, desiredOutputs, options } = intentPayload.value;
   const { buildConnectorIntent } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return buildConnectorIntent({ desiredInputs, desiredOutputs, options }, credentials, approvalCurrent);
+  return buildConnectorIntent(loggedWallet.value?.network ?? '', { desiredInputs, desiredOutputs, options }, credentials, approvalCurrent);
 }
 
 /** Shows the failure; an insufficient-funds build is remembered for the decline. */

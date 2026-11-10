@@ -385,10 +385,14 @@ export async function buildAndSignUnshieldedTransfer(
  * routes a sealed tx to Nexus's submit-proven relay.
  */
 export async function balanceConnectorTransaction(
+  network: string,
   tx: string,
   credentials: MidnightSendCredentials,
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
+  assertCurrentApproval(current);
+  // Paused for a network upgrade (midnightWriteGate.ts): stop before keys, as makeTransfer does.
+  await assertMidnightWritesOpen(network);
   assertCurrentApproval(current);
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX,
@@ -411,10 +415,14 @@ export async function balanceConnectorTransaction(
  * re-validating it first, and returns it sealed.
  */
 export async function buildConnectorIntent(
+  network: string,
   request: { desiredInputs: unknown; desiredOutputs: unknown; options: unknown },
   credentials: MidnightSendCredentials,
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
+  assertCurrentApproval(current);
+  // Paused for a network upgrade (midnightWriteGate.ts): stop before keys, as makeTransfer does.
+  await assertMidnightWritesOpen(network);
   assertCurrentApproval(current);
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BUILD_MIDNIGHT_CONNECTOR_INTENT,

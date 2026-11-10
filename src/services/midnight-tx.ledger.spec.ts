@@ -31,7 +31,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { MidnightApiError } from '@/api/midnightApiError';
 import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
 import { resetMidnightWriteStatusForTests } from '@/chains/midnight/midnightWriteStatus';
-import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -123,13 +123,15 @@ describe('Midnight ledger-specific orchestration', () => {
 
   it('refuses stale connector balancing before dispatch and discards stale completions', async () => {
     let current = false;
-    await expect(balanceConnectorTransaction('aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
+    await expect(balanceConnectorTransaction('Preprod', 'aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
     expect(mocks.send).not.toHaveBeenCalled();
     current = true;
     const signed = deferred<{ data: { success: boolean; tx: string } }>();
     mocks.send.mockReturnValue(signed.promise);
-    const result = balanceConnectorTransaction('aa', {}, () => current);
+    const result = balanceConnectorTransaction('Preprod', 'aa', {}, () => current);
     const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    // The write-gate check runs first, so the dispatch is one tick later.
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     current = false;
     signed.resolve({ data: { success: true, tx: 'signed' } });
     await rejected;
@@ -431,9 +433,12 @@ describe('Midnight ledger-specific orchestration', () => {
       expect(mocks.send).not.toHaveBeenCalled();
     });
 
-    it('a dapp makeTransfer and a DUST registration stop before keys', async () => {
+    it('a dapp makeTransfer, balance, makeIntent and a DUST registration stop before keys', async () => {
       mocks.api.mockReturnValue({ buildUnshieldedTx: vi.fn(), buildNightDustRegistrationTx: vi.fn() });
       await expect(buildAndSignUnshieldedTransfer('Preprod', request, {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(balanceConnectorTransaction('Preprod', 'aa', {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
       await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
         .resolves.toEqual({ status: 'failed', message: 'midnight.errors.networkUpgrading', errorKind: 'networkUpgrading' });
       expect(mocks.send).not.toHaveBeenCalled();

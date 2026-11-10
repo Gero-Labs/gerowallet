@@ -156,6 +156,7 @@
             :disabled="!dustAddress"
             :aria-disabled="writesPaused ? 'true' : undefined"
             :aria-describedby="writesPaused ? 'dust-register-paused' : undefined"
+            :ripple="!writesPaused"
             data-test="dust-register"
             @click="startRegistration"
           >

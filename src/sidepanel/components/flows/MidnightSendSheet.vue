@@ -279,6 +279,7 @@
                   class="flex-grow-1 ml-2"
                   :aria-disabled="writesPaused ? 'true' : undefined"
                   :aria-describedby="writesPaused ? 'midnight-sheet-send-paused' : undefined"
+                  :ripple="!writesPaused"
                   data-test="midnight-send-confirm"
                   @click="goToStep(4)"
                 >

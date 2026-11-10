@@ -412,6 +412,7 @@
             :disabled="sending"
             :aria-disabled="writesPaused ? 'true' : undefined"
             :aria-describedby="writesPaused ? 'midnight-send-paused' : undefined"
+            :ripple="!writesPaused"
             data-test="midnight-send-continue"
             @click="nextStep()"
           >{{ t('common.continue') }}

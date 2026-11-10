@@ -48,6 +48,16 @@ describe('write gate rules', () => {
     expect(unchanged).toBe(record);
   });
 
+  it('an expired status pause does not outrank a fresh 501', () => {
+    const record: MidnightWriteGateRecord = { preprod: { source: 'status', at: NOW } };
+    const later = NOW + STATUS_GATE_TTL_MS + 1;
+    const next = nextGateRecord(record, 'Preprod', { paused: true, source: 'response', at: later });
+    expect(next).toEqual({ preprod: { source: 'response', at: later } });
+    expect(isPausedIn(next, 'Preprod', later)).toBe(true);
+    // While the status pause is live, it still wins.
+    expect(nextGateRecord(record, 'Preprod', { paused: true, source: 'response', at: NOW + 60_000 })).toBe(record);
+  });
+
   it('clearing the status pause leaves a remembered 501 alone', () => {
     const record: MidnightWriteGateRecord = { preprod: { source: 'response', at: NOW }, mainnet: { source: 'status', at: NOW } };
     expect(nextGateRecord(record, 'Preprod', { paused: false, onlySource: 'status' })).toBe(record);
@@ -60,7 +70,9 @@ function fakeSessionStorage() {
   let store: Record<string, unknown> = {};
   const listeners: Array<(changes: Record<string, { newValue?: unknown }>, area: string) => void> = [];
   const session = {
-    get: vi.fn(async (key: string | null) => (key === null ? { ...store } : key in store ? { [key]: store[key] } : {})),
+    get: vi.fn(async (keys: string | string[]) => Object.fromEntries(
+      (Array.isArray(keys) ? keys : [keys]).filter((k) => k in store).map((k) => [k, store[k]]),
+    )),
     set: vi.fn(async (items: Record<string, unknown>) => {
       const changes: Record<string, { newValue?: unknown }> = {};
       for (const [k, v] of Object.entries(items)) { store[k] = v; changes[k] = { newValue: v }; }
@@ -137,11 +149,20 @@ describe('write gate state across extension contexts', () => {
     expect(fake.keys()).toEqual([`${MIDNIGHT_WRITE_GATE_KEY}:mainnet`]);
   });
 
-  it('picks up entries stored before the view opened', async () => {
+  it('picks up entries stored before the view opened, reading only its own keys', async () => {
     await fake.writeFromElsewhere('preprod', { source: 'status', at: Date.now() });
+    await fake.session.set({ unrelatedSecret: 'never read into this page' });
+    fake.session.get.mockClear();
     const preprod = mountGate(() => 'Preprod');
     await settle();
     expect(preprod.value).toBe(true);
+    const reads = fake.session.get.mock.calls.map(([keys]) => keys);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const keys of reads) {
+      expect(keys).not.toBeNull();
+      for (const key of [keys].flat()) expect(key).toMatch(new RegExp(`^${MIDNIGHT_WRITE_GATE_KEY}:`));
+    }
+    expect([reads].flat(2)).toContain(`${MIDNIGHT_WRITE_GATE_KEY}:preprod`);
   });
 
   it('re-enables on its own when a status pause lapses', async () => {
