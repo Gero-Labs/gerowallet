@@ -30,7 +30,8 @@ describe('Midnight send dialog errors', () => {
   });
 
   it('a paused network or an unsupported ledger is an amber note, not an error, and disables the CTA', () => {
-    expect(source).toMatch(/<GNote v-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status"/);
+    // After the network upgrade gate's own note (midnightWriteGate.ts), when that is on.
+    expect(source).toMatch(/<GNote v-(?:else-)?if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status"/);
     expect(source).not.toContain('midnight-dust-note');
     expect(source).toContain(':loading="sending || checkingLocalProver || !!sendBlock"');
     expect(source).toContain(':disabled="sending || checkingLocalProver || !!sendBlock"');

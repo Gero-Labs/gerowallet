@@ -153,12 +153,19 @@
             block
             size="large"
             class="geroButton"
-            :disabled="!dustAddress"
+            :disabled="!dustAddress || writesPaused"
+            data-test="dust-register"
             @click="startRegistration"
           >
             <v-icon start>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
+          <!-- Native registration on this network is paused (midnightWriteGate.ts).
+               The Cardano-held NIGHT sources below stay available. -->
+          <div v-if="writesPaused" class="writes-paused-note t-caption mt-2" data-test="dust-register-paused">
+            <v-icon size="14" color="warning">mdi-pause-circle-outline</v-icon>
+            <span>{{ t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}</span>
+          </div>
 
           <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
                sources panel), with the external portal kept as a low-prominence
@@ -255,6 +262,8 @@ import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccou
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
@@ -503,6 +512,12 @@ const submitError = ref<string | null>(null);
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
+/** Native registration on this wallet's network is paused for a network upgrade (midnightWriteGate.ts). */
+const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
+// Turned on while the password step is open: back out, so no password or PassKey is asked for.
+watch(writesPaused, (paused) => {
+  if (paused && inSigningPhase.value && !submitBusy.value) resetRegistrationState();
+});
 
 const isPrfWalletForSign = computed(() => isPrfWallet.value);
 
@@ -514,7 +529,7 @@ function resetRegistrationState() {
 }
 
 function startRegistration() {
-  if (!dustAddress.value) return;
+  if (!dustAddress.value || writesPaused.value) return;
   // For PRF wallets, kick straight into the PassKey gesture (no input field).
   // For password wallets, show the inline password field first.
   inSigningPhase.value = true;
@@ -524,7 +539,7 @@ function startRegistration() {
 }
 
 const canConfirmRegistration = computed(() => {
-  if (submitBusy.value) return false;
+  if (submitBusy.value || writesPaused.value) return false;
   if (!dustAddress.value) return false;
   if (isPrfWalletForSign.value) return true;
   return !!localPassword.value;
@@ -532,7 +547,7 @@ const canConfirmRegistration = computed(() => {
 
 async function confirmRegistration() {
   const wallet = loggedWallet.value;
-  if (!wallet) return;
+  if (!wallet || writesPaused.value) return;
   if (!dustAddress.value) return;
   if (!wallet.baseAddress) {
     submitError.value = 'Wallet missing Midnight address';
@@ -841,5 +856,16 @@ void props;
   font-size: 12px;
   font-weight: 500;
   color: var(--g-text-1);
+}
+/* A paused action: the warning glyph and text on the muted warning pair. */
+.writes-paused-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-1);
+  padding: var(--g-s-2) var(--g-s-3);
+  color: var(--g-warning);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
 }
 </style>

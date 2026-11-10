@@ -674,7 +674,19 @@
           </div>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Sends on this network are paused (midnightWriteGate.ts): the reason in place
+             of Approve, no password or PassKey. Closing tells the dapp why. -->
+        <template v-if="midnightWritesPaused">
+          <div class="midnight-paused-note t-caption mb-2 mt-3" data-testid="midnight-writes-paused">
+            <v-icon size="14" color="warning">mdi-pause-circle-outline</v-icon>
+            <span>{{ midnightWritesPausedReason }}</span>
+          </div>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -764,7 +776,18 @@
           <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Same pause as makeTransfer above. -->
+        <template v-if="midnightWritesPaused">
+          <div class="midnight-paused-note t-caption mb-2 mt-3" data-testid="midnight-writes-paused">
+            <v-icon size="14" color="warning">mdi-pause-circle-outline</v-icon>
+            <span>{{ midnightWritesPausedReason }}</span>
+          </div>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -1222,6 +1245,9 @@ import KeystoneSignSheet from './KeystoneSignSheet.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -3227,6 +3253,7 @@ async function signMidnightTransferNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -3261,6 +3288,7 @@ async function signMidnightTransferPrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -3344,6 +3372,24 @@ function rejectMidnightBalance() {
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
 }
 
+// ── Midnight network upgrade (midnightWriteGate.ts) ─────────────────────────
+// While sends on the wallet's network are paused, makeTransfer and
+// balanceUnsealedTransaction show the reason instead of Approve, and the dapp
+// gets InternalError with the same sentence: a server-side state, not a
+// request the dapp got wrong.
+const midnightWritesPaused = useMidnightNetworkUpgrading(() => (
+  loggedWallet.value?.chain === Blockchain.MIDNIGHT ? loggedWallet.value?.network : ''
+));
+const midnightWritesPausedReason = computed(() => t('midnight.errors.networkUpgrading', {
+  network: midnightNetworkDisplayName(loggedWallet.value?.network),
+}));
+function declineMidnightWhilePaused() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.InternalError, midnightWritesPausedReason.value));
+}
+
 async function buildMidnightBalanceTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
 ): Promise<{ tx: string }> {
@@ -3359,6 +3405,7 @@ async function signMidnightBalanceNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   // Capture the request identity BEFORE the multi-second balance round-trip
   // (see signMidnightTransferNormal): never deliver this tx to a superseded request.
@@ -3385,6 +3432,7 @@ async function signMidnightBalancePrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
@@ -3878,6 +3926,18 @@ function approveWcSession() {
 
 /* Replaces the unconditional "confirm the URL" nag: it only appears when the
    hostname actually contains punycode or non-ASCII characters. */
+/* Midnight network upgrade: the reason in place of Approve, on the muted warning pair. */
+.midnight-paused-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-1);
+  padding: var(--g-s-2) var(--g-s-3);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
+  color: var(--g-warning);
+}
+
 .suspicious-host {
   display: flex;
   align-items: center;

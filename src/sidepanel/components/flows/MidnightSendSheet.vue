@@ -250,11 +250,24 @@
                 <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
 
+              <!-- Sends on this network are paused (midnightWriteGate.ts): the button
+                   stays, disabled, with the reason, and the password step can't open. -->
+              <div v-if="writesPaused" class="midnight-dust-note mt-3" data-test="midnight-send-paused">
+                <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
+                <span>{{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}</span>
+              </div>
+
               <div class="step-actions-row mt-4">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
-                <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" @click="goToStep(4)">
+                <GButton
+                  tier="primary"
+                  class="flex-grow-1 ml-2"
+                  :disabled="writesPaused"
+                  data-test="midnight-send-confirm"
+                  @click="goToStep(4)"
+                >
                   {{ $t('miniGero.confirmSend') }}
-                </v-btn>
+                </GButton>
               </div>
             </div>
           </v-expand-transition>
@@ -410,7 +423,8 @@ import { useChainContext } from '../../composables/useChainContext';
 import snackbar from '@/plugins/snackbar';
 import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
-import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { midnightApiErrorKind, midnightNetworkDisplayName, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 
@@ -425,6 +439,8 @@ const { loggedWallet } = toRefs(walletStore);
 
 // ── State ──
 const step = ref(1);
+/** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
+const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
 const stepperEl = ref<HTMLElement | null>(null);
 
 const recipient = ref('');
@@ -455,6 +471,13 @@ function showSendError(e: unknown) {
   passwordError.value = message;
 }
 const submitting = ref(false);
+// Turned on while the password step is open: back to the review, so no password or PassKey is asked for.
+watch(writesPaused, (paused) => {
+  if (paused && step.value === 4 && !submitting.value) {
+    approval.invalidate();
+    step.value = 3;
+  }
+});
 const txSuccess = ref(false);
 const txId = ref('');
 
@@ -673,6 +696,7 @@ function editStep(target: number) {
 
 function goToStep(target: number) {
   if (submitting.value) return;
+  if (target === 4 && writesPaused.value) return;
   if (target === 2 && !isAddressValid.value) return;
   if (target === 3 && !isAmountValid.value) return;
   step.value = target;
@@ -877,7 +901,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
 }
 
 async function signAndSubmit() {
-  if (!spendingPassword.value || submitting.value || !isAddressValid.value || !isAmountValid.value) return;
+  if (!spendingPassword.value || submitting.value || !isAddressValid.value || !isAmountValid.value || writesPaused.value) return;
   const current = approval.capture();
   const password = spendingPassword.value;
   await approval.run(() => routeSend({ password }, current));
@@ -975,7 +999,7 @@ watch(mayLackDust, (needsSponsor) => {
 }, { immediate: true });
 
 async function signAndSubmitPrf() {
-  if (submitting.value || !isAddressValid.value || !isAmountValid.value) return;
+  if (submitting.value || !isAddressValid.value || !isAmountValid.value || writesPaused.value) return;
   const current = approval.capture();
   await approval.run(async () => {
   passwordError.value = '';

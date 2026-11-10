@@ -6,6 +6,10 @@
          showing NIGHT/DUST as line items. Dust registration dialog is opened
          from a header-action button so the Register CTA stays accessible. -->
     <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
+      <!-- Shown only while sends on this network are paused for a network upgrade. -->
+      <div class="pa-2 pb-0">
+        <MidnightNetworkUpgradeBanner />
+      </div>
       <v-row no-gutters class="hero-row">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <MidnightPortfolioChart />
@@ -454,6 +458,7 @@ import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTra
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
 import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
+import MidnightNetworkUpgradeBanner from '@/modules/dashboard/components/MidnightNetworkUpgradeBanner.vue';
 import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
 import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
 import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';

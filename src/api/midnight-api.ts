@@ -27,7 +27,8 @@ import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import { recoverLostSubmit, type MidnightSubmitWatch } from './midnightSubmitRecovery';
-import { midnightApiErrorFromResponse, toMidnightApiError } from './midnightApiError';
+import { MIDNIGHT_NETWORK_UPGRADING, midnightApiErrorFromResponse, toMidnightApiError } from './midnightApiError';
+import { noteMidnightNetworkUpgrading, noteMidnightWritesOpen } from '@/chains/midnight/midnightWriteGate';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -718,6 +719,33 @@ export class MidnightApi {
         throw error;
       },
     );
+    // A write route's answer opens or closes this network's write gate (midnightWriteGate.ts).
+    this.axiosInstance.interceptors.response.use(
+      (res) => {
+        recordWriteOutcome(this.network, { url: res.config?.url, status: res.status, data: res.data });
+        return res;
+      },
+      (error: AxiosError) => {
+        recordWriteOutcome(this.network, error.response
+          ? { url: error.config?.url, status: error.response.status, data: error.response.data }
+          : undefined);
+        throw error;
+      },
+    );
+  }
+
+  /**
+   * The server's write status for this network: `GET /api/midnight/{network}/status`.
+   * A server without the route answers 404 (`unsupported`). Never throws.
+   */
+  async getWriteStatus(): Promise<MidnightWriteStatus> {
+    try {
+      const { data, status } = await this.axiosInstance.get(nexusMidnightPathFor(this.network, 'status'), { timeout: 10_000 });
+      return status === 200 ? parseMidnightWriteStatus(data) : { kind: 'unknown', unsupported: false };
+    } catch (error) {
+      const status = (error as AxiosError)?.response?.status;
+      return { kind: 'unknown', unsupported: status === 404 || status === 405 };
+    }
   }
 
   /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-stagenet` etc.). */
@@ -1392,6 +1420,58 @@ export class MidnightApi {
       throw toMidnightApiError(error, this.network, 'submit');
     }
   }
+}
+
+/** The write routes the server can close per network (answering 501 MIDNIGHT_NETWORK_UPGRADING). */
+const MIDNIGHT_WRITE_ROUTE = /\/api\/midnight\/[^/]+\/(?:tx\/(?:build-unshielded|submit|prove-and-submit|submit-proven)|dust\/(?:build|submit)-night-registration)(?:\?|$)/;
+
+export function isMidnightWriteRoute(url: string | undefined): boolean {
+  return !!url && MIDNIGHT_WRITE_ROUTE.test(url);
+}
+
+/**
+ * What a write route's answer says about the network's write gate
+ * (midnightWriteGate.ts): a 501 MIDNIGHT_NETWORK_UPGRADING closes it for this
+ * session, any success opens it. Anything else says nothing. Registered as a
+ * response interceptor on every MidnightApi instance.
+ */
+export function midnightWriteOutcome(
+  network: string,
+  response: { url?: string; status?: number; data?: unknown } | undefined,
+): 'paused' | 'open' | null {
+  if (!response || !isMidnightWriteRoute(response.url) || typeof response.status !== 'number') return null;
+  if (response.status >= 200 && response.status < 300) return 'open';
+  const code = response.data && typeof response.data === 'object' ? (response.data as { errorCode?: unknown }).errorCode : undefined;
+  return response.status === 501 && code === MIDNIGHT_NETWORK_UPGRADING ? 'paused' : null;
+}
+
+function recordWriteOutcome(network: string, response: { url?: string; status?: number; data?: unknown } | undefined): void {
+  const outcome = midnightWriteOutcome(network, response);
+  if (outcome === 'paused') void noteMidnightNetworkUpgrading(network, 'response');
+  else if (outcome === 'open') void noteMidnightWritesOpen(network);
+}
+
+/**
+ * The server's write status for a network (`GET /api/midnight/{network}/status`).
+ * `unknown` covers a server without the route (`unsupported`) and any failed
+ * read; neither may change the gate.
+ */
+export type MidnightWriteStatus =
+  | { kind: 'open' }
+  | { kind: 'closed'; reason?: string; message?: string }
+  | { kind: 'unknown'; unsupported: boolean };
+
+/** Read a status body. Only `writesOpen` as a boolean counts. */
+export function parseMidnightWriteStatus(data: unknown): MidnightWriteStatus {
+  if (!data || typeof data !== 'object') return { kind: 'unknown', unsupported: false };
+  const body = data as { writesOpen?: unknown; reason?: unknown; message?: unknown };
+  if (typeof body.writesOpen !== 'boolean') return { kind: 'unknown', unsupported: false };
+  if (body.writesOpen) return { kind: 'open' };
+  return {
+    kind: 'closed',
+    reason: typeof body.reason === 'string' ? body.reason : undefined,
+    message: typeof body.message === 'string' ? body.message : undefined,
+  };
 }
 
 /**

@@ -54,6 +54,7 @@ import {
   type MidnightBuiltTxRefusal,
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
+import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
 
 export interface SignedSegment {
   index: number;
@@ -310,6 +311,9 @@ export async function sendUnshieldedNight(
   current: () => boolean = () => true,
 ): Promise<SubmitMidnightTxResponse> {
   assertCurrentApproval(current);
+  // Sends on a paused network stop here, before keys or the build (midnightWriteGate.ts).
+  await assertMidnightWritesOpen(network);
+  assertCurrentApproval(current);
   const target = resolveWalletProvingTarget(network, 'unshielded', forceRemote);
   assertWalletProving(target);
   if (target && target.prover !== 'device') await assertProverReachable(target, current);
@@ -356,6 +360,8 @@ export async function buildAndSignUnshieldedTransfer(
   expectedProver?: WalletProver,
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
+  assertCurrentApproval(current);
+  await assertMidnightWritesOpen(network);
   assertCurrentApproval(current);
   const target = resolveWalletProvingTarget(network, 'unshielded');
   assertWalletProving(target, expectedProver);
@@ -740,6 +746,10 @@ export async function sendShieldedNight(
     throw new Error('sendShieldedNight: at least one output is required');
   }
   for (const output of outputs) validateShieldedTokenType(output.tokenType ?? '');
+  // The one cheap call the server can refuse, made before the shielded sync and
+  // the proving: a fresh status read, then the gate (midnightWriteGate.ts).
+  await assertMidnightWritesOpen(network, { refresh: true });
+  assertCurrentApproval(current);
   const api = getMidnightApi(network);
 
   const target = resolveWalletProvingTarget(network, 'shielded', forceRemote);
@@ -817,6 +827,7 @@ export async function registerNightForDust(
   credentials: MidnightSendCredentials,
 ): Promise<DustRegistrationOutcome> {
   try {
+    await assertMidnightWritesOpen(network);
     const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
 
     const api = getMidnightApi(network);
