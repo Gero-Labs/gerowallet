@@ -5877,6 +5877,10 @@ export default {
   'midnight.dataPaused.estimateCaption': 'Estimate · As of block {block} · {age}',
   'midnight.dataPaused.cnightPending': 'Your registration is on Cardano. Midnight will show it once GeroWallet\'s Midnight data catches up.',
   'midnight.dataPaused.dustLinePending': 'DUST registration pending · Midnight data paused',
+  'midnight.refresh.afterUpgrade': 'Refreshing your Midnight balances and history after the network upgrade…',
+  'midnight.refresh.inProgress': 'Refreshing your Midnight balances and history…',
+  'midnight.refresh.stalled': 'Still refreshing. Check your connection.',
+  'midnight.refresh.sendHeld': 'Available when the refresh finishes.',
   'midnight.dustSourcesReadOnly': 'No local keys',
   // Row states that must NOT offer a plain "Generate here" — a stake credential
   // may carry exactly one live registration, so registering over an existing

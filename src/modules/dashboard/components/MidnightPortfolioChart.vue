@@ -24,6 +24,10 @@
         <div v-if="dataPaused" class="data-paused-caption t-caption g-num" data-test="midnight-data-paused-caption">
           <v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>{{ $t('midnight.dataPaused.caption', { block: tipHeightLabel, age: tipAge }) }}
         </div>
+        <!-- While Midnight data is rebuilt: the block the last-known balances are from. -->
+        <div v-else-if="refreshing && snapshotHeight > 0" class="data-paused-caption t-caption g-num" data-test="midnight-refresh-caption">
+          {{ $t('midnight.dataPaused.caption', { block: snapshotHeightLabel, age: snapshotAge }) }}
+        </div>
 
         <div class="address-section" v-if="shortenedAddress">
           <CopyButton
@@ -101,6 +105,7 @@ import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 
 defineEmits<{ (e: 'refresh'): void }>();
 
@@ -113,6 +118,10 @@ const midnightLoading = useMidnightLoading();
 // beside a battery already showing a real Path-B charge.
 const dustLive = useMidnightDustLive();
 const { paused: dataPaused, heightLabel: tipHeightLabel, ageLabel: tipAge } = useMidnightDataFreshness();
+const { refreshing, snapshotTip } = useMidnightRefresh();
+const {
+  height: snapshotHeight, heightLabel: snapshotHeightLabel, ageLabel: snapshotAge,
+} = useMidnightDataFreshness(() => snapshotTip.value);
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));

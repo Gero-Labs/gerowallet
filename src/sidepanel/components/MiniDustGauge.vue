@@ -229,7 +229,7 @@ function onSponsorSaved(): void {
   font-family: 'Roboto Mono', monospace;
   font-size: 12px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
 }
 

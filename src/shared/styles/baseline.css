@@ -139,6 +139,16 @@ html .v-alert :is(.t-body, .t-body-sm, .t-caption) {
 /* Numbers: always tabular */
 .g-num { font-variant-numeric: tabular-nums; }
 
+/* Last-known values shown while data is rebuilt (Midnight "Refreshing"): every
+   text tone and the semantic hues inside resolve to g-text-3, so the numbers read
+   as metadata. For value containers only, never around controls. */
+.g-stale {
+  --g-text-1: var(--g-text-3);
+  --g-text-2: var(--g-text-3);
+  --g-success: var(--g-text-3);
+  --g-error: var(--g-text-3);
+}
+
 /* Read by screen readers, not shown: live regions and extra labels. */
 .g-sr-only {
   position: absolute;

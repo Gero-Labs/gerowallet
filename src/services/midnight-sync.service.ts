@@ -37,6 +37,9 @@ import { Network } from '@/models/types';
 import { getMidnightApi } from '@/api/midnight-api';
 import { blockTimeToMs } from '@/chains/midnight/midnightDataFreshness';
 import { MIDNIGHT_STATUS_POLL_MS, refreshMidnightWriteStatus } from '@/chains/midnight/midnightWriteStatus';
+import {
+  REFRESH_CHECK_MS, hasDataToKeep, refreshProgressOf, refreshReasonOf, refreshTargetOf, refreshVerdict, type MidnightRefreshTracker,
+} from '@/chains/midnight/midnightRefresh';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import type {
   MidnightAddresses,
@@ -214,6 +217,10 @@ class MidnightSyncService {
   private sessionEpoch = 0;
   private currentNetwork: string | null = null;
   private currentAddresses: MidnightAddresses | null = null;
+  /** A rebuild after a reset or a forced resync (midnightRefresh.ts); null when none runs. */
+  private refreshTracker: MidnightRefreshTracker | null = null;
+  /** Re-checks a running rebuild; armed only while one runs. */
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Start syncing a Midnight wallet. Idempotent — calling start while already
@@ -307,6 +314,17 @@ class MidnightSyncService {
     if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
     void refreshMidnightWriteStatus(network, { force: true });
     this.writeStatusTimer = setInterval(() => { void refreshMidnightWriteStatus(network, { force: true }); }, MIDNIGHT_STATUS_POLL_MS);
+    // A rebuild that was running when this session last stopped picks up again,
+    // also when the worker restarted in between (its snapshot is persisted).
+    if (midnightStore.refreshing && midnightStore.refreshSnapshot) {
+      this.trackRefresh(refreshTargetOf(midnightStore.refreshSnapshot.transactions), true);
+    } else {
+      void midnightActions.restoreRefreshAfterRestart().then((restored) => {
+        if (restored && this.sessionEpoch === sessionEpoch && midnightStore.refreshSnapshot && !this.refreshTracker) {
+          this.trackRefresh(refreshTargetOf(midnightStore.refreshSnapshot.transactions), true);
+        }
+      });
+    }
   }
 
   private refreshTipFromNexus(network: string): Promise<void> {
@@ -355,6 +373,7 @@ class MidnightSyncService {
     if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
     this.writeStatusTimer = null;
     this.tipRequest = null;
+    this.stopRefreshTracking();
     if (!this.active) return;
     webSocketService.close();
     midnightActions.setNetworkStatus('disconnected');
@@ -380,6 +399,8 @@ class MidnightSyncService {
    */
   forceResync(): void {
     if (!this.active) return;
+    // The rebuild shows "Refreshing" over what was on screen (midnightRefresh.ts).
+    this.beginRefresh();
     midnightActions.setTransactions([]);
     midnightActions.setUtxos([]);
     // Fire-and-forget: clearing the SDK state blobs is best-effort and must
@@ -397,6 +418,70 @@ class MidnightSyncService {
 
   isActive(): boolean {
     return this.active;
+  }
+
+  // ---------------------------------------------------------------- refreshing
+
+  /** Keep what is on screen through a forced resync, and watch for the rebuild's end. */
+  private beginRefresh(): void {
+    const target = refreshTargetOf(midnightStore.refreshSnapshot?.transactions ?? midnightStore.transactions);
+    midnightActions.beginRefresh(null);
+    this.trackRefresh(target, true);
+  }
+
+  /** Start (or restart) watching a rebuild the store is showing as "Refreshing". */
+  private trackRefresh(target: string | null, sameChain: boolean): void {
+    if (!midnightStore.refreshing) {
+      this.stopRefreshTracking();
+      return;
+    }
+    const now = Date.now();
+    this.refreshTracker = { startedAt: now, lastFrameAt: now, lastTxAt: now, target, sameChain };
+    this.scheduleRefreshCheck();
+  }
+
+  private stopRefreshTracking(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+    this.refreshTracker = null;
+  }
+
+  private scheduleRefreshCheck(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.checkRefresh();
+    }, REFRESH_CHECK_MS);
+  }
+
+  /** Ends the refresh when the rebuild is complete, or marks it stalled; re-arms while it runs. */
+  private checkRefresh(): void {
+    const tracker = this.refreshTracker;
+    if (!tracker) return;
+    if (!midnightStore.refreshing) {
+      this.stopRefreshTracking();
+      return;
+    }
+    const verdict = refreshVerdict(tracker, midnightStore.transactions, Date.now(), midnightStore.networkStatus === 'connected');
+    if (verdict === 'done') {
+      this.stopRefreshTracking();
+      midnightActions.endRefresh();
+      return;
+    }
+    midnightActions.setRefreshStatus({ stalled: verdict === 'stalled' });
+    if (!this.refreshTimer) this.scheduleRefreshCheck();
+  }
+
+  /** A frame arrived for a running rebuild: any frame shows the connection lives; one with transactions moves it. */
+  private noteRefreshFrame(data: WsSyncMessage | null, appliedTransactions: boolean): void {
+    const tracker = this.refreshTracker;
+    if (!tracker) return;
+    const now = Date.now();
+    tracker.lastFrameAt = now;
+    if (appliedTransactions) tracker.lastTxAt = now;
+    const progress = refreshProgressOf(data as Record<string, unknown> | null);
+    if (progress !== null) midnightActions.setRefreshStatus({ progress });
+    if (appliedTransactions) this.checkRefresh();
   }
 
   /** The Midnight network this service is currently syncing, or `null` if stopped. */
@@ -417,11 +502,24 @@ class MidnightSyncService {
     const scope = this.currentAddresses?.unshielded;
     const isActive = () => this.active && this.sessionEpoch === sessionEpoch
       && this.currentNetwork === network && this.currentAddresses?.unshielded === scope;
+    // Any frame, keep-alives included, shows a running rebuild's connection is alive.
+    if (isActive()) this.noteRefreshFrame(data, false);
     await this.generationQueue.enqueue(data, toGeroSyncMidnightNetwork(network),
       () => midnightStore.chainIdentity, isActive,
       async (identity) => {
         await clearMidnightNetworkCheckpoints(identity.network);
-        if (isActive()) midnightActions.resetChainState(identity);
+        if (!isActive()) return;
+        // Taken before the wipe: what the rebuild must bring back before it counts as done.
+        // A worker that restarted holds nothing in memory, so it keeps what it last persisted.
+        const previous = midnightStore.chainIdentity;
+        const inMemory = midnightStore.refreshSnapshot
+          || hasDataToKeep(midnightStore.balances, midnightStore.transactions);
+        const persisted = inMemory ? null : await midnightActions.persistedRefreshSnapshot();
+        if (!isActive()) return;
+        const target = refreshTargetOf(midnightStore.refreshSnapshot?.transactions
+          ?? (inMemory ? midnightStore.transactions : persisted?.transactions ?? []));
+        midnightActions.resetChainState(identity, { reason: refreshReasonOf(data as Record<string, unknown>), persisted });
+        this.trackRefresh(target, !previous || previous.genesisHash === identity.genesisHash);
       }, () => this.applySync(data));
     if (isActive() && midnightStore.tip.hash === null) void this.refreshTipFromNexus(network);
   }
@@ -550,6 +648,7 @@ class MidnightSyncService {
 
     midnightActions.markSynced();
     midnightActions.setNetworkStatus('connected');
+    this.noteRefreshFrame(data, Array.isArray(data.transactions) && data.transactions.length > 0);
   }
 
   private async handleRollback(data: WsSyncMessage): Promise<void> {
@@ -564,6 +663,7 @@ class MidnightSyncService {
 
   private async handleForceResync(): Promise<void> {
     debugLog('🌙 Midnight force resync triggered');
+    this.beginRefresh();
     midnightActions.setTransactions([]);
     midnightActions.setUtxos([]);
     midnightActions.setNetworkStatus('connecting');

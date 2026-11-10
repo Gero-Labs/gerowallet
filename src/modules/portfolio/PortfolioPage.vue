@@ -9,7 +9,9 @@
       <!-- The Midnight notices above the balance, at most two by precedence
            (MidnightNoticeSlot.vue); renders nothing (and takes no space) otherwise. -->
       <MidnightNoticeSlot class="portfolio-upgrade-banner" />
-      <v-row no-gutters class="hero-row">
+      <!-- While Midnight data is rebuilt (midnightRefresh.ts), the value containers
+           show the last values the wallet knew, greyed (.g-stale); controls aren't. -->
+      <v-row no-gutters class="hero-row" :class="{ 'g-stale': midnightRefreshing }">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <MidnightPortfolioChart />
         </v-col>
@@ -25,7 +27,7 @@
            /proof-server page via useMidnightProofServer (never a separate
            copy - see that composable's header comment). -->
       <v-row no-gutters>
-        <v-col cols="12" sm="6" class="pa-2">
+        <v-col cols="12" sm="6" class="pa-2" :class="{ 'g-stale': midnightRefreshing }">
           <MidnightDustGauge @register="dustRegistrationOpen = true" />
         </v-col>
         <v-col cols="12" sm="6" class="pa-2">
@@ -67,7 +69,7 @@
               </v-btn>
             </div>
 
-            <MidnightHoldingsTable />
+            <MidnightHoldingsTable :class="{ 'g-stale': midnightRefreshing }" />
           </v-card>
         </v-col>
       </v-row>
@@ -458,6 +460,7 @@ import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.
 import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
 import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
 import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
 import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';
@@ -583,6 +586,8 @@ function openMoveToGero(ref: string) {
 
 // DUST registration dialog state — only relevant when chain === Midnight.
 const dustRegistrationOpen = ref(false);
+// Midnight data is being rebuilt: the value containers show the last values the wallet knew, greyed.
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 
 // Midnight "reset sync cache" recovery action state. Forces a full re-sync from
 // block 0 in BG (clears WS cursor + store snapshot + persisted SDK wallet-state

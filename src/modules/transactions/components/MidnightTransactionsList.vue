@@ -253,9 +253,11 @@ import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
 import { midnightTxRowKey } from '@/chains/midnight/midnightTxHash';
 import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 const { transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 
@@ -509,6 +511,8 @@ function typeLabel(type: MidnightTransactionType): string {
 }
 
 function amountColor(type: MidnightTransactionType): string {
+  // While Midnight data is rebuilt these are the last rows the wallet knew: metadata, not news.
+  if (midnightRefreshing.value) return 'var(--g-text-3)';
   if (type === 'receive') return '#47CD89';
   if (type === 'send') return '#F97066';
   return '#c4c4c4';
