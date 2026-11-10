@@ -129,6 +129,38 @@ describe('what turns it off', () => {
   });
 });
 
+describe('status bodies as the server sends them (parsed, then read)', () => {
+  // This build signs ledger 8 on Mainnet.
+  const closedForUpgrade = { writesOpen: false, reason: 'NETWORK_UPGRADING', ledger: 9, minClientVersion: { extension: '9.0.0' } };
+  const openClientUpdate = { writesOpen: true, reason: 'CLIENT_UPDATE_REQUIRED' };
+  const openNewerLedger = { writesOpen: true, ledger: 9 };
+  const openNewerLedgerName = { writesOpen: true, ledger: 'ledger-9' };
+  const openSameLedger = { writesOpen: true, ledger: 8 };
+  const feed = async (body: Record<string, unknown>) => {
+    const { parseMidnightWriteStatus } = await vi.importActual<typeof import('@/api/midnight-api')>('@/api/midnight-api');
+    return read(parseMidnightWriteStatus(body) as unknown as Record<string, unknown>);
+  };
+
+  it.each([
+    ['closed for the upgrade, with a newer ledger and a minimum', closedForUpgrade, 'networkUpgrading'],
+    ['open, reason CLIENT_UPDATE_REQUIRED', openClientUpdate, 'updateRequired'],
+    ['open, a newer ledger', openNewerLedger, 'updateRequired'],
+    ['open, a newer ledger by name', openNewerLedgerName, 'updateRequired'],
+    ['open, the ledger this build signs', openSameLedger, null],
+  ])('%s, from a clean gate', async (_name, body, expected) => {
+    await expect(feed(body)).resolves.toBe(expected);
+  });
+
+  it('each read replaces the state the previous one set', async () => {
+    await expect(feed(openNewerLedger)).resolves.toBe('updateRequired');
+    await expect(feed(closedForUpgrade)).resolves.toBe('networkUpgrading');
+    await expect(feed(openClientUpdate)).resolves.toBe('updateRequired');
+    await expect(feed(openSameLedger)).resolves.toBeNull();
+    await expect(feed(closedForUpgrade)).resolves.toBe('networkUpgrading');
+    await expect(feed(openSameLedger)).resolves.toBeNull();
+  });
+});
+
 describe('the send and registration paths', () => {
   it('stop with the update sentence before anything is asked for', async () => {
     await noteMidnightUpdateRequired('Mainnet', 'status', { minVersion: '2.9.0' });
