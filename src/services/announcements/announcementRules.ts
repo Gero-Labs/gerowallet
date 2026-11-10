@@ -112,9 +112,12 @@ export function feedTextForbidden(s: string): boolean {
 export function check(payload: Uint8Array | null | undefined, tier: AnnouncementTier, now: number): RulesResult {
   if (!payload) return refuse('bad_json');
   if (payload.length > MAX_PAYLOAD) return refuse('too_large');
+  // Parsed as the server parses it, so one signed payload gets one verdict everywhere: strictly
+  // UTF-8, a byte order mark is not skipped (`ignoreBOM` keeps it, and JSON.parse then refuses it),
+  // and nothing may follow the document. Numbers are integers by value: `1.0` is 1.
   let root: unknown;
   try {
-    root = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payload));
+    root = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(payload));
   } catch {
     return refuse('bad_json');
   }

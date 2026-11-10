@@ -52,9 +52,12 @@ export function decodeB64Url(s: unknown): Uint8Array | null {
 
 /** The key and its tier. A key id listed in both tiers is usable in neither. */
 function findKey(keys: VerifyKeys, keyId: string): { publicKeyHex: string; tier: AnnouncementTier } | null {
-  const editorial = keys.editorial.find((k) => k.keyId === keyId);
-  const feed = keys.feed.find((k) => k.keyId === keyId);
-  if (editorial && feed) return null;
+  const editorials = keys.editorial.filter((k) => k.keyId === keyId);
+  const feeds = keys.feed.filter((k) => k.keyId === keyId);
+  // One key id names one key in one tier. Listed twice, in either way, it names none (as on the server).
+  if (editorials.length + feeds.length !== 1) return null;
+  const editorial = editorials[0];
+  const feed = feeds[0];
   if (editorial) return { publicKeyHex: editorial.publicKeyHex, tier: 'editorial' };
   if (feed) return { publicKeyHex: feed.publicKeyHex, tier: 'feed' };
   return null;
