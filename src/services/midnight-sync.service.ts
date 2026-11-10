@@ -510,7 +510,8 @@ class MidnightSyncService {
         await clearMidnightNetworkCheckpoints(identity.network);
         if (!isActive()) return;
         // Taken before the wipe: what the rebuild must bring back before it counts as done.
-        // A worker that restarted holds nothing in memory, so it keeps what it last persisted.
+        // A worker that restarted holds none of the history (its own pending sends at
+        // most), so it keeps what the previous worker persisted, read at boot.
         const previous = midnightStore.chainIdentity;
         const inMemory = midnightStore.refreshSnapshot
           || hasDataToKeep(midnightStore.balances, midnightStore.transactions);
@@ -521,6 +522,9 @@ class MidnightSyncService {
         midnightActions.resetChainState(identity, { reason: refreshReasonOf(data as Record<string, unknown>), persisted });
         this.trackRefresh(target, !previous || previous.genesisHash === identity.genesisHash);
       }, () => this.applySync(data));
+    // Once this worker holds the wallet's data itself, the previous worker's
+    // record read at boot is no longer needed (midnightStore.ts).
+    if (isActive() && hasDataToKeep(midnightStore.balances, midnightStore.transactions)) midnightActions.releaseBootRecord();
     if (isActive() && midnightStore.tip.hash === null) void this.refreshTipFromNexus(network);
   }
 

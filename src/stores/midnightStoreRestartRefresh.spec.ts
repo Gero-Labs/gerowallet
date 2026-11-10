@@ -154,6 +154,38 @@ describe('Refreshing across a worker restart', () => {
     await expect(other.midnightActions.persistedRefreshSnapshot()).resolves.toBeNull();
   });
 
+  it('keeps the previous worker\'s record from boot, though this worker has written its history since', async () => {
+    await seed(m!, 'abc', 20);
+    m!.midnightActions.updateBalances({ nightUnshielded: 7_000_000n });
+    await settle();
+
+    const restarted = await load('background');
+    restarted.midnightActions.setActive(addresses('abc'));
+    // A send right after the restart: the only row in this worker's memory, and
+    // written over the persisted history.
+    restarted.midnightActions.applyTransaction({
+      hash: 'ee'.repeat(32), type: 'send', token: 'NIGHT', amount: 9n, counterparty: 'mn_addr_preprod1to',
+      timestamp: Date.now(), status: 'pending', fee: 0n, isShielded: false,
+    });
+    await settle();
+    // The persisted history is this worker's now: the pending row alone.
+    const cached = await restarted.cache.readStoreCache(['midnightStore.transactions']);
+    expect(JSON.parse(cached.get('midnightStore.transactions')!.json)).toHaveLength(1);
+
+    // As the sync service's reset callback decides: a pending row alone is not data in memory.
+    const { hasDataToKeep } = await import('@/chains/midnight/midnightRefresh');
+    expect(hasDataToKeep(restarted.midnightStore.balances, restarted.midnightStore.transactions)).toBe(false);
+    const persisted = await restarted.midnightActions.persistedRefreshSnapshot();
+    expect(persisted?.balances.nightUnshielded).toBe(7_000_000n);
+    expect(persisted?.transactions).toHaveLength(20);
+    expect(persisted?.utxos).toHaveLength(200);
+
+    restarted.midnightActions.resetChainState({ network: 'midnight-preprod', generation: 5, genesisHash: `0x${'ab'.repeat(32)}` }, { persisted });
+    expect(restarted.midnightStore.refreshSnapshot?.transactions).toHaveLength(20);
+    // Used: released, so a later reset can't take the previous worker's record again.
+    await expect(restarted.midnightActions.persistedRefreshSnapshot()).resolves.toBeNull();
+  });
+
   it('a refresh running when the worker stopped comes back after the restart, so it can end', async () => {
     await seed(m!, 'abc', 5);
     m!.midnightActions.updateBalances({ nightUnshielded: 2_000_000n });

@@ -2,7 +2,9 @@
   <!-- Sends and DUST registration on this network are paused for a network
        upgrade (midnightWriteGate.ts). Reads, Receive and history are unaffected.
        Renders nothing otherwise, so a parent's spacing class lands only on the banner. -->
-  <div v-if="paused" class="upgrade-banner" role="status" data-test="midnight-upgrade-banner">
+  <!-- No live region of its own: the notice slot's always-mounted one says it
+       when it appears (MidnightNoticeSlot.vue). -->
+  <div v-if="paused" class="upgrade-banner" data-test="midnight-upgrade-banner">
     <v-icon size="20" color="warning" class="upgrade-banner__icon" aria-hidden="true">mdi-pause-circle-outline</v-icon>
     <div class="upgrade-banner__body">
       <div class="upgrade-banner__title t-body">{{ t('midnight.upgrade.title') }}</div>

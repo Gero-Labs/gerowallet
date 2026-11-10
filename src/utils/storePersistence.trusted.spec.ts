@@ -210,6 +210,30 @@ describe('StorePersister redaction and trusted fields', () => {
     expect(applied!['loggedWallet']).toEqual(WALLET);
   });
 
+  it('hydrateWith({ bulk: true }) hands back the bulk fields as stored, before any write can replace them', async () => {
+    const state = fresh();
+    const p = persisterFor(state, compact, bulk, trusted);
+    await p.hydrate({ migrate: true });
+    state.loggedWallet = { ...WALLET };
+    state.items = [1, 2, 3];
+    p.markDirty(['loggedWallet', 'items']);
+    await p.flush();
+
+    // A restarted context: it changes the bulk field at once, and keeps the old copy aside.
+    const next = fresh();
+    const restarted = persisterFor(next, compact, bulk, trusted);
+    let applied: Record<string, unknown> | null = null;
+    const booting = restarted.hydrateWith((stored) => { applied = stored; }, { bulk: true });
+    next.loggedWallet = { ...WALLET };
+    next.items = [9];
+    restarted.markDirty(['loggedWallet', 'items']);
+    const writing = restarted.flush();
+    await booting;
+    await writing;
+    expect(applied!['items']).toEqual([1, 2, 3]);
+    expect(JSON.parse(bulk.data.get('testStore.items')!.json)).toEqual([9]);
+  });
+
   it('pairs bulk data with the trusted session, not a planted one', async () => {
     const state = fresh();
     const p = persisterFor(state, compact, bulk, trusted);

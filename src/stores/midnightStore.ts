@@ -773,14 +773,26 @@ if (context === 'browser') {
  * Boot-race guards for the background hydrate below: a setter that runs
  * before the async storage read lands must win over the stored copy.
  */
-/** The display state the previous worker persisted, read once at boot (see the background hydrate). */
-let bootDisplay: {
+/**
+ * What the previous worker persisted for its wallet, read once at boot, before
+ * this worker can write over any of it (see the background hydrate): the small
+ * fields its first write replaces, and the bulk ones (history, UTxOs, a running
+ * refresh's snapshot) that any later write of them replaces. A chain reset is
+ * usually first seen right after a restart, by a worker whose memory is empty.
+ * Released once this worker holds the wallet's data itself.
+ */
+let bootRecord: {
   activeWalletKey: string | null;
   balances: MidnightBalances;
   dustState: MidnightDustState | null;
   tip: MidnightRefreshSnapshot['tip'];
   refreshing: MidnightRefreshStatus | null;
+  transactions: MidnightTransaction[];
+  utxos: MidnightUnshieldedUtxo[];
+  refreshSnapshot: MidnightRefreshSnapshot | null;
 } | null = null;
+/** Settles once the boot read above has landed. */
+let bootRead: Promise<void> = Promise.resolve();
 
 const bgDurableTouched = {
   proofServer: false,
@@ -805,7 +817,7 @@ const bgDurableTouched = {
 // would otherwise replace the record with these fields' defaults before they were
 // restored, and a lost chainIdentity costs a full private-note rescan.
 if (context === 'background') {
-  void persister.hydrateWith((record) => {
+  bootRead = persister.hydrateWith((record) => {
     const stored = record as Partial<MidnightStore> | null;
     if (!stored) return;
     if (!bgDurableTouched.proofServer) {
@@ -825,17 +837,20 @@ if (context === 'background') {
     if (!bgDurableTouched.chainIdentity) {
       midnightStore.chainIdentity = hydrateChainIdentity(stored.chainIdentity);
     }
-    // What the previous worker left on screen, kept aside (never into the store:
-    // sync owns per-wallet state). The first write of this worker replaces these
-    // small fields, and a chain reset is usually first seen right after a restart.
-    bootDisplay = {
+    // What the previous worker left, kept aside (never into the store: sync owns
+    // per-wallet state). The bulk fields are read in the same step, so no write
+    // of this worker can land first (the persister holds writes until it ends).
+    bootRecord = {
       activeWalletKey: typeof stored.activeWalletKey === 'string' ? stored.activeWalletKey : null,
       balances: hydrateBalances(stored.balances),
       dustState: hydrateDustState(stored.dustState),
       tip: { hash: stored.tip?.hash ?? null, height: stored.tip?.height ?? 0, timestamp: stored.tip?.timestamp ?? 0 },
       refreshing: hydrateRefreshStatus(stored.refreshing),
+      transactions: hydrateTransactions(stored.transactions),
+      utxos: hydrateUtxos(stored.utxos),
+      refreshSnapshot: hydrateRefreshSnapshot(stored.refreshSnapshot),
     };
-  }, { migrate: true });
+  }, { migrate: true, bulk: true }).catch(() => undefined);
 }
 
 /**
@@ -1141,6 +1156,8 @@ export const midnightActions = {
     };
     Object.assign(midnightStore, updates);
     broadcastFromBackground(updates, true);
+    // The previous worker's record has served: what it showed is the snapshot now.
+    bootRecord = null;
   },
   /**
    * Keep what is on screen for a rebuild that doesn't go through a chain reset
@@ -1193,42 +1210,39 @@ export const midnightActions = {
     }, true);
   },
   /**
-   * What the wallet last showed, from its persisted record, for a rebuild that
-   * starts while this worker's memory is empty (it restarted, which is the
-   * usual way a reset is first seen). Same wallet only; null when there is
-   * nothing to keep.
+   * What the wallet last showed, from the previous worker's record read at boot,
+   * for a rebuild that starts while this worker's memory holds none of it (it
+   * restarted, which is the usual way a reset is first seen). Same wallet only;
+   * null when there is nothing to keep.
    */
   async persistedRefreshSnapshot(): Promise<MidnightRefreshSnapshot | null> {
-    try {
-      const key = midnightStore.activeWalletKey;
-      const stored = await persister.read() as Partial<MidnightStore> | null;
-      if (!key || !stored) return null;
-      // The bulk fields (history, UTxOs, a running refresh's snapshot) are written
-      // only when they change, so they are still the previous worker's; they are
-      // read only when they belong to this wallet (the persister checks the scope).
-      const running = hydrateRefreshSnapshot(stored.refreshSnapshot);
-      if (running && bootDisplay?.activeWalletKey === key) return running;
-      // The small fields were rewritten by this worker's first write: take the
-      // previous worker's from boot.
-      const display = bootDisplay?.activeWalletKey === key ? bootDisplay : null;
-      if (stored.activeWalletKey !== key || !display) return null;
-      const transactions = hydrateTransactions(stored.transactions);
-      if (!hasDataToKeep(display.balances, transactions)) return null;
-      return {
-        balances: display.balances, transactions, utxos: hydrateUtxos(stored.utxos),
-        dustState: display.dustState, tip: { ...display.tip },
-      };
-    } catch {
-      return null;
-    }
+    await bootRead;
+    const key = midnightStore.activeWalletKey;
+    const boot = key && bootRecord?.activeWalletKey === key ? bootRecord : null;
+    if (!boot) return null;
+    // A rebuild was running: what the wallet showed before it.
+    if (boot.refreshSnapshot) return boot.refreshSnapshot;
+    if (!hasDataToKeep(boot.balances, boot.transactions)) return null;
+    return {
+      balances: boot.balances, transactions: [...boot.transactions], utxos: [...boot.utxos],
+      dustState: boot.dustState, tip: { ...boot.tip },
+    };
+  },
+  /**
+   * This worker holds the wallet's data now (or the wallet is gone): the
+   * previous worker's record read at boot is no longer needed.
+   */
+  releaseBootRecord() {
+    bootRecord = null;
   },
   /**
    * A refresh the previous worker was running when it stopped: back into
    * memory, and to the views, so the rebuild can end. True when there was one.
    */
   async restoreRefreshAfterRestart(): Promise<boolean> {
-    if (midnightStore.refreshSnapshot || !bootDisplay?.refreshing) return false;
-    const status = bootDisplay.refreshing;
+    await bootRead;
+    if (midnightStore.refreshSnapshot || !bootRecord?.refreshing) return false;
+    const status = bootRecord.refreshing;
     const snapshot = await midnightActions.persistedRefreshSnapshot();
     if (!snapshot || midnightStore.refreshSnapshot) return false;
     const updates: Partial<MidnightStore> = { refreshSnapshot: snapshot, refreshing: { ...status, stalled: false } };
@@ -1383,6 +1397,7 @@ export const midnightActions = {
   },
 
   clear() {
+    bootRecord = null;
     Object.assign(midnightStore, {
       isActive: false,
       networkStatus: 'disconnected',

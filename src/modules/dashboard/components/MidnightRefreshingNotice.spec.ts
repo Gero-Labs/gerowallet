@@ -22,6 +22,8 @@ const SNAPSHOT: MidnightRefreshSnapshot = {
   balances: { shieldedTokens: {}, nightShielded: 0n, nightUnshielded: 5n, nightRegistered: 0n, dust: 0n, dustGenerating: 0n },
   transactions: [], utxos: [], dustState: null, tip: { hash: 'h', height: 10, timestamp: 1 },
 };
+/** Past the slot's gathering moment, so what it says has been said. */
+const settleSaid = async () => { await flushPromises(); await new Promise((r) => setTimeout(r, 300)); await flushPromises(); };
 const refreshing = (extra: Partial<NonNullable<typeof midnightStore.refreshing>> = {}) => {
   midnightStore.refreshSnapshot = SNAPSHOT;
   midnightStore.refreshing = { startedAt: 1, reason: null, stalled: false, progress: null, ...extra };
@@ -77,12 +79,34 @@ describe('the notice slot during a refresh', () => {
     expect(region.attributes('role')).toBe('status');
     expect(region.text()).toBe('');
     refreshing({ reason: 'upgrade' });
-    await flushPromises();
+    await settleSaid();
     expect(w.get('[data-test="midnight-notice-announcer"]').text()).toBe('midnight.refresh.afterUpgrade');
     // A progress tick says nothing new.
     midnightStore.refreshing = { ...midnightStore.refreshing!, progress: 50 };
-    await flushPromises();
+    await settleSaid();
     expect(w.get('[data-test="midnight-notice-announcer"]').text()).toBe('midnight.refresh.afterUpgrade');
+  });
+
+  it('says update required and the refresh together when they appear together, and the upgrade when it appears', async () => {
+    const w = mount(MidnightNoticeSlot, { global: { stubs } });
+    const said = () => w.get('[data-test="midnight-notice-announcer"]').text();
+    await flushPromises();
+    expect(said()).toBe('');
+    refreshing({ reason: 'upgrade' });
+    await noteMidnightUpdateRequired('Mainnet', 'response');
+    await settleSaid();
+    expect(said()).toBe('midnight.errors.updateRequired midnight.refresh.afterUpgrade');
+    // The banners carry no live region of their own.
+    expect(w.find('[data-test="midnight-update-banner"]').attributes('role')).toBeUndefined();
+
+    resetMidnightWriteGateForTests();
+    midnightStore.refreshing = null;
+    midnightStore.refreshSnapshot = null;
+    await settleSaid();
+    await noteMidnightNetworkUpgrading('Mainnet', 'status');
+    await settleSaid();
+    expect(said()).toBe('midnight.upgrade.title. midnight.errors.networkUpgrading');
+    expect(w.find('[data-test="midnight-upgrade-banner"]').attributes('role')).toBeUndefined();
   });
 
   it('shows refreshing after update required and the upgrade, at most two', async () => {

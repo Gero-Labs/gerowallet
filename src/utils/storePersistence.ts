@@ -573,12 +573,23 @@ export class StorePersister {
    * it, as hydrate() does. For a store that restores only some fields, through its own
    * validators, rather than the whole record.
    */
-  async hydrateWith(apply: (stored: State | null) => void, { migrate = false }: Pick<HydrateOptions, 'migrate'> = {}): Promise<void> {
+  async hydrateWith(
+    apply: (stored: State | null) => void,
+    { migrate = false, bulk = false }: Pick<HydrateOptions, 'migrate'> & {
+      /**
+       * Merge the bulk fields in, as read() does, read before any write can replace
+       * them: for a store that keeps the previous session's data aside.
+       */
+      bulk?: boolean;
+    } = {},
+  ): Promise<void> {
     const trustedRead = this.readTrusted();
     const reading = this.readCompactRecord().then(async (stored) => {
       const trusted = await trustedRead;
+      const record = this.withTrusted(stored, trusted);
+      const full = bulk && record ? await this.withBulk(record) : record;
       try {
-        apply(this.withTrusted(stored, trusted));
+        apply(full);
       } catch (error) {
         console.error(`Failed to hydrate ${this.options.storeName}:`, error);
       }
@@ -602,10 +613,14 @@ export class StorePersister {
    * hydrate(): it is always the later write.
    */
   async read(): Promise<State | null> {
-    const { storeName } = this.options;
     const [compact, trusted] = await Promise.all([this.readCompactRecord(), this.readTrusted()]);
     const stored = this.withTrusted(compact, trusted);
-    if (!stored) return null;
+    return stored ? this.withBulk(stored) : null;
+  }
+
+  /** `stored` with the bulk fields of its own session merged in (an inline copy wins). */
+  private async withBulk(stored: State): Promise<State> {
+    const { storeName } = this.options;
     let entries = new Map<string, StoreCacheEntry>();
     try {
       entries = await this.bulk.read([...this.bulkFields].map((field) => this.bulkKey(field)));

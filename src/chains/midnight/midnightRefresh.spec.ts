@@ -22,6 +22,11 @@ describe('what a refresh keeps', () => {
     expect(hasDataToKeep(EMPTY, [tx('aa', 1)])).toBe(true);
   });
 
+  it('a pending send alone is not history to keep (a restarted worker may hold nothing else)', () => {
+    expect(hasDataToKeep(EMPTY, [tx('aa', 1, { status: 'pending' })])).toBe(false);
+    expect(hasDataToKeep(EMPTY, [tx('aa', 1, { status: 'pending' }), tx('bb', 2)])).toBe(true);
+  });
+
   it('waits for the newest confirmed public row, never a pending or shielded one', () => {
     const rows = [
       tx(`0x${'AA'.repeat(32)}`, 10),

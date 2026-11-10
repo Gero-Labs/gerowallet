@@ -83,9 +83,14 @@ export interface MidnightRefreshTracker {
   sameChain: boolean;
 }
 
-/** True when there is something on screen worth keeping through a rebuild. */
+/**
+ * True when there is something on screen worth keeping through a rebuild: a
+ * balance of any kind, or history. A pending row alone is not: it is a send of
+ * this session, and after a worker restart it can be all that memory holds
+ * while the history the wallet showed is still only in the persisted record.
+ */
 export function hasDataToKeep(balances: MidnightBalances | null | undefined, transactions: readonly MidnightTransaction[]): boolean {
-  if (transactions.length > 0) return true;
+  if (transactions.some((tx) => tx.status !== 'pending')) return true;
   if (!balances) return false;
   return (balances.nightUnshielded ?? 0n) > 0n || (balances.nightShielded ?? 0n) > 0n
     || (balances.nightRegistered ?? 0n) > 0n || (balances.dust ?? 0n) > 0n
