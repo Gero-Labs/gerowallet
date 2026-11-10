@@ -34,6 +34,8 @@ defineProps<{
   min-width: 0;
   color: var(--g-text-1);
   white-space: pre-wrap;
+  /* g-mono breaks anywhere (for hashes); a command wraps at its spaces first. */
+  word-break: normal;
   overflow-wrap: anywhere;
 }
 
