@@ -86,11 +86,14 @@ describe('useNotifyPresent: who may present a snackbar', () => {
     expect(notifySnackStore.state.items).toEqual([]);
   });
 
-  it('answers a content script nothing on an unfocused page either (focus is not disclosed)', () => {
+  // The worker keeps only the first answer to its message. An unfocused page that answered
+  // `{ shown: false }` beat the focused page's `{ shown: true }` in about half of the page sets
+  // tried in Chromium, which adds the system notification to the snackbar.
+  it('an unfocused page answers nobody, so it cannot outrun the answer of the focused page', () => {
     focus(false);
     install();
+    expect(deliver(WORKER, request())).toEqual([]);
     expect(deliver(CONTENT_SCRIPT, request())).toEqual([]);
-    expect(deliver(WORKER, request())).toEqual([{ shown: false }]);
     expect(notifySnackStore.state.items).toEqual([]);
   });
 
@@ -111,15 +114,15 @@ describe('useNotifyPresent: where a snackbar may lead', () => {
     ['a settings tab the worker never asks for', { dashboard: '/', sidepanel: null, settingsTab: 'advanced' }],
     ['an unknown side panel route', { dashboard: '/', sidepanel: '/settings' }],
     ['no route at all', undefined],
-  ])('refuses %s, even from the worker', (_name, route) => {
+  ])('refuses %s, even from the worker, and leaves it to the system notification', (_name, route) => {
     install();
-    expect(deliver(WORKER, request({ route: route as unknown as NotifyPresentRequest['route'] }))).toEqual([{ shown: false }]);
+    expect(deliver(WORKER, request({ route: route as unknown as NotifyPresentRequest['route'] }))).toEqual([]);
     expect(notifySnackStore.state.items).toEqual([]);
   });
 
   it('refuses a route whose side panel half is unknown on the side panel too', () => {
     install('sidepanel');
-    expect(deliver(WORKER, request({ route: { dashboard: '/', sidepanel: '/settings' } }))).toEqual([{ shown: false }]);
+    expect(deliver(WORKER, request({ route: { dashboard: '/', sidepanel: '/settings' } }))).toEqual([]);
     expect(notifySnackStore.state.items).toEqual([]);
   });
 

@@ -1,14 +1,16 @@
 // Handover B8, as Adam wants it: a push that arrives while a wallet page is visible AND
 // focused shows as the wallet's own snackbar (top right, NotifySnackbar.vue), and the
 // worker shows no system bubble at all. This answers the worker's NOTIFY_PRESENT with
-// `{ shown: true }` only in that case; any other page answers `{ shown: false }` so the
-// worker shows the system notification. Install once per extension page.
+// `{ shown: true }` only in that case. A page that does not show it answers NOTHING: the
+// worker keeps only the first answer to its message, so a `{ shown: false }` from an unfocused
+// page (the side panel beside a focused dashboard) could arrive first and add the system
+// notification to the snackbar. With no answer at all the worker's callback returns at once
+// and it shows the system notification. Install once per extension page.
 //
 // runtime.onMessage on an extension page also receives what a content script sends, and the
 // content-script world is hostile (senderTrust.ts). So the real sender must be this extension's
 // worker or one of its pages (the worker reports `chrome-extension://<id>/<its script>`, a
-// content script the web page's URL), and the route must be one routeFor() can return. A
-// refused sender gets no answer at all: only the worker learns whether a page is focused.
+// content script the web page's URL), and the route must be one routeFor() can return.
 
 import { onBeforeUnmount } from 'vue';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -40,10 +42,10 @@ export function useNotifyPresent(surface: 'dashboard' | 'sidepanel'): void {
     if (!m || m.method !== MessageTypes.NOTIFY_PRESENT || !m.data) return false;
     if (!isOwnExtensionPageSender(sender, ownExtension())) return false;
     const focused = typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus();
-    if (!focused) { sendResponse({ shown: false }); return false; }
+    if (!focused) return false;
     const { e, title, body, route, assets, walletId } = m.data;
     // Not shown here, so the worker shows the system notification, whose click it routes itself.
-    if (!isPushRoute(route)) { sendResponse({ shown: false }); return false; }
+    if (!isPushRoute(route)) return false;
     notifySnackStore.show({
       e, title, body, walletId,
       ...(assets?.length ? { assets } : {}),
