@@ -265,9 +265,16 @@
       <!-- A broadcast announcement in full: opened from the bell, the banner, a snackbar or `?announcement=<id>`. -->
       <AnnouncementDialog />
 
+      <!-- One-time "Restart your local proof server" notice for anyone who may have run the
+           old verbose command (proofServerRestartNotice.ts): waits behind the other dialogs. -->
+      <ProofServerRestartNotice
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || announcementOpen || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        @open-change="proofServerNoticeOpen = $event"
+      />
+
       <!-- The offer to turn push notifications on for an eligible, unlinked wallet (notifyIntro.ts): waits its turn behind every other dialog. -->
       <NotifyIntroPrompt
-        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || announcementOpen || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || announcementOpen || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true' || proofServerNoticeOpen"
         @turn-on="openNotifySettingsFromIntro"
       />
 
@@ -308,6 +315,7 @@ import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
+import ProofServerRestartNotice from '@/modules/midnight/ProofServerRestartNotice.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
 import { announcementsStore } from '@/stores/announcementsStore';
 import AnnouncementBanner from '@/shared/components/announcements/AnnouncementBanner.vue';
@@ -382,6 +390,8 @@ const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobal
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
+/** The proof server restart notice is up: the push-notification offer waits behind it. */
+const proofServerNoticeOpen = ref(false);
 
 // Compact nav mode — collapse labels to icons when toolbar is narrow
 const compactNav = ref(false);

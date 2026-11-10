@@ -235,8 +235,6 @@ export function nexusMidnightPathFor(network: string, subpath: string): string {
  * composable.
  */
 export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
-export const PROOF_SERVER_DOCKER_COMMAND =
-  `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;
 
 /** True for the ledger-9 network. Accepts the wallet `Network` value or a `midnight-<id>` slug. */
 export function isLedger9Network(network?: string): boolean {
@@ -262,7 +260,25 @@ export function midnightProofServerPort(network?: string): number {
 export const DEFAULT_LOCAL_PROOF_SERVER_URL = 'http://localhost:6300';
 export const DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 = 'http://localhost:6301';
 
+/**
+ * The one command the wallet suggests for starting a local proof server, for
+ * the given network's ledger. Every surface that shows a command (Settings →
+ * Proof server, Remote signing → "Prove for your phone", the restart notice)
+ * builds it here so they cannot drift apart.
+ *
+ * No verbose flag: verbose mode writes request contents, including private
+ * transaction inputs, to the container log, and the wallet never reads that
+ * output. `--rm` removes the container (and its log) when it stops, and the
+ * port is bound to loopback so the server is not reachable from the network.
+ */
 export function midnightProofServerCommand(network?: string): string {
   const port = midnightProofServerPort(network);
-  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server -v`;
+  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server`;
 }
+
+/**
+ * The command for the ledger-8 server that Cross-Device Proving serves from
+ * (it always advertises the ledger-8 profile, see localProverProfile.ts).
+ * The same string Settings → Proof server shows for Mainnet and Preprod.
+ */
+export const PROOF_SERVER_DOCKER_COMMAND = midnightProofServerCommand();
