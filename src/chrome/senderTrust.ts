@@ -37,6 +37,8 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'NOTIFY_INBOX_READ',
   'NOTIFY_INBOX_CLEAR',
   'NOTIFY_WATCH_ORDERS',
+  // Registers a Gero market listing of the logged wallet for sale alerts (market dialogs).
+  'NOTIFY_WATCH_LISTINGS',
   'NOTIFY_INTRO_ANSWER',
   // Part of signing: only the wallet's own pages sign (Ledger, Keystone, Trezor over WebUSB).
   'CIP113_SIGN_PREFLIGHT',
@@ -46,6 +48,13 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'CIP113_PREPARE_TRANSFER',
   // Builds the one legacy-marketplace cancel the wallet will sign (NFT rescue).
   'LEGACY_LISTING_PREPARE_CANCEL',
+  // Build the one Gero market transaction (list, reprice, cancel, buy, migrate) the wallet will
+  // sign, and grant the one signing allowance for it.
+  'NFT_MARKET_PREPARE_LIST',
+  'NFT_MARKET_PREPARE_REPRICE',
+  'NFT_MARKET_PREPARE_CANCEL',
+  'NFT_MARKET_PREPARE_BUY',
+  'NFT_MARKET_PREPARE_MIGRATE',
   // Submit API (Settings > Advanced): where the wallet sends its signed transactions, and the auth header value.
   'SET_SUBMIT_API',
   'TEST_SUBMIT_API',

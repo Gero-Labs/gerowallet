@@ -113,13 +113,15 @@
                 <GButton v-if="canTransact && !ordersLocked && hasUsdr" tier="primary" compact @click="openAmount('stake')">
                   {{ $t('realfi.stakeAction') }}
                 </GButton>
+                <!-- Unstaking hands off to RealFi's app: the wallet refuses to sign an
+                     unstake order it builds (orderRecipients.ts realfiStakeRequest). -->
                 <GButton
                   v-if="canTransact && !ordersLocked && canUnstake"
                   tier="secondary"
                   compact
-                  @click="openAmount('unstake')"
+                  @click="openRealFiApp()"
                 >
-                  {{ $t('staking.unstake') }}
+                  {{ $t('realfi.unstakeOnRealfi') }}
                 </GButton>
               </div>
             </div>
@@ -134,6 +136,9 @@
                 </p>
                 <p v-if="apyLabel && !showYieldChart" class="t-caption realfi-hero__apy">
                   {{ apyLabel }}
+                </p>
+                <p v-if="canTransact && !ordersLocked && canUnstake" class="t-caption realfi-hero__apy">
+                  {{ $t('realfi.unstakeOnRealfiNote') }}
                 </p>
               </div>
               <RealFiYieldChart
@@ -789,8 +794,12 @@ function pillClass(status: RealFiOrderStatus): string {
 
 /* ── In-wallet orders ── */
 
-/** An unstake binds to the protocol's next cooldown boundary; without it, none can be built. */
-const canUnstake = computed(() => susdrBalance.value > 0 && !!protocol.value?.nextCooldownSlot);
+/**
+ * Holds sUSDrf to unstake. The unstake itself happens in RealFi's app: its order pays a
+ * per-order timelock script the wallet cannot verify, so the signer refuses one Gero
+ * would build (orderRecipients.ts realfiStakeRequest).
+ */
+const canUnstake = computed(() => susdrBalance.value > 0);
 
 const amountMode = ref<'stake' | 'unstake' | null>(null);
 const flow = ref<{ run(req: RealFiBuildRequest): Promise<void> } | null>(null);

@@ -7,6 +7,7 @@ import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged
 import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
 import { dustLedger9, balanceLightDust9 } from './midnightDustLightLedger9';
+import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 
 export function deserializeLedger9Transaction(network: string, hex: string): ledger.UnprovenTransaction {
   if (midnightLedgerVersion(network) !== 9) throw new Error('Ledger 9 requires Midnight Stagenet');
@@ -66,20 +67,24 @@ export async function balanceLedger9Fees(
   for (const tx of transactions) ledger.Transaction.fromParts('stagenet').merge(tx);
   const dustKey = ledger.DustSecretKey.fromSeed(args.dustSecretSeed);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  // The same silence and TTL bounds as the ledger 8 builder (gero-ios#241), not a flat time.
+  const watchdog = watchDustSync(controller, DUST_SYNC_INACTIVITY_MS, args.ttl.getTime());
+  const { progress, reply } = dustSyncReporting(watchdog, args.onDustSyncProgress);
   try {
     const identity = await readVerifiedMidnightChainIdentity(args.endpoints, controller.signal);
+    watchdog.activity();
     const { state, block } = await reconstructDustState(dustLedger9, dustKey, 'stagenet',
-      createDustLightTransport(args.endpoints, controller.signal), args.onDustSyncProgress);
+      createDustLightTransport(args.endpoints, controller.signal, reply), progress);
     controller.signal.throwIfAborted();
     const fee = balanceLightDust9(state, dustKey, transactions, args.ttl, new Date(block.timestamp), block.ledgerParameters);
+    watchdog.activity();
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal);
     return fee;
   } catch (error) {
     if (controller.signal.aborted) throw new Error('DUST synchronization timed out. Please try again shortly.');
     throw error;
   } finally {
-    clearTimeout(timeout);
+    watchdog.stop();
     controller.abort();
     dustKey.clear();
   }

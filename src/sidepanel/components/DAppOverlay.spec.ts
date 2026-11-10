@@ -2,7 +2,8 @@ import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
 import { Psbt } from 'bitcoinjs-lib';
@@ -55,7 +56,12 @@ vi.mock('@/shared/utils/keystone', () => ({ createKeystoneDataSignRequest: vi.fn
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: vi.fn(), end: vi.fn() } }));
 vi.mock('@/api/cardano-shield-api', () => ({ default: { scanTx: vi.fn() } }));
 vi.mock('@/shared/components/TransactionDetailsCard.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('@/shared/components/TxApprovalIntents.vue', () => ({ default: { template: '<div />' } }));
+// Stands in for the effects list: its acknowledgement button reports a tick as the real one does.
+vi.mock('@/shared/components/TxApprovalIntents.vue', () => ({ default: {
+  props: ['summary'],
+  emits: ['update:marketAck'],
+  template: '<div data-testid="intents-stub"><button data-testid="ack-market" @click="$emit(\'update:marketAck\', true)">ack</button></div>',
+} }));
 vi.mock('./KeystoneSignSheet.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./BottomSheet.vue', () => ({ default: { template: '<section><slot /><slot name="footer" /></section>' } }));
@@ -66,10 +72,13 @@ import DAppOverlay from './DAppOverlay.vue';
 import WalletStore from '@/stores/walletStore';
 import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
 import { geroStore } from '@/stores/geroStore';
+import { midnightStore } from '@/stores/midnightStore';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import networks from '@/utils/networks';
+import { NFT_MARKET_DEPLOYMENTS_PREPROD } from '@/utils/nftMarketDeployments';
+import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 
 // Synthetic enterprise address from a fixed public payment-key hash.
 const ADDRESS = Cardano.Address.fromBytes(HexBlob(`61${'01'.repeat(28)}`)).toBech32();
@@ -396,6 +405,96 @@ describe('Midnight balanceUnsealedTransaction: the approval names who gets paid'
   });
 });
 
+describe('Midnight makeIntent: the approval shows what the wallet gives and asks for', () => {
+  const OWN = 'mn_addr_preprod1ownxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  const OTHER = 'mn_addr_preprod1otherxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  const intentRequest = (payFees: boolean) => ({
+    requestId: 'intent-1', method: 'midnight_makeIntent',
+    payload: { website: 'https://dapp.example', data: {
+      desiredInputs: [{ kind: 'unshielded', type: '0'.repeat(64), value: '30000000' }],
+      desiredOutputs: [
+        { kind: 'unshielded', type: 'ab'.repeat(32), value: '7', recipient: OWN, toSelf: true },
+        { kind: 'unshielded', type: 'ab'.repeat(32), value: '2', recipient: OTHER, toSelf: false },
+      ],
+      options: { intentId: 'random', payFees },
+      ttlMinutes: 60,
+    } },
+  });
+
+  it('lists the give and the wants, and warns only for a want paid to another address', () => {
+    overlay.currentRequest.value = intentRequest(true) as never;
+    const wrapper = render();
+
+    expect(wrapper.findAll('[data-testid="midnight-intent-give"]')).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid="midnight-intent-want"]')).toHaveLength(2);
+    const warnings = wrapper.findAll('[data-testid="midnight-intent-want-other"]');
+    expect(warnings).toHaveLength(1);
+    expect(wrapper.text()).toContain(OTHER);
+    expect(wrapper.text()).not.toContain(OWN);
+    expect(wrapper.find('[data-testid="midnight-intent-fees"]').text()).toBe('midnight.connector.transferFeesNote');
+  });
+
+  it('decides a want is the wallet’s own from this page when the worker did not know its address', () => {
+    const req = intentRequest(true);
+    req.payload.data.desiredOutputs = req.payload.data.desiredOutputs.map(({ toSelf: _toSelf, ...want }) => want) as never;
+    (midnightStore as { addresses?: { unshielded: string } }).addresses = { unshielded: OWN };
+    try {
+      overlay.currentRequest.value = req as never;
+      const wrapper = render();
+      expect(wrapper.findAll('[data-testid="midnight-intent-want-other"]')).toHaveLength(1);
+      expect(wrapper.text()).toContain(OTHER);
+      expect(wrapper.text()).not.toContain(OWN);
+    } finally {
+      delete (midnightStore as { addresses?: unknown }).addresses;
+    }
+  });
+
+  it('warns for every want when neither side knows the wallet’s address', () => {
+    const req = intentRequest(true);
+    req.payload.data.desiredOutputs = req.payload.data.desiredOutputs.map(({ toSelf: _toSelf, ...want }) => want) as never;
+    overlay.currentRequest.value = req as never;
+    expect(render().findAll('[data-testid="midnight-intent-want-other"]')).toHaveLength(2);
+  });
+
+  it('says the wallet does not pay the fee when the dapp asks it not to', () => {
+    overlay.currentRequest.value = intentRequest(false) as never;
+    const wrapper = render();
+    expect(wrapper.find('[data-testid="midnight-intent-fees"]').text()).toBe('midnight.connector.intentFeesNotPaid');
+  });
+
+  it('builds from the request it showed and approves the sealed tx', async () => {
+    mocks.send.mockResolvedValue({ data: { success: true, tx: 'sealed-intent' } });
+    overlay.currentRequest.value = intentRequest(true) as never;
+    const wrapper = render();
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    await button(wrapper, 'approve').trigger('click');
+    await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledWith({ tx: 'sealed-intent' }));
+
+    const shown = intentRequest(true).payload.data;
+    expect(mocks.send).toHaveBeenCalledWith({
+      method: 'BUILD_MIDNIGHT_CONNECTOR_INTENT',
+      data: {
+        desiredInputs: shown.desiredInputs, desiredOutputs: shown.desiredOutputs, options: shown.options,
+        password: 'password', prfSecret: undefined,
+      },
+    });
+  });
+
+  it('answers InsufficientFunds, not Rejected, when the user declines after an insufficient-funds build', async () => {
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough funds', code: 'InsufficientFunds' } });
+    overlay.currentRequest.value = intentRequest(true) as never;
+    const wrapper = render();
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    await button(wrapper, 'approve').trigger('click');
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalled());
+    await flushPromises();
+
+    await button(wrapper, 'reject').trigger('click');
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(JSON.parse(mocks.reject.mock.calls.at(-1)![0])).toMatchObject({ code: 'InsufficientFunds' });
+  });
+});
+
 describe('dApp Bitcoin PSBT: signing waits on the review', () => {
   const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
   // Fixed test vectors — never used to hold funds.
@@ -498,5 +597,135 @@ describe('Bitcoin dApp signing with a PassKey', () => {
     finishRawPrf([9, 8, 7]);
     await vi.waitFor(() => expect(mocks.approve).toHaveBeenCalledExactlyOnceWith(approved));
     expect(mocks.send).toHaveBeenCalledExactlyOnceWith({ method, data: expect.objectContaining({ privateKeyBytes: [9, 8, 7] }) });
+  });
+});
+
+// A dApp can list the user's NFT with itself as owner and seller, and the worker signs such a
+// transaction once the user approves it (dApp market pass): Sign must wait for an explicit
+// acknowledgement of a created listing that pays someone else, and not otherwise.
+describe('dApp signTx: a Gero listing the transaction creates', () => {
+  const V1 = NFT_MARKET_DEPLOYMENTS_PREPROD[0];
+  const OWN_PAYMENT = '0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c';
+  const STAKE = '2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c';
+  const STRANGER = '77'.repeat(28);
+  const NFT = `${'b'.repeat(56)}${Buffer.from('NFT').toString('hex')}`;
+  const key = (hash: string, type = Cardano.CredentialType.KeyHash) => ({ hash: Hash28ByteBase16(hash), type });
+  const baseAddress = (payment: string, stake: string, paymentIsScript = false) => Cardano.BaseAddress.fromCredentials(
+    Cardano.NetworkId.Testnet, key(payment, paymentIsScript ? Cardano.CredentialType.ScriptHash : Cardano.CredentialType.KeyHash), key(stake),
+  ).toAddress().toBech32();
+  const OWN = baseAddress(OWN_PAYMENT, STAKE);
+
+  // A listing datum, encoded by hand (the contract's indefinite-length constructors).
+  const bstr = (h: string) => `581c${h}`;
+  const constr = (index: 0 | 1, fields: string[]) => `${index === 0 ? 'd879' : 'd87a'}9f${fields.join('')}ff`;
+  const addressData = (payment: string, stake: string) => constr(0, [constr(0, [bstr(payment)]), constr(0, [constr(0, [constr(0, [bstr(stake)])])])]);
+  const datum = (owner: string, sellerPayment: string) =>
+    constr(0, [bstr(owner), addressData(sellerPayment, STAKE), '1a017d7840', '9fff', 'd87a80']);
+
+  const signTxRequest = (datumHex: string) => {
+    const core = {
+      id: '0'.repeat(64),
+      body: {
+        inputs: [{ txId: '1'.repeat(64), index: 0 }],
+        outputs: [
+          { address: baseAddress(V1.scriptHash, STAKE, true), value: { coins: 2_000_000n, assets: new Map([[NFT, 1n]]) }, datum: inlineDatumFromCbor(HexBlob(datumHex)) },
+          { address: OWN, value: { coins: 9_000_000n } },
+        ],
+        fee: 200_000n,
+      },
+      witness: { signatures: new Map() },
+    };
+    const tx = Serialization.Transaction.fromCore(core as never).toCbor();
+    return { requestId: 'tx-market', method: 'signTx', payload: { website: 'https://dapp.example', tx } };
+  };
+
+  beforeEach(() => {
+    WalletStore.state.loggedWallet = {
+      ...WalletStore.state.loggedWallet, network: Network.PREPROD, encryptionMethod: 'prf',
+    } as never;
+    // The wallet's stake key is what a listing of its own sits under.
+    const rewardAddress = Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Testnet, key(STAKE)).toAddress().toBech32();
+    WalletStore.state.keys = { payment: [{ address: OWN, cred: OWN_PAYMENT }], change: [], stake: [{ address: rewardAddress, cred: STAKE }] } as never;
+    expect(networks.resolveNftMarketDeployments(Blockchain.CARDANO, Network.PREPROD)).toEqual([V1]);
+  });
+
+  const sign = (wrapper: View) => wrapper.findAll('button').find(entry => entry.text() === 'miniGero.sign')!;
+
+  it('holds Sign until a listing owned by someone else is acknowledged, then lets it through', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
+    await wrapper.find('[data-testid="ack-market"]').trigger('click');
+    expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+  });
+
+  it('holds Sign for a listing whose seller is someone else, too', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(OWN_PAYMENT, STRANGER)) as never;
+    const wrapper = render();
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it('does not hold Sign for the wallet\'s own plain listing', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(OWN_PAYMENT, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+  });
+
+  // Enter in the password field, and every other way into a signer, must wait for the same gate the
+  // Sign button does: the button is disabled, but the field's own handler is not the button.
+  const signTxCalls = () => mocks.send.mock.calls.filter(([message]) => message?.method === MessageTypes.SIGN_TX);
+
+  it('does not sign on Enter in the password field until the market acknowledgement is ticked', async () => {
+    WalletStore.state.loggedWallet = { ...WalletStore.state.loggedWallet, encryptionMethod: 'password' } as never;
+    mocks.send.mockResolvedValue({ data: { witnesses: 'a100' } });
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    const input = wrapper.find('[data-label="miniGero.spendingPassword"]');
+    await input.setValue('password');
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
+
+    await input.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(mocks.validate).not.toHaveBeenCalled();
+    expect(signTxCalls()).toHaveLength(0);
+    expect(mocks.approve).not.toHaveBeenCalled();
+
+    await wrapper.find('[data-testid="ack-market"]').trigger('click');
+    await input.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(signTxCalls()).toHaveLength(1);
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith('a100');
+  });
+
+  it('starts none of the signers (password, PassKey, Ledger, Trezor, Keystone) while the gate holds', async () => {
+    WalletStore.state.loggedWallet = { ...WalletStore.state.loggedWallet, encryptionMethod: 'password' } as never;
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
+    const signers = wrapper.vm as unknown as Record<'signNormal' | 'signPrf' | 'signLedger' | 'signTrezor' | 'signKeystone', () => Promise<unknown>>;
+    for (const name of ['signNormal', 'signPrf', 'signLedger', 'signTrezor', 'signKeystone'] as const) {
+      await signers[name]();
+      await flushPromises();
+    }
+    expect(mocks.validate).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
+  });
+
+  it('asks again for the next request: an acknowledgement is not carried over', async () => {
+    overlay.currentRequest.value = signTxRequest(datum(STRANGER, OWN_PAYMENT)) as never;
+    const wrapper = render();
+    await flushPromises();
+    await wrapper.find('[data-testid="ack-market"]').trigger('click');
+    expect(sign(wrapper).attributes('disabled')).toBeUndefined();
+    overlay.currentRequest.value = { ...signTxRequest(datum(STRANGER, OWN_PAYMENT)), requestId: 'tx-market-2' } as never;
+    await flushPromises();
+    expect(sign(wrapper).attributes('disabled')).toBeDefined();
   });
 });

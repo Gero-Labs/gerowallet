@@ -32,9 +32,11 @@ import {
   type TxIntent,
 } from '@/shared/utils/txIntentGuard';
 import { forEachAsset, selectInputCandidates, type InputSelectionOptions } from './nexusInputSelection';
+import { parseNftMarketBuildResponse, type NftMarketBuildResponse } from './nftMarketValidation';
 
 export { InputLimitError, NEXUS_MAX_INPUTS, selectInputCandidates } from './nexusInputSelection';
 export type { InputSelection, InputSelectionOptions } from './nexusInputSelection';
+export type { NftMarketBuildResponse } from './nftMarketValidation';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -293,6 +295,102 @@ export interface LegacyCancelBuildResponse {
   sponsoredCollateralRef?: string;
 }
 
+/** A payee of a listing besides the seller and the fee address: a creator royalty. */
+export interface NftMarketRoyaltyPayee {
+  address: string;
+  /** Lovelace, a decimal string. */
+  lovelace: string;
+}
+
+/** The UTxO of a listing: a Gero listing, or (migrate) a legacy one. */
+export interface NftMarketListingRef {
+  txHash: string;
+  outputIndex: number;
+}
+
+/**
+ * Gero market list build request (`POST /api/tx/build/nft-market/list`). The worker chooses
+ * every value and checks the built datum against them, so `royalties` are the ones it
+ * computed, not ones Nexus looks up.
+ */
+export interface NftMarketListBuildRequest {
+  /** Policy id followed by the hex asset name. */
+  unit: string;
+  /** What the buyer pays the payees, lovelace as a decimal string. */
+  priceLovelace: string;
+  /** Payment key hash (56 hex) of the address the NFT is listed from; must sign cancels. */
+  ownerPkh: string;
+  /** Where the seller's proceeds and the deposit go; the datum's `seller_address`. */
+  sellerAddress: string;
+  /** The seller's stake credential hash (56 hex): the listing sits at the script plus this. */
+  stakeCredential: string;
+  /** Phase 1 lists publicly only: a private listing (a buyer key) is phase 1b. */
+  buyerPkh: null;
+  royalties: NftMarketRoyaltyPayee[];
+  /** The wallet's spendable UTxOs: the NFT's own, and ADA for the deposit and the fee. */
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+}
+
+/**
+ * Gero market cancel build request (`POST /api/tx/build/nft-market/cancel`). Nexus re-reads
+ * the listing from chain and answers 422 `LISTING_NOT_FOUND` for one already spent.
+ */
+export interface NftMarketCancelBuildRequest {
+  listingRef: NftMarketListingRef;
+  /** Where the NFT and the ADA locked in the listing go. */
+  returnAddress: string;
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  /** Let Nexus lend pool collateral when no fee input is ADA-only and at least 5 ADA. */
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Gero market reprice build request (`POST /api/tx/build/nft-market/reprice`). The new
+ * listing keeps the old datum's owner, seller address and buyer; the price is new, and so are
+ * the royalties: the worker computes them for the new price from the collection's current terms,
+ * exactly as for a list. Nexus sizes the deposit as a new listing's, the difference to the old
+ * one paid from, or returned to, the wallet.
+ */
+export interface NftMarketRepriceBuildRequest {
+  listingRef: NftMarketListingRef;
+  priceLovelace: string;
+  royalties: NftMarketRoyaltyPayee[];
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Gero market buy build request (`POST /api/tx/build/nft-market/buy`). Public listings only.
+ */
+export interface NftMarketBuyBuildRequest {
+  listingRef: NftMarketListingRef;
+  /** Where the NFT goes. */
+  buyerAddress: string;
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Migrate build request (`POST /api/tx/build/nft-market/migrate`): cancels a legacy listing
+ * and lists the NFT at the Gero contract in one transaction. Mainnet only, as the legacy
+ * contracts are.
+ */
+export interface NftMarketMigrateBuildRequest {
+  legacyRef: NftMarketListingRef;
+  priceLovelace: string;
+  ownerPkh: string;
+  sellerAddress: string;
+  stakeCredential: string;
+  royalties: NftMarketRoyaltyPayee[];
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  allowSponsoredCollateral?: boolean;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -326,6 +424,38 @@ export function nexusErrorMessage(
 export function nexusErrorCode(error: unknown): string | undefined {
   const code = (error as { response?: { data?: { errorCode?: unknown } } })?.response?.data?.errorCode;
   return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/.test(code) ? code : undefined;
+}
+
+/**
+ * The `errorCode`s Nexus raises for the Gero NFT market (its `NftMarketException`, HTTP 422), the
+ * only ones the wallet believes from a market build or read. Any other code in a response is not a
+ * market code: it may be one the wallet itself uses for another stage (`SUBMIT_FAILED`,
+ * `WRONG_PASSWORD`, `EXPIRED`, `INPUT_SPENT`, `VERIFY_FAILED`, ...), and passed through it would
+ * make a prepare that signed nothing read as a password prompt or a transaction that may have been
+ * sent. Keep it equal to Nexus's list; a code Nexus adds is unknown here until it is added.
+ */
+export const NFT_MARKET_NEXUS_ERROR_CODES: ReadonlySet<string> = new Set([
+  'NETWORK_UNSUPPORTED',
+  'LISTING_NOT_FOUND',
+  'NOT_GERO_LISTING',
+  'PRIVATE_LISTING',
+  'DATUM_UNREADABLE',
+  'NFT_NOT_FOUND',
+  'PRICE_TOO_LOW',
+  'SELLER_SHARE_TOO_LOW',
+  'TOO_MANY_ROYALTIES',
+  'OFFER_NOT_MOVABLE',
+  'TOO_MANY_LISTINGS',
+  'EVALUATION_FAILED',
+  'INSUFFICIENT_ADA',
+  'NO_COLLATERAL',
+  'FEE_INPUT_SPENT',
+]);
+
+/** `nexusErrorCode`, but only for a code in NFT_MARKET_NEXUS_ERROR_CODES; undefined for any other. */
+export function nexusMarketErrorCode(error: unknown): string | undefined {
+  const code = nexusErrorCode(error);
+  return code !== undefined && NFT_MARKET_NEXUS_ERROR_CODES.has(code) ? code : undefined;
 }
 
 // Surface the Nexus error body's message so callers can parse it
@@ -653,6 +783,27 @@ export interface MaxAdaResponse {
   total_balance: string;
 }
 
+/**
+ * Post one of the Gero market builds and read the answer. The slug goes in the query and the
+ * body, as for the legacy cancel; a 422's `errorCode` stays on the thrown error for
+ * nexusErrorCode(). A response that does not read back whole throws an NftMarketResponseError.
+ */
+async function postNftMarketBuild(
+  action: 'list' | 'cancel' | 'reprice' | 'buy' | 'migrate',
+  request: object,
+  network: string,
+): Promise<NftMarketBuildResponse> {
+  const nexusNetwork = toNexusNetwork(network);
+  if (!nexusNetwork) throw new Error(`NFT market transactions are not supported on ${network}`);
+  const route = `/api/tx/build/nft-market/${action}`;
+  // The body's network wins over the query's in Nexus; send the slug in both, as above.
+  const { data } = await nexusTxClient.post<unknown>(`${route}?network=${nexusNetwork}`, {
+    ...request,
+    network: nexusNetwork,
+  });
+  return parseNftMarketBuildResponse(data, route);
+}
+
 export const nexusTxApi = {
   /**
    * Build an unsigned transfer transaction (ADA + optional native tokens) via nexus.
@@ -880,5 +1031,49 @@ export const nexusTxApi = {
       { ...request, network: nexusNetwork },
     );
     return data;
+  },
+
+  /**
+   * Build an unsigned Gero market listing via nexus (`/api/tx/build/nft-market/list`): the
+   * NFT and a deposit to the listing contract at the seller's stake credential, with the
+   * inline datum. Anything Nexus cannot build safely is a 422 whose `errorCode`
+   * nexusErrorCode() reads. The caller must verify the returned transaction before signing it.
+   */
+  buildNftMarketList(request: NftMarketListBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('list', request, network);
+  },
+
+  /**
+   * Build an unsigned cancel of a Gero listing (`/api/tx/build/nft-market/cancel`). A listing
+   * already spent is a 422 `LISTING_NOT_FOUND`. The caller must verify the transaction.
+   */
+  buildNftMarketCancel(request: NftMarketCancelBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('cancel', request, network);
+  },
+
+  /**
+   * Build an unsigned reprice of a Gero listing (`/api/tx/build/nft-market/reprice`): spends
+   * the listing and relists it at the new price. A listing changed since (a quicker reprice)
+   * is a 422 `LISTING_NOT_FOUND`. The caller must verify the transaction.
+   */
+  buildNftMarketReprice(request: NftMarketRepriceBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('reprice', request, network);
+  },
+
+  /**
+   * Build an unsigned buy of a public Gero listing (`/api/tx/build/nft-market/buy`). A private
+   * listing is a 422 `PRIVATE_LISTING`. The caller must verify the transaction.
+   */
+  buildNftMarketBuy(request: NftMarketBuyBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('buy', request, network);
+  },
+
+  /**
+   * Build an unsigned migration of a legacy listing to the Gero contract
+   * (`/api/tx/build/nft-market/migrate`). Nexus builds it for mainnet only (the legacy
+   * contracts exist nowhere else). The caller must verify the transaction.
+   */
+  buildNftMarketMigrate(request: NftMarketMigrateBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('migrate', request, network);
   },
 };

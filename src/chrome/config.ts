@@ -6,6 +6,15 @@
 export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-113 programmable tokens';
 
 /**
+ * What every Gero NFT market signing path reports once a transaction touching a Gero listing is
+ * refused (WalletBg.signTx, the hardware preflight, the dApp paths). Fixed English, thrown from the
+ * background (which has no i18n), so a page can map it back to its own copy, as it does for the
+ * CIP-113 refusal. Here, not in marketAllowance.ts, so pages can read it without importing the
+ * worker's allowance state.
+ */
+export const NFT_MARKET_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign a market transaction that was not prepared and checked by this wallet';
+
+/**
  * The refusal for a transaction marked to fail (isValid: false). Such a transaction skips its
  * scripts and forfeits its collateral, and no dApp sends one honestly: listing a wallet UTxO as
  * collateral, and another at the same key as an input, would take it. Same fixed-English-string
@@ -117,7 +126,7 @@ export const NETWORKD_ID_NUMBER = {
   preprod: 0,
 };
 
-// Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1). One
+// Midnight DApp Connector (@midnightntwrk/dapp-connector-api v4.1.0). One
 // entry per `ConnectedAPI` method, plus `connect` for the `InitialAPI`
 // handshake (the spec has no `isEnabled`-style pre-connect status check —
 // `getConnectionStatus` on the ALREADY-connected API is the analog, and it's
@@ -142,6 +151,9 @@ export const MIDNIGHT_METHOD = {
   // Funds + fee-pays a dapp's proven, unbound tx after side-panel approval
   // (midnightConnectorBalance.ts / midnightDappBalancer.ts).
   balanceUnsealedTransaction: 'midnight_balanceUnsealedTransaction',
+  // Builds a purposefully imbalanced, sealed swap intent after side-panel
+  // approval (midnightConnectorIntent.ts / midnightIntentBuilder.ts).
+  makeIntent: 'midnight_makeIntent',
   hintUsage: 'midnight_hintUsage',
   // Proving delegation (`getProvingProvider`): the page streams each proof's
   // preimage + circuit key material to the background in chunks, then asks
@@ -153,17 +165,20 @@ export const MIDNIGHT_METHOD = {
   provingProve: 'midnight_provingProve',
 };
 
-// Error codes from `@midnight-ntwrk/dapp-connector-api`'s `ErrorCodes` —
+// Error codes from `@midnightntwrk/dapp-connector-api`'s `ErrorCodes` —
 // duplicated as plain strings (not imported) so `content.ts`/`inject.ts`
 // (page-context bundle) don't need the npm package's runtime import, only
 // its types. Values are verified byte-identical against the installed
-// 4.0.1 package's `errors.d.ts`.
+// 4.1.0 package's `errors.d.ts`.
 export const MidnightErrorCode = {
   InternalError: 'InternalError',
   Rejected: 'Rejected',
   InvalidRequest: 'InvalidRequest',
   PermissionRejected: 'PermissionRejected',
   Disconnected: 'Disconnected',
+  // 4.1.0: the request is well formed but the wallet lacks the tokens to
+  // give or the DUST to pay the fee.
+  InsufficientFunds: 'InsufficientFunds',
 } as const;
 
 export const BITCOIN_METHOD = {

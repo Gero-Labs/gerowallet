@@ -65,6 +65,30 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('LEGACY_LISTING_PREPARE_CANCEL')).toBe(true);
   });
 
+  it('gates the NFT market prepare messages: a content script is refused (they grant the signing allowance)', () => {
+    const contentScript = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
+    const page = { id: OWN, url: `chrome-extension://${OWN}/options.html` } as unknown as S;
+    for (const kind of ['LIST', 'REPRICE', 'CANCEL', 'BUY', 'MIGRATE']) {
+      const method = `NFT_MARKET_PREPARE_${kind}`;
+      expect(EXTENSION_PAGE_ONLY_METHODS.has(method), method).toBe(true);
+      expect(CONTENT_SCRIPT_OPTIONS_METHODS.has(method), method).toBe(false);
+      expect(isOptionsSenderAllowed(method, contentScript, CHROME), method).toBe(false);
+      expect(isOptionsSenderAllowed(method, undefined, CHROME), method).toBe(false);
+      expect(isOptionsSenderAllowed(method, page, CHROME), method).toBe(true);
+    }
+  });
+
+  it('gates the listing sale-alert registration: a content script is refused (it registers watches for the logged wallet)', () => {
+    const contentScript = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
+    const page = { id: OWN, url: `chrome-extension://${OWN}/options.html` } as unknown as S;
+    const method = 'NOTIFY_WATCH_LISTINGS';
+    expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);
+    expect(CONTENT_SCRIPT_OPTIONS_METHODS.has(method)).toBe(false);
+    expect(isOptionsSenderAllowed(method, contentScript, CHROME)).toBe(false);
+    expect(isOptionsSenderAllowed(method, undefined, CHROME)).toBe(false);
+    expect(isOptionsSenderAllowed(method, page, CHROME)).toBe(true);
+  });
+
   it('gates the Submit API settings (they choose where signed transactions go and hold the auth header)', () => {
     for (const method of ['SET_SUBMIT_API', 'TEST_SUBMIT_API', 'CLEAR_SUBMIT_API']) {
       expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);

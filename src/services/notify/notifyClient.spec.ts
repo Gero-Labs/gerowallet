@@ -68,6 +68,23 @@ describe('notifyClient', () => {
     expect(h.seen[0].headers['X-Gero-Sig']).toMatch(/^[0-9a-f]{128}$/);
   });
 
+  it('watchListings POSTs {ownerPkh, listingRefs} to the listings path of the wallet (gero-sync NotifyApi.postListings)', async () => {
+    const h = harness([{ status: 202, json: { watching: 1 } }]);
+    const body = { ownerPkh: 'ab'.repeat(28), listingRefs: [`${'cd'.repeat(32)}#0`] };
+    expect(await h.client.watchListings('a'.repeat(32), body)).toEqual({ watching: 1 });
+    expect(h.seen[0].method).toBe('POST');
+    expect(h.seen[0].url).toBe(`https://sync.gerowallet.io/api/notify/v1/device/wallets/${'a'.repeat(32)}/listings`);
+    expect(h.seen[0].body).toBe(JSON.stringify(body));
+    expect(h.seen[0].headers['X-Gero-Sig']).toMatch(/^[0-9a-f]{128}$/);
+  });
+
+  it('watchListings surfaces the 422 limit_exceeded (details.limit listingWatches) as a NotifyError, never retried', async () => {
+    const h = harness([err(422, 'limit_exceeded', { limit: 'listingWatches' })]);
+    await expect(h.client.watchListings('a'.repeat(32), { ownerPkh: 'ab'.repeat(28), listingRefs: [`${'cd'.repeat(32)}#0`] }))
+      .rejects.toMatchObject({ status: 422, code: 'limit_exceeded', details: { limit: 'listingWatches' } });
+    expect(h.seen).toHaveLength(1);
+  });
+
   it('auth_clock_skew: stores serverTime − now and retries exactly once', async () => {
     const h = harness([err(401, 'auth_clock_skew', { serverTime: 1_790_553_900_000 }), { status: 200, json: deviceView }]);
     await h.client.getDevice();

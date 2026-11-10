@@ -67,7 +67,7 @@ const MIDNIGHT_METHOD_VALUES: Set<string> = new Set(Object.values(MIDNIGHT_METHO
  * error shape depending on which connector originated the request:
  * CIP-30/Bitcoin/WalletConnect callers expect `APIError.Refused`
  * (`{code:-3, info:...}`); Midnight connector callers expect the
- * `@midnight-ntwrk/dapp-connector-api` shape
+ * `@midnightntwrk/dapp-connector-api` shape
  * (`{type:'DAppConnectorAPIError', code:'Rejected', reason, message}`) —
  * without this, a dapp doing spec-correct `error.code === 'Rejected'`
  * checking would fail to recognize a plain window-close as a normal decline.
@@ -616,6 +616,7 @@ export const Messaging = {
         request.method === MIDNIGHT_METHOD.signData ||
         request.method === MIDNIGHT_METHOD.makeTransfer ||
         request.method === MIDNIGHT_METHOD.balanceUnsealedTransaction ||
+        request.method === MIDNIGHT_METHOD.makeIntent ||
         bitcoinFastPath
       ) {
         Messaging.sendToBackground({

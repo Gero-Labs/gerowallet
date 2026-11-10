@@ -25,7 +25,7 @@ import { isEligibleWallet } from './notifyEligibility';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { NotifyDeferred, NotifyError, type NotifyClient } from './notifyClient';
 import type { NotifyStore, NotifyWalletState } from './notifyStore';
-import { NOTIFY_PROTOCOL, type DeviceBody, type DeviceView, type NotifyConfig, type WalletLinkBody, type WalletPrefsWrite, type WalletProof, type WatchOrdersBody, type WebPushTarget } from './notifyTypes';
+import { NOTIFY_PROTOCOL, type DeviceBody, type DeviceView, type NotifyConfig, type WalletLinkBody, type WalletPrefsWrite, type WalletProof, type WatchListingsBody, type WatchOrdersBody, type WebPushTarget } from './notifyTypes';
 
 export const NOTIFY_REASSERT_ALARM = 'notify-reassert';
 export const NOTIFY_RETRY_ALARM = 'notify-retry';
@@ -92,6 +92,14 @@ export interface WatchOrdersInput {
 }
 export type WatchOrdersResult = { result: 'ok'; watching: number } | { result: 'not_registered' } | { result: 'failed' };
 
+/** A Gero market listing to watch for a sale: the wallet, the payment key hash that owns it, and its output ref(s). */
+export interface WatchListingsInput {
+  walletId: number;
+  ownerPkh: string;
+  listingRefs: string[];
+}
+export type WatchListingsResult = WatchOrdersResult;
+
 export interface NotifyRegistration {
   setBrowserEnabled(enabled: boolean): Promise<BrowserEnableResult | 'off'>;
   enableWallet(auth?: { password?: string; privateKeyBytes?: Uint8Array }): Promise<WalletEnableResult>;
@@ -103,6 +111,12 @@ export interface NotifyRegistration {
   walletRemoved(walletId: number): Promise<void>;
   /** Tell the server to watch a submitted swap for a fill or cancel (§4.9). Fire-and-forget: no retry queue. */
   watchOrders(input: WatchOrdersInput): Promise<WatchOrdersResult>;
+  /**
+   * Tell the server to watch a Gero NFT listing for a sale. Fire-and-forget and never fatal: a device with no
+   * push registration is `not_registered`, and anything else the server refuses (a 422 `limit_exceeded` on the
+   * wallet's pending watches included) is `failed`, logged, without a retry.
+   */
+  watchListings(input: WatchListingsInput): Promise<WatchListingsResult>;
   reassert(trigger: ReassertTrigger): Promise<ReassertResult>;
   /** Re-send the logged wallet's link after its credential range grew. */
   credentialsChanged(): Promise<void>;
@@ -568,6 +582,24 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
           return { result: 'not_registered' };
         }
         log(`notify POST orders failed: ${String(e)}`);
+        return { result: 'failed' };
+      }
+    },
+
+    async watchListings({ walletId, ownerPkh, listingRefs }) {
+      const w = await store.getWallet(walletId);
+      if (!w || w.registeredAt === null) return { result: 'not_registered' };
+      const body: WatchListingsBody = { ownerPkh, listingRefs };
+      try {
+        const { watching } = await client.watchListings(w.walletTag, body);
+        return { result: 'ok', watching };
+      } catch (e) {
+        if (e instanceof NotifyError && e.code === 'wallet_not_registered') {
+          await store.setWallet(walletId, { ...w, registeredAt: null });
+          return { result: 'not_registered' };
+        }
+        // limit_exceeded (details.limit = listingWatches) and every other refusal: the listing simply goes unwatched.
+        log(`notify POST listings failed: ${e instanceof NotifyError ? `${e.status} ${e.code}` : String(e)}`);
         return { result: 'failed' };
       }
     },

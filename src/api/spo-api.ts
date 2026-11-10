@@ -8,7 +8,7 @@ import { Network } from '@/models/types';
  * Provides: epoch history, block log, stake snapshots, epoch parameters.
  */
 
-const KOIOS_URLS: Record<string, string> = {
+export const KOIOS_URLS: Record<string, string> = {
   [Network.MAINNET]: 'https://api.koios.rest/api/v1',
   [Network.PREPROD]: 'https://preprod.koios.rest/api/v1',
   [Network.PREVIEW]: 'https://preview.koios.rest/api/v1',

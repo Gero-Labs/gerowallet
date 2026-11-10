@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { backendSource, historySource, outputRef, proveOutputs, provenOutput, sameOutput } from './provenInputs';
+import { backendSource, historySource, outputRef, proveOutputs, provenOutput, provenTxOutput, sameOutput } from './provenInputs';
 
 const keyCred = (c: string) => ({ type: Cardano.CredentialType.KeyHash, hash: c.repeat(56) as Cardano.Credential['hash'] });
 const base = (pay: string, stake: string) =>
@@ -54,6 +54,32 @@ describe('provenOutput', () => {
     const { cbor, hash } = creatingTx(5_000_000n, { invalid: true });
     expect(provenOutput(cbor, hash, 0)).toBeNull();
     expect(provenOutput(cbor, hash, 2)?.value.coins).toBe(4_000_000n);
+  });
+});
+
+describe('provenTxOutput', () => {
+  it('serves the serialized output of CBOR that hashes to the claimed transaction id', () => {
+    const { cbor, hash } = creatingTx(100_000_000n);
+    const proven = provenTxOutput(cbor, hash.toUpperCase(), 0);
+    expect(proven.failure).toBeUndefined();
+    expect(proven.output?.address().toBech32()).toBe(OWN);
+    expect(proven.output?.amount().coin()).toBe(100_000_000n);
+  });
+
+  it('says why it could not: not a transaction, another transaction, no such output', () => {
+    const real = creatingTx(1_000_000_000n);
+    const tampered = creatingTx(1_000_000n);
+    expect(provenTxOutput('deadbeef', real.hash, 0)).toEqual({ failure: 'undecodable' });
+    expect(provenTxOutput('not hex', real.hash, 0)).toEqual({ failure: 'undecodable' });
+    expect(provenTxOutput(tampered.cbor, real.hash, 0)).toEqual({ failure: 'wrong-transaction' });
+    expect(provenTxOutput(real.cbor, real.hash, 2)).toEqual({ failure: 'no-such-output' });
+    expect(provenTxOutput(real.cbor, real.hash, -1)).toEqual({ failure: 'no-such-output' });
+  });
+
+  it('a failed-scripts transaction has only its collateral return, at index = number of outputs', () => {
+    const { cbor, hash } = creatingTx(5_000_000n, { invalid: true });
+    expect(provenTxOutput(cbor, hash, 0)).toEqual({ failure: 'no-such-output' });
+    expect(provenTxOutput(cbor, hash, 2).output?.amount().coin()).toBe(4_000_000n);
   });
 });
 

@@ -56,7 +56,7 @@ type DeserializableTx = {
  * no `/check` or `/prove` call, so this only turns marker types, and throws
  * loudly if that assumption ever breaks.
  */
-const unreachableProver: ledger.ProvingProvider = {
+export const unreachableProver: ledger.ProvingProvider = {
   check: async () => { throw new Error('unexpected proof-server call while building an empty envelope'); },
   prove: async () => { throw new Error('unexpected proof-server call while building an empty envelope'); },
 };

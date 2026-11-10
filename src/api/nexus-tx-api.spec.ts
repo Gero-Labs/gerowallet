@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Cardano } from '@cardano-sdk/core';
-import { cardanoUtxoToNexusInput, NEXUS_MAX_INPUTS, nexusErrorCode, nexusErrorMessage, postWithRateLimitRetry, walletUtxosToNexusInputs } from './nexus-tx-api';
+import { cardanoUtxoToNexusInput, NEXUS_MAX_INPUTS, nexusErrorCode, nexusErrorMessage, nexusMarketErrorCode, postWithRateLimitRetry, walletUtxosToNexusInputs } from './nexus-tx-api';
 import { convertNexusUtxos } from '@/services/nexusUtxo';
 import { HASH_ONLY_DATUM_UTXO, INLINE_DATUM_UTXOS } from '@/shared/utils/__fixtures__/mainnetDatumUtxos';
 
@@ -81,6 +81,30 @@ describe('nexusErrorCode', () => {
     expect(nexusErrorCode(new Error('network down'))).toBeUndefined();
     expect(nexusErrorCode({ response: { data: { errorCode: '<script>' } } })).toBeUndefined();
     expect(nexusErrorCode(undefined)).toBeUndefined();
+  });
+});
+
+describe('nexusMarketErrorCode', () => {
+  const failure = (errorCode: unknown) => Object.assign(new Error('x'), { response: { data: { errorCode } } });
+
+  it('reads the codes Nexus raises for the market', () => {
+    for (const code of ['LISTING_NOT_FOUND', 'NO_COLLATERAL', 'TOO_MANY_ROYALTIES', 'EVALUATION_FAILED']) {
+      expect(nexusMarketErrorCode(failure(code))).toBe(code);
+    }
+  });
+
+  it("is undefined for a well-formed code that is not one of them: another stage's, another module's, or unknown", () => {
+    for (const code of ['SUBMIT_FAILED', 'WRONG_PASSWORD', 'EXPIRED', 'INPUT_SPENT', 'VERIFY_FAILED', 'MODULE_UNSUPPORTED', 'SOMETHING_NEW']) {
+      expect(nexusErrorCode(failure(code)), code).toBe(code);
+      expect(nexusMarketErrorCode(failure(code)), code).toBeUndefined();
+    }
+  });
+
+  it('is undefined for an error with no usable code', () => {
+    expect(nexusMarketErrorCode(new Error('network down'))).toBeUndefined();
+    expect(nexusMarketErrorCode(failure('<script>'))).toBeUndefined();
+    expect(nexusMarketErrorCode(failure(42))).toBeUndefined();
+    expect(nexusMarketErrorCode(undefined)).toBeUndefined();
   });
 });
 

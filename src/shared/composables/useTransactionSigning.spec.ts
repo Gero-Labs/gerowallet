@@ -10,6 +10,7 @@ import { useTransactionSigning, type TransactionSigningOptions } from './useTran
 import i18n from '@/plugins/i18n';
 import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), ledger: vi.fn(), evaluatePrf: vi.fn(), decryptPrf: vi.fn(), error: vi.fn(), success: vi.fn(), createQr: vi.fn(), parseQr: vi.fn() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, utxos: [], keys: [], config: { txAutoSubmit: true }, isLocked: false }) }));
@@ -88,6 +89,18 @@ describe('transaction approval under asynchronous validation and authentication'
     await signing.onKeystoneScan(ur);
     await signing.onKeystoneScan(ur);
     expect(methods().filter(method => method === MessageTypes.SUBMIT_TX)).toHaveLength(1);
+  });
+  // The worker answers a refused signature with a fixed English string; the user reads it in their language.
+  it('shows a market signing refusal from the Keystone request in the user\'s language', async () => {
+    walletStore.loggedWallet.type = WalletType.Keystone;
+    walletStore.loggedWallet['xfp'] = 'synthetic-fingerprint';
+    const { signing } = signer();
+    mocks.createQr.mockRejectedValueOnce(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    await signing.handleSign();
+    // The wallet's own signing (Send, staking, ...): nothing expired, the transaction is not one to sign here.
+    expect(mocks.error).toHaveBeenCalledWith('This transaction touches an NFT listing, so it can only be signed from the market screens.');
+    expect(mocks.error).not.toHaveBeenCalledWith(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    expect(signing.overlay.value).toBe(false);
   });
   it('awaits Vuetify validation and blocks repeated clicks while pending; false never signs', async () => {
     const { signing } = signer();

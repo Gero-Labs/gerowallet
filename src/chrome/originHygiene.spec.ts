@@ -219,7 +219,7 @@ describe('embedding-site warning on popup approvals (PR #2 review)', () => {
 
   it('every Midnight prompt carries it to the side panel', () => {
     const bg = read('chrome/background.ts');
-    for (const name of ['connect', 'signData', 'balanceUnsealedTransaction', 'makeTransfer']) {
+    for (const name of ['connect', 'signData', 'balanceUnsealedTransaction', 'makeTransfer', 'makeIntent']) {
       const start = bg.indexOf(`app.add(MIDNIGHT_METHOD.${name}, `);
       expect(start, name).toBeGreaterThan(-1);
       const handler = bg.slice(start, bg.indexOf('\napp.add(', start + 10));

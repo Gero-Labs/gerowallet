@@ -9,7 +9,7 @@
  * per-project token, so dApps bring their own Midnight services (issue 1320).
  */
 
-import type { Configuration } from '@midnight-ntwrk/dapp-connector-api';
+import type { Configuration } from '@midnightntwrk/dapp-connector-api';
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import { localUrlForNetwork } from './midnightProvingTarget';
 import type { ProofServerPreference } from './midnightProvingTarget';

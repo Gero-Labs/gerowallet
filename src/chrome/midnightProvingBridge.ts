@@ -26,7 +26,7 @@ import type {
   ProvingUploadChunkRequest,
   ProvingUploadPart,
 } from '@/chrome/midnightProvingWire';
-import type { KeyMaterialProvider, ProvingProvider } from '@midnight-ntwrk/dapp-connector-api';
+import type { KeyMaterialProvider, ProvingProvider } from '@midnightntwrk/dapp-connector-api';
 
 /** One connector round-trip; resolves with the reply's `data`, rejects with its `error`. */
 export type ProvingBridgeSend = (method: string, data: unknown) => Promise<unknown>;

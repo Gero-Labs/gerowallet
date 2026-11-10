@@ -547,7 +547,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       return true; // Return true to indicate QR is ready (not signed yet)
     } catch (e) {
       console.error('Error creating Keystone sign request:', e);
-      snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
+      // friendlyTxError: the worker's fixed English refusals read in the user's language.
+      snackbar.setError(e instanceof Error ? friendlyTxError(e) : t('errors.unknownError'));
       return false;
     }
   };
