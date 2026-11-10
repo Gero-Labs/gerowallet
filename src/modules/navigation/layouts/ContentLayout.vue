@@ -97,19 +97,21 @@
                           tabindex="0"
                           :aria-label="t('navigation.status')"
                         >
-                          <!-- Midnight: a connected socket whose blocks are old is "Paused"
-                               (amber, no streaming animation), never "Online". -->
+                          <!-- Midnight: a connected socket whose blocks are old is "Paused", never
+                               "Online": a chip on the muted warning pair, with no streaming animation. -->
+                          <span v-if="isMidnightPaused" class="network-paused-chip t-caption" data-test="network-chip-paused">
+                            <v-icon size="small" color="warning">mdi-pause-circle-outline</v-icon>
+                            {{ t('midnight.dataPaused.chip') }}
+                          </span>
                           <v-icon
+                            v-else
                             size="small"
-                            :color="isMidnightPaused ? 'warning' : (isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
+                            :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                             :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
                             data-test="network-chip-icon"
                           >
-                            {{ isMidnightPaused ? 'mdi-pause-circle-outline' : (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
+                            {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                           </v-icon>
-                          <span v-if="isMidnightPaused" class="network-paused-label t-caption" data-test="network-chip-paused">
-                            {{ t('midnight.dataPaused.chip') }}
-                          </span>
 
                           <!-- Small progress bar (hidden in compact mode).
                                Cardano: epoch-slot percentage as a definite value.
@@ -1013,8 +1015,15 @@ div.v-toolbar__content {
   color: var(--g-text-1);
 }
 
-/* "Paused" beside the network icon, in the same amber as the icon. */
-.network-paused-label {
+/* The "Paused" chip: the muted warning pair, a pill, the label in g-warning. */
+.network-paused-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  padding: 0 var(--g-s-2);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-pill);
   color: var(--g-warning);
   white-space: nowrap;
 }

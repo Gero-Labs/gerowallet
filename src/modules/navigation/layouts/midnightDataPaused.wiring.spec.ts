@@ -17,8 +17,8 @@ describe('Midnight data paused wiring', () => {
     expect(layout).toContain('midnightNetworkChipState(midnightNetworkStatus.value, midnightFreshness.paused.value)');
     // "Online" (and its sync animation) is only the 'online' state, never 'paused'.
     expect(layout).toContain("const isMidnightConnected = computed(() => midnightChipState.value === 'online');");
-    expect(layout).toContain(":color=\"isMidnightPaused ? 'warning'");
-    expect(layout).toMatch(/v-if="isMidnightPaused" class="network-paused-label[^"]*"[^>]*>\s*\{\{ t\('midnight\.dataPaused\.chip'\) \}\}/);
+    expect(layout).toMatch(/<span v-if="isMidnightPaused" class="network-paused-chip t-caption"[^>]*>\s*<v-icon size="small" color="warning">mdi-pause-circle-outline<\/v-icon>\s*\{\{ t\('midnight\.dataPaused\.chip'\) \}\}/);
+    expect(layout).toMatch(/\.network-paused-chip \{[^}]*background: var\(--g-warning-fill\);[^}]*border: 1px solid var\(--g-warning-line\);[^}]*border-radius: var\(--g-r-pill\);/);
     expect(layout).toContain("t('midnight.dataPaused.detail', { block: midnightFreshness.height.value, age: midnightFreshness.ageLabel.value })");
     // The activator is focusable, "Last sync" is hidden while paused, and the sentence comes last.
     expect(layout).toMatch(/v-bind="activatorProps"\s+tabindex="0"/);
@@ -30,7 +30,7 @@ describe('Midnight data paused wiring', () => {
 
   it('the dashboard caption shows only while paused', () => {
     const chart = read('modules/dashboard/components/MidnightPortfolioChart.vue');
-    expect(chart).toMatch(/<div v-if="dataPaused" class="data-paused-caption t-caption g-num"[^>]*>\s*\{\{ \$t\('midnight\.dataPaused\.caption', \{ block: tipHeight, age: tipAge \}\) \}\}/);
+    expect(chart).toMatch(/<div v-if="dataPaused" class="data-paused-caption t-caption g-num"[^>]*>\s*<v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline<\/v-icon>\{\{ \$t\('midnight\.dataPaused\.caption', \{ block: tipHeight, age: tipAge \}\) \}\}/);
   });
 
   it('the dashboard battery labels an estimate and shows no projection while paused', () => {

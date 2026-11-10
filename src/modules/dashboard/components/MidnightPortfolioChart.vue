@@ -22,7 +22,7 @@
         </div>
         <!-- Only while Midnight data is paused: the block the balances are based on. -->
         <div v-if="dataPaused" class="data-paused-caption t-caption g-num" data-test="midnight-data-paused-caption">
-          {{ $t('midnight.dataPaused.caption', { block: tipHeight, age: tipAge }) }}
+          <v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>{{ $t('midnight.dataPaused.caption', { block: tipHeight, age: tipAge }) }}
         </div>
 
         <div class="address-section" v-if="shortenedAddress">
@@ -445,9 +445,11 @@ function formatNight(value: bigint): string {
   margin-bottom: 4px;
 }
 
-/* "As of block N · age", shown only while Midnight data is paused. */
+/* "As of block N · age", shown only while Midnight data is paused: metadata in
+   t-caption's g-text-3, with the amber pause glyph in front. */
 .data-paused-caption {
-  color: var(--g-warning);
+  display: flex;
+  align-items: center;
   margin-bottom: var(--g-s-1);
 }
 
