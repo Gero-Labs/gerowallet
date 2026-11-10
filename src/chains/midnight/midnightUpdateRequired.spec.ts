@@ -30,16 +30,25 @@ const read = async (status: Record<string, unknown>, network = 'Mainnet') => {
 };
 
 describe('what turns "update required" on', () => {
-  it('a status read whose minimum extension version is above this build, writes open or not', async () => {
+  it('a status read whose minimum extension version is above this build, while writes are open', async () => {
     await expect(read({ kind: 'open', minExtensionVersion: '2.9.0' })).resolves.toBe('updateRequired');
-    await expect(read({ kind: 'closed', reason: 'NETWORK_UPGRADING', minExtensionVersion: '2.9.0' }, 'Preprod')).resolves.toBe('updateRequired');
+    // Closed for the upgrade: the minimum is for the build that reopens, not a reason to update today.
+    await expect(read({ kind: 'closed', reason: 'NETWORK_UPGRADING', minExtensionVersion: '2.9.0' }, 'Preprod')).resolves.toBe('networkUpgrading');
   });
 
-  it('a status read whose ledger this build cannot sign for', async () => {
+  it('a status read whose ledger this build cannot sign for, while writes are open', async () => {
     // This build signs ledger 8 on Mainnet and Preprod, ledger 9 on Stagenet.
     await expect(read({ kind: 'open', ledger: 9 })).resolves.toBe('updateRequired');
     await expect(read({ kind: 'open', ledger: 9 }, 'Stagenet')).resolves.toBeNull();
     await expect(read({ kind: 'open', ledger: 8 }, 'Preprod')).resolves.toBeNull();
+  });
+
+  it('a closed status body (writesOpen false, NETWORK_UPGRADING, a ledger above this build) is the network upgrade', async () => {
+    const { parseMidnightWriteStatus } = await vi.importActual<typeof import('@/api/midnight-api')>('@/api/midnight-api');
+    const status = parseMidnightWriteStatus({ writesOpen: false, reason: 'NETWORK_UPGRADING', ledger: 9 });
+    expect(status).toMatchObject({ kind: 'closed', reason: 'NETWORK_UPGRADING', ledger: 9 });
+    await expect(read(status as Record<string, unknown>)).resolves.toBe('networkUpgrading');
+    await expect(isMidnightNetworkUpgrading('Mainnet')).resolves.toBe(true);
   });
 
   it('a status read with reason CLIENT_UPDATE_REQUIRED', async () => {

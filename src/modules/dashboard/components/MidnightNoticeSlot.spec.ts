@@ -9,10 +9,10 @@ vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({
 // @ts-ignore: tsconfig ships no `*.vue` shim; vite resolves this fine.
 import MidnightNoticeSlot from './MidnightNoticeSlot.vue';
 import { MAX_NOTICES, MIDNIGHT_NOTICE_ORDER, visibleMidnightNotices } from './midnightNotices';
-import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
+import { noteMidnightNetworkUpgrading, noteMidnightUpdateRequired, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
 import { walletStore } from '@/stores/walletStore';
 
-const stubs = { 'v-icon': true };
+const stubs = { 'v-icon': true, GButton: { template: '<button><slot /></button>' } };
 const setWallet = (network: string) => {
   (walletStore as { loggedWallet: { chain: string; network: string } | null }).loggedWallet = { chain: 'Midnight', network };
 };
@@ -37,6 +37,17 @@ describe('Midnight notice slot', () => {
     await flushPromises();
     const order = w.findAll('[data-test]').map((el) => el.attributes('data-test')).filter((id) => id !== 'midnight-notice-slot');
     expect(order.indexOf('midnight-upgrade-banner')).toBeLessThan(order.indexOf('midnight-stagenet-notice'));
+  });
+
+  it('update required comes first and replaces the network upgrade banner', async () => {
+    await noteMidnightNetworkUpgrading('Stagenet', 'status');
+    await noteMidnightUpdateRequired('Stagenet', 'response');
+    const w = mount(MidnightNoticeSlot, { props: { layout: 'panel' }, global: { stubs } });
+    await flushPromises();
+    const ids = w.findAll('[data-test]').map((el) => el.attributes('data-test'));
+    expect(ids).toContain('midnight-update-banner');
+    expect(ids).not.toContain('midnight-upgrade-banner');
+    expect(ids.indexOf('midnight-update-banner')).toBeLessThan(ids.indexOf('midnight-stagenet-notice'));
   });
 
   it('renders nothing when no notice applies, so a parent spacing class takes no room', () => {

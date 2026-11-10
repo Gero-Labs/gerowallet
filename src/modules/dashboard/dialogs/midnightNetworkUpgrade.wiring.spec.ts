@@ -47,7 +47,7 @@ describe('Midnight network upgrade wiring', () => {
     expect(dialog).toContain('id="dust-register-paused"');
     expect(dialog).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
     expect(dialog).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
-    expect(dialog).toContain("? t('midnight.errors.updateRequired')");
+    expect(dialog).toContain("? t('midnight.update.registrationHeld')");
     expect(dialog).toContain("t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
     expect(dialog).toContain('{{ writesHeldText }}');
     expect(dialog).toContain('if (!dustAddress.value || writesPaused.value) return;');

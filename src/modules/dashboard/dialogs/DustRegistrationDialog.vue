@@ -523,12 +523,12 @@ const submitError = ref<string | null>(null);
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
-/** Native registration on this wallet's network is paused for a network upgrade (midnightWriteGate.ts). */
+/** Why native registration on this wallet's network is held, if it is: update required or network upgrade (midnightWriteGate.ts). */
 const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
-/** Held for either reason: the network upgrade, or this build must update (which takes precedence). */
+/** `writesPaused`: held for either reason. The copy says which; update required takes precedence. */
 const writesPaused = computed(() => writeBlock.value !== null);
 const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
-  ? t('midnight.errors.updateRequired')
+  ? t('midnight.update.registrationHeld')
   : t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
 // Turned on while the password step is open: back out, so no password or PassKey is asked for.
 watch(writesPaused, (paused) => {

@@ -23,8 +23,11 @@ function buildLedger(network: string): number | null {
 
 /**
  * Whether a status read closes sends to this build, and on what evidence:
- * the reason CLIENT_UPDATE_REQUIRED, a ledger above the one this build signs
- * with on the network, or a minimum extension version above this build.
+ * the reason CLIENT_UPDATE_REQUIRED (open or closed), or, only while writes
+ * are open, a ledger above the one this build signs with on the network or a
+ * minimum extension version above this build. While the server is closed for
+ * the network upgrade, a newer ledger or minimum is what the next build will
+ * meet, not something an update can fix today: that is "network upgrade".
  * `minVersion` is returned only when the minimum is the sole cause, so the
  * entry stops holding a build that has since updated past it.
  */
@@ -35,8 +38,9 @@ export function updateRequiredBy(
 ): { minVersion?: string } | null {
   const ledger = buildLedger(network);
   const byReason = status.reason === CLIENT_UPDATE_REQUIRED;
-  const byLedger = status.ledger !== undefined && ledger !== null && status.ledger > ledger;
-  const byVersion = !!status.minExtensionVersion && !!version && isVersionBelow(version, status.minExtensionVersion);
+  const open = status.kind === 'open';
+  const byLedger = open && status.ledger !== undefined && ledger !== null && status.ledger > ledger;
+  const byVersion = open && !!status.minExtensionVersion && !!version && isVersionBelow(version, status.minExtensionVersion);
   if (byReason || byLedger) return {};
   return byVersion ? { minVersion: status.minExtensionVersion } : null;
 }
@@ -56,7 +60,7 @@ const inFlight = new Map<string, Promise<void>>();
 /**
  * Read the server's status for `network` and apply it to the gate. First, does
  * it close sends to this build ({@link updateRequiredBy}): then "update
- * required", open or closed, which takes precedence. Otherwise `writesOpen:
+ * required", which takes precedence. Otherwise `writesOpen:
  * false` with reason NETWORK_UPGRADING (or no reason) pauses the network;
  * `writesOpen: true` opens it. Other reasons are left to their own states. A
  * 404 (no status route) clears a pause an earlier read set, and the network is

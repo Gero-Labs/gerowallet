@@ -395,7 +395,7 @@
           </div>
         </div>
 
-        <!-- Sends on this network are paused (midnightWriteGate.ts): Continue stays,
+        <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): Continue stays,
              held but focusable (aria-disabled), with this reason linked to it, and
              step 2 can't be opened. -->
         <GNote v-if="writesPaused" id="midnight-send-paused" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-paused">
@@ -802,9 +802,9 @@ watch(busyPrompt, (prompt) => {
   if (!prompt) return;
   void nextTick(() => busyActionsEl.value?.querySelector<HTMLElement>('[data-test="midnight-send-busy-retry"]')?.focus());
 });
-/** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
+/** Why sends on this wallet's network are held, if they are: update required or network upgrade (midnightWriteGate.ts). */
 const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
-/** Held for either reason: the network upgrade, or this build must update (which takes precedence). */
+/** `writesPaused`: held for either reason. The copy says which; update required takes precedence. */
 const writesPaused = computed(() => writeBlock.value !== null);
 const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
   ? t('midnight.errors.updateRequired')

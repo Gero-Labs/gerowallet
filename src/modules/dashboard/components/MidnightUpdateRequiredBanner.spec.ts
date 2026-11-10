@@ -50,7 +50,8 @@ describe('"Update required" banner', () => {
     const banner = w.get('[data-test="midnight-update-banner"]');
     expect(banner.text()).toContain('midnight.errors.updateRequired');
     expect(w.get('[data-test="midnight-update-version"]').text()).toBe('midnight.update.installedVersion:2.8.4');
-    expect(banner.attributes('role')).toBe('status');
+    // Not a live region itself: the check's outcome line is the banner's only one.
+    expect(banner.attributes('role')).toBeUndefined();
 
     await noteMidnightWritesOpen('Mainnet');
     await flushPromises();
@@ -81,6 +82,25 @@ describe('"Update required" banner', () => {
     expect(w.find('[data-test="midnight-update-check"]').exists()).toBe(true);
   });
 
+  it('Check for update: while checking, the button stays put, held and busy, and says "Checking…"', async () => {
+    let answer: ((s: string) => void) | undefined;
+    runtime['requestUpdateCheck'] = (cb: (s: string) => void) => { answer = cb; };
+    await noteMidnightUpdateRequired('Mainnet', 'response');
+    const w = await mountBanner();
+    await w.get('[data-test="midnight-update-check"]').trigger('click');
+    const button = w.get('[data-test="midnight-update-check"]');
+    expect(button.text()).toBe('midnight.update.checking');
+    expect(button.attributes('aria-disabled')).toBe('true');
+    expect(button.attributes('aria-busy')).toBe('true');
+    expect(button.attributes('data-loading')).toBeUndefined();
+    // A second press while checking asks nothing more.
+    await button.trigger('click');
+    answer?.('no_update');
+    await flushPromises();
+    expect(w.get('[data-test="midnight-update-check"]').text()).toBe('midnight.update.check');
+    expect(w.get('[data-test="midnight-update-check"]').attributes('aria-busy')).toBeUndefined();
+  });
+
   it('Check for update: an update found offers the restart, which reloads the extension', async () => {
     const reload = vi.fn();
     runtime['requestUpdateCheck'] = (cb: (s: string) => void) => cb('update_available');
@@ -105,13 +125,12 @@ describe('"Update required" banner', () => {
     expect(w.find('[data-test="midnight-update-check"]').exists()).toBe(false);
   });
 
-  it('is mounted on the Midnight dashboard and the side panel home, beside the upgrade banner', () => {
+  it('is the first notice in the slot on the Midnight dashboard and the side panel home', () => {
     const src = join(__dirname, '../../..');
-    const page = readFileSync(join(src, 'modules/portfolio/PortfolioPage.vue'), 'utf8');
+    const slot = readFileSync(join(src, 'modules/dashboard/components/MidnightNoticeSlot.vue'), 'utf8');
     const home = readFileSync(join(src, 'sidepanel/pages/HomePage.vue'), 'utf8');
-    expect(page).toContain('<MidnightUpdateRequiredBanner class="portfolio-upgrade-banner" />');
-    expect(home).toContain('<MidnightUpdateRequiredBanner v-if="isMidnight" block class="home-upgrade-banner" />');
-    expect(home.indexOf('<MidnightUpdateRequiredBanner')).toBeLessThan(home.indexOf('<BalanceSection'));
+    expect(slot).toContain('update: MidnightUpdateRequiredBanner,');
+    expect(slot).toContain("return id === 'update' ? { block: props.layout === 'panel' } : {};");
     // Send held for either reason; the line under it says "update" when that is the reason.
     expect(home).toContain('const midnightSendPaused = computed(() => midnightWriteBlock.value !== null);');
     expect(home).toContain("? t('midnight.update.sendHeld')");

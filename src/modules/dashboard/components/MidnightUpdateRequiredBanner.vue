@@ -3,7 +3,7 @@
        to this build of GeroWallet (midnightWriteGate.ts); a newer build may send.
        Takes precedence over the network upgrade banner, which then hides. Reads,
        Receive and history are unaffected. Renders nothing otherwise. -->
-  <div v-if="updateRequired" class="update-banner" role="status" data-test="midnight-update-banner">
+  <div v-if="updateRequired" class="update-banner" data-test="midnight-update-banner">
     <v-icon size="20" color="warning" class="update-banner__icon" aria-hidden="true">mdi-download-circle-outline</v-icon>
     <div class="update-banner__body">
       <p class="update-banner__text t-body-sm">{{ t('midnight.errors.updateRequired') }}</p>
@@ -24,18 +24,22 @@
       >
         {{ t('midnight.update.restart') }}
       </GButton>
+      <!-- While checking, the button stays where it is and keeps focus: held
+           (aria-disabled), busy, and saying so, rather than a spinner block. -->
       <GButton
         v-else-if="canCheck"
         tier="secondary"
         compact
-        :loading="check === 'checking'"
+        :aria-disabled="checking ? 'true' : undefined"
+        :aria-busy="checking ? 'true' : undefined"
+        :ripple="!checking"
         class="update-banner__action"
         data-test="midnight-update-check"
         @click="checkNow()"
       >
-        {{ t('midnight.update.check') }}
+        {{ checking ? t('midnight.update.checking') : t('midnight.update.check') }}
       </GButton>
-      <!-- The outcome of a check, said once per check. -->
+      <!-- The banner's only live region: the outcome of a check, said once per check. -->
       <p class="update-banner__outcome t-caption" aria-live="polite" data-test="midnight-update-outcome">
         <template v-if="check === 'none'">{{ t('midnight.update.noneYet') }}</template>
       </p>
@@ -69,6 +73,7 @@ const version = extensionVersion();
 const canCheck = canCheckForExtensionUpdate();
 
 const check = ref<'idle' | 'checking' | 'available' | 'none'>('idle');
+const checking = computed(() => check.value === 'checking');
 const restartButton = ref<{ $el?: HTMLElement } | null>(null);
 
 async function checkNow(): Promise<void> {
@@ -99,8 +104,9 @@ function restart(): void {
   border-radius: var(--g-r-card);
 }
 
+/* Same offset as the sibling banners in the notice slot. */
 .update-banner__icon {
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .update-banner__body {

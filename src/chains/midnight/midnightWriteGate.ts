@@ -226,12 +226,6 @@ export function useMidnightWriteBlock(network: () => string | undefined | null):
   return computed(() => writeBlockIn(mirror.record, network() ?? '', mirror.now));
 }
 
-/** Reactive: are sends and DUST registration on `network` held, for either reason? For buttons. */
-export function useMidnightWritesHeld(network: () => string | undefined | null): ComputedRef<boolean> {
-  const block = useMidnightWriteBlock(network);
-  return computed(() => block.value !== null);
-}
-
 /** Reactive: is `network` paused for the network upgrade (and not for an update)? For its banner. */
 export function useMidnightNetworkUpgrading(network: () => string | undefined | null): ComputedRef<boolean> {
   const block = useMidnightWriteBlock(network);

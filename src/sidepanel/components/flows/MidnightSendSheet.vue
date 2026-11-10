@@ -40,7 +40,7 @@
 
           <v-expand-transition>
             <div v-show="step === 1" class="step-body">
-              <!-- Sends on this network are paused (midnightWriteGate.ts): said up front,
+              <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): said up front,
                    before the user fills in anything. Review and Confirm stay held. -->
               <GNote v-if="writesPaused" icon="mdi-pause-circle-outline" role="status" class="mb-3" data-test="midnight-send-paused-start">
                 {{ writesHeldText }}
@@ -261,7 +261,7 @@
                 </div>
               </template>
 
-              <!-- Sends on this network are paused (midnightWriteGate.ts): the button
+              <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): the button
                    stays, held but focusable (aria-disabled), with the reason linked
                    to it, and the password step can't open. -->
               <GNote
@@ -480,9 +480,9 @@ const { loggedWallet } = toRefs(walletStore);
 
 // ── State ──
 const step = ref(1);
-/** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
+/** Why sends on this wallet's network are held, if they are: update required or network upgrade (midnightWriteGate.ts). */
 const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
-/** Held for either reason: the network upgrade, or this build must update (which takes precedence). */
+/** `writesPaused`: held for either reason. The copy says which; update required takes precedence. */
 const writesPaused = computed(() => writeBlock.value !== null);
 const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
   ? t('midnight.errors.updateRequired')
