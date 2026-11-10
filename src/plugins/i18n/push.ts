@@ -24,6 +24,9 @@ export type PushStringKey =
   | 'PUSH_ADAM_TITLE' | 'PUSH_ADAM_BODY'
   | 'PUSH_DREP_RETIRED_TITLE' | 'PUSH_DREP_RETIRED_BODY' | 'PUSH_DREP_INACTIVE_TITLE' | 'PUSH_DREP_INACTIVE_BODY' | 'PUSH_DREP_EXPIRING_TITLE' | 'PUSH_DREP_EXPIRING_BODY'
   | 'PUSH_TEST_TITLE' | 'PUSH_TEST_BODY'
+  // A broadcast announcement the worker could not fetch and verify in time: the only words such a
+  // notification may carry. Verified announcements bring their own, signed, title and summary.
+  | 'PUSH_ANNOUNCEMENT_TITLE' | 'PUSH_ANNOUNCEMENT_BODY'
   | 'PUSH_AMOUNT_ADA' | 'PUSH_AMOUNT_OTHER_ONE' | 'PUSH_AMOUNT_OTHER' | 'PUSH_AMOUNT_JOIN'
   | 'PUSH_TOAST_VIEW' | 'PUSH_TOAST_DISMISS';
 
@@ -69,6 +72,8 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_DREP_EXPIRING_BODY: 'The DRep you delegate to is about to go inactive.',
     PUSH_TEST_TITLE: 'Test notification',
     PUSH_TEST_BODY: 'Notifications from Gero are working.',
+    PUSH_ANNOUNCEMENT_TITLE: 'News from Gero',
+    PUSH_ANNOUNCEMENT_BODY: 'Open Gero Wallet to read it.',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 other token',
     PUSH_AMOUNT_OTHER: '{n} other tokens',
@@ -117,6 +122,8 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_DREP_EXPIRING_BODY: 'Der DRep, an den du delegierst, wird bald inaktiv.',
     PUSH_TEST_TITLE: 'Testbenachrichtigung',
     PUSH_TEST_BODY: 'Benachrichtigungen von Gero funktionieren.',
+    PUSH_ANNOUNCEMENT_TITLE: 'Neuigkeiten von Gero',
+    PUSH_ANNOUNCEMENT_BODY: 'Öffne Gero Wallet, um sie zu lesen.',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 weiterer Token',
     PUSH_AMOUNT_OTHER: '{n} weitere Token',
@@ -165,6 +172,8 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_DREP_EXPIRING_BODY: 'El DRep al que delegas está por quedar inactivo.',
     PUSH_TEST_TITLE: 'Notificación de prueba',
     PUSH_TEST_BODY: 'Las notificaciones de Gero funcionan.',
+    PUSH_ANNOUNCEMENT_TITLE: 'Novedades de Gero',
+    PUSH_ANNOUNCEMENT_BODY: 'Abre Gero Wallet para leerlas.',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 token más',
     PUSH_AMOUNT_OTHER: '{n} tokens más',

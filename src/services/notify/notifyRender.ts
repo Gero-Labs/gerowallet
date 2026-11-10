@@ -183,6 +183,9 @@ export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: 
     case 'nftListings': return withHighlight({ dashboard: '/?view=collectibles', sidepanel: null });
     case 'governance': return withHighlight({ dashboard: deepLinks && x?.drepId ? `/governance/dreps/${x.drepId}` : '/governance/me', sidepanel: null });
     case 'pairedDevices': return withHighlight({ dashboard: '/', sidepanel: null, settingsTab: 'security' });
+    // A broadcast announcement: the page opens it by id from what the worker verified and stored.
+    // Without a verified id there is nothing to open, so it is home.
+    case 'announcement': return deepLinks && x?.aid ? { dashboard: `/?announcement=${x.aid}`, sidepanel: `/?announcement=${x.aid}` } : { dashboard: '/', sidepanel: '/' };
     default: return { dashboard: '/', sidepanel: '/' }; // home, signRequest, adam, unknown
   }
 }

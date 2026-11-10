@@ -74,10 +74,15 @@ export interface NotifyRegistrationDeps {
   loadProof: (deviceId: string, stakeAddress: string) => Promise<WalletProof | null>;
   /** walletManager.produceDeviceRegisterProof: signs and caches the proof under user auth. */
   produceProof: (auth: { password?: string; privateKeyBytes?: Uint8Array }) => Promise<boolean>;
+  /** The announcement kinds switched off on this device (`product`, `news`); sent with every PUT /device. */
+  announcementsOff?: () => Promise<string[]>;
   now?: () => number;
   random?: (n: number) => Uint8Array;
   log?: (message: string) => void;
 }
+
+/** What this client can render beyond wallet alerts (PUT /device `caps`). */
+export const DEVICE_CAPS: readonly string[] = ['announcements'];
 
 export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials' | 'settings';
 export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recovered' | 'needs_attention' | 'unavailable' | 'deferred' | 'error' | 'skipped';
@@ -157,8 +162,13 @@ export function credentialsHash(creds: string[]): string {
   return bytesToHex(sha256(new TextEncoder().encode(creds.join(','))));
 }
 
-export function targetFingerprint(target: WebPushTarget | null, appVersion: string, locale: string, osPermission: boolean): string {
-  return JSON.stringify({ target, appVersion, locale, osPermission });
+/**
+ * What the last PUT /device said, to tell when it must be sent again. The announcement opt-outs are
+ * part of it only when there are any, so a device without them keeps the fingerprint it had. `caps`
+ * is a constant of the build and rides on `appVersion`.
+ */
+export function targetFingerprint(target: WebPushTarget | null, appVersion: string, locale: string, osPermission: boolean, announcementsOff: readonly string[] = []): string {
+  return JSON.stringify({ target, appVersion, locale, osPermission, ...(announcementsOff.length ? { announcementsOff: [...announcementsOff].sort() } : {}) });
 }
 
 function base64UrlToBytes(s: string): Uint8Array {
@@ -189,7 +199,17 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       osPermission: true, // Chrome grants it with the `notifications` permission
       transport: target ? 'webpush' : 'none',
       ...(target ? { webpush: target } : {}),
+      caps: [...DEVICE_CAPS],
+      announcementsOff: await announcementsOff(),
     };
+  }
+
+  /** Only the kinds that may be switched off, whatever the store hands back: `service` is never sent. */
+  async function announcementsOff(): Promise<string[]> {
+    try {
+      const off: unknown = await deps.announcementsOff?.();
+      return Array.isArray(off) ? ['product', 'news'].filter((k) => off.includes(k)) : [];
+    } catch { return []; }
   }
 
   /** PUT /device and remember what was sent. */
@@ -198,7 +218,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
     const view = await client.putDevice(body);
     await store.updateDevice({
       lastPutAt: now(),
-      lastPutFingerprint: targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission),
+      lastPutFingerprint: targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff),
       targetStatus: view.target.status === 'active' ? 'active' : 'none',
       endpoint: target?.endpoint ?? null,
       vapidKid: target?.vapidKid ?? null,
@@ -450,7 +470,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
     } else {
       const target = targetOf(sub, device.vapidKid ?? (config.vapidKid as string));
       const body = await deviceBody(target);
-      const fingerprint = targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission);
+      const fingerprint = targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff);
       if (fingerprint !== device.lastPutFingerprint || device.lastPutAt === null || now() - device.lastPutAt >= view.reassertAfterMs) {
         try { sent = await putDevice(target); } catch (e) { if (e instanceof NotifyDeferred) return 'deferred'; throw e; }
       }

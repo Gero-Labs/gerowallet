@@ -107,6 +107,10 @@ export interface FeatureFlags {
   // false skips Zione's cardholder-details endpoints, and an order refused for missing
   // details then points the user to Zione support. Only an explicit false turns it off.
   isCardholderDetailsEnabled: boolean;
+  // Broadcast announcements in the UI (bell section, snackbar, banner, dialog). Default ON and a
+  // remote KILL-SWITCH: only an explicit false hides them. UI-only: the worker keeps fetching and
+  // verifying, and what it shows from a push is the server operator's to stop.
+  isAnnouncementsEnabled: boolean;
   // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
   // and for the on-unlock migration to it. Every release since the reader-only one
   // opens gpw2, so turning this off only stops new gpw2 writes. Read by the
@@ -167,6 +171,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
     isCardholderDetailsEnabled: true,
+    isAnnouncementsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
   },
@@ -265,6 +270,9 @@ export const featureFlagsStore = {
     // Cardholder-details step ships ON; only an explicit false from the service turns it off.
     featureFlagsState.flags.isCardholderDetailsEnabled =
       featureFlagService.getFlag<boolean>('isCardholderDetailsEnabled', true) !== false;
+    // Announcements ship ON; only an explicit false from the service hides them.
+    featureFlagsState.flags.isAnnouncementsEnabled =
+      featureFlagService.getFlag<boolean>('isAnnouncementsEnabled', true) !== false;
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -377,6 +385,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCardholderDetailsEnabled', (newValue) => {
       featureFlagsState.flags['isCardholderDetailsEnabled'] = newValue !== false;
+    });
+    featureFlagService.onFlagChange('isAnnouncementsEnabled', (newValue) => {
+      featureFlagsState.flags['isAnnouncementsEnabled'] = newValue !== false;
     });
     featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
       featureFlagsState.flags['isKeyEnvelopeV2Enabled'] = newValue === true;
@@ -700,6 +711,7 @@ export const featureFlagsStore = {
       isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
       isCardholderDetailsEnabled: true,
+      isAnnouncementsEnabled: true,
       isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
     };
