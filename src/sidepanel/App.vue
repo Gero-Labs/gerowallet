@@ -77,6 +77,12 @@
     <!-- Global, so every hardware-wallet signing path gets the "continue on
          your device" prompt without each sheet re-declaring it. -->
     <HardwareSignPrompt />
+    <!-- One-time "Restart your local proof server" notice (proofServerRestartNotice.ts),
+         here too for people who only use the side panel; waits behind the open sheets. -->
+    <ProofServerRestartNotice
+      v-if="hasActiveWallet && !isLocked"
+      :suppressed="showWalletSwitcher || showNotifications"
+    />
     <!-- In-app toast for a push that arrives while the panel is focused (B8). -->
 
   </v-app>
@@ -88,6 +94,7 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import ProofServerRestartNotice from '@/modules/midnight/ProofServerRestartNotice.vue';
 import MiniLayout from './layouts/MiniLayout.vue';
 import NoWalletScreen from './components/NoWalletScreen.vue';
 import WalletSelector from './components/WalletSelector.vue';
