@@ -14,6 +14,7 @@
         <template v-if="!hideBalances">{{ dustFmt }} {{ dustTicker }}</template>
         <template v-else>••••</template>
         <span class="mini-dust__pct"> · {{ pct.toFixed(1) }}%</span>
+        <!-- Midnight data is paused: the last reading, not ticking. -->
       </span>
     </div>
     <div class="mini-dust__bar" role="progressbar" :aria-valuenow="pct" aria-valuemin="0" aria-valuemax="100">
@@ -28,7 +29,11 @@
       <DustParticleCanvas :active="isCharging" :fill-pct="pct" />
     </div>
     <div class="mini-dust__sub">
-      <span v-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
+      <!-- Midnight data is paused: the last reading, and the block it is based on, in place of the rate. -->
+      <span v-if="dustEstimate" class="mini-dust__estimate g-num" data-test="dust-estimate">
+        <v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>{{ $t('midnight.dataPaused.estimateCaption', { block: tipHeightLabel, age: tipAge }) }}
+      </span>
+      <span v-else-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
       <span v-else-if="isPending" class="mini-dust__pending">{{ $t('midnight.dustBatteryPending') }}</span>
       <span v-else>{{ $t('midnight.statusUnregistered') }}</span>
       <span v-if="isCharging"> · {{ timeToFullLabel }}</span>
@@ -60,6 +65,7 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
 import { getDustPendingForDestination, reconcileDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -75,7 +81,8 @@ const dustTicker = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 
 const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
-const { dustBalance, dustGenerating, dustCap, registrationStatus } = useMidnightDustLive();
+const { dustBalance, dustGenerating, dustCap, registrationStatus, estimate: dustEstimate } = useMidnightDustLive();
+const { heightLabel: tipHeightLabel, ageLabel: tipAge } = useMidnightDataFreshness();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
@@ -149,7 +156,8 @@ const pct = computed(() => {
   return Math.max(0, Math.min(100, p));
 });
 const isFull = computed(() => isRegistered.value && dustCap.value > 0n && pct.value >= 99.95);
-const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value);
+// No charging animation while Midnight data is paused: the value is not moving.
+const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value && !dustEstimate.value);
 
 function fmt(value: bigint, digits: number): string {
   const whole = value / DUST_DIVISOR;
@@ -228,6 +236,11 @@ function onSponsorSaved(): void {
 .is-charging .mini-dust__value,
 .is-full .mini-dust__value {
   color: #f3ddae;
+}
+
+/* Metadata, as on the dashboard: g-text-3 with the amber pause glyph in front. */
+.mini-dust__estimate {
+  color: var(--g-text-3);
 }
 
 .mini-dust__pct {
