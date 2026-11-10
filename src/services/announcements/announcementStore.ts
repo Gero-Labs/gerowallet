@@ -6,15 +6,24 @@
 // own text in the bell as if Gero had signed it. Only the worker writes these keys, and only after
 // announcementVerify accepted the envelope.
 //
-// The three state keys go through notifyStorage, whose writes raise the session-storage signal pages
-// listen to (IndexedDB has no change events). Image bytes are written directly: they do not survive
-// the JSON round trip that path does, and pages read them by hash when they need one.
+// The three state keys are WRITTEN through notifyStorage, whose writes raise the session-storage
+// signal pages listen to (IndexedDB has no change events). They are READ straight from the private
+// store, never through notifyStorage's readNotifyKey: that path adopts a value it finds in
+// chrome.storage.local the first time a key is read (the one-time move of the older notification
+// keys). These keys never lived there, so anything found there was planted, and adopting it would
+// make it a "verified" announcement. Image bytes are written directly: they do not survive the JSON
+// round trip the state keys take, and pages read them by hash when they need one.
+//
+// What is stored is also only shown while it was verified by THIS build (trustedSnapshot): after an
+// update that removes a key or changes the rules, the old items stay hidden until the feed has been
+// read and verified again.
 
 import { announcementTag } from '@/services/notify/notifyPayload';
-import { privateNotifyStorage } from '@/services/notify/notifyStorage';
+import { writeNotifyKey } from '@/services/notify/notifyStorage';
 import { getPrivate, getPrivateEntries, removePrivate, setPrivate } from '@/utils/privateStore';
 import { isForThisInstall, type InstallInfo } from './announcementAudience';
 import { ANNOUNCEMENT_ID, SHA256_HEX, type AnnouncementDocument, type AnnouncementTier } from './announcementRules';
+import type { VerifyKeys } from './announcementVerify';
 
 export const ANNOUNCEMENTS_KEY = 'announcements';
 export const ANNOUNCEMENT_STATE_KEY = 'announcementState';
@@ -71,8 +80,9 @@ export interface AnnouncementStorage {
 }
 
 export const privateAnnouncementStorage: AnnouncementStorage = {
-  get: (key) => privateNotifyStorage.get(key),
-  set: (key, value) => privateNotifyStorage.set(key, value),
+  // Not readNotifyKey: see the header. chrome.storage.local is never consulted for these keys.
+  get: (key) => getPrivate(key),
+  set: (key, value) => writeNotifyKey(key, value),
   getMedia: (sha) => getPrivate<StoredMedia>(ANNOUNCEMENT_MEDIA_PREFIX + sha),
   setMedia: (sha, media) => setPrivate(ANNOUNCEMENT_MEDIA_PREFIX + sha, media),
   removeMedia: (sha) => removePrivate(ANNOUNCEMENT_MEDIA_PREFIX + sha),
@@ -135,6 +145,26 @@ export function readState(v: unknown): AnnouncementState {
 export function readPrefs(v: unknown): AnnouncementPrefs {
   const off = isObject(v) && Array.isArray(v['off']) ? v['off'] : Array.isArray(v) ? v : [];
   return { off: OPT_OUT_KINDS.filter((k) => off.includes(k)) };
+}
+
+/**
+ * Names the build a snapshot was verified by: the extension version (the rules) and every pinned
+ * key with its tier. Null when no key is pinned, because then nothing can have been verified.
+ */
+export function verificationFingerprint(version: string, keys: VerifyKeys): string | null {
+  if (!keys.editorial.length && !keys.feed.length) return null;
+  const list = (ks: VerifyKeys['editorial']) => ks.map((k) => `${k.keyId}:${k.publicKeyHex}`).join(',');
+  return `${version}|${list(keys.editorial)}|${list(keys.feed)}`;
+}
+
+/**
+ * The snapshot, if this build verified it; otherwise an empty one. Everything that shows an
+ * announcement (the worker's snackbar and push lookup, the pages' bell, banner and dialog) reads the
+ * stored copy through this, so an item signed by a key a later release removed, or accepted by rules
+ * a later release tightened, is not shown again before it has been verified again.
+ */
+export function trustedSnapshot(snapshot: AnnouncementsSnapshot, fingerprint: string | null): AnnouncementsSnapshot {
+  return fingerprint !== null && snapshot.verifiedWith === fingerprint ? snapshot : { ...EMPTY_SNAPSHOT, items: [] };
 }
 
 /** What may be shown now: for this install, not expired, and not a kind the user switched off. */

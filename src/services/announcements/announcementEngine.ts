@@ -14,7 +14,10 @@
 import type { InstallInfo } from './announcementAudience';
 import type { AnnouncementFeed } from './announcementFeed';
 import { ANNOUNCEMENT_ID } from './announcementRules';
-import { visibleAnnouncements, type AnnouncementPrefs, type AnnouncementStore, type StoredAnnouncement } from './announcementStore';
+import {
+  trustedSnapshot, verificationFingerprint, visibleAnnouncements,
+  type AnnouncementPrefs, type AnnouncementsSnapshot, type AnnouncementStore, type StoredAnnouncement,
+} from './announcementStore';
 import { verifyEnvelope, type VerifyKeys } from './announcementVerify';
 
 export type RefreshReason = 'start' | 'socket' | 'push' | 'page';
@@ -69,11 +72,17 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
   const log = deps.log ?? (() => undefined);
   const flagOn = deps.flagOn ?? (() => true);
 
-  /** Changes when a key is pinned, removed or re-tiered, or the extension updates: then the ETag is not reused. */
-  async function verifiedWith(): Promise<string> {
-    const install = await deps.install();
-    const list = (ks: VerifyKeys['editorial']) => ks.map((k) => `${k.keyId}:${k.publicKeyHex}`).join(',');
-    return `${install.version}|${list(keys.editorial)}|${list(keys.feed)}`;
+  /**
+   * Changes when a key is pinned, removed or re-tiered, or the extension updates. Then the ETag is
+   * not reused and what is stored is not shown until it has been verified again. Null: no key pinned.
+   */
+  async function fingerprint(): Promise<string | null> {
+    return verificationFingerprint((await deps.install()).version, keys);
+  }
+
+  /** The stored items this build verified: the only ones that are ever shown. */
+  async function shownSnapshot(): Promise<AnnouncementsSnapshot> {
+    return trustedSnapshot(await store.getSnapshot(), await fingerprint());
   }
 
   async function storeImages(items: StoredAnnouncement[]): Promise<void> {
@@ -93,7 +102,7 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
 
   /** Offer what is new to open pages, once each. */
   async function presentNew(firstFetch: boolean): Promise<void> {
-    const snapshot = await store.getSnapshot();
+    const snapshot = await shownSnapshot();
     const state = await store.getState();
     const visible = visibleAnnouncements(snapshot, await store.getPrefs(), await deps.install(), now());
     const fresh = visible.filter((i) => state.read[i.document.id] === undefined && state.presented[i.document.id] === undefined);
@@ -109,14 +118,16 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
 
   async function doRefresh(reason: RefreshReason): Promise<RefreshOutcome> {
     // With no key pinned nothing can verify, so there is nothing to ask the server for.
-    if (!keys.editorial.length && !keys.feed.length) return 'unchanged';
+    const verifiedBy = await fingerprint();
+    if (verifiedBy === null) return 'unchanged';
     const snapshot = await store.getSnapshot();
+    const current = snapshot.verifiedWith === verifiedBy;
     // An MV3 worker starts many times a day and a page can ask at will: neither may turn into a
     // request each time. The socket frame and a push are the server saying there is something new.
+    // A copy another build verified does not count as fresh: it is hidden until it is read again.
     const minInterval = reason === 'start' ? START_MIN_INTERVAL_MS : reason === 'page' ? PAGE_MIN_INTERVAL_MS : 0;
-    if (snapshot.fetchedAt > 0 && now() - snapshot.fetchedAt < minInterval) return 'unchanged';
-    const fingerprint = await verifiedWith();
-    const result = await feed.fetchFeed(snapshot.verifiedWith === fingerprint ? snapshot.etag : null);
+    if (current && snapshot.fetchedAt > 0 && now() - snapshot.fetchedAt < minInterval) return 'unchanged';
+    const result = await feed.fetchFeed(current ? snapshot.etag : null);
     const at = now();
     if (result.status === 'failed') {
       log(`announcement feed (${reason}): ${result.reason}`);
@@ -145,7 +156,7 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
     }
     await storeImages(items);
     // The feed is the truth: what it no longer serves is gone here too.
-    await store.setSnapshot({ seq: result.seq, etag: result.etag, fetchedAt: at, verifiedWith: fingerprint, items });
+    await store.setSnapshot({ seq: result.seq, etag: result.etag, fetchedAt: at, verifiedWith: verifiedBy, items });
     await store.pruneState(new Set(items.map((i) => i.document.id)), at);
     if (reason !== 'push') await presentNew(snapshot.fetchedAt === 0);
     return 'updated';
@@ -179,7 +190,7 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
       if (typeof aid !== 'string' || !ANNOUNCEMENT_ID.test(aid)) return null;
       const deadline = new Promise<void>((resolve) => { setTimer(resolve, PUSH_BUDGET_MS); });
       await Promise.race([refresh('push'), deadline]);
-      const visible = visibleAnnouncements(await store.getSnapshot(), await store.getPrefs(), await deps.install(), now());
+      const visible = visibleAnnouncements(await shownSnapshot(), await store.getPrefs(), await deps.install(), now());
       const item = visible.find((i) => i.document.id === aid) ?? null;
       // The push shows it, so the snackbar path must not show it again.
       if (item) await store.mark('presented', [aid], now());

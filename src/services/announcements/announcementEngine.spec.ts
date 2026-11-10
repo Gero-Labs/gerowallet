@@ -388,3 +388,42 @@ describe('announcement store', () => {
     expect(announcementEventTag('01JC0000000000000000000001')).toHaveLength(32);
   });
 });
+
+describe('announcement engine: what another build verified', () => {
+  it('shows nothing a different version verified until the feed has been read again', async () => {
+    const h = harness();
+    h.serve(ok(1, [await signEditorial(plain(1))]));
+    await h.engine.refresh('start');
+    expect((await h.engine.forPush(id(1)))?.document.id).toBe(id(1));
+    // The extension updates and the feed cannot be reached: what the old rules accepted is not shown.
+    h.install.version = '2.10.0';
+    h.serve({ status: 'failed', reason: 'network' });
+    expect(await h.engine.forPush(id(1))).toBeNull();
+    // Verified again by this version: shown again.
+    h.serve(ok(1, [await signEditorial(plain(1))]));
+    expect((await h.engine.forPush(id(1)))?.document.id).toBe(id(1));
+  });
+
+  it('reads the feed again right after an update, whatever the start throttle says', async () => {
+    const h = harness();
+    h.serve(ok(1, [await signEditorial(plain(1))]));
+    await h.engine.refresh('start');
+    h.clock.now += 60_000;
+    expect(await h.engine.refresh('start')).toBe('unchanged');
+    expect(h.feedCalls).toHaveLength(1);
+    h.install.version = '2.10.0';
+    await h.engine.refresh('start');
+    expect(h.feedCalls).toEqual([null, null]);
+  });
+
+  it('shows nothing that is stored while no key is pinned', async () => {
+    // A snapshot that is in the store without this build having verified it: with no key pinned,
+    // nothing can vouch for it, so a push about it gets the generic text.
+    const signed = harness();
+    signed.serve(ok(1, [await signEditorial(plain(1))]));
+    await signed.engine.refresh('start');
+    const keyless = harness({ store: signed.store }, { editorial: [], feed: [] });
+    expect(await keyless.engine.forPush(id(1))).toBeNull();
+    expect(keyless.feedCalls).toEqual([]);
+  });
+});
