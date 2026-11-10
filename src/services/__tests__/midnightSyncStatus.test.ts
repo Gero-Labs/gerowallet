@@ -102,6 +102,24 @@ describe('Midnight network status recovery', () => {
     expect(midnightStore.tip.timestamp).toBe(block.time);
   });
 
+  it('stores a seconds-shaped block time from the latest-block route as milliseconds, stamped as seen now', async () => {
+    // `/api/blocks/latest` `time` is epoch seconds.
+    const seconds = Math.floor(Date.now() / 1000) - 6;
+    h.latest.mockResolvedValue({ ...block, time: seconds });
+    start(); await flush();
+    expect(midnightStore.tip.timestamp).toBe(seconds * 1000);
+    expect(midnightStore.tip.observedAt).toBe(Date.now());
+  });
+
+  it('keeps a milliseconds-shaped block time from a sync frame as milliseconds', async () => {
+    start(); await flush(); await sync(); await flush();
+    const ms = Date.now() - 6_000;
+    await sync({ block: { ...block, height: block.height + 2, time: ms } }); await flush();
+    expect(midnightStore.tip.height).toBe(block.height + 2);
+    expect(midnightStore.tip.timestamp).toBe(ms);
+    expect(midnightStore.tip.observedAt).toBe(Date.now());
+  });
+
   it('keeps the last known block when a later Nexus refresh fails', async () => {
     start(); await flush();
     h.latest.mockRejectedValue(new Error('offline'));

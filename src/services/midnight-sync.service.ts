@@ -35,6 +35,7 @@ import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { debugLog } from '@/utils/debug';
 import { Network } from '@/models/types';
 import { getMidnightApi } from '@/api/midnight-api';
+import { blockTimeToMs } from '@/chains/midnight/midnightDataFreshness';
 import { MIDNIGHT_STATUS_POLL_MS, refreshMidnightWriteStatus } from '@/chains/midnight/midnightWriteStatus';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import type {
@@ -336,8 +337,11 @@ class MidnightSyncService {
     midnightActions.applyTipUpdate({
       hash: block.hash,
       height: block.height!,
-      timestamp: typeof block.time === 'number' && Number.isFinite(block.time) && block.time > 0
-        ? block.time : 0,
+      // `/api/blocks/latest` sends epoch seconds, sync frames may send milliseconds.
+      timestamp: blockTimeToMs(block.time),
+      // When this session saw it: a tip restored from storage has an old stamp
+      // and reads as unknown, not paused (midnightDataFreshness.ts).
+      observedAt: Date.now(),
     });
   }
 
