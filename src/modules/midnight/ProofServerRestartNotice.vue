@@ -4,6 +4,7 @@
     @close="closeForNow"
     icon="mdi-shield-alert-outline"
     :title="$t('midnight.proofServerRestart.title')"
+    :title-lines="2"
     size="md"
     :min-height="0"
   >

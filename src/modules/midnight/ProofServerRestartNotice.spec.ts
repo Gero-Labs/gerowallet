@@ -23,11 +23,11 @@ import { PROOF_SERVER_RESTART_NOTICE_KEY } from '@/chains/midnight/proofServerRe
 import { midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
 
 const BaseDialogStub = defineComponent({
-  props: { isOpen: Boolean, title: String, subtitle: String, icon: String },
+  props: { isOpen: Boolean, title: String, subtitle: String, icon: String, titleLines: Number },
   emits: ['close'],
   render() {
     if (!this.isOpen) return null;
-    return Vue.h('div', { 'data-test': 'dialog', 'data-subtitle': String(this.subtitle ?? ''), 'data-icon': this.icon }, [
+    return Vue.h('div', { 'data-test': 'dialog', 'data-subtitle': String(this.subtitle ?? ''), 'data-icon': this.icon, 'data-title-lines': String(this.titleLines) }, [
       Vue.h('h2', this.title),
       Vue.h('button', { 'data-test': 'dialog-close', onClick: () => this.$emit('close') }),
       this.$slots['default']?.(),
@@ -100,6 +100,8 @@ describe('ProofServerRestartNotice', () => {
     const dialog = w.find('[data-test="dialog"]');
     expect(dialog.attributes('data-subtitle')).toBe('');
     expect(dialog.attributes('data-icon')).toBe('mdi-shield-alert-outline');
+    // The title wraps to two lines instead of clamping at side-panel width.
+    expect(dialog.attributes('data-title-lines')).toBe('2');
     expect(w.find('[data-test="proof-server-restart-body"]').text()).toBe(msg('midnight.proofServerRestart.body'));
   });
 
@@ -179,7 +181,15 @@ describe('ProofServerRestartNotice', () => {
 
   it('is mounted on the dashboard and in the side panel', () => {
     const src = join(__dirname, '../..');
-    expect(readFileSync(join(src, 'modules/navigation/layouts/ContentLayout.vue'), 'utf8')).toContain('<ProofServerRestartNotice');
-    expect(readFileSync(join(src, 'sidepanel/App.vue'), 'utf8')).toMatch(/<ProofServerRestartNotice\s+v-if="hasActiveWallet && !isLocked"/);
+    const dashboard = readFileSync(join(src, 'modules/navigation/layouts/ContentLayout.vue'), 'utf8');
+    expect(dashboard).toContain('<ProofServerRestartNotice');
+    // Behind an announcement opened in full, and the notifications offer behind the notice.
+    expect(dashboard).toMatch(/<ProofServerRestartNotice\s+:suppressed="[^"]*announcementOpen[^"]*"/);
+    expect(dashboard).toMatch(/<NotifyIntroPrompt\s+:suppressed="[^"]*proofServerNoticeOpen"/);
+    const panel = readFileSync(join(src, 'sidepanel/App.vue'), 'utf8');
+    expect(panel).toMatch(/<ProofServerRestartNotice\s+v-if="hasActiveWallet && !isLocked"/);
+    // Never over a DApp request waiting for approval, or an open announcement.
+    expect(panel).toContain(':suppressed="showWalletSwitcher || showNotifications || dappRequestPending || announcementOpen"');
+    expect(panel).toContain('const dappRequestPending = computed(() => !!hub.currentRequest.value || hub.requestQueue.value.length > 0);');
   });
 });

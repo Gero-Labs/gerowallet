@@ -5859,7 +5859,7 @@ export default {
   'midnight.proofServer.zkpaasKeyMissing': 'Füge deinen Arkhia-API-Key hinzu',
   'midnight.proofServer.zkpaasNotReachableSend': 'Arkhia zkPaaS ist nicht erreichbar. Prüfe deinen API-Key in den Proof-Server-Einstellungen.',
   'midnight.proofServerRestart.title': 'Starte deinen lokalen Proof-Server neu',
-  'midnight.proofServerRestart.body': 'Der von GeroWallet vorgeschlagene Befehl hat den Proof-Server im ausführlichen Modus gestartet. Dieser schreibt Anfrageinhalte, einschließlich privater Transaktionseingaben, in das Log des Containers. Starte ihn mit dem Befehl unten neu und entferne den alten Container, damit sein Log gelöscht wird.',
+  'midnight.proofServerRestart.body': 'Der von GeroWallet vorgeschlagene Befehl hat den Proof-Server im ausführlichen Modus gestartet. Dieser schreibt Anfrageinhalte, einschließlich privater Transaktionseingaben, in das Log des Containers. Entferne den alten Container, damit sein Log gelöscht wird, und starte den Server dann mit dem Befehl unten erneut.',
   'midnight.proofServerRestart.step1': 'Stoppe den Proof-Server (Strg+C in seinem Terminal).',
   'midnight.proofServerRestart.step2': 'Entferne den alten Container:',
   'midnight.proofServerRestart.step2Command': 'docker rm <Container-Name oder -ID>',

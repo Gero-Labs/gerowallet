@@ -5966,7 +5966,7 @@ export default {
   'midnight.proofServer.zkpaasKeyMissing': 'Add your Arkhia API key',
   'midnight.proofServer.zkpaasNotReachableSend': 'Arkhia zkPaaS is not reachable. Check your API key in the proof server settings.',
   'midnight.proofServerRestart.title': 'Restart your local proof server',
-  'midnight.proofServerRestart.body': 'The command GeroWallet suggested started the proof server in verbose mode, which writes request contents, including private transaction inputs, to the container\'s log. Restart it with the command below, and remove the old container so its log is deleted.',
+  'midnight.proofServerRestart.body': 'The command GeroWallet suggested started the proof server in verbose mode, which writes request contents, including private transaction inputs, to the container\'s log. Remove the old container so its log is deleted, then start the server again with the command below.',
   'midnight.proofServerRestart.step1': 'Stop the proof server (Ctrl+C in its terminal).',
   'midnight.proofServerRestart.step2': 'Remove the old container:',
   'midnight.proofServerRestart.step2Command': 'docker rm <container name or ID>',

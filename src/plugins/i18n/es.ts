@@ -5743,7 +5743,7 @@ export default {
   'midnight.proofServer.zkpaasKeyMissing': 'Agrega tu clave de API de Arkhia',
   'midnight.proofServer.zkpaasNotReachableSend': 'No se puede conectar con Arkhia zkPaaS. Revisa tu clave de API en la configuración de pruebas criptográficas.',
   'midnight.proofServerRestart.title': 'Reinicia tu generador local de pruebas',
-  'midnight.proofServerRestart.body': 'El comando que sugirió GeroWallet iniciaba el generador de pruebas en modo detallado, que escribe el contenido de las solicitudes, incluidos los datos privados de las transacciones, en el registro del contenedor. Reinícialo con el comando de abajo y elimina el contenedor anterior para que se borre su registro.',
+  'midnight.proofServerRestart.body': 'El comando que sugirió GeroWallet iniciaba el generador de pruebas en modo detallado, que escribe el contenido de las solicitudes, incluidos los datos privados de las transacciones, en el registro del contenedor. Elimina el contenedor anterior para que se borre su registro y luego vuelve a iniciar el generador con el comando de abajo.',
   'midnight.proofServerRestart.step1': 'Detén el generador de pruebas (Ctrl+C en su terminal).',
   'midnight.proofServerRestart.step2': 'Elimina el contenedor anterior:',
   'midnight.proofServerRestart.step2Command': 'docker rm <nombre o ID del contenedor>',
