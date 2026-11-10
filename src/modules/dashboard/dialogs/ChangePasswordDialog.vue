@@ -54,7 +54,6 @@
     <v-card-actions class="justify-center">
       <v-btn
         class="geroButton ml-2"
-        style="color: black!important;"
         :disabled="!valid || updating"
         :loading="updating"
         @click="updateSpendingPassword"
