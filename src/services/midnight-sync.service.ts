@@ -512,8 +512,9 @@ class MidnightSyncService {
     const undecided: typeof rows = [];
     let failed = false;
     for (const tx of rows) {
-      const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), tx);
-      if (this.sessionEpoch !== epoch || midnightStore.refreshing) return;
+      const current = () => this.sessionEpoch === epoch && !midnightStore.refreshing;
+      const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), tx, current);
+      if (!current()) return;
       if (outcome === 'notFound') midnightActions.markPendingNotIncluded(tx.hash, tx.token);
       else if (outcome === 'confirmed' || outcome === 'failed') midnightActions.settlePendingTx(tx.hash, tx.token, outcome);
       else {

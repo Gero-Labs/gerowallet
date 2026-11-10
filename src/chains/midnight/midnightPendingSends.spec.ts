@@ -92,6 +92,25 @@ describe('the lookup', () => {
     await expect(ask(found('FAILURE'))).resolves.toBe('failed');
   });
 
+  it('"not found" takes two answers in a row; a second that differs is the verdict', async () => {
+    const graphql = vi.fn()
+      .mockResolvedValueOnce(reply([], T + 60 * 60_000))
+      .mockResolvedValueOnce(found('SUCCESS'));
+    await expect(checkPendingTx(graphql, sent)).resolves.toBe('confirmed');
+    expect(graphql).toHaveBeenCalledTimes(2);
+    const twice = vi.fn().mockResolvedValue(reply([], T + 60 * 60_000));
+    await expect(checkPendingTx(twice, sent)).resolves.toBe('notFound');
+    expect(twice).toHaveBeenCalledTimes(2);
+    // Only "not found" is asked twice.
+    const once = vi.fn().mockResolvedValue(found('SUCCESS'));
+    await checkPendingTx(once, sent);
+    expect(once).toHaveBeenCalledTimes(1);
+    // A caller that no longer wants the answer ends it with no verdict.
+    const stopped = vi.fn().mockResolvedValue(reply([], T + 60 * 60_000));
+    await expect(checkPendingTx(stopped, sent, () => false)).resolves.toBe('unknown');
+    expect(stopped).toHaveBeenCalledTimes(1);
+  });
+
   it('a row with the hash but no result yet is found, not "not found"', async () => {
     await expect(ask(found(null))).resolves.toBe('waiting');
     await expect(ask(reply([{ __typename: 'RegularTransaction', hash: 'ab' }]))).resolves.toBe('waiting');

@@ -6813,6 +6813,9 @@ app.addToOptions(MessageTypes.CHECK_MIDNIGHT_PENDING_TX, async (request, sendRes
       hash, timestamp: row?.timestamp ?? 0, isShielded: row?.isShielded ?? false,
     });
     if (outcome === 'confirmed' || outcome === 'failed') midnightActions.settlePendingTx(hash, rowToken, outcome);
+    // The same verdict as the lookup after a rebuild: a send kept through a reset
+    // that the indexer doesn't have didn't go through, and joins the card.
+    else if (outcome === 'notFound' && row?.beforeReset && !midnightStore.refreshing) midnightActions.markPendingNotIncluded(hash, rowToken);
     sendResponse({ id: request.id, data: { success: true, result: { outcome } }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });

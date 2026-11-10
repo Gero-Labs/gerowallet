@@ -108,8 +108,9 @@ export function keptRowsRetryDelay(
 /**
  * What a lookup of a pending row found:
  * - `confirmed` / `failed`: the transaction is on chain, with its result;
- * - `notFound`: the indexer answered, lists no such transaction, and its latest
- *   block is past the row's time to live: it was never included;
+ * - `notFound`: the indexer answered, twice in a row, that it lists no such
+ *   transaction while its latest block is past the row's time to live: it was
+ *   never included;
  * - `waiting`: no verdict yet: found without its result, or not found by an
  *   indexer that hasn't reached the time to live;
  * - `unknown`: the lookup failed (network, server or an answer it can't read).
@@ -139,16 +140,28 @@ export function readPendingLookup(data: unknown, tx: Pick<MidnightTransaction, '
 /**
  * Ask the indexer for a pending row's transaction by its ledger hash. A failed
  * lookup is no answer: `unknown`, never `notFound`.
+ *
+ * `notFound` takes two answers in a row. The transactions list and the latest
+ * block are separate fields of one query, which the indexer may resolve at
+ * different moments: the list could be read just before the block holding the
+ * send is indexed, and the latest block just after. A second ask, sent once the
+ * first answer showed a latest block past the deadline, reads a list from an
+ * indexer already that far. Any other second answer is the verdict.
  */
 export async function checkPendingTx(
   graphql: (query: string, variables: Record<string, unknown>) => Promise<unknown>,
   tx: Pick<MidnightTransaction, 'hash' | 'timestamp' | 'isShielded'>,
+  /** Asked before the second ask: false (the session stopped, say) ends it with no verdict. */
+  stillWanted: () => boolean = () => true,
 ): Promise<PendingTxCheck> {
-  let data: unknown;
-  try {
-    data = await graphql(PENDING_TX_QUERY, { hash: tx.hash.replace(/^0x/i, '').toLowerCase() });
-  } catch {
-    return 'unknown';
-  }
-  return readPendingLookup(data, tx);
+  const ask = async (): Promise<PendingTxCheck> => {
+    try {
+      return readPendingLookup(await graphql(PENDING_TX_QUERY, { hash: tx.hash.replace(/^0x/i, '').toLowerCase() }), tx);
+    } catch {
+      return 'unknown';
+    }
+  };
+  const first = await ask();
+  if (first !== 'notFound') return first;
+  return stillWanted() ? ask() : 'unknown';
 }

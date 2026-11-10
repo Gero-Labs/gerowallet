@@ -1,6 +1,7 @@
-// The previous worker's record across service-worker restarts (issue 1471),
-// through the real store module and persister: what a restarted worker saves
-// before sync delivers anything, and what a chain reset then shows.
+// The previous worker's record across service-worker restarts (issues 1471 and
+// 1470), through the real store module and persister: what a restarted worker
+// saves before sync delivers anything, what a chain reset then shows, and where
+// pending sends end up.
 //
 // Each case uses its own wallet and waits for the previous case's debounced
 // writes to land: fake IndexedDB and leftover timers outlive a case.
@@ -35,6 +36,7 @@ vi.mock('@/chrome/storeMessagingBg', () => ({
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: () => () => undefined } }));
 
 import { hasDataToKeep } from '@/chains/midnight/midnightRefresh';
+import { keptRowsToCheck, notIncludedAfterReset } from '@/chains/midnight/midnightPendingSends';
 
 const hex = (n: number, seed: number) => Array.from({ length: n }, (_, i) => ((seed * 31 + i * 7) % 16).toString(16)).join('');
 const addresses = (body: string): MidnightAddresses => ({
@@ -218,5 +220,172 @@ describe('the previous worker\'s record across restarts', () => {
     r.midnightActions.setActive(addresses(wallet));
     r.midnightActions.releaseBootRecord();
     await expect(r.midnightActions.persistedRefreshSnapshot()).resolves.toBeNull();
+  });
+});
+
+// Issue 1470: pending sends across restarts, wallet switches and resets.
+describe('pending sends and the previous worker\'s record', () => {
+  let n = 0;
+  let A = '';
+  let B = '';
+  let m: Loaded;
+  const P2 = 'e2'.repeat(32);
+  const row = (hash: string, extra: Partial<MidnightTransaction> = {}) => sent(hash, { ledgerHash: true, ...extra });
+
+  beforeEach(async () => {
+    await settle(); // the previous case's debounced writes land first
+    env.data.clear();
+    n += 1;
+    A = `pa${n}`;
+    B = `pb${n}`;
+    m = await load();
+  });
+
+  async function previousWorker(body = A, pending: MidnightTransaction[] = [row(P1)]) {
+    m.midnightActions.setActive(addresses(body));
+    m.midnightActions.setTransactions(history(3));
+    m.midnightActions.setUtxos(utxoSet(5));
+    m.midnightActions.updateBalances({ nightUnshielded: 7_000_000n });
+    pending.forEach((tx) => m.midnightActions.applyTransaction(tx));
+    await settle();
+  }
+
+  /** A restarted worker as the sync service starts it: the refresh, then the sends; no frame arrives. */
+  async function restart(body = A): Promise<Loaded> {
+    const r = await load();
+    r.midnightActions.setActive(addresses(body));
+    await r.midnightActions.restoreRefreshAfterRestart();
+    await r.midnightActions.restorePendingAfterRestart();
+    return r;
+  }
+
+  it('a restored send keeps its reset mark, "not found" and ledger hash, so it is looked up or listed again', async () => {
+    await previousWorker(A, [
+      row(P1, { beforeReset: { at: 1, upgrade: true } }),
+      row(P2, { beforeReset: { at: 1, upgrade: true, notFound: true } }),
+    ]);
+    const r = await load();
+    r.midnightActions.setActive(addresses(A));
+    await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(2);
+    expect(keptRowsToCheck(r.midnightStore.transactions).map((t) => t.hash)).toEqual([P1]);
+    expect(notIncludedAfterReset(r.midnightStore.transactions).map((t) => t.hash)).toEqual([P2]);
+  });
+
+  it('dismissed after the restore, with history back in memory: a reset brings it back nowhere', async () => {
+    await previousWorker();
+    const r = await restart();
+    r.midnightActions.setTransactions([...history(3), ...r.midnightStore.transactions]); // the replay landed
+    r.midnightActions.dismissPendingTx(P1, 'NIGHT');
+    await resetLikeTheService(r);
+    expect(r.midnightStore.transactions.map((t) => t.hash)).not.toContain(P1);
+    expect(r.midnightStore.refreshSnapshot?.transactions.map((t) => t.hash)).not.toContain(P1);
+  });
+
+  it('dismissed after the restore, with a reset as the first frame: not kept, not in the snapshot', async () => {
+    await previousWorker();
+    const r = await restart();
+    r.midnightActions.dismissPendingTx(P1, 'NIGHT');
+    await resetLikeTheService(r);
+    expect(r.midnightStore.transactions.map((t) => t.hash)).not.toContain(P1);
+    expect(r.midnightStore.refreshSnapshot?.transactions.map((t) => t.hash)).not.toContain(P1);
+    expect(r.midnightStore.refreshSnapshot?.transactions).toHaveLength(3);
+  });
+
+  it('a dismissed shielded send stays out of history when the refresh ends', async () => {
+    await previousWorker(A, [row(P1, { isShielded: true })]);
+    m.midnightActions.updateBalances({ nightShielded: 3n });
+    await settle();
+    const r = await restart();
+    r.midnightActions.dismissPendingTx(P1, 'NIGHT');
+    await resetLikeTheService(r);
+    r.midnightActions.endRefresh();
+    expect(r.midnightStore.transactions.map((t) => t.hash)).not.toContain(P1);
+  });
+
+  it('a reset before the restore keeps the send once, and the restore then adds nothing', async () => {
+    await previousWorker();
+    const r = await load();
+    r.midnightActions.setActive(addresses(A));
+    await resetLikeTheService(r);
+    expect(r.midnightStore.transactions.filter((t) => t.hash === P1)).toHaveLength(1);
+    await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(0);
+    expect(r.midnightStore.transactions.filter((t) => t.hash === P1)).toHaveLength(1);
+  });
+
+  it('a restored send and a new one: a reset keeps each once, over the wallet\'s balance', async () => {
+    await previousWorker();
+    const r = await restart();
+    r.midnightActions.applyTransaction(row(P2, { timestamp: 1_758_000_200_000 }));
+    await resetLikeTheService(r);
+    expect(r.midnightStore.transactions.map((t) => t.hash).sort()).toEqual([P1, P2].sort());
+    expect(r.midnightStore.refreshSnapshot?.balances.nightUnshielded).toBe(7_000_000n);
+  });
+
+  it('another wallet never gets the record\'s sends or snapshot', async () => {
+    await previousWorker(A);
+    const r = await load();
+    r.midnightActions.setActive(addresses(B));
+    await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(0);
+    await expect(r.midnightActions.persistedRefreshSnapshot()).resolves.toBeNull();
+    await resetLikeTheService(r);
+    expect(r.midnightStore.transactions).toEqual([]);
+    expect(r.midnightStore.refreshSnapshot).toBeNull();
+  });
+
+  it('another wallet at the reset keeps its own send only', async () => {
+    await previousWorker(A);
+    const r = await load();
+    r.midnightActions.setActive(addresses(B));
+    r.midnightActions.applyTransaction(row(P2));
+    await resetLikeTheService(r);
+    expect(r.midnightStore.transactions.map((t) => t.hash)).toEqual([P2]);
+  });
+
+  it('a switch back to the record\'s wallet before any reset brings its sends back, for it only', async () => {
+    await previousWorker(A);
+    const r = await load();
+    r.midnightActions.setActive(addresses(B));
+    await r.midnightActions.restorePendingAfterRestart();
+    r.midnightActions.setActive(addresses(A));
+    await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(1);
+    expect(r.midnightStore.transactions.map((t) => t.hash)).toEqual([P1]);
+  });
+
+  it('the record waits for a Midnight login while nothing else has started', async () => {
+    await previousWorker(A);
+    const r = await load();
+    await settle();
+    r.midnightActions.setActive(addresses(A));
+    await expect(r.midnightActions.persistedRefreshSnapshot()).resolves.not.toBeNull();
+  });
+
+  it('a removed wallet\'s sends never reach a re-import of its seed', async () => {
+    await previousWorker(A);
+    const r = await load();
+    r.midnightActions.setActive(addresses(A));
+    r.midnightActions.forgetWallet(addresses(A).unshielded);
+    r.midnightActions.setActive(addresses(A));
+    await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(0);
+  });
+
+  it('two restarts with no sync frame between (offline), then a reset: the snapshot still shows the wallet and the send', async () => {
+    await previousWorker();
+    await restart();
+    await settle();
+    const r2 = await restart();
+    await resetLikeTheService(r2);
+    expect(r2.midnightStore.refreshSnapshot?.transactions).toHaveLength(4);
+    expect(r2.midnightStore.refreshSnapshot?.balances.nightUnshielded).toBe(7_000_000n);
+    expect(r2.midnightStore.transactions.map((t) => t.hash)).toEqual([P1]);
+  });
+
+  it('two restarts with no sync frame and no pending send, then a reset: the snapshot shows the wallet', async () => {
+    await previousWorker(A, []);
+    await restart();
+    await settle();
+    const r2 = await restart();
+    await resetLikeTheService(r2);
+    expect(r2.midnightStore.refreshSnapshot?.transactions).toHaveLength(3);
+    expect(r2.midnightStore.refreshSnapshot?.balances.nightUnshielded).toBe(7_000_000n);
   });
 });

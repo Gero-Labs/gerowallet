@@ -146,6 +146,18 @@ describe('"Not confirmed" on a history row', () => {
     await expect(outcome(async () => ({ data: { success: true, result: { outcome: 'waiting' } } }))).resolves.toBe('midnight.pending.stillNotConfirmed');
   });
 
+  it('Check again gives the lookup\'s verdict: a kept send the indexer doesn\'t have never went through, and joins the card', async () => {
+    h.send.mockResolvedValueOnce({ data: { success: true, result: { outcome: 'notFound' } } });
+    const kept = sent('ad', { beforeReset: { at: NOW - 60_000, upgrade: true } });
+    const w = mount(MidnightPendingRowStatus, { props: { tx: kept }, global: { stubs } });
+    await w.get('[data-test="midnight-check-again"]').trigger('click');
+    await flushPromises();
+    expect(w.get('[data-test="midnight-check-outcome"]').text()).toBe('midnight.pending.neverWentThrough');
+    // The background marks it, as the lookup after a rebuild does.
+    const background = readFileSync(join(__dirname, '../../../chrome/background.ts'), 'utf8');
+    expect(background).toContain("else if (outcome === 'notFound' && row?.beforeReset && !midnightStore.refreshing) midnightActions.markPendingNotIncluded(hash, rowToken);");
+  });
+
   it('a row keyed by the extrinsic hash offers Dismiss but no Check again', () => {
     const w = mount(MidnightPendingRowStatus, { props: { tx: sent('ee', { ledgerHash: undefined, timestamp: NOW - PENDING_EXPIRY_MS }) }, global: { stubs } });
     expect(w.find('[data-test="midnight-check-again"]').exists()).toBe(false);

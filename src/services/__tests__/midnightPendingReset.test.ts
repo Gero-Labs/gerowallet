@@ -106,11 +106,11 @@ describe('a pending send across a chain reset', () => {
     expect(notIncludedAfterReset(midnightStore.transactions)).toEqual([]);
     expect(sentRow()).toMatchObject({ status: 'pending', beforeReset: { upgrade: true } });
 
-    // The indexer answers on a later try, once past the time to live.
+    // The indexer answers on a later try, once past the time to live (twice in a row: the verdict takes two answers).
     vi.setSystemTime(pendingLookupDeadline(sentRow()!) + 1_000);
     h.graphql.mockImplementation(async () => notIndexed());
     await vi.advanceTimersByTimeAsync(31_000);
-    expect(h.graphql).toHaveBeenCalledTimes(2);
+    expect(h.graphql).toHaveBeenCalledTimes(3);
     expect(notIncludedAfterReset(midnightStore.transactions).map((t) => t.hash)).toEqual([SENT]);
   });
 

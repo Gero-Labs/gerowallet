@@ -53,8 +53,10 @@ const checking = computed(() => stateOf(props.tx).checking);
 const outcomeText = computed(() => {
   if (refreshing.value) return '';
   switch (stateOf(props.tx).outcome) {
-    // Not found, or found without its result yet: either way not confirmed.
-    case 'notFound':
+    // A send kept through a reset that the indexer doesn't have didn't go through
+    // (the background lists it in the card too); any other is still not confirmed.
+    case 'notFound': return props.tx.beforeReset ? t('midnight.pending.neverWentThrough') : t('midnight.pending.stillNotConfirmed');
+    // Found without its result yet, or no verdict yet.
     case 'waiting': return t('midnight.pending.stillNotConfirmed');
     case 'confirmed': return t('midnight.pending.wentThrough');
     case 'failed': return t('midnight.pending.rejected');
