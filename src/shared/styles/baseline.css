@@ -77,11 +77,28 @@ html :is(.v-application, .v-overlay-container) :is(
    A flag always beats a non-flagged declaration whatever the specificity, and
    between two flagged declarations specificity decides -- so this rule must be
    flagged AND reach (0,5,0), or the disabled CTA renders Vuetify's translucent
-   grey instead of the raised surface. */
+   grey instead of the raised surface.
+
+   One disabled look for every button tier (design system: raised fill, muted
+   text, hairline border): the gradient CTA here and every GButton tier, and
+   also when a button is only aria-disabled (focusable, with its reason linked
+   by aria-describedby). Vuetify 4's own disabled rules live in the
+   `vuetify-components` cascade layer, so these unlayered declarations win
+   without a flag: its 26% opacity on the button and the grey overlay on
+   flat/elevated variants are undone here. */
 :is(.v-application, .v-overlay-container) .v-btn.geroButton.v-btn--disabled,
-:is(.v-application, .v-overlay-container) .v-btn.geroButton:disabled {
+:is(.v-application, .v-overlay-container) .v-btn.geroButton:disabled,
+:is(.v-application, .v-overlay-container) .v-btn.geroButton[aria-disabled="true"],
+:is(.v-application, .v-overlay-container) .v-btn.g-btn.v-btn--disabled:not(.v-btn--loading),
+:is(.v-application, .v-overlay-container) .v-btn.g-btn[aria-disabled="true"] {
   background: var(--g-raised) !important;
   color: var(--g-text-3) !important;
+  border: 1px solid var(--g-hairline-1);
+  opacity: 1;
+}
+:is(.v-application, .v-overlay-container) .v-btn.geroButton:is(.v-btn--disabled, :disabled, [aria-disabled="true"]) .v-btn__overlay,
+:is(.v-application, .v-overlay-container) .v-btn.g-btn:is(.v-btn--disabled, [aria-disabled="true"]) .v-btn__overlay {
+  opacity: 0;
 }
 
 /* ---- Tooltip: an opaque surface keeps the page from showing through the text.
