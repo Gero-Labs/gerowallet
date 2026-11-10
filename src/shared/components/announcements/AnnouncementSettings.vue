@@ -18,13 +18,25 @@
 
     <v-row v-for="kind in kinds" :key="kind" no-gutters class="py-2">
       <v-col cols="9">
-        <button type="button" class="announce-settings__label" :disabled="busy" @click="set(kind, isOff(kind))">
+        <!-- A larger click target for the pointer only. The switch is the one control for the
+             keyboard and for a screen reader, and carries this text as its name and description. -->
+        <button type="button" class="announce-settings__label" tabindex="-1" aria-hidden="true" :disabled="busy" @click="set(kind, isOff(kind))">
           <span class="announce-settings__title">{{ $t(`announce.settings.${kind}.title`) }}</span>
           <span class="helper my-0 d-block">{{ $t(`announce.settings.${kind}.hint`) }}</span>
         </button>
+        <span :id="`announce-setting-hint-${kind}`" class="d-sr-only">{{ $t(`announce.settings.${kind}.hint`) }}</span>
       </v-col>
       <v-col cols="3" class="announce-settings__control">
-        <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :model-value="!isOff(kind)" :disabled="busy" @update:model-value="(on) => set(kind, on)" />
+        <ToggleSwitch
+          text-left="OFF"
+          text-right="ON"
+          font-size="10px"
+          :label="$t(`announce.settings.${kind}.title`)"
+          :describedby="`announce-setting-hint-${kind}`"
+          :model-value="!isOff(kind)"
+          :disabled="busy"
+          @update:model-value="(on) => set(kind, on)"
+        />
       </v-col>
     </v-row>
     <span v-if="failed" class="helper my-0 d-block error--text" role="alert">{{ $t('announce.settings.saveFailed') }}</span>

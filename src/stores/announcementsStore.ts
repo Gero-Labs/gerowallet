@@ -30,6 +30,8 @@ export type { OptOutKind, StoredAnnouncement };
 
 /** How often "now" moves, so an announcement leaves the bell when it expires without a reload. */
 const TICK_MS = 60_000;
+/** A page that opens on a copy older than this asks the worker to read the feed. */
+const STALE_MS = 6 * 60 * 60_000;
 
 interface AnnouncementsPageState {
   snapshot: AnnouncementsSnapshot;
@@ -92,8 +94,12 @@ async function reload(key: string): Promise<void> {
   let value: unknown;
   try { value = await privateAnnouncementStorage.get(key); } catch { value = undefined; }
   if (key === ANNOUNCEMENTS_KEY) {
+    const first = !state.loaded;
     state.snapshot = readSnapshot(value);
     state.loaded = true;
+    // The worker reads the feed when it starts, on a socket frame and on a push. A wallet that sat
+    // open and idle (or locked) can miss all three, so a page that finds an old copy asks once.
+    if (first && Date.now() - state.snapshot.fetchedAt > STALE_MS) announcementsStore.refreshIfStale();
     pruneImages();
     // An image that was missing may have arrived with this write: ask again when it is next shown.
     for (const [sha, url] of Object.entries(state.images)) if (url === null) delete state.images[sha];
@@ -173,7 +179,9 @@ export const announcementsStore = {
 
   /** Show this announcement (the dialog or the sheet) and mark it read. */
   open(id: string): void {
-    if (!ANNOUNCEMENT_ID.test(id)) return;
+    // With the kill switch off nothing opens: the dialog would only have "it has ended" to say,
+    // which is not what happened.
+    if (!ANNOUNCEMENT_ID.test(id) || !featureFlagsStore.isAnnouncementsEnabled()) return;
     state.openId = id;
     void announcementsStore.markRead(id);
   },

@@ -110,7 +110,7 @@ describe('AnnouncementDialog', () => {
     store().state.items = [critical(1)];
     store().state.openId = annId(1);
     const { view } = render(AnnouncementDialog);
-    expect(view.find('[data-test="dialog"]').attributes('data-icon')).toBe('mdi-alert-outline');
+    expect(view.find('[data-test="dialog"]').attributes('data-icon')).toBe('mdi-alert-octagon-outline');
     expect(view.find('[data-test="dialog"]').attributes('data-img')).toBeUndefined();
     expect(view.find('[data-test="meta"]').text()).toContain('Service notice');
     expect(view.find('[data-test="meta"]').text()).toContain('Critical');
@@ -166,6 +166,26 @@ describe('AnnouncementDialog', () => {
     const { view } = render(AnnouncementDialog);
     expect(view.text()).toContain('Read how listing and buying work');
     expect(buttons(view)).toEqual(['Close', 'Read on gerowallet.io']);
+  });
+
+  it('draws a hero image for an editorial announcement and never for a headline', () => {
+    const SHA = 'd'.repeat(64);
+    const withThumb = (d: Record<string, unknown>) => { d['media'] = [{ sha256: SHA, type: 'image/png', bytes: 4, w: 1200, h: 630 }]; d['thumb'] = SHA; };
+    const fromFeed = { ...stored(plainDoc(2, withThumb)), tier: 'feed' as const };
+    store().state.items = [stored(plainDoc(1, withThumb)), fromFeed];
+    store().state.openId = annId(1);
+    const { view } = render(AnnouncementDialog);
+    expect(view.findAll('announcement-image-stub')).toHaveLength(1);
+  });
+
+  it('does not draw the hero of a headline, whose image the worker never fetched', async () => {
+    const SHA = 'd'.repeat(64);
+    const fromFeed = { ...stored(plainDoc(2, (d) => { d['media'] = [{ sha256: SHA, type: 'image/png', bytes: 4, w: 1200, h: 630 }]; d['thumb'] = SHA; at(d, 'content', 'en')['body'] = ''; at(d, 'content', 'de')['body'] = ''; })), tier: 'feed' as const };
+    store().state.items = [fromFeed];
+    store().state.openId = annId(2);
+    const { view } = render(AnnouncementDialog);
+    expect(view.findAll('announcement-image-stub')).toHaveLength(0);
+    expect(store().imageUrl).not.toHaveBeenCalled();
   });
 
   it('opens from ?announcement=<id> and takes only that out of the address', () => {

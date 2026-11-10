@@ -23,9 +23,9 @@ enableAutoUnmount(afterEach);
 
 const button = { template: '<button class="g-btn"><slot /></button>' };
 const toggle = {
-  props: ['modelValue', 'disabled'],
+  props: ['modelValue', 'disabled', 'label', 'describedby'],
   emits: ['update:modelValue'],
-  template: '<button class="toggle" :data-on="String(modelValue)" :disabled="disabled" @click="$emit(\'update:modelValue\', !modelValue)"></button>',
+  template: '<button class="toggle" :data-on="String(modelValue)" :aria-label="label" :aria-describedby="describedby" :disabled="disabled" @click="$emit(\'update:modelValue\', !modelValue)"></button>',
 };
 const globals = { plugins: [i18nPlugin], stubs: { 'v-icon': { template: '<i />' }, 'v-row': { template: '<div class="row"><slot /></div>' }, 'v-col': { template: '<div><slot /></div>' }, GButton: button, ToggleSwitch: toggle } };
 
@@ -94,6 +94,22 @@ describe('AnnouncementSettings', () => {
     // The label is a button too: the whole row toggles.
     await view.findAll('.announce-settings__label')[1]!.trigger('click');
     expect(store().setKind).toHaveBeenLastCalledWith('news', true);
+  });
+
+  it('gives each switch a name and a description, and keeps the pointer-only label out of the way', () => {
+    const view = mount(AnnouncementSettings, { global: globals });
+    const switches = view.findAll('.toggle');
+    expect(switches.map((t) => t.attributes('aria-label'))).toEqual(['Product updates', 'News']);
+    for (const t of switches) {
+      const hint = view.find(`#${t.attributes('aria-describedby')}`);
+      expect(hint.exists()).toBe(true);
+      expect(hint.text().length).toBeGreaterThan(10);
+    }
+    // One control per setting for the keyboard and for a screen reader: the switch.
+    for (const label of view.findAll('.announce-settings__label')) {
+      expect(label.attributes('tabindex')).toBe('-1');
+      expect(label.attributes('aria-hidden')).toBe('true');
+    }
   });
 
   it('says so when a change could not be saved', async () => {

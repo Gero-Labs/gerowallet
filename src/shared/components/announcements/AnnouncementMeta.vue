@@ -15,7 +15,7 @@ import { announcementDate, toneOf } from './announcementView';
 
 const props = defineProps<{ item: StoredAnnouncement }>();
 const tone = computed(() => toneOf(props.item));
-const date = computed(() => announcementDate(props.item.document.ts));
+const date = computed(() => announcementDate(props.item.document.ts, props.item.document.kind === 'service'));
 </script>
 
 <style scoped lang="scss">

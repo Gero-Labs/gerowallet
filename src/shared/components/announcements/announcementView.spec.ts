@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { critical, headline, product, warning } from '@/services/announcements/__fixtures__/stored';
-import { ANNOUNCEMENT_ROUTES, iconOf, openGeroUrl, resolveAction, toneOf } from './announcementView';
+import i18n from '@/plugins/i18n';
+import { NOW } from '@/services/announcements/__fixtures__/docs';
+import { plainDoc, stored } from '@/services/announcements/__fixtures__/stored';
+import { ANNOUNCEMENT_ROUTES, announcementDate, iconOf, openGeroUrl, resolveAction, toneOf } from './announcementView';
 
 const doc = (actionRoute: string | null, actionUrl: string | null = null) => ({ actionRoute, actionUrl });
 
@@ -58,8 +61,34 @@ describe('tone and icon', () => {
     expect(toneOf(critical(1))).toBe('error');
     expect(toneOf(warning(2))).toBe('warning');
     expect(toneOf(product(3))).toBe('neutral');
-    expect(iconOf(critical(1))).toBe('mdi-alert-outline');
     expect(iconOf(product(3))).toBe('mdi-creation-outline');
     expect(iconOf(headline(4))).toBe('mdi-newspaper-variant-outline');
+    expect(iconOf(stored(plainDoc(5, (d) => { d['kind'] = 'service'; })))).toBe('mdi-information-outline');
+  });
+
+  it('give each severity a shape of its own, so colour is never the only signal', () => {
+    const shapes = [iconOf(critical(1)), iconOf(warning(2)), iconOf(stored(plainDoc(3, (d) => { d['kind'] = 'service'; })))];
+    expect(shapes).toEqual(['mdi-alert-octagon-outline', 'mdi-alert-outline', 'mdi-information-outline']);
+    expect(new Set(shapes).size).toBe(3);
+    // Whatever the kind: a product update marked critical is shown as critical.
+    expect(iconOf(stored(plainDoc(4, (d) => { d['severity'] = 'critical'; })))).toBe('mdi-alert-octagon-outline');
+  });
+});
+
+describe('announcementDate', () => {
+  it('follows the app language, not the browser, and adds the time only when asked', () => {
+    const before = i18n.locale;
+    try {
+      i18n.locale = 'us';
+      const english = announcementDate(NOW);
+      expect(english).toMatch(/2026/);
+      expect(english).not.toMatch(/\d{1,2}:\d{2}/);
+      expect(announcementDate(NOW, true)).toMatch(/\d{1,2}:\d{2}/);
+      i18n.locale = 'de';
+      expect(announcementDate(NOW)).toBe(new Date(NOW).toLocaleString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' }));
+      expect(announcementDate(NOW)).not.toBe(english);
+    } finally {
+      i18n.locale = before;
+    }
   });
 });

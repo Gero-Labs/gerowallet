@@ -18,6 +18,7 @@
         <button v-for="a in criticalNotices" :key="a.document.id" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': !isUnread(a) }" @click="openAnnouncement(a)">
           <span class="notify-inbox__tile" :class="toneClass('notify-inbox__tile', a)"><v-icon size="15" :color="toneColor(toneOf(a))">{{ iconOf(a) }}</v-icon></span>
           <span class="notify-inbox__text">
+            <span v-if="toneOf(a) !== 'neutral'" class="d-sr-only">{{ $t(`announce.severity.${a.document.severity}`) }}</span>
             <span class="notify-inbox__row-title">{{ textOf(a).title }}</span>
             <span class="notify-inbox__row-body notify-inbox__row-body--clamp">{{ isHeadline(a) ? $t('announce.headline.source') : textOf(a).summary }}</span>
           </span>
@@ -65,6 +66,7 @@
         <button v-for="a in fromGero" :key="a.document.id" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': !isUnread(a) }" @click="openAnnouncement(a)">
           <span class="notify-inbox__tile" :class="toneClass('notify-inbox__tile', a)"><v-icon size="15" :color="toneColor(toneOf(a))">{{ iconOf(a) }}</v-icon></span>
           <span class="notify-inbox__text">
+            <span v-if="toneOf(a) !== 'neutral'" class="d-sr-only">{{ $t(`announce.severity.${a.document.severity}`) }}</span>
             <span class="notify-inbox__row-title">{{ textOf(a).title }}</span>
             <span class="notify-inbox__row-body notify-inbox__row-body--clamp">{{ isHeadline(a) ? $t('announce.headline.source') : textOf(a).summary }}</span>
           </span>

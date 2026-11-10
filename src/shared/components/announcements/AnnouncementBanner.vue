@@ -1,6 +1,6 @@
 <template>
   <div v-if="item && text" class="announce-banner" role="alert">
-    <v-icon size="20" color="var(--g-error)" class="announce-banner__icon">mdi-alert-outline</v-icon>
+    <v-icon size="20" color="var(--g-error)" class="announce-banner__icon">mdi-alert-octagon-outline</v-icon>
     <span class="announce-banner__text">
       <span class="announce-banner__title">{{ text.title }}</span>
       <span class="announce-banner__body">{{ text.summary }}</span>

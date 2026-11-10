@@ -78,6 +78,14 @@ describe('NotifyInbox with announcements', () => {
     expect(row(view, 'Title 3').find('.notify-inbox__tile').classes()).toEqual(['notify-inbox__tile']);
   });
 
+  it('says the severity in words for a screen reader, and nothing for plain information', () => {
+    store().state.items = [critical(1), warning(2), product(3)];
+    const view = render();
+    expect(row(view, 'Title 1').find('.d-sr-only').text()).toBe('Critical');
+    expect(row(view, 'Title 2').find('.d-sr-only').text()).toBe('Warning');
+    expect(row(view, 'Title 3').find('.d-sr-only').exists()).toBe(false);
+  });
+
   it('counts unread announcements with unread pushes, and dims what was read', () => {
     hoisted.items = [activity];
     store().state.items = [product(1), product(2)];

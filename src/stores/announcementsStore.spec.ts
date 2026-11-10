@@ -51,6 +51,7 @@ beforeEach(async () => {
   announcementsStore.close();
   await load();
   announcementsStore.state.now = NOW;
+  hoisted.send.mockClear();
 });
 
 describe('what the page shows', () => {
@@ -162,6 +163,31 @@ describe('what the page tells the worker', () => {
     expect(announcementsStore.unread()).toBe(0);
     announcementsStore.close();
     expect(announcementsStore.state.openId).toBeNull();
+  });
+
+  it('opens nothing while the kill switch is off', async () => {
+    await given([product(1)]);
+    hoisted.flag = false;
+    announcementsStore.open(annId(1));
+    expect(announcementsStore.state.openId).toBeNull();
+    expect(hoisted.send).not.toHaveBeenCalled();
+  });
+
+  it('asks the worker to look when a page opens on a copy more than six hours old, and only then', async () => {
+    // The first read of a page's life.
+    announcementsStore.state.loaded = false;
+    hoisted.db.set(ANNOUNCEMENTS_KEY, { ...snapshotOf([product(1)]), fetchedAt: Date.now() - 7 * 3_600_000 });
+    await load();
+    expect(hoisted.send).toHaveBeenCalledWith({ method: MessageTypes.ANNOUNCEMENTS_REFRESH, data: {} });
+    hoisted.send.mockClear();
+    // A later change of the stored copy is not a page opening.
+    await load();
+    expect(hoisted.send).not.toHaveBeenCalled();
+    // A fresh copy asks for nothing.
+    announcementsStore.state.loaded = false;
+    hoisted.db.set(ANNOUNCEMENTS_KEY, { ...snapshotOf([product(1)]), fetchedAt: Date.now() - 60_000 });
+    await load();
+    expect(hoisted.send).not.toHaveBeenCalled();
   });
 
   it('switches a kind off and on, and never sends anything but product and news', async () => {

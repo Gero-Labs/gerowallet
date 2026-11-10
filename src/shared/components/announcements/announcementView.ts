@@ -7,25 +7,33 @@
 // confirmation, dApp connect), and none carries a query the document chose. `actionUrl` passed the
 // signed rules already (https, one of Gero's sites) and is checked against them again here.
 
+import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { ALLOWED_URL, type AnnouncementDocument } from '@/services/announcements/announcementRules';
 import type { StoredAnnouncement } from '@/services/announcements/announcementStore';
 
 export type AnnouncementTone = 'neutral' | 'warning' | 'error';
 export type AnnouncementSurface = 'dashboard' | 'sidepanel';
 
-/** Severity is never carried by colour alone: every toned element also has an icon and a word. */
+/**
+ * Severity is never carried by colour alone. A toned element also has its own icon shape (iconOf:
+ * an octagon for critical, a triangle for a warning) and the severity as a word, visible in the
+ * dialog and read out by a screen reader in the bell and the snackbar.
+ */
 export function toneOf(item: StoredAnnouncement): AnnouncementTone {
   if (item.document.severity === 'critical') return 'error';
   return item.document.severity === 'warning' ? 'warning' : 'neutral';
 }
 
 const ICONS: Readonly<Record<string, string>> = {
-  service: 'mdi-alert-outline',
+  service: 'mdi-information-outline',
   product: 'mdi-creation-outline',
   news: 'mdi-newspaper-variant-outline',
 };
 
+/** The severity's shape when there is one to signal, else the kind's. */
 export function iconOf(item: StoredAnnouncement): string {
+  if (item.document.severity === 'critical') return 'mdi-alert-octagon-outline';
+  if (item.document.severity === 'warning') return 'mdi-alert-outline';
   return ICONS[item.document.kind] ?? 'mdi-bell-outline';
 }
 
@@ -84,7 +92,12 @@ export function openGeroUrl(url: string | null): boolean {
   return true;
 }
 
-/** 10 Nov 2026, in the browser's own format. */
-export function announcementDate(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+/**
+ * 10 Nov 2026 in the app's language (not the browser's), with the time for a service notice, where
+ * "how long ago did Gero say this" matters.
+ */
+export function announcementDate(ts: number, withTime = false): string {
+  return new Date(ts).toLocaleString(getLocaleCode(String(i18n.locale)), {
+    day: 'numeric', month: 'short', year: 'numeric', ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
+  });
 }

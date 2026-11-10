@@ -28,7 +28,9 @@ export function useAnnouncementView(surface: AnnouncementSurface) {
   const headerIcon = computed(() => (ended.value ? 'mdi-clock-outline' : item.value ? iconOf(item.value) : 'mdi-bell-outline'));
   const headerIconColor = computed(() => (ended.value || !item.value ? 'var(--g-text-3)' : toneColor(toneOf(item.value))));
   const hero = computed(() => {
-    const doc = item.value?.document;
+    // Editorial only: the worker never fetches an image for a headline.
+    if (item.value?.tier !== 'editorial') return null;
+    const doc = item.value.document;
     return doc?.thumb ? doc.media.find((m) => m.sha256 === doc.thumb) ?? null : null;
   });
   const action = computed(() => (item.value ? resolveAction(item.value.document, surface) : null));

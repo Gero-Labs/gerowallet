@@ -103,6 +103,7 @@ describe('an announcement offered to a focused page', () => {
     const { view, $router } = render();
     await present(request(annId(1)));
     expect(view.find('.notify-snack__tile').classes()).toContain('notify-snack__tile--error');
+    expect(view.find('.notify-snack .d-sr-only').text()).toBe('Critical');
     await view.find('.notify-snack__open').trigger('click');
     expect(store().open).toHaveBeenCalledWith(annId(1));
     expect($router.push).not.toHaveBeenCalled();

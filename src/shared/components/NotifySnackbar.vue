@@ -10,6 +10,7 @@
           <v-icon size="15" :color="toneColor(tone(snack))">{{ icon(snack) }}</v-icon>
         </span>
         <div class="notify-snack__text">
+          <span v-if="tone(snack) !== 'neutral'" class="d-sr-only">{{ severityWord(snack) }}</span>
           <span class="notify-snack__title">{{ snack.title }}</span>
           <span class="notify-snack__body" :class="{ 'notify-snack__body--clamp': !!snack.announcementId }">{{ snack.body }}</span>
           <button type="button" class="notify-snack__open" @click="open(snack)">
@@ -48,6 +49,8 @@ function dismiss(id: number) { notifySnackStore.dismiss(id); }
 const announcement = (snack: NotifySnack) => announcementsStore.byId(snack.announcementId ?? null);
 function tone(snack: NotifySnack): AnnouncementTone { const item = announcement(snack); return item ? toneOf(item) : 'neutral'; }
 function icon(snack: NotifySnack): string { const item = announcement(snack); return item ? iconOf(item) : 'mdi-bell-outline'; }
+/** "Warning" or "Critical", for a screen reader: the tile's colour and shape say it to the eye. */
+function severityWord(snack: NotifySnack): string { const item = announcement(snack); return item ? t(`announce.severity.${item.document.severity}`) : ''; }
 /** The host a headline's action opens, or null when this snack is not a headline. */
 function headlineHost(snack: NotifySnack): string | null {
   const item = announcement(snack);

@@ -52,5 +52,5 @@ export function headline(n: number): StoredAnnouncement {
 
 /** A snapshot this build (VERSION + the test keys) verified. */
 export function snapshotOf(items: StoredAnnouncement[], version = VERSION): AnnouncementsSnapshot {
-  return { seq: 1, etag: null, fetchedAt: NOW, verifiedWith: verificationFingerprint(version, TEST_KEYS) ?? '', items };
+  return { seq: 1, fetchedAt: NOW, failures: 0, failedAt: 0, verifiedWith: verificationFingerprint(version, TEST_KEYS) ?? '', items };
 }
