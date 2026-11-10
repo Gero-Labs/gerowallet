@@ -168,6 +168,18 @@ describe('AnnouncementDialog', () => {
     expect(buttons(view)).toEqual(['Close', 'Read on gerowallet.io']);
   });
 
+  it('says a headline came from the blog, and keeps "Signed by Gero" for what an editorial key signed', async () => {
+    store().state.items = [headline(1), product(2)];
+    store().state.openId = annId(1);
+    const { view } = render(AnnouncementDialog);
+    expect(view.text()).toContain('Posted automatically from the Gero blog');
+    expect(view.text()).not.toContain('Signed by Gero');
+    store().state.openId = annId(2);
+    await nextTick();
+    expect(view.text()).toContain('Signed by Gero and verified on this device');
+    expect(view.text()).not.toContain('from the Gero blog');
+  });
+
   it('draws a hero image for an editorial announcement and never for a headline', () => {
     const SHA = 'd'.repeat(64);
     const withThumb = (d: Record<string, unknown>) => { d['media'] = [{ sha256: SHA, type: 'image/png', bytes: 4, w: 1200, h: 630 }]; d['thumb'] = SHA; };

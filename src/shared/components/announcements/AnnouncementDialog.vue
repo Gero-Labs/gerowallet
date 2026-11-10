@@ -34,7 +34,7 @@
 
     <v-card-actions class="announce-dialog__foot">
       <div v-if="item" class="announce-dialog__provenance">
-        <AnnouncementSigned />
+        <AnnouncementSigned :tier="item.tier" />
         <!-- A link that leaves the wallet names where it goes before it is clicked. -->
         <span v-if="action && action.type === 'url'" class="announce-dialog__leaves">{{ $t('announce.action.opensHost', { host: action.host }) }}</span>
       </div>

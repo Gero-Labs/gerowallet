@@ -3693,6 +3693,7 @@ export default {
   'announce.severity.critical': 'Kritisch',
   'announce.headline.source': 'Im Gero-Blog',
   'announce.signed': 'Von Gero signiert und auf diesem Gerät geprüft',
+  'announce.fromBlog': 'Automatisch aus dem Gero-Blog übernommen',
   'announce.action.read': 'Lesen',
   'announce.action.readOn': 'Auf {host} lesen',
   'announce.action.opensHost': 'Öffnet {host} in einem neuen Tab',

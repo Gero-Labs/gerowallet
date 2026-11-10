@@ -3081,6 +3081,7 @@ export default {
   'announce.severity.critical': 'Crítico',
   'announce.headline.source': 'En el blog de Gero',
   'announce.signed': 'Firmado por Gero y verificado en este dispositivo',
+  'announce.fromBlog': 'Publicado automáticamente desde el blog de Gero',
   'announce.action.read': 'Leer',
   'announce.action.readOn': 'Leer en {host}',
   'announce.action.opensHost': 'Abre {host} en una pestaña nueva',

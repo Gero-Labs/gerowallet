@@ -33,7 +33,7 @@
           <v-icon v-if="action.type === 'url'" size="16" class="ml-2">mdi-open-in-new</v-icon>
         </GButton>
         <GButton v-else tier="secondary" block @click="close()">{{ $t('common.close') }}</GButton>
-        <AnnouncementSigned v-if="item" compact class="announce-sheet__signed" />
+        <AnnouncementSigned v-if="item" :tier="item.tier" compact class="announce-sheet__signed" />
       </div>
     </template>
   </BottomSheet>

@@ -3148,6 +3148,7 @@ export default {
   'announce.severity.critical': 'Critical',
   'announce.headline.source': 'On the Gero blog',
   'announce.signed': 'Signed by Gero and verified on this device',
+  'announce.fromBlog': 'Posted automatically from the Gero blog',
   'announce.action.read': 'Read',
   'announce.action.readOn': 'Read on {host}',
   'announce.action.opensHost': 'Opens {host} in a new tab',
