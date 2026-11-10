@@ -6,7 +6,7 @@
     <DustParticleCanvas class="dust-line-canvas" :active="animate" :fillPct="fillPct" />
 
     <div class="dust-line-body">
-      <span class="dust-line-label">{{ label }}</span>
+      <span class="dust-line-label" :title="labelTitle">{{ label }}</span>
       <span v-if="capacityLabel" class="dust-line-capacity g-num">{{ capacityLabel }}</span>
 
       <v-btn
@@ -33,6 +33,7 @@ import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 import { walletStore } from '@/stores/walletStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
+import { useFetchedMidnightTip, useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { getDustPending, dustPendingRevision } from '@/shared/composables/useDustPending';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { debugLog } from '@/utils/debug';
@@ -150,10 +151,20 @@ const fillPct = computed(() => {
 });
 const animate = computed(() => true);
 
+// While Midnight data is paused the relay cannot show the registration, so
+// the line does not promise "a few hours".
+const pendingTip = useFetchedMidnightTip(
+  () => walletStore.loggedWallet?.network ?? '',
+  () => effectiveStatus.value === 'Pending',
+);
+const { paused: midnightDataPaused } = useMidnightDataFreshness(() => pendingTip.value);
+const pendingWhilePaused = computed(() => effectiveStatus.value === 'Pending' && midnightDataPaused.value);
+const labelTitle = computed(() => (pendingWhilePaused.value ? t('midnight.dataPaused.cnightPending') : undefined));
+
 const label = computed(() => {
   switch (effectiveStatus.value) {
     case 'Registered': return t('midnight.dustLineGenerating');
-    case 'Pending': return t('midnight.dustLinePending');
+    case 'Pending': return pendingWhilePaused.value ? t('midnight.dataPaused.dustLinePending') : t('midnight.dustLinePending');
     case 'Duplicated': return t('midnight.dustLineDuplicated');
     case 'Invalid': return t('midnight.dustLineInvalid');
     default: return t('midnight.dustLinePromo');

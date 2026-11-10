@@ -26,7 +26,7 @@
         <span class="status-dot status-dot--pending"></span>
         <span>{{ t('midnight.cnightIncomingPending', { count: incomingCnightPending }) }}</span>
         <v-spacer />
-        <span class="status-pill-help">{{ t('midnight.relayFewHours') }}</span>
+        <span class="status-pill-help" data-test="incoming-pending-help">{{ pendingHelp }}</span>
       </div>
 
       <!-- Hero card: the DUST recipient address. This is the thing the user is
@@ -255,6 +255,7 @@ import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccou
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
@@ -362,10 +363,16 @@ const statusLabel = computed(() => {
   }
 });
 
+// While Midnight data is paused the relay cannot show a registration, so
+// "a few hours" would be a promise the wallet cannot keep.
+const { paused: midnightDataPaused } = useMidnightDataFreshness();
+const pendingHelp = computed(() =>
+  (midnightDataPaused.value ? t('midnight.dataPaused.cnightPending') : t('midnight.relayFewHours')));
+
 const statusHelp = computed(() => {
   switch (registrationStatus.value) {
     case 'Registered': return '';
-    case 'Pending': return t('midnight.relayFewHours');
+    case 'Pending': return pendingHelp.value;
     case 'Invalid': return '';
     default: return '';
   }

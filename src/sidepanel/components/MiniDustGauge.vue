@@ -14,6 +14,8 @@
         <template v-if="!hideBalances">{{ dustFmt }} {{ dustTicker }}</template>
         <template v-else>••••</template>
         <span class="mini-dust__pct"> · {{ pct.toFixed(1) }}%</span>
+        <!-- Midnight data is paused: the last reading, not ticking. -->
+        <span v-if="dustEstimate" class="mini-dust__estimate" data-test="dust-estimate"> · {{ $t('midnight.dataPaused.estimate') }}</span>
       </span>
     </div>
     <div class="mini-dust__bar" role="progressbar" :aria-valuenow="pct" aria-valuemin="0" aria-valuemax="100">
@@ -75,7 +77,7 @@ const dustTicker = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 
 const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
-const { dustBalance, dustGenerating, dustCap, registrationStatus } = useMidnightDustLive();
+const { dustBalance, dustGenerating, dustCap, registrationStatus, estimate: dustEstimate } = useMidnightDustLive();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
@@ -149,7 +151,8 @@ const pct = computed(() => {
   return Math.max(0, Math.min(100, p));
 });
 const isFull = computed(() => isRegistered.value && dustCap.value > 0n && pct.value >= 99.95);
-const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value);
+// No charging animation while Midnight data is paused: the value is not moving.
+const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value && !dustEstimate.value);
 
 function fmt(value: bigint, digits: number): string {
   const whole = value / DUST_DIVISOR;
@@ -228,6 +231,10 @@ function onSponsorSaved(): void {
 .is-charging .mini-dust__value,
 .is-full .mini-dust__value {
   color: #f3ddae;
+}
+
+.mini-dust__estimate {
+  color: var(--g-warning);
 }
 
 .mini-dust__pct {

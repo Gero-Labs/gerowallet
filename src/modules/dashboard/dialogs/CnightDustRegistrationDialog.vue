@@ -372,6 +372,7 @@ import { Network } from '@/models/types';
 import { DustRegistrationUtxoDto } from '@/api/midnight-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
+import { useFetchedMidnightTip, useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
@@ -521,8 +522,18 @@ const statusLabel = computed(() => {
   }
 });
 
+// While Midnight data is paused the relay cannot show the registration, so
+// "a few hours" would be a promise the wallet cannot keep.
+const pendingTip = useFetchedMidnightTip(
+  () => walletStore.loggedWallet?.network ?? '',
+  () => registrationStatus.value === 'Pending',
+);
+const { paused: midnightDataPaused } = useMidnightDataFreshness(() => pendingTip.value);
+
 const statusHelp = computed(() => {
-  if (registrationStatus.value === 'Pending') return t('midnight.relayFewHours');
+  if (registrationStatus.value === 'Pending') {
+    return midnightDataPaused.value ? t('midnight.dataPaused.cnightPending') : t('midnight.relayFewHours');
+  }
   if (registrationStatus.value === 'Duplicated') return t('midnight.cnightDuplicateCount', { count: registrations.value.length });
   return '';
 });

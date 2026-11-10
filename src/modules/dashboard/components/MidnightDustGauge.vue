@@ -27,6 +27,8 @@
         <template v-else>
           <span class="dust-gauge__balance-num">{{ dustCurrentFmt }}</span>
           <span class="dust-gauge__balance-unit">{{ dustCurrency }}</span>
+          <!-- Midnight data is paused: the last reading, not ticking. -->
+          <span v-if="dustEstimate" class="dust-gauge__estimate" data-test="dust-estimate">{{ $t('midnight.dataPaused.estimate') }}</span>
         </template>
       </div>
     </div>
@@ -107,6 +109,7 @@ const {
   dustCap,
   registrationStatus,
   nightRegistered,
+  estimate: dustEstimate,
 } = useMidnightDustLive();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
@@ -194,7 +197,8 @@ const pct = computed(() => {
   return Math.max(0, Math.min(100, p));
 });
 const isFull = computed(() => isRegistered.value && dustCap.value > 0n && pct.value >= 99.95);
-const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value);
+// No charging animation while Midnight data is paused: the value is not moving.
+const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value && !dustEstimate.value);
 
 function fmt(value: bigint, digits: number): string {
   const whole = value / DUST_DIVISOR;
@@ -299,6 +303,12 @@ function onSponsorSaved(): void {
 .dust-gauge__balance-unit {
   font-size: 11px;
   color: var(--g-text-3);
+}
+
+.dust-gauge__estimate {
+  font-size: 11px;
+  color: var(--g-warning);
+  margin-left: 4px;
 }
 
 /* Battery track */

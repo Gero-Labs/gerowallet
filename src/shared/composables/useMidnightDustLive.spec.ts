@@ -202,4 +202,46 @@ describe('DUST account-state polling', () => {
       expect(live.settled.value).toBe(true);
     });
   });
+
+  describe('while Midnight data is paused', () => {
+    const store = midnightStore as unknown as { tip?: { hash: string | null; height: number; timestamp: number } };
+    afterEach(() => { delete store.tip; mocks.pathBBalance.value = 0n; mocks.pathBAsOfMs.value = 0; });
+    const generating = { ...state('1000'), dust_generating: '10', dust_cap: '1000000' };
+
+    it('ticks the battery forward on fresh data, and says it is not an estimate', async () => {
+      store.tip = { hash: 'h', height: 10, timestamp: Date.now() - 6_000 };
+      mocks.get.mockResolvedValue(generating);
+      const live = mount();
+      await settle();
+      expect(live.estimate.value).toBe(false);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(live.dustBalance.value).toBeGreaterThan(1000n);
+    });
+
+    it('holds the last reading with no live tick, and labels it an estimate', async () => {
+      store.tip = { hash: 'h', height: 10, timestamp: Date.now() - 11 * 60_000 };
+      mocks.get.mockResolvedValue(generating);
+      mocks.pathBBalance.value = 500n;
+      mocks.pathBAsOfMs.value = Date.now();
+      const live = mount();
+      await settle();
+      expect(live.estimate.value).toBe(true);
+      const held = live.dustBalance.value;
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(live.dustBalance.value).toBe(held);
+      expect(held).toBe(1500n);
+    });
+
+    it('starts ticking again once a fresh tip arrives', async () => {
+      store.tip = { hash: 'h', height: 10, timestamp: Date.now() - 11 * 60_000 };
+      mocks.get.mockResolvedValue(generating);
+      const live = mount();
+      await settle();
+      expect(live.estimate.value).toBe(true);
+      store.tip = { hash: 'h2', height: 200, timestamp: Date.now() };
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(live.estimate.value).toBe(false);
+      expect(live.dustBalance.value).toBeGreaterThan(1000n);
+    });
+  });
 });

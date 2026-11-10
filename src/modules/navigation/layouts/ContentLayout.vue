@@ -79,7 +79,9 @@
                     <v-tooltip
                       location="bottom"
                       :content-class="
-                        (isMidnight ? isMidnightConnected : connected)
+                        isMidnightPaused
+                          ? 'network-tooltip connecting'
+                          : (isMidnight ? isMidnightConnected : connected)
                           ? 'network-tooltip'
                           : (isMidnight ? isMidnightConnecting : connecting)
                           ? 'network-tooltip connecting'
@@ -93,13 +95,19 @@
                           v-bind="activatorProps"
 
                         >
+                          <!-- Midnight: a connected socket whose blocks are old is "Paused"
+                               (amber, no streaming animation), never "Online". -->
                           <v-icon
                             size="small"
-                            :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
+                            :color="isMidnightPaused ? 'warning' : (isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                             :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
+                            data-test="network-chip-icon"
                           >
-                            {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
+                            {{ isMidnightPaused ? 'mdi-pause-circle-outline' : (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                           </v-icon>
+                          <span v-if="isMidnightPaused" class="network-paused-label t-caption" data-test="network-chip-paused">
+                            {{ t('midnight.dataPaused.chip') }}
+                          </span>
 
                           <!-- Small progress bar (hidden in compact mode).
                                Cardano: epoch-slot percentage as a definite value.
@@ -126,6 +134,9 @@
                         <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                         <template v-if="isMidnight">
                           <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
+                          <div v-if="isMidnightPaused" class="network-tooltip-detail" data-test="network-paused-detail">
+                            {{ t('midnight.dataPaused.detail', { block: midnightFreshness.height.value, age: midnightFreshness.ageLabel.value }) }}
+                          </div>
                         </template>
                         <template v-else-if="isBitcoin">
                           <!-- Bitcoin has no epoch — show block height instead. -->
@@ -139,9 +150,9 @@
                           <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                           <span
                             :style="
-                              (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
+                              isMidnightPaused ? { color: 'var(--g-warning)' } : (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
                             "
-                            >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
+                            >{{ isMidnightPaused ? t('midnight.dataPaused.chip') : (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
                           >
                         </div>
                       </div>
@@ -310,6 +321,8 @@ import { OPEN_SETTINGS_ON_LOAD_KEY } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { midnightNetworkChipState } from '@/chains/midnight/midnightDataFreshness';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -475,9 +488,15 @@ const lastSyncTimestamp = computed(() => {
 });
 
 // Midnight WS connection state mirrors midnightStore.networkStatus rather than
-// the global Cardano `loadingState.connected/connecting`.
-const isMidnightConnected = computed(() => midnightNetworkStatus.value === 'connected');
-const isMidnightConnecting = computed(() => midnightNetworkStatus.value === 'connecting');
+// the global Cardano `loadingState.connected/connecting`. A connected socket
+// whose tip is more than ten minutes old is "paused", not online
+// (midnightDataFreshness.ts): the data behind balances is not advancing.
+const midnightFreshness = useMidnightDataFreshness();
+const midnightChipState = computed(() =>
+  midnightNetworkChipState(midnightNetworkStatus.value, midnightFreshness.paused.value));
+const isMidnightConnected = computed(() => midnightChipState.value === 'online');
+const isMidnightPaused = computed(() => isMidnight.value && midnightChipState.value === 'paused');
+const isMidnightConnecting = computed(() => midnightChipState.value === 'connecting');
 
 const isWelcomeDone = computed({
   get() {
@@ -976,6 +995,19 @@ div.v-toolbar__content {
 
 .network-tooltip-content strong {
   color: var(--g-accent) !important;
+}
+
+/* The "Data paused" sentence: wraps instead of widening the tooltip. */
+.network-tooltip-detail {
+  max-width: 320px;
+  white-space: normal;
+  color: var(--g-text-2);
+}
+
+/* "Paused" beside the network icon, in the same amber as the icon. */
+.network-paused-label {
+  color: var(--g-warning);
+  white-space: nowrap;
 }
 
 /* Search field in top nav bar */
