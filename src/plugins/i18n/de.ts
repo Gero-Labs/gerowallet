@@ -5754,6 +5754,13 @@ export default {
   'midnight.dustSourcesGeneratingHere': 'Generiert für diese Wallet',
   'midnight.dustRelayEstimate': 'Relay zu Midnight (einige Stunden)',
   'midnight.relayFewHours': 'einige Stunden',
+  'midnight.dataPaused.chip': 'Pausiert',
+  'midnight.dataPaused.detail': 'Midnight-Daten sind bei Block {block} ({age}) pausiert. Guthaben und Verlauf sind möglicherweise nicht aktuell.',
+  'midnight.dataPaused.caption': 'Stand: Block {block} · {age}',
+  'midnight.dataPaused.estimate': 'Schätzung',
+  'midnight.dataPaused.estimateCaption': 'Schätzung · Stand: Block {block} · {age}',
+  'midnight.dataPaused.cnightPending': 'Deine Registrierung ist auf Cardano. Midnight zeigt sie an, sobald die Midnight-Daten von GeroWallet aufgeholt haben.',
+  'midnight.dataPaused.dustLinePending': 'DUST-Registrierung ausstehend · Midnight-Daten pausiert',
   'midnight.dustSourcesReadOnly': 'Keine lokalen Schlüssel',
   // Zeilenzustände, die kein einfaches „Hier erzeugen“ anbieten dürfen — ein
   // Stake-Credential darf genau eine aktive Registrierung tragen.
