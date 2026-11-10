@@ -27,12 +27,12 @@ const stored: StoredAnnouncement = {
   },
 };
 
-function harness(opts: { item?: StoredAnnouncement | null | 'throw'; toast?: boolean; locale?: string; noLookup?: boolean } = {}) {
+function harness(opts: { item?: StoredAnnouncement | null | 'throw'; quiet?: boolean; toast?: boolean; locale?: string; noLookup?: boolean } = {}) {
   const storage = memoryNotifyStorage({ notifyWallets: { 4: { walletTag: '00112233445566778899aabbccddeeff' } } });
   const store = createNotifyStore(storage);
-  const announcement = vi.fn(async (_aid: string) => {
+  const announcement = vi.fn(async (_aid: string, _kind?: string) => {
     if (opts.item === 'throw') throw new Error('lookup failed');
-    return opts.item === undefined ? stored : opts.item;
+    return { item: opts.item === undefined ? stored : opts.item, quiet: opts.quiet ?? false };
   });
   const deps: NotifyPushDeps = {
     store,
@@ -53,7 +53,7 @@ describe('announcement push', () => {
   it('shows the verified announcement in the stored locale, tagged by its id', async () => {
     const h = harness();
     const r = await h.handlers.handlePush(push());
-    expect(h.announcement).toHaveBeenCalledWith(AID);
+    expect(h.announcement).toHaveBeenCalledWith(AID, 'service');
     expect(r.title).toBe('Cardano mainnet sync is delayed');
     expect(r.body).toBe('Balances may be a few minutes behind.');
     expect(r.tag).toBe(announcementTag(AID));
@@ -79,6 +79,23 @@ describe('announcement push', () => {
     }
     const noLookup = await harness({ noLookup: true }).handlers.handlePush(push());
     expect(noLookup.tag).toBe(GENERIC_ANNOUNCEMENT_TAG);
+  });
+
+  it('shows the generic text without a sound, and no snackbar, for one the wallet knows is not for this user', async () => {
+    // Chrome requires a notification for every push (userVisibleOnly), so it cannot be dropped.
+    const h = harness({ item: null, quiet: true, toast: true });
+    const r = await h.handlers.handlePush(push());
+    expect(r.title).toBe(pushStrings.us.PUSH_ANNOUNCEMENT_TITLE);
+    expect(h.deps.presentToPages).not.toHaveBeenCalled();
+    expect(h.deps.showNotification).toHaveBeenCalledWith(pushStrings.us.PUSH_ANNOUNCEMENT_TITLE, expect.objectContaining({ tag: GENERIC_ANNOUNCEMENT_TAG, silent: true, renotify: false }));
+    // One that could not be checked in time still makes a sound: it may be for this user.
+    const loud = harness({ item: null, quiet: false });
+    await loud.handlers.handlePush(push());
+    expect(loud.deps.showNotification).toHaveBeenCalledWith(pushStrings.us.PUSH_ANNOUNCEMENT_TITLE, expect.objectContaining({ silent: false }));
+    // A verified one is never silenced, whatever the lookup says about quiet.
+    const verified = harness({ quiet: true });
+    await verified.handlers.handlePush(push());
+    expect(verified.deps.showNotification).toHaveBeenCalledWith('Cardano mainnet sync is delayed', expect.objectContaining({ silent: false }));
   });
 
   it('never shows text that came with the push itself', async () => {

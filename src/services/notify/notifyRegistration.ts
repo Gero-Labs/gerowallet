@@ -76,6 +76,12 @@ export interface NotifyRegistrationDeps {
   produceProof: (auth: { password?: string; privateKeyBytes?: Uint8Array }) => Promise<boolean>;
   /** The announcement kinds switched off on this device (`product`, `news`); sent with every PUT /device. */
   announcementsOff?: () => Promise<string[]>;
+  /**
+   * What this build can do with a push (`DEVICE_CAPS`). gero-sync sends announcement pushes only to
+   * a device that lists `announcements`, so a build that cannot verify one (no key pinned) lists
+   * nothing. Absent: nothing.
+   */
+  caps?: () => string[];
   now?: () => number;
   random?: (n: number) => Uint8Array;
   log?: (message: string) => void;
@@ -199,7 +205,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       osPermission: true, // Chrome grants it with the `notifications` permission
       transport: target ? 'webpush' : 'none',
       ...(target ? { webpush: target } : {}),
-      caps: [...DEVICE_CAPS],
+      caps: (deps.caps?.() ?? []).filter((c) => DEVICE_CAPS.includes(c)),
       announcementsOff: await announcementsOff(),
     };
   }

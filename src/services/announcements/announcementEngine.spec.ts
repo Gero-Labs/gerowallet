@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@/services/notify/notifyAuth';
 import {
-  createAnnouncementEngine, PAGE_MIN_INTERVAL_MS, PUSH_BUDGET_MS, SOCKET_JITTER_MS, START_MIN_INTERVAL_MS, type AnnouncementEngineDeps,
+  BACKOFF_BASE_MS, BACKOFF_MAX_MS, createAnnouncementEngine, PAGE_MIN_INTERVAL_MS, PUSH_BUDGET_MS, SOCKET_JITTER_MS, START_MIN_INTERVAL_MS,
+  type AnnouncementEngineDeps,
 } from './announcementEngine';
 import type { AnnouncementFeed, FeedResult, FetchedMedia } from './announcementFeed';
 import {
@@ -36,7 +37,8 @@ interface Harness {
   engine: ReturnType<typeof createAnnouncementEngine>;
   storage: ReturnType<typeof memoryAnnouncementStorage>;
   store: ReturnType<typeof createAnnouncementStore>;
-  feedCalls: Array<string | null>;
+  /** One entry per request to the feed: what was sent with it (always nothing). */
+  feedCalls: unknown[][];
   mediaCalls: string[];
   presented: string[];
   logs: string[];
@@ -53,14 +55,14 @@ function harness(over: Partial<AnnouncementEngineDeps> = {}, keys: VerifyKeys = 
   const storage = memoryAnnouncementStorage();
   const store = createAnnouncementStore(storage);
   const h = {
-    storage, store, feedCalls: [] as Array<string | null>, mediaCalls: [] as string[], presented: [] as string[], logs: [] as string[],
+    storage, store, feedCalls: [] as unknown[][], mediaCalls: [] as string[], presented: [] as string[], logs: [] as string[],
     timers: [] as Array<{ fn: () => void; ms: number }>, clock: { now: NOW }, media: new Map<string, FetchedMedia | null>(),
     install: { version: '2.9.0', networks: ['cardano-mainnet'] }, flag: { on: true }, prefsChanged: 0,
   } as unknown as Harness;
   let next: FeedResult | (() => Promise<FeedResult>) = { status: 'failed', reason: 'unset' };
   h.serve = (result) => { next = result; };
   const fake: AnnouncementFeed = {
-    fetchFeed: async (etag) => { h.feedCalls.push(etag); return typeof next === 'function' ? next() : next; },
+    fetchFeed: async (...sent: unknown[]) => { h.feedCalls.push(sent); return typeof next === 'function' ? next() : next; },
     fetchMedia: async (sha) => { h.mediaCalls.push(sha); return h.media.get(sha) ?? null; },
   };
   h.engine = createAnnouncementEngine({
@@ -78,7 +80,7 @@ function harness(over: Partial<AnnouncementEngineDeps> = {}, keys: VerifyKeys = 
   return h;
 }
 
-const ok = (seq: number, envelopes: unknown[], etag: string | null = `W/"${seq}"`): FeedResult => ({ status: 'ok', seq, etag, envelopes });
+const ok = (seq: number, envelopes: unknown[]): FeedResult => ({ status: 'ok', seq, envelopes });
 const stored = async (h: Harness) => (await h.store.getSnapshot()).items.map((i) => i.document.id);
 const visible = async (h: Harness) => visibleAnnouncements(await h.store.getSnapshot(), await h.store.getPrefs(), h.install, h.clock.now).map((i) => i.document.id);
 
@@ -137,36 +139,79 @@ describe('announcement engine: what is kept', () => {
     h.serve({ status: 'failed', reason: 'network' });
     expect(await h.engine.refresh('socket')).toBe('failed');
     expect(await stored(h)).toEqual([id(1), id(2)]);
+    expect((await h.store.getSnapshot()).seq).toBe(1);
+    h.clock.now += BACKOFF_BASE_MS;
     h.serve(ok(2, [await signEditorial(plain(2))]));
     await h.engine.refresh('socket');
     expect(await stored(h)).toEqual([id(2)]);
     expect((await h.store.getSnapshot()).seq).toBe(2);
   });
 
-  it('drops what expired when the feed says "unchanged", and keeps the first-seen time across refreshes', async () => {
+  it('keeps the first-seen time across refreshes, and stops showing what expired without asking the feed', async () => {
     const h = harness();
     const short = plain(1, (d) => { d['exp'] = NOW + 60_000; });
     h.serve(ok(1, [await signEditorial(short), await signEditorial(plain(2))]));
     await h.engine.refresh('start');
     const first = (await h.store.getSnapshot()).items.find((i) => i.document.id === id(2))!.firstSeenAt;
     h.clock.now = NOW + 120_000;
-    h.serve({ status: 'unchanged' });
-    expect(await h.engine.refresh('socket')).toBe('unchanged');
-    expect(await stored(h)).toEqual([id(2)]);
+    expect(await visible(h)).toEqual([id(2)]);
     h.serve(ok(2, [await signEditorial(plain(2)), await signEditorial(plain(3))]));
     await h.engine.refresh('socket');
     expect((await h.store.getSnapshot()).items.find((i) => i.document.id === id(2))!.firstSeenAt).toBe(first);
   });
 
-  it('reuses the ETag only while the pinned keys and the version are the same', async () => {
+  it('sends the server nothing it could recognise this client by', async () => {
     const h = harness();
-    h.serve(ok(1, [await signEditorial(plain(1))], 'W/"1.1"'));
+    h.serve(ok(1, [await signEditorial(plain(1))]));
     await h.engine.refresh('start');
-    h.serve({ status: 'unchanged' });
     await h.engine.refresh('socket');
-    h.install.version = '2.10.0'; // an update may pin a new key: everything is verified again
+    h.install.version = '2.10.0';
     await h.engine.refresh('socket');
-    expect(h.feedCalls).toEqual([null, 'W/"1.1"', null]);
+    // No ETag, no last-seen version, no arguments at all: every read is the same request.
+    expect(h.feedCalls).toEqual([[], [], []]);
+  });
+
+  it('backs off from a feed that keeps failing, longer each time, whatever asks', async () => {
+    const h = harness();
+    h.serve({ status: 'failed', reason: 'http_503' });
+    expect(await h.engine.refresh('start')).toBe('failed');
+    // Inside the back-off nothing is asked: not for a socket frame, a push or a page.
+    for (const reason of ['socket', 'push', 'page', 'start'] as const) expect(await h.engine.refresh(reason)).toBe('failed');
+    expect(h.feedCalls).toHaveLength(1);
+    h.clock.now += BACKOFF_BASE_MS;
+    await h.engine.refresh('socket');
+    expect(h.feedCalls).toHaveLength(2);
+    // Two failures in a row: twice as long.
+    h.clock.now += BACKOFF_BASE_MS;
+    await h.engine.refresh('socket');
+    expect(h.feedCalls).toHaveLength(2);
+    h.clock.now += BACKOFF_BASE_MS;
+    await h.engine.refresh('socket');
+    expect(h.feedCalls).toHaveLength(3);
+    // Never longer than the cap, however long it has been failing.
+    for (let i = 0; i < 12; i++) { h.clock.now += BACKOFF_MAX_MS; await h.engine.refresh('socket'); }
+    const calls = h.feedCalls.length;
+    h.clock.now += BACKOFF_MAX_MS;
+    await h.engine.refresh('socket');
+    expect(h.feedCalls).toHaveLength(calls + 1);
+    // One good read and it is forgotten.
+    h.clock.now += BACKOFF_MAX_MS;
+    h.serve(ok(1, []));
+    expect(await h.engine.refresh('socket')).toBe('updated');
+    expect(await h.engine.refresh('socket')).toBe('updated');
+  });
+
+  it('survives a worker restart inside the back-off, and a clock that moved back', async () => {
+    const h = harness();
+    h.serve({ status: 'failed', reason: 'network' });
+    await h.engine.refresh('start');
+    const restarted = harness({ store: h.store, now: () => h.clock.now });
+    restarted.serve(ok(1, []));
+    expect(await restarted.engine.refresh('socket')).toBe('failed');
+    expect(restarted.feedCalls).toHaveLength(0);
+    // A failure "in the future" cannot hold the feed off for ever.
+    h.clock.now -= 24 * 3_600_000;
+    expect(await restarted.engine.refresh('socket')).toBe('updated');
   });
 
   it('makes one request for two refreshes that overlap', async () => {
@@ -185,7 +230,7 @@ describe('announcement engine: what is kept', () => {
     const h = harness({}, { editorial: [], feed: [] });
     h.serve(ok(1, [await signEditorial(plain(1))]));
     expect(await h.engine.refresh('start')).toBe('unchanged');
-    expect(await h.engine.forPush(id(1))).toBeNull();
+    expect(await h.engine.forPush(id(1))).toEqual({ item: null, quiet: true });
     expect(h.feedCalls).toHaveLength(0);
   });
 
@@ -347,20 +392,59 @@ describe('announcement engine: the socket and the push', () => {
     h.serve(ok(1, []));
     await h.engine.refresh('start');
     h.serve(ok(2, [await signEditorial(plain(1))]));
-    const item = await h.engine.forPush(id(1));
-    expect(item?.document.content['en']?.title).toBe('Mainnet sync is delayed');
+    const found = await h.engine.forPush(id(1));
+    expect(found.quiet).toBe(false);
+    expect(found.item?.document.content['en']?.title).toBe('Mainnet sync is delayed');
     await h.engine.refresh('socket');
     expect(h.presented).toEqual([]);
   });
 
-  it('gives a push nothing when the announcement is not there, was switched off, or the id is not one', async () => {
+  it('gives a push nothing, quietly, when the wallet knows the announcement is not for this user', async () => {
     const h = harness();
-    h.serve(ok(1, [await signEditorial(plain(1, (d) => { d['kind'] = 'news'; }))]));
-    expect(await h.engine.forPush(id(9))).toBeNull();
-    expect(await h.engine.forPush('../../feed')).toBeNull();
-    expect(await h.engine.forPush(undefined)).toBeNull();
+    h.serve(ok(1, [
+      await signEditorial(plain(1, (d) => { d['kind'] = 'news'; })),
+      await signEditorial(plain(2, (d) => { at(d, 'audience')['networks'] = ['cardano-preprod']; })),
+      await signEditorial(plain(3, (d) => { at(d, 'audience')['minVersion'] = { extension: '9.0.0' }; })),
+    ]));
+    // Not in the feed (taken down, or never there), for another network, for a newer version.
+    expect(await h.engine.forPush(id(9))).toEqual({ item: null, quiet: true });
+    expect(await h.engine.forPush(id(2))).toEqual({ item: null, quiet: true });
+    expect(await h.engine.forPush(id(3))).toEqual({ item: null, quiet: true });
+    // A kind the user switched off.
     await h.engine.setPrefs(['news']);
-    expect(await h.engine.forPush(id(1))).toBeNull();
+    expect(await h.engine.forPush(id(1))).toEqual({ item: null, quiet: true });
+    // The kill switch: the announcement is there and verified, and still not handed out.
+    await h.engine.setPrefs([]);
+    h.flag.on = false;
+    expect(await h.engine.forPush(id(1))).toEqual({ item: null, quiet: true });
+  });
+
+  it('is not quiet when it could not find out: the announcement may be for this user', async () => {
+    const h = harness();
+    h.serve({ status: 'failed', reason: 'network' });
+    expect(await h.engine.forPush(id(1))).toEqual({ item: null, quiet: false });
+    // Unless the push itself names a kind the user switched off.
+    await h.engine.setPrefs(['news']);
+    expect(await h.engine.forPush(id(1), 'news')).toEqual({ item: null, quiet: true });
+    expect(await h.engine.forPush(id(1), 'service')).toEqual({ item: null, quiet: false });
+    // An id that is not one asks for nothing and decides nothing.
+    expect(await h.engine.forPush('../../feed')).toEqual({ item: null, quiet: false });
+    expect(await h.engine.forPush(undefined)).toEqual({ item: null, quiet: false });
+  });
+
+  it('never fetches the image of a headline', async () => {
+    const h = harness();
+    const headline = feedDoc();
+    delete at(headline, 'audience')['networks'];
+    delete at(headline, 'audience')['minVersion'];
+    headline['media'] = [{ sha256: PNG_SHA, type: 'image/png', bytes: PNG.length, w: 4, h: 4 }];
+    headline['thumb'] = PNG_SHA;
+    h.media.set(PNG_SHA, { type: 'image/png', bytes: PNG });
+    h.serve(ok(1, [await signFeed(headline)]));
+    await h.engine.refresh('start');
+    expect(await stored(h)).toHaveLength(1);
+    expect(h.mediaCalls).toEqual([]);
+    expect(h.storage.media.size).toBe(0);
   });
 
   it('stops waiting for a slow feed after the push budget', async () => {
@@ -371,7 +455,7 @@ describe('announcement engine: the socket and the push', () => {
     const budget = h.timers.find((t) => t.ms === PUSH_BUDGET_MS);
     expect(budget).toBeDefined();
     budget!.fn();
-    expect(await waiting).toBeNull();
+    expect(await waiting).toEqual({ item: null, quiet: false });
   });
 });
 
@@ -394,14 +478,15 @@ describe('announcement engine: what another build verified', () => {
     const h = harness();
     h.serve(ok(1, [await signEditorial(plain(1))]));
     await h.engine.refresh('start');
-    expect((await h.engine.forPush(id(1)))?.document.id).toBe(id(1));
+    expect((await h.engine.forPush(id(1))).item?.document.id).toBe(id(1));
     // The extension updates and the feed cannot be reached: what the old rules accepted is not shown.
     h.install.version = '2.10.0';
     h.serve({ status: 'failed', reason: 'network' });
-    expect(await h.engine.forPush(id(1))).toBeNull();
+    expect((await h.engine.forPush(id(1))).item).toBeNull();
     // Verified again by this version: shown again.
+    h.clock.now += BACKOFF_BASE_MS;
     h.serve(ok(1, [await signEditorial(plain(1))]));
-    expect((await h.engine.forPush(id(1)))?.document.id).toBe(id(1));
+    expect((await h.engine.forPush(id(1))).item?.document.id).toBe(id(1));
   });
 
   it('reads the feed again right after an update, whatever the start throttle says', async () => {
@@ -413,7 +498,7 @@ describe('announcement engine: what another build verified', () => {
     expect(h.feedCalls).toHaveLength(1);
     h.install.version = '2.10.0';
     await h.engine.refresh('start');
-    expect(h.feedCalls).toEqual([null, null]);
+    expect(h.feedCalls).toHaveLength(2);
   });
 
   it('shows nothing that is stored while no key is pinned', async () => {
@@ -423,7 +508,7 @@ describe('announcement engine: what another build verified', () => {
     signed.serve(ok(1, [await signEditorial(plain(1))]));
     await signed.engine.refresh('start');
     const keyless = harness({ store: signed.store }, { editorial: [], feed: [] });
-    expect(await keyless.engine.forPush(id(1))).toBeNull();
+    expect(await keyless.engine.forPush(id(1))).toEqual({ item: null, quiet: true });
     expect(keyless.feedCalls).toEqual([]);
   });
 });

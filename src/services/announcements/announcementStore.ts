@@ -46,9 +46,11 @@ export interface StoredAnnouncement {
 export interface AnnouncementsSnapshot {
   /** The feed version these items came from. */
   seq: number;
-  etag: string | null;
-  /** Last successful or unchanged fetch; 0 before the first. */
+  /** Last successful fetch; 0 before the first. */
   fetchedAt: number;
+  /** Failed reads in a row since then, and when the last one was: the engine backs off on these. */
+  failures: number;
+  failedAt: number;
   /** The pinned keys and version the items were verified under: when either changes, the ETag is not reused. */
   verifiedWith: string;
   items: StoredAnnouncement[];
@@ -63,6 +65,18 @@ export interface AnnouncementState {
 
 export interface AnnouncementPrefs {
   off: OptOutKind[];
+}
+
+/** What a push about an announcement gets back from the engine. */
+export interface PushLookup {
+  /** The verified announcement to show, or null: then only the fixed generic text may be shown. */
+  item: StoredAnnouncement | null;
+  /**
+   * With no item: true when that is a decision (the kind is switched off, it is not for this
+   * install, it was taken down, the kill switch is off, no key is pinned), so the notification Chrome
+   * requires is shown without a sound. False when the feed could not be read in time.
+   */
+  quiet: boolean;
 }
 
 export interface StoredMedia {
@@ -105,7 +119,7 @@ export function memoryAnnouncementStorage(): AnnouncementStorage & { keys: Map<s
   };
 }
 
-export const EMPTY_SNAPSHOT: AnnouncementsSnapshot = Object.freeze({ seq: 0, etag: null, fetchedAt: 0, verifiedWith: '', items: [] }) as AnnouncementsSnapshot;
+export const EMPTY_SNAPSHOT: AnnouncementsSnapshot = Object.freeze({ seq: 0, fetchedAt: 0, failures: 0, failedAt: 0, verifiedWith: '', items: [] }) as AnnouncementsSnapshot;
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -122,8 +136,9 @@ export function readSnapshot(v: unknown): AnnouncementsSnapshot {
   if (!isObject(v) || !Array.isArray(v['items'])) return { ...EMPTY_SNAPSHOT, items: [] };
   return {
     seq: typeof v['seq'] === 'number' && Number.isSafeInteger(v['seq']) ? v['seq'] : 0,
-    etag: typeof v['etag'] === 'string' ? v['etag'] : null,
     fetchedAt: typeof v['fetchedAt'] === 'number' ? v['fetchedAt'] : 0,
+    failures: typeof v['failures'] === 'number' && Number.isSafeInteger(v['failures']) && v['failures'] > 0 ? v['failures'] : 0,
+    failedAt: typeof v['failedAt'] === 'number' ? v['failedAt'] : 0,
     verifiedWith: typeof v['verifiedWith'] === 'string' ? v['verifiedWith'] : '',
     items: v['items'].filter(isStored),
   };
@@ -194,35 +209,50 @@ export interface AnnouncementStore {
 }
 
 export function createAnnouncementStore(storage: AnnouncementStorage = privateAnnouncementStorage): AnnouncementStore {
+  // Every write goes through one queue. `mark` and `pruneState` read a key and write it back, and
+  // they are called at the same time from page messages and from a refresh: unqueued, the later
+  // write drops the earlier one's mark (a snackbar shown twice, an unread dot that comes back).
+  let queue: Promise<unknown> = Promise.resolve();
+  function serial<T>(write: () => Promise<T>): Promise<T> {
+    const run = queue.then(write, write);
+    queue = run.catch(() => undefined);
+    return run;
+  }
   return {
     async getSnapshot() { return readSnapshot(await storage.get(ANNOUNCEMENTS_KEY)); },
-    async setSnapshot(snapshot) { await storage.set(ANNOUNCEMENTS_KEY, snapshot); },
+    setSnapshot(snapshot) { return serial(() => storage.set(ANNOUNCEMENTS_KEY, snapshot)); },
     async getState() { return readState(await storage.get(ANNOUNCEMENT_STATE_KEY)); },
-    async mark(kind, ids, at) {
-      const valid = ids.filter((id) => ANNOUNCEMENT_ID.test(id));
-      if (!valid.length) return;
-      const state = readState(await storage.get(ANNOUNCEMENT_STATE_KEY));
-      let changed = false;
-      for (const id of valid) {
-        if (state[kind][id] === undefined) { state[kind][id] = at; changed = true; }
-      }
-      if (changed) await storage.set(ANNOUNCEMENT_STATE_KEY, state);
-    },
-    async pruneState(keepIds, now) {
-      const state = readState(await storage.get(ANNOUNCEMENT_STATE_KEY));
-      let changed = false;
-      for (const marks of [state.read, state.bannerDismissed, state.presented]) {
-        for (const [id, at] of Object.entries(marks)) {
-          if (!keepIds.has(id) && now - at > STATE_TTL_MS) { delete marks[id]; changed = true; }
+    mark(kind, ids, at) {
+      return serial(async () => {
+        const valid = ids.filter((id) => ANNOUNCEMENT_ID.test(id));
+        if (!valid.length) return;
+        const state = readState(await storage.get(ANNOUNCEMENT_STATE_KEY));
+        let changed = false;
+        for (const id of valid) {
+          if (state[kind][id] === undefined) { state[kind][id] = at; changed = true; }
         }
-      }
-      if (changed) await storage.set(ANNOUNCEMENT_STATE_KEY, state);
+        if (changed) await storage.set(ANNOUNCEMENT_STATE_KEY, state);
+      });
+    },
+    pruneState(keepIds, now) {
+      return serial(async () => {
+        const state = readState(await storage.get(ANNOUNCEMENT_STATE_KEY));
+        let changed = false;
+        for (const marks of [state.read, state.bannerDismissed, state.presented]) {
+          for (const [id, at] of Object.entries(marks)) {
+            if (!keepIds.has(id) && now - at > STATE_TTL_MS) { delete marks[id]; changed = true; }
+          }
+        }
+        if (changed) await storage.set(ANNOUNCEMENT_STATE_KEY, state);
+      });
     },
     async getPrefs() { return readPrefs(await storage.get(ANNOUNCEMENT_PREFS_KEY)); },
-    async setPrefs(off) {
-      const prefs = readPrefs(Array.isArray(off) ? off : []);
-      await storage.set(ANNOUNCEMENT_PREFS_KEY, prefs);
-      return prefs;
+    setPrefs(off) {
+      return serial(async () => {
+        const prefs = readPrefs(Array.isArray(off) ? off : []);
+        await storage.set(ANNOUNCEMENT_PREFS_KEY, prefs);
+        return prefs;
+      });
     },
     async hasMedia(sha) { return SHA256_HEX.test(sha) && (await storage.getMedia(sha)) !== undefined; },
     async putMedia(sha, media) { if (SHA256_HEX.test(sha)) await storage.setMedia(sha, media); },

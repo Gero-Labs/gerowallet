@@ -15,7 +15,7 @@ const CONFIG: NotifyConfig = {
 const PREFS: WalletPrefs = { synced: { categoriesOff: [], typesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null }, device: { muted: false } };
 const TARGET = { endpoint: 'https://push.example.net/push/ep1', p256dh: 'p', auth: 'a', vapidKid: 'v1', expirationTime: null };
 
-function machine(off: { value: unknown }) {
+function machine(off: { value: unknown }, caps: (() => string[]) | null = () => ['announcements']) {
   const puts: DeviceBody[] = [];
   let device: DeviceBody | null = null;
   const view = (): DeviceView => ({
@@ -49,6 +49,7 @@ function machine(off: { value: unknown }) {
     pushManager: () => pm, appVersion: () => '2.9.0', locale: async () => 'us',
     wallets: async () => [], logged: () => null, loadProof: async () => null, produceProof: async () => false,
     announcementsOff: async () => off.value as string[],
+    ...(caps ? { caps } : {}),
     now: () => 1_790_553_600_000, random: (n) => new Uint8Array(n).fill(1),
   });
   return { reg, puts };
@@ -59,6 +60,15 @@ describe('announcement fields of the device registration', () => {
     const m = machine({ value: ['news'] });
     expect(await m.reg.setBrowserEnabled(true)).toBe('ok');
     expect(m.puts.at(-1)).toMatchObject({ caps: ['announcements'], announcementsOff: ['news'] });
+  });
+
+  it('asks for no announcement pushes from a build that cannot verify one', async () => {
+    // No key pinned: every announcement push could only be the generic text, so none is asked for.
+    for (const caps of [() => [], null, () => ['announcements', 'root-access']]) {
+      const m = machine({ value: [] }, caps);
+      await m.reg.setBrowserEnabled(true);
+      expect(m.puts.at(-1)?.caps).toEqual(caps && caps().includes('announcements') ? ['announcements'] : []);
+    }
   });
 
   it('never sends service notices as switched off, whatever the store holds', async () => {

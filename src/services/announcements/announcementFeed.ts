@@ -6,6 +6,13 @@
 // bytes hash to the SHA-256 the signed document names and are a real PNG, JPEG or WebP.
 //
 // Every failure is an answer, never a throw: a bad or unreachable feed must not disturb the worker.
+//
+// Two things a hostile server could otherwise use:
+// - The body is read in pieces and dropped the moment it passes the limit. `content-length` is the
+//   size on the wire (or absent), so a small compressed body can unpack to anything; buffering it
+//   whole first would let one response exhaust the worker's memory.
+// - Nothing the server chose is ever sent back to it. An ETag is a value the server picks and the
+//   client replays, which makes it a per-client token, so there are no conditional requests.
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@/services/notify/notifyAuth';
@@ -24,8 +31,7 @@ export interface FeedDeps {
 }
 
 export type FeedResult =
-  | { status: 'ok'; seq: number; etag: string | null; envelopes: unknown[] }
-  | { status: 'unchanged' }
+  | { status: 'ok'; seq: number; envelopes: unknown[] }
   | { status: 'failed'; reason: string };
 
 export interface FetchedMedia {
@@ -34,7 +40,7 @@ export interface FetchedMedia {
 }
 
 export interface AnnouncementFeed {
-  fetchFeed(etag: string | null): Promise<FeedResult>;
+  fetchFeed(): Promise<FeedResult>;
   /** The image, only when its bytes hash to `sha256`, are of `expectedType` by their magic bytes, and are not oversized. */
   fetchMedia(sha256Hex: string, expectedType: string): Promise<FetchedMedia | null>;
 }
@@ -48,26 +54,49 @@ export function sniffImageType(b: Uint8Array): string | null {
   return null;
 }
 
+/**
+ * The body, read piece by piece, or null once it passes `maxBytes` (the rest is cancelled unread).
+ * The stream yields the bytes after any content decoding, so this bounds what is held in memory.
+ */
+async function readBounded(res: Response, maxBytes: number): Promise<Uint8Array | null> {
+  const reader = res.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) { body.set(chunk, at); at += chunk.length; }
+  return body;
+}
+
 export function createAnnouncementFeed(deps: FeedDeps): AnnouncementFeed {
   const baseUrl = deps.baseUrl.replace(/\/+$/, '');
   const timeoutMs = deps.timeoutMs ?? 8_000;
 
   /** One GET with a hard deadline that also covers reading the body. Null on any failure. */
-  async function get(url: string, headers: Record<string, string>, maxBytes: number): Promise<{ status: number; etag: string | null; body: Uint8Array } | null> {
+  async function get(url: string, maxBytes: number): Promise<{ status: number; body: Uint8Array } | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await deps.fetch(url, {
-        method: 'GET', headers, signal: controller.signal,
+        method: 'GET', headers: {}, signal: controller.signal,
         credentials: 'omit', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer',
       });
-      const etag = res.headers.get('etag');
-      if (res.status !== 200) return { status: res.status, etag, body: new Uint8Array(0) };
+      if (res.status !== 200) return { status: res.status, body: new Uint8Array(0) };
       const declared = Number(res.headers.get('content-length') ?? '0');
       if (Number.isFinite(declared) && declared > maxBytes) return null;
-      const body = new Uint8Array(await res.arrayBuffer());
-      if (body.length > maxBytes) return null;
-      return { status: 200, etag, body };
+      const body = await readBounded(res, maxBytes);
+      return body ? { status: 200, body } : null;
     } catch {
       return null;
     } finally {
@@ -76,10 +105,9 @@ export function createAnnouncementFeed(deps: FeedDeps): AnnouncementFeed {
   }
 
   return {
-    async fetchFeed(etag) {
-      const res = await get(`${baseUrl}/feed?platform=extension`, etag ? { 'If-None-Match': etag } : {}, MAX_FEED_BYTES);
+    async fetchFeed() {
+      const res = await get(`${baseUrl}/feed?platform=extension`, MAX_FEED_BYTES);
       if (!res) return { status: 'failed', reason: 'network' };
-      if (res.status === 304) return { status: 'unchanged' };
       if (res.status !== 200) return { status: 'failed', reason: `http_${res.status}` };
       let parsed: unknown;
       try {
@@ -92,12 +120,12 @@ export function createAnnouncementFeed(deps: FeedDeps): AnnouncementFeed {
         || typeof feed.seq !== 'number' || !Number.isSafeInteger(feed.seq) || feed.seq < 0) {
         return { status: 'failed', reason: 'bad_shape' };
       }
-      return { status: 'ok', seq: feed.seq, etag: res.etag, envelopes: feed.items };
+      return { status: 'ok', seq: feed.seq, envelopes: feed.items };
     },
 
     async fetchMedia(sha256Hex, expectedType) {
       if (!SHA256_HEX.test(sha256Hex) || !MEDIA_TYPES.includes(expectedType)) return null;
-      const res = await get(`${baseUrl}/media/${sha256Hex}`, {}, MAX_MEDIA_BYTES);
+      const res = await get(`${baseUrl}/media/${sha256Hex}`, MAX_MEDIA_BYTES);
       if (!res || res.status !== 200 || res.body.length === 0) return null;
       if (bytesToHex(sha256(res.body)) !== sha256Hex) return null;
       // The type is what the bytes are, never what the server says: a header is not signed.
