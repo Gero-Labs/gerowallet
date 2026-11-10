@@ -40,6 +40,13 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   // Registers a Gero market listing of the logged wallet for sale alerts (market dialogs).
   'NOTIFY_WATCH_LISTINGS',
   'NOTIFY_INTRO_ANSWER',
+  // Broadcast announcements: refresh, read marks, banner dismissal and which kinds are wanted.
+  // None carries content, but a web page must not be able to mark Gero's notices read or switch
+  // them off behind the user's back.
+  'ANNOUNCEMENTS_REFRESH',
+  'ANNOUNCEMENT_READ',
+  'ANNOUNCEMENT_DISMISS_BANNER',
+  'ANNOUNCEMENTS_SET_PREFS',
   // Part of signing: only the wallet's own pages sign (Ledger, Keystone, Trezor over WebUSB).
   'CIP113_SIGN_PREFLIGHT',
   // Trezor signing in the worker; like the preflight, it honours the CIP-113 Send allowance.
