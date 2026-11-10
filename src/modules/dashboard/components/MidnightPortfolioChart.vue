@@ -21,7 +21,7 @@
           </span>
         </div>
         <!-- Only while Midnight data is paused: the block the balances are based on. -->
-        <div v-if="dataPaused" class="data-paused-caption t-caption" data-test="midnight-data-paused-caption">
+        <div v-if="dataPaused" class="data-paused-caption t-caption g-num" data-test="midnight-data-paused-caption">
           {{ $t('midnight.dataPaused.caption', { block: tipHeight, age: tipAge }) }}
         </div>
 
@@ -448,7 +448,7 @@ function formatNight(value: bigint): string {
 /* "As of block N · age", shown only while Midnight data is paused. */
 .data-paused-caption {
   color: var(--g-warning);
-  margin-bottom: 4px;
+  margin-bottom: var(--g-s-1);
 }
 
 .portfolio-amount-masked {

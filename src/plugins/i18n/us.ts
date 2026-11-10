@@ -5842,10 +5842,11 @@ export default {
   'midnight.dustRelayEstimate': 'Relay to Midnight (a few hours)',
   'midnight.relayFewHours': 'a few hours',
   'midnight.dataPaused.chip': 'Paused',
-  'midnight.dataPaused.detail': 'Midnight data is paused at block {block} ({age}) while GeroWallet moves to Midnight\'s new network version. Balances and history may be out of date.',
+  'midnight.dataPaused.detail': 'Midnight data is paused at block {block} ({age}). Balances and history may be out of date.',
   'midnight.dataPaused.caption': 'As of block {block} · {age}',
   'midnight.dataPaused.estimate': 'estimate',
-  'midnight.dataPaused.cnightPending': 'Your registration is on Cardano. Midnight will show it once GeroWallet\'s Midnight data catches up after the network upgrade.',
+  'midnight.dataPaused.estimateCaption': 'Estimate · As of block {block} · {age}',
+  'midnight.dataPaused.cnightPending': 'Your registration is on Cardano. Midnight will show it once GeroWallet\'s Midnight data catches up.',
   'midnight.dataPaused.dustLinePending': 'DUST registration pending · Midnight data paused',
   'midnight.dustSourcesReadOnly': 'No local keys',
   // Row states that must NOT offer a plain "Generate here" — a stake credential

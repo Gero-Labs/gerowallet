@@ -18,6 +18,11 @@
         <v-spacer />
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
+      <!-- Midnight data is paused: the relay can't show a registration yet. Its own
+           line, not the pill's short help slot. -->
+      <p v-if="pausedNoteShown" class="paused-note t-body-sm" data-test="dust-paused-note">
+        {{ t('midnight.dataPaused.cnightPending') }}
+      </p>
 
       <!-- Incoming DUST from a Cardano wallet just registered to this address
            (bound to a Cardano stake credential, so the status pill above, which
@@ -366,8 +371,11 @@ const statusLabel = computed(() => {
 // While Midnight data is paused the relay cannot show a registration, so
 // "a few hours" would be a promise the wallet cannot keep.
 const { paused: midnightDataPaused } = useMidnightDataFreshness();
-const pendingHelp = computed(() =>
-  (midnightDataPaused.value ? t('midnight.dataPaused.cnightPending') : t('midnight.relayFewHours')));
+// The pill keeps its short help; while paused that help is dropped and the
+// sentence goes on its own line under the pill.
+const pendingHelp = computed(() => (midnightDataPaused.value ? '' : t('midnight.relayFewHours')));
+const pausedNoteShown = computed(() => midnightDataPaused.value
+  && (registrationStatus.value === 'Pending' || incomingCnightPending.value > 0));
 
 const statusHelp = computed(() => {
   switch (registrationStatus.value) {
@@ -848,5 +856,9 @@ void props;
   font-size: 12px;
   font-weight: 500;
   color: var(--g-text-1);
+}
+/* "Midnight data is paused" under the status pill, on the spacing grid. */
+.paused-note {
+  margin: var(--g-s-2) 0 0;
 }
 </style>

@@ -89,11 +89,13 @@
                       "
                     >
                       <template v-slot:activator="{ props: activatorProps }">
+                        <!-- Focusable, so keyboard and touch users can open the status tooltip. -->
                         <div
                           style="display: flex; align-items: center; gap: 4px"
                           :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
                           v-bind="activatorProps"
-
+                          tabindex="0"
+                          :aria-label="t('navigation.status')"
                         >
                           <!-- Midnight: a connected socket whose blocks are old is "Paused"
                                (amber, no streaming animation), never "Online". -->
@@ -131,11 +133,13 @@
 
                       <div class="network-tooltip-content">
                         <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
-                        <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                        <!-- A local clock time looks fresh while the data is not: hidden while paused. -->
+                        <div v-if="!isMidnightPaused"><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                         <template v-if="isMidnight">
-                          <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
-                          <div v-if="isMidnightPaused" class="network-tooltip-detail" data-test="network-paused-detail">
-                            {{ t('midnight.dataPaused.detail', { block: midnightFreshness.height.value, age: midnightFreshness.ageLabel.value }) }}
+                          <div>
+                            <strong>Block:</strong>
+                            <span class="g-num">{{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</span>
+                            <template v-if="isMidnightPaused"> · {{ midnightFreshness.ageLabel.value }}</template>
                           </div>
                         </template>
                         <template v-else-if="isBitcoin">
@@ -154,6 +158,10 @@
                             "
                             >{{ isMidnightPaused ? t('midnight.dataPaused.chip') : (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
                           >
+                        </div>
+                        <!-- Last, after the facts it explains. -->
+                        <div v-if="isMidnightPaused" class="network-tooltip-detail" data-test="network-paused-detail">
+                          {{ t('midnight.dataPaused.detail', { block: midnightFreshness.height.value, age: midnightFreshness.ageLabel.value }) }}
                         </div>
                       </div>
                     </v-tooltip>
@@ -997,11 +1005,12 @@ div.v-toolbar__content {
   color: var(--g-accent) !important;
 }
 
-/* The "Data paused" sentence: wraps instead of widening the tooltip. */
+/* The "Data paused" sentence: last, wraps instead of widening the tooltip. */
 .network-tooltip-detail {
-  max-width: 320px;
+  max-width: 300px;
+  margin-top: var(--g-s-2);
   white-space: normal;
-  color: var(--g-text-2);
+  color: var(--g-text-1);
 }
 
 /* "Paused" beside the network icon, in the same amber as the icon. */

@@ -17,6 +17,11 @@
         <v-spacer />
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
+      <!-- Midnight data is paused: the relay can't show the registration yet. Its own
+           line, not the pill's short help slot. -->
+      <p v-if="registrationStatus === 'Pending' && midnightDataPaused" class="paused-note t-body-sm" data-test="cnight-paused-note">
+        {{ t('midnight.dataPaused.cnightPending') }}
+      </p>
 
       <!-- Holdings card: what generates, and where it goes. -->
       <div class="holdings-card">
@@ -531,9 +536,8 @@ const pendingTip = useFetchedMidnightTip(
 const { paused: midnightDataPaused } = useMidnightDataFreshness(() => pendingTip.value);
 
 const statusHelp = computed(() => {
-  if (registrationStatus.value === 'Pending') {
-    return midnightDataPaused.value ? t('midnight.dataPaused.cnightPending') : t('midnight.relayFewHours');
-  }
+  // While paused the short help is dropped; the sentence has its own line under the pill.
+  if (registrationStatus.value === 'Pending') return midnightDataPaused.value ? '' : t('midnight.relayFewHours');
   if (registrationStatus.value === 'Duplicated') return t('midnight.cnightDuplicateCount', { count: registrations.value.length });
   return '';
 });
@@ -1073,5 +1077,9 @@ watch(() => props.isOpen, (open) => {
   line-height: 1.5;
   text-align: center;
   padding: 8px 0;
+}
+/* "Midnight data is paused" under the status pill, on the spacing grid. */
+.paused-note {
+  margin: var(--g-s-2) 0 0;
 }
 </style>

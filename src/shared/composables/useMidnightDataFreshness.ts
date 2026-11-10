@@ -14,7 +14,7 @@ import { computed, getCurrentScope, onScopeDispose, ref, watch, type ComputedRef
 import { midnightStore } from '@/stores/midnightStore';
 import { formatRelativeTime } from '@/shared/utils/relativeTime';
 import { debugLog } from '@/utils/debug';
-import { isMidnightDataPaused, type MidnightTipSnapshot } from '@/chains/midnight/midnightDataFreshness';
+import { blockTimeToMs, isMidnightDataPaused, type MidnightTipSnapshot } from '@/chains/midnight/midnightDataFreshness';
 
 const TICK_MS = 15_000;
 const FETCHED_TIP_TTL_MS = 60_000;
@@ -81,7 +81,8 @@ async function refreshFetchedTip(network: string): Promise<void> {
     const { getMidnightApi } = await import('@/api/midnight-api');
     const block = await getMidnightApi(network).getLatestBlock();
     const tip = typeof block?.hash === 'string' && block.hash && Number.isSafeInteger(block.height)
-      ? { hash: block.hash, height: block.height, timestamp: typeof block.time === 'number' && block.time > 0 ? block.time : 0 }
+      // `/api/blocks/latest` `time` is epoch seconds.
+      ? { hash: block.hash, height: block.height, timestamp: blockTimeToMs(block.time), observedAt: Date.now() }
       : null;
     fetchedTips.value = new Map(fetchedTips.value).set(network, { tip, at: Date.now() });
   } catch (error) {

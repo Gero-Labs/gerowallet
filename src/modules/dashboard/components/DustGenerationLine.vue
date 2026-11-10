@@ -6,7 +6,7 @@
     <DustParticleCanvas class="dust-line-canvas" :active="animate" :fillPct="fillPct" />
 
     <div class="dust-line-body">
-      <span class="dust-line-label" :title="labelTitle">{{ label }}</span>
+      <span class="dust-line-label">{{ label }}</span>
       <span v-if="capacityLabel" class="dust-line-capacity g-num">{{ capacityLabel }}</span>
 
       <v-btn
@@ -159,7 +159,6 @@ const pendingTip = useFetchedMidnightTip(
 );
 const { paused: midnightDataPaused } = useMidnightDataFreshness(() => pendingTip.value);
 const pendingWhilePaused = computed(() => effectiveStatus.value === 'Pending' && midnightDataPaused.value);
-const labelTitle = computed(() => (pendingWhilePaused.value ? t('midnight.dataPaused.cnightPending') : undefined));
 
 const label = computed(() => {
   switch (effectiveStatus.value) {

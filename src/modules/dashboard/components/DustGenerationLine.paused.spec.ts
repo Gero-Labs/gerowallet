@@ -20,7 +20,8 @@ vi.mock('@/shared/components/DustParticleCanvas.vue', async () => {
 import DustGenerationLine from './DustGenerationLine.vue';
 import { resetMidnightDataFreshnessForTests } from '@/shared/composables/useMidnightDataFreshness';
 
-const block = (ageMs: number) => ({ hash: 'b', height: 77, time: Date.now() - ageMs, slot: 0, epoch: 0, epochSlot: 0 });
+// `/api/blocks/latest` `time` is epoch seconds.
+const block = (ageMs: number) => ({ hash: 'b', height: 77, time: Math.floor((Date.now() - ageMs) / 1000), slot: 0, epoch: 0, epochSlot: 0 });
 const stubs = { 'v-btn': { template: '<button><slot /></button>' }, 'v-icon': true };
 
 enableAutoUnmount(afterEach);
@@ -49,13 +50,11 @@ describe('cNIGHT pending line while Midnight data is paused', () => {
     expect(mocks.latest).toHaveBeenCalledTimes(1);
     const label = w.find('.dust-line-label');
     expect(label.text()).toBe('midnight.dataPaused.dustLinePending');
-    expect(label.attributes('title')).toBe('midnight.dataPaused.cnightPending');
 
     mocks.latest.mockResolvedValue(block(3_000));
     await vi.advanceTimersByTimeAsync(61_000);
     await vi.dynamicImportSettled();
     await flushPromises();
     expect(w.find('.dust-line-label').text()).toBe('midnight.dustLinePending');
-    expect(w.find('.dust-line-label').attributes('title')).toBeUndefined();
   });
 });

@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe('useMidnightDataFreshness', () => {
   it('reads the wallet\'s tip: fresh is not paused, and the age says so', () => {
-    midnightStore.tip = { hash: 'h', height: 1234, timestamp: Date.now() - 6_000 };
+    midnightStore.tip = { hash: 'h', height: 1234, timestamp: Date.now() - 6_000, observedAt: Date.now() };
     const f: MidnightDataFreshness = mountWith(() => useMidnightDataFreshness());
     expect(f.paused.value).toBe(false);
     expect(f.height.value).toBe(1234);
@@ -53,7 +53,7 @@ describe('useMidnightDataFreshness', () => {
   });
 
   it('turns paused, and ages the label, as time passes without a new sync message', async () => {
-    midnightStore.tip = { hash: 'h', height: 1234, timestamp: Date.now() - 9 * 60_000 };
+    midnightStore.tip = { hash: 'h', height: 1234, timestamp: Date.now() - 9 * 60_000, observedAt: Date.now() };
     const f = mountWith(() => useMidnightDataFreshness());
     expect(f.paused.value).toBe(false);
     expect(f.ageLabel.value).toBe('9m ago');
@@ -63,17 +63,18 @@ describe('useMidnightDataFreshness', () => {
   });
 
   it('switches back when a fresh tip arrives', async () => {
-    midnightStore.tip = { hash: 'h', height: 1234, timestamp: Date.now() - 30 * 60_000 };
+    midnightStore.tip = { hash: 'h', height: 1234, timestamp: Date.now() - 30 * 60_000, observedAt: Date.now() };
     const f = mountWith(() => useMidnightDataFreshness());
     expect(f.paused.value).toBe(true);
-    midnightStore.tip = { hash: 'h2', height: 1500, timestamp: Date.now() };
+    midnightStore.tip = { hash: 'h2', height: 1500, timestamp: Date.now(), observedAt: Date.now() };
     await Vue.nextTick();
     expect(f.paused.value).toBe(false);
   });
 });
 
 describe('useFetchedMidnightTip (Cardano-side views)', () => {
-  const block = (ageMs: number) => ({ hash: 'b', height: 77, time: Date.now() - ageMs, slot: 0, epoch: 0, epochSlot: 0 });
+  // `/api/blocks/latest` `time` is epoch seconds.
+  const block = (ageMs: number) => ({ hash: 'b', height: 77, time: Math.floor((Date.now() - ageMs) / 1000), slot: 0, epoch: 0, epochSlot: 0 });
 
   it('reads nothing until a view needs it', async () => {
     mountWith(() => useFetchedMidnightTip(() => 'Mainnet', () => false));
@@ -99,6 +100,18 @@ describe('useFetchedMidnightTip (Cardano-side views)', () => {
     await settle();
     expect(mocks.latest).toHaveBeenCalledTimes(2);
     expect(a.paused.value).toBe(false);
+  });
+
+  it('reads a seconds-shaped block time as seconds: a fresh block is not paused', async () => {
+    mocks.latest.mockResolvedValue(block(6_000));
+    const f = mountWith(() => {
+      const tip = useFetchedMidnightTip(() => 'Mainnet', () => true);
+      return useMidnightDataFreshness(() => tip.value);
+    });
+    await settle();
+    expect(f.height.value).toBe(77);
+    expect(f.paused.value).toBe(false);
+    expect(f.ageLabel.value).toMatch(/^\d+s ago$/);
   });
 
   it('a failed read is not a stale answer', async () => {

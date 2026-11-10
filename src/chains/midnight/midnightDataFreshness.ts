@@ -15,6 +15,12 @@
 
 /** A tip older than this is "paused". */
 export const MIDNIGHT_DATA_PAUSED_AFTER_MS = 10 * 60_000;
+/**
+ * A tip the wallet has not seen in this long is unknown, not paused: for
+ * example one restored from storage after the worker restarted, before the
+ * first tip read of the new session lands. The read repeats every 30 s.
+ */
+export const MIDNIGHT_TIP_OBSERVED_WITHIN_MS = 3 * 60_000;
 
 /** The fields of a chain tip the check reads. */
 export interface MidnightTipSnapshot {
@@ -22,11 +28,25 @@ export interface MidnightTipSnapshot {
   height: number;
   /** Block time, epoch ms; 0 when unknown. */
   timestamp: number;
+  /** Local clock (epoch ms) when the wallet last saw this tip; absent = never in this session. */
+  observedAt?: number;
 }
 
-/** How old the tip's block is at `now`, or null when the tip or its time is unknown. */
+/**
+ * A block time as epoch milliseconds. `/api/blocks/latest` `time` is epoch
+ * seconds; sync frames may carry milliseconds. Values below 1e12 are seconds
+ * (1e12 ms is in 2001). Anything else is 0, "unknown".
+ */
+export function blockTimeToMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value < 1e12 ? value * 1000 : value);
+}
+
+/** How old the tip's block is at `now`, or null when the tip, its time or its sighting is unknown. */
 export function midnightTipAgeMs(tip: MidnightTipSnapshot | null | undefined, now: number): number | null {
   if (!tip || !tip.hash || !Number.isFinite(tip.timestamp) || tip.timestamp <= 0) return null;
+  const observedAt = tip.observedAt;
+  if (typeof observedAt !== 'number' || now - observedAt > MIDNIGHT_TIP_OBSERVED_WITHIN_MS) return null;
   return Math.max(0, now - tip.timestamp);
 }
 

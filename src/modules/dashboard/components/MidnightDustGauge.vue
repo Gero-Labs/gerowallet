@@ -28,7 +28,7 @@
           <span class="dust-gauge__balance-num">{{ dustCurrentFmt }}</span>
           <span class="dust-gauge__balance-unit">{{ dustCurrency }}</span>
           <!-- Midnight data is paused: the last reading, not ticking. -->
-          <span v-if="dustEstimate" class="dust-gauge__estimate" data-test="dust-estimate">{{ $t('midnight.dataPaused.estimate') }}</span>
+          <span v-if="dustEstimate" class="dust-gauge__estimate t-caption" data-test="dust-estimate">{{ $t('midnight.dataPaused.estimate') }}</span>
         </template>
       </div>
     </div>
@@ -51,7 +51,7 @@
       </div>
       <div class="dust-gauge__stat">
         <span class="k">{{ $t('midnight.generationRate') }}</span>
-        <span class="v">{{ isRegistered ? `+${dustRateFmt} ${dustCurrency}/s` : '—' }}</span>
+        <span class="v">{{ isRegistered && !dustEstimate ? `+${dustRateFmt} ${dustCurrency}/s` : '—' }}</span>
       </div>
       <div class="dust-gauge__stat">
         <span class="k">{{ isFull ? $t('midnight.dustCapReached') : $t('midnight.dustTimeToFull') }}</span>
@@ -216,6 +216,8 @@ const statusClass = computed(() => (isFull.value ? 'v--full' : isCharging.value 
 
 // Seconds to reach cap at the current rate → coarse human label.
 const timeToFullLabel = computed(() => {
+  // Midnight data is paused: no projection from a reading labelled "estimate".
+  if (dustEstimate.value) return '—';
   if (isFull.value) return t('midnight.dustFullyCharged');
   // Registered but nothing to generate from: a bare dash here reads as "no
   // data" when we actually know the reason. Say it.
@@ -306,9 +308,8 @@ function onSponsorSaved(): void {
 }
 
 .dust-gauge__estimate {
-  font-size: 11px;
   color: var(--g-warning);
-  margin-left: 4px;
+  margin-left: var(--g-s-1);
 }
 
 /* Battery track */

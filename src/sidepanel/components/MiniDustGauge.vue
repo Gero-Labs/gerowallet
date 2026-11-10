@@ -15,7 +15,6 @@
         <template v-else>••••</template>
         <span class="mini-dust__pct"> · {{ pct.toFixed(1) }}%</span>
         <!-- Midnight data is paused: the last reading, not ticking. -->
-        <span v-if="dustEstimate" class="mini-dust__estimate" data-test="dust-estimate"> · {{ $t('midnight.dataPaused.estimate') }}</span>
       </span>
     </div>
     <div class="mini-dust__bar" role="progressbar" :aria-valuenow="pct" aria-valuemin="0" aria-valuemax="100">
@@ -30,7 +29,11 @@
       <DustParticleCanvas :active="isCharging" :fill-pct="pct" />
     </div>
     <div class="mini-dust__sub">
-      <span v-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
+      <!-- Midnight data is paused: the last reading, and the block it is based on, in place of the rate. -->
+      <span v-if="dustEstimate" class="mini-dust__estimate g-num" data-test="dust-estimate">
+        {{ $t('midnight.dataPaused.estimateCaption', { block: tipHeight, age: tipAge }) }}
+      </span>
+      <span v-else-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
       <span v-else-if="isPending" class="mini-dust__pending">{{ $t('midnight.dustBatteryPending') }}</span>
       <span v-else>{{ $t('midnight.statusUnregistered') }}</span>
       <span v-if="isCharging"> · {{ timeToFullLabel }}</span>
@@ -62,6 +65,7 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
 import { getDustPendingForDestination, reconcileDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -78,6 +82,7 @@ const dustTicker = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 const { dustBalance, dustGenerating, dustCap, registrationStatus, estimate: dustEstimate } = useMidnightDustLive();
+const { height: tipHeight, ageLabel: tipAge } = useMidnightDataFreshness();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
