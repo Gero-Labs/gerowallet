@@ -11,6 +11,7 @@
 import { computed, type ComputedRef } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
+import { provingStepOf, useProvingElapsed, type ProvingStep } from '@/shared/composables/useProvingElapsed';
 
 export interface TimelineNode {
   key: string;
@@ -36,6 +37,7 @@ export const STAGE_RANK: Record<string, number> = {
   provingLocal: 3,
   provingZkpaas: 3,
   submitting: 4,
+  provingCloud: 4,
   done: 5,
 };
 
@@ -48,17 +50,29 @@ export interface SendTimelineLabels {
   provingDevice: string;
   provingLocal: string;
   provingZkpaas: string;
+  /** The submit node while Gero Cloud proves inside the submit request. */
+  provingCloud: string;
 }
 
 /**
  * @param stage       the live send stage
  * @param labels      already-translated node labels (the caller owns i18n, so
  *                    the sync label can name the sponsor wallet)
+ * @param provingDetailFor the line under the proving node: elapsed time and hint
+ *                    (useProvingElapsed.ts `provingDetail`, translated by the caller)
  */
 export function useMidnightSendTimeline(
   stage: ComputedRef<MidnightSendStage | 'idle'>,
   labels: ComputedRef<SendTimelineLabels>,
+  provingDetailFor?: (step: ProvingStep, seconds: number) => string,
 ): ComputedRef<TimelineNode[]> {
+  const elapsed = useProvingElapsed(() => provingStepOf(
+    stage.value, stage.value === 'working' && midnightStore.sendProgress?.phase === 'proving'));
+  const elapsedDetail = (node: ProvingStep['node']): string | undefined => {
+    const step = elapsed.step.value;
+    const seconds = elapsed.seconds.value;
+    return step?.node === node && seconds != null && provingDetailFor ? provingDetailFor(step, seconds) : undefined;
+  };
   return computed<TimelineNode[]>(() => {
     const s = stage.value;
     const rank = STAGE_RANK[s] ?? 0;
@@ -95,7 +109,7 @@ export function useMidnightSendTimeline(
         state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
         showBar: true,
         percent: provingActive ? null : (syncActive ? pct : undefined),
-        detail: syncActive ? prog?.detail : undefined,
+        detail: syncActive ? prog?.detail : elapsedDetail('sync'),
       },
       {
         key: 'sign',
@@ -103,11 +117,16 @@ export function useMidnightSendTimeline(
         state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
         showBar: feeProving || undefined,
         percent: feeProving ? null : undefined,
+        detail: elapsedDetail('sign'),
       },
       {
         key: 'submit',
-        label: labels.value.submit,
-        state: s === 'submitting' ? 'active' : s === 'done' ? 'done' : 'pending',
+        label: s === 'provingCloud' ? labels.value.provingCloud : labels.value.submit,
+        state: s === 'submitting' || s === 'provingCloud' ? 'active' : s === 'done' ? 'done' : 'pending',
+        // Gero Cloud proving has no progress signal: an indeterminate bar, never a percentage.
+        showBar: s === 'provingCloud' || undefined,
+        percent: s === 'provingCloud' ? null : undefined,
+        detail: elapsedDetail('submit'),
       },
     ];
   });

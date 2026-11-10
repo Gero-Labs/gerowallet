@@ -5686,6 +5686,10 @@ export default {
   'midnight.send.stageProvingLocal': 'Proving locally...',
   'midnight.send.stageProvingDevice': 'Proving on this device...',
   'midnight.send.stageProvingZkpaas': 'Proving via Arkhia...',
+  'midnight.send.stageProvingCloud': 'Proving with Gero Cloud',
+  'midnight.send.provingElapsed': '{n} s',
+  'midnight.send.provingDeviceHint': 'This can take up to a minute on this device.',
+  'midnight.send.provingSlowHint': 'Taking longer than usual. Keep this window open.',
   // Shield/unshield conversion dialog (WP-SH4). Shield direction only for
   // now; the toggle still shows "Make public" so the option isn't hidden,
   // just visibly disabled with a "coming soon" caption + tooltip.

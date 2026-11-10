@@ -5579,6 +5579,10 @@ export default {
   'midnight.send.stageProvingLocal': 'Beweis wird lokal erstellt...',
   'midnight.send.stageProvingDevice': 'Beweis wird auf diesem Gerät erstellt...',
   'midnight.send.stageProvingZkpaas': 'Beweis wird über Arkhia erstellt...',
+  'midnight.send.stageProvingCloud': 'Beweis wird mit Gero Cloud erstellt',
+  'midnight.send.provingElapsed': '{n} s',
+  'midnight.send.provingDeviceHint': 'Das kann auf diesem Gerät bis zu einer Minute dauern.',
+  'midnight.send.provingSlowHint': 'Das dauert länger als üblich. Lass dieses Fenster geöffnet.',
   // Umwandlungsdialog Shield/Unshield (WP-SH4). Vorerst nur die Verschleiern-
   // Richtung; der Umschalter zeigt "Öffentlich machen" trotzdem an, damit die
   // Option nicht versteckt ist, aber sichtbar deaktiviert mit einem

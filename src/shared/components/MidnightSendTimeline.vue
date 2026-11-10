@@ -29,7 +29,7 @@
             :style="node.percent != null ? { width: node.percent + '%' } : undefined"
           ></div>
         </div>
-        <div v-if="node.detail && node.state === 'active'" class="mtl-node__detail">
+        <div v-if="node.detail && node.state === 'active'" class="mtl-node__detail g-num">
           {{ node.detail }}
         </div>
       </div>

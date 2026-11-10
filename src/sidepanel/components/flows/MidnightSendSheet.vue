@@ -406,6 +406,7 @@
 import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
+import { provingDetail } from '@/shared/composables/useProvingElapsed';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import BottomSheet from '../BottomSheet.vue';
@@ -1093,8 +1094,13 @@ const timelineLabels = computed(() => ({
   provingDevice: t('midnight.send.stageProvingDevice') as string,
   provingLocal: t('midnight.send.stageProvingLocal') as string,
   provingZkpaas: t('midnight.send.stageProvingZkpaas') as string,
+  provingCloud: t('midnight.send.stageProvingCloud') as string,
 }));
-const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels);
+const timelineNodes = useMidnightSendTimeline(
+  computed(() => sendStage.value),
+  timelineLabels,
+  (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params))),
+);
 </script>
 
 <style scoped lang="scss">

@@ -466,6 +466,7 @@ import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPi
 import { geroStore } from '@/stores/geroStore';
 import { secretsWallet } from '@/shared/utils/walletAccount';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
+import { provingDetail, provingStepOf, useProvingElapsed, type ProvingStep } from '@/shared/composables/useProvingElapsed';
 import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
@@ -778,8 +779,20 @@ const sendDispatched = computed(() => sending.value && sendStage.value !== 'idle
 // occupy the same position in every send's stage sequence — authorize →
 // (build →) working-or-proving → submit → done.
 const STAGE_RANK: Record<SendStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, provingDevice: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, done: 5,
+  idle: 0, authorizing: 1, building: 2, working: 3, provingDevice: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, provingCloud: 4, done: 5,
 };
+
+// Elapsed time on the node that is proving, with a hint about how long that
+// kind of proving takes (useProvingElapsed.ts). Bars stay indeterminate.
+const provingElapsed = useProvingElapsed(() => provingStepOf(
+  sendStage.value, sendStage.value === 'working' && midnightStore.sendProgress?.phase === 'proving'));
+function elapsedDetail(node: ProvingStep['node']): string | undefined {
+  const step = provingElapsed.step.value;
+  const seconds = provingElapsed.seconds.value;
+  return step?.node === node && seconds != null
+    ? provingDetail(step, seconds, (key, params) => String(t(key, params)))
+    : undefined;
+}
 
 interface TimelineNode {
   key: string;
@@ -834,7 +847,7 @@ const timelineNodes = computed<TimelineNode[]>(() => {
       state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
       showBar: true,
       percent: provingActive ? null : (syncActive ? pct : undefined),
-      detail: syncActive ? prog?.detail : undefined,
+      detail: syncActive ? prog?.detail : elapsedDetail('sync'),
     },
     {
       key: 'sign',
@@ -842,11 +855,16 @@ const timelineNodes = computed<TimelineNode[]>(() => {
       state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
       showBar: feeProving || undefined,
       percent: feeProving ? null : undefined,
+      detail: elapsedDetail('sign'),
     },
     {
       key: 'submit',
-      label: t('midnight.send.stageSubmit'),
-      state: s === 'submitting' ? 'active' : s === 'done' ? 'done' : 'pending',
+      // Gero Cloud proves inside the submit request: say so, with an indeterminate bar.
+      label: s === 'provingCloud' ? t('midnight.send.stageProvingCloud') : t('midnight.send.stageSubmit'),
+      state: s === 'submitting' || s === 'provingCloud' ? 'active' : s === 'done' ? 'done' : 'pending',
+      showBar: s === 'provingCloud' || undefined,
+      percent: s === 'provingCloud' ? null : undefined,
+      detail: elapsedDetail('submit'),
     },
   ];
 });
