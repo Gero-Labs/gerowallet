@@ -16,7 +16,7 @@ describe('Midnight send dialog errors', () => {
 
   it('offers Try again after LEDGER_MISMATCH, and Try again sends again from a new build', () => {
     expect(source).toContain("ledgerMismatch.value = midnightApiErrorKind(e) === 'ledgerMismatch';");
-    expect(source).toMatch(/v-if="canRetryLedgerMismatch"[\s\S]*?@click="retryLedgerMismatch\(\)"[\s\S]*?common\.tryAgain/);
+    expect(source).toMatch(/<GButton\s+v-if="canRetryLedgerMismatch"\s+tier="tertiary"[\s\S]*?@click="retryLedgerMismatch\(\)"[\s\S]*?common\.tryAgain/);
     const retry = source.slice(source.indexOf('async function retryLedgerMismatch()'));
     expect(retry.slice(0, retry.indexOf('\n}\n'))).toContain('await submitWithPassword();');
   });

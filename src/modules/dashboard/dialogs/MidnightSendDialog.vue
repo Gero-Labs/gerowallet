@@ -384,15 +384,14 @@
         </div>
         <!-- The network's ledger changed under the build: a fresh build may go
              through. PRF wallets retry with the PassKey button above. -->
-        <v-btn
+        <GButton
           v-if="canRetryLedgerMismatch"
-          variant="text"
-          size="small"
-          color="var(--g-accent)"
+          tier="tertiary"
+          compact
           class="mb-2"
           data-test="midnight-send-try-again"
           @click="retryLedgerMismatch()"
-        >{{ t('common.tryAgain') }}</v-btn>
+        >{{ t('common.tryAgain') }}</GButton>
 
         <div>
           <v-btn
@@ -444,6 +443,7 @@ import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/m
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import TransactionDetailsCard, {
