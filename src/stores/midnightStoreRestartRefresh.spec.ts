@@ -116,9 +116,14 @@ describe('Refreshing across a worker restart', () => {
   let m: Loaded | undefined;
 
   beforeEach(async () => {
+    // A previous case's workers may still have a debounced write due: let it land first.
+    await settle();
     env.data.clear();
     env.sets.length = 0;
     env.broadcasts.length = 0;
+    // IndexedDB outlives a case: start each from an empty one, as a worker that never wrote.
+    const cache = await import('@/utils/storeCache');
+    for (const body of ['abc', 'zzz']) await cache.deleteStoreCacheScope(addresses(body).unshielded);
     m = await load('background');
   });
 
@@ -221,5 +226,65 @@ describe('Refreshing across a worker restart', () => {
     expect(restarted.midnightStore.transactions.map((t) => [t.hash, t.status, t.ledgerHash])).toEqual([['ee'.repeat(32), 'pending', true]]);
     // Once is enough: a second call (pending rows already there) adds nothing.
     await expect(restarted.midnightActions.restorePendingAfterRestart()).resolves.toBe(0);
+  });
+
+  describe('a pending send, a restart, its restore, then a chain reset', () => {
+    const PENDING = {
+      hash: 'ee'.repeat(32), type: 'send' as const, token: 'NIGHT', amount: 9n, counterparty: 'mn_addr_preprod1to',
+      timestamp: 1_758_000_100_000, status: 'pending' as const, fee: 0n, isShielded: false, ledgerHash: true,
+    };
+    const IDENTITY = { network: 'midnight-preprod', generation: 7, genesisHash: `0x${'ab'.repeat(32)}` };
+
+    async function previousWorker() {
+      m!.midnightActions.setActive(addresses('abc'));
+      m!.midnightActions.setTransactions(history(3));
+      m!.midnightActions.setUtxos(utxoSet(5));
+      m!.midnightActions.updateBalances({ nightUnshielded: 7_000_000n });
+      m!.midnightActions.applyTransaction(PENDING);
+      await settle();
+    }
+
+    /** As the sync service's reset callback decides what to keep (midnight-sync.service.ts). */
+    async function resetLikeTheService(r: Loaded) {
+      const { hasDataToKeep } = await import('@/chains/midnight/midnightRefresh');
+      const inMemory = r.midnightStore.refreshSnapshot || hasDataToKeep(r.midnightStore.balances, r.midnightStore.transactions);
+      const persisted = inMemory ? null : await r.midnightActions.persistedRefreshSnapshot();
+      r.midnightActions.resetChainState(IDENTITY, { persisted, reason: 'upgrade' });
+    }
+
+    it('"Refreshing" shows what the wallet last showed, and the send is kept once', async () => {
+      await previousWorker();
+      const r = await load('background');
+      r.midnightActions.setActive(addresses('abc'));
+      await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(1);
+      await settle(); // the restore's write has landed over the persisted history
+      await resetLikeTheService(r);
+      expect(r.midnightStore.refreshSnapshot?.balances.nightUnshielded).toBe(7_000_000n);
+      expect(r.midnightStore.refreshSnapshot?.transactions).toHaveLength(4);
+      expect(r.midnightStore.refreshSnapshot?.utxos).toHaveLength(5);
+      expect(r.midnightStore.transactions.map((t) => [t.hash, t.status, t.beforeReset?.upgrade])).toEqual([['ee'.repeat(32), 'pending', true]]);
+    });
+
+    it('a reset before the restore keeps the send too, and the restore then adds nothing', async () => {
+      await previousWorker();
+      const r = await load('background');
+      r.midnightActions.setActive(addresses('abc'));
+      await settle();
+      await resetLikeTheService(r);
+      expect(r.midnightStore.refreshSnapshot?.transactions).toHaveLength(4);
+      expect(r.midnightStore.transactions.map((t) => t.hash)).toEqual(['ee'.repeat(32)]);
+      await expect(r.midnightActions.restorePendingAfterRestart()).resolves.toBe(0);
+    });
+
+    it('a send dismissed after the restore doesn\'t come back with the reset', async () => {
+      await previousWorker();
+      const r = await load('background');
+      r.midnightActions.setActive(addresses('abc'));
+      await r.midnightActions.restorePendingAfterRestart();
+      r.midnightActions.dismissPendingTx(PENDING.hash, 'NIGHT');
+      await resetLikeTheService(r);
+      expect(r.midnightStore.transactions).toEqual([]);
+      expect(r.midnightStore.refreshSnapshot?.balances.nightUnshielded).toBe(7_000_000n);
+    });
   });
 });

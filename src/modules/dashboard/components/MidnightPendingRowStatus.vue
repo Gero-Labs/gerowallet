@@ -53,9 +53,13 @@ const checking = computed(() => stateOf(props.tx).checking);
 const outcomeText = computed(() => {
   if (refreshing.value) return '';
   switch (stateOf(props.tx).outcome) {
-    case 'notFound': return t('midnight.pending.stillNotConfirmed');
+    // Not found, or found without its result yet: either way not confirmed.
+    case 'notFound':
+    case 'waiting': return t('midnight.pending.stillNotConfirmed');
     case 'confirmed': return t('midnight.pending.wentThrough');
     case 'failed': return t('midnight.pending.rejected');
+    // The lookup itself failed: that says nothing about the send.
+    case 'unknown': return t('midnight.pending.couldNotCheck');
     default: return '';
   }
 });

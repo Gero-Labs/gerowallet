@@ -5362,6 +5362,7 @@ export default {
   'midnight.pending.notConfirmed': 'Sin confirmar',
   'midnight.pending.checkAgain': 'Comprobar de nuevo',
   'midnight.pending.stillNotConfirmed': 'Todavía sin confirmar.',
+  'midnight.pending.couldNotCheck': 'No se pudo comprobar. Inténtalo de nuevo más tarde.',
   'midnight.pending.wentThrough': 'Confirmado. Este envío se completó.',
   'midnight.pending.rejected': 'La red rechazó este envío. No se movieron fondos.',
   'midnight.pending.toAddress': 'a {address}',

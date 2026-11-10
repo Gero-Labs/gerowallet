@@ -800,6 +800,8 @@ let bootRecord: {
   transactions: MidnightTransaction[];
   utxos: MidnightUnshieldedUtxo[];
   refreshSnapshot: MidnightRefreshSnapshot | null;
+  /** Its pending rows are back in memory (restorePendingAfterRestart): never taken twice. */
+  pendingTaken: boolean;
 } | null = null;
 /** Settles once the boot read above has landed. */
 let bootRead: Promise<void> = Promise.resolve();
@@ -859,6 +861,7 @@ if (context === 'background') {
       transactions: hydrateTransactions(stored.transactions),
       utxos: hydrateUtxos(stored.utxos),
       refreshSnapshot: hydrateRefreshSnapshot(stored.refreshSnapshot),
+      pendingTaken: false,
     };
   }, { migrate: true, bulk: true }).catch(() => undefined);
 }
@@ -1158,10 +1161,20 @@ export const midnightActions = {
     // "Refreshing" (midnightRefresh.ts): what was on screen is kept, in the same
     // broadcast as the wipe, so no view ever renders the empty state in between.
     // Pending sends survive the wipe too (midnightPendingSends.ts): collected
-    // before anything is cleared (from what this worker last persisted when it
-    // restarted and holds none), put back marked as sent before the reset. One
-    // the rebuilt history confirms replaces its pending copy.
-    const source = midnightStore.transactions.length ? midnightStore.transactions : options.persisted?.transactions ?? [];
+    // before anything is cleared, from memory and from the previous worker's
+    // record (a restarted worker may not have put them back yet), once each,
+    // memory first; put back marked as sent before the reset. One the rebuilt
+    // history confirms replaces its pending copy.
+    const key = midnightStore.activeWalletKey;
+    const boot = bootRecord && bootRecord.activeWalletKey === key ? bootRecord : null;
+    const previous = boot ? (boot.pendingTaken ? [] : boot.transactions) : options.persisted?.transactions ?? [];
+    const seen = new Set<string>();
+    const source = [...midnightStore.transactions, ...previous].filter((tx) => {
+      const rowKey = txRowKey(tx);
+      if (seen.has(rowKey)) return false;
+      seen.add(rowKey);
+      return true;
+    });
     const kept = pendingRowsToKeep(source, Date.now(), options.reason === 'upgrade');
     const updates: Partial<MidnightStore> = {
       ...refreshStartFields(options.reason ?? null, options.persisted ?? null),
@@ -1575,24 +1588,22 @@ export const midnightActions = {
 
   /**
    * After a worker restart the history is replayed from scratch, and pending
-   * sends are not in that replay: put back the ones the previous worker
-   * persisted for this wallet, unless a copy has arrived meanwhile.
+   * sends are not in that replay: put back the ones in the previous worker's
+   * record for this wallet (read at boot), each unless a copy has arrived
+   * meanwhile. Once per record: a row dismissed since never comes back.
    */
   async restorePendingAfterRestart(): Promise<number> {
+    await bootRead;
     const key = midnightStore.activeWalletKey;
-    if (!key || midnightStore.transactions.some((tx) => tx.status === 'pending')) return 0;
-    try {
-      const stored = await persister.read() as Partial<MidnightStore> | null;
-      if (!stored || stored.activeWalletKey !== key || midnightStore.activeWalletKey !== key) return 0;
-      const known = new Set(midnightStore.transactions.map(txRowKey));
-      const pending = hydrateTransactions(stored.transactions).filter((tx) => tx.status === 'pending' && !known.has(txRowKey(tx)));
-      if (!pending.length) return 0;
-      midnightStore.transactions = [...midnightStore.transactions, ...pending].sort((a, b) => b.timestamp - a.timestamp);
-      broadcastFromBackground({ transactions: midnightStore.transactions });
-      return pending.length;
-    } catch {
-      return 0;
-    }
+    const boot = key && bootRecord?.activeWalletKey === key && !bootRecord.pendingTaken ? bootRecord : null;
+    if (!boot) return 0;
+    boot.pendingTaken = true;
+    const known = new Set(midnightStore.transactions.map(txRowKey));
+    const pending = boot.transactions.filter((tx) => tx.status === 'pending' && !known.has(txRowKey(tx)));
+    if (!pending.length) return 0;
+    midnightStore.transactions = [...midnightStore.transactions, ...pending].sort((a, b) => b.timestamp - a.timestamp);
+    broadcastFromBackground({ transactions: midnightStore.transactions });
+    return pending.length;
   },
 
   /** Check again found the row's transaction: confirmed (it went through) or failed (rejected). */

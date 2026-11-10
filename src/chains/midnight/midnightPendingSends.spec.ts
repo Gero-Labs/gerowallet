@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  PENDING_EXPIRY_MS, canLookUpPending, checkPendingTx, isUnconfirmedPending, keptRowsToCheck, notIncludedAfterReset, pendingRowsToKeep,
+  LOOKUP_MARGIN_MS, LOOKUP_MAX_RETRIES, PENDING_EXPIRY_MS, SEND_TTL_MS, canLookUpPending, checkPendingTx, isUnconfirmedPending,
+  keptRowsRetryDelay, keptRowsToCheck, notIncludedAfterReset, pendingLookupDeadline, pendingRowsToKeep,
 } from './midnightPendingSends';
 import { historyHashForSubmittedTx } from './midnightTxHash';
 import { awaitSubmittedTx } from '@/api/midnightSubmitRecovery';
@@ -65,22 +66,69 @@ describe('a chain reset', () => {
     expect(notIncludedAfterReset([notFound])).toEqual([notFound]);
     expect(keptRowsToCheck([notFound])).toEqual([]);
     expect(notIncludedAfterReset([{ ...notFound, status: 'confirmed' }])).toEqual([]);
+    // Only a row the lookup could have asked about.
+    expect(notIncludedAfterReset([{ ...notFound, ledgerHash: undefined }])).toEqual([]);
   });
 });
 
-describe('Check again', () => {
-  const found = (status: string) => ({ transactions: [{ __typename: 'RegularTransaction', hash: '0xAB', transactionResult: { status } }] });
+describe('the lookup', () => {
+  // Sent at T; the indexer's latest block at `tip` (epoch ms, as the indexer sends it).
+  const T = 1_800_000_000_000;
+  const sent = row('ab', 'pending', T, { ledgerHash: true });
+  const reply = (transactions: unknown[], tip: number | null = T + 60 * 60_000) => ({
+    transactions, ...(tip === null ? {} : { block: { height: 10, timestamp: tip } }),
+  });
+  const found = (status: string | null) => reply([{ __typename: 'RegularTransaction', hash: '0xAB', transactionResult: status ? { status } : null }]);
+  const ask = (data: unknown, tx = sent) => checkPendingTx(vi.fn().mockResolvedValue(data), tx);
 
-  it('asks the indexer by ledger hash and reads its answer', async () => {
+  it('asks the indexer by ledger hash, with its latest block, and reads its answer', async () => {
     const graphql = vi.fn().mockResolvedValue(found('SUCCESS'));
-    await expect(checkPendingTx(graphql, '0xABCD')).resolves.toBe('confirmed');
+    // A row for another hash is not this send.
+    await expect(checkPendingTx(graphql, { ...sent, hash: '0xABCD' })).resolves.toBe('notFound');
     expect(graphql).toHaveBeenCalledWith(expect.stringContaining('offset: {hash: $hash}'), { hash: 'abcd' });
-    await expect(checkPendingTx(vi.fn().mockResolvedValue(found('PARTIAL_SUCCESS')), 'ab')).resolves.toBe('confirmed');
-    await expect(checkPendingTx(vi.fn().mockResolvedValue(found('FAILURE')), 'ab')).resolves.toBe('failed');
+    expect(graphql.mock.calls[0][0]).toContain('block { height timestamp }');
+    await expect(ask(found('SUCCESS'))).resolves.toBe('confirmed');
+    await expect(ask(found('PARTIAL_SUCCESS'))).resolves.toBe('confirmed');
+    await expect(ask(found('FAILURE'))).resolves.toBe('failed');
   });
 
-  it('nothing found, or no answer, is "still not confirmed"', async () => {
-    await expect(checkPendingTx(vi.fn().mockResolvedValue({ transactions: [] }), 'ab')).resolves.toBe('notFound');
-    await expect(checkPendingTx(vi.fn().mockRejectedValue(new Error('down')), 'ab')).resolves.toBe('notFound');
+  it('a row with the hash but no result yet is found, not "not found"', async () => {
+    await expect(ask(found(null))).resolves.toBe('waiting');
+    await expect(ask(reply([{ __typename: 'RegularTransaction', hash: 'ab' }]))).resolves.toBe('waiting');
+  });
+
+  it('a failed lookup is no answer: unknown, never not found', async () => {
+    await expect(checkPendingTx(vi.fn().mockRejectedValue(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' })), sent)).resolves.toBe('unknown');
+    await expect(checkPendingTx(vi.fn().mockRejectedValue(new Error('Request failed with status code 501')), sent)).resolves.toBe('unknown');
+    // An answer without a transactions list (a changed schema, an error body) can't say "not found".
+    await expect(ask(null)).resolves.toBe('unknown');
+    await expect(ask({ block: { height: 10, timestamp: T * 2 } })).resolves.toBe('unknown');
+    await expect(ask({ transactions: 'nope' })).resolves.toBe('unknown');
+  });
+
+  it('not found only from an indexer past the send\'s time to live, plus a margin', async () => {
+    const deadline = T + SEND_TTL_MS.unshielded + LOOKUP_MARGIN_MS;
+    expect(pendingLookupDeadline(sent)).toBe(deadline);
+    expect(pendingLookupDeadline({ ...sent, isShielded: true })).toBe(T + SEND_TTL_MS.shielded + LOOKUP_MARGIN_MS);
+    await expect(ask(reply([], deadline))).resolves.toBe('waiting');
+    await expect(ask(reply([], deadline + 1))).resolves.toBe('notFound');
+    // The indexer's block time in seconds reads the same.
+    await expect(ask(reply([], Math.ceil((deadline + 1_000) / 1000)))).resolves.toBe('notFound');
+    // A shielded send lives longer.
+    await expect(ask(reply([], deadline + 1), { ...sent, isShielded: true })).resolves.toBe('waiting');
+    // No latest block in the answer: it can't tell.
+    await expect(ask(reply([], null))).resolves.toBe('waiting');
+  });
+
+  it('tries again with a backoff, not before a too-early row\'s deadline, and stops after a few tries', () => {
+    const now = T + 60_000;
+    expect(keptRowsRetryDelay([sent], 0, true, now)).toBe(30_000);
+    expect(keptRowsRetryDelay([sent], 2, true, now)).toBe(120_000);
+    expect(keptRowsRetryDelay([sent], 5, true, now)).toBe(10 * 60_000);
+    // Too early: wait for the deadline (but never more than 10 minutes).
+    expect(keptRowsRetryDelay([sent], 0, false, now)).toBe(pendingLookupDeadline(sent) - now + 30_000);
+    expect(keptRowsRetryDelay([{ ...sent, isShielded: true }], 0, false, now)).toBe(10 * 60_000);
+    expect(keptRowsRetryDelay([sent], LOOKUP_MAX_RETRIES, true, now)).toBeNull();
+    expect(keptRowsRetryDelay([], 0, true, now)).toBeNull();
   });
 });

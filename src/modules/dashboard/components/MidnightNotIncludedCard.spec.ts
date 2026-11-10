@@ -17,6 +17,8 @@ vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')
 import MidnightNotIncludedCard from './MidnightNotIncludedCard.vue';
 // @ts-ignore: tsconfig ships no `*.vue` shim; vite resolves this fine.
 import MidnightPendingRowStatus from './MidnightPendingRowStatus.vue';
+// @ts-ignore: tsconfig ships no `*.vue` shim; vite resolves this fine.
+import MidnightNoticeSlot from './MidnightNoticeSlot.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import { PENDING_EXPIRY_MS } from '@/chains/midnight/midnightPendingSends';
@@ -61,11 +63,12 @@ describe('"Didn\'t go through" card (after a chain reset)', () => {
     expect(w.get('[data-test="midnight-dismiss-not-included"]').attributes('data-tier')).toBe('tertiary');
   });
 
-  it('only its text is announced; "network upgrade" and "No funds moved" only when the server gave that cause; singular or plural', () => {
+  it('"network upgrade" and "No funds moved" only when the server gave that cause; singular or plural; no live region of its own', () => {
     midnightStore.transactions = [sent('aa', { beforeReset: notFound })];
     let w = mount(MidnightNotIncludedCard, { global: { stubs } });
     expect(w.get('[data-test="midnight-not-included"]').attributes('role')).toBeUndefined();
-    expect(w.get('[data-test="midnight-not-included-text"]').attributes('role')).toBe('status');
+    // The card comes and goes: the slot's always-mounted region says it.
+    expect(w.get('[data-test="midnight-not-included-text"]').attributes('role')).toBeUndefined();
     expect(w.get('[data-test="midnight-not-included-text"]').text()).toBe('midnight.pending.notIncludedUpgrade#1');
     midnightStore.transactions = [sent('aa', { beforeReset: { ...notFound, upgrade: false } }), sent('dd', { beforeReset: notFound })];
     w = mount(MidnightNotIncludedCard, { global: { stubs } });
@@ -127,6 +130,22 @@ describe('"Not confirmed" on a history row', () => {
     expect(w.get('[data-test="midnight-check-outcome"]').attributes('aria-live')).toBe('polite');
   });
 
+  it('Check again that could not ask says so, never "Still not confirmed"', async () => {
+    const tx = sent('ab', { timestamp: NOW - PENDING_EXPIRY_MS });
+    const outcome = async (reply: () => Promise<unknown>) => {
+      h.send.mockImplementationOnce(reply);
+      const w = mount(MidnightPendingRowStatus, { props: { tx }, global: { stubs } });
+      await w.get('[data-test="midnight-check-again"]').trigger('click');
+      await flushPromises();
+      return w.get('[data-test="midnight-check-outcome"]').text();
+    };
+    await expect(outcome(async () => ({ data: { success: true, result: { outcome: 'unknown' } } }))).resolves.toBe('midnight.pending.couldNotCheck');
+    await expect(outcome(async () => ({ data: { success: false, error: 'down' } }))).resolves.toBe('midnight.pending.couldNotCheck');
+    await expect(outcome(async () => { throw new Error('no background'); })).resolves.toBe('midnight.pending.couldNotCheck');
+    // Found without its result yet: still not confirmed.
+    await expect(outcome(async () => ({ data: { success: true, result: { outcome: 'waiting' } } }))).resolves.toBe('midnight.pending.stillNotConfirmed');
+  });
+
   it('a row keyed by the extrinsic hash offers Dismiss but no Check again', () => {
     const w = mount(MidnightPendingRowStatus, { props: { tx: sent('ee', { ledgerHash: undefined, timestamp: NOW - PENDING_EXPIRY_MS }) }, global: { stubs } });
     expect(w.find('[data-test="midnight-check-again"]').exists()).toBe(false);
@@ -150,6 +169,24 @@ describe('"Not confirmed" on a history row', () => {
   });
 });
 
+describe('the notice slot says the card', () => {
+  it('when it appears and when its sentence changes, from the always-mounted region', async () => {
+    vi.useRealTimers();
+    const w = mount(MidnightNoticeSlot, { global: { stubs } });
+    const said = async () => {
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 300));
+      return w.get('[data-test="midnight-notice-announcer"]').text();
+    };
+    await expect(said()).resolves.toBe('');
+    midnightStore.transactions = [sent('aa', { beforeReset: notFound })];
+    await expect(said()).resolves.toBe('midnight.pending.notIncludedUpgrade#1');
+    expect(w.find('[data-test="midnight-not-included"]').exists()).toBe(true);
+    midnightStore.transactions = [sent('aa', { beforeReset: notFound }), sent('bb', { beforeReset: notFound })];
+    await expect(said()).resolves.toBe('midnight.pending.notIncludedUpgrade#2');
+  });
+});
+
 describe('wiring', () => {
   const src = join(__dirname, '../../..');
   const read = (path: string) => readFileSync(join(src, path), 'utf8');
@@ -157,7 +194,7 @@ describe('wiring', () => {
   it('the card is a notice in the slot, after refreshing; Send again opens each surface\'s Send', () => {
     const slot = read('modules/dashboard/components/MidnightNoticeSlot.vue');
     expect(slot).toContain('notIncluded: MidnightNotIncludedCard,');
-    expect(slot).toContain('const notIncluded = computed(() => !refreshing.value && notIncludedAfterReset(midnightStore.transactions ?? []).length > 0);');
+    expect(slot).toContain("const notIncluded = computed(() => !refreshing.value && notIncludedSentence.value !== '');");
     expect(read('modules/dashboard/components/midnightNotices.ts')).toContain("['update', 'upgrade', 'refreshing', 'notIncluded', 'stagenet']");
     expect(read('modules/portfolio/PortfolioPage.vue')).toContain('<MidnightNoticeSlot class="portfolio-upgrade-banner" @send-again="openDialog(\'SEND\')" />');
     expect(read('sidepanel/pages/HomePage.vue')).toContain('@send-again="showMidnightSend = true"');

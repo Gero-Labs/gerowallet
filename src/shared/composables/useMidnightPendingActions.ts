@@ -3,11 +3,13 @@
  * (midnightPendingSends.ts): Check again, Dismiss and Send again. Check again
  * and Dismiss run in the background, which owns the history.
  */
-import { getCurrentScope, onScopeDispose, reactive, ref, type Ref } from 'vue';
+import { computed, getCurrentScope, onScopeDispose, reactive, ref, type ComputedRef, type Ref } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
-import type { PendingTxCheck } from '@/chains/midnight/midnightPendingSends';
+import { notIncludedAfterReset, type PendingTxCheck } from '@/chains/midnight/midnightPendingSends';
+import { midnightStore } from '@/stores/midnightStore';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { requestMidnightSendAgain } from '@/chains/midnight/midnightSendPrefill';
 import { midnightTxRowKey } from '@/chains/midnight/midnightTxHash';
 
@@ -50,17 +52,18 @@ export function useMidnightPendingActions() {
 
   async function checkAgain(tx: MidnightTransaction): Promise<PendingTxCheck> {
     const key = midnightTxRowKey(tx);
-    if (rowState[key]?.checking) return 'notFound';
+    if (rowState[key]?.checking) return 'waiting';
     rowState[key] = { checking: true, outcome: null };
-    let outcome: PendingTxCheck = 'notFound';
+    // No answer from the background is no answer from the indexer either.
+    let outcome: PendingTxCheck = 'unknown';
     try {
       const reply = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.CHECK_MIDNIGHT_PENDING_TX,
         data: { hash: tx.hash, token: tx.token },
       }) as BgReply;
-      outcome = reply?.data?.success ? reply.data.result?.outcome ?? 'notFound' : 'notFound';
+      outcome = reply?.data?.success ? reply.data.result?.outcome ?? 'unknown' : 'unknown';
     } catch {
-      outcome = 'notFound';
+      outcome = 'unknown';
     }
     rowState[key] = { checking: false, outcome };
     return outcome;
@@ -83,4 +86,25 @@ export function useMidnightPendingActions() {
   }
 
   return { stateOf, checkAgain, dismiss, sendAgain };
+}
+
+/**
+ * The sends kept through a reset that the lookup didn't find, newest first, and
+ * the sentence that lists them: singular or plural, and "network upgrade" (with
+ * "No funds moved", which the lookup supports there) only when the server gave
+ * that as the reset's cause. The card shows it; the notice slot says it when
+ * the card appears (MidnightNoticeSlot.vue). Empty when there are none.
+ */
+export function useNotIncludedSends(): { sends: ComputedRef<MidnightTransaction[]>; sentence: ComputedRef<string> } {
+  const { tc } = useTranslation();
+  const sends = computed(() => notIncludedAfterReset(midnightStore.transactions ?? [])
+    .sort((a, b) => b.timestamp - a.timestamp));
+  const sentence = computed(() => {
+    const n = sends.value.length;
+    if (!n) return '';
+    return sends.value.every((tx) => tx.beforeReset?.upgrade)
+      ? tc('midnight.pending.notIncludedUpgrade', n)
+      : tc('midnight.pending.notIncluded', n);
+  });
+  return { sends, sentence };
 }

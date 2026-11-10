@@ -6,9 +6,10 @@
   <section v-if="sends.length" ref="card" class="not-included" data-test="midnight-not-included">
     <div class="not-included__head">
       <v-icon size="20" color="warning" class="not-included__icon" aria-hidden="true">mdi-alert-circle-outline</v-icon>
-      <!-- The text alone is announced, not the list and its buttons. Focus lands
+      <!-- Not a live region: the card comes and goes, and the notice slot's
+           always-mounted region says this sentence when it appears. Focus lands
            here when the last send is dismissed. -->
-      <p class="not-included__text t-body-sm" role="status" tabindex="-1" data-test="midnight-not-included-text">{{ sentence }}</p>
+      <p class="not-included__text t-body-sm" tabindex="-1" data-test="midnight-not-included-text">{{ sentence }}</p>
     </div>
     <ul class="not-included__list">
       <li v-for="tx in visible" :key="midnightTxRowKey(tx)" class="not-included__item" data-test="midnight-not-included-item">
@@ -51,11 +52,9 @@
 import { computed, nextTick, ref } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useMidnightPendingActions, usePendingClock } from '@/shared/composables/useMidnightPendingActions';
-import { midnightStore } from '@/stores/midnightStore';
+import { useMidnightPendingActions, useNotIncludedSends, usePendingClock } from '@/shared/composables/useMidnightPendingActions';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
-import { notIncludedAfterReset } from '@/chains/midnight/midnightPendingSends';
 import { formatTokenAmount } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
@@ -74,27 +73,15 @@ const emit = defineEmits<{ (e: 'send-again'): void }>();
 /** Shown before "Show N more". */
 const FIRST_SHOWN = 2;
 
-const { t, tc } = useTranslation();
+const { t } = useTranslation();
 const now = usePendingClock();
 const { sendAgain, dismiss } = useMidnightPendingActions();
 const card = ref<HTMLElement | null>(null);
 const expanded = ref(false);
 
-const sends = computed(() => notIncludedAfterReset(midnightStore.transactions ?? [])
-  .sort((a, b) => b.timestamp - a.timestamp));
+const { sends, sentence } = useNotIncludedSends();
 const visible = computed(() => (expanded.value ? sends.value : sends.value.slice(0, FIRST_SHOWN)));
 const hidden = computed(() => sends.value.length - visible.value.length);
-/**
- * "Network upgrade" (and "No funds moved", which the lookup supports there)
- * only when the server said that was the reset's cause; otherwise wording that
- * claims neither. Singular or plural by how many sends are listed.
- */
-const sentence = computed(() => {
-  const n = sends.value.length;
-  return sends.value.every((tx) => tx.beforeReset?.upgrade)
-    ? tc('midnight.pending.notIncludedUpgrade', n)
-    : tc('midnight.pending.notIncluded', n);
-});
 
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
 

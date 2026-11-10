@@ -5449,6 +5449,7 @@ export default {
   'midnight.pending.notConfirmed': 'Nicht bestätigt',
   'midnight.pending.checkAgain': 'Erneut prüfen',
   'midnight.pending.stillNotConfirmed': 'Noch immer nicht bestätigt.',
+  'midnight.pending.couldNotCheck': 'Prüfen nicht möglich. Versuche es später erneut.',
   'midnight.pending.wentThrough': 'Bestätigt. Diese Sendung ist durchgegangen.',
   'midnight.pending.rejected': 'Das Netzwerk hat diese Sendung abgelehnt. Es wurde kein Guthaben bewegt.',
   'midnight.pending.toAddress': 'an {address}',

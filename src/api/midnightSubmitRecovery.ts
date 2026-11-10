@@ -41,7 +41,8 @@ export const SUBMITTED_TX_QUERY = `query GeroSubmittedTx($id: HexEncoded!) {
 /**
  * The same lookup by the ledger hash a history row carries, for a pending row
  * the wallet checks again later (midnightPendingSends.ts): pending rows keep
- * the hash, not the identifiers.
+ * the hash, not the identifiers. With the indexer's latest block, so "not
+ * found" can be told apart from "not indexed that far yet".
  */
 export const PENDING_TX_QUERY = `query GeroPendingTx($hash: HexEncoded!) {
   transactions(offset: {hash: $hash}) {
@@ -49,6 +50,7 @@ export const PENDING_TX_QUERY = `query GeroPendingTx($hash: HexEncoded!) {
     hash
     ... on RegularTransaction { transactionResult { status } }
   }
+  block { height timestamp }
 }`;
 
 const LOST_REPLY_CODES: ReadonlySet<string> = new Set(['ECONNABORTED', 'ETIMEDOUT', 'ERR_NETWORK']);
@@ -100,7 +102,7 @@ const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(reso
 type IndexedOutcome = 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILURE';
 
 /** The first regular transaction in the indexer reply that carries a result, if any. */
-export function findOutcome(data: unknown): { hash: string; status: IndexedOutcome } | undefined {
+function findOutcome(data: unknown): { hash: string; status: IndexedOutcome } | undefined {
   const rows = (data as { transactions?: unknown } | null | undefined)?.transactions;
   if (!Array.isArray(rows)) return undefined;
   for (const row of rows) {

@@ -6715,6 +6715,15 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
       sendResponse({ id: request.id, data: { success: true, skipped: true }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    const rowToken = typeof token === 'string' && token ? token : 'NIGHT';
+    // The history feed can deliver the confirmed row before this message lands
+    // (the page records it after the submit): never turn it back into pending.
+    const { midnightTxRowKey } = await import('@/chains/midnight/midnightTxHash');
+    const rowKey = midnightTxRowKey({ hash, token: rowToken });
+    if (midnightStore.transactions.some((t) => t.status !== 'pending' && midnightTxRowKey(t) === rowKey)) {
+      sendResponse({ id: request.id, data: { success: true, skipped: true }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
     let amountBig = 0n;
     try { amountBig = BigInt(amount ?? '0'); } catch { amountBig = 0n; }
     // A public send to our own unshielded address is a self-transfer from the
@@ -6730,7 +6739,7 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
       // Colour of what was actually sent. Defaulted rather than required so
       // older callers (and the shielded path) keep their NIGHT behaviour; a
       // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
-      token: typeof token === 'string' && token ? token : 'NIGHT',
+      token: rowToken,
       amount: amountBig,
       // A self-transfer names no counterparty, matching the confirmed row
       // gero-sync will deliver — otherwise our own address would show for a
@@ -6781,8 +6790,9 @@ app.addToOptions(MessageTypes.DISMISS_MIDNIGHT_PENDING_TX, async (request, sendR
 /**
  * Midnight: "Check again" for a pending row past its time limit. Asks the
  * indexer for the transaction by its ledger hash and settles the row when it
- * is found. Request shape: `{ hash, token }`; result `{ outcome }`:
- * `confirmed` | `failed` | `notFound`.
+ * is found with its result. Request shape: `{ hash, token }`; result
+ * `{ outcome }` (midnightPendingSends.ts PendingTxCheck): `confirmed` |
+ * `failed` | `notFound` | `waiting` | `unknown` (the lookup failed).
  */
 app.addToOptions(MessageTypes.CHECK_MIDNIGHT_PENDING_TX, async (request, sendResponse) => {
   try {
@@ -6790,12 +6800,19 @@ app.addToOptions(MessageTypes.CHECK_MIDNIGHT_PENDING_TX, async (request, sendRes
     if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('CHECK_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
     const { hash, token } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
-    const [{ getMidnightApi }, { checkPendingTx }, { midnightActions }] = await Promise.all([
+    const [{ getMidnightApi }, { checkPendingTx }, { midnightActions, midnightStore }, { midnightTxRowKey }] = await Promise.all([
       import('@/api/midnight-api'), import('@/chains/midnight/midnightPendingSends'), import('@/stores/midnightStore'),
+      import('@/chains/midnight/midnightTxHash'),
     ]);
+    const rowToken = typeof token === 'string' && token ? token : 'NIGHT';
+    const rowKey = midnightTxRowKey({ hash, token: rowToken });
+    // The row's time and kind set how long the network could still include it.
+    const row = midnightStore.transactions.find((t) => midnightTxRowKey(t) === rowKey);
     const api = getMidnightApi(walletBg.network);
-    const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), hash);
-    if (outcome !== 'notFound') midnightActions.settlePendingTx(hash, typeof token === 'string' && token ? token : 'NIGHT', outcome);
+    const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), {
+      hash, timestamp: row?.timestamp ?? 0, isShielded: row?.isShielded ?? false,
+    });
+    if (outcome === 'confirmed' || outcome === 'failed') midnightActions.settlePendingTx(hash, rowToken, outcome);
     sendResponse({ id: request.id, data: { success: true, result: { outcome } }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });

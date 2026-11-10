@@ -29,8 +29,7 @@ import MidnightUpdateRequiredBanner from './MidnightUpdateRequiredBanner.vue';
 import MidnightStagenetNotice from './MidnightStagenetNotice.vue';
 import MidnightRefreshingNotice from './MidnightRefreshingNotice.vue';
 import MidnightNotIncludedCard from './MidnightNotIncludedCard.vue';
-import { midnightStore } from '@/stores/midnightStore';
-import { notIncludedAfterReset } from '@/chains/midnight/midnightPendingSends';
+import { useNotIncludedSends } from '@/shared/composables/useMidnightPendingActions';
 import { useMidnightRefresh, useMidnightRefreshSentence } from '@/shared/composables/useMidnightRefresh';
 import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -56,7 +55,8 @@ const upgrading = useMidnightNetworkUpgrading(() => network.value);
 const stagenet = computed(() => isMidnightStagenetWallet(walletStore.loggedWallet));
 const { refreshing } = useMidnightRefresh();
 // Sends that didn't go through: only once the rebuild has ended and the lookup didn't find them.
-const notIncluded = computed(() => !refreshing.value && notIncludedAfterReset(midnightStore.transactions ?? []).length > 0);
+const { sentence: notIncludedSentence } = useNotIncludedSends();
+const notIncluded = computed(() => !refreshing.value && notIncludedSentence.value !== '');
 
 /** Send again on a send that didn't go through: the page opens its Send screen. */
 const emit = defineEmits<{ (e: 'send-again'): void }>();
@@ -90,6 +90,8 @@ watch(upgrading, (on) => {
   if (on) say('upgrade', `${t('midnight.upgrade.title')}. ${t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(network.value) })}`);
 });
 watch(refreshSentence, (sentence) => { if (sentence) say('refreshing', sentence); });
+// The card's sentence when it appears, and again when it changes (another send, singular to plural).
+watch(() => (notIncluded.value ? notIncludedSentence.value : ''), (sentence) => { if (sentence) say('notIncluded', sentence); });
 
 const shown = computed(() => visibleMidnightNotices({
   update: updateRequired.value,

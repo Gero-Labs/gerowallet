@@ -5556,6 +5556,7 @@ export default {
   'midnight.pending.notConfirmed': 'Not confirmed',
   'midnight.pending.checkAgain': 'Check again',
   'midnight.pending.stillNotConfirmed': 'Still not confirmed.',
+  'midnight.pending.couldNotCheck': 'Couldn\'t check. Try again later.',
   'midnight.pending.wentThrough': 'Confirmed. This send went through.',
   'midnight.pending.rejected': 'The network rejected this send. No funds moved.',
   'midnight.pending.toAddress': 'to {address}',

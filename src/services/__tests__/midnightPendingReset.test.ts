@@ -1,6 +1,8 @@
 // Issue 1470 through the real sync pipeline: a pending send survives a chain
 // reset; only once the rebuild has ended does the background look it up, and
-// only a send the lookup doesn't find goes to the "didn't go through" card.
+// only a send the indexer answers it doesn't have, once its latest block is
+// past the send's time to live, goes to the "didn't go through" card. A failed
+// lookup is no answer.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({ connect: vi.fn(), graphql: vi.fn() }));
@@ -16,7 +18,7 @@ vi.mock('@/chains/midnight/midnightSyncGeneration', async (importOriginal) => ({
 import service from '@/services/midnight-sync.service';
 import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { Network } from '@/models/types';
-import { notIncludedAfterReset } from '@/chains/midnight/midnightPendingSends';
+import { notIncludedAfterReset, pendingLookupDeadline } from '@/chains/midnight/midnightPendingSends';
 import { REFRESH_QUIET_MS } from '@/chains/midnight/midnightRefresh';
 
 const ME = 'mn_addr_stagenet1test';
@@ -34,6 +36,9 @@ const transfer = (hash: string, mine: 'in' | 'out', value = '40000000') => ({
       unshielded_spent_outputs: [] },
 });
 const flush = () => vi.advanceTimersByTimeAsync(0);
+/** The indexer's answer for a hash it doesn't have, its latest block at the current (fake) time. */
+const notIndexed = () => ({ transactions: [], block: { height: 10, timestamp: Date.now() } });
+const sentRow = () => midnightStore.transactions.find((t) => t.hash === SENT);
 const sync = async (data: Record<string, unknown>) => { await h.connect.mock.lastCall![4].onSync({ type: 'SYNC', ...data }); await flush(); };
 const pending = (ledgerHash: boolean) => midnightActions.applyTransaction({
   hash: SENT, type: 'send', token: 'NIGHT', amount: 40_000_000n, counterparty: 'mn_addr_stagenet1other',
@@ -49,7 +54,7 @@ beforeEach(async () => {
   midnightStore.transactions = [];
   midnightStore.chainIdentity = null;
   h.connect.mockClear();
-  h.graphql.mockReset().mockResolvedValue({ transactions: [] });
+  h.graphql.mockReset().mockImplementation(async () => notIndexed());
   service.start(Network.STAGENET, { unshielded: ME, shielded: '', dust: '' });
   await flush();
   await sync({ ...identity(1), transactions: [transfer('bb'.repeat(32), 'in')] });
@@ -74,7 +79,7 @@ describe('a pending send across a chain reset', () => {
     expect(notIncludedAfterReset(midnightStore.transactions)).toEqual([]);
   });
 
-  it('no lookup while the rebuild runs; once it ends, a send the indexer cannot find goes to the card', async () => {
+  it('no lookup while the rebuild runs; once it ends, and once the indexer is past the send\'s time to live, a send it cannot find goes to the card', async () => {
     pending(true);
     await sync(identity(2, `0x${'ef'.repeat(32)}`)); // a new chain: done after the quiet time
     expect(midnightStore.refreshing).not.toBeNull();
@@ -82,7 +87,53 @@ describe('a pending send across a chain reset', () => {
     await vi.advanceTimersByTimeAsync(REFRESH_QUIET_MS + 5_000);
     expect(midnightStore.refreshing).toBeNull();
     expect(h.graphql).toHaveBeenCalledWith(expect.stringContaining('offset: {hash: $hash}'), { hash: SENT });
+    // The indexer's latest block is not past the time to live yet: the network could still include it.
+    expect(notIncludedAfterReset(midnightStore.transactions)).toEqual([]);
+    expect(sentRow()?.beforeReset?.notFound).toBeUndefined();
+    // Looked up again once it is.
+    await vi.advanceTimersByTimeAsync(pendingLookupDeadline(sentRow()!) - Date.now() + 31_000);
     expect(notIncludedAfterReset(midnightStore.transactions).map((t) => t.hash)).toEqual([SENT]);
+  });
+
+  it('a lookup that fails is no answer: the send stays "Not confirmed", and is looked up again later', async () => {
+    h.graphql.mockRejectedValue(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }));
+    pending(true);
+    await sync({ ...identity(2), midnight_chain_generation_reason: 'network_upgrade' });
+    await sync({ ...identity(2), transactions: [transfer('bb'.repeat(32), 'in')] }); // the target comes back: done
+    await flush();
+    expect(midnightStore.refreshing).toBeNull();
+    expect(h.graphql).toHaveBeenCalledTimes(1);
+    expect(notIncludedAfterReset(midnightStore.transactions)).toEqual([]);
+    expect(sentRow()).toMatchObject({ status: 'pending', beforeReset: { upgrade: true } });
+
+    // The indexer answers on a later try, once past the time to live.
+    vi.setSystemTime(pendingLookupDeadline(sentRow()!) + 1_000);
+    h.graphql.mockImplementation(async () => notIndexed());
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(h.graphql).toHaveBeenCalledTimes(2);
+    expect(notIncludedAfterReset(midnightStore.transactions).map((t) => t.hash)).toEqual([SENT]);
+  });
+
+  it('a failed lookup is retried a few times only, and the timer goes with the session', async () => {
+    h.graphql.mockRejectedValue(new Error('Request failed with status code 501'));
+    pending(true);
+    await sync(identity(2, `0x${'ef'.repeat(32)}`));
+    await vi.advanceTimersByTimeAsync(REFRESH_QUIET_MS + 5_000);
+    await vi.advanceTimersByTimeAsync(3 * 60 * 60_000);
+    const tries = h.graphql.mock.calls.length;
+    expect(tries).toBe(7); // the first lookup and six retries
+    expect(notIncludedAfterReset(midnightStore.transactions)).toEqual([]);
+    service.stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a send found without its result yet is not listed', async () => {
+    h.graphql.mockResolvedValue({ transactions: [{ __typename: 'RegularTransaction', hash: SENT, transactionResult: null }], block: { height: 10, timestamp: Date.now() + 60 * 60_000 } });
+    pending(true);
+    await sync(identity(2, `0x${'ef'.repeat(32)}`));
+    await vi.advanceTimersByTimeAsync(REFRESH_QUIET_MS + 5_000);
+    expect(notIncludedAfterReset(midnightStore.transactions)).toEqual([]);
+    expect(sentRow()?.status).toBe('pending');
   });
 
   it('a send the lookup finds is settled, not listed', async () => {
