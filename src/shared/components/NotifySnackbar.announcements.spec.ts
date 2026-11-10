@@ -50,7 +50,7 @@ function render() {
 /** Deliver a NOTIFY_PRESENT as the runtime would, and wait for the page's answer. */
 async function present(data: Record<string, unknown>): Promise<unknown> {
   let answer: unknown = 'no answer';
-  const kept = listeners[0]!({ method: MessageTypes.NOTIFY_PRESENT, data }, {}, (r) => { answer = r; });
+  const kept = listeners[0]!({ method: MessageTypes.NOTIFY_PRESENT, data }, { id: 'ext', url: 'chrome-extension://ext/background/index.js' }, (r) => { answer = r; });
   await flushPromises();
   await nextTick();
   return { answer, kept };
@@ -64,7 +64,7 @@ beforeEach(() => {
   listeners = [];
   focused = true;
   (globalThis as unknown as { chrome: unknown }).chrome = {
-    runtime: { id: 'ext', onMessage: { addListener: (l: Listener) => listeners.push(l), removeListener: () => undefined } },
+    runtime: { id: 'ext', getURL: (path: string) => `chrome-extension://ext/${path}`, onMessage: { addListener: (l: Listener) => listeners.push(l), removeListener: () => undefined } },
   };
   vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
   store().reset();
@@ -94,7 +94,7 @@ describe('an announcement offered to a focused page', () => {
     store().state.items = [product(1)];
     focused = false;
     const { view } = render();
-    expect(await present(request(annId(1)))).toEqual({ answer: { shown: false }, kept: false });
+    expect(await present(request(annId(1)))).toEqual({ answer: 'no answer', kept: false });
     expect(view.find('.notify-snack').exists()).toBe(false);
   });
 
