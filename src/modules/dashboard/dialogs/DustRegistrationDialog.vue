@@ -174,7 +174,7 @@
             class="mt-2"
             data-test="dust-register-paused"
           >
-            {{ t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+            {{ writesHeldText }}
           </GNote>
 
           <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
@@ -273,7 +273,7 @@ import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccou
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
-import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
@@ -524,7 +524,12 @@ const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
 /** Native registration on this wallet's network is paused for a network upgrade (midnightWriteGate.ts). */
-const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
+const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
+/** Held for either reason: the network upgrade, or this build must update (which takes precedence). */
+const writesPaused = computed(() => writeBlock.value !== null);
+const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
+  ? t('midnight.errors.updateRequired')
+  : t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
 // Turned on while the password step is open: back out, so no password or PassKey is asked for.
 watch(writesPaused, (paused) => {
   if (paused && inSigningPhase.value && !submitBusy.value) resetRegistrationState();

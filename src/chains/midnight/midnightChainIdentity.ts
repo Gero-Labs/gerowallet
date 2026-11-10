@@ -1,6 +1,7 @@
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { withMidnightAbort } from './midnightAbort';
+import { geroClientHeaders } from './midnightClientVersion';
 
 export interface MidnightChainIdentity {
   network: string;
@@ -10,7 +11,7 @@ export interface MidnightChainIdentity {
 
 async function authenticatedGet(url: string, signal?: AbortSignal): Promise<Response> {
   const attempt = async (token: string) => fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, ...geroClientHeaders() },
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
   let response = await attempt(await withMidnightAbort(getNexusAccessToken(), signal));

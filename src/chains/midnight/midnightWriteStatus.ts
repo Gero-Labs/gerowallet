@@ -2,12 +2,44 @@
  * The status read that drives the write gate (midnightWriteGate.ts), and the
  * check the send and registration paths run before they ask for anything.
  */
-import { getMidnightApi } from '@/api/midnight-api';
-import { MIDNIGHT_NETWORK_UPGRADING, MidnightApiError } from '@/api/midnightApiError';
+import { getMidnightApi, type MidnightWriteStatus } from '@/api/midnight-api';
+import { CLIENT_UPDATE_REQUIRED, MIDNIGHT_NETWORK_UPGRADING, MidnightApiError } from '@/api/midnightApiError';
 import { debugLog } from '@/utils/debug';
 import {
-  clearMidnightStatusPause, isMidnightNetworkUpgrading, midnightGateKey, noteMidnightNetworkUpgrading, noteMidnightWritesOpen,
+  clearMidnightStatusPause, midnightGateKey, midnightWriteBlock, noteMidnightNetworkUpgrading, noteMidnightUpdateRequired,
+  noteMidnightWritesOpen,
 } from './midnightWriteGate';
+import { extensionVersion, isVersionBelow } from './midnightClientVersion';
+import { midnightLedgerVersion } from './midnightLedger';
+
+/** The ledger this build signs with on `network`, or null for a network it doesn't know. */
+function buildLedger(network: string): number | null {
+  try {
+    return midnightLedgerVersion(network);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a status read closes sends to this build, and on what evidence:
+ * the reason CLIENT_UPDATE_REQUIRED, a ledger above the one this build signs
+ * with on the network, or a minimum extension version above this build.
+ * `minVersion` is returned only when the minimum is the sole cause, so the
+ * entry stops holding a build that has since updated past it.
+ */
+export function updateRequiredBy(
+  status: Exclude<MidnightWriteStatus, { kind: 'unknown' }>,
+  network: string,
+  version: string = extensionVersion(),
+): { minVersion?: string } | null {
+  const ledger = buildLedger(network);
+  const byReason = status.reason === CLIENT_UPDATE_REQUIRED;
+  const byLedger = status.ledger !== undefined && ledger !== null && status.ledger > ledger;
+  const byVersion = !!status.minExtensionVersion && !!version && isVersionBelow(version, status.minExtensionVersion);
+  if (byReason || byLedger) return {};
+  return byVersion ? { minVersion: status.minExtensionVersion } : null;
+}
 
 /** How often a Midnight wallet session re-reads the status. */
 export const MIDNIGHT_STATUS_POLL_MS = 5 * 60_000;
@@ -22,12 +54,15 @@ const unsupportedUntil = new Map<string, number>();
 const inFlight = new Map<string, Promise<void>>();
 
 /**
- * Read the server's status for `network` and apply it to the gate. `writesOpen:
+ * Read the server's status for `network` and apply it to the gate. First, does
+ * it close sends to this build ({@link updateRequiredBy}): then "update
+ * required", open or closed, which takes precedence. Otherwise `writesOpen:
  * false` with reason NETWORK_UPGRADING (or no reason) pauses the network;
  * `writesOpen: true` opens it. Other reasons are left to their own states. A
  * 404 (no status route) clears a pause an earlier read set, and the network is
  * asked again after {@link MIDNIGHT_STATUS_UNSUPPORTED_RETRY_MS}. A failed read
- * changes nothing.
+ * changes nothing. A server that sends no minimum version and no ledger
+ * leaves "update required" to the 501's reason.
  */
 export function refreshMidnightWriteStatus(network: string, options: { force?: boolean } = {}): Promise<void> {
   const key = midnightGateKey(network);
@@ -48,7 +83,10 @@ export function refreshMidnightWriteStatus(network: string, options: { force?: b
         return;
       }
       unsupportedUntil.delete(key);
-      if (status.kind === 'open') {
+      const update = updateRequiredBy(status, network);
+      if (update) {
+        await noteMidnightUpdateRequired(network, 'status', update);
+      } else if (status.kind === 'open') {
         await noteMidnightWritesOpen(network);
       } else if (!status.reason || status.reason === 'NETWORK_UPGRADING') {
         await noteMidnightNetworkUpgrading(network, 'status');
@@ -64,13 +102,17 @@ export function refreshMidnightWriteStatus(network: string, options: { force?: b
 }
 
 /**
- * Throws the readable network upgrade error when `network` is paused. With
- * `refresh`, reads the status first: the one cheap call that lets a shielded
- * send stop before its sync and proving.
+ * Throws the readable error when writes on `network` are held: the network
+ * upgrade, or "update required". With `refresh`, reads the status first: the
+ * one cheap call that lets a shielded send stop before its sync and proving.
  */
 export async function assertMidnightWritesOpen(network: string, options: { refresh?: boolean } = {}): Promise<void> {
   if (options.refresh) await refreshMidnightWriteStatus(network);
-  if (await isMidnightNetworkUpgrading(network)) {
+  const block = await midnightWriteBlock(network);
+  if (block === 'updateRequired') {
+    throw new MidnightApiError('updateRequired', { errorCode: MIDNIGHT_NETWORK_UPGRADING, reason: CLIENT_UPDATE_REQUIRED }, network);
+  }
+  if (block === 'networkUpgrading') {
     throw new MidnightApiError('networkUpgrading', { errorCode: MIDNIGHT_NETWORK_UPGRADING }, network);
   }
 }

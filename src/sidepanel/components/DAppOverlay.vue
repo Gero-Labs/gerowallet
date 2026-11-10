@@ -1254,7 +1254,7 @@ import KeystoneSignSheet from './KeystoneSignSheet.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
-import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
@@ -3385,20 +3385,22 @@ function rejectMidnightBalance() {
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
 }
 
-// ── Midnight network upgrade (midnightWriteGate.ts) ─────────────────────────
-// While sends on the wallet's network are paused, makeTransfer,
+// ── Midnight network upgrade or update required (midnightWriteGate.ts) ──────
+// While sends on the wallet's network are paused, or closed to this build until
+// it updates (which takes precedence), makeTransfer,
 // balanceUnsealedTransaction and makeIntent show the reason instead of
 // Approve, and the dapp gets InternalError with the same sentence (on Close
 // and on Escape): a server-side state, not a request the dapp got wrong.
 const MIDNIGHT_PAUSABLE_METHODS: ReadonlySet<string> = new Set([
   'midnight_makeTransfer', 'midnight_balanceUnsealedTransaction', 'midnight_makeIntent',
 ]);
-const midnightWritesPaused = useMidnightNetworkUpgrading(() => (
+const midnightWriteBlock = useMidnightWriteBlock(() => (
   loggedWallet.value?.chain === Blockchain.MIDNIGHT ? loggedWallet.value?.network : ''
 ));
-const midnightWritesPausedReason = computed(() => t('midnight.errors.networkUpgrading', {
-  network: midnightNetworkDisplayName(loggedWallet.value?.network),
-}));
+const midnightWritesPaused = computed(() => midnightWriteBlock.value !== null);
+const midnightWritesPausedReason = computed(() => (midnightWriteBlock.value === 'updateRequired'
+  ? t('midnight.errors.updateRequired')
+  : t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
 function declineMidnightWhilePaused() {
   approval.invalidate();
   spendingPassword.value = '';

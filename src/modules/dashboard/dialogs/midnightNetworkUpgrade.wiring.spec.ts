@@ -12,11 +12,14 @@ const read = (path: string) => readFileSync(join(src, path), 'utf8');
 describe('Midnight network upgrade wiring', () => {
   it('send dialog: Continue held (aria-disabled) with the reason linked, step 2 never opens, and backs out if it turns on', () => {
     const dialog = read('modules/dashboard/dialogs/MidnightSendDialog.vue');
-    expect(dialog).toContain('const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);');
+    expect(dialog).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
+    expect(dialog).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
+    expect(dialog).toContain("? t('midnight.errors.updateRequired')");
     expect(dialog).toContain(':aria-disabled="writesPaused ? \'true\' : undefined"');
     expect(dialog).toContain(':aria-describedby="writesPaused ? \'midnight-send-paused\' : undefined"');
     expect(dialog).toContain('<GNote v-if="writesPaused" id="midnight-send-paused"');
-    expect(dialog).toContain("t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) })");
+    expect(dialog).toContain("t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
+    expect(dialog).toContain('{{ writesHeldText }}');
     expect(dialog).toContain('if (writesPaused.value) return;\n  if (currentStep.value === 1) {');
     expect(dialog).toContain('if (paused && currentStep.value === 2 && !sending.value) prevStep();');
     expect(dialog).toContain("if (writesPaused.value) return false;");
@@ -29,7 +32,11 @@ describe('Midnight network upgrade wiring', () => {
     expect(sheet).toContain(':aria-describedby="writesPaused ? \'midnight-sheet-send-paused\' : undefined"');
     expect(sheet).toMatch(/<template v-if="!writesPaused">\s*<GNote v-if="!isDustLow"/);
     expect(sheet).toContain('if (target === 4 && writesPaused.value) return;');
-    expect(sheet).toContain("$t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) })");
+    expect(sheet).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
+    expect(sheet).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
+    expect(sheet).toContain("? t('midnight.errors.updateRequired')");
+    expect(sheet).toContain("t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
+    expect(sheet.match(/\{\{ writesHeldText \}\}/g)?.length).toBe(2);
     expect(sheet).toMatch(/if \(paused && step\.value === 4 && !submitting\.value\) \{\s*approval\.invalidate\(\);\s*step\.value = 3;/);
   });
 
@@ -38,7 +45,11 @@ describe('Midnight network upgrade wiring', () => {
     expect(dialog).toContain(':aria-disabled="writesPaused ? \'true\' : undefined"');
     expect(dialog).toContain(':aria-describedby="writesPaused ? \'dust-register-paused\' : undefined"');
     expect(dialog).toContain('id="dust-register-paused"');
-    expect(dialog).toContain("t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) })");
+    expect(dialog).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
+    expect(dialog).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
+    expect(dialog).toContain("? t('midnight.errors.updateRequired')");
+    expect(dialog).toContain("t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
+    expect(dialog).toContain('{{ writesHeldText }}');
     expect(dialog).toContain('if (!dustAddress.value || writesPaused.value) return;');
     expect(dialog).toContain('<v-btn block variant="outlined" class="mt-3" @click="sourcesOpen = true">');
   });
@@ -55,14 +66,14 @@ describe('Midnight network upgrade wiring', () => {
     expect(overlay).toContain('<p v-if="!(midnightWritesPaused && intentPaysFees)"');
   });
 
-  it('DApp submitTransaction is answered at once on a paused network', () => {
+  it('DApp submitTransaction is answered at once on a paused network, or one closed to this build', () => {
     const background = read('chrome/background.ts');
     const start = background.indexOf('app.add(MIDNIGHT_METHOD.submitTransaction,');
     const handler = background.slice(start, background.indexOf('\napp.add', start + 10));
-    const gate = handler.indexOf('if (await isMidnightNetworkUpgrading(wallet.network)) {');
+    const gate = handler.indexOf('const writeBlock = await midnightWriteBlock(wallet.network);\n  if (writeBlock) {');
     expect(gate).toBeGreaterThan(-1);
     expect(gate).toBeLessThan(handler.indexOf('getMidnightApi'));
-    expect(handler).toContain("midnightApiError(MidnightErrorCode.InternalError, readableMidnightError('networkUpgrading', {}, wallet.network))");
+    expect(handler).toContain('midnightApiError(MidnightErrorCode.InternalError, readableMidnightError(writeBlock, {}, wallet.network))');
     // The side panel's site tracker shows the refusal.
     const refusal = handler.slice(gate, handler.indexOf('return;', gate));
     expect(refusal).toContain("recordSiteActivity(request.origin as string, { type: 'submit-failed', reason: 'paused' })");
