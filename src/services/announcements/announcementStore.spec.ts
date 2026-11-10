@@ -24,7 +24,7 @@ function planted(): AnnouncementsSnapshot {
   const r = check(bytes(editorial()), 'editorial', NOW);
   if (r.ok === false) throw new Error(r.refusal);
   r.document.content['en']!.title = 'Send your recovery phrase to verify your wallet';
-  return { seq: 9, etag: null, fetchedAt: NOW, verifiedWith: verificationFingerprint('2.9.0', TEST_KEYS)!, items: [{ document: r.document, tier: 'editorial', firstSeenAt: NOW }] };
+  return { seq: 9, fetchedAt: NOW, failures: 0, failedAt: 0, verifiedWith: verificationFingerprint('2.9.0', TEST_KEYS)!, items: [{ document: r.document, tier: 'editorial', firstSeenAt: NOW }] };
 }
 
 beforeEach(async () => {
@@ -74,6 +74,21 @@ describe('announcement storage', () => {
     expect((await store.getState()).read).toEqual({ [ID]: 5 });
     expect((await store.getPrefs()).off).toEqual(['news']);
     expect([...session.keys()].sort()).toEqual(['notifyChanged:announcementPrefs', 'notifyChanged:announcementState', 'notifyChanged:announcements']);
+  });
+
+  it('loses no mark when several are written at once', async () => {
+    // Page messages and a refresh call these together; each reads the key and writes it back.
+    const store = createAnnouncementStore();
+    const ids = Array.from({ length: 12 }, (_, n) => `01JC00000000000000000000${String(n + 10)}`);
+    await Promise.all([
+      ...ids.map((id, n) => store.mark(n % 2 ? 'read' : 'presented', [id], n + 1)),
+      store.pruneState(new Set(ids), 1),
+      store.mark('bannerDismissed', [ID], 99),
+    ]);
+    const state = await store.getState();
+    expect(Object.keys(state.read)).toHaveLength(6);
+    expect(Object.keys(state.presented)).toHaveLength(6);
+    expect(state.bannerDismissed).toEqual({ [ID]: 99 });
   });
 
   it('reads a private-store value of the wrong shape as empty', async () => {

@@ -3,14 +3,14 @@
 // Both import this file instead of the engine, so neither pulls the engine's dependencies into its
 // own graph. notifyBackground binds the real functions; until then both do nothing.
 
-import type { StoredAnnouncement } from './announcementStore';
+import type { PushLookup } from './announcementStore';
 
 export const announcementHooks: {
   /** The `ANNOUNCEMENTS` socket frame: the feed's version number. */
   feedChanged: (seq: unknown) => void;
-  /** The verified announcement a push names, or null when it cannot be had in time. */
-  forPush: (aid: unknown) => Promise<StoredAnnouncement | null>;
+  /** The verified announcement a push names, or none, and then whether the generic text is shown quietly. */
+  forPush: (aid: unknown, kind?: unknown) => Promise<PushLookup>;
 } = {
   feedChanged: () => undefined,
-  forPush: async () => null,
+  forPush: async () => ({ item: null, quiet: false }),
 };

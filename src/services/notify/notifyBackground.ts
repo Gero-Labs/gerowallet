@@ -23,6 +23,7 @@ import { createAnnouncementEngine, type RefreshReason } from '@/services/announc
 import { createAnnouncementFeed, DEFAULT_ANNOUNCEMENTS_API_URL } from '@/services/announcements/announcementFeed';
 import { announcementHooks } from '@/services/announcements/announcementHooks';
 import { announcementEventTag, createAnnouncementStore, type StoredAnnouncement } from '@/services/announcements/announcementStore';
+import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
@@ -49,6 +50,19 @@ export const notifyStore = createNotifyStore(undefined, (m, e) => log(`${m}: ${S
 
 /** Broadcast announcements: verified documents, read marks and the kinds switched off (private store). */
 const announcementStore = createAnnouncementStore();
+/** The keys pinned in this build, and nothing else: no key is ever read from storage or the network. */
+const announcementKeys = { editorial: ANNOUNCEMENT_EDITORIAL_KEYS, feed: ANNOUNCEMENT_FEED_KEYS };
+/**
+ * Announcement pushes are asked for only by a build that can verify one. With no key pinned every
+ * such push could only be the generic "News from Gero", so the server is told not to send any.
+ */
+const announcementCaps = (): string[] => (announcementKeys.editorial.length || announcementKeys.feed.length ? [...DEVICE_CAPS] : []);
+/**
+ * The kill switch, from the flag mirror in the private store (the flag service cannot run in the
+ * worker). On unless the mirror says an explicit `false`, so a worker that starts before any page
+ * has loaded the flags behaves as it does by default.
+ */
+const announcementsOn = async (): Promise<boolean> => (await readFeatureFlagMirror())['isAnnouncementsEnabled'] !== false;
 
 const notifyClient = createNotifyClient({
   baseUrl: import.meta.env['VITE_NOTIFY_API_URL'] || DEFAULT_NOTIFY_API_URL,
@@ -72,7 +86,7 @@ const notifyClient = createNotifyClient({
       transport: j && device.vapidKid ? 'webpush' : 'none',
       ...(j && device.vapidKid ? { webpush: { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, vapidKid: device.vapidKid, expirationTime: j.expirationTime ?? null } } : {}),
       // The same announcement fields the registration machine sends, so a recovery does not lose them.
-      caps: [...DEVICE_CAPS],
+      caps: announcementCaps(),
       announcementsOff: (await announcementStore.getPrefs()).off,
     };
   },
@@ -109,6 +123,7 @@ export const notifyRegistration: NotifyRegistration = createNotifyRegistration({
   loadProof: loadDeviceRegisterProof,
   produceProof: (auth) => walletManager.produceDeviceRegisterProof(auth),
   announcementsOff: async () => (await announcementStore.getPrefs()).off,
+  caps: announcementCaps,
   log,
 });
 
@@ -281,8 +296,8 @@ const announcementEngine = createAnnouncementEngine({
     fetch: (input, init) => fetch(input, init),
   }),
   store: announcementStore,
-  // The keys pinned in this build, and nothing else: no key is ever read from storage or the network.
-  keys: { editorial: ANNOUNCEMENT_EDITORIAL_KEYS, feed: ANNOUNCEMENT_FEED_KEYS },
+  keys: announcementKeys,
+  flagOn: announcementsOn,
   install: async () => ({ version: chrome.runtime.getManifest().version, networks: await installedNetworks() }),
   present: presentAnnouncement,
   // The server must learn the new opt-outs, or it keeps pushing a kind this browser no longer shows.
@@ -291,7 +306,7 @@ const announcementEngine = createAnnouncementEngine({
 });
 
 announcementHooks.feedChanged = (seq) => announcementEngine.onFeedChanged(seq);
-announcementHooks.forPush = (aid) => announcementEngine.forPush(aid);
+announcementHooks.forPush = (aid, kind) => announcementEngine.forPush(aid, kind);
 
 /** Read the feed now. Never awaited by anything that matters: a slow or failing feed delays nothing. */
 export function announcementsRefresh(reason: RefreshReason): Promise<void> {
@@ -310,7 +325,7 @@ export const notifyPushHandlers = createNotifyPushHandlers({
   store: notifyStore,
   showNotification: async (title, options) => { await self.registration?.showNotification?.(title, options); },
   presentToPages,
-  announcement: (aid) => announcementHooks.forPush(aid),
+  announcement: (aid, kind) => announcementHooks.forPush(aid, kind),
   locale: storedLocale,
   tokenInfo: storedTokenInfo,
   walletName: storedWalletName,

@@ -16,7 +16,7 @@
 // Dependencies are injected for the unit tests; notifyBackground.ts binds them.
 
 import { pushStrings } from '@/plugins/i18n/push';
-import type { StoredAnnouncement } from '@/services/announcements/announcementStore';
+import type { PushLookup, StoredAnnouncement } from '@/services/announcements/announcementStore';
 import { announcementTag, parsePushPayload, type PushPayload } from './notifyPayload';
 import { pushLocale, renderPush, routeFor, type NotificationData, type NotifyAsset, type RenderedPush, type RouteIntent, type TokenLookup } from './notifyRender';
 import type { NotifyStore } from './notifyStore';
@@ -48,11 +48,11 @@ export interface NotifyPushDeps {
   /** Focus or open the dashboard on this route (B4). */
   openDashboard: (route: RouteIntent) => Promise<void>;
   /**
-   * The broadcast announcement with this id, fetched and signature-verified by the worker, or null
-   * when it cannot be had in time (announcementEngine.forPush). Absent: every announcement push
-   * shows the generic text.
+   * The broadcast announcement with this id, fetched and signature-verified by the worker, or none
+   * (announcementEngine.forPush). `kind` is the push's own claim, used only to stay quiet about a
+   * kind the user switched off. Absent: every announcement push shows the generic text.
    */
-  announcement?: (aid: string) => Promise<StoredAnnouncement | null>;
+  announcement?: (aid: string, kind?: string) => Promise<PushLookup>;
   iconUrl: string;
   now?: () => number;
   log?: (message: string) => void;
@@ -84,13 +84,23 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
    * worker has fetched it and verified its signature (deps.announcement), or the two fixed strings
    * from push.ts. Nothing else can be shown, whoever sent the push. It is not added to the inbox:
    * announcements have their own store, which only verified documents enter.
+   *
+   * A push the wallet knows is not for this user (its kind is switched off, it is for another
+   * network or version, it was taken down) cannot simply be dropped: the subscription is
+   * userVisibleOnly, so Chrome requires a notification. It gets the generic text without a sound,
+   * under the one shared tag, and no in-page snackbar.
    */
   async function handleAnnouncementPush(p: PushPayload): Promise<RenderedPush> {
     const locale = pushLocale(await deps.locale());
     const aid = p.x?.aid;
     let item: StoredAnnouncement | null = null;
+    let quiet = false;
     if (aid && deps.announcement) {
-      try { item = await deps.announcement(aid); } catch (e) { log(`announcement lookup failed: ${String(e)}`); }
+      try {
+        const found = await deps.announcement(aid, p.x?.kind);
+        item = found.item;
+        quiet = found.item === null && found.quiet;
+      } catch (e) { log(`announcement lookup failed: ${String(e)}`); }
     }
     const text = item ? (item.document.content[locale === 'us' ? 'en' : locale] ?? item.document.content['en']) : undefined;
     const shown = item && text && aid ? { aid, title: text.title, body: text.summary } : null;
@@ -106,13 +116,15 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
     const data: NotificationData = { v: p.v, t: 'announcement', c: p.c, w: '', e: tag, d: 'announcement', ...(details ? { x: details } : {}), walletId: null, degraded: verified ? 'none' : 'generic' };
     await deps.store.markSeen(tag, now());
     let presented = false;
-    try {
-      presented = await deps.presentToPages({ e: tag, title, body, route, walletId: null, ...(shown ? { announcementId: shown.aid } : {}) });
-    } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
-    if (!presented) {
-      await deps.showNotification(title, { body, icon: deps.iconUrl, tag, silent: false, renotify: false, requireInteraction: false, timestamp, data });
+    if (!quiet) {
+      try {
+        presented = await deps.presentToPages({ e: tag, title, body, route, walletId: null, ...(shown ? { announcementId: shown.aid } : {}) });
+      } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
     }
-    log(`announcement push shown: verified=${verified} inPage=${presented}`);
+    if (!presented) {
+      await deps.showNotification(title, { body, icon: deps.iconUrl, tag, silent: quiet, renotify: false, requireInteraction: false, timestamp, data });
+    }
+    log(`announcement push shown: verified=${verified} quiet=${quiet} inPage=${presented}`);
     return { title, body, tag, requireInteraction: false, timestamp, data, route, unknownWalletTag: null };
   }
 

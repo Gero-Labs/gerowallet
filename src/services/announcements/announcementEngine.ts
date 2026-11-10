@@ -16,7 +16,7 @@ import type { AnnouncementFeed } from './announcementFeed';
 import { ANNOUNCEMENT_ID } from './announcementRules';
 import {
   trustedSnapshot, verificationFingerprint, visibleAnnouncements,
-  type AnnouncementPrefs, type AnnouncementsSnapshot, type AnnouncementStore, type StoredAnnouncement,
+  type AnnouncementPrefs, type AnnouncementsSnapshot, type AnnouncementStore, type PushLookup, type StoredAnnouncement,
 } from './announcementStore';
 import { verifyEnvelope, type VerifyKeys } from './announcementVerify';
 
@@ -31,6 +31,9 @@ export const PUSH_BUDGET_MS = 5_000;
 export const START_MIN_INTERVAL_MS = 15 * 60_000;
 /** A page may ask for a refresh at most this often. */
 export const PAGE_MIN_INTERVAL_MS = 60_000;
+/** After a failed read the feed is left alone this long, doubling with each failure in a row, up to the cap. */
+export const BACKOFF_BASE_MS = 30_000;
+export const BACKOFF_MAX_MS = 30 * 60_000;
 /** Envelopes verified per refresh, whatever the feed sends. */
 const MAX_ENVELOPES = 50;
 
@@ -42,8 +45,11 @@ export interface AnnouncementEngineDeps {
   install: () => Promise<InstallInfo> | InstallInfo;
   /** Offer one announcement to open pages (the snackbar). Never a system notification: those come from pushes. */
   present?: (item: StoredAnnouncement) => Promise<unknown> | unknown;
-  /** The kill switch (isAnnouncementsEnabled). Off: still fetched and stored, never presented. */
-  flagOn?: () => boolean;
+  /**
+   * The kill switch (isAnnouncementsEnabled). Off: still fetched and stored, but nothing is offered to
+   * pages and a push gets no announcement (it shows the generic text, quietly).
+   */
+  flagOn?: () => boolean | Promise<boolean>;
   /** Called after the opt-outs change, so the device registration can be sent again. */
   onPrefsChanged?: (prefs: AnnouncementPrefs) => void;
   now?: () => number;
@@ -56,8 +62,11 @@ export interface AnnouncementEngine {
   refresh(reason: RefreshReason): Promise<RefreshOutcome>;
   /** The Gero Sync frame: a version number and nothing else. */
   onFeedChanged(seq: unknown): void;
-  /** The announcement a push is about, once it is fetched and verified, or null after the budget. */
-  forPush(aid: unknown): Promise<StoredAnnouncement | null>;
+  /**
+   * The announcement a push is about, once it is fetched and verified. `kind` is the push's own claim
+   * about its kind: it is only ever used to stay quiet about a kind the user switched off.
+   */
+  forPush(aid: unknown, kind?: unknown): Promise<PushLookup>;
   markRead(id: unknown): Promise<void>;
   markAllRead(): Promise<void>;
   dismissBanner(id: unknown): Promise<void>;
@@ -73,8 +82,8 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
   const flagOn = deps.flagOn ?? (() => true);
 
   /**
-   * Changes when a key is pinned, removed or re-tiered, or the extension updates. Then the ETag is
-   * not reused and what is stored is not shown until it has been verified again. Null: no key pinned.
+   * Changes when a key is pinned, removed or re-tiered, or the extension updates. Then what is
+   * stored is not shown until it has been verified again. Null: no key pinned.
    */
   async function fingerprint(): Promise<string | null> {
     return verificationFingerprint((await deps.install()).version, keys);
@@ -88,6 +97,9 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
   async function storeImages(items: StoredAnnouncement[]): Promise<void> {
     const wanted = new Set<string>();
     for (const item of items) {
+      // A headline has no page in the wallet, so an image of one is never drawn. Not fetching it
+      // also keeps whoever holds the server's feed key from putting image bytes in front of a decoder.
+      if (item.tier === 'feed') continue;
       for (const m of item.document.media) {
         wanted.add(m.sha256);
         if (await store.hasMedia(m.sha256)) continue;
@@ -110,7 +122,7 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
     // Marked before anything is shown: a worker that dies mid-way must not present the same thing again.
     await store.mark('presented', fresh.map((i) => i.document.id), now());
     // A new install finds everything that is live at once. That belongs in the bell, not in a burst of snackbars.
-    if (firstFetch || !flagOn() || !deps.present) return;
+    if (firstFetch || !(await flagOn()) || !deps.present) return;
     for (const item of fresh.slice(0, 3)) {
       try { await deps.present(item); } catch (e) { log(`announcement present failed: ${String(e)}`); }
     }
@@ -127,16 +139,17 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
     // A copy another build verified does not count as fresh: it is hidden until it is read again.
     const minInterval = reason === 'start' ? START_MIN_INTERVAL_MS : reason === 'page' ? PAGE_MIN_INTERVAL_MS : 0;
     if (current && snapshot.fetchedAt > 0 && now() - snapshot.fetchedAt < minInterval) return 'unchanged';
-    const result = await feed.fetchFeed(current ? snapshot.etag : null);
+    // A feed that keeps failing (down, or hostile) is not asked again on every start, frame and push.
+    const backoff = Math.min(BACKOFF_BASE_MS * 2 ** (snapshot.failures - 1), BACKOFF_MAX_MS);
+    const sinceFailure = now() - snapshot.failedAt;
+    if (snapshot.failures > 0 && sinceFailure >= 0 && sinceFailure < backoff) return 'failed';
+    const result = await feed.fetchFeed();
     const at = now();
     if (result.status === 'failed') {
       log(`announcement feed (${reason}): ${result.reason}`);
+      // The items stay as they are; only the failure is counted.
+      await store.setSnapshot({ ...snapshot, failures: snapshot.failures + 1, failedAt: at });
       return 'failed';
-    }
-    if (result.status === 'unchanged') {
-      await store.setSnapshot({ ...snapshot, fetchedAt: at, items: snapshot.items.filter((i) => i.document.exp > at) });
-      if (reason !== 'push') await presentNew(false);
-      return 'unchanged';
     }
     const known = new Map(snapshot.items.map((i) => [i.document.id, i]));
     const items: StoredAnnouncement[] = [];
@@ -156,7 +169,7 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
     }
     await storeImages(items);
     // The feed is the truth: what it no longer serves is gone here too.
-    await store.setSnapshot({ seq: result.seq, etag: result.etag, fetchedAt: at, verifiedWith: verifiedBy, items });
+    await store.setSnapshot({ seq: result.seq, fetchedAt: at, failures: 0, failedAt: 0, verifiedWith: verifiedBy, items });
     await store.pruneState(new Set(items.map((i) => i.document.id)), at);
     if (reason !== 'push') await presentNew(snapshot.fetchedAt === 0);
     return 'updated';
@@ -186,15 +199,24 @@ export function createAnnouncementEngine(deps: AnnouncementEngineDeps): Announce
       }, () => undefined);
     },
 
-    async forPush(aid) {
-      if (typeof aid !== 'string' || !ANNOUNCEMENT_ID.test(aid)) return null;
+    async forPush(aid, kind) {
+      if (typeof aid !== 'string' || !ANNOUNCEMENT_ID.test(aid)) return { item: null, quiet: false };
       const deadline = new Promise<void>((resolve) => { setTimer(resolve, PUSH_BUDGET_MS); });
-      await Promise.race([refresh('push'), deadline]);
-      const visible = visibleAnnouncements(await shownSnapshot(), await store.getPrefs(), await deps.install(), now());
+      let outcome = 'timeout' as RefreshOutcome | 'timeout';
+      await Promise.race([refresh('push').then((o) => { outcome = o; }), deadline]);
+      const prefs = await store.getPrefs();
+      const on = await flagOn();
+      const visible = visibleAnnouncements(await shownSnapshot(), prefs, await deps.install(), now());
       const item = visible.find((i) => i.document.id === aid) ?? null;
       // The push shows it, so the snackbar path must not show it again.
       if (item) await store.mark('presented', [aid], now());
-      return flagOn() ? item : null;
+      if (item && on) return { item, quiet: false };
+      // Nothing to show under this id. Chrome still requires a notification for the push, so the
+      // fixed generic text is shown; quietly when the wallet knows this one is not for this user
+      // (switched off, not for this install, taken down, kill switch, no key pinned), and audibly
+      // only when the feed could not be read, where it may well be.
+      const switchedOff = typeof kind === 'string' && (prefs.off as string[]).includes(kind);
+      return { item: null, quiet: !on || switchedOff || outcome === 'updated' || outcome === 'unchanged' };
     },
 
     async markRead(id) {
