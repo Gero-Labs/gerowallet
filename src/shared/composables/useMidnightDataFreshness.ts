@@ -13,6 +13,7 @@
 import { computed, getCurrentScope, onScopeDispose, ref, watch, type ComputedRef } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { formatRelativeTime } from '@/shared/utils/relativeTime';
+import { formatInt } from '@/shared/utils/format';
 import { debugLog } from '@/utils/debug';
 import { blockTimeToMs, isMidnightDataPaused, type MidnightTipSnapshot } from '@/chains/midnight/midnightDataFreshness';
 
@@ -48,6 +49,8 @@ export interface MidnightDataFreshness {
   readonly paused: ComputedRef<boolean>;
   /** The tip's height (0 when unknown). */
   readonly height: ComputedRef<number>;
+  /** The height with digit grouping ("1,234,567"), for copy. */
+  readonly heightLabel: ComputedRef<string>;
   /** "12m ago" for the tip's block time ('' when unknown). */
   readonly ageLabel: ComputedRef<string>;
 }
@@ -60,6 +63,7 @@ export function useMidnightDataFreshness(
   return {
     paused: computed(() => isMidnightDataPaused(current.value, now.value)),
     height: computed(() => current.value?.height ?? 0),
+    heightLabel: computed(() => formatInt(current.value?.height ?? 0)),
     ageLabel: computed(() => {
       void now.value; // re-render the label on every tick
       const at = current.value?.timestamp ?? 0;

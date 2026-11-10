@@ -5844,7 +5844,7 @@ export default {
   'midnight.dataPaused.chip': 'Paused',
   'midnight.dataPaused.detail': 'Midnight data is paused at block {block} ({age}). Balances and history may be out of date.',
   'midnight.dataPaused.caption': 'As of block {block} · {age}',
-  'midnight.dataPaused.estimate': 'estimate',
+  'midnight.dataPaused.estimate': 'Estimate',
   'midnight.dataPaused.estimateCaption': 'Estimate · As of block {block} · {age}',
   'midnight.dataPaused.cnightPending': 'Your registration is on Cardano. Midnight will show it once GeroWallet\'s Midnight data catches up.',
   'midnight.dataPaused.dustLinePending': 'DUST registration pending · Midnight data paused',

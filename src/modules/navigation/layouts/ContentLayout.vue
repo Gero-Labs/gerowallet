@@ -95,7 +95,8 @@
                           :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
                           v-bind="activatorProps"
                           tabindex="0"
-                          :aria-label="t('navigation.status')"
+                          role="button"
+                          :aria-label="`${t('navigation.status')}: ${networkStatusText}`"
                         >
                           <!-- Midnight: a connected socket whose blocks are old is "Paused", never
                                "Online": a chip on the muted warning pair, with no streaming animation. -->
@@ -140,7 +141,7 @@
                         <template v-if="isMidnight">
                           <div>
                             <strong>Block:</strong>
-                            <span class="g-num">{{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</span>
+                            <span class="g-num">{{ midnightTip?.hash ? formatInt(midnightTip.height) : 'N/A' }}</span>
                             <template v-if="isMidnightPaused"> · {{ midnightFreshness.ageLabel.value }}</template>
                           </div>
                         </template>
@@ -158,12 +159,12 @@
                             :style="
                               isMidnightPaused ? { color: 'var(--g-warning)' } : (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
                             "
-                            >{{ isMidnightPaused ? t('midnight.dataPaused.chip') : (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
+                            >{{ networkStatusText }}</span
                           >
                         </div>
                         <!-- Last, after the facts it explains. -->
                         <div v-if="isMidnightPaused" class="network-tooltip-detail" data-test="network-paused-detail">
-                          {{ t('midnight.dataPaused.detail', { block: midnightFreshness.height.value, age: midnightFreshness.ageLabel.value }) }}
+                          {{ t('midnight.dataPaused.detail', { block: midnightFreshness.heightLabel.value, age: midnightFreshness.ageLabel.value }) }}
                         </div>
                       </div>
                     </v-tooltip>
@@ -333,6 +334,7 @@ import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { midnightNetworkChipState } from '@/chains/midnight/midnightDataFreshness';
+import { formatInt } from '@/shared/utils/format';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -507,6 +509,12 @@ const midnightChipState = computed(() =>
 const isMidnightConnected = computed(() => midnightChipState.value === 'online');
 const isMidnightPaused = computed(() => isMidnight.value && midnightChipState.value === 'paused');
 const isMidnightConnecting = computed(() => midnightChipState.value === 'connecting');
+/** The status in words, for the tooltip and the chip's accessible name ("Status: Paused"). */
+const networkStatusText = computed(() => (isMidnightPaused.value
+  ? t('midnight.dataPaused.chip')
+  : (isMidnight.value ? isMidnightConnected.value : connected.value) ? t('navigation.online')
+    : (isMidnight.value ? isMidnightConnecting.value : connecting.value) ? t('navigation.connecting')
+      : t('navigation.offline')));
 
 const isWelcomeDone = computed({
   get() {

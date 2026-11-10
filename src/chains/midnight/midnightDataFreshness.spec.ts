@@ -33,6 +33,13 @@ describe('Midnight data paused', () => {
     expect(isMidnightDataPaused(tipAt(60 * 60_000, NOW - MIDNIGHT_TIP_OBSERVED_WITHIN_MS + 1), NOW)).toBe(true);
   });
 
+  it('keeps a frozen chain paused when the wallet stops seeing tips: it was already old when last seen', () => {
+    // Last seen 20 minutes ago, when its block was already 40 minutes old.
+    expect(isMidnightDataPaused(tipAt(60 * 60_000, NOW - 20 * 60_000), NOW)).toBe(true);
+    // Last seen 20 minutes ago while fresh: unknown, not paused.
+    expect(isMidnightDataPaused(tipAt(20 * 60_000 + 6_000, NOW - 20 * 60_000), NOW)).toBe(false);
+  });
+
   it('is never paused for an unknown tip or block time', () => {
     expect(isMidnightDataPaused(null, NOW)).toBe(false);
     expect(isMidnightDataPaused({ hash: null, height: 0, timestamp: 0 }, NOW)).toBe(false);

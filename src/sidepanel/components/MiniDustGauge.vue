@@ -31,7 +31,7 @@
     <div class="mini-dust__sub">
       <!-- Midnight data is paused: the last reading, and the block it is based on, in place of the rate. -->
       <span v-if="dustEstimate" class="mini-dust__estimate g-num" data-test="dust-estimate">
-        {{ $t('midnight.dataPaused.estimateCaption', { block: tipHeight, age: tipAge }) }}
+        <v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>{{ $t('midnight.dataPaused.estimateCaption', { block: tipHeightLabel, age: tipAge }) }}
       </span>
       <span v-else-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
       <span v-else-if="isPending" class="mini-dust__pending">{{ $t('midnight.dustBatteryPending') }}</span>
@@ -82,7 +82,7 @@ const dustTicker = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 const { dustBalance, dustGenerating, dustCap, registrationStatus, estimate: dustEstimate } = useMidnightDustLive();
-const { height: tipHeight, ageLabel: tipAge } = useMidnightDataFreshness();
+const { heightLabel: tipHeightLabel, ageLabel: tipAge } = useMidnightDataFreshness();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
@@ -238,8 +238,9 @@ function onSponsorSaved(): void {
   color: #f3ddae;
 }
 
+/* Metadata, as on the dashboard: g-text-3 with the amber pause glyph in front. */
 .mini-dust__estimate {
-  color: var(--g-warning);
+  color: var(--g-text-3);
 }
 
 .mini-dust__pct {

@@ -49,6 +49,7 @@ describe('useMidnightDataFreshness', () => {
     const f: MidnightDataFreshness = mountWith(() => useMidnightDataFreshness());
     expect(f.paused.value).toBe(false);
     expect(f.height.value).toBe(1234);
+    expect(f.heightLabel.value).toBe('1,234');
     expect(f.ageLabel.value).toBe('6s ago');
   });
 

@@ -5633,7 +5633,7 @@ export default {
   'midnight.dataPaused.chip': 'En pausa',
   'midnight.dataPaused.detail': 'Los datos de Midnight están en pausa en el bloque {block} ({age}). Los saldos y el historial pueden no estar actualizados.',
   'midnight.dataPaused.caption': 'Según el bloque {block} · {age}',
-  'midnight.dataPaused.estimate': 'estimación',
+  'midnight.dataPaused.estimate': 'Estimación',
   'midnight.dataPaused.estimateCaption': 'Estimación · Según el bloque {block} · {age}',
   'midnight.dataPaused.cnightPending': 'Tu registro está en Cardano. Midnight lo mostrará cuando los datos de Midnight de GeroWallet se pongan al día.',
   'midnight.dataPaused.dustLinePending': 'Registro de DUST pendiente · datos de Midnight en pausa',

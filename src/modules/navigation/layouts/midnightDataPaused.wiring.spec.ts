@@ -19,18 +19,18 @@ describe('Midnight data paused wiring', () => {
     expect(layout).toContain("const isMidnightConnected = computed(() => midnightChipState.value === 'online');");
     expect(layout).toMatch(/<span v-if="isMidnightPaused" class="network-paused-chip t-caption"[^>]*>\s*<v-icon size="small" color="warning">mdi-pause-circle-outline<\/v-icon>\s*\{\{ t\('midnight\.dataPaused\.chip'\) \}\}/);
     expect(layout).toMatch(/\.network-paused-chip \{[^}]*background: var\(--g-warning-fill\);[^}]*border: 1px solid var\(--g-warning-line\);[^}]*border-radius: var\(--g-r-pill\);/);
-    expect(layout).toContain("t('midnight.dataPaused.detail', { block: midnightFreshness.height.value, age: midnightFreshness.ageLabel.value })");
+    expect(layout).toContain("t('midnight.dataPaused.detail', { block: midnightFreshness.heightLabel.value, age: midnightFreshness.ageLabel.value })");
     // The activator is focusable, "Last sync" is hidden while paused, and the sentence comes last.
-    expect(layout).toMatch(/v-bind="activatorProps"\s+tabindex="0"/);
+    expect(layout).toMatch(/v-bind="activatorProps"\s+tabindex="0"\s+role="button"\s+:aria-label="`\$\{t\('navigation\.status'\)\}: \$\{networkStatusText\}`"/);
     expect(layout).toContain('<div v-if="!isMidnightPaused"><strong>{{ t(\'navigation.lastSync\') }}');
     const tooltip = layout.slice(layout.indexOf('<div class="network-tooltip-content">'), layout.indexOf('</v-tooltip>', layout.indexOf('<div class="network-tooltip-content">')));
     expect(tooltip.indexOf('network-paused-detail')).toBeGreaterThan(tooltip.indexOf("t('navigation.status')"));
-    expect(layout).toContain("isMidnightPaused ? t('midnight.dataPaused.chip') : (isMidnight ? isMidnightConnected : connected) ? t('navigation.online')");
+    expect(layout).toMatch(/const networkStatusText = computed\(\(\) => \(isMidnightPaused\.value\s+\? t\('midnight\.dataPaused\.chip'\)/);
   });
 
   it('the dashboard caption shows only while paused', () => {
     const chart = read('modules/dashboard/components/MidnightPortfolioChart.vue');
-    expect(chart).toMatch(/<div v-if="dataPaused" class="data-paused-caption t-caption g-num"[^>]*>\s*<v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline<\/v-icon>\{\{ \$t\('midnight\.dataPaused\.caption', \{ block: tipHeight, age: tipAge \}\) \}\}/);
+    expect(chart).toMatch(/<div v-if="dataPaused" class="data-paused-caption t-caption g-num"[^>]*>\s*<v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline<\/v-icon>\{\{ \$t\('midnight\.dataPaused\.caption', \{ block: tipHeightLabel, age: tipAge \}\) \}\}/);
   });
 
   it('the dashboard battery labels an estimate and shows no projection while paused', () => {

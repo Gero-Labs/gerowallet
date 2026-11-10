@@ -42,11 +42,19 @@ export function blockTimeToMs(value: unknown): number {
   return Math.round(value < 1e12 ? value * 1000 : value);
 }
 
-/** How old the tip's block is at `now`, or null when the tip, its time or its sighting is unknown. */
+/**
+ * How old the tip's block is at `now`, or null when it is unknown: no tip, no
+ * block time, never seen in this session, or not seen for a while and fresh
+ * when it was. A tip that was already paused when last seen stays paused: a
+ * frozen chain must not flip back to Online because the wallet stopped seeing
+ * new tips.
+ */
 export function midnightTipAgeMs(tip: MidnightTipSnapshot | null | undefined, now: number): number | null {
   if (!tip || !tip.hash || !Number.isFinite(tip.timestamp) || tip.timestamp <= 0) return null;
   const observedAt = tip.observedAt;
-  if (typeof observedAt !== 'number' || now - observedAt > MIDNIGHT_TIP_OBSERVED_WITHIN_MS) return null;
+  if (typeof observedAt !== 'number') return null;
+  if (now - observedAt > MIDNIGHT_TIP_OBSERVED_WITHIN_MS
+    && observedAt - tip.timestamp <= MIDNIGHT_DATA_PAUSED_AFTER_MS) return null;
   return Math.max(0, now - tip.timestamp);
 }
 
