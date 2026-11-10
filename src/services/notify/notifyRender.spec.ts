@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeEventTag, parsePushPayload, sanitizeAmounts } from './notifyPayload';
-import { formatAmounts, renderPush, routeFor, scaleQuantity, type TokenLookup } from './notifyRender';
+import { formatAmounts, isPushRoute, renderPush, routeFor, scaleQuantity, type TokenLookup } from './notifyRender';
 import { pushStrings } from '@/plugins/i18n/push';
 
 // CONTRACT §6.6 examples, verbatim.
@@ -302,5 +302,39 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
     expect(routeFor('pairedDevices', { deviceId: 'b'.repeat(32) }, true)).toEqual({ dashboard: '/', sidepanel: null, settingsTab: 'security', highlight: { deviceId: 'b'.repeat(32) } });
     expect(routeFor('signRequest', undefined, true)).toEqual({ dashboard: '/', sidepanel: '/' });
     expect(routeFor('adam', undefined, true)).toEqual({ dashboard: '/', sidepanel: '/' });
+  });
+});
+
+describe('isPushRoute: the routes a page follows from a message', () => {
+  const x = { tx: 'a'.repeat(64), deviceId: 'b'.repeat(32), drepId: 'drep1qqqqqqqqqqqq', orderRef: `${'a'.repeat(64)}#0`, listingRef: `${'c'.repeat(64)}#1` };
+  const DESTINATIONS = ['home', 'activity', 'staking', 'swapOrders', 'nftListings', 'governance', 'pairedDevices', 'signRequest', 'adam', 'somethingNew'];
+
+  it.each(DESTINATIONS)('accepts everything routeFor() returns for %s', (d) => {
+    expect(isPushRoute(routeFor(d, x, true))).toBe(true);
+    expect(isPushRoute(routeFor(d, x, false))).toBe(true);
+    expect(isPushRoute(routeFor(d, undefined, true))).toBe(true);
+    // As a page receives it: through the message's JSON.
+    expect(isPushRoute(JSON.parse(JSON.stringify(routeFor(d, x, true))))).toBe(true);
+  });
+
+  it.each([
+    ['another in-app route', { dashboard: '/settings', sidepanel: null }],
+    ['a known route with a query the worker never adds', { dashboard: '/swap?from=ada&to=evil', sidepanel: null }],
+    ['a route with something appended', { dashboard: '/staking/../send', sidepanel: '/staking' }],
+    ['an absolute URL', { dashboard: 'https://evil.example/', sidepanel: null }],
+    ['a protocol-relative URL', { dashboard: '//evil.example/', sidepanel: null }],
+    ['a script URL', { dashboard: 'javascript:alert(1)', sidepanel: null }],
+    ['a tx that is not 64 hex characters', { dashboard: '/transactions?tx=abc', sidepanel: '/activity' }],
+    ['a DRep id with a path in it', { dashboard: '/governance/dreps/drep1qqqqqq/../../send', sidepanel: null }],
+    ['an unknown side panel route', { dashboard: '/', sidepanel: '/send' }],
+    ['a side panel route that is not a string or null', { dashboard: '/', sidepanel: undefined }],
+    ['the Security tab away from home', { dashboard: '/transactions', sidepanel: '/activity', settingsTab: 'security' }],
+    ['another settings tab', { dashboard: '/', sidepanel: null, settingsTab: 'advanced' }],
+    ['a dashboard route that is not a string', { dashboard: ['/'], sidepanel: null }],
+    ['a string', '/'],
+    ['null', null],
+    ['nothing', undefined],
+  ])('refuses %s', (_name, route) => {
+    expect(isPushRoute(route)).toBe(false);
   });
 });

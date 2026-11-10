@@ -99,6 +99,10 @@ function normalizedRoot(root: string | undefined): string | null {
  * sender.id is the extension id. (sender.tab is NOT a distinguisher: an
  * extension page opened in a tab, e.g. the dashboard, also carries one.)
  *
+ * Also true for this extension's service worker, which reports its own script
+ * URL under the same root and no origin or tab (measured in Chromium, 2026-11):
+ * a page uses this to accept only what the worker or another own page sent.
+ *
  * `own` is passed in (`ownExtension()` at the call site) so this stays pure.
  */
 export function isOwnExtensionPageSender(

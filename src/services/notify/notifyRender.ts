@@ -187,6 +187,26 @@ export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: 
   }
 }
 
+// Every route routeFor() can return, and nothing else. The tx and DRep patterns are the ones
+// notifyPayload.ts accepts for `x`. Add a destination to routeFor() and here together:
+// notifyRender.spec.ts runs each destination through isPushRoute().
+const DASHBOARD_ROUTE = /^\/(?:|transactions(?:\?tx=[0-9a-f]{64})?|staking|swap|\?view=collectibles|governance\/(?:me|dreps\/drep1[a-z0-9]{6,}))$/;
+const SIDEPANEL_ROUTES: ReadonlySet<string> = new Set(['/', '/activity', '/staking']);
+
+/**
+ * True when `route` is one routeFor() can return. A page checks this before it follows a route
+ * that reached it in a message (NOTIFY_PRESENT), so a message can never send the router to an
+ * arbitrary path or open the Security tab from a route other than pairedDevices'.
+ */
+export function isPushRoute(route: unknown): route is RouteIntent {
+  if (!route || typeof route !== 'object') return false;
+  const r = route as { dashboard?: unknown; sidepanel?: unknown; settingsTab?: unknown };
+  if (typeof r.dashboard !== 'string' || !DASHBOARD_ROUTE.test(r.dashboard)) return false;
+  if (r.sidepanel !== null && !(typeof r.sidepanel === 'string' && SIDEPANEL_ROUTES.has(r.sidepanel))) return false;
+  if (r.settingsTab !== undefined && !(r.settingsTab === 'security' && r.dashboard === '/')) return false;
+  return true;
+}
+
 export function renderPush(input: RenderInput): RenderedPush {
   const locale = pushLocale(input.locale);
   const { parsed } = input;

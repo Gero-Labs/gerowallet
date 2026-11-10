@@ -25,6 +25,11 @@ describe('isOwnExtensionPageSender', () => {
     expect(isOwnExtensionPageSender(sender, CHROME)).toBe(true);
   });
 
+  it('accepts the extension\'s own service worker (its script url, no origin, no tab)', () => {
+    const sender = { id: OWN, url: `chrome-extension://${OWN}/background/index.js` } as unknown as S;
+    expect(isOwnExtensionPageSender(sender, CHROME)).toBe(true);
+  });
+
   it('rejects a content script (own id + tab, but http page url)', () => {
     const sender = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
     expect(isOwnExtensionPageSender(sender, CHROME)).toBe(false);
