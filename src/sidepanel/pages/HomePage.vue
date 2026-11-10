@@ -25,6 +25,8 @@
       <!-- Midnight: sends and DUST registration on this network are paused for a
            network upgrade (midnightWriteGate.ts). Renders nothing otherwise. -->
       <MidnightNetworkUpgradeBanner v-if="isMidnight" class="home-upgrade-banner" />
+      <!-- Midnight Stagenet: being retired, the wallet will move to Preview. Renders nothing otherwise. -->
+      <MidnightStagenetNotice v-if="isMidnight" class="home-upgrade-banner" />
 
       <BalanceSection @buy-sell="handleBuySell" />
 
@@ -166,6 +168,7 @@ import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import MidnightNetworkUpgradeBanner from '@/modules/dashboard/components/MidnightNetworkUpgradeBanner.vue';
+import MidnightStagenetNotice from '@/modules/dashboard/components/MidnightStagenetNotice.vue';
 import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
@@ -351,7 +354,7 @@ function formatAdaPrice(price: number): string {
 </script>
 
 <style scoped>
-/* The network upgrade banner, on the panel's gutter. */
+/* The network upgrade and Stagenet banners, on the panel's gutter. */
 .home-upgrade-banner {
   margin: var(--g-s-3) var(--g-s-3) 0;
 }

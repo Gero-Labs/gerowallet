@@ -172,6 +172,13 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
 };
 
 /**
+ * Midnight Preview's public tNIGHT faucet. Stagenet wallets are told to get new
+ * tNIGHT here before they move to Preview (issue 1477). Preview has no entry in
+ * the endpoint map above yet; when it gets one, its `faucetUrl` is this value.
+ */
+export const MIDNIGHT_PREVIEW_FAUCET_URL = 'https://midnight-tmnight-preview.nethermind.dev';
+
+/**
  * The Cardano network a Midnight network's cNIGHT lives on.
  *
  * Until stagenet these two vocabularies happened to coincide — Midnight
