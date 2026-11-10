@@ -274,5 +274,77 @@
       "sig" : "hNx6AcwGKn2v1t34qnZGebe0r17I_of-q1SbwvrGHCrMBkAyYGQAkOJXQg-8rvIo67BsWCPRKFtQJ-W0esTBDA"
     },
     "expect" : "ok"
+  }, {
+    "name" : "feed_title_fullwidth_dot",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6IkNsYWltIGF0IGdlcm8tYWlyZHJvcO-8jmNvbSIsInN1bW1hcnkiOiJSZWFkIGhvdyBsaXN0aW5nIGFuZCBidXlpbmcgd29yayJ9fSwiYWN0aW9uIjp7InVybCI6Imh0dHBzOi8vZ2Vyb3dhbGxldC5pby9ibG9nL25mdC1tYXJrZXQifX0",
+      "keyId" : "vec-feed",
+      "sig" : "1EKwV0iLMp4Kr4TShkBn_8-zPetAluUawrLW5HKGihkMVFfOXDBTLYt9fIfg1MhZKUIfHUVJQxDC-1L_lXtNCg"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_title_one_dot_leader",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6Imdlcm93YWxsZXTigKRpby9jbGFpbSIsInN1bW1hcnkiOiJSZWFkIGhvdyBsaXN0aW5nIGFuZCBidXlpbmcgd29yayJ9fSwiYWN0aW9uIjp7InVybCI6Imh0dHBzOi8vZ2Vyb3dhbGxldC5pby9ibG9nL25mdC1tYXJrZXQifX0",
+      "keyId" : "vec-feed",
+      "sig" : "jHx_oaFTkz6PBps6eJiept7CS_A4C0Nx0wkbk1m11BRWHRNWwX7yKM-0ITxbqdO6NnQvd3_0gGZ6IPvkM47LDg"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_summary_zero_width_in_address",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6Ikdlcm8gV2FsbGV0IGFkZHMgYSBtYXJrZXQgZm9yIE5GVHMiLCJzdW1tYXJ5IjoiU2VuZCB0byBhZGRyMeKAi3F4eTJr4oCLZ2R5Z2rigItyc3F0eiJ9fSwiYWN0aW9uIjp7InVybCI6Imh0dHBzOi8vZ2Vyb3dhbGxldC5pby9ibG9nL25mdC1tYXJrZXQifX0",
+      "keyId" : "vec-feed",
+      "sig" : "tYeCkzMJ5vrRZK0jS77JcdymrUSbiHSLW0CiNetojZnzROME1xt1nPfEjR70aDt05R3xynlZPLDIHhEL96yRDw"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_title_cyrillic_lookalike",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6IkdlctC-IFdhbGxldCB1cGRhdGUiLCJzdW1tYXJ5IjoiUmVhZCBob3cgbGlzdGluZyBhbmQgYnV5aW5nIHdvcmsifX0sImFjdGlvbiI6eyJ1cmwiOiJodHRwczovL2dlcm93YWxsZXQuaW8vYmxvZy9uZnQtbWFya2V0In19",
+      "keyId" : "vec-feed",
+      "sig" : "qblUbfP1BawJmFTp68sUTW0i759_oskYaR-V1qtQ2trk6exPgPkFQmU0wwCjxu7gbdCJh6ZhJQ7W0R0MU4bdBg"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_title_no_break_space",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6Ikdlcm_CoFdhbGxldCIsInN1bW1hcnkiOiJSZWFkIGhvdyBsaXN0aW5nIGFuZCBidXlpbmcgd29yayJ9fSwiYWN0aW9uIjp7InVybCI6Imh0dHBzOi8vZ2Vyb3dhbGxldC5pby9ibG9nL25mdC1tYXJrZXQifX0",
+      "keyId" : "vec-feed",
+      "sig" : "vAIHkUTLGd2utATH4fNtoyrPrdZq0Rd6JXH_7bm18GxiXW0zxObSA0_S4UnsAAhjQEwM4AlMNeClOMnpzIL9CQ"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_title_astral_character",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6IkJpZyBuZXdzIPCfmoAiLCJzdW1tYXJ5IjoiUmVhZCBob3cgbGlzdGluZyBhbmQgYnV5aW5nIHdvcmsifX0sImFjdGlvbiI6eyJ1cmwiOiJodHRwczovL2dlcm93YWxsZXQuaW8vYmxvZy9uZnQtbWFya2V0In19",
+      "keyId" : "vec-feed",
+      "sig" : "Ympeb9DxbNhck7Cv1gwCxrH_70mYBoGGAqCJxaZAG19csIzoxPUTOAjzhvAB9KqMesfIEs9SkKwotCoEY_qgAA"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_title_latin1_domain",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6IlZpc2l0IGdlcm93YWxsZXQuY8OzbSB0b2RheSIsInN1bW1hcnkiOiJSZWFkIGhvdyBsaXN0aW5nIGFuZCBidXlpbmcgd29yayJ9fSwiYWN0aW9uIjp7InVybCI6Imh0dHBzOi8vZ2Vyb3dhbGxldC5pby9ibG9nL25mdC1tYXJrZXQifX0",
+      "keyId" : "vec-feed",
+      "sig" : "B7f3Mkiw7xkg0cRwXxKFN3RzAFsq2BROrJdub-gIPSfjKGqLF2uROSB-MOcHGctHWLZiUkmhZ1Vg37RGjfkLBA"
+    },
+    "expect" : "feed_text_not_allowed"
+  }, {
+    "name" : "feed_title_german_ok",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6Ikdyw7bDn2VyZSDDnGJlcnNpY2h0IOKAkyBqZXR6dCBmw7xyIGFsbGUiLCJzdW1tYXJ5IjoiUmVhZCBob3cgbGlzdGluZyBhbmQgYnV5aW5nIHdvcmsifX0sImFjdGlvbiI6eyJ1cmwiOiJodHRwczovL2dlcm93YWxsZXQuaW8vYmxvZy9uZnQtbWFya2V0In19",
+      "keyId" : "vec-feed",
+      "sig" : "HqcZv2fDmRrQvmCn1xSPp1yENGL9XoKB6Ym8PiTV2ZBx0iyeP3buDlbWMJRlcbYnqrn4lTZayBhNTXBkrVhlAg"
+    },
+    "expect" : "ok"
+  }, {
+    "name" : "feed_title_typographic_ok",
+    "envelope" : {
+      "payload" : "eyJ2IjoxLCJpZCI6IjAxSkMwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwia2luZCI6Im5ld3MiLCJzZXZlcml0eSI6ImluZm8iLCJ0cyI6MTc5NDM5NjQwMDAwMCwiZXhwIjoxNzk0OTE4NDAwMDAwLCJhdWRpZW5jZSI6eyJwbGF0Zm9ybXMiOlsiZXh0ZW5zaW9uIiwiaW9zIiwiYW5kcm9pZCJdLCJuZXR3b3JrcyI6WyJjYXJkYW5vLW1haW5uZXQiXSwibWluVmVyc2lvbiI6eyJleHRlbnNpb24iOiIyLjkuMCJ9fSwiY29udGVudCI6eyJlbiI6eyJ0aXRsZSI6Ikdlcm_igJlzIG5ldyBsb29rIOKAlCB3aGF04oCZcyBjaGFuZ2VkIiwic3VtbWFyeSI6IlJlYWQgaG93IGxpc3RpbmcgYW5kIGJ1eWluZyB3b3JrIn19LCJhY3Rpb24iOnsidXJsIjoiaHR0cHM6Ly9nZXJvd2FsbGV0LmlvL2Jsb2cvbmZ0LW1hcmtldCJ9fQ",
+      "keyId" : "vec-feed",
+      "sig" : "wF6wu1nC2rFY5f26vpeuQgkKiZ-kW6hg9Ii-RU3Dnq0bQD9tgBBmzoSXdhXCBbl15Uv0QzrX5aV552pu_E9DAA"
+    },
+    "expect" : "ok"
   } ]
 }

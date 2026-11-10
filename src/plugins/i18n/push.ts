@@ -26,7 +26,7 @@ export type PushStringKey =
   | 'PUSH_TEST_TITLE' | 'PUSH_TEST_BODY'
   // A broadcast announcement the worker could not fetch and verify in time: the only words such a
   // notification may carry. Verified announcements bring their own, signed, title and summary.
-  | 'PUSH_ANNOUNCEMENT_TITLE' | 'PUSH_ANNOUNCEMENT_BODY'
+  | 'PUSH_ANNOUNCEMENT_TITLE' | 'PUSH_ANNOUNCEMENT_BODY' | 'PUSH_ANNOUNCEMENT_BLOG'
   | 'PUSH_AMOUNT_ADA' | 'PUSH_AMOUNT_OTHER_ONE' | 'PUSH_AMOUNT_OTHER' | 'PUSH_AMOUNT_JOIN'
   | 'PUSH_TOAST_VIEW' | 'PUSH_TOAST_DISMISS';
 
@@ -74,6 +74,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_TEST_BODY: 'Notifications from Gero are working.',
     PUSH_ANNOUNCEMENT_TITLE: 'News from Gero',
     PUSH_ANNOUNCEMENT_BODY: 'Open Gero Wallet to read it.',
+    PUSH_ANNOUNCEMENT_BLOG: 'On the Gero blog',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 other token',
     PUSH_AMOUNT_OTHER: '{n} other tokens',
@@ -124,6 +125,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_TEST_BODY: 'Benachrichtigungen von Gero funktionieren.',
     PUSH_ANNOUNCEMENT_TITLE: 'Neuigkeiten von Gero',
     PUSH_ANNOUNCEMENT_BODY: 'Öffne Gero Wallet, um sie zu lesen.',
+    PUSH_ANNOUNCEMENT_BLOG: 'Im Gero-Blog',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 weiterer Token',
     PUSH_AMOUNT_OTHER: '{n} weitere Token',
@@ -174,6 +176,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_TEST_BODY: 'Las notificaciones de Gero funcionan.',
     PUSH_ANNOUNCEMENT_TITLE: 'Novedades de Gero',
     PUSH_ANNOUNCEMENT_BODY: 'Abre Gero Wallet para leerlas.',
+    PUSH_ANNOUNCEMENT_BLOG: 'En el blog de Gero',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 token más',
     PUSH_AMOUNT_OTHER: '{n} tokens más',

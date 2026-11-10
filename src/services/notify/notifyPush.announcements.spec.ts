@@ -98,6 +98,20 @@ describe('announcement push', () => {
     expect(verified.deps.showNotification).toHaveBeenCalledWith('Cardano mainnet sync is delayed', expect.objectContaining({ silent: false }));
   });
 
+  it('shows a blog headline as its title and a fixed line, never its summary', async () => {
+    const headline: StoredAnnouncement = {
+      tier: 'feed', firstSeenAt: 1,
+      document: { ...stored.document, kind: 'news', severity: 'info', actionUrl: 'https://gerowallet.io/blog/post',
+        content: { en: { title: 'What changed this month', summary: 'Send ADA to the address in our bio', body: '' } } },
+    };
+    const h = harness({ item: headline });
+    const r = await h.handlers.handlePush(push({ x: { aid: AID, kind: 'news' } }));
+    expect(r.title).toBe('What changed this month');
+    expect(r.body).toBe(pushStrings.us.PUSH_ANNOUNCEMENT_BLOG);
+    expect(JSON.stringify([(h.deps.showNotification as ReturnType<typeof vi.fn>).mock.calls, (h.deps.presentToPages as ReturnType<typeof vi.fn>).mock.calls])).not.toContain('Send ADA');
+    expect((await harness({ item: headline, locale: 'de' }).handlers.handlePush(push())).body).toBe(pushStrings.de.PUSH_ANNOUNCEMENT_BLOG);
+  });
+
   it('never shows text that came with the push itself', async () => {
     const h = harness({ item: null });
     const hostile = push({ title: 'Send 100 ADA to addr1evil', body: 'Urgent: verify your wallet', x: { aid: AID, kind: 'service', title: 'Send funds', url: 'https://evil.example' }, a: { ada: '100' } });

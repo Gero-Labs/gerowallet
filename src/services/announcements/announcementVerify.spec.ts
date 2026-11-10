@@ -87,7 +87,7 @@ describe('the shared announcement vectors', () => {
   };
 
   it('are all here', () => {
-    expect(file.vectors).toHaveLength(33);
+    expect(file.vectors).toHaveLength(42);
     expect(file.domain).toBe('gero-announcement-v1\n');
   });
 

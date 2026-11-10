@@ -69,9 +69,17 @@ const NETWORK = /^[a-z0-9-]{1,40}$/;
 const VERSION = /^[0-9]{1,4}(\.[0-9]{1,4}){0,3}$/;
 const ROUTE = /^\/[A-Za-z0-9/_-]{0,80}$/;
 const MEDIA_REF = /media:([0-9a-f]{64})/g;
-// Feed tier: no URL, nothing domain-like, nothing address-like in a headline. Used with find semantics.
+// Feed tier: the only characters a headline may contain are printable ASCII, the Latin-1 letters
+// German and Spanish need, and typographic quotes and dashes. Everything else is refused, because the
+// patterns below look for ASCII: a fullwidth or one-dot-leader "dot", a zero-width space inside an
+// address, or a Cyrillic look-alike letter would walk past them and still read as a domain or an
+// address. An allowlist, because a list of bad characters is never complete. Every character here is
+// in the BMP, so this agrees with the server's Java pattern unit for unit.
+const FEED_TEXT = /^[\x20-\x7E\u00A1\u00BF\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D]*$/;
+// No URL, nothing domain-like, nothing address-like in a headline. Used with find semantics.
 const FEED_SCHEME = /:\/\//;
-const FEED_DOMAIN = /[A-Za-z0-9-]+\.[A-Za-z]{2,}/;
+// Latin-1 letters count as letters here too: "gerowallet.c\u00F3m" is domain-like.
+const FEED_DOMAIN = /[A-Za-z0-9\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF-]+\.[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]{2,}/;
 const FEED_ADDRESS = /(addr|stake|addr_test|stake_test|drep|pool|bc)1[0-9a-z]{6,}/;
 const FEED_LONG_RUN = /[0-9A-Za-z]{30,}/;
 
@@ -98,7 +106,7 @@ function intIn(o: unknown, field: string, min: number, max: number): number {
 }
 
 export function feedTextForbidden(s: string): boolean {
-  return FEED_SCHEME.test(s) || FEED_DOMAIN.test(s) || FEED_ADDRESS.test(s.toLowerCase()) || FEED_LONG_RUN.test(s);
+  return !FEED_TEXT.test(s) || FEED_SCHEME.test(s) || FEED_DOMAIN.test(s) || FEED_ADDRESS.test(s.toLowerCase()) || FEED_LONG_RUN.test(s);
 }
 
 export function check(payload: Uint8Array | null | undefined, tier: AnnouncementTier, now: number): RulesResult {

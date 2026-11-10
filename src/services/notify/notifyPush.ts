@@ -103,7 +103,9 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
       } catch (e) { log(`announcement lookup failed: ${String(e)}`); }
     }
     const text = item ? (item.document.content[locale === 'us' ? 'en' : locale] ?? item.document.content['en']) : undefined;
-    const shown = item && text && aid ? { aid, title: text.title, body: text.summary } : null;
+    // A headline (feed tier) is signed by the key the server holds, so the least of it is shown: its
+    // title and a fixed line that says where it is from. Its summary never reaches a notification.
+    const shown = item && text && aid ? { aid, title: text.title, body: item.tier === 'feed' ? pushStrings[locale].PUSH_ANNOUNCEMENT_BLOG : text.summary } : null;
     const verified = shown !== null;
     const title = shown ? shown.title : pushStrings[locale].PUSH_ANNOUNCEMENT_TITLE;
     const body = shown ? shown.body : pushStrings[locale].PUSH_ANNOUNCEMENT_BODY;
