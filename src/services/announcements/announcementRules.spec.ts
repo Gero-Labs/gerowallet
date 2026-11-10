@@ -116,4 +116,25 @@ describe('announcement content rules', () => {
     expect(ofFeed((d) => { at(d, 'content', 'en')['title'] = 'Go to https://x'; })).toBe('feed_text_not_allowed');
     expect(ofFeed((d) => { at(d, 'content', 'en')['title'] = 'Version 2.9 is out'; })).toBeNull();
   });
+
+  it('accept only an allowlist of characters in a headline, so no look-alike carries a domain or an address', () => {
+    const title = (t: string) => ofFeed((d) => { at(d, 'content', 'en')['title'] = t; });
+    const summary = (t: string) => ofFeed((d) => { at(d, 'content', 'en')['summary'] = t; });
+    // The same cases as the server's AnnouncementRulesTest.
+    expect(title('Claim at gero-airdrop\uFF0Ecom')).toBe('feed_text_not_allowed'); // fullwidth full stop
+    expect(title('Claim at gero-airdrop\u3002com')).toBe('feed_text_not_allowed'); // ideographic full stop
+    expect(title('gerowallet\u2024io/claim')).toBe('feed_text_not_allowed'); // one dot leader
+    expect(summary('Send to addr1\u200Bqxy2k\u200Bgdygj\u200Brsqtz')).toBe('feed_text_not_allowed'); // zero-width spaces
+    expect(title('Ger\u043E Wallet update')).toBe('feed_text_not_allowed'); // Cyrillic o
+    expect(title('Gero\u00A0Wallet')).toBe('feed_text_not_allowed'); // no-break space
+    expect(title('Two\nlines')).toBe('feed_text_not_allowed');
+    expect(title('Big news \u{1F680}')).toBe('feed_text_not_allowed');
+    expect(title('Visit gerowallet.c\u00F3m today')).toBe('feed_text_not_allowed');
+    // What a real headline needs still passes.
+    expect(title('Gr\u00F6\u00DFere \u00DCbersicht \u2013 jetzt f\u00FCr alle')).toBeNull();
+    expect(title('Gero\u2019s new look \u2014 what\u2019s changed')).toBeNull();
+    expect(summary('\u00BFQu\u00E9 hay de nuevo? \u00A1M\u00E1s staking!')).toBeNull();
+    // The allowlist is for the server-held feed key only: an editorial document may say anything.
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['title'] = 'Big news \u{1F680} \u65E5\u672C\u8A9E'; })).toBeNull();
+  });
 });
