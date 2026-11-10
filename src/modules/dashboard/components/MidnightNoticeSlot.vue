@@ -4,7 +4,7 @@
        Send off a 360px panel: at most MAX_NOTICES, by precedence (midnightNotices.ts).
        Renders nothing when none applies, so a parent's spacing class takes no room. -->
   <div v-if="shown.length" v-bind="$attrs" class="notice-slot" data-test="midnight-notice-slot">
-    <component :is="NOTICE_COMPONENTS[id]" v-for="id in shown" :key="id" v-bind="noticeProps(id)" />
+    <component :is="NOTICE_COMPONENTS[id]" v-for="id in shown" :key="id" v-bind="noticeProps(id)" @send-again="emit('send-again')" />
   </div>
   <!-- Always mounted, so a notice that appears is announced: a region added
        together with its first message is often not read, so the notices carry
@@ -28,6 +28,9 @@ import MidnightNetworkUpgradeBanner from './MidnightNetworkUpgradeBanner.vue';
 import MidnightUpdateRequiredBanner from './MidnightUpdateRequiredBanner.vue';
 import MidnightStagenetNotice from './MidnightStagenetNotice.vue';
 import MidnightRefreshingNotice from './MidnightRefreshingNotice.vue';
+import MidnightNotIncludedCard from './MidnightNotIncludedCard.vue';
+import { midnightStore } from '@/stores/midnightStore';
+import { notIncludedAfterReset } from '@/chains/midnight/midnightPendingSends';
 import { useMidnightRefresh, useMidnightRefreshSentence } from '@/shared/composables/useMidnightRefresh';
 import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -42,6 +45,7 @@ const NOTICE_COMPONENTS: Record<MidnightNoticeId, Component> = {
   update: MidnightUpdateRequiredBanner,
   upgrade: MidnightNetworkUpgradeBanner,
   refreshing: MidnightRefreshingNotice,
+  notIncluded: MidnightNotIncludedCard,
   stagenet: MidnightStagenetNotice,
 };
 
@@ -51,6 +55,11 @@ const updateRequired = useMidnightUpdateRequired(() => network.value);
 const upgrading = useMidnightNetworkUpgrading(() => network.value);
 const stagenet = computed(() => isMidnightStagenetWallet(walletStore.loggedWallet));
 const { refreshing } = useMidnightRefresh();
+// Sends that didn't go through: only once the rebuild has ended and the lookup didn't find them.
+const notIncluded = computed(() => !refreshing.value && notIncludedAfterReset(midnightStore.transactions ?? []).length > 0);
+
+/** Send again on a send that didn't go through: the page opens its Send screen. */
+const emit = defineEmits<{ (e: 'send-again'): void }>();
 
 // Each notice said once as it appears, from the region that is always there.
 // Notices that appear within a moment of each other (a cutover: the gate and the
@@ -86,12 +95,16 @@ const shown = computed(() => visibleMidnightNotices({
   update: updateRequired.value,
   upgrade: upgrading.value,
   refreshing: refreshing.value,
+  notIncluded: notIncluded.value,
   stagenet: stagenet.value,
 }, MAX_NOTICES));
 
 function noticeProps(id: MidnightNoticeId): Record<string, unknown> {
-  // The side panel stretches the update banner's restart button across it.
-  return id === 'update' ? { block: props.layout === 'panel' } : {};
+  // The side panel stretches the update banner's restart button across it,
+  // and its Send takes unshielded addresses only.
+  if (id === 'update') return { block: props.layout === 'panel' };
+  if (id === 'notIncluded') return { layout: props.layout };
+  return {};
 }
 </script>
 

@@ -8,7 +8,7 @@
     <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
       <!-- The Midnight notices above the balance, at most two by precedence
            (MidnightNoticeSlot.vue); renders nothing (and takes no space) otherwise. -->
-      <MidnightNoticeSlot class="portfolio-upgrade-banner" />
+      <MidnightNoticeSlot class="portfolio-upgrade-banner" @send-again="openDialog('SEND')" />
       <!-- While Midnight data is rebuilt (midnightRefresh.ts), the value containers
            show the last values the wallet knew, greyed (.g-stale); controls aren't. -->
       <v-row no-gutters class="hero-row" :class="{ 'g-stale': midnightRefreshing }">

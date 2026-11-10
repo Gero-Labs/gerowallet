@@ -158,6 +158,8 @@ export enum MessageTypes {
   // and push it back. Deduplicated by hash: the confirmed entry from gero-sync
   // replaces it when it arrives.
   ADD_MIDNIGHT_PENDING_TX = 'ADD_MIDNIGHT_PENDING_TX',
+  DISMISS_MIDNIGHT_PENDING_TX = 'DISMISS_MIDNIGHT_PENDING_TX',
+  CHECK_MIDNIGHT_PENDING_TX = 'CHECK_MIDNIGHT_PENDING_TX',
   // DApp Connector: called by DAppOverlay.vue's Midnight signData branch
   // (side-panel bundle, after the user approves + authenticates) to actually
   // sign the dapp's data with the mandatory midnight_signed_message: prefix.

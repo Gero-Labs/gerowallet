@@ -179,6 +179,19 @@ export interface MidnightTransaction {
   proofTimeMs?: number;
   /** Serialized substrate tx hex (the `raw` field from indexer's Transaction type). */
   raw?: string;
+  /**
+   * Set on a `pending` row the wallet kept through a chain reset
+   * (midnightPendingSends.ts): when the reset happened (epoch ms) and whether
+   * the server said it was the network upgrade. A row that comes back confirmed
+   * in the rebuilt history replaces this one.
+   */
+  beforeReset?: { at: number; upgrade: boolean; notFound?: boolean };
+  /**
+   * On a pending row: its `hash` is the ledger hash the indexer and the history
+   * feed know (the submit route's `ledgerTxHash`), not the extrinsic hash. Only
+   * such a row can be looked up (Check again) or confirmed by the feed.
+   */
+  ledgerHash?: boolean;
 }
 
 /**

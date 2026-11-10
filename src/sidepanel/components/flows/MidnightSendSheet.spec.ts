@@ -63,8 +63,8 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function render() {
-  return mount(MidnightSendSheet, { props: { modelValue: true }, global: {
+function render(modelValue = true) {
+  return mount(MidnightSendSheet, { props: { modelValue }, global: {
     config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) },
     stubs: {
       ...dialogControls(async () => ({ valid: true, errors: [] })),
@@ -144,7 +144,7 @@ describe('Midnight sidepanel authorization freshness', () => {
     await flushPromises();
     expect(popup.close).toHaveBeenCalledTimes(1);
     expect(window.clearTimeout).toHaveBeenCalled();
-    expect(mocks.pending).toHaveBeenCalledWith(result.ledgerTxHash, 1_000_000n, 'mn_addr1recipient', false, 'NIGHT');
+    expect(mocks.pending).toHaveBeenCalledWith(result.ledgerTxHash, 1_000_000n, 'mn_addr1recipient', false, 'NIGHT', 'mn_addr1sender', true);
     expect(mocks.success).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.success-overlay').exists()).toBe(true);
   });
@@ -221,5 +221,36 @@ describe('Midnight sidepanel authorization freshness', () => {
     await wrapper.get('[data-testid="consent"]').trigger('click');
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
     expect(mocks.send.mock.calls[0][1].outputs[0].address).toBe('mn_addr1replacement');
+  });
+});
+
+// Issue 1470: a send that went out is recorded as pending even when the sheet
+// has moved on, but only for the wallet that sent it; Send again fills it in.
+describe('Midnight sidepanel pending rows and Send again', () => {
+  it('records the pending row for the sending wallet after the view moved on', async () => {
+    const sending = deferred<typeof result>();
+    mocks.send.mockReturnValueOnce(sending.promise);
+    const wrapper = await ready();
+    await confirm(wrapper).trigger('click');
+    await authenticate();
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    await invalidate(wrapper, 'recipient');
+    sending.resolve(result);
+    await flushPromises();
+    expect(mocks.pending).toHaveBeenCalledWith(result.ledgerTxHash, 1_000_000n, 'mn_addr1recipient', false, 'NIGHT', 'mn_addr1sender', true);
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+
+  it('Send again fills in the recipient and amount and sends nothing by itself', async () => {
+    const { requestMidnightSendAgain } = await import('@/chains/midnight/midnightSendPrefill');
+    const wrapper = render(false);
+    requestMidnightSendAgain({ recipient: 'mn_addr1again', amount: 2_500_000n, token: 'NIGHT', shielded: false });
+    await wrapper.setProps({ modelValue: true });
+    await flushPromises();
+    const vm = wrapper.vm as unknown as { recipient: string; amount: string };
+    expect(vm.recipient).toBe('mn_addr1again');
+    expect(vm.amount).toBe('2.5');
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.pending).not.toHaveBeenCalled();
   });
 });

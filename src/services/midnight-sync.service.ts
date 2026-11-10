@@ -1,4 +1,5 @@
 import { MidnightGenerationQueue, clearMidnightNetworkCheckpoints } from '@/chains/midnight/midnightSyncGeneration';
+import { checkPendingTx, keptRowsToCheck } from '@/chains/midnight/midnightPendingSends';
 /**
  * Midnight Sync Service
  *
@@ -325,6 +326,12 @@ class MidnightSyncService {
         }
       });
     }
+    // Pending sends aren't in the replay a restarted worker starts with
+    // (midnightPendingSends.ts): put them back, then ask about any that were
+    // kept through a reset and never looked up.
+    void midnightActions.restorePendingAfterRestart().then(() => {
+      if (this.sessionEpoch === sessionEpoch) void this.checkKeptPendingRows();
+    });
   }
 
   private refreshTipFromNexus(network: string): Promise<void> {
@@ -399,9 +406,10 @@ class MidnightSyncService {
    */
   forceResync(): void {
     if (!this.active) return;
-    // The rebuild shows "Refreshing" over what was on screen (midnightRefresh.ts).
+    // The rebuild shows "Refreshing" over what was on screen (midnightRefresh.ts);
+    // pending sends stay in the history it rebuilds (midnightPendingSends.ts).
     this.beginRefresh();
-    midnightActions.setTransactions([]);
+    midnightActions.clearHistoryKeepingPending();
     midnightActions.setUtxos([]);
     // Fire-and-forget: clearing the SDK state blobs is best-effort and must
     // not block the WS resubscribe. Clear ALL of them (no network scope) —
@@ -466,10 +474,33 @@ class MidnightSyncService {
     if (verdict === 'done') {
       this.stopRefreshTracking();
       midnightActions.endRefresh();
+      // Only now, with the rebuild done, ask about the sends kept through the reset.
+      void this.checkKeptPendingRows();
       return;
     }
     midnightActions.setRefreshStatus({ stalled: verdict === 'stalled' });
     if (!this.refreshTimer) this.scheduleRefreshCheck();
+  }
+
+  /**
+   * Look up each send kept through a chain reset (midnightPendingSends.ts):
+   * confirmed or rejected settles the row; not found marks it "didn't go
+   * through". Rows keyed by an extrinsic hash can't be looked up and stay
+   * "Not confirmed". Runs once the rebuild has ended, never while it runs.
+   */
+  private async checkKeptPendingRows(): Promise<void> {
+    const network = this.currentNetwork;
+    if (!network || midnightStore.refreshing) return;
+    const rows = keptRowsToCheck(midnightStore.transactions);
+    if (!rows.length) return;
+    const epoch = this.sessionEpoch;
+    const api = getMidnightApi(network);
+    for (const tx of rows) {
+      const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), tx.hash);
+      if (this.sessionEpoch !== epoch || midnightStore.refreshing) return;
+      if (outcome === 'notFound') midnightActions.markPendingNotIncluded(tx.hash, tx.token);
+      else midnightActions.settlePendingTx(tx.hash, tx.token, outcome);
+    }
   }
 
   /** A frame arrived for a running rebuild: any frame shows the connection lives; one with transactions moves it. */
@@ -668,7 +699,7 @@ class MidnightSyncService {
   private async handleForceResync(): Promise<void> {
     debugLog('🌙 Midnight force resync triggered');
     this.beginRefresh();
-    midnightActions.setTransactions([]);
+    midnightActions.clearHistoryKeepingPending();
     midnightActions.setUtxos([]);
     midnightActions.setNetworkStatus('connecting');
   }

@@ -461,6 +461,7 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useChainContext } from '../../composables/useChainContext';
 import snackbar from '@/plugins/snackbar';
+import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
@@ -829,10 +830,16 @@ function isSameWallet(sent: { id: number; network: string }): boolean {
 // send shows as NIGHT in history until gero-sync backfills the confirmed row).
 // Not tied to the view: an accepted transaction gets its pending row even if
 // the sheet is gone.
-async function addOptimisticPendingTx(hash: string, draft: { amount: bigint; to: string; token: string }) {
+async function addOptimisticPendingTx(
+  hash: string,
+  draft: { amount: bigint; to: string; token: string },
+  sent: { ledgerHash: boolean; fromAddress: string },
+) {
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    await addPendingMidnightTx(hash, draft.amount, draft.to, false, draft.token);
+    // `ledgerHash`: whether `hash` is the ledger hash the indexer knows (midnightPendingSends.ts);
+    // `fromAddress`: the background records the row only into the sending wallet's history.
+    await addPendingMidnightTx(hash, draft.amount, draft.to, false, draft.token, sent.fromAddress, sent.ledgerHash);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -992,7 +999,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
     // Into this wallet's history only: after a wallet switch it would land in another's.
-    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft);
+    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft, { ledgerHash: !!result.ledgerTxHash, fromAddress: wallet.baseAddress });
     if (!current()) return;
     txId.value = historyHash;
     txSuccess.value = true;
@@ -1163,8 +1170,23 @@ function resetAll() {
 }
 
 watch(() => props.modelValue, (val) => {
-  if (val) resetAll();
+  if (!val) return;
+  resetAll();
+  applySendAgain();
 });
+
+/**
+ * "Send again" for a send that never went through (midnightPendingSends.ts):
+ * recipient, token and amount filled in, at the first step; the user reviews
+ * and confirms as for any send.
+ */
+function applySendAgain() {
+  const prefill = takeMidnightSendPrefill();
+  if (!prefill) return;
+  selectedToken.value = prefill.token || 'NIGHT';
+  recipient.value = prefill.recipient;
+  amount.value = toAmountInput(prefill.amount, selectedDecimals.value);
+}
 
 /** Token colours are 64-char hex; show the head so a label stays readable. */
 function shortToken(colour: string): string {

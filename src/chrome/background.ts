@@ -6707,9 +6707,14 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     if (walletBg.chain !== Blockchain.MIDNIGHT) {
       throw new Error('ADD_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
     }
-    const { hash, amount, counterparty, isShielded, token } = request.data || {};
+    const { hash, amount, counterparty, isShielded, token, fromAddress, ledgerHash } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
     const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
+    // A send recorded after its page closed: only into the history of the wallet that sent it.
+    if (typeof fromAddress === 'string' && fromAddress && midnightStore.activeWalletKey !== fromAddress) {
+      sendResponse({ id: request.id, data: { success: true, skipped: true }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
     let amountBig = 0n;
     try { amountBig = BigInt(amount ?? '0'); } catch { amountBig = 0n; }
     // A public send to our own unshielded address is a self-transfer from the
@@ -6735,6 +6740,8 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
       status: 'pending',
       fee: 0n,
       isShielded: !!isShielded,
+      // Only a ledger hash can be looked up (Check again) or matched by the history feed.
+      ...(ledgerHash === true ? { ledgerHash: true } : {}),
     });
     sendResponse({
       id: request.id,
@@ -6749,6 +6756,49 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
       target: TARGET,
       sender: SENDER.extension,
     });
+  }
+});
+
+/**
+ * Midnight: the user is done with a pending row that never confirmed
+ * (midnightPendingSends.ts). Only a non-confirmed row is removed.
+ * Request shape: `{ hash, token }`.
+ */
+app.addToOptions(MessageTypes.DISMISS_MIDNIGHT_PENDING_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('DISMISS_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
+    const { hash, token } = request.data || {};
+    if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
+    const { midnightActions } = await import('@/stores/midnightStore');
+    midnightActions.dismissPendingTx(hash, typeof token === 'string' && token ? token : 'NIGHT');
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/**
+ * Midnight: "Check again" for a pending row past its time limit. Asks the
+ * indexer for the transaction by its ledger hash and settles the row when it
+ * is found. Request shape: `{ hash, token }`; result `{ outcome }`:
+ * `confirmed` | `failed` | `notFound`.
+ */
+app.addToOptions(MessageTypes.CHECK_MIDNIGHT_PENDING_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('CHECK_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
+    const { hash, token } = request.data || {};
+    if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
+    const [{ getMidnightApi }, { checkPendingTx }, { midnightActions }] = await Promise.all([
+      import('@/api/midnight-api'), import('@/chains/midnight/midnightPendingSends'), import('@/stores/midnightStore'),
+    ]);
+    const api = getMidnightApi(walletBg.network);
+    const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), hash);
+    if (outcome !== 'notFound') midnightActions.settlePendingTx(hash, typeof token === 'string' && token ? token : 'NIGHT', outcome);
+    sendResponse({ id: request.id, data: { success: true, result: { outcome } }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
   }
 });
 

@@ -38,6 +38,19 @@ export const SUBMITTED_TX_QUERY = `query GeroSubmittedTx($id: HexEncoded!) {
   }
 }`;
 
+/**
+ * The same lookup by the ledger hash a history row carries, for a pending row
+ * the wallet checks again later (midnightPendingSends.ts): pending rows keep
+ * the hash, not the identifiers.
+ */
+export const PENDING_TX_QUERY = `query GeroPendingTx($hash: HexEncoded!) {
+  transactions(offset: {hash: $hash}) {
+    __typename
+    hash
+    ... on RegularTransaction { transactionResult { status } }
+  }
+}`;
+
 const LOST_REPLY_CODES: ReadonlySet<string> = new Set(['ECONNABORTED', 'ETIMEDOUT', 'ERR_NETWORK']);
 // Gateway and Cloudflare "the origin did not answer in time" statuses.
 const LOST_REPLY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504, 520, 522, 524]);
@@ -87,7 +100,7 @@ const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(reso
 type IndexedOutcome = 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILURE';
 
 /** The first regular transaction in the indexer reply that carries a result, if any. */
-function findOutcome(data: unknown): { hash: string; status: IndexedOutcome } | undefined {
+export function findOutcome(data: unknown): { hash: string; status: IndexedOutcome } | undefined {
   const rows = (data as { transactions?: unknown } | null | undefined)?.transactions;
   if (!Array.isArray(rows)) return undefined;
   for (const row of rows) {

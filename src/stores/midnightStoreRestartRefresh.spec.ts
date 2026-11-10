@@ -202,4 +202,24 @@ describe('Refreshing across a worker restart', () => {
     expect(restarted.midnightStore.refreshing?.stalled).toBe(false);
   });
 
+
+  // Issue 1470: pending sends are not in the replay a restarted worker starts with.
+  it('a worker restart keeps pending sends: they come back from what the previous worker persisted', async () => {
+    m!.midnightActions.setActive(addresses('abc'));
+    m!.midnightActions.setTransactions(history(3));
+    m!.midnightActions.applyTransaction({
+      hash: 'ee'.repeat(32), type: 'send', token: 'NIGHT', amount: 9n, counterparty: 'mn_addr_preprod1to',
+      timestamp: 1_758_000_100_000, status: 'pending', fee: 0n, isShielded: false, ledgerHash: true,
+    });
+    await settle();
+
+    const restarted = await load('background');
+    restarted.midnightActions.setActive(addresses('abc'));
+    await settle();
+    expect(restarted.midnightStore.transactions).toHaveLength(0);
+    await expect(restarted.midnightActions.restorePendingAfterRestart()).resolves.toBe(1);
+    expect(restarted.midnightStore.transactions.map((t) => [t.hash, t.status, t.ledgerHash])).toEqual([['ee'.repeat(32), 'pending', true]]);
+    // Once is enough: a second call (pending rows already there) adds nothing.
+    await expect(restarted.midnightActions.restorePendingAfterRestart()).resolves.toBe(0);
+  });
 });

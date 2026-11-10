@@ -320,6 +320,17 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.health).not.toHaveBeenCalled();
   });
 
+  it('reports a registration the server took as submitted, with its status, never as registered', async () => {
+    mocks.api.mockReturnValue({
+      buildNightDustRegistrationTx: vi.fn().mockResolvedValue({ unprovenTxHex: 'aabb', signaturePayloadHex: '0xcc' }),
+      submitNightDustRegistrationTx: vi.fn().mockResolvedValue({ txHash: '0xfeed', status: 'Submitted' }),
+    });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } })
+      .mockResolvedValueOnce({ data: { success: true, signatures: [{ index: 1, signatureHex: 'ff' }] } });
+    const result = await registerNightForDust('Stagenet', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
+    expect(result).toEqual({ status: 'submitted', txHash: '0xfeed', submitStatus: 'Submitted' });
+  });
+
   it('passes the registration envelope to background validation and never submits a rejected payload', async () => {
     const submit = vi.fn();
     mocks.api.mockReturnValue({
