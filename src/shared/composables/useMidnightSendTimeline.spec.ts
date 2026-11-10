@@ -23,13 +23,14 @@ const t = (key: string, params?: Record<string, unknown>) => ({
 
 const s = (n: number) => `${n}\u00a0s`;
 let apps: Vue.App[] = [];
-function mountTimeline(stage: Vue.Ref<string>, announce?: (text: string) => void) {
+function mountTimeline(stage: Vue.Ref<string>, announce?: (text: string) => void, busy?: Vue.Ref<string | undefined>) {
   let nodes!: Vue.ComputedRef<TimelineNode[]>;
   const app = Vue.createApp({
     setup() {
       nodes = useMidnightSendTimeline(Vue.computed(() => stage.value as never), Vue.computed(() => labels), {
         provingDetailFor: (step, seconds) => provingDetail(step, seconds, t),
         announce,
+        submitDetail: busy ? Vue.computed(() => busy.value) : undefined,
       });
       return {};
     },
@@ -135,5 +136,40 @@ describe('what the live region hears', () => {
     stage.value = 'provingCloud';
     await Vue.nextTick();
     expect(said).toEqual(['Proving locally', 'Proving with Gero Cloud']);
+  });
+});
+
+describe('waiting for a busy Gero Cloud', () => {
+  it('keeps the Gero Cloud label, shows the countdown without the counter or a bar, then proves again from zero', async () => {
+    const said: string[] = [];
+    const stage = Vue.ref('provingCloud');
+    const busy = Vue.ref<string | undefined>(undefined);
+    const node = mountTimeline(stage, (text) => said.push(text), busy);
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(node('submit').elapsed).toBe(s(8));
+
+    stage.value = 'waiting';
+    busy.value = 'Gero Cloud is busy. Trying again in 10\u00a0s…';
+    await Vue.nextTick();
+    expect(node('submit')).toMatchObject({ label: 'Proving with Gero Cloud', state: 'waiting', detail: busy.value });
+    expect(node('submit').elapsed).toBeUndefined();
+    expect(node('submit').showBar).toBeUndefined();
+    busy.value = 'Gero Cloud is busy. Trying again in 9\u00a0s…';
+    await Vue.nextTick();
+
+    stage.value = 'provingCloud';
+    busy.value = undefined;
+    await Vue.nextTick();
+    expect(node('submit')).toMatchObject({ state: 'active', elapsed: s(0) });
+    // Once when the wait starts (not each second), once for the resubmit.
+    expect(said).toEqual(['Proving with Gero Cloud', 'Gero Cloud is busy. Trying again in 10\u00a0s…', 'Proving with Gero Cloud']);
+  });
+
+  it('a wait on a proven submit keeps "Submit"', async () => {
+    const stage = Vue.ref('submitting');
+    const node = mountTimeline(stage);
+    stage.value = 'waiting';
+    await Vue.nextTick();
+    expect(node('submit')).toMatchObject({ label: 'Submit', state: 'waiting' });
   });
 });

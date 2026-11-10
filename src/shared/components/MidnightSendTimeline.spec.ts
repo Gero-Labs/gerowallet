@@ -34,4 +34,20 @@ describe('MidnightSendTimeline', () => {
     expect(w.find('.mtl-node__elapsed').exists()).toBe(false);
     expect(w.find('.mtl-node__hint').exists()).toBe(false);
   });
+
+  it('waiting: a still clock in the dot, the countdown under the label, no bar, no counter', () => {
+    const w = mount(MidnightSendTimeline, {
+      props: { nodes: nodes({ state: 'waiting', showBar: undefined, percent: undefined, detail: 'Gero Cloud is busy. Trying again in 9\u00a0s…' }) },
+      global: { stubs: { 'v-icon': { template: '<i class="icon"><slot /></i>' } } },
+    });
+    const node = w.findAll('.mtl-node')[1];
+    expect(node.classes()).toContain('waiting');
+    expect(node.get('.mtl-dot').text()).toBe('mdi-clock-outline');
+    expect(node.find('.mtl-pulse').exists()).toBe(false);
+    const busy = node.get('[data-test="mtl-busy"]');
+    expect(busy.classes()).toContain('t-body-sm');
+    expect(busy.text()).toContain('Trying again in 9');
+    expect(node.find('.mtl-bar').exists()).toBe(false);
+    expect(node.find('.mtl-node__elapsed').exists()).toBe(false);
+  });
 });

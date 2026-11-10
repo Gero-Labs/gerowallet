@@ -306,62 +306,65 @@
 
           <v-expand-transition>
             <div v-show="step === 4" class="step-body">
-              <!-- ── Normal wallet (password) ── -->
-              <template v-if="isNormalWallet && !isPrfWallet">
-                <div class="text-caption grey--text mb-2">{{ $t('miniGero.spendingPassword') }}</div>
-                <v-text-field
-                  v-model="spendingPassword"
-                  :type="showPassword ? 'text' : 'password'"
-                  variant="outlined"
-                  density="compact"
-                  theme="dark"
-                  hide-details="auto"
-                  :placeholder="$t('miniGero.enterPassword')"
-                  :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                  :disabled="submitting"
-                  @click:append-inner="showPassword = !showPassword"
-                  @keydown.enter="signAndSubmit()"
-                />
-                <GButton
-                  tier="primary"
-                  block
-                  class="mt-4"
-                  :disabled="!spendingPassword || submitting || !!sendBlock"
-                  :loading="submitting"
-                  data-test="midnight-send-submit"
-                  @click="signAndSubmit()"
-                >
-                  <v-icon start size="small">mdi-send</v-icon>
-                  {{ sendCtaText }}
-                </GButton>
-              </template>
+              <!-- While the send runs the timeline takes this space: no password field, no CTA. -->
+              <template v-if="!submitting">
+                <!-- ── Normal wallet (password) ── -->
+                <template v-if="isNormalWallet && !isPrfWallet">
+                  <div class="text-caption grey--text mb-2">{{ $t('miniGero.spendingPassword') }}</div>
+                  <v-text-field
+                    v-model="spendingPassword"
+                    :type="showPassword ? 'text' : 'password'"
+                    variant="outlined"
+                    density="compact"
+                    theme="dark"
+                    hide-details="auto"
+                    :placeholder="$t('miniGero.enterPassword')"
+                    :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                    :disabled="submitting"
+                    @click:append-inner="showPassword = !showPassword"
+                    @keydown.enter="signAndSubmit()"
+                  />
+                  <GButton
+                    tier="primary"
+                    block
+                    class="mt-4"
+                    :disabled="!spendingPassword || submitting || !!sendBlock"
+                    :loading="submitting"
+                    data-test="midnight-send-submit"
+                    @click="signAndSubmit()"
+                  >
+                    <v-icon start size="small">mdi-send</v-icon>
+                    {{ sendCtaText }}
+                  </GButton>
+                </template>
 
-              <!-- ── PRF wallet (PassKey) ── -->
-              <template v-else-if="isNormalWallet && isPrfWallet">
-                <div class="hw-notice">
-                  <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
-                  <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
-                </div>
-                <GButton
-                  tier="primary"
-                  block
-                  :disabled="submitting || !!sendBlock"
-                  :loading="submitting"
-                  data-test="midnight-send-submit-prf"
-                  @click="signAndSubmitPrf()"
-                >
-                  <v-icon start size="small">mdi-fingerprint</v-icon>
-                  {{ sendCtaText }}
-                </GButton>
-              </template>
+                <!-- ── PRF wallet (PassKey) ── -->
+                <template v-else-if="isNormalWallet && isPrfWallet">
+                  <div class="hw-notice">
+                    <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
+                    <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
+                  </div>
+                  <GButton
+                    tier="primary"
+                    block
+                    :disabled="submitting || !!sendBlock"
+                    :loading="submitting"
+                    data-test="midnight-send-submit-prf"
+                    @click="signAndSubmitPrf()"
+                  >
+                    <v-icon start size="small">mdi-fingerprint</v-icon>
+                    {{ sendCtaText }}
+                  </GButton>
+                </template>
 
-              <!-- ── Any other wallet type: Midnight has no hardware-wallet
-                   signing support. ── -->
-              <template v-else>
-                <div class="hw-notice">
-                  <v-icon size="40" color="var(--g-text-3)" class="mb-2">mdi-alert-circle-outline</v-icon>
-                  <div class="text-body-2 grey--text text-center">{{ $t('midnight.connector.walletTypeUnsupported') }}</div>
-                </div>
+                <!-- ── Any other wallet type: Midnight has no hardware-wallet
+                     signing support. ── -->
+                <template v-else>
+                  <div class="hw-notice">
+                    <v-icon size="40" color="var(--g-text-3)" class="mb-2">mdi-alert-circle-outline</v-icon>
+                    <div class="text-body-2 grey--text text-center">{{ $t('midnight.connector.walletTypeUnsupported') }}</div>
+                  </div>
+                </template>
               </template>
 
               <!-- The same five-node timeline the options page shows. This
@@ -373,8 +376,19 @@
                   {{ $t('midnight.sponsor.feePaidByLabel') }}: {{ sponsorWallet.name }}
                 </div>
                 <MidnightSendTimeline compact :nodes="timelineNodes" />
+                <!-- Gero Cloud stayed busy after the automatic resubmits: the transaction is
+                     signed and kept in memory; Try again resends the same bytes, no password. -->
+                <template v-if="busyPrompt">
+                  <GNote icon="mdi-clock-outline" role="status" class="mt-2" data-test="midnight-send-still-busy">
+                    {{ $t('midnight.busy.stillBusy') }}
+                  </GNote>
+                  <div ref="busyActionsEl" class="mini-tl__busy-actions mt-2">
+                    <GButton tier="secondary" compact data-test="midnight-send-busy-cancel" @click="answerBusy('cancel')">{{ $t('common.cancel') }}</GButton>
+                    <GButton tier="primary" compact data-test="midnight-send-busy-retry" @click="answerBusy('retry')">{{ $t('common.tryAgain') }}</GButton>
+                  </div>
+                </template>
                 <!-- The send runs in this panel: closing it stops the send. -->
-                <div class="mini-tl__keep">{{ $t('midnight.send.keepPanelOpen') }}</div>
+                <div v-else class="mini-tl__keep">{{ $t('midnight.send.keepPanelOpen') }}</div>
               </div>
 
               <!-- Not an error: sends are paused on this network, or this build can't sign
@@ -383,6 +397,9 @@
                 {{ sendBlockText }}
               </GNote>
 
+              <p v-if="busyCancelled && !submitting" role="status" class="mini-tl__cancelled t-caption mt-2 mb-0 text-center" data-test="midnight-send-cancelled">
+                {{ $t('midnight.busy.nothingSent') }}
+              </p>
               <p v-if="passwordError" role="alert" class="t-caption mt-2 mb-0 text-center" style="color: var(--g-error)">
                 {{ passwordError }}
               </p>
@@ -407,7 +424,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, toRefs } from 'vue';
+import { ref, computed, watch, nextTick, toRefs, onBeforeUnmount } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
 import { provingDetail } from '@/shared/composables/useProvingElapsed';
@@ -447,6 +464,7 @@ import snackbar from '@/plugins/snackbar';
 import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightNetworkDisplayName, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { isMidnightBusyCancelled, type MidnightBusyHandlers } from '@/services/midnightBusyRetry';
 import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
@@ -480,8 +498,48 @@ const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') 
 const sendBlock = ref<MidnightSendBlock | null>(null);
 const sendBlockText = ref('');
 
+/** Seconds until the automatic resubmit while Gero Cloud is busy (midnightBusyRetry.ts). */
+const busySeconds = ref<number | null>(null);
+/** Set while the send waits for Try again or Cancel after the automatic resubmits. */
+const busyPrompt = ref<((choice: 'retry' | 'cancel') => void) | null>(null);
+/** Shown after Cancel on the still-busy prompt: nothing went out, and nothing went wrong. */
+const busyCancelled = ref(false);
+const busyActionsEl = ref<HTMLElement | null>(null);
+/** Ends the current send's busy countdown at once (Cancel, the sheet going away), timer included. */
+let busyAbort: AbortController | null = null;
+
+/** The busy countdown and the still-busy prompt for one send. */
+function busyHandlers(current: () => boolean): MidnightBusyHandlers {
+  busyAbort?.abort();
+  busyAbort = new AbortController();
+  return {
+    signal: busyAbort.signal,
+    onCountdown: (seconds) => { if (current()) busySeconds.value = seconds; },
+    onStillBusy: () => new Promise<'retry' | 'cancel'>((resolve) => {
+      if (!current()) { resolve('cancel'); return; }
+      busyPrompt.value = (choice) => { busyPrompt.value = null; resolve(choice); };
+    }),
+  };
+}
+
+function answerBusy(choice: 'retry' | 'cancel') {
+  if (choice === 'cancel') busyAbort?.abort();
+  busyPrompt.value?.(choice);
+}
+onBeforeUnmount(() => answerBusy('cancel'));
+// The prompt is the next thing to act on: focus Try again when it appears.
+watch(busyPrompt, (prompt) => {
+  if (!prompt) return;
+  void nextTick(() => busyActionsEl.value?.querySelector<HTMLElement>('[data-test="midnight-send-busy-retry"]')?.focus());
+});
+
 /** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
 function showSendError(e: unknown) {
+  // Cancel while Gero Cloud was busy: nothing was sent and nothing went wrong.
+  if (isMidnightBusyCancelled(e)) {
+    busyCancelled.value = true;
+    return;
+  }
   const message = e instanceof Error ? e.message : String(e);
   const block = midnightSendBlockOf(e);
   ledgerMismatch.value = !block && midnightApiErrorKind(e) === 'ledgerMismatch';
@@ -756,16 +814,19 @@ function copyTxId() {
 // ── Sign & submit (mirrors MidnightSendDialog.vue's sendUnshielded exactly:
 //    same service call, same credentials shape, same onStage callback, same
 //    addPendingMidnightTx follow-up call after a successful submit). ──
-async function addOptimisticPendingTx(hash: string, current: () => boolean) {
-  const amountBig = parseAmount(amount.value);
-  const to = recipient.value.trim();
-  // Captured with the amount: without it a token send shows as NIGHT in
-  // history until gero-sync backfills the confirmed row.
-  const token = selectedToken.value;
+/** The wallet that sent is still the one logged in (the sheet may be gone, the wallet not switched). */
+function isSameWallet(sent: { id: number; network: string }): boolean {
+  return walletStore.loggedWallet?.id === sent.id && walletStore.loggedWallet?.network === sent.network;
+}
+
+// From the values the send started with (the token too: without it a token
+// send shows as NIGHT in history until gero-sync backfills the confirmed row).
+// Not tied to the view: an accepted transaction gets its pending row even if
+// the sheet is gone.
+async function addOptimisticPendingTx(hash: string, draft: { amount: bigint; to: string; token: string }) {
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    if (!current()) return;
-    await addPendingMidnightTx(hash, amountBig, to, false, token);
+    await addPendingMidnightTx(hash, draft.amount, draft.to, false, draft.token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -845,8 +906,18 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
   }
   passwordError.value = '';
   ledgerMismatch.value = false;
+  busyCancelled.value = false;
   submitting.value = true;
   sendStage.value = 'authorizing';
+  // Captured now: the pending row and the sponsor link are recorded once the
+  // submit is accepted, even if the sheet has been reset or closed by then.
+  const draft = {
+    amount: parseAmount(amount.value),
+    to: recipient.value.trim(),
+    token: selectedToken.value,
+    amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
+  };
+  const paying = sponsorWallet.value;
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
     const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
@@ -857,30 +928,38 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       {
         fromAddress: wallet.baseAddress,
         outputs: [{
-          address: recipient.value.trim(),
-          amount: parseAmount(amount.value).toString(),
-          token: selectedToken.value,
+          address: draft.to,
+          amount: draft.amount.toString(),
+          token: draft.token,
         }],
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
-      (stage) => { if (current()) sendStage.value = stage; },
+      (stage) => {
+        // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
+        if (stage === 'submitting' || stage === 'provingCloud') {
+          credentials.prfSecret?.fill(0);
+          sponsor?.prfSecret?.fill(0);
+        }
+        if (current()) sendStage.value = stage;
+      },
       sponsor,
       false,
       current,
+      busyHandlers(current),
     );
-    if (!current()) return;
     debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
-      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+      'status:', result.status, 'sponsor:', paying?.id ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
     // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
     // match the row later keys on it.
     const historyHash = historyHashForSubmittedTx(result);
 
+    // The transaction is accepted: record it whether or not this view is
+    // still the current one. Only the screen updates below wait on that.
     // Remember who paid, for the battery indicator on both wallets and the
     // transaction details screen. Best effort — never fail a submitted tx.
-    if (sponsorWallet.value) {
-      const paying = sponsorWallet.value;
+    if (paying) {
       try {
         const { recordSponsoredTx, saveSponsorLink } = await import('@/chains/midnight/midnightSponsorLinks');
         const at = Date.now();
@@ -898,16 +977,17 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
           at,
           sponsoredWalletId: wallet.id,
           sponsoredWalletName: wallet.name,
-          amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
-          recipient: recipient.value.trim(),
+          amountLabel: draft.amountLabel,
+          recipient: draft.to,
         });
       } catch (e) {
         debugLog('🌙 could not record sponsorship for this tx', e);
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
+    // Into this wallet's history only: after a wallet switch it would land in another's.
+    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft);
     if (!current()) return;
-    void addOptimisticPendingTx(historyHash, current);
     txId.value = historyHash;
     txSuccess.value = true;
     snackbar.fireSuccess(t('miniGero.txSubmitted'));
@@ -918,6 +998,8 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
     sponsor?.prfSecret?.fill(0);
     credentials.prfSecret?.fill(0);
     spendingPassword.value = '';
+    busySeconds.value = null;
+    answerBusy('cancel');
     submitting.value = false;
     sendStage.value = 'idle';
   }
@@ -1109,6 +1191,8 @@ const timelineNodes = useMidnightSendTimeline(
     // "Keep this panel open" is always shown under the timeline, so the slow hint need not repeat it.
     provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), { keepOpenShown: true }),
     announce,
+    // Gero Cloud is busy: counting down to the automatic resubmit.
+    submitDetail: computed(() => (busySeconds.value != null ? String(t('midnight.busy.retrying', { n: busySeconds.value })) : undefined)),
   },
 );
 </script>
@@ -1356,9 +1440,20 @@ input[type='number'] {
   color: var(--g-text-2);
 }
 
+.mini-tl__cancelled {
+  color: var(--g-text-2);
+}
+
 .mini-tl__keep {
   margin-top: 4px;
   font-size: 11px;
   color: var(--g-text-3);
+}
+/* The still-busy prompt under the timeline. */
+.mini-tl__busy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+  justify-content: flex-end;
 }
 </style>

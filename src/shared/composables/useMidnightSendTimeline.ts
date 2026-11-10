@@ -16,7 +16,8 @@ import { provingStepOf, useProvingElapsed, type ProvingDetail, type ProvingStep 
 export interface TimelineNode {
   key: string;
   label: string;
-  state: 'pending' | 'active' | 'done';
+  /** `waiting`: Gero Cloud answered busy and the send counts down to resubmit the same bytes. */
+  state: 'pending' | 'active' | 'waiting' | 'done';
   /** Node carries a progress bar (the DUST-ledger sync, or opaque proving). */
   showBar?: boolean;
   /**
@@ -47,6 +48,7 @@ export const STAGE_RANK: Record<string, number> = {
   provingZkpaas: 3,
   submitting: 4,
   provingCloud: 4,
+  waiting: 4,
   done: 5,
 };
 
@@ -76,6 +78,8 @@ export interface SendTimelineOptions {
    * counter.
    */
   announce?: (text: string) => void;
+  /** A line under the submit node while it waits for a busy Gero Cloud (the countdown). */
+  submitDetail?: ComputedRef<string | undefined>;
 }
 
 /**
@@ -95,9 +99,14 @@ export function useMidnightSendTimeline(
     const seconds = elapsed.seconds.value;
     return step?.node === node && seconds != null && options.provingDetailFor ? options.provingDetailFor(step, seconds) : undefined;
   };
+  // Which submit the send is waiting to repeat: a wait after a Gero Cloud
+  // proving attempt keeps that node's label ("Proving with Gero Cloud").
+  let lastAttempt: 'submitting' | 'provingCloud' = 'submitting';
   const nodes = computed<TimelineNode[]>(() => {
     const s = stage.value;
     const rank = STAGE_RANK[s] ?? 0;
+    if (s === 'submitting' || s === 'provingCloud') lastAttempt = s;
+    const submitCloud = s === 'provingCloud' || (s === 'waiting' && lastAttempt === 'provingCloud');
     const prog = midnightStore.sendProgress;
     const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
     // A public send proving its DUST fee on this device: after signing, inside
@@ -144,11 +153,14 @@ export function useMidnightSendTimeline(
       },
       {
         key: 'submit',
-        label: s === 'provingCloud' ? labels.value.provingCloud : labels.value.submit,
-        state: s === 'submitting' || s === 'provingCloud' ? 'active' : s === 'done' ? 'done' : 'pending',
+        label: submitCloud ? labels.value.provingCloud : labels.value.submit,
+        state: s === 'waiting' ? 'waiting' : s === 'submitting' || s === 'provingCloud' ? 'active' : s === 'done' ? 'done' : 'pending',
         // Gero Cloud proving has no progress signal: an indeterminate bar, never a percentage.
+        // None while waiting for a busy Gero Cloud: the countdown says what happens next.
         showBar: s === 'provingCloud' || undefined,
         percent: s === 'provingCloud' ? null : undefined,
+        // The busy countdown first; the counter and hint only while proving.
+        detail: options.submitDetail?.value,
         ...provingDetailOf('submit'),
       },
     ];
@@ -156,10 +168,16 @@ export function useMidnightSendTimeline(
 
   const announce = options.announce;
   if (announce) {
-    // The proving node and what it says, without the counter.
+    // The proving node and what it says, without the counter; and the start
+    // of a wait for a busy Gero Cloud, once (not each second of its countdown).
+    // Each resubmit is a new proving step, so it is said again.
     let said: { key: string; hint: boolean } | null = null;
     watch(
       () => {
+        if (stage.value === 'waiting') {
+          const line = options.submitDetail?.value;
+          return line ? { key: 'waiting', label: line, hint: undefined } : null;
+        }
         const step = elapsed.step.value;
         if (!step) return null;
         const node = nodes.value.find((n) => n.key === step.node);

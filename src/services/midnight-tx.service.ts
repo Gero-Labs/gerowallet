@@ -55,6 +55,7 @@ import {
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
+import { submitWithBusyRetry, type BusyRetryOptions, type MidnightBusyHandlers } from './midnightBusyRetry';
 
 export interface SignedSegment {
   index: number;
@@ -122,6 +123,8 @@ export type MidnightSendStage =
   | 'submitting'
   // The submit request also proves: Gero Cloud proves the transaction on the way through.
   | 'provingCloud'
+  // Gero Cloud answered busy (503 MIDNIGHT_PROVER_BUSY): counting down to resubmit the same bytes.
+  | 'waiting'
   | 'done';
 
 /**
@@ -256,18 +259,21 @@ function signedInBg(data: SignedInBgReply): SignedInBg {
  * Step 4: POST the tx to Nexus. A proven tx goes to `/tx/submit-proven`
  * (relayed as is); a signed-but-unproven one (the one-off Gero Cloud
  * fallback) to `/tx/submit`, whose sidecar `/tx/finalize` proves + binds +
- * submits. Either way a lost reply is settled by finding the tx on chain.
+ * submits. Either way a lost reply is settled by finding the tx on chain, and
+ * a busy prover (503 MIDNIGHT_PROVER_BUSY) gets the same bytes again
+ * (midnightBusyRetry.ts).
  */
 async function submitSignedTx(
   network: string,
   signed: SignedInBg,
   waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+  busy: Omit<BusyRetryOptions, 'sleep' | 'now'> = {},
 ): Promise<SubmitMidnightTxResponse> {
   const api = getMidnightApi(network);
   const watch = { identifiers: signed.txIdentifiers };
-  return signed.proven
+  return submitWithBusyRetry(() => (signed.proven
     ? api.submitProvenMidnightTx({ signedTxHex: signed.signedTxHex, waitFor }, watch)
-    : api.submitMidnightTx({ signedTxHex: signed.signedTxHex, waitFor }, watch);
+    : api.submitMidnightTx({ signedTxHex: signed.signedTxHex, waitFor }, watch)), busy);
 }
 
 /**
@@ -311,6 +317,8 @@ export async function sendUnshieldedNight(
   sponsor?: MidnightSponsor,
   forceRemote = false,
   current: () => boolean = () => true,
+  /** Countdown and still-busy prompt when Gero Cloud is busy (midnightBusyRetry.ts). */
+  busy: MidnightBusyHandlers = {},
 ): Promise<SubmitMidnightTxResponse> {
   assertCurrentApproval(current);
   // Sends on a paused network stop here, before keys or the build (midnightWriteGate.ts).
@@ -336,8 +344,16 @@ export async function sendUnshieldedNight(
   );
   assertCurrentApproval(current);
   // An unproven transaction is proved by Gero Cloud inside the submit request.
-  onStage?.(signed.proven ? 'submitting' : 'provingCloud');
-  const result = await submitSignedTx(network, signed);
+  // While Gero Cloud is busy the timeline waits, then proves again on each resubmit.
+  const attemptStage: MidnightSendStage = signed.proven ? 'submitting' : 'provingCloud';
+  onStage?.(attemptStage);
+  const result = await submitSignedTx(network, signed, 'InBlock', {
+    ...busy,
+    ttlMs: baseRequest.ttlMs,
+    isCurrent: current,
+    onWait: () => onStage?.('waiting'),
+    onAttempt: () => onStage?.(attemptStage),
+  });
   onStage?.('done');
   return withLedgerTxHash(result, signed.ledgerTxHash);
 }
@@ -751,6 +767,8 @@ export async function sendShieldedNight(
   forceRemote = false,
   sponsor?: MidnightSponsor,
   current: () => boolean = () => true,
+  /** Countdown and still-busy prompt when Gero Cloud is busy (midnightBusyRetry.ts). */
+  busy: MidnightBusyHandlers = {},
 ): Promise<SubmitMidnightTxResponse> {
   assertCurrentApproval(current);
   if (outputs.length === 0) {
@@ -779,7 +797,10 @@ export async function sendShieldedNight(
       throw new Error('Wallet-side proving requested but BG returned an unproven tx');
     }
     onStage?.('submitting');
-    const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor }, { identifiers: signed.txIdentifiers });
+    const result = await submitWithBusyRetry(
+      () => api.submitProvenMidnightTx({ signedTxHex, waitFor }, { identifiers: signed.txIdentifiers }),
+      { ...busy, isCurrent: current, onWait: () => onStage?.('waiting'), onAttempt: () => onStage?.('submitting') },
+    );
     onStage?.('done');
     return withLedgerTxHash(result, ledgerTxHash);
   }
@@ -787,9 +808,12 @@ export async function sendShieldedNight(
   onStage?.('working');
   const { signedTxHex, txIdentifiers } = await buildAndSignShieldedInBg(outputs, credentials, undefined, sponsor);
   assertCurrentApproval(current);
-  // Gero Cloud proves inside this request.
+  // Gero Cloud proves inside this request; a busy prover gets the same bytes again.
   onStage?.('provingCloud');
-  const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor }, { identifiers: txIdentifiers });
+  const result = await submitWithBusyRetry(
+    () => api.proveAndSubmitMidnightTx({ signedTxHex, waitFor }, { identifiers: txIdentifiers }),
+    { ...busy, isCurrent: current, onWait: () => onStage?.('waiting'), onAttempt: () => onStage?.('provingCloud') },
+  );
   onStage?.('done');
   return result;
 }

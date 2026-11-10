@@ -72,6 +72,37 @@ describe('isLostReply', () => {
   });
 });
 
+describe('a coded 503 is an answer', () => {
+  const coded = (errorCode: string, headers: Record<string, string> = {}) =>
+    new AxiosError('boom', 'ERR_BAD_RESPONSE', undefined, undefined, {
+      status: 503, data: { status: 503, errorCode, message: 'm' }, statusText: '', headers, config: {} as never,
+    });
+
+  it('busy with Retry-After is not a lost reply, and is typed with its wait', async () => {
+    const error = coded('MIDNIGHT_PROVER_BUSY', { 'retry-after': '15' });
+    expect(isLostReply(error)).toBe(false);
+    const graphql = vi.fn();
+    const thrown = await recoverLostSubmit(error, { identifiers: [ID] }, { graphql }).catch((e: unknown) => e);
+    expect(thrown).toMatchObject({ name: 'MidnightApiError', kind: 'proverBusy', retryAfter: 15 });
+    expect(graphql).not.toHaveBeenCalled();
+  });
+
+  it('another coded 503 is an answer too, shown through its message', async () => {
+    const error = coded('MIDNIGHT_RESET_PENDING');
+    expect(isLostReply(error)).toBe(false);
+    await expect(recoverLostSubmit(error, { identifiers: [ID] }, { graphql: vi.fn() })).rejects.toMatchObject({ kind: 'resetPending', message: 'm' });
+  });
+
+  it.each([
+    ['a body-less 503', withStatus(503, null)],
+    ['an HTML 503', withStatus(503, '<html>Service Unavailable</html>')],
+    ['a 503 with a body but no errorCode', withStatus(503, { message: 'x' })],
+    ['a 504', withStatus(504, null)],
+  ])('%s is still a lost reply', (_name, error) => {
+    expect(isLostReply(error)).toBe(true);
+  });
+});
+
 describe('recoverLostSubmit', () => {
   const graphql = vi.fn();
   beforeEach(() => graphql.mockReset());

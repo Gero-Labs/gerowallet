@@ -129,7 +129,8 @@ describe('Midnight sidepanel authorization freshness', () => {
     await authenticate(extensionOrigin, { close: vi.fn() });
     expect(mocks.send).not.toHaveBeenCalled();
     expect(popup.close).not.toHaveBeenCalled();
-    await confirm(wrapper).trigger('click');
+    // While the send runs the CTA is gone, so it cannot open a second popup.
+    expect(confirm(wrapper)).toBeUndefined();
     expect(window.open).toHaveBeenCalledTimes(1);
     await authenticate();
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
@@ -137,7 +138,9 @@ describe('Midnight sidepanel authorization freshness', () => {
       expect.objectContaining({ outputs: [{ address: 'mn_addr1recipient', amount: '1000000', token: 'NIGHT' }] }),
       role === 'sender' ? { prfSecret: expect.any(Uint8Array) } : { password: 'sender-password' },
       expect.any(Function), role === 'sponsor' ? { walletId: 2, prfSecret: expect.any(Uint8Array) } : undefined,
-      false, expect.any(Function));
+      false, expect.any(Function),
+      // The busy prover's countdown and still-busy prompt (midnightBusyRetry.ts).
+      expect.objectContaining({ onCountdown: expect.any(Function), onStillBusy: expect.any(Function) }));
     await flushPromises();
     expect(popup.close).toHaveBeenCalledTimes(1);
     expect(window.clearTimeout).toHaveBeenCalled();
