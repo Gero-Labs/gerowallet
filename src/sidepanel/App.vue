@@ -71,6 +71,9 @@
       />
     </BottomSheet>
 
+    <!-- A broadcast announcement in full: opened from the inbox, a snackbar or `?announcement=<id>`. -->
+    <AnnouncementSheet v-if="hasActiveWallet && !isLocked" />
+
     <!-- Global, so every hardware-wallet signing path gets the "continue on
          your device" prompt without each sheet re-declaring it. -->
     <HardwareSignPrompt />
@@ -92,6 +95,7 @@ import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
+import AnnouncementSheet from './components/AnnouncementSheet.vue';
 import { initDappRequestHub } from './services/dappRequestHub';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';

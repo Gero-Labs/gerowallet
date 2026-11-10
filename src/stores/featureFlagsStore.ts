@@ -667,6 +667,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if broadcast announcements are shown (the bell's "From Gero" rows, the snackbar, the
+   * banner, the dialog and their settings). Default ON: a kill switch, off only on an explicit
+   * `false`. Gates the UI only; the background keeps fetching and verifying whatever this says.
+   */
+  isAnnouncementsEnabled(): boolean {
+    return featureFlagsState.flags.isAnnouncementsEnabled;
+  },
+
+  /**
    * Check if multi-account (accounts #1..N of one device) is enabled.
    * Ships DARK (default false). Gates the UI only.
    */

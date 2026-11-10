@@ -205,6 +205,8 @@
                       </v-avatar>
                     </v-btn>
                   </v-toolbar>
+                  <!-- A critical service notice from Gero: one banner at most, under the app bar. -->
+                  <AnnouncementBanner />
                   <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
                     <v-col cols="12">
                       <v-alert
@@ -260,9 +262,12 @@
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
 
+      <!-- A broadcast announcement in full: opened from the bell, the banner, a snackbar or `?announcement=<id>`. -->
+      <AnnouncementDialog />
+
       <!-- The offer to turn push notifications on for an eligible, unlinked wallet (notifyIntro.ts): waits its turn behind every other dialog. -->
       <NotifyIntroPrompt
-        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || announcementOpen || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
         @turn-on="openNotifySettingsFromIntro"
       />
 
@@ -304,6 +309,9 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { announcementsStore } from '@/stores/announcementsStore';
+import AnnouncementBanner from '@/shared/components/announcements/AnnouncementBanner.vue';
+import AnnouncementDialog from '@/shared/components/announcements/AnnouncementDialog.vue';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
 import { bellBadge } from './bellBadge';
 import { OPEN_SETTINGS_ON_LOAD_KEY } from '@/services/notify/notifyStorage';
@@ -518,7 +526,10 @@ function onSheetScroll() {
 
 // Mirror the worker's notifyInbox from the start: the badge counts unread before the menu ever opens.
 notifyInboxStore.init();
-const inboxUnread = computed(() => notifyInboxStore.unread());
+// Announcements from Gero count with it: the bell is one place, whatever put a row there.
+announcementsStore.init();
+const inboxUnread = computed(() => notifyInboxStore.unread() + announcementsStore.unread());
+const announcementOpen = computed(() => announcementsStore.state.openId !== null);
 function openNotifySettings() {
   notificationsMenu.value = false;
   settingsInitialTab.value = 'notifications';

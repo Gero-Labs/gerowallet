@@ -11,9 +11,22 @@
     </div>
 
     <div class="notify-inbox__list">
-      <!-- Needs you: sticky security items, the SPO key warning and items stuck on a closed marketplace -->
-      <template v-if="needsYou.length || kesVisible || legacyVisible">
+      <!-- Needs you: critical service notices from Gero, sticky security items, the SPO key warning and items stuck on a closed marketplace -->
+      <template v-if="needsYou.length || kesVisible || legacyVisible || criticalNotices.length">
         <div class="t-label notify-inbox__section">{{ $t('notify.inbox.needsYou') }}</div>
+        <!-- First: a network or service issue affects everything below it. -->
+        <button v-for="a in criticalNotices" :key="a.document.id" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': !isUnread(a) }" @click="openAnnouncement(a)">
+          <span class="notify-inbox__tile" :class="toneClass('notify-inbox__tile', a)"><v-icon size="15" :color="toneColor(toneOf(a))">{{ iconOf(a) }}</v-icon></span>
+          <span class="notify-inbox__text">
+            <span v-if="toneOf(a) !== 'neutral'" class="d-sr-only">{{ $t(`announce.severity.${a.document.severity}`) }}</span>
+            <span class="notify-inbox__row-title">{{ textOf(a).title }}</span>
+            <span class="notify-inbox__row-body notify-inbox__row-body--clamp">{{ isHeadline(a) ? $t('announce.headline.source') : textOf(a).summary }}</span>
+          </span>
+          <span class="notify-inbox__meta">
+            <span class="notify-inbox__time g-mono">{{ when(a.document.ts) }}</span>
+            <span v-if="isUnread(a)" class="notify-inbox__dot" :class="toneClass('notify-inbox__dot', a)" aria-hidden="true"></span>
+          </span>
+        </button>
         <button v-if="kesVisible" type="button" class="notify-inbox__row" @click="$emit('kes')">
           <span class="notify-inbox__tile notify-inbox__tile--warn"><v-icon size="15" color="var(--g-warning)">mdi-key-chain</v-icon></span>
           <span class="notify-inbox__text">
@@ -47,6 +60,23 @@
         </button>
       </template>
 
+      <!-- From Gero: signed announcements (product updates, news, service notices below critical) -->
+      <template v-if="fromGero.length">
+        <div class="t-label notify-inbox__section">{{ $t('announce.section.fromGero') }}</div>
+        <button v-for="a in fromGero" :key="a.document.id" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': !isUnread(a) }" @click="openAnnouncement(a)">
+          <span class="notify-inbox__tile" :class="toneClass('notify-inbox__tile', a)"><v-icon size="15" :color="toneColor(toneOf(a))">{{ iconOf(a) }}</v-icon></span>
+          <span class="notify-inbox__text">
+            <span v-if="toneOf(a) !== 'neutral'" class="d-sr-only">{{ $t(`announce.severity.${a.document.severity}`) }}</span>
+            <span class="notify-inbox__row-title">{{ textOf(a).title }}</span>
+            <span class="notify-inbox__row-body notify-inbox__row-body--clamp">{{ isHeadline(a) ? $t('announce.headline.source') : textOf(a).summary }}</span>
+          </span>
+          <span class="notify-inbox__meta">
+            <span class="notify-inbox__time g-mono">{{ when(a.document.ts) }}</span>
+            <span v-if="isUnread(a)" class="notify-inbox__dot" :class="toneClass('notify-inbox__dot', a)" aria-hidden="true"></span>
+          </span>
+        </button>
+      </template>
+
       <!-- Activity: everything else, newest first -->
       <template v-if="activity.length">
         <div class="t-label notify-inbox__section">{{ $t('notify.inbox.activity') }}</div>
@@ -66,7 +96,7 @@
         </button>
       </template>
 
-      <div v-if="!items.length && !kesVisible && !legacyVisible" class="notify-inbox__empty">
+      <div v-if="!items.length && !kesVisible && !legacyVisible && !criticalNotices.length && !fromGero.length" class="notify-inbox__empty">
         <v-icon size="small" color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
         {{ $t('navigation.nothingNew') }}
       </div>
@@ -90,9 +120,14 @@
 // Rows come from notifyInboxStore (the worker's notifyInbox key); the SPO key warning keeps
 // its place at the top as a "Needs you" row, and so do the items stuck on a closed marketplace
 // (`legacyCount`, from the host's useLegacyListings: the count is the host's, the row only shows it).
+// Announcements from Gero (announcementsStore: what the worker verified) add a "From Gero" section,
+// and a critical service notice sits first in "Needs you". They are not inbox rows: "Clear" leaves
+// them, and they go when they end.
 import { computed, getCurrentInstance, onMounted, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { notifyInboxStore, type NotifyInboxItem } from '@/stores/notifyInboxStore';
+import { announcementsStore, isHeadline, type StoredAnnouncement } from '@/stores/announcementsStore';
+import { iconOf, openGeroUrl, toneColor, toneOf } from '@/shared/components/announcements/announcementView';
 import { requestSettingsTabOnLoad, writeNotifyKey } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
@@ -111,7 +146,16 @@ const inSheet = computed(() => props.surface === 'sidepanel');
 const legacyVisible = computed(() => props.legacyCount > 0);
 
 const items = computed(() => notifyInboxStore.state.items);
-const unread = computed(() => notifyInboxStore.unread());
+const unread = computed(() => notifyInboxStore.unread() + announcementsStore.unread());
+const criticalNotices = computed(() => announcementsStore.needsYou());
+const fromGero = computed(() => announcementsStore.fromGero());
+const isUnread = (a: StoredAnnouncement) => announcementsStore.isUnread(a);
+const textOf = (a: StoredAnnouncement) => announcementsStore.text(a);
+/** `block--warn` / `block--error` for a toned tile or dot; nothing for plain information. */
+function toneClass(block: string, a: StoredAnnouncement): string | undefined {
+  const tone = toneOf(a);
+  return tone === 'neutral' ? undefined : `${block}--${tone === 'warning' ? 'warn' : 'error'}`;
+}
 const needsYou = computed(() => items.value.filter((i) => i.needsYou));
 const activity = computed(() => items.value.filter((i) => !i.needsYou));
 const pushOn = computed(() => !!notifySettingsStore.device()?.browserEnabled);
@@ -135,7 +179,21 @@ function when(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
-function markAllRead() { void notifyInboxStore.markRead(null); }
+function markAllRead() {
+  void notifyInboxStore.markRead(null);
+  void announcementsStore.markRead(null);
+}
+
+/** A headline opens its page on gerowallet.io; everything else opens in full, here in the wallet. */
+function openAnnouncement(a: StoredAnnouncement) {
+  emit('close');
+  if (isHeadline(a)) {
+    void announcementsStore.markRead(a.document.id);
+    openGeroUrl(announcementsStore.safeUrl(a));
+    return;
+  }
+  announcementsStore.open(a.document.id);
+}
 function clearAll() { void notifyInboxStore.clear(); }
 
 /** Same routing as a notification click (B4): another wallet asks before switching. */
@@ -159,9 +217,17 @@ function open(item: NotifyInboxItem) {
   if (router && router.currentRoute.value.fullPath !== route.dashboard) router.push(route.dashboard).catch(() => undefined);
 }
 
-onMounted(() => notifyInboxStore.init());
-// Opening the menu refreshes the push status line (cheap: the worker's stored state, no /config).
-watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refresh(); }, { immediate: true });
+onMounted(() => {
+  notifyInboxStore.init();
+  announcementsStore.init();
+});
+// Opening the menu refreshes the push status line (cheap: the worker's stored state, no /config)
+// and asks the worker to look for new announcements (it decides whether that means a request).
+watch(() => props.open, (isOpen) => {
+  if (!isOpen) return;
+  void notifySettingsStore.refresh();
+  announcementsStore.refreshIfStale();
+}, { immediate: true });
 </script>
 
 <style scoped lang="scss">
@@ -181,7 +247,7 @@ watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refre
 }
 .notify-inbox__head { border-bottom: 1px solid var(--g-hairline-1); }
 /* In Mini Gero's bottom sheet the sheet is the surface: fill it, no card chrome of its own. */
-.notify-inbox--sheet { display: flex; flex-direction: column; height: 100%; }
+.notify-inbox--sheet { display: flex; flex-direction: column; height: 100%; max-height: none; }
 .notify-inbox__foot { border-top: 1px solid var(--g-hairline-1); padding-top: 10px; padding-bottom: 10px; }
 .notify-inbox__title { display: flex; align-items: center; gap: var(--g-s-2); }
 .notify-inbox__heading { font-size: 14px; font-weight: 600; color: var(--g-text-1); }
@@ -242,10 +308,13 @@ watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refre
   background: var(--g-hairline-1);
   border: 1px solid var(--g-hairline-2);
   &--warn { background: var(--g-warning-fill); border-color: var(--g-warning-line); }
+  &--error { background: var(--g-error-fill); border-color: var(--g-error-line); }
 }
 .notify-inbox__text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
 .notify-inbox__row-title { font-size: 13px; font-weight: 500; color: var(--g-text-1); }
 .notify-inbox__row-body { font-size: 12px; color: var(--g-text-3); }
+/* An announcement's summary: the row never grows past its title and two lines. */
+.notify-inbox__row-body--clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .notify-inbox__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .notify-inbox__time { font-size: 11px; color: var(--g-text-3); line-height: 1.2; word-break: normal; }
 .notify-inbox__dot {
@@ -254,6 +323,7 @@ watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refre
   border-radius: var(--g-r-pill);
   background: var(--g-accent);
   &--warn { background: var(--g-warning); }
+  &--error { background: var(--g-error); }
 }
 .notify-inbox__empty {
   padding: 16px;

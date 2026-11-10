@@ -56,7 +56,7 @@
       </v-tooltip>
       <!-- The bell: the same inbox as the dashboard's, in a bottom sheet (B-M3). -->
       <v-btn icon variant="text" size="x-small" @click="$emit('notifications')" class="toolbar-btn" :aria-label="$t('navigation.notifications')">
-        <v-badge :model-value="inboxUnread > 0" :content="String(inboxUnread)" color="var(--g-accent)" overlap>
+        <v-badge :model-value="bellUnread > 0" :content="String(bellUnread)" color="var(--g-accent)" overlap>
           <v-icon size="18" color="var(--g-text-3)">mdi-bell-outline</v-icon>
         </v-badge>
       </v-btn>
@@ -78,9 +78,11 @@ import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { announcementsStore } from '@/stores/announcementsStore';
 
-// Unread pushes for the bell's badge; the store mirrors the worker's inbox once subscribed.
-const inboxUnread = computed(() => notifyInboxStore.unread());
+// Unread pushes and unread announcements from Gero for the bell's badge; both stores mirror what
+// the worker keeps once subscribed.
+const bellUnread = computed(() => notifyInboxStore.unread() + announcementsStore.unread());
 
 // Connected-site visibility: no session management existed anywhere in the
 // panel before this — once whitelisted, enable() auto-approved silently
@@ -107,6 +109,7 @@ onMounted(() => {
   resolveActiveTabOrigin();
   document.addEventListener('visibilitychange', onVisibilityChange);
   notifyInboxStore.init();
+  announcementsStore.init();
 });
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange);
