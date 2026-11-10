@@ -306,8 +306,8 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
 });
 
 describe('isPushRoute: the routes a page follows from a message', () => {
-  const x = { tx: 'a'.repeat(64), deviceId: 'b'.repeat(32), drepId: 'drep1qqqqqqqqqqqq', orderRef: `${'a'.repeat(64)}#0`, listingRef: `${'c'.repeat(64)}#1` };
-  const DESTINATIONS = ['home', 'activity', 'staking', 'swapOrders', 'nftListings', 'governance', 'pairedDevices', 'signRequest', 'adam', 'somethingNew'];
+  const x = { tx: 'a'.repeat(64), deviceId: 'b'.repeat(32), drepId: 'drep1qqqqqqqqqqqq', orderRef: `${'a'.repeat(64)}#0`, listingRef: `${'c'.repeat(64)}#1`, aid: '01JC0000000000000000000001' };
+  const DESTINATIONS = ['home', 'activity', 'staking', 'swapOrders', 'nftListings', 'governance', 'pairedDevices', 'announcement', 'signRequest', 'adam', 'somethingNew'];
 
   it.each(DESTINATIONS)('accepts everything routeFor() returns for %s', (d) => {
     expect(isPushRoute(routeFor(d, x, true))).toBe(true);
@@ -326,6 +326,10 @@ describe('isPushRoute: the routes a page follows from a message', () => {
     ['a script URL', { dashboard: 'javascript:alert(1)', sidepanel: null }],
     ['a tx that is not 64 hex characters', { dashboard: '/transactions?tx=abc', sidepanel: '/activity' }],
     ['a DRep id with a path in it', { dashboard: '/governance/dreps/drep1qqqqqq/../../send', sidepanel: null }],
+    ['an announcement id that is not one', { dashboard: '/?announcement=../../send', sidepanel: '/?announcement=../../send' }],
+    ['an announcement the side panel would open differently', { dashboard: '/?announcement=01JC0000000000000000000001', sidepanel: '/?announcement=01JC0000000000000000000002' }],
+    ['an announcement route on the side panel only', { dashboard: '/', sidepanel: '/?announcement=01JC0000000000000000000001' }],
+    ['an announcement that also opens the Security tab', { dashboard: '/?announcement=01JC0000000000000000000001', sidepanel: '/?announcement=01JC0000000000000000000001', settingsTab: 'security' }],
     ['an unknown side panel route', { dashboard: '/', sidepanel: '/send' }],
     ['a side panel route that is not a string or null', { dashboard: '/', sidepanel: undefined }],
     ['the Security tab away from home', { dashboard: '/transactions', sidepanel: '/activity', settingsTab: 'security' }],

@@ -38,6 +38,12 @@ interface WsHandlers {
    * DEVICE_REGISTER (which the relay rejects if it arrives before SUBSCRIBE).
    */
   onSocketOpen?: () => void;
+  /**
+   * The `ANNOUNCEMENTS` frame: the version number of the public announcement feed. A poke and
+   * nothing more. It carries no content, and nothing but that number is read from it; whoever
+   * handles it reads the feed and verifies every signature there (announcementEngine).
+   */
+  onAnnouncements?: (seq: unknown) => void;
 }
 
 /**
@@ -445,6 +451,11 @@ class WebSocketService {
           debugLog('🔄 Force resync requested by admin');
           this.lastSyncedBlock = 0;
           this.handlers.onForceResync?.();
+          break;
+
+        case 'ANNOUNCEMENTS':
+          // Not sync data: it answers no SUBSCRIBE and touches no sync state.
+          this.handlers.onAnnouncements?.(data['seq']);
           break;
 
         default:

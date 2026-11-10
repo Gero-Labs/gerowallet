@@ -37,7 +37,7 @@
             <v-img v-else :src="img"  :style="imgStyle"></v-img>
           </v-avatar>
           <div class="ml-5 mr-3 my-4 g-list-icon" v-if="icon">
-            <v-icon style="font-size: 56px">{{icon}}</v-icon>
+            <v-icon style="font-size: 56px" :color="iconColor">{{icon}}</v-icon>
           </div>
           <!-- Header illustration (e.g. an IsoScene) in place of img/icon. -->
           <div v-if="$slots['art']" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
@@ -70,6 +70,10 @@
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
               {{ truncate(subtitle2) }}<CopyButton x-small :value="subtitle2" class="ml-1" />
             </v-list-item-subtitle>
+            <!-- Under the title, for a line that is more than text (chips, a date). -->
+            <div v-if="$slots['meta']" class="base-dialog__meta">
+              <slot name="meta"></slot>
+            </div>
           </div>
         </v-list-item>
       </v-card-title>
@@ -121,6 +125,10 @@ const props = defineProps({
     default: 54,
   },
   icon: {
+    type: String,
+  },
+  /** The colour of `icon`, e.g. 'var(--g-error)'. Absent: the theme's own. */
+  iconColor: {
     type: String,
   },
   title: {
@@ -254,6 +262,10 @@ const isDialogOpen = computed({
 .base-dialog-art {
   flex: none;
   width: 96px;
+}
+
+.base-dialog__meta {
+  margin-top: var(--g-s-1);
 }
 
 .base-dialog-img-mask {

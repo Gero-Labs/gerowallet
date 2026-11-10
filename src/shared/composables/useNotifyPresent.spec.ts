@@ -1,9 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+
+const fake = vi.hoisted(() => ({ store: null as unknown }));
+
+vi.mock('@/stores/announcementsStore', async () => {
+  const { createFakePageStore, isCritical, isHeadline } = await import('@/services/announcements/__fixtures__/fakePageStore');
+  fake.store = createFakePageStore();
+  return { announcementsStore: fake.store, isCritical, isHeadline };
+});
+
 import { useNotifyPresent, type NotifyPresentRequest } from './useNotifyPresent';
 import { notifySnackStore } from '@/stores/notifySnackStore';
 import { routeFor } from '@/services/notify/notifyRender';
+import type { FakePageStore } from '@/services/announcements/__fixtures__/fakePageStore';
+import { annId, product } from '@/services/announcements/__fixtures__/stored';
+
+const announcements = () => fake.store as FakePageStore;
 
 // The page listener is a runtime.onMessage listener on an extension page, which a content script
 // reaches too. The sender shapes below are what Chromium hands that listener (measured with an
@@ -58,6 +71,7 @@ beforeEach(() => {
     },
   });
   focus(true);
+  announcements().reset();
 });
 
 afterEach(() => {
@@ -101,6 +115,49 @@ describe('useNotifyPresent: who may present a snackbar', () => {
     vi.stubGlobal('chrome', { runtime: { ...chrome.runtime, id: undefined } });
     install();
     expect(deliver(WORKER, request())).toEqual([]);
+    expect(notifySnackStore.state.items).toEqual([]);
+  });
+});
+
+describe('useNotifyPresent: who may present an announcement', () => {
+  const announce = (id: string) => request({ title: 'FORGED title', body: 'FORGED body', route: routeFor('announcement', { aid: id }, true), walletId: null, announcementId: id });
+
+  it('shows the verified copy the page holds, not the words of the message, and answers shown', async () => {
+    announcements().state.items = [product(1)];
+    install();
+    const replies = deliver(WORKER, announce(annId(1)));
+    await flushPromises();
+    expect(replies).toEqual([{ shown: true }]);
+    expect(notifySnackStore.state.items).toEqual([expect.objectContaining({ title: 'Title 1', body: 'Summary 1', announcementId: annId(1) })]);
+  });
+
+  it('ignores a content script naming a real announcement: the store is not even read', async () => {
+    announcements().state.items = [product(1)];
+    install();
+    const replies = deliver(CONTENT_SCRIPT, announce(annId(1)));
+    await flushPromises();
+    expect(replies).toEqual([]);
+    expect(announcements().find).not.toHaveBeenCalled();
+    expect(notifySnackStore.state.items).toEqual([]);
+  });
+
+  it('an unfocused page answers nobody about an announcement either', async () => {
+    announcements().state.items = [product(1)];
+    focus(false);
+    install();
+    const replies = deliver(WORKER, announce(annId(1)));
+    await flushPromises();
+    expect(replies).toEqual([]);
+    expect(announcements().find).not.toHaveBeenCalled();
+    expect(notifySnackStore.state.items).toEqual([]);
+  });
+
+  // The focused page is the only one that answers, so its "no" cannot beat another page's "yes".
+  it('the focused page says so when it has no verified copy of the announcement', async () => {
+    install();
+    const replies = deliver(WORKER, announce(annId(5)));
+    await flushPromises();
+    expect(replies).toEqual([{ shown: false }]);
     expect(notifySnackStore.state.items).toEqual([]);
   });
 });

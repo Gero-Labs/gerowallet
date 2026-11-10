@@ -35,6 +35,14 @@ export interface DeviceBody {
   osPermission: boolean;
   transport: NotifyTransport;
   webpush?: WebPushTarget;
+  /**
+   * What this client can render beyond the wallet alerts. `announcements`: broadcast announcements
+   * (gero-sync sends an announcement push only to a device that says so, since an older client would
+   * show it as an unknown-wallet notification). Unknown values are ignored by the server.
+   */
+  caps?: string[];
+  /** The announcement kinds the user switched off on this device: `product`, `news`. Never `service`. */
+  announcementsOff?: string[];
 }
 
 /** From `PushSubscription.toJSON()` plus the `/config` kid it was created with. */

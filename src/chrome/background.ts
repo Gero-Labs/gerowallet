@@ -64,7 +64,7 @@ import { installLocaleFor } from '@/chrome/installLocale';
 import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
-import { getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
+import { announcementActions, announcementsRefresh, getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
@@ -172,6 +172,11 @@ const sidePanelSupported = !!chrome.sidePanel;
 // worker's first turn, synchronously, or a push wake never sees them. Feature-detected
 // inside (no-op where the worker has no push registration).
 installNotifyListeners();
+
+// Broadcast announcements: read the public feed once per worker start. Not awaited, and behind no
+// login: it is the same public feed for everyone, and only what verifies against the keys pinned
+// in this build is kept. A slow or failing feed delays nothing.
+void announcementsRefresh('start');
 
 // Restore side panel behavior from its own chrome.storage key
 chrome.storage.local.get('openMiniGeroOnClick', (result) => {
@@ -3441,6 +3446,46 @@ app.addToOptions(MessageTypes.NOTIFY_INBOX_READ, async (request, sendResponse) =
     await booted();
     await notifyActions.inboxRead(typeof request.data?.e === 'string' ? request.data.e : null);
     sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// ---- broadcast announcements (extension pages only: senderTrust.ts) ----
+// No handler takes or returns announcement content. Pages read what the worker verified from the
+// private store; these only ask for a refresh and record read marks, a banner dismissal and which
+// kinds the user wants. Every argument is validated again inside announcementActions.
+app.addToOptions(MessageTypes.ANNOUNCEMENTS_REFRESH, async (request, sendResponse) => {
+  try {
+    await announcementActions.refresh();
+    sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.ANNOUNCEMENT_READ, async (request, sendResponse) => {
+  try {
+    await announcementActions.read(request.data?.id);
+    sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.ANNOUNCEMENT_DISMISS_BANNER, async (request, sendResponse) => {
+  try {
+    await announcementActions.dismissBanner(request.data?.id);
+    sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.ANNOUNCEMENTS_SET_PREFS, async (request, sendResponse) => {
+  try {
+    const prefs = await announcementActions.setPrefs(request.data?.off);
+    sendResponse(crossDeviceReply(request.id, { success: true, result: prefs }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }
