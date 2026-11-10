@@ -19,12 +19,19 @@ describe('Midnight send dialog errors', () => {
     expect(source).toContain("const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('midnight.signAndSend')));");
     expect(source).toContain(':submit-text="sendCtaText"');
     expect(source).toContain(":passkey-text=\"ledgerMismatch ? t('common.tryAgain') : ''\"");
-    expect(source).toMatch(/@click="submitWithPassword"[\s\S]*?\{\{ sendCtaText \}\}/);
+    expect(source).toMatch(/<GButton\s+v-else-if="currentStep === 2 && !isPrfWallet"\s+tier="primary"[\s\S]*?@click="submitWithPassword\(\)"\s*>\{\{ sendCtaText \}\}<\/GButton>/);
     expect(source).not.toContain('canRetryLedgerMismatch');
   });
 
+  it('Continue and Sign and send are the design system\'s primary GButton', () => {
+    expect(source).toMatch(/<GButton\s+v-if="currentStep === 1"\s+tier="primary"/);
+    // The arrow inherits the button's colour; no inline override.
+    expect(source).toContain('<v-icon size="small" class="ml-1">mdi-arrow-right</v-icon>');
+  });
+
   it('a paused network or an unsupported ledger is an amber note, not an error, and disables the CTA', () => {
-    expect(source).toMatch(/<div v-if="sendBlock" class="midnight-dust-note mb-2" role="status"/);
+    expect(source).toMatch(/<GNote v-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status"/);
+    expect(source).not.toContain('midnight-dust-note');
     expect(source).toContain(':loading="sending || checkingLocalProver || !!sendBlock"');
     expect(source).toContain(':disabled="sending || checkingLocalProver || !!sendBlock"');
     expect(source).toMatch(/<p v-if="errorMessage" role="alert" class="error--text t-caption/);

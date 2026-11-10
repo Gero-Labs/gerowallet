@@ -318,19 +318,17 @@
                    verified on preprod, the old "reset" was an estimator bug).
                    Suppressed when the low-DUST hint below is showing, so only
                    one DUST note renders at a time. -->
-              <div v-if="!isShielded && !isDustLow" class="midnight-dust-note mt-3">
-                <v-icon size="14" color="warning" class="mr-1">mdi-information-outline</v-icon>
-                <span>{{ t('midnight.send.dustResetWarning') }}</span>
-              </div>
+              <GNote v-if="!isShielded && !isDustLow" icon="mdi-information-outline" class="mt-3">
+                {{ t('midnight.send.dustResetWarning') }}
+              </GNote>
               <!-- Low-DUST hint: informational (neutral) while any DUST remains —
                    the fee is tiny so the send still goes through. Red only when
                    DUST is genuinely empty and the fee can't be paid. -->
-              <div
-                v-if="!isShielded && isDustLow"
-                class="mt-3"
-                :class="isDustEmpty ? 'midnight-dust-note midnight-dust-note--low' : 'midnight-info-note'"
-              >
-                <v-icon size="14" :color="isDustEmpty ? 'error' : 'var(--g-text-3)'" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+              <GNote v-if="!isShielded && isDustLow && isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+                {{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
+              </GNote>
+              <div v-else-if="!isShielded && isDustLow" class="midnight-info-note mt-3">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
                 <span>{{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
             </div>
@@ -382,10 +380,9 @@
 
         <!-- Not an error: sends are paused on this network, or this build can't sign
              for the network's ledger. The amber note, and the CTA is disabled. -->
-        <div v-if="sendBlock" class="midnight-dust-note mb-2" role="status" data-test="midnight-send-blocked">
-          <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
-          <span>{{ sendBlockText }}</span>
-        </div>
+        <GNote v-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-blocked">
+          {{ sendBlockText }}
+        </GNote>
 
         <p v-if="errorMessage" role="alert" class="error--text t-caption mb-2 text-center px-3" data-test="midnight-send-error">
           {{ errorMessage }}
@@ -402,25 +399,27 @@
             <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
           </v-btn>
           <!-- Step 1: advance to the review. -->
-          <v-btn
+          <GButton
             v-if="currentStep === 1"
-            :class="['continue-button', 'geroButton', { shake: shakeError }]"
-            @click="nextStep()"
+            tier="primary"
+            :class="{ shake: shakeError }"
             :disabled="sending"
-          >{{ t('common.continue') + ' ' }}
-            <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-arrow-right</v-icon>
-          </v-btn>
+            data-test="midnight-send-continue"
+            @click="nextStep()"
+          >{{ t('common.continue') }}
+            <v-icon size="small" class="ml-1">mdi-arrow-right</v-icon>
+          </GButton>
           <!-- Step 2: password wallets submit here (TransactionAuthSection only
                renders the field for them); PRF wallets submit via the PassKey
                button rendered inside TransactionAuthSection above. -->
-          <v-btn
+          <GButton
             v-else-if="currentStep === 2 && !isPrfWallet"
-            class="continue-button geroButton"
-            @click="submitWithPassword"
+            tier="primary"
             :disabled="sending || checkingLocalProver || !!sendBlock"
             :loading="sending || checkingLocalProver"
             data-test="midnight-send-submit"
-          >{{ sendCtaText }}</v-btn>
+            @click="submitWithPassword()"
+          >{{ sendCtaText }}</GButton>
         </div>
       </v-card-actions>
     </BaseDialog>
@@ -442,6 +441,8 @@ import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/m
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import TransactionDetailsCard, {
@@ -1534,12 +1535,6 @@ function shortToken(colour: string): string {
   justify-content: center;
 }
 
-.continue-button {
-  background: var(--g-grad);
-  color: var(--g-on-grad);
-}
-/* Disabled: the design system's raised fill and muted text, from `.geroButton` in baseline.css. */
-
 .stepper-container {
   background-color: transparent;
 }
@@ -1772,23 +1767,6 @@ function shortToken(colour: string): string {
 }
 .midnight-summary-wrapper {
   padding: 8px 0 4px;
-}
-.midnight-dust-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--g-warning);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
-  padding: 8px 10px;
-}
-.midnight-dust-note--low {
-  color: var(--g-error);
-  background: var(--g-error-fill);
-  border-color: var(--g-error-line);
 }
 .midnight-info-note {
   @include g-glass-tier(false);

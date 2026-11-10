@@ -133,6 +133,12 @@ describe('Midnight API errors: one row per server error code', () => {
     expect(e.message).not.toContain('Nothing was sent');
   });
 
+  it('a failure before the request left the device says nothing was sent, even on a submit route', () => {
+    const e = toMidnightApiError(new Error('token fetch failed'), 'Mainnet', 'submit');
+    expect(e.phase).toBe('build');
+    expect(e.message).toBe(NO_ANSWER);
+  });
+
   it('on a build route, no usable answer says nothing was sent', () => {
     expect(toMidnightApiError(new AxiosError('down', 'ERR_NETWORK'), 'Mainnet').message).toBe(NO_ANSWER);
     expect(NO_ANSWER).toContain('Nothing was sent');

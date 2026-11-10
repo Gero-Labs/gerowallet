@@ -280,7 +280,9 @@ export async function assertMidnightDustRegistrationMatches(
  * that decodes but was built for another network throws a plain error.
  */
 export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, hex: string): Promise<MidnightTxView> {
-  const { midnightLedgerVersion, strictMidnightHex } = await import('./midnightLedger');
+  const ledgerHelpers = await loadModule(() => import('./midnightLedger'));
+  if (!ledgerHelpers) throw new MidnightBuiltTxUnreadableError(false);
+  const { midnightLedgerVersion, strictMidnightHex } = ledgerHelpers;
   const version = midnightLedgerVersion(sdkNetworkId);
   let bytes: Uint8Array;
   try {
@@ -302,7 +304,8 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
     assertLedger9TransactionNetwork(sdkNetworkId, tx);
     return tx as unknown as MidnightTxView;
   }
-  const ledger = await import('@midnight-ntwrk/ledger-v8');
+  const ledger = await loadModule(() => import('@midnight-ntwrk/ledger-v8'));
+  if (!ledger) throw new MidnightBuiltTxUnreadableError(false);
   let tx: import('@midnight-ntwrk/ledger-v8').UnprovenTransaction;
   try {
     tx = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', bytes);
@@ -315,14 +318,16 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
   return tx as unknown as MidnightTxView;
 }
 
-/** The ledger 9 decoder, or null when it can't be loaded: the bytes are then simply unreadable. */
-async function loadLedger9(): Promise<typeof import('./midnightLedger9') | null> {
+/** A lazily loaded decoder module, or null when it can't be loaded: the bytes are then unreadable to this build. */
+async function loadModule<M>(load: () => Promise<M>): Promise<M | null> {
   try {
-    return await import('./midnightLedger9');
+    return await load();
   } catch {
     return null;
   }
 }
+
+const loadLedger9 = () => loadModule(() => import('./midnightLedger9'));
 
 /** Bech32m → ledger values for `sdkNetworkId`, with the address format of its ledger. */
 export async function midnightAddressDecoder(sdkNetworkId: string): Promise<{

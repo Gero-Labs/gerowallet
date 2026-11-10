@@ -87,9 +87,10 @@ describe('recoverLostSubmit', () => {
     expect(graphql).not.toHaveBeenCalled();
   });
 
-  it('rethrows a non-axios error as "no answer" on a submit, without polling', async () => {
+  it('rethrows a failure that never left the device as "nothing was sent", without polling', async () => {
+    // For example the device token couldn't be fetched: the request never went out.
     const thrown = await recover(new Error('token')).catch((e: unknown) => e);
-    expect(thrown).toMatchObject({ name: 'MidnightApiError', kind: 'noAnswer', phase: 'submit', message: 'midnight.errors.submitUnconfirmed' });
+    expect(thrown).toMatchObject({ name: 'MidnightApiError', kind: 'noAnswer', phase: 'build', message: 'midnight.errors.noAnswer' });
     expect(graphql).not.toHaveBeenCalled();
   });
 

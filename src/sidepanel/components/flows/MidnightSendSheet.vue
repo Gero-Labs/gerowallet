@@ -148,10 +148,9 @@
                 </div>
 
                 <!-- An unverified zero warns and offers a sponsor; it does not disable Review. -->
-                <div v-if="mayLackDust" class="midnight-dust-note mt-3">
-                  <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
-                  <span>{{ $t('midnight.send.noDustFee') }}</span>
-                </div>
+                <GNote v-if="mayLackDust" icon="mdi-alert-outline" class="mt-3">
+                  {{ $t('midnight.send.noDustFee') }}
+                </GNote>
                 <MidnightSponsorPicker
                   v-if="mayLackDust && loggedWallet"
                   :model-value="sponsorWalletId"
@@ -238,14 +237,16 @@
 
               <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
                    verified on preprod, the old "reset" was an estimator bug). -->
-              <div v-if="!isDustLow" class="midnight-dust-note mt-3">
-                <v-icon size="14" color="warning" class="mr-1">mdi-information-outline</v-icon>
-                <span>{{ $t('midnight.send.dustResetWarning') }}</span>
-              </div>
+              <GNote v-if="!isDustLow" icon="mdi-information-outline" class="mt-3">
+                {{ $t('midnight.send.dustResetWarning') }}
+              </GNote>
               <!-- Low-DUST hint: informational while any DUST remains (the tiny
                    fee still clears); red only when DUST is genuinely empty. -->
-              <div v-else class="mt-3" :class="isDustEmpty ? 'midnight-dust-note midnight-dust-note--low' : 'midnight-info-note'">
-                <v-icon size="14" :color="isDustEmpty ? 'error' : 'var(--g-text-3)'" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+              <GNote v-else-if="isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+                {{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
+              </GNote>
+              <div v-else class="midnight-info-note mt-3">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
                 <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
 
@@ -288,17 +289,18 @@
                   @click:append-inner="showPassword = !showPassword"
                   @keydown.enter="signAndSubmit()"
                 />
-                <v-btn
+                <GButton
+                  tier="primary"
                   block
-                  :color="primaryColor"
-                  class="black--text font-weight-bold mt-4"
+                  class="mt-4"
                   :disabled="!spendingPassword || submitting || !!sendBlock"
                   :loading="submitting"
+                  data-test="midnight-send-submit"
                   @click="signAndSubmit()"
                 >
                   <v-icon start size="small">mdi-send</v-icon>
                   {{ sendCtaText }}
-                </v-btn>
+                </GButton>
               </template>
 
               <!-- ── PRF wallet (PassKey) ── -->
@@ -307,17 +309,17 @@
                   <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
                   <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
                 </div>
-                <v-btn
+                <GButton
+                  tier="primary"
                   block
-                  :color="primaryColor"
-                  class="black--text font-weight-bold"
                   :disabled="submitting || !!sendBlock"
                   :loading="submitting"
+                  data-test="midnight-send-submit-prf"
                   @click="signAndSubmitPrf()"
                 >
                   <v-icon start size="small">mdi-fingerprint</v-icon>
                   {{ sendCtaText }}
-                </v-btn>
+                </GButton>
               </template>
 
               <!-- ── Any other wallet type: Midnight has no hardware-wallet
@@ -343,10 +345,9 @@
 
               <!-- Not an error: sends are paused on this network, or this build can't sign
                    for the network's ledger. The amber note, and the CTA is disabled. -->
-              <div v-if="sendBlock" class="midnight-dust-note mt-2" role="status" data-test="midnight-send-blocked">
-                <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
-                <span>{{ sendBlockText }}</span>
-              </div>
+              <GNote v-if="sendBlock" icon="mdi-pause-circle-outline" role="status" class="mt-2" data-test="midnight-send-blocked">
+                {{ sendBlockText }}
+              </GNote>
 
               <p v-if="passwordError" role="alert" class="t-caption mt-2 mb-0 text-center" style="color: var(--g-error)">
                 {{ passwordError }}
@@ -410,6 +411,8 @@ import snackbar from '@/plugins/snackbar';
 import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 
 const { t } = useTranslation();
 const { themeColors } = useChainContext();
@@ -1220,23 +1223,6 @@ const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), t
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
-}
-.midnight-dust-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--g-warning);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
-  padding: 8px 10px;
-}
-.midnight-dust-note--low {
-  color: var(--g-error);
-  background: var(--g-error-fill);
-  border-color: var(--g-error-line);
 }
 
 /* Chrome number input spinners off */

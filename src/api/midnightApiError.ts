@@ -263,14 +263,19 @@ export function midnightApiErrorFromResponse(
 
 /**
  * Any failure of a Midnight API call as a {@link MidnightApiError}. An error that
- * already is one passes through. A request that got no answer, or anything that
- * is not an HTTP error, is `noAnswer`.
+ * already is one passes through. A request that got no answer is `noAnswer`.
+ * Anything that is not an HTTP error (the device token couldn't be fetched, the
+ * URL couldn't be built) failed before the request left the device, so it uses
+ * the build-phase copy, "Nothing was sent", even on a submit route.
  */
 export function toMidnightApiError(error: unknown, network?: string, phase: MidnightApiPhase = 'build'): MidnightApiError {
   if (isMidnightApiError(error)) return error;
-  if (isAxiosLike(error) && error.response) {
-    const { status, data, headers } = error.response;
-    return midnightApiErrorFromResponse(status, data, headers, network, phase);
+  if (isAxiosLike(error)) {
+    if (error.response) {
+      const { status, data, headers } = error.response;
+      return midnightApiErrorFromResponse(status, data, headers, network, phase);
+    }
+    return new MidnightApiError('noAnswer', {}, network, phase);
   }
-  return new MidnightApiError('noAnswer', {}, network, phase);
+  return new MidnightApiError('noAnswer', {}, network, 'build');
 }
