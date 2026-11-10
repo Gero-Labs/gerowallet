@@ -1850,8 +1850,9 @@ function shortToken(colour: string): string {
   flex-direction: column;
 }
 
-/* A narrow card (a small window): the summary above the timeline, full width. */
-@container (max-width: 440px) {
+/* A card under ~440px (a small window; the container is the card less its
+   padding and border on each side): the summary above the timeline, full width. */
+@container (max-width: 370px) {
   .midnight-progress-view {
     flex-direction: column;
   }
