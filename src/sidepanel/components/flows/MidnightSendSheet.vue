@@ -292,12 +292,12 @@
                   block
                   :color="primaryColor"
                   class="black--text font-weight-bold mt-4"
-                  :disabled="!spendingPassword || submitting"
+                  :disabled="!spendingPassword || submitting || !!sendBlock"
                   :loading="submitting"
                   @click="signAndSubmit()"
                 >
                   <v-icon start size="small">mdi-send</v-icon>
-                  {{ $t('miniGero.confirmSend') }}
+                  {{ sendCtaText }}
                 </v-btn>
               </template>
 
@@ -311,12 +311,12 @@
                   block
                   :color="primaryColor"
                   class="black--text font-weight-bold"
-                  :disabled="submitting"
+                  :disabled="submitting || !!sendBlock"
                   :loading="submitting"
                   @click="signAndSubmitPrf()"
                 >
                   <v-icon start size="small">mdi-fingerprint</v-icon>
-                  {{ $t('miniGero.confirmSend') }}
+                  {{ sendCtaText }}
                 </v-btn>
               </template>
 
@@ -341,9 +341,16 @@
                 <div class="mini-tl__keep">{{ $t('midnight.sponsor.keepOpen') }}</div>
               </div>
 
-              <div v-if="passwordError" class="text-caption mt-2 text-center" style="color: var(--g-error)">
-                {{ passwordError }}
+              <!-- Not an error: sends are paused on this network, or this build can't sign
+                   for the network's ledger. The amber note, and the CTA is disabled. -->
+              <div v-if="sendBlock" class="midnight-dust-note mt-2" role="status" data-test="midnight-send-blocked">
+                <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
+                <span>{{ sendBlockText }}</span>
               </div>
+
+              <p v-if="passwordError" role="alert" class="t-caption mt-2 mb-0 text-center" style="color: var(--g-error)">
+                {{ passwordError }}
+              </p>
 
               <div class="step-actions-row mt-3">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" block :disabled="sendDispatched" @click="editStep(3)">
@@ -402,6 +409,7 @@ import { useChainContext } from '../../composables/useChainContext';
 import snackbar from '@/plugins/snackbar';
 import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
+import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
 
 const { t } = useTranslation();
 const { themeColors } = useChainContext();
@@ -423,6 +431,26 @@ const showQR = ref(false);
 const spendingPassword = ref('');
 const showPassword = ref(false);
 const passwordError = ref('');
+/** The last send failed with LEDGER_MISMATCH: the CTA reads "Try again" and sends from a new build. */
+const ledgerMismatch = ref(false);
+const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('miniGero.confirmSend')));
+/** Refused for a state the user can't fix here (midnightApiError.ts): a note, and the CTA is disabled. */
+const sendBlock = ref<MidnightSendBlock | null>(null);
+const sendBlockText = ref('');
+
+/** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
+function showSendError(e: unknown) {
+  const message = e instanceof Error ? e.message : String(e);
+  const block = midnightSendBlockOf(e);
+  ledgerMismatch.value = !block && midnightApiErrorKind(e) === 'ledgerMismatch';
+  if (block) {
+    sendBlock.value = block;
+    sendBlockText.value = message;
+    passwordError.value = '';
+    return;
+  }
+  passwordError.value = message;
+}
 const submitting = ref(false);
 const txSuccess = ref(false);
 const txId = ref('');
@@ -634,6 +662,8 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
 function editStep(target: number) {
   if (target < step.value && !sendDispatched.value) {
     approval.invalidate();
+    sendBlock.value = null;
+    ledgerMismatch.value = false;
     step.value = target;
   }
 }
@@ -764,6 +794,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
     return;
   }
   passwordError.value = '';
+  ledgerMismatch.value = false;
   submitting.value = true;
   sendStage.value = 'authorizing';
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
@@ -832,7 +863,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
     snackbar.fireSuccess(t('miniGero.txSubmitted'));
   } catch (e) {
     if (!current()) return;
-    passwordError.value = e instanceof Error ? e.message : String(e);
+    showSendError(e);
   } finally {
     sponsor?.prfSecret?.fill(0);
     credentials.prfSecret?.fill(0);
@@ -951,7 +982,7 @@ async function signAndSubmitPrf() {
     const prfBytes = await requestRawPrf(current);
     await routeSend({ prfSecret: prfBytes }, current);
   } catch (e) {
-    if (current()) passwordError.value = e instanceof Error ? e.message : String(e);
+    if (current()) showSendError(e);
   } finally {
     submitting.value = false;
     sendStage.value = 'idle';
@@ -985,6 +1016,8 @@ function resetAll() {
   spendingPassword.value = '';
   showPassword.value = false;
   passwordError.value = '';
+  ledgerMismatch.value = false;
+  sendBlock.value = null;
   submitting.value = false;
   sendStage.value = 'idle';
   txSuccess.value = false;

@@ -7,6 +7,8 @@ import {
   isMidnightServerSideFailure,
   midnightApiErrorFromResponse,
   midnightApiErrorKind,
+  midnightNetworkDisplayName,
+  midnightSendBlockOf,
   parseRetryAfter,
   toMidnightApiError,
 } from './midnightApiError';
@@ -19,7 +21,7 @@ const answered = (status: number, data: unknown, headers: Record<string, string>
 const envelope = (status: number, fields: Record<string, unknown>) =>
   ({ status, error: 'Server error', requestId: 'req-1', ...fields });
 
-const UPGRADING = String(i18n.t('midnight.errors.networkUpgrading', { network: 'Preprod' }));
+const UPGRADING = String(i18n.t('midnight.errors.networkUpgrading', { network: 'Midnight Preprod' }));
 const LEDGER = String(i18n.t('midnight.errors.ledgerMismatch'));
 const NO_ANSWER = String(i18n.t('midnight.errors.noAnswer'));
 
@@ -37,7 +39,7 @@ describe('Midnight API errors: one row per server error code', () => {
     expect(e.status).toBe(501);
     expect(e.errorCode).toBe('MIDNIGHT_NETWORK_UPGRADING');
     expect(e.message).toBe(UPGRADING);
-    expect(e.message).toContain('Preprod');
+    expect(e.message).toContain('Midnight Preprod');
     expectReadable(e);
   });
 
@@ -120,6 +122,22 @@ describe('Midnight API errors: one row per server error code', () => {
     expect(e.message).not.toContain('X-Secret-Header');
   });
 
+  it.each([
+    ['no response', new AxiosError('socket hang up', 'ERR_NETWORK')],
+    ['an HTML page', answered(500, '<html>oops</html>')],
+  ])('on a submit route, no usable answer (%s) says the transaction may still go through', (_name, error) => {
+    const e = toMidnightApiError(error, 'Mainnet', 'submit');
+    expect(e.kind).toBe('noAnswer');
+    expect(e.phase).toBe('submit');
+    expect(e.message).toBe(String(i18n.t('midnight.errors.submitUnconfirmed')));
+    expect(e.message).not.toContain('Nothing was sent');
+  });
+
+  it('on a build route, no usable answer says nothing was sent', () => {
+    expect(toMidnightApiError(new AxiosError('down', 'ERR_NETWORK'), 'Mainnet').message).toBe(NO_ANSWER);
+    expect(NO_ANSWER).toContain('Nothing was sent');
+  });
+
   it('passes a typed error through unchanged', () => {
     const e = new MidnightApiError('ledgerMismatch', {}, 'Mainnet');
     expect(toMidnightApiError(e, 'Preprod')).toBe(e);
@@ -133,6 +151,28 @@ describe('Midnight API errors: one row per server error code', () => {
 });
 
 describe('Midnight API error helpers', () => {
+  it.each([401, 403, 408, 429])('calls a %i answer server-side, so a dapp gets InternalError', (status) => {
+    const e = toMidnightApiError(answered(status, envelope(status, { message: 'Try later' })), 'Mainnet');
+    expect(e.kind).toBe('server');
+    expect(isMidnightServerSideFailure(e)).toBe(true);
+  });
+
+  it('names the network the way the network list does', () => {
+    expect(midnightNetworkDisplayName('Preprod')).toBe('Midnight Preprod');
+    expect(midnightNetworkDisplayName('mainnet')).toBe('Midnight Mainnet');
+    expect(midnightNetworkDisplayName('Midnight Stagenet')).toBe('Midnight Stagenet');
+    expect(midnightNetworkDisplayName(undefined)).toBe('Midnight');
+  });
+
+  it('tells a paused network and an unsupported ledger apart from errors', () => {
+    expect(midnightSendBlockOf(new MidnightApiError('networkUpgrading', {}, 'Preprod'))).toBe('networkUpgrading');
+    expect(midnightSendBlockOf(Object.assign(new Error('update'), { name: 'MidnightBuiltTxRefusedError', code: 'MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED' })))
+      .toBe('updateRequired');
+    expect(midnightSendBlockOf(Object.assign(new Error('x'), { name: 'MidnightBuiltTxRefusedError', code: 'MIDNIGHT_BUILT_TX_MISMATCH' }))).toBeNull();
+    expect(midnightSendBlockOf(new MidnightApiError('ledgerMismatch', {}))).toBeNull();
+    expect(midnightSendBlockOf('a string')).toBeNull();
+  });
+
   it('reads Retry-After as seconds or as an HTTP date', () => {
     const now = Date.parse('2026-01-01T00:00:00Z');
     expect(parseRetryAfter('30', now)).toBe(30);
@@ -159,6 +199,7 @@ describe('Midnight API error helpers', () => {
     expect(isMidnightServerSideFailure(toMidnightApiError(new AxiosError('down', 'ERR_NETWORK')))).toBe(true);
     expect(isMidnightServerSideFailure(Object.assign(new Error('unconfirmed'), { name: 'MidnightSubmitUnconfirmedError' }))).toBe(true);
     expect(isMidnightServerSideFailure(fromStatus(400, { message: 'Invalid transaction hex' }))).toBe(false);
+    expect(isMidnightServerSideFailure(fromStatus(404, { message: 'Not found' }))).toBe(false);
     expect(isMidnightServerSideFailure(new Error('This transaction is not proven'))).toBe(false);
   });
 });

@@ -289,7 +289,9 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
     throw new MidnightBuiltTxUnreadableError(false);
   }
   if (version === 9) {
-    const { readLedger9UnprovenTransaction, assertLedger9TransactionNetwork } = await import('./midnightLedger9');
+    const ledger9 = await loadLedger9();
+    if (!ledger9) throw new MidnightBuiltTxUnreadableError(false);
+    const { readLedger9UnprovenTransaction, assertLedger9TransactionNetwork } = ledger9;
     let tx: ReturnType<typeof readLedger9UnprovenTransaction>;
     try {
       tx = readLedger9UnprovenTransaction(bytes);
@@ -305,12 +307,21 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
   try {
     tx = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', bytes);
   } catch {
-    const { isLedger9TransactionFor } = await import('./midnightLedger9');
-    throw new MidnightBuiltTxUnreadableError(isLedger9TransactionFor(sdkNetworkId, bytes));
+    const ledger9 = await loadLedger9();
+    throw new MidnightBuiltTxUnreadableError(!!ledger9 && ledger9.isLedger9TransactionFor(sdkNetworkId, bytes));
   }
   // The ledger refuses to merge transactions of different networks.
   ledger.Transaction.fromParts(sdkNetworkId.toLowerCase()).merge(tx);
   return tx as unknown as MidnightTxView;
+}
+
+/** The ledger 9 decoder, or null when it can't be loaded: the bytes are then simply unreadable. */
+async function loadLedger9(): Promise<typeof import('./midnightLedger9') | null> {
+  try {
+    return await import('./midnightLedger9');
+  } catch {
+    return null;
+  }
 }
 
 /** Bech32m → ledger values for `sdkNetworkId`, with the address format of its ledger. */

@@ -39,6 +39,12 @@ export type MidnightApiErrorKind =
   | 'server'
   | 'noAnswer';
 
+/**
+ * Which kind of route failed. A build route that gets no usable answer sent
+ * nothing; a submit route that gets none may have reached the network.
+ */
+export type MidnightApiPhase = 'build' | 'submit';
+
 /** The fields of the server's error envelope the wallet uses. */
 export interface MidnightErrorEnvelope {
   status?: number;
@@ -61,10 +67,12 @@ export class MidnightApiError extends Error {
   readonly retryAfter?: number;
   /** The wallet network the request was for (`Mainnet`, `Preprod`, ...). */
   readonly network?: string;
+  readonly phase: MidnightApiPhase;
 
-  constructor(kind: MidnightApiErrorKind, envelope: MidnightErrorEnvelope, network?: string) {
-    super(readableMidnightError(kind, envelope, network));
+  constructor(kind: MidnightApiErrorKind, envelope: MidnightErrorEnvelope, network?: string, phase: MidnightApiPhase = 'build') {
+    super(readableMidnightError(kind, envelope, network, phase));
     this.name = 'MidnightApiError';
+    this.phase = phase;
     this.kind = kind;
     this.status = envelope.status;
     this.errorCode = envelope.errorCode;
@@ -89,11 +97,39 @@ export function isMidnightApiError(error: unknown): error is MidnightApiError {
  * reset, no answer, a 5xx, or a submit whose reply was lost. The connector
  * answers these with `InternalError`; anything else stays `InvalidRequest`.
  */
+const SERVER_SIDE_4XX: ReadonlySet<number> = new Set([401, 403, 408, 429]);
+
 export function isMidnightServerSideFailure(error: unknown): boolean {
   if (error instanceof Error && error.name === 'MidnightSubmitUnconfirmedError') return true;
   if (!isMidnightApiError(error)) return false;
   if (error.kind !== 'server') return true;
+  // Auth, a timeout and rate limiting are the server's state, not the dapp's request.
+  if (typeof error.status === 'number' && SERVER_SIDE_4XX.has(error.status)) return true;
   return typeof error.status !== 'number' || error.status >= 500;
+}
+
+/**
+ * A send refused for a state the user can't fix from the send screen. Not an
+ * error: the screen shows it as a note and disables its CTA.
+ * - `networkUpgrading`: the server answered MIDNIGHT_NETWORK_UPGRADING.
+ * - `updateRequired`: the pre-sign guard read the built transaction as a newer
+ *   ledger than this build signs for (MidnightBuiltTxRefusedError, code
+ *   MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED).
+ */
+export type MidnightSendBlock = 'networkUpgrading' | 'updateRequired';
+
+export function midnightSendBlockOf(error: unknown): MidnightSendBlock | null {
+  if (midnightApiErrorKind(error) === 'networkUpgrading') return 'networkUpgrading';
+  if (error instanceof Error && error.name === 'MidnightBuiltTxRefusedError'
+    && (error as { code?: unknown }).code === 'MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED') return 'updateRequired';
+  return null;
+}
+
+/** "Midnight Preprod" for the wallet network `Preprod`: the name the network list shows. */
+export function midnightNetworkDisplayName(network: string | undefined | null): string {
+  const name = (network ?? '').trim();
+  if (!name) return 'Midnight';
+  return /^midnight\b/i.test(name) ? name : `Midnight ${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 }
 
 /** The kind of a Midnight API failure, or undefined for any other error. */
@@ -180,14 +216,20 @@ export function midnightErrorKindOf(envelope: MidnightErrorEnvelope): MidnightAp
 }
 
 /** The sentence a user sees for a failure of this kind. */
-export function readableMidnightError(kind: MidnightApiErrorKind, envelope: MidnightErrorEnvelope, network?: string): string {
+export function readableMidnightError(
+  kind: MidnightApiErrorKind,
+  envelope: MidnightErrorEnvelope,
+  network?: string,
+  phase: MidnightApiPhase = 'build',
+): string {
   switch (kind) {
     case 'networkUpgrading':
-      return String(i18n.t('midnight.errors.networkUpgrading', { network: network || 'Midnight' }));
+      return String(i18n.t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(network) }));
     case 'ledgerMismatch':
       return String(i18n.t('midnight.errors.ledgerMismatch'));
     case 'noAnswer':
-      return String(i18n.t('midnight.errors.noAnswer'));
+      // A submit with no usable answer may still have reached the network.
+      return String(i18n.t(phase === 'submit' ? 'midnight.errors.submitUnconfirmed' : 'midnight.errors.noAnswer'));
     default:
       // Prover busy and a pending reset are handled by their own flows; until a
       // flow catches them, the server's sentence is the best thing to show.
@@ -207,10 +249,16 @@ const isAxiosLike = (error: unknown): error is AxiosLike =>
  * A server answer (status, body, headers) as a typed error. Used for a 2xx that
  * is not the expected 200 as well as for an axios error's response.
  */
-export function midnightApiErrorFromResponse(status: number | undefined, data: unknown, headers: unknown, network?: string): MidnightApiError {
+export function midnightApiErrorFromResponse(
+  status: number | undefined,
+  data: unknown,
+  headers: unknown,
+  network?: string,
+  phase: MidnightApiPhase = 'build',
+): MidnightApiError {
   const envelope = parseMidnightErrorEnvelope(status, data, headers);
-  if (!envelope) return new MidnightApiError('noAnswer', { status, retryAfter: parseRetryAfter(header(headers, 'retry-after')) }, network);
-  return new MidnightApiError(midnightErrorKindOf(envelope), envelope, network);
+  if (!envelope) return new MidnightApiError('noAnswer', { status, retryAfter: parseRetryAfter(header(headers, 'retry-after')) }, network, phase);
+  return new MidnightApiError(midnightErrorKindOf(envelope), envelope, network, phase);
 }
 
 /**
@@ -218,11 +266,11 @@ export function midnightApiErrorFromResponse(status: number | undefined, data: u
  * already is one passes through. A request that got no answer, or anything that
  * is not an HTTP error, is `noAnswer`.
  */
-export function toMidnightApiError(error: unknown, network?: string): MidnightApiError {
+export function toMidnightApiError(error: unknown, network?: string, phase: MidnightApiPhase = 'build'): MidnightApiError {
   if (isMidnightApiError(error)) return error;
   if (isAxiosLike(error) && error.response) {
     const { status, data, headers } = error.response;
-    return midnightApiErrorFromResponse(status, data, headers, network);
+    return midnightApiErrorFromResponse(status, data, headers, network, phase);
   }
-  return new MidnightApiError('noAnswer', {}, network);
+  return new MidnightApiError('noAnswer', {}, network, phase);
 }

@@ -1225,7 +1225,7 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
         timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
       });
-      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return data;
     } catch (error) {
       return this.resolveSubmitError(error, watch);
@@ -1258,7 +1258,7 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
         timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
       });
-      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return data;
     } catch (error) {
       return this.resolveSubmitError(error, watch);
@@ -1289,7 +1289,7 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
         timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
       });
-      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return data;
     } catch (error) {
       return this.resolveSubmitError(error, watch);
@@ -1386,10 +1386,10 @@ export class MidnightApi {
         tx_hash: string;
         status: 'Submitted' | 'InBlock' | 'Finalized';
       }>(url, wireBody, { timeout: 90_000 });
-      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return { txHash: data.tx_hash, status: data.status };
     } catch (error) {
-      throw toMidnightApiError(error, this.network);
+      throw toMidnightApiError(error, this.network, 'submit');
     }
   }
 }

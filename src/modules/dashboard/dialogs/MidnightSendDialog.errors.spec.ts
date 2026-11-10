@@ -14,10 +14,19 @@ describe('Midnight send dialog errors', () => {
     expect(source.match(/showSendError\(e\);/g)?.length).toBe(2);
   });
 
-  it('offers Try again after LEDGER_MISMATCH, and Try again sends again from a new build', () => {
+  it('after LEDGER_MISMATCH the one CTA reads Try again, for password and PassKey wallets', () => {
     expect(source).toContain("ledgerMismatch.value = midnightApiErrorKind(e) === 'ledgerMismatch';");
-    expect(source).toMatch(/<GButton\s+v-if="canRetryLedgerMismatch"\s+tier="tertiary"[\s\S]*?@click="retryLedgerMismatch\(\)"[\s\S]*?common\.tryAgain/);
-    const retry = source.slice(source.indexOf('async function retryLedgerMismatch()'));
-    expect(retry.slice(0, retry.indexOf('\n}\n'))).toContain('await submitWithPassword();');
+    expect(source).toContain("const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('midnight.signAndSend')));");
+    expect(source).toContain(':submit-text="sendCtaText"');
+    expect(source).toContain(":passkey-text=\"ledgerMismatch ? t('common.tryAgain') : ''\"");
+    expect(source).toMatch(/@click="submitWithPassword"[\s\S]*?\{\{ sendCtaText \}\}/);
+    expect(source).not.toContain('canRetryLedgerMismatch');
+  });
+
+  it('a paused network or an unsupported ledger is an amber note, not an error, and disables the CTA', () => {
+    expect(source).toMatch(/<div v-if="sendBlock" class="midnight-dust-note mb-2" role="status"/);
+    expect(source).toContain(':loading="sending || checkingLocalProver || !!sendBlock"');
+    expect(source).toContain(':disabled="sending || checkingLocalProver || !!sendBlock"');
+    expect(source).toMatch(/<p v-if="errorMessage" role="alert" class="error--text t-caption/);
   });
 });

@@ -346,12 +346,13 @@
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="false"
-            :loading="sending || checkingLocalProver"
+            :loading="sending || checkingLocalProver || !!sendBlock"
             :password="password"
             @update:password="password = $event"
             :password-label="t('send.spendingPassword')"
             :password-rules="passwordRules"
-            :submit-text="t('midnight.signAndSend')"
+            :submit-text="sendCtaText"
+            :passkey-text="ledgerMismatch ? t('common.tryAgain') : ''"
             @passkey-prf-output="onPasskeyPrfOutput"
             @passkey-error="onPasskeyError"
             @submit="submitWithPassword"
@@ -379,19 +380,16 @@
           </div>
         </div>
 
-        <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3" data-test="midnight-send-error">
-          {{ errorMessage }}
+        <!-- Not an error: sends are paused on this network, or this build can't sign
+             for the network's ledger. The amber note, and the CTA is disabled. -->
+        <div v-if="sendBlock" class="midnight-dust-note mb-2" role="status" data-test="midnight-send-blocked">
+          <v-icon size="14" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>
+          <span>{{ sendBlockText }}</span>
         </div>
-        <!-- The network's ledger changed under the build: a fresh build may go
-             through. PRF wallets retry with the PassKey button above. -->
-        <GButton
-          v-if="canRetryLedgerMismatch"
-          tier="tertiary"
-          compact
-          class="mb-2"
-          data-test="midnight-send-try-again"
-          @click="retryLedgerMismatch()"
-        >{{ t('common.tryAgain') }}</GButton>
+
+        <p v-if="errorMessage" role="alert" class="error--text t-caption mb-2 text-center px-3" data-test="midnight-send-error">
+          {{ errorMessage }}
+        </p>
 
         <div>
           <v-btn
@@ -419,9 +417,10 @@
             v-else-if="currentStep === 2 && !isPrfWallet"
             class="continue-button"
             @click="submitWithPassword"
-            :disabled="sending || checkingLocalProver"
+            :disabled="sending || checkingLocalProver || !!sendBlock"
             :loading="sending || checkingLocalProver"
-          >{{ t('midnight.signAndSend') }}</v-btn>
+            data-test="midnight-send-submit"
+          >{{ sendCtaText }}</v-btn>
         </div>
       </v-card-actions>
     </BaseDialog>
@@ -443,7 +442,6 @@ import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/m
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import TransactionDetailsCard, {
@@ -485,7 +483,7 @@ import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
 import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
-import { midnightApiErrorKind } from '@/api/midnightApiError';
+import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
 
 interface Props {
   isOpen: boolean;
@@ -736,9 +734,16 @@ const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
 /** The last send failed with LEDGER_MISMATCH: "Try again" builds it from scratch. */
+/** The last send failed with LEDGER_MISMATCH: the CTA reads "Try again" and sends from a new build. */
 const ledgerMismatch = ref(false);
-const canRetryLedgerMismatch = computed(() =>
-  ledgerMismatch.value && !!errorMessage.value && !isPrfWallet.value && !!password.value && !sending.value);
+const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('midnight.signAndSend')));
+/**
+ * The last send was refused for a state the user can't fix here: the network's
+ * sends are paused for an upgrade, or this build can't sign for the network's
+ * ledger. Shown as a note, not an error, with the CTA disabled.
+ */
+const sendBlock = ref<MidnightSendBlock | null>(null);
+const sendBlockText = ref('');
 
 // ── Send progress timeline ──
 // High-level stage of the in-flight send, driven by sendUnshieldedNight's
@@ -1069,6 +1074,7 @@ function prevStep() {
   approval.invalidate();
   errorMessage.value = null;
   ledgerMismatch.value = false;
+  sendBlock.value = null;
   localProverUnavailable.value = false;
   currentStep.value = 1;
 }
@@ -1092,14 +1098,16 @@ async function submitWithPassword() {
   await approval.run(() => routeSend({ password: password.value }, approval.capture()));
 }
 
-/** A new build request for the same send, after the network's ledger changed. */
-async function retryLedgerMismatch() {
-  ledgerMismatch.value = false;
-  await submitWithPassword();
-}
-
-/** Show a failed send: the error's readable message, and whether a fresh build may help. */
+/** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
 function showSendError(e: unknown) {
+  const block = midnightSendBlockOf(e);
+  if (block) {
+    sendBlock.value = block;
+    sendBlockText.value = e instanceof Error ? e.message : String(e);
+    errorMessage.value = null;
+    ledgerMismatch.value = false;
+    return;
+  }
   errorMessage.value = e instanceof Error ? e.message : String(e);
   ledgerMismatch.value = midnightApiErrorKind(e) === 'ledgerMismatch';
 }

@@ -87,9 +87,9 @@ describe('recoverLostSubmit', () => {
     expect(graphql).not.toHaveBeenCalled();
   });
 
-  it('rethrows a non-axios error as "no answer", without polling', async () => {
+  it('rethrows a non-axios error as "no answer" on a submit, without polling', async () => {
     const thrown = await recover(new Error('token')).catch((e: unknown) => e);
-    expect(thrown).toMatchObject({ name: 'MidnightApiError', kind: 'noAnswer' });
+    expect(thrown).toMatchObject({ name: 'MidnightApiError', kind: 'noAnswer', phase: 'submit', message: 'midnight.errors.submitUnconfirmed' });
     expect(graphql).not.toHaveBeenCalled();
   });
 
@@ -169,7 +169,7 @@ describe('recoverLostSubmit', () => {
     await expect(outcome).rejects.toBeInstanceOf(MidnightSubmitUnconfirmedError);
     await expect(outcome).rejects.toMatchObject({
       name: 'MidnightSubmitUnconfirmedError',
-      message: 'Gero stopped waiting for the network, but this transaction may still go through. Check your activity before you send again.',
+      message: 'midnight.errors.submitUnconfirmed',
     });
     // One poll every 5 s from 0 s to 120 s inclusive.
     expect(graphql).toHaveBeenCalledTimes(25);
