@@ -16,18 +16,21 @@ const labels: SendTimelineLabels = {
   provingCloud: 'Proving with Gero Cloud',
 };
 const t = (key: string, params?: Record<string, unknown>) => ({
-  'midnight.send.provingElapsed': `${params?.['n']} s`,
+  'midnight.send.provingElapsed': `${params?.['n']}\u00a0s`,
   'midnight.send.provingDeviceHint': 'This can take up to a minute on this device.',
   'midnight.send.provingSlowHint': 'Taking longer than usual. Keep this window open.',
 } as Record<string, string>)[key] ?? key;
 
+const s = (n: number) => `${n}\u00a0s`;
 let apps: Vue.App[] = [];
-function mountTimeline(stage: Vue.Ref<string>) {
+function mountTimeline(stage: Vue.Ref<string>, announce?: (text: string) => void) {
   let nodes!: Vue.ComputedRef<TimelineNode[]>;
   const app = Vue.createApp({
     setup() {
-      nodes = useMidnightSendTimeline(Vue.computed(() => stage.value as never), Vue.computed(() => labels),
-        (step, seconds) => provingDetail(step, seconds, t));
+      nodes = useMidnightSendTimeline(Vue.computed(() => stage.value as never), Vue.computed(() => labels), {
+        provingDetailFor: (step, seconds) => provingDetail(step, seconds, t),
+        announce,
+      });
       return {};
     },
     render: () => Vue.h('div'),
@@ -46,46 +49,52 @@ describe('send timeline proving feedback', () => {
     const node = mountTimeline(stage);
     stage.value = 'provingCloud';
     await Vue.nextTick();
-    expect(node('submit')).toMatchObject({ label: 'Proving with Gero Cloud', state: 'active', showBar: true, percent: null, detail: '0 s' });
+    expect(node('submit')).toMatchObject({ label: 'Proving with Gero Cloud', state: 'active', showBar: true, percent: null, elapsed: s(0) });
+    expect(node('submit').hint).toBeUndefined();
     await vi.advanceTimersByTimeAsync(6_000);
-    expect(node('submit').detail).toBe('6 s');
+    expect(node('submit').elapsed).toBe(s(6));
   });
 
   it('Gero Cloud: the "taking longer" hint appears at 20 s and stays until the step ends', async () => {
     const stage = Vue.ref('provingCloud');
     const node = mountTimeline(stage);
     await vi.advanceTimersByTimeAsync(19_000);
-    expect(node('submit').detail).toBe('19 s');
+    expect(node('submit').elapsed).toBe(s(19));
+    expect(node('submit').hint).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(node('submit').detail).toBe('20 s · Taking longer than usual. Keep this window open.');
+    expect(node('submit')).toMatchObject({ elapsed: s(20), hint: 'Taking longer than usual. Keep this window open.' });
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(node('submit').detail).toBe('50 s · Taking longer than usual. Keep this window open.');
+    expect(node('submit')).toMatchObject({ elapsed: s(50), hint: 'Taking longer than usual. Keep this window open.' });
     stage.value = 'done';
     await Vue.nextTick();
-    expect(node('submit')).toMatchObject({ state: 'done', detail: undefined, label: 'Submit' });
+    expect(node('submit')).toMatchObject({ state: 'done', label: 'Submit' });
+    expect(node('submit').elapsed).toBeUndefined();
+    expect(node('submit').hint).toBeUndefined();
   });
 
   it('a plain submit (already proven) is "Submit" with no counter', async () => {
     const node = mountTimeline(Vue.ref('submitting'));
-    expect(node('submit')).toMatchObject({ label: 'Submit', state: 'active', detail: undefined });
+    expect(node('submit')).toMatchObject({ label: 'Submit', state: 'active' });
+    expect(node('submit').elapsed).toBeUndefined();
     expect(node('submit').showBar).toBeUndefined();
   });
 
   it.each([
-    ['provingDevice', '3 s · This can take up to a minute on this device.'],
-    ['provingLocal', '3 s'],
-    ['provingZkpaas', '3 s'],
-  ])('%s: the proving node shows a running counter', async (proving, detail) => {
+    ['provingDevice', 'This can take up to a minute on this device.'],
+    ['provingLocal', undefined],
+    ['provingZkpaas', undefined],
+  ])('%s: the proving node shows a running counter', async (proving, hint) => {
     const node = mountTimeline(Vue.ref(proving));
     await vi.advanceTimersByTimeAsync(3_000);
-    expect(node('sync')).toMatchObject({ state: 'active', percent: null, detail });
+    expect(node('sync')).toMatchObject({ state: 'active', percent: null, elapsed: s(3) });
+    expect(node('sync').hint).toBe(hint);
   });
 
   it('the DUST fee proof on this device counts on the sign node', async () => {
     (midnightStore as { sendProgress: unknown }).sendProgress = { phase: 'proving' };
     const node = mountTimeline(Vue.ref('working'));
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(node('sign').detail).toBe('2 s · This can take up to a minute on this device.');
+    expect(node('sign')).toMatchObject({ elapsed: s(2), hint: 'This can take up to a minute on this device.' });
   });
 
   it('the counter stops when a send fails', async () => {
@@ -94,7 +103,37 @@ describe('send timeline proving feedback', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     stage.value = 'idle';
     await Vue.nextTick();
-    expect(node('submit').detail).toBeUndefined();
+    expect(node('submit').elapsed).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('what the live region hears', () => {
+  it('the proving label once, the 20 s hint once, never the counter', async () => {
+    const said: string[] = [];
+    const stage = Vue.ref('submitting');
+    mountTimeline(stage, (text) => said.push(text));
+    stage.value = 'provingCloud';
+    await Vue.nextTick();
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(said).toEqual(['Proving with Gero Cloud', 'Taking longer than usual. Keep this window open.']);
+  });
+
+  it('a hint that shows from the start goes with the label', async () => {
+    const said: string[] = [];
+    mountTimeline(Vue.ref('provingDevice'), (text) => said.push(text));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(said).toEqual(['Proving on this device. This can take up to a minute on this device.']);
+  });
+
+  it('a new proving step is said again', async () => {
+    const said: string[] = [];
+    const stage = Vue.ref('provingLocal');
+    mountTimeline(stage, (text) => said.push(text));
+    stage.value = 'submitting';
+    await Vue.nextTick();
+    stage.value = 'provingCloud';
+    await Vue.nextTick();
+    expect(said).toEqual(['Proving locally', 'Proving with Gero Cloud']);
   });
 });

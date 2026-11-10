@@ -17,21 +17,27 @@ describe('which node is proving', () => {
   });
 });
 
-describe('the detail line', () => {
+describe('the counter and the hint', () => {
   it('device proving: the counter and how long it can take', () => {
     expect(provingDetail({ node: 'sync', prover: 'device' }, 6, t))
-      .toBe('midnight.send.provingElapsed:{"n":6} · midnight.send.provingDeviceHint');
+      .toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":6}', hint: 'midnight.send.provingDeviceHint' });
   });
 
   it('a local proof server and Arkhia: the counter only', () => {
-    expect(provingDetail({ node: 'sync', prover: 'local' }, 6, t)).toBe('midnight.send.provingElapsed:{"n":6}');
-    expect(provingDetail({ node: 'sync', prover: 'zkpaas' }, 40, t)).toBe('midnight.send.provingElapsed:{"n":40}');
+    expect(provingDetail({ node: 'sync', prover: 'local' }, 6, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":6}' });
+    expect(provingDetail({ node: 'sync', prover: 'zkpaas' }, 40, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":40}' });
   });
 
   it('Gero Cloud: the counter, then the "taking longer" hint from 20 s', () => {
     const cloud: ProvingStep = { node: 'submit', prover: 'cloud' };
-    expect(provingDetail(cloud, CLOUD_SLOW_AFTER_S - 1, t)).toBe('midnight.send.provingElapsed:{"n":19}');
-    expect(provingDetail(cloud, CLOUD_SLOW_AFTER_S, t)).toBe('midnight.send.provingElapsed:{"n":20} · midnight.send.provingSlowHint');
+    expect(provingDetail(cloud, CLOUD_SLOW_AFTER_S - 1, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":19}' });
+    expect(provingDetail(cloud, CLOUD_SLOW_AFTER_S, t))
+      .toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":20}', hint: 'midnight.send.provingSlowHint' });
+  });
+
+  it('Gero Cloud where the surface already says to keep it open: the short hint', () => {
+    const cloud: ProvingStep = { node: 'submit', prover: 'cloud' };
+    expect(provingDetail(cloud, CLOUD_SLOW_AFTER_S, t, { keepOpenShown: true }).hint).toBe('midnight.send.provingSlowHintShort');
   });
 });
 

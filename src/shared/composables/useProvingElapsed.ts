@@ -3,10 +3,12 @@
  * (dashboard dialog and side panel sheet).
  *
  * Proving has no progress signal, so the bars stay indeterminate; what the
- * user gets is a running counter ("6 s") on the node that is proving and, where
- * it helps, a hint about how long that kind of proving takes:
+ * user gets is a running counter ("6 s", beside the node's label) on the node
+ * that is proving and, where it helps, a hint on its own line about how long
+ * that kind of proving takes:
  * - Gero Cloud (proving inside the submit request): after 20 s, "Taking longer
- *   than usual. Keep this window open." It stays until the step ends.
+ *   than usual." It stays until the step ends. Where the surface does not
+ *   already say to keep it open, the hint says so too.
  * - This device: "This can take up to a minute on this device."
  * - A local proof server or Arkhia: the counter only.
  * The counter starts when the step starts and stops when it ends, error included.
@@ -37,16 +39,25 @@ export function provingStepOf(stage: string, feeProving: boolean): ProvingStep |
   }
 }
 
-/** The detail line under a proving node: the counter, then the hint that applies. */
+/** What a proving node shows: the counter (beside the label) and, when one applies, a hint (its own line). */
+export interface ProvingDetail {
+  elapsed: string;
+  hint?: string;
+}
+
 export function provingDetail(
   step: ProvingStep,
   seconds: number,
   t: (key: string, params?: Record<string, unknown>) => string,
-): string {
+  /** The surface already tells the user to keep it open, so the slow hint need not. */
+  options: { keepOpenShown?: boolean } = {},
+): ProvingDetail {
   const elapsed = t('midnight.send.provingElapsed', { n: seconds });
-  if (step.prover === 'device') return `${elapsed} · ${t('midnight.send.provingDeviceHint')}`;
-  if (step.prover === 'cloud' && seconds >= CLOUD_SLOW_AFTER_S) return `${elapsed} · ${t('midnight.send.provingSlowHint')}`;
-  return elapsed;
+  if (step.prover === 'device') return { elapsed, hint: t('midnight.send.provingDeviceHint') };
+  if (step.prover === 'cloud' && seconds >= CLOUD_SLOW_AFTER_S) {
+    return { elapsed, hint: t(options.keepOpenShown ? 'midnight.send.provingSlowHintShort' : 'midnight.send.provingSlowHint') };
+  }
+  return { elapsed };
 }
 
 export interface ProvingElapsed {

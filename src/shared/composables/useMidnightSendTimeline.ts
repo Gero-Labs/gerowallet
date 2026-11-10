@@ -8,10 +8,10 @@
  * `midnightStore.sendProgress`, so they can never disagree about where a send
  * has got to.
  */
-import { computed, type ComputedRef } from 'vue';
+import { computed, watch, type ComputedRef } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
-import { provingStepOf, useProvingElapsed, type ProvingStep } from '@/shared/composables/useProvingElapsed';
+import { provingStepOf, useProvingElapsed, type ProvingDetail, type ProvingStep } from '@/shared/composables/useProvingElapsed';
 
 export interface TimelineNode {
   key: string;
@@ -24,10 +24,19 @@ export interface TimelineNode {
    * `undefined` for no bar. Never a fabricated number.
    */
   percent?: number | null;
+  /** The DUST-ledger sync's own progress line. */
   detail?: string;
+  /** The running counter on a proving node ("6 s"), shown beside the label. */
+  elapsed?: string;
+  /** A hint on its own line under a proving node (how long it can take). */
+  hint?: string;
 }
 
-/** Ordering used to decide which nodes are already behind the current stage. */
+/**
+ * Ordering used to decide which nodes are already behind the current stage.
+ * The wallet-side proving stages share `working`'s rank: a send emits one of
+ * them in place of `working`, never both.
+ */
 export const STAGE_RANK: Record<string, number> = {
   idle: 0,
   authorizing: 1,
@@ -54,26 +63,39 @@ export interface SendTimelineLabels {
   provingCloud: string;
 }
 
+export interface SendTimelineOptions {
+  /**
+   * The counter and hint on the proving node (useProvingElapsed.ts
+   * `provingDetail`, translated by the caller).
+   */
+  provingDetailFor?: (step: ProvingStep, seconds: number) => ProvingDetail;
+  /**
+   * The surface's polite live region (usePoliteAnnouncer.ts). Told once when a
+   * proving step starts (its label, with its hint when it has one from the
+   * start) and once when a hint appears later (Gero Cloud at 20 s). Never the
+   * counter.
+   */
+  announce?: (text: string) => void;
+}
+
 /**
- * @param stage       the live send stage
- * @param labels      already-translated node labels (the caller owns i18n, so
- *                    the sync label can name the sponsor wallet)
- * @param provingDetailFor the line under the proving node: elapsed time and hint
- *                    (useProvingElapsed.ts `provingDetail`, translated by the caller)
+ * @param stage   the live send stage
+ * @param labels  already-translated node labels (the caller owns i18n, so
+ *                the sync label can name the sponsor wallet)
  */
 export function useMidnightSendTimeline(
   stage: ComputedRef<MidnightSendStage | 'idle'>,
   labels: ComputedRef<SendTimelineLabels>,
-  provingDetailFor?: (step: ProvingStep, seconds: number) => string,
+  options: SendTimelineOptions = {},
 ): ComputedRef<TimelineNode[]> {
   const elapsed = useProvingElapsed(() => provingStepOf(
     stage.value, stage.value === 'working' && midnightStore.sendProgress?.phase === 'proving'));
-  const elapsedDetail = (node: ProvingStep['node']): string | undefined => {
+  const provingDetailOf = (node: ProvingStep['node']): ProvingDetail | undefined => {
     const step = elapsed.step.value;
     const seconds = elapsed.seconds.value;
-    return step?.node === node && seconds != null && provingDetailFor ? provingDetailFor(step, seconds) : undefined;
+    return step?.node === node && seconds != null && options.provingDetailFor ? options.provingDetailFor(step, seconds) : undefined;
   };
-  return computed<TimelineNode[]>(() => {
+  const nodes = computed<TimelineNode[]>(() => {
     const s = stage.value;
     const rank = STAGE_RANK[s] ?? 0;
     const prog = midnightStore.sendProgress;
@@ -109,7 +131,8 @@ export function useMidnightSendTimeline(
         state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
         showBar: true,
         percent: provingActive ? null : (syncActive ? pct : undefined),
-        detail: syncActive ? prog?.detail : elapsedDetail('sync'),
+        detail: syncActive ? prog?.detail : undefined,
+        ...provingDetailOf('sync'),
       },
       {
         key: 'sign',
@@ -117,7 +140,7 @@ export function useMidnightSendTimeline(
         state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
         showBar: feeProving || undefined,
         percent: feeProving ? null : undefined,
-        detail: elapsedDetail('sign'),
+        ...provingDetailOf('sign'),
       },
       {
         key: 'submit',
@@ -126,8 +149,34 @@ export function useMidnightSendTimeline(
         // Gero Cloud proving has no progress signal: an indeterminate bar, never a percentage.
         showBar: s === 'provingCloud' || undefined,
         percent: s === 'provingCloud' ? null : undefined,
-        detail: elapsedDetail('submit'),
+        ...provingDetailOf('submit'),
       },
     ];
   });
+
+  const announce = options.announce;
+  if (announce) {
+    // The proving node and what it says, without the counter.
+    let said: { key: string; hint: boolean } | null = null;
+    watch(
+      () => {
+        const step = elapsed.step.value;
+        if (!step) return null;
+        const node = nodes.value.find((n) => n.key === step.node);
+        return node ? { key: `${step.node}:${step.prover}`, label: node.label, hint: node.hint } : null;
+      },
+      (now) => {
+        if (!now) { said = null; return; }
+        if (said?.key !== now.key) {
+          said = { key: now.key, hint: !!now.hint };
+          announce(now.hint ? `${now.label}. ${now.hint}` : now.label);
+        } else if (now.hint && !said.hint) {
+          said.hint = true;
+          announce(now.hint);
+        }
+      },
+      { immediate: true },
+    );
+  }
+  return nodes;
 }

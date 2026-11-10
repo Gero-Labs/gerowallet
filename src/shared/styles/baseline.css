@@ -138,6 +138,16 @@ html .v-alert :is(.t-body, .t-body-sm, .t-caption) {
 
 /* Numbers: always tabular */
 .g-num { font-variant-numeric: tabular-nums; }
+
+/* Read by screen readers, not shown: live regions and extra labels. */
+.g-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 /* Addresses/hashes: one mono face, chunked in the markup in groups of four */
 .g-mono {
   font-family: var(--g-font-mono);

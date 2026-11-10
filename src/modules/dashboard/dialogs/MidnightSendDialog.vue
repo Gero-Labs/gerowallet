@@ -41,8 +41,12 @@
       </v-card-title>
 
       <v-card-text class="send-dialog-content px-3 pb-0">
-        <!-- ── Send-in-progress: left summary + right stage timeline ── -->
-        <div v-if="sending" class="midnight-progress-view">
+        <!-- One polite live region for the whole dialog, mounted before any send so
+             its first message is read: proving steps and their hints. -->
+        <div class="g-sr-only" aria-live="polite" aria-atomic="true" data-test="midnight-send-live">{{ liveMessage }}</div>
+        <!-- ── Send-in-progress: left summary + right stage timeline (stacked in a narrow card) ── -->
+        <div v-if="sending" class="mpv-container">
+        <div class="midnight-progress-view">
           <div class="mpv-summary">
             <div class="mpv-summary-amount">{{ amount || '0' }} {{ selectedTicker }}</div>
             <div class="mpv-summary-to">
@@ -63,6 +67,7 @@
           </div>
 
           <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
+        </div>
         </div>
 
         <CustomStepper v-else :currentStep="currentStep" :steps="steps">
@@ -466,7 +471,9 @@ import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPi
 import { geroStore } from '@/stores/geroStore';
 import { secretsWallet } from '@/shared/utils/walletAccount';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
-import { provingDetail, provingStepOf, useProvingElapsed, type ProvingStep } from '@/shared/composables/useProvingElapsed';
+import { provingDetail } from '@/shared/composables/useProvingElapsed';
+import { useMidnightSendTimeline, type SendTimelineLabels } from '@/shared/composables/useMidnightSendTimeline';
+import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
@@ -773,100 +780,26 @@ type SendStageOrIdle = MidnightSendStage | 'idle';
 const sendStage = ref<SendStageOrIdle>('idle');
 const sendDispatched = computed(() => sending.value && sendStage.value !== 'idle' && sendStage.value !== 'authorizing');
 
-// `provingLocal`/`provingZkpaas` share `working`'s rank: the three are
-// mutually exclusive (wallet-side shielded sends emit a proving stage in
-// place of `working`, see midnight-tx.service's sendShieldedNight) and
-// occupy the same position in every send's stage sequence — authorize →
-// (build →) working-or-proving → submit → done.
-const STAGE_RANK: Record<SendStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, provingDevice: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, provingCloud: 4, done: 5,
-};
-
-// Elapsed time on the node that is proving, with a hint about how long that
-// kind of proving takes (useProvingElapsed.ts). Bars stay indeterminate.
-const provingElapsed = useProvingElapsed(() => provingStepOf(
-  sendStage.value, sendStage.value === 'working' && midnightStore.sendProgress?.phase === 'proving'));
-function elapsedDetail(node: ProvingStep['node']): string | undefined {
-  const step = provingElapsed.step.value;
-  const seconds = provingElapsed.seconds.value;
-  return step?.node === node && seconds != null
-    ? provingDetail(step, seconds, (key, params) => String(t(key, params)))
-    : undefined;
-}
-
-interface TimelineNode {
-  key: string;
-  label: string;
-  state: 'pending' | 'active' | 'done';
-  showBar?: boolean;
-  percent?: number | null;
-  detail?: string;
-}
-
-const timelineNodes = computed<TimelineNode[]>(() => {
-  const s = sendStage.value;
-  const rank = STAGE_RANK[s] ?? 0;
-  const prog = midnightStore.sendProgress;
-  const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
-  // A public send proving its DUST fee on this device (after signing, inside
-  // the same BG call): the sign node carries it, with an indeterminate bar.
-  const feeProving = s === 'working' && prog?.phase === 'proving';
-  // Within the single BG `working` stage: sync is active until the ledger
-  // replay hits 100%, then sign takes over until the call resolves.
-  const syncDone = feeProving || (pct != null && pct >= 100);
-  const syncActive = s === 'working' && !syncDone;
-  const signActive = s === 'working' && syncDone;
-  // Wallet-side shielded sends (WP-P5 local; zkPaaS hosted): the BG round
-  // trip is one opaque proving+binding call with no percent signal, so it
-  // gets a single indeterminate-bar node (staged copy, not a fake
-  // percentage — rule 14) rather
-  // than the sync/sign split above, which is specific to DUST-balance sync.
-  const provingActive = s === 'provingDevice' || s === 'provingLocal' || s === 'provingZkpaas';
-  const provingLabel = s === 'provingZkpaas'
-    ? t('midnight.send.stageProvingZkpaas')
-    : s === 'provingDevice' ? t('midnight.send.stageProvingDevice') : t('midnight.send.stageProvingLocal');
-
-  return [
-    {
-      key: 'authorize',
-      label: t('midnight.send.stageAuthorize'),
-      state: s === 'authorizing' ? 'active' : rank > 1 ? 'done' : 'pending',
-    },
-    {
-      key: 'build',
-      label: t('midnight.send.stageBuild'),
-      state: s === 'building' ? 'active' : rank > 2 ? 'done' : 'pending',
-    },
-    {
-      key: 'sync',
-      label: provingActive
-        ? provingLabel
-        : (sponsorWallet.value
-          ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
-          : t('midnight.send.stageSync')),
-      state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
-      showBar: true,
-      percent: provingActive ? null : (syncActive ? pct : undefined),
-      detail: syncActive ? prog?.detail : elapsedDetail('sync'),
-    },
-    {
-      key: 'sign',
-      label: feeProving ? t('midnight.send.stageProvingDevice') : t('midnight.send.stageSign'),
-      state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
-      showBar: feeProving || undefined,
-      percent: feeProving ? null : undefined,
-      detail: elapsedDetail('sign'),
-    },
-    {
-      key: 'submit',
-      // Gero Cloud proves inside the submit request: say so, with an indeterminate bar.
-      label: s === 'provingCloud' ? t('midnight.send.stageProvingCloud') : t('midnight.send.stageSubmit'),
-      state: s === 'submitting' || s === 'provingCloud' ? 'active' : s === 'done' ? 'done' : 'pending',
-      showBar: s === 'provingCloud' || undefined,
-      percent: s === 'provingCloud' ? null : undefined,
-      detail: elapsedDetail('submit'),
-    },
-  ];
+// The five-node timeline, shared with the side panel sheet (useMidnightSendTimeline.ts):
+// the proving node carries a running counter and, where it helps, a hint
+// (useProvingElapsed.ts). Bars stay indeterminate.
+const { message: liveMessage, announce } = usePoliteAnnouncer();
+const timelineLabels = computed<SendTimelineLabels>(() => ({
+  authorize: String(t('midnight.send.stageAuthorize')),
+  build: String(t('midnight.send.stageBuild')),
+  sync: String(sponsorWallet.value
+    ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
+    : t('midnight.send.stageSync')),
+  sign: String(t('midnight.send.stageSign')),
+  submit: String(t('midnight.send.stageSubmit')),
+  provingDevice: String(t('midnight.send.stageProvingDevice')),
+  provingLocal: String(t('midnight.send.stageProvingLocal')),
+  provingZkpaas: String(t('midnight.send.stageProvingZkpaas')),
+  provingCloud: String(t('midnight.send.stageProvingCloud')),
+}));
+const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels, {
+  provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params))),
+  announce,
 });
 
 // Compact DUST battery for the progress summary (current / cap), so the user
@@ -1835,6 +1768,9 @@ function shortToken(colour: string): string {
 }
 
 /* ─── Send-progress timeline (right-side, appears while sending) ─── */
+.mpv-container {
+  container-type: inline-size;
+}
 .midnight-progress-view {
   display: flex;
   gap: 16px;
@@ -1912,6 +1848,20 @@ function shortToken(colour: string): string {
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* A narrow card (a small window): the summary above the timeline, full width. */
+@container (max-width: 440px) {
+  .midnight-progress-view {
+    flex-direction: column;
+  }
+  .mpv-summary {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--g-hairline-1);
+    padding-right: 0;
+    padding-bottom: var(--g-s-3);
+  }
 }
 
 .sponsor-unlock {
