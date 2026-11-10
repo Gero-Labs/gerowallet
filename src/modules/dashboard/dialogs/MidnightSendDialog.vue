@@ -404,7 +404,7 @@
           <!-- Step 1: advance to the review. -->
           <v-btn
             v-if="currentStep === 1"
-            :class="['continue-button', { shake: shakeError }]"
+            :class="['continue-button', 'geroButton', { shake: shakeError }]"
             @click="nextStep()"
             :disabled="sending"
           >{{ t('common.continue') + ' ' }}
@@ -415,7 +415,7 @@
                button rendered inside TransactionAuthSection above. -->
           <v-btn
             v-else-if="currentStep === 2 && !isPrfWallet"
-            class="continue-button"
+            class="continue-button geroButton"
             @click="submitWithPassword"
             :disabled="sending || checkingLocalProver || !!sendBlock"
             :loading="sending || checkingLocalProver"
@@ -1538,10 +1538,7 @@ function shortToken(colour: string): string {
   background: var(--g-grad);
   color: var(--g-on-grad);
 }
-.continue-button:disabled {
-  opacity: 0.5;
-  color: var(--g-on-grad) !important;
-}
+/* Disabled: the design system's raised fill and muted text, from `.geroButton` in baseline.css. */
 
 .stepper-container {
   background-color: transparent;
