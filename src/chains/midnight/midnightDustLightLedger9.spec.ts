@@ -110,4 +110,64 @@ describe('funded ledger-9 DUST projection', () => {
       expect(fee.serialize().length).toBeGreaterThan(0);
     } finally { f.key.clear(); }
   });
+
+  // #1452 M6: a chain that crossed the upgrade (mainnet, preprod) answers the
+  // spend queries with its whole history, ledger 8 transactions included.
+  it.each(['mainnet', 'preprod'])('%s: ignores spend history from before the ledger 9 crossing, even one matching an owned nullifier', async (network) => {
+    const f = fundedFixture();
+    try {
+      const snapshot = { ...f.snapshot, network: `midnight-${network}` };
+      const ownedNullifiers = [...new Set((await f.transport.spends(f.snapshot.block, [''], 0, f.snapshot.block.height)).transactions.flatMap(tx => tx.matchedNullifiers))];
+      expect(ownedNullifiers.length).toBeGreaterThan(0);
+      // Before the crossing: ledger 8 bytes no ledger 9 adapter can read, matching the owned chain's nullifiers.
+      const preCrossing: DustSpendTransaction = { hash: 'ee'.repeat(32), matchedNullifiers: ownedNullifiers, protocolVersion: 1_000_000,
+        block: { hash: 'ee'.repeat(32), height: 0, ledgerParameters: f.snapshot.block.ledgerParameters },
+        dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 1_000_000 }] };
+      const transport: DustLightTransport = {
+        snapshot: vi.fn(async () => snapshot),
+        spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+          const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+          return { ...page, transactions: fromBlock === 0 ? [preCrossing, ...page.transactions] : page.transactions };
+        }),
+        commitments: f.transport.commitments,
+      };
+      const { state } = await reconstructDustState(dustLedger9, f.key, network, transport);
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
+    } finally { f.key.clear(); }
+  });
+
+  it('a ledger 8 event inside a ledger 9 owned spend is skipped, not fatal; an unreadable ledger 9 one still is', async () => {
+    const f = fundedFixture();
+    try {
+      const page = await f.transport.spends(f.snapshot.block, [''], 0, f.snapshot.block.height);
+      expect(page.transactions.length).toBeGreaterThan(0);
+      const withLegacy = page.transactions.map(tx => ({ ...tx, dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 1_000_000 }, ...tx.dustLedgerEvents] }));
+      const ok: DustLightTransport = { ...f.transport, spends: vi.fn(async (_b, prefixes) => ({ nextBlock: null,
+        transactions: withLegacy.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })) };
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', ok)).resolves.toBeTruthy();
+      const broken = page.transactions.map(tx => ({ ...tx, dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 2_001_100 }] }));
+      const bad: DustLightTransport = { ...f.transport, spends: vi.fn(async (_b, prefixes) => ({ nextBlock: null,
+        transactions: broken.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })) };
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', bad)).rejects.toThrow('Cannot decode an owned DUST spend');
+    } finally { f.key.clear(); }
+  });
+
+  it('preprod: a registration the upgrade cleared leaves no DUST and asks for no spend history', async () => {
+    const key = ledger.DustSecretKey.fromSeed(new Uint8Array(32).fill(74));
+    const parameters = ledger.LedgerParameters.initialParameters();
+    const transport: DustLightTransport = {
+      snapshot: vi.fn(async () => ({ version: 1, network: 'midnight-preprod', generations: [], block: {
+        hash: 'cd'.repeat(32), height: 10, timestamp: Date.now(), protocolVersion: 2_001_100,
+        ledgerParameters: hex(parameters.serialize()), dustGenerationEndIndex: 0, dustCommitmentEndIndex: 0,
+        dustGenerationMerkleTreeRoot: null, dustCommitmentMerkleTreeRoot: null } })),
+      spends: vi.fn(), commitments: vi.fn(),
+    };
+    try {
+      const { state } = await reconstructDustState(dustLedger9, key, 'preprod', transport);
+      expect(state.utxos).toEqual([]);
+      expect(state.walletBalance(new Date())).toBe(0n);
+      expect(transport.spends).not.toHaveBeenCalled();
+    } finally { key.clear(); }
+  });
 });

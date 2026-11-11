@@ -51,13 +51,18 @@ const SCHEMA_VERSION = 1;
 // - preprod 2: Foundation -> Gero's self-hosted indexer. The Foundation's
 //   preprod indexer has a 22-id hole (989781-989802, midnight-wallet#781), so
 //   its checkpoints cannot carry over.
+// - mainnet 3, preprod 3: the ledger 9 upgrade. Indexer 4.4.101 re-indexes
+//   from genesis (new event ids), the network reset DUST once at the crossing,
+//   and a ledger 8 SDK checkpoint is no state a ledger 9 wallet can resume.
+//   The ledger 9 shielded checkpoints live under their own chain-identity
+//   namespace (midnightCheckpointNamespace) and are not affected.
 function schemaVersion(network: string): number {
   switch (network) {
     case 'mainnet':
     case 'midnight-mainnet':
     case 'preprod':
     case 'midnight-preprod':
-      return 2;
+      return 3;
     default:
       return SCHEMA_VERSION;
   }
@@ -75,8 +80,23 @@ interface PersistedWalletState {
   savedAt: number;
 }
 
-interface StoredWalletState extends PersistedWalletState {
+export interface StoredWalletState extends PersistedWalletState {
   key: string;
+}
+
+/**
+ * Where the rows live. The extension uses its own IndexedDB (Dexie, below);
+ * another host of these modules (the mobile apps' bundle) supplies a small
+ * adapter with `setMidnightWalletStateStore` instead of rewriting this file.
+ * Rows are opaque to the store: keys are already one-way hashes, values are
+ * the SDK's serialized state.
+ */
+export interface MidnightWalletStateStore {
+  get(key: string): Promise<StoredWalletState | undefined>;
+  put(row: StoredWalletState): Promise<void>;
+  delete(key: string): Promise<void>;
+  /** Delete every row whose key starts with one of `prefixes`. Throws when it cannot. */
+  deleteByPrefixes(prefixes: string[]): Promise<void>;
 }
 
 class MidnightWalletStateDb extends Dexie {
@@ -98,6 +118,27 @@ function stateDb(): MidnightWalletStateDb {
 
 function hasIndexedDb(): boolean {
   return typeof indexedDB !== 'undefined';
+}
+
+/** The extension's store: its own extension-origin IndexedDB. */
+const dexieStore: MidnightWalletStateStore = {
+  get: (key) => stateDb().states.get(key),
+  put: async (row) => { await stateDb().states.put(row); },
+  delete: (key) => stateDb().states.delete(key),
+  deleteByPrefixes: async (prefixes) => { await stateDb().states.where('key').startsWithAnyOf(prefixes).delete(); },
+};
+
+let injectedStore: MidnightWalletStateStore | null = null;
+
+/** Replace the store (a host without IndexedDB), or pass null to go back to the extension's. */
+export function setMidnightWalletStateStore(store: MidnightWalletStateStore | null): void {
+  injectedStore = store;
+}
+
+/** The store in use, or null when there is none (no IndexedDB and nothing injected): every call is then a miss. */
+function activeStore(): MidnightWalletStateStore | null {
+  if (injectedStore) return injectedStore;
+  return hasIndexedDb() ? dexieStore : null;
 }
 
 const LEGACY_PURGED = 'legacyChromeStoragePurged';
@@ -155,11 +196,12 @@ export async function loadWalletState(
   kind: MidnightWalletKind,
   identitySeed: Uint8Array,
 ): Promise<string | null> {
-  if (!hasIndexedDb()) return null;
-  void purgeLegacyChromeWalletState();
+  const store = activeStore();
+  if (!store) return null;
+  if (!injectedStore) void purgeLegacyChromeWalletState();
   const key = storageKey(network, kind, identitySeed);
   try {
-    const blob = await stateDb().states.get(key);
+    const blob = await store.get(key);
     if (
       !blob
       || blob.schemaVersion !== schemaVersion(network)
@@ -190,12 +232,13 @@ export async function saveWalletState(
   identitySeed: Uint8Array,
   serializedState: string,
 ): Promise<void> {
-  if (!hasIndexedDb()) return;
+  const store = activeStore();
+  if (!store) return;
   if (typeof serializedState !== 'string' || serializedState.length === 0) return;
-  void purgeLegacyChromeWalletState();
+  if (!injectedStore) void purgeLegacyChromeWalletState();
   const key = storageKey(network, kind, identitySeed);
   try {
-    await stateDb().states.put({
+    await store.put({
       key,
       schemaVersion: schemaVersion(network),
       network,
@@ -219,9 +262,10 @@ export async function clearWalletState(
   kind: MidnightWalletKind,
   identitySeed: Uint8Array,
 ): Promise<void> {
-  if (!hasIndexedDb()) return;
+  const store = activeStore();
+  if (!store) return;
   try {
-    await stateDb().states.delete(storageKey(network, kind, identitySeed));
+    await store.delete(storageKey(network, kind, identitySeed));
   } catch {
     // Best-effort: the next restore fails the same way and clears again.
   }
@@ -233,8 +277,9 @@ export async function clearWalletState(
  * (a chain reset) can tell.
  */
 export async function clearWalletStatesByPrefix(prefixes: string[]): Promise<void> {
-  if (!hasIndexedDb() || prefixes.length === 0) return;
-  await stateDb().states.where('key').startsWithAnyOf(prefixes).delete();
+  const store = activeStore();
+  if (!store || prefixes.length === 0) return;
+  await store.deleteByPrefixes(prefixes);
 }
 
 /**
