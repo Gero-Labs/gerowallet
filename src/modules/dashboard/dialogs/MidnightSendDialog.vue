@@ -821,6 +821,17 @@ const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') 
 const sendBlock = ref<MidnightSendBlock | null>(null);
 const sendBlockText = ref('');
 
+/**
+ * Forget the last send's outcome note and its "Try again" CTA. The dialog stays
+ * mounted while closed and keeps its step, so a block left set would greet the
+ * next open (even on another wallet or network) with a disabled CTA.
+ */
+function clearSendOutcome() {
+  sendBlock.value = null;
+  sendBlockText.value = '';
+  ledgerMismatch.value = false;
+}
+
 // ── Send progress timeline ──
 // High-level stage of the in-flight send, driven by sendUnshieldedNight's
 // onStage callback. The `working` stage (BG balance+sign round-trip) is split
@@ -948,6 +959,8 @@ const approval = useApprovalFreshness(
     localProverUnavailable.value = false;
     checkingLocalProver.value = false;
     forceRemoteForNextSend.value = false;
+    // A change of wallet, network, form or open state: the last refusal no longer applies.
+    clearSendOutcome();
   },
 );
 
@@ -1096,8 +1109,7 @@ function prevStep() {
   approval.invalidate();
   errorMessage.value = null;
   busyCancelled.value = false;
-  ledgerMismatch.value = false;
-  sendBlock.value = null;
+  clearSendOutcome();
   localProverUnavailable.value = false;
   currentStep.value = 1;
 }
@@ -1504,6 +1516,7 @@ function onDialogClose() {
   localProverUnavailable.value = false;
   pendingCredentials.value = null;
   forceRemoteForNextSend.value = false;
+  clearSendOutcome();
   emit('close');
 }
 
@@ -1517,6 +1530,7 @@ function resetForm() {
   sendStage.value = 'idle';
   localProverUnavailable.value = false;
   forceRemoteForNextSend.value = false;
+  clearSendOutcome();
 }
 
 // Reset to step 1 whenever the dialog re-opens.
