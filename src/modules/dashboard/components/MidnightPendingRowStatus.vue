@@ -4,13 +4,14 @@
        keyed by its ledger hash (the only one the indexer can find); Dismiss
        always. While Midnight data is rebuilt the row is the last one the wallet
        knew, so the chip alone. Mount it for pending rows (and rows with a Check
-       again outcome) only. -->
-  <div v-if="unconfirmed || outcomeText" ref="root" class="pending-status" data-test="midnight-pending-status">
+       again in flight or an outcome: hasPendingOutcome) only. -->
+  <div v-if="unconfirmed || checking || outcomeText" ref="root" class="pending-status" data-test="midnight-pending-status">
     <span v-if="unconfirmed" class="pending-status__chip t-caption" data-test="midnight-not-confirmed">{{ t('midnight.pending.notConfirmed') }}</span>
-    <div v-if="unconfirmed && !compact && !refreshing" class="pending-status__actions">
-      <!-- While checking it stays in place and keeps focus: held, busy, and saying so. -->
+    <div v-if="actionsShown" class="pending-status__actions">
+      <!-- While checking it stays in place and keeps focus: held, busy, and saying so,
+           also if the check settles the row before it answers. -->
       <GButton
-        v-if="lookupPossible"
+        v-if="lookupPossible || checking"
         tier="tertiary"
         compact
         :aria-disabled="checking ? 'true' : undefined"
@@ -19,7 +20,7 @@
         data-test="midnight-check-again"
         @click="onCheckAgain()"
       >{{ checking ? t('midnight.pending.checking') : t('midnight.pending.checkAgain') }}</GButton>
-      <GButton tier="tertiary" compact data-test="midnight-dismiss-pending" @click="onDismiss()">{{ t('midnight.pending.dismiss') }}</GButton>
+      <GButton v-if="unconfirmed" tier="tertiary" compact data-test="midnight-dismiss-pending" @click="onDismiss()">{{ t('midnight.pending.dismiss') }}</GButton>
     </div>
     <!-- What Check again found, said once. -->
     <p class="pending-status__outcome t-caption" aria-live="polite" data-test="midnight-check-outcome">{{ outcomeText }}</p>
@@ -27,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightPendingActions, usePendingClock } from '@/shared/composables/useMidnightPendingActions';
@@ -50,6 +51,7 @@ const root = ref<HTMLElement | null>(null);
 const unconfirmed = computed(() => isUnconfirmedPending(props.tx, now.value));
 const lookupPossible = computed(() => canLookUpPending(props.tx));
 const checking = computed(() => stateOf(props.tx).checking);
+const actionsShown = computed(() => (unconfirmed.value || checking.value) && !props.compact && !refreshing.value);
 const outcomeText = computed(() => {
   if (refreshing.value) return '';
   switch (stateOf(props.tx).outcome) {
@@ -71,14 +73,29 @@ function onCheckAgain(): void {
   void checkAgain(props.tx);
 }
 
+function focusListHeading(list: HTMLElement | null): void {
+  const heading = list?.matches('[data-pending-list-heading]') ? list : list?.querySelector<HTMLElement>('[data-pending-list-heading]');
+  heading?.focus();
+}
+
 /** Dismiss, then keep focus in the list: on its heading (the row is gone). */
 async function onDismiss(): Promise<void> {
   const list = root.value?.closest<HTMLElement>('[data-pending-list]') ?? null;
   await dismiss(props.tx);
   await nextTick();
-  const heading = list?.matches('[data-pending-list-heading]') ? list : list?.querySelector<HTMLElement>('[data-pending-list-heading]');
-  heading?.focus();
+  focusListHeading(list);
 }
+
+// Check again found the send and the row settled: the buttons go, while the
+// outcome stays in the same live region. Focus on them moves to the list's
+// heading, as after Dismiss, rather than dropping to the page. Checked before
+// the buttons leave the DOM.
+watch(actionsShown, async (shown) => {
+  if (shown || !root.value || !root.value.contains(document.activeElement)) return;
+  const list = root.value.closest<HTMLElement>('[data-pending-list]');
+  await nextTick();
+  focusListHeading(list);
+}, { flush: 'pre' });
 </script>
 
 <style scoped lang="scss">

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { defineComponent } from 'vue';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -24,6 +25,7 @@ import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import { PENDING_EXPIRY_MS } from '@/chains/midnight/midnightPendingSends';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 import { MessageTypes } from '@/models/MessageTypes';
+import { hasPendingOutcome } from '@/shared/composables/useMidnightPendingActions';
 
 const NOW = new Date('2026-11-10T12:00:00Z').getTime();
 const stubs = {
@@ -129,6 +131,56 @@ describe('"Not confirmed" on a history row', () => {
     expect(w.get('[data-test="midnight-check-outcome"]').text()).toBe('midnight.pending.stillNotConfirmed');
     expect(w.get('[data-test="midnight-check-outcome"]').attributes('aria-live')).toBe('polite');
   });
+
+  // A history list as the card and the side panel mount it: a heading, and the
+  // status on each pending row or one with a check in flight or an outcome.
+  const List = defineComponent({
+    components: { MidnightPendingRowStatus },
+    setup: () => ({ midnightStore, hasPendingOutcome }),
+    template: `<div data-pending-list><span tabindex="-1" data-pending-list-heading>Recent</span>
+      <div v-for="tx in midnightStore.transactions" :key="tx.hash">
+        <MidnightPendingRowStatus v-if="tx.status === 'pending' || hasPendingOutcome(tx)" :tx="tx" />
+      </div></div>`,
+  });
+  const settle = (status: 'confirmed' | 'failed') => {
+    midnightStore.transactions = midnightStore.transactions.map((tx) => ({ ...tx, status }));
+  };
+
+  for (const order of ['settled before the answer', 'answer before the settle'] as const) {
+    it(`Check again that finds the send says so from the same live region, and focus stays in the list (${order})`, async () => {
+      let answer: (v: unknown) => void = () => undefined;
+      h.send.mockImplementation(() => new Promise((r) => { answer = r; }));
+      // Its own hash per case: what a check found is kept per row for the session.
+      midnightStore.transactions = [sent(order === 'settled before the answer' ? 'ac' : 'ae', { timestamp: NOW - PENDING_EXPIRY_MS })];
+      const w = mount(List, { attachTo: document.body, global: { stubs } });
+      const region = w.get('[data-test="midnight-check-outcome"]').element;
+      const button = w.get<HTMLButtonElement>('[data-test="midnight-check-again"]');
+      button.element.focus();
+      await button.trigger('click');
+      const reply = { data: { success: true, result: { outcome: 'confirmed' } } };
+      if (order === 'settled before the answer') {
+        // The background pushes the settled row on the port before it replies.
+        settle('confirmed');
+        await flushPromises();
+        const held = w.get('[data-test="midnight-check-again"]');
+        expect(held.text()).toBe('midnight.pending.checking');
+        expect(document.activeElement).toBe(held.element);
+        answer(reply);
+      } else {
+        answer(reply);
+        await flushPromises();
+        expect(document.activeElement).toBe(w.get('[data-test="midnight-check-again"]').element);
+        settle('confirmed');
+      }
+      await flushPromises();
+      expect(w.get('[data-test="midnight-check-outcome"]').element).toBe(region);
+      expect(region.textContent).toBe('midnight.pending.wentThrough');
+      expect(w.find('[data-test="midnight-check-again"]').exists()).toBe(false);
+      expect(w.find('[data-test="midnight-dismiss-pending"]').exists()).toBe(false);
+      expect(document.activeElement).toBe(w.get('[data-pending-list-heading]').element);
+      w.unmount();
+    });
+  }
 
   it('Check again that could not ask says so, never "Still not confirmed"', async () => {
     const tx = sent('ab', { timestamp: NOW - PENDING_EXPIRY_MS });

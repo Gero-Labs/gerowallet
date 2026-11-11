@@ -39,9 +39,16 @@ export function usePendingClock(): Ref<number> {
   return sharedNow;
 }
 
-/** Whether a row has something to say about its last Check again (shown even once it is no longer pending). */
+/**
+ * Whether a row has a Check again in flight or something to say about its last
+ * one: its status stays mounted even once it is no longer pending. A check that
+ * finds the send settles the row (a store update) around the same time as it
+ * answers, in either order, and the status must stay to say the answer from
+ * the live region the user's focus was next to.
+ */
 export function hasPendingOutcome(tx: MidnightTransaction): boolean {
-  return !!rowState[midnightTxRowKey(tx)]?.outcome;
+  const state = rowState[midnightTxRowKey(tx)];
+  return !!state && (state.checking || !!state.outcome);
 }
 
 /** Per row: a Check again in flight, and what the last one found. */
