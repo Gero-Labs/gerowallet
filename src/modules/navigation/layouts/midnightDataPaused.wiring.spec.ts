@@ -35,7 +35,9 @@ describe('Midnight data paused wiring', () => {
 
   it('the dashboard battery labels an estimate and shows no projection while paused', () => {
     const gauge = read('modules/dashboard/components/MidnightDustGauge.vue');
-    expect(gauge).toMatch(/v-if="dustEstimate" class="dust-gauge__estimate t-caption"[^>]*>\{\{ \$t\('midnight\.dataPaused\.estimate'\) \}\}/);
+    expect(gauge).toMatch(/v-if="showEstimate" class="dust-gauge__estimate t-caption"[^>]*>\{\{ \$t\('midnight\.dataPaused\.estimate'\) \}\}/);
+    // The registration state outranks the label (dustGaugeEstimate.runtime.spec.ts).
+    expect(gauge).toContain('const showEstimate = computed(() => isRegistered.value && dustEstimate.value);');
     expect(gauge).toContain('&& !dustEstimate.value);');
     expect(gauge).toContain("isRegistered && !dustEstimate ? `+${dustRateFmt} ${dustCurrency}/s` : '—'");
     expect(gauge).toMatch(/const timeToFullLabel = computed\(\(\) => \{[\s\S]*?if \(dustEstimate\.value\) return '—';/);
@@ -43,7 +45,8 @@ describe('Midnight data paused wiring', () => {
 
   it('the side panel battery shows "Estimate · As of block" in place of the rate while paused', () => {
     const mini = read('sidepanel/components/MiniDustGauge.vue');
-    expect(mini).toMatch(/<span v-if="dustEstimate" class="mini-dust__estimate g-num"[\s\S]*?midnight\.dataPaused\.estimateCaption/);
+    expect(mini).toMatch(/<span v-if="showEstimate" class="mini-dust__estimate g-num"[\s\S]*?midnight\.dataPaused\.estimateCaption/);
+    expect(mini).toContain('const showEstimate = computed(() => isRegistered.value && dustEstimate.value);');
     expect(mini).toContain('<span v-else-if="isRegistered">+{{ rateFmt }}');
     expect(mini).toContain('&& !dustEstimate.value);');
   });
