@@ -119,6 +119,7 @@ import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt }
 import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
 import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
+import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
@@ -2804,6 +2805,20 @@ export class WalletBg {
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
+        // The chain's ledger decides the path, never the network's name.
+        if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
+          const result9 = await balanceDappTransaction9({
+            sdkNetworkId: endpoints.sdkNetworkId,
+            endpoints,
+            txHex,
+            unshieldedSecretKey: derived.unshieldedSecretKey,
+            dustSecretSeed: derived.dustSecretKey,
+            utxos: midnightStore.utxos,
+            proving,
+          });
+          assertSession();
+          return { tx: result9.txHex };
+        }
         const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
         const result = await balanceDappTransaction({
           sdkNetworkId: endpoints.sdkNetworkId,

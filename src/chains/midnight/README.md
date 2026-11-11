@@ -63,7 +63,17 @@ Keep these boundaries when changing transaction code.
 - No hardware-wallet support by design: ZK proving needs cleartext keys.
 - The DApp connector exposes connected-wallet reads, public transfers,
   submission, and unshielded message signing. Unsupported request types fail
-  before prompting for approval.
+  before prompting for approval. Every connector path follows the chain's
+  ledger: `balanceUnsealedTransaction` balances with `midnightDappBalancer.ts`
+  (ledger 8) or `midnightDappBalancer9.ts` (ledger 9, wallet SDK 2's pure `/v2`
+  capabilities over the wallet's synced UTxOs); `submitTransaction` judges
+  "sealed" with the chain's ledger and names a transaction of the other ledger
+  instead of sending it to be proven. `makeIntent` is ledger 8 only for now.
+- Connector fees on ledger 9 are paid with two DUST spends when the wallet has
+  two coins: ledger 9 can reject a contract call paid with exactly one
+  (`OutsideTimeToDismiss`, midnight-ledger#838). `balanceLightDust9(…,
+  { minimumSpends: 2 })` re-pays the SDK's one-spend fee from two coins, priced
+  with the SDK's own `dryRunFee`.
 
 ## Compact DUST synchronization
 

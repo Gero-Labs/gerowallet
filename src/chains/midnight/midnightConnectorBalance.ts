@@ -4,12 +4,16 @@
  * and the "what will the wallet contribute" summary the approval panel shows.
  * The balancing pipeline itself lives in `midnightDappBalancer.ts`.
  *
- * Ledger 8 only (Preprod / Mainnet). Stagenet balancing is rejected up front.
+ * Routed by the ledger the chain runs: ledger 8 decodes with ledger-v8 and
+ * balances in `midnightDappBalancer.ts`, ledger 9 with ledger-v9 in
+ * `midnightDappBalancer9.ts`. Never by the network's name.
  */
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
-import { knownMidnightLedger, midnightNetworkName } from './midnightLedger';
+import * as ledger9 from '@midnightntwrk/ledger-v9';
+import { knownMidnightLedger, midnightLedgerKey, midnightNetworkName, type MidnightLedger } from './midnightLedger';
 import { resolveMidnightLedger } from './midnightChainLedger';
+import { decodeUnboundTransaction9 } from './midnightDappBalancer9';
 // Static: in the background's single iife an inlined dynamic import is read through a
 // namespace const that lands after this module (scripts/check-bundle-tdz.mjs).
 import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
@@ -35,11 +39,9 @@ export function validateConnectorBalanceRequest(data: unknown, network: string):
   if (payFees !== undefined && payFees !== true) {
     return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
   }
-  // The caller reads the chain's ledger first (resolveMidnightLedger).
-  const version = knownMidnightLedger(network);
-  if (version === undefined) return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs` };
-  if (version !== 8) {
-    return { ok: false, reason: `balanceUnsealedTransaction is not supported on Midnight ${midnightNetworkName(network)} (ledger ${version}) in this version` };
+  // The caller reads the chain's ledger first (resolveMidnightLedger); both ledgers balance.
+  if (knownMidnightLedger(network) === undefined) {
+    return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs` };
   }
   return { ok: true, tx, payFees: true };
 }
@@ -200,11 +202,19 @@ export async function connectorBalancePrompt(
   sdkNetworkId: string,
   ownAddress: string,
 ): Promise<ConnectorBalancePrompt> {
+  let version: MidnightLedger;
+  try {
+    version = await resolveMidnightLedger(sdkNetworkId);
+  } catch {
+    return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(sdkNetworkId)} runs` };
+  }
   let tx: UnboundTransaction;
   try {
-    tx = await decodeUnboundTransaction(txHex, sdkNetworkId);
+    tx = version === 9
+      ? decodeUnboundTransaction9(txHex, sdkNetworkId) as unknown as UnboundTransaction
+      : await decodeUnboundTransaction(txHex, sdkNetworkId);
   } catch {
-    return { ok: false, reason: 'tx is not a valid unsealed transaction for the connected network' };
+    return { ok: false, reason: `tx is not a valid unsealed ledger ${version} transaction for Midnight ${midnightNetworkName(sdkNetworkId)}` };
   }
   const codec = await unshieldedAddressCodec(sdkNetworkId);
   let ownHex = '';
@@ -213,7 +223,11 @@ export async function connectorBalancePrompt(
   } catch {
     ownHex = '';
   }
-  if (ownHex && countWalletOwnedInputs(tx, ownHex) > 0) {
+  // Ledger 9 tags verifying keys ({ tag, value }); its own addressFromKey reads them.
+  const addressOfKey = version === 9
+    ? (key: ledger.SignatureVerifyingKey) => ledger9.addressFromKey(key as unknown as ledger9.SignatureVerifyingKey)
+    : ledger.addressFromKey;
+  if (ownHex && countWalletOwnedInputs(tx, ownHex, addressOfKey) > 0) {
     return { ok: false, reason: 'tx already spends from this wallet; the wallet adds its own inputs when it balances' };
   }
   const payments = summarizeForeignPayments(tx, ownHex).map((payment) => {
@@ -226,24 +240,57 @@ export async function connectorBalancePrompt(
   return { ok: true, contributions: summarizeContributions(tx), payments };
 }
 
-/**
- * True when `hex` parses as a sealed (`signature / proof / binding`)
- * transaction under the network's ledger — i.e. it must go to Nexus's
- * submit-proven relay, not the prove-and-finalize one.
- */
-export async function isSealedMidnightTransaction(hex: string, sdkNetworkId: string): Promise<boolean> {
-  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return false;
-  let version: number;
+type Deserializer = { deserialize: (s: string, p: string, b: string, raw: Uint8Array) => unknown };
+
+/** Whether `bytes` read as a transaction of this ledger module with these markers. */
+function readsAs(mod: { Transaction: unknown }, bytes: Uint8Array, proof: string, binding: string): boolean {
   try {
-    version = await resolveMidnightLedger(sdkNetworkId);
+    (mod.Transaction as Deserializer).deserialize('signature', proof, binding, bytes);
+    return true;
   } catch {
     return false;
   }
-  const mod = version === 9 ? await import('@midnightntwrk/ledger-v9') : await import('@midnight-ntwrk/ledger-v8');
+}
+
+/**
+ * How a dapp's `submitTransaction` bytes relate to the chain: `sealed` (proven
+ * and bound for the chain's ledger: Nexus's submit-proven relay), `unsealed`
+ * (anything else; only Gero Cloud's prove-and-submit can take it), or
+ * `otherLedger` (a transaction of the ledger the chain does not run, which no
+ * route can submit). Judged by the ledger the chain reports, never the name.
+ */
+export type ConnectorSubmission =
+  | { kind: 'sealed' | 'unsealed'; ledger: MidnightLedger }
+  | { kind: 'otherLedger'; ledger: MidnightLedger; txLedger: MidnightLedger };
+
+export async function classifyConnectorSubmission(hex: string, sdkNetworkId: string): Promise<ConnectorSubmission> {
+  const version = await resolveMidnightLedger(sdkNetworkId);
+  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return { kind: 'unsealed', ledger: version };
+  const bytes = Buffer.from(hex, 'hex');
+  const own = version === 9 ? ledger9 : ledger;
+  const other = version === 9 ? ledger : ledger9;
+  if (readsAs(own, bytes, 'proof', 'binding')) return { kind: 'sealed', ledger: version };
+  const markers: Array<[string, string]> = [['proof', 'binding'], ['proof', 'pre-binding'], ['pre-proof', 'pre-binding']];
+  if (markers.some(([proof, binding]) => readsAs(other, bytes, proof, binding))) {
+    return { kind: 'otherLedger', ledger: version, txLedger: version === 9 ? 8 : 9 };
+  }
+  return { kind: 'unsealed', ledger: version };
+}
+
+/** The reason a dapp gets for a transaction of the other ledger. */
+export function otherLedgerSubmissionReason(sdkNetworkId: string, submission: Extract<ConnectorSubmission, { kind: 'otherLedger' }>): string {
+  return `This is a ledger ${submission.txLedger} transaction; Midnight ${midnightNetworkName(midnightLedgerKey(sdkNetworkId))} runs ledger ${submission.ledger}. Build it again with a library for ledger ${submission.ledger}.`;
+}
+
+/**
+ * True when `hex` parses as a sealed (`signature / proof / binding`)
+ * transaction under the chain's ledger — i.e. it must go to Nexus's
+ * submit-proven relay, not the prove-and-finalize one. False when the chain's
+ * ledger can't be read.
+ */
+export async function isSealedMidnightTransaction(hex: string, sdkNetworkId: string): Promise<boolean> {
   try {
-    (mod.Transaction as unknown as { deserialize: (s: string, p: string, b: string, raw: Uint8Array) => unknown })
-      .deserialize('signature', 'proof', 'binding', Buffer.from(hex, 'hex'));
-    return true;
+    return (await classifyConnectorSubmission(hex, sdkNetworkId)).kind === 'sealed';
   } catch {
     return false;
   }

@@ -44,11 +44,11 @@ describe('validateConnectorBalanceRequest', () => {
     expect(validateConnectorBalanceRequest({ tx: 'abcd', options: { payFees: true } }, 'Mainnet')).toMatchObject({ ok: true });
   });
 
-  it('rejects fee delegation, Stagenet, bad hex, oversized input and non-objects', () => {
+  it('rejects fee delegation, bad hex, oversized input, non-objects and an unread chain', () => {
     expect(validateConnectorBalanceRequest({ tx: 'abcd', options: { payFees: false } }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/payFees:false/) });
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Stagenet'))
-      .toMatchObject({ ok: false, reason: expect.stringMatching(/Midnight Stagenet \(ledger 9\)/) });
+    // Both ledgers balance now; the chain's ledger picks the path (midnightDappBalancer9.spec.ts).
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Stagenet')).toMatchObject({ ok: true });
     expect(validateConnectorBalanceRequest({ tx: 'xyz' }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/hex/) });
     expect(validateConnectorBalanceRequest({ tx: 'ab'.repeat(2 * 1024 * 1024 + 1) }, 'Preprod'))
