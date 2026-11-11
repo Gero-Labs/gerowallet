@@ -801,10 +801,20 @@ let bootRead: Promise<void> = Promise.resolve();
 let bootDropped = false;
 const bootForgotten = new Set<string>();
 
+/**
+ * The fields derived from the wallet's history that the views were last sent
+ * the record's value for (see withBootStandIns). This worker's own values go out
+ * once the record is released: nothing else re-sends a field whose value has not
+ * changed since, such as balances that really are zero. (The tip and the DUST
+ * state are left to their own frames, which keep arriving.)
+ */
+const bootShownToViews = new Set<'balances' | 'utxos'>();
+
 /** Let go of the previous worker's record, also if its read is still to land. */
 function dropBootRecord(): void {
   bootRecord = null;
   bootDropped = true;
+  bootShownToViews.clear();
 }
 
 const bgDurableTouched = {
@@ -898,11 +908,15 @@ function bootStandIn(field: string, value: unknown): unknown {
   const boot = bootRecord;
   const key = midnightStore.activeWalletKey;
   if (!boot || !key || boot.activeWalletKey !== key) return value;
+  // Settled history or a balance of its own is this worker's data (the same test
+  // that releases the record): zero balances and no UTxOs are then real, as after
+  // the wallet was emptied from another device while this worker was down.
+  const ownData = hasDataToKeep(midnightStore.balances, midnightStore.transactions);
   switch (field) {
-    case 'balances': return hasDataToKeep(midnightStore.balances, []) ? value : boot.balances;
+    case 'balances': return ownData ? value : boot.balances;
     case 'dustState': return midnightStore.dustState ?? boot.dustState;
     case 'tip': return midnightStore.tip.hash ? value : { ...midnightStore.tip, ...boot.tip };
-    case 'utxos': return boot.bulkRead && midnightStore.utxos.length === 0 ? boot.utxos : value;
+    case 'utxos': return boot.bulkRead && !ownData && midnightStore.utxos.length === 0 ? boot.utxos : value;
     case 'transactions': {
       if (!boot.bulkRead || midnightStore.transactions.some((tx) => tx.status !== 'pending')) return value;
       const own = new Set(midnightStore.transactions.map(txRowKey));
@@ -917,7 +931,14 @@ function bootStandIn(field: string, value: unknown): unknown {
 function withBootStandIns(updates: Partial<MidnightStore>): Partial<MidnightStore> {
   if (!bootRecord) return updates;
   const out: Record<string, unknown> = { ...updates };
-  for (const key of Object.keys(updates)) out[key] = bootStandIn(key, (updates as Record<string, unknown>)[key]);
+  for (const key of Object.keys(updates)) {
+    const own = (updates as Record<string, unknown>)[key];
+    out[key] = bootStandIn(key, own);
+    if (key === 'balances' || key === 'utxos') {
+      if (out[key] !== own) bootShownToViews.add(key);
+      else bootShownToViews.delete(key);
+    }
+  }
   return out as Partial<MidnightStore>;
 }
 
@@ -1306,7 +1327,14 @@ export const midnightActions = {
    * previous worker's record read at boot is no longer needed.
    */
   releaseBootRecord() {
+    // The views may still show a stand-in sent before this worker had data of its
+    // own; send them, and save, this worker's values in its place.
+    const held = bootRecord && bootRecord.activeWalletKey === midnightStore.activeWalletKey ? [...bootShownToViews] : [];
     dropBootRecord();
+    if (held.length === 0) return;
+    const own: Partial<MidnightStore> = {};
+    for (const field of held) (own as Record<string, unknown>)[field] = midnightStore[field];
+    broadcastFromBackground(own);
   },
   /**
    * A refresh the previous worker was running when it stopped: back into
