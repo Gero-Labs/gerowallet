@@ -40,6 +40,13 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   // Registers a Gero market listing of the logged wallet for sale alerts (market dialogs).
   'NOTIFY_WATCH_LISTINGS',
   'NOTIFY_INTRO_ANSWER',
+  // Broadcast announcements: refresh, read marks, banner dismissal and which kinds are wanted.
+  // None carries content, but a web page must not be able to mark Gero's notices read or switch
+  // them off behind the user's back.
+  'ANNOUNCEMENTS_REFRESH',
+  'ANNOUNCEMENT_READ',
+  'ANNOUNCEMENT_DISMISS_BANNER',
+  'ANNOUNCEMENTS_SET_PREFS',
   // Part of signing: only the wallet's own pages sign (Ledger, Keystone, Trezor over WebUSB).
   'CIP113_SIGN_PREFLIGHT',
   // Trezor signing in the worker; like the preflight, it honours the CIP-113 Send allowance.
@@ -98,6 +105,10 @@ function normalizedRoot(root: string | undefined): string | null {
  * root, whereas a content script reports the http(s) page URL even though its
  * sender.id is the extension id. (sender.tab is NOT a distinguisher: an
  * extension page opened in a tab, e.g. the dashboard, also carries one.)
+ *
+ * Also true for this extension's service worker, which reports its own script
+ * URL under the same root and no origin or tab (measured in Chromium, 2026-11):
+ * a page uses this to accept only what the worker or another own page sent.
  *
  * `own` is passed in (`ownExtension()` at the call site) so this stays pure.
  */

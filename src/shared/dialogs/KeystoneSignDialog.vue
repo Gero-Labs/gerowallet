@@ -74,7 +74,6 @@
         <v-btn
           v-if="!keystoneScan"
           class="geroButton"
-          style="color: black!important;"
           @click="keystoneScan = true"
         >
           {{ $t('common.next') }}

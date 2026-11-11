@@ -109,6 +109,13 @@ export interface RenderMarkdownOptions {
    * intra-word underscores literal even when this is on.
    */
   emphasis?: boolean;
+  /**
+   * Which destinations may become a link. Absent: every `http(s)://` link forms, as before. Given:
+   * a link forms only when this returns true for its destination (the author's URL, unescaped);
+   * otherwise its TEXT is kept and no anchor is written, so the reader is never handed a
+   * destination the caller does not allow. Announcements use it to keep body links on Gero's sites.
+   */
+  linkAllowed?: (url: string) => boolean;
 }
 
 /**
@@ -129,6 +136,19 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * The exact reverse of `escapeHtml`, `&amp;` last so `&amp;lt;` comes back as the `&lt;` the author
+ * typed and not as `<`. Used ONLY to show a caller's `linkAllowed` the URL as written; its result is
+ * never put in the output.
+ */
+function unescapeHtml(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&');
 }
 
 /**
@@ -346,8 +366,11 @@ function renderInline(escaped: string, options: RenderMarkdownOptions): string {
   // `"` in it into `&quot;` so it cannot close the quote it sits in, and the
   // pattern stops at `<`/`>` so it cannot absorb markup. See `LINK` and
   // `REFERENCE_MARKER_ATTR`.
+  // A destination the caller does not allow (`linkAllowed`) leaves its text and writes no anchor.
+  // The text is still lifted, so the `[n]` pass below treats it as it treats real link text.
+  const allowed = options.linkAllowed;
   s = s.replace(LINK, (_m, text, url) =>
-    lift(slots, `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`),
+    lift(slots, allowed && !allowed(unescapeHtml(url)) ? text : `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`),
   );
 
   // [n] reference markers, only where the caller says a reference exists.

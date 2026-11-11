@@ -37,14 +37,14 @@
             <v-img v-else :src="img"  :style="imgStyle"></v-img>
           </v-avatar>
           <div class="ml-5 mr-3 my-4 g-list-icon" v-if="icon">
-            <v-icon style="font-size: 56px">{{icon}}</v-icon>
+            <v-icon style="font-size: 56px" :color="iconColor">{{icon}}</v-icon>
           </div>
           <!-- Header illustration (e.g. an IsoScene) in place of img/icon. -->
           <div v-if="$slots['art']" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
             <slot name="art"></slot>
           </div>
           <div class="g-list-content">
-            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;" :style="{ WebkitLineClamp: titleLines }">
               {{ title }}
               <v-tooltip location="bottom" v-if="titleInfo"  max-width="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
@@ -70,6 +70,10 @@
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
               {{ truncate(subtitle2) }}<CopyButton x-small :value="subtitle2" class="ml-1" />
             </v-list-item-subtitle>
+            <!-- Under the title, for a line that is more than text (chips, a date). -->
+            <div v-if="$slots['meta']" class="base-dialog__meta">
+              <slot name="meta"></slot>
+            </div>
           </div>
         </v-list-item>
       </v-card-title>
@@ -123,11 +127,20 @@ const props = defineProps({
   icon: {
     type: String,
   },
+  /** The colour of `icon`, e.g. 'var(--g-error)'. Absent: the theme's own. */
+  iconColor: {
+    type: String,
+  },
   title: {
     type: String,
   },
   titleInfo: {
     type: String,
+  },
+  /** Lines the title may take before it is clamped with an ellipsis. */
+  titleLines: {
+    type: Number,
+    default: 1,
   },
   subtitle: {
     type: String
@@ -254,6 +267,10 @@ const isDialogOpen = computed({
 .base-dialog-art {
   flex: none;
   width: 96px;
+}
+
+.base-dialog__meta {
+  margin-top: var(--g-s-1);
 }
 
 .base-dialog-img-mask {

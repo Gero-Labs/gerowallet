@@ -12,6 +12,7 @@ import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
+import { announcementHooks } from '@/services/announcements/announcementHooks';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 // Static, not dynamic: both land in the same background iife, so a dynamic
 // import buys no code splitting — it only pushes the module's declaration later
@@ -729,6 +730,9 @@ export class WalletManager {
           }
           this.crossDevice?.onCrossDeviceMessage(raw);
         },
+        // Broadcast announcements: the feed's version number. The engine decides whether to read
+        // the feed; nothing from the frame is trusted or shown.
+        onAnnouncements: (seq: unknown) => announcementHooks.feedChanged(seq),
         // A new socket (connect and every reconnect): every earlier challenge is
         // gone. Sends nothing itself. The relay's DEVICE_CHALLENGE triggers the one
         // signed registration; only if none arrives within 5 s does the legacy
@@ -812,6 +816,8 @@ export class WalletManager {
               await walletBg.syncService.applyBitcoinSync(data);
             });
           },
+          // Broadcast announcements reach every session, whatever its chain.
+          onAnnouncements: (seq: unknown) => announcementHooks.feedChanged(seq),
           onRollback: async (data: WsSyncMessage) => {
             // Phase 4: height-based BTC rollback. Serialized under tipMutex so it can't
             // race a concurrent SYNC apply. `rollback_to_height` is snake_case (BTC-specific).

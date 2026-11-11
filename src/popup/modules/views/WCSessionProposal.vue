@@ -51,7 +51,7 @@
           </v-btn>
         </v-col>
         <v-col cols="6">
-          <v-btn block class="geroButton" style="color: black!important;" :disabled="!consent || hasUnsupportedChains" @click="approve" :loading="loading">
+          <v-btn block class="geroButton" :disabled="!consent || hasUnsupportedChains" @click="approve" :loading="loading">
             {{ $t('walletConnect.approve') }}
           </v-btn>
         </v-col>

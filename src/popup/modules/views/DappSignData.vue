@@ -49,7 +49,6 @@
                 v-else
                 block
                 class="geroButton"
-                style="color: black!important;"
                 @click="sign"
                 :disabled="loading"
                 :loading="loading"
@@ -86,7 +85,6 @@
               <v-btn
                 block
                 class="geroButton"
-                style="color: black!important;"
                 @click="sign"
                 :loading="loading"
                 :disabled="!valid || loading">
@@ -162,7 +160,6 @@
             v-if="!keystoneScan"
             size="small"
             class="geroButton"
-            style="color: black!important;"
             @click="keystoneScan = true"
           >
             {{ $t('common.next') }}

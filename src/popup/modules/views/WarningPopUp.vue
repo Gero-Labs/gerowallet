@@ -32,9 +32,9 @@
             </v-icon>
             {{ $t('navigation.backToSafety') }}
           </v-btn>
-          <v-btn class="geroButton" @click="proceed" :disabled="!valid" style="text-transform: uppercase; color: black!important;">
+          <v-btn class="geroButton" @click="proceed" :disabled="!valid" style="text-transform: uppercase;">
             {{ $t('navigation.continueToSite') }}
-            <v-icon size="small" class="mr-1" style="color: black!important;">
+            <v-icon size="small" class="mr-1">
               mdi-arrow-right
             </v-icon>
           </v-btn>

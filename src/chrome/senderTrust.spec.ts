@@ -25,6 +25,11 @@ describe('isOwnExtensionPageSender', () => {
     expect(isOwnExtensionPageSender(sender, CHROME)).toBe(true);
   });
 
+  it('accepts the extension\'s own service worker (its script url, no origin, no tab)', () => {
+    const sender = { id: OWN, url: `chrome-extension://${OWN}/background/index.js` } as unknown as S;
+    expect(isOwnExtensionPageSender(sender, CHROME)).toBe(true);
+  });
+
   it('rejects a content script (own id + tab, but http page url)', () => {
     const sender = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
     expect(isOwnExtensionPageSender(sender, CHROME)).toBe(false);
@@ -46,6 +51,13 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('REQUEST_CROSS_DEVICE_SIGNATURE')).toBe(true);
     expect(EXTENSION_PAGE_ONLY_METHODS.has('WC_PAIR')).toBe(false);
     expect(EXTENSION_PAGE_ONLY_METHODS.has('SIGN_TX')).toBe(false);
+  });
+
+  it('gates the announcement messages (a web page must not mark Gero’s notices read or switch them off)', () => {
+    for (const method of ['ANNOUNCEMENTS_REFRESH', 'ANNOUNCEMENT_READ', 'ANNOUNCEMENT_DISMISS_BANNER', 'ANNOUNCEMENTS_SET_PREFS']) {
+      expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);
+      expect(CONTENT_SCRIPT_OPTIONS_METHODS.has(method)).toBe(false);
+    }
   });
 
   it('gates the support-chat handshake (it takes spending auth and signs with the stake key)', () => {

@@ -156,13 +156,13 @@
         {{ $t('navigation.back') }}
       </v-btn>
       <v-spacer></v-spacer>
-      <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton" style="color: var(--g-on-grad)!important">
+      <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton">
         {{ $t('navigation.continue') }}
-        <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-arrow-right</v-icon>
+        <v-icon size="small" class="ml-1">mdi-arrow-right</v-icon>
       </v-btn>
-      <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton" style="color: var(--g-on-grad)!important">
+      <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton">
         {{ $t('navigation.submitReport') }}
-        <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-file-document-outline</v-icon>
+        <v-icon size="small" class="ml-1">mdi-file-document-outline</v-icon>
       </v-btn>
     </v-card-actions>
   </BaseDialog>

@@ -196,6 +196,13 @@ export enum MessageTypes {
   // a listing it verified itself, and only compares what the page names (listingWatch.ts). Extension pages only.
   NOTIFY_WATCH_LISTINGS = 'NOTIFY_WATCH_LISTINGS',
   NOTIFY_INTRO_ANSWER = 'NOTIFY_INTRO_ANSWER', // page -> worker: the offer to turn notifications on was answered (notifyIntro.ts)
+  // Broadcast announcements (services/announcements). Extension pages only. The worker is the only
+  // one that fetches, verifies and stores them; a page can only ask for a refresh, mark one read,
+  // dismiss the banner and set which kinds it wants. No message carries announcement content.
+  ANNOUNCEMENTS_REFRESH = 'ANNOUNCEMENTS_REFRESH',
+  ANNOUNCEMENT_READ = 'ANNOUNCEMENT_READ', // { id } or {} for all
+  ANNOUNCEMENT_DISMISS_BANNER = 'ANNOUNCEMENT_DISMISS_BANNER', // { id }
+  ANNOUNCEMENTS_SET_PREFS = 'ANNOUNCEMENTS_SET_PREFS', // { off: ('product' | 'news')[] }
   // The CIP-113 signing refusal for a signer outside the worker (Trezor over WebUSB,
   // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.
   // Answers { success, refused }. Extension-page-only (senderTrust).

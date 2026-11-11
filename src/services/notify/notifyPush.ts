@@ -15,9 +15,14 @@
 //
 // Dependencies are injected for the unit tests; notifyBackground.ts binds them.
 
-import { parsePushPayload } from './notifyPayload';
-import { renderPush, routeFor, type NotificationData, type NotifyAsset, type RenderedPush, type RouteIntent, type TokenLookup } from './notifyRender';
+import { pushStrings } from '@/plugins/i18n/push';
+import type { PushLookup, StoredAnnouncement } from '@/services/announcements/announcementStore';
+import { announcementTag, parsePushPayload, type PushPayload } from './notifyPayload';
+import { pushLocale, renderPush, routeFor, type NotificationData, type NotifyAsset, type RenderedPush, type RouteIntent, type TokenLookup } from './notifyRender';
 import type { NotifyStore } from './notifyStore';
+
+/** The one tag every announcement push that could not be verified is shown under. */
+export const GENERIC_ANNOUNCEMENT_TAG = 'announcement-generic';
 
 export interface ToastRequest {
   e: string;
@@ -26,6 +31,8 @@ export interface ToastRequest {
   route: RouteIntent;
   walletId: number | null;
   assets?: NotifyAsset[];
+  /** Set when the toast is a verified broadcast announcement: the id the page opens. */
+  announcementId?: string;
 }
 
 export interface NotifyPushDeps {
@@ -40,6 +47,12 @@ export interface NotifyPushDeps {
   loggedWalletId: () => Promise<number | null>;
   /** Focus or open the dashboard on this route (B4). */
   openDashboard: (route: RouteIntent) => Promise<void>;
+  /**
+   * The broadcast announcement with this id, fetched and signature-verified by the worker, or none
+   * (announcementEngine.forPush). `kind` is the push's own claim, used only to stay quiet about a
+   * kind the user switched off. Absent: every announcement push shows the generic text.
+   */
+  announcement?: (aid: string, kind?: string) => Promise<PushLookup>;
   iconUrl: string;
   now?: () => number;
   log?: (message: string) => void;
@@ -63,9 +76,64 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
     return { walletId, name: await deps.walletName(walletId) };
   }
 
+  /**
+   * A broadcast announcement (t = announcement). It belongs to no wallet, so it never reaches the
+   * wallet lookup: an absent `w` here is not an unknown wallet and must not queue a DELETE.
+   *
+   * The push carries an id and no text. The words shown are either the announcement's own, once the
+   * worker has fetched it and verified its signature (deps.announcement), or the two fixed strings
+   * from push.ts. Nothing else can be shown, whoever sent the push. It is not added to the inbox:
+   * announcements have their own store, which only verified documents enter.
+   *
+   * A push the wallet knows is not for this user (its kind is switched off, it is for another
+   * network or version, it was taken down) cannot simply be dropped: the subscription is
+   * userVisibleOnly, so Chrome requires a notification. It gets the generic text without a sound,
+   * under the one shared tag, and no in-page snackbar.
+   */
+  async function handleAnnouncementPush(p: PushPayload): Promise<RenderedPush> {
+    const locale = pushLocale(await deps.locale());
+    const aid = p.x?.aid;
+    let item: StoredAnnouncement | null = null;
+    let quiet = false;
+    if (aid && deps.announcement) {
+      try {
+        const found = await deps.announcement(aid, p.x?.kind);
+        item = found.item;
+        quiet = found.item === null && found.quiet;
+      } catch (e) { log(`announcement lookup failed: ${String(e)}`); }
+    }
+    const text = item ? (item.document.content[locale === 'us' ? 'en' : locale] ?? item.document.content['en']) : undefined;
+    // A headline (feed tier) is signed by the key the server holds, so the least of it is shown: its
+    // title and a fixed line that says where it is from. Its summary never reaches a notification.
+    const shown = item && text && aid ? { aid, title: text.title, body: item.tier === 'feed' ? pushStrings[locale].PUSH_ANNOUNCEMENT_BLOG : text.summary } : null;
+    const verified = shown !== null;
+    const title = shown ? shown.title : pushStrings[locale].PUSH_ANNOUNCEMENT_TITLE;
+    const body = shown ? shown.body : pushStrings[locale].PUSH_ANNOUNCEMENT_BODY;
+    // The tag comes from the verified id, not from the push's own `e`. Unverified ones share one tag,
+    // so a flood of them is one notification.
+    const tag = shown ? announcementTag(shown.aid) : GENERIC_ANNOUNCEMENT_TAG;
+    const details = shown ? { aid: shown.aid } : undefined;
+    const route = routeFor('announcement', details, verified);
+    const timestamp = p.ts || now();
+    const data: NotificationData = { v: p.v, t: 'announcement', c: p.c, w: '', e: tag, d: 'announcement', ...(details ? { x: details } : {}), walletId: null, degraded: verified ? 'none' : 'generic' };
+    await deps.store.markSeen(tag, now());
+    let presented = false;
+    if (!quiet) {
+      try {
+        presented = await deps.presentToPages({ e: tag, title, body, route, walletId: null, ...(shown ? { announcementId: shown.aid } : {}) });
+      } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
+    }
+    if (!presented) {
+      await deps.showNotification(title, { body, icon: deps.iconUrl, tag, silent: quiet, renotify: false, requireInteraction: false, timestamp, data });
+    }
+    log(`announcement push shown: verified=${verified} quiet=${quiet} inPage=${presented}`);
+    return { title, body, tag, requireInteraction: false, timestamp, data, route, unknownWalletTag: null };
+  }
+
   return {
     async handlePush(text) {
       const parsed = parsePushPayload(text ?? '');
+      if (parsed.ok && parsed.payload.t === 'announcement') return handleAnnouncementPush(parsed.payload);
       const wallet = parsed.ok ? await walletFor(parsed.payload.w) : null;
       const rendered = renderPush({ parsed, wallet, locale: await deps.locale(), now: now(), tokenInfo: deps.tokenInfo });
       if (rendered.unknownWalletTag) {

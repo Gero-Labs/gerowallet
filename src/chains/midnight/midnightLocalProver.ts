@@ -2,9 +2,9 @@
  * Wallet-side Midnight proof-server integration.
  *
  * Hand-rolled `ledger.ProvingProvider` for any HTTP proof server exposing
- * the NATIVE proof-server API — the self-hosted docker server
- * (`docker run -p 6300:6300 midnightntwrk/proof-server:<tag>
- * midnight-proof-server -v`, default `http://localhost:6300`) and the
+ * the NATIVE proof-server API — the self-hosted docker server (the
+ * command is `midnightProofServerCommand()` in midnightConfig.ts, default
+ * `http://localhost:6300`) and the
  * hosted Arkhia zkPaaS gateway (which relays the same API behind
  * `x-api-key`/`x-api-secret` auth, see midnightZkpaas.ts) — plus a
  * `/health` poller. Deliberately NOT a wrapper around

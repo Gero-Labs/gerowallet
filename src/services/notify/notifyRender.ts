@@ -183,8 +183,34 @@ export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: 
     case 'nftListings': return withHighlight({ dashboard: '/?view=collectibles', sidepanel: null });
     case 'governance': return withHighlight({ dashboard: deepLinks && x?.drepId ? `/governance/dreps/${x.drepId}` : '/governance/me', sidepanel: null });
     case 'pairedDevices': return withHighlight({ dashboard: '/', sidepanel: null, settingsTab: 'security' });
+    // A broadcast announcement: the page opens it by id from what the worker verified and stored.
+    // Without a verified id there is nothing to open, so it is home.
+    case 'announcement': return deepLinks && x?.aid ? { dashboard: `/?announcement=${x.aid}`, sidepanel: `/?announcement=${x.aid}` } : { dashboard: '/', sidepanel: '/' };
     default: return { dashboard: '/', sidepanel: '/' }; // home, signRequest, adam, unknown
   }
+}
+
+// Every route routeFor() can return, and nothing else. The tx and DRep patterns are the ones
+// notifyPayload.ts accepts for `x`. Add a destination to routeFor() and here together:
+// notifyRender.spec.ts runs each destination through isPushRoute().
+const DASHBOARD_ROUTE = /^\/(?:|transactions(?:\?tx=[0-9a-f]{64})?|staking|swap|\?view=collectibles|governance\/(?:me|dreps\/drep1[a-z0-9]{6,}))$/;
+const SIDEPANEL_ROUTES: ReadonlySet<string> = new Set(['/', '/activity', '/staking']);
+// An announcement opens by id on both surfaces; the id pattern is notifyPayload.ts's for `aid`.
+const ANNOUNCEMENT_ROUTE = /^\/\?announcement=[0-9A-HJKMNP-TV-Z]{26}$/;
+
+/**
+ * True when `route` is one routeFor() can return. A page checks this before it follows a route
+ * that reached it in a message (NOTIFY_PRESENT), so a message can never send the router to an
+ * arbitrary path or open the Security tab from a route other than pairedDevices'.
+ */
+export function isPushRoute(route: unknown): route is RouteIntent {
+  if (!route || typeof route !== 'object') return false;
+  const r = route as { dashboard?: unknown; sidepanel?: unknown; settingsTab?: unknown };
+  if (typeof r.dashboard === 'string' && ANNOUNCEMENT_ROUTE.test(r.dashboard)) return r.sidepanel === r.dashboard && r.settingsTab === undefined;
+  if (typeof r.dashboard !== 'string' || !DASHBOARD_ROUTE.test(r.dashboard)) return false;
+  if (r.sidepanel !== null && !(typeof r.sidepanel === 'string' && SIDEPANEL_ROUTES.has(r.sidepanel))) return false;
+  if (r.settingsTab !== undefined && !(r.settingsTab === 'security' && r.dashboard === '/')) return false;
+  return true;
 }
 
 export function renderPush(input: RenderInput): RenderedPush {

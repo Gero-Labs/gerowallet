@@ -118,7 +118,6 @@
                 v-else
                 block
                 class="geroButton"
-                style="color: black!important;"
                 @click="sign"
                 :disabled="txSignLoading || signBlocked"
                 :loading="txSignLoading"
@@ -159,7 +158,7 @@
             </v-col>
             <!-- Hide action button for PRF wallets (handled above) -->
             <v-col cols="6" v-if="!isPrfWallet">
-              <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading || signBlocked" :loading="txSignLoading">
+              <v-btn block class="geroButton" @click="sign" :disabled="!valid || txSignLoading || signBlocked" :loading="txSignLoading">
                 {{txAutoSubmit ? $t('wallet.signAndConfirm') : !witnesses ? $t('wallet.sign') : $t('common.confirm')}}
               </v-btn>
             </v-col>
@@ -235,7 +234,6 @@
             v-if="!keystoneScan"
             size="small"
             class="geroButton"
-            style="color: black!important;"
             @click="keystoneScan = true"
           >
             {{ $t('common.next') }}

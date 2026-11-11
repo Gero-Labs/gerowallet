@@ -38,7 +38,7 @@
                 @error="handlePassKeyAuthError"
                 block class="mb-2"
               />
-              <v-btn v-else block class="geroButton" style="color: black!important;" @click="returnSigned" :disabled="loading" :loading="loading">
+              <v-btn v-else block class="geroButton" @click="returnSigned" :disabled="loading" :loading="loading">
                 {{ $t('common.confirm') }}
               </v-btn>
             </v-col>
@@ -71,7 +71,7 @@
               </v-btn>
             </v-col>
             <v-col cols="6" v-if="!isPrfWallet">
-              <v-btn block class="geroButton" style="color: black!important;" @click="sign" :loading="loading" :disabled="!canSign || loading">
+              <v-btn block class="geroButton" @click="sign" :loading="loading" :disabled="!canSign || loading">
                 {{ $t('wallet.sign') }}
               </v-btn>
             </v-col>
@@ -105,7 +105,7 @@
           <v-btn variant="text" size="small" @click="backKeystoneScan" class="mr-2">
             {{ keystoneScan ? $t('common.back') : $t('common.cancel') }}
           </v-btn>
-          <v-btn v-if="!keystoneScan" size="small" class="geroButton" style="color: black!important;" @click="keystoneScan = true">
+          <v-btn v-if="!keystoneScan" size="small" class="geroButton" @click="keystoneScan = true">
             {{ $t('common.next') }}
           </v-btn>
         </div>
