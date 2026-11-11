@@ -471,11 +471,20 @@ export async function addPendingMidnightTx(
   counterparty: string,
   isShielded: boolean,
   token: string = 'NIGHT',
+  /** The sending wallet's unshielded address: the background records the row only for that wallet. */
+  fromAddress?: string,
+  /**
+   * Whether `hash` is the ledger hash (the one the indexer and the history feed
+   * know). The submit routes return the extrinsic hash as `txHash` and the
+   * ledger hash, best effort, as `ledgerTxHash`; a row keyed by the extrinsic
+   * hash can't be looked up or matched later.
+   */
+  ledgerHash = false,
 ): Promise<void> {
   try {
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ADD_MIDNIGHT_PENDING_TX,
-      data: { hash, amount: amount.toString(), counterparty, isShielded, token },
+      data: { hash, amount: amount.toString(), counterparty, isShielded, token, fromAddress, ledgerHash },
     });
   } catch {
     /* optimistic-only — gero-sync will deliver the confirmed entry anyway */
@@ -837,12 +846,19 @@ export async function shieldNight(
   return assertNativeNightConversionSupported();
 }
 
-/** Result of native NIGHT registration for DUST generation. */export type DustRegistrationStatus = 'registered' | 'no_night_utxos' | 'failed';
+/**
+ * Result of native NIGHT registration for DUST generation. `submitted`: the
+ * server took the transaction; it is not registered until the chain shows it
+ * (the dialog keeps a pending state until then, midnightDustRegistrationPending.ts).
+ */
+export type DustRegistrationStatus = 'submitted' | 'no_night_utxos' | 'failed';
 
 export interface DustRegistrationOutcome {
   status: DustRegistrationStatus;
-  /** Present on `registered`. */
+  /** Present on `submitted`. */
   txHash?: string;
+  /** Present on `submitted`: how far the server saw it go (`Submitted`, `InBlock`, `Finalized`). */
+  submitStatus?: string;
   /** Human-readable detail for `no_night_utxos` / `failed`. */
   message?: string;
   /** For a `failed` server answer: what it means (midnightApiError.ts). */
@@ -893,7 +909,9 @@ export async function registerNightForDust(
       unprovenTxHex: built.unprovenTxHex,
       signatureHex: signed[0].signatureHex,
     });
-    return { status: 'registered', txHash: res.txHash };
+    // Any 200 is "submitted", whatever its status says: registered is what the
+    // chain shows later, not what the submit route answered.
+    return { status: 'submitted', txHash: res.txHash, submitStatus: res.status };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // Classify by the server's own sentence; `message` is already the readable one.

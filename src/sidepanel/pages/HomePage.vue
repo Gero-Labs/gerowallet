@@ -24,7 +24,7 @@
     <template v-else>
       <!-- Midnight: the notices above the balance, at most two by precedence
            (MidnightNoticeSlot.vue). Renders nothing otherwise. -->
-      <MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner" />
+      <MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner" @send-again="showMidnightSend = true" />
 
       <BalanceSection @buy-sell="handleBuySell" />
 

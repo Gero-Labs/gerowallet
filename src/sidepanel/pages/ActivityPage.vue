@@ -7,7 +7,8 @@
         <v-icon size="56" color="var(--g-text-3)">mdi-history</v-icon>
         <div class="text-body-1 white--text mt-3">{{ $t('miniGero.noTransactions') }}</div>
       </div>
-      <div v-else class="tx-list" :class="{ 'g-stale': midnightRefreshing }">
+      <!-- Focus lands on the list after a pending row is dismissed (MidnightPendingRowStatus.vue). -->
+      <div v-else class="tx-list" :class="{ 'g-stale': midnightRefreshing }" tabindex="-1" data-pending-list data-pending-list-heading>
         <div
           v-for="tx in midnightTxs"
           :key="tx.hash"
@@ -21,6 +22,8 @@
           <div class="tx-info">
             <div class="tx-title tx-title--midnight text-body-2">{{ midnightTxLabel(tx) }}</div>
             <div class="tx-time text-caption grey--text">{{ formatTimestamp(tx.timestamp) }}</div>
+            <!-- A pending send past its time limit: "Not confirmed", Check again, Dismiss. -->
+            <MidnightPendingRowStatus v-if="tx.status === 'pending' || hasPendingOutcome(tx)" :tx="tx" />
           </div>
           <div class="tx-amount-col text-right">
             <div
@@ -86,6 +89,8 @@ import { ref, shallowRef, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
+import MidnightPendingRowStatus from '@/modules/dashboard/components/MidnightPendingRowStatus.vue';
+import { hasPendingOutcome } from '@/shared/composables/useMidnightPendingActions';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { formatTokenAmount } from '@/chains/midnight/midnightAmount';

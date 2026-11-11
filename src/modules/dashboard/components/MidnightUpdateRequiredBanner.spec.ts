@@ -130,7 +130,7 @@ describe('"Update required" banner', () => {
     const slot = readFileSync(join(src, 'modules/dashboard/components/MidnightNoticeSlot.vue'), 'utf8');
     const home = readFileSync(join(src, 'sidepanel/pages/HomePage.vue'), 'utf8');
     expect(slot).toContain('update: MidnightUpdateRequiredBanner,');
-    expect(slot).toContain("return id === 'update' ? { block: props.layout === 'panel' } : {};");
+    expect(slot).toContain("if (id === 'update') return { block: props.layout === 'panel' };");
     // Send held for either reason; the line under it says "update" when that is the reason.
     expect(home).toContain('const midnightSendPaused = midnightSendHold.held;');
     expect(home).toContain('const midnightSendHeldText = midnightSendHold.sendTextShort;');

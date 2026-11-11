@@ -472,6 +472,7 @@ import { computed, nextTick, onBeforeUnmount, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
+import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import TransactionDetailsCard, {
@@ -1383,7 +1384,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
     // Into this wallet's history only: after a wallet switch it would land in another's.
-    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft);
+    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft, false, { ledgerHash: !!result.ledgerTxHash, fromAddress: wallet.baseAddress });
     if (!current()) return;
     // Brief completed-state hold so the user sees the timeline finish.
     await new Promise((r) => setTimeout(r, 550));
@@ -1467,7 +1468,9 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a', 'status:', result.status);
     // Accepted: in history right away, whether or not this view is still current
     // (but only this wallet's history).
-    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHashForSubmittedTx(result), draft, true);
+    if (isSameWallet(wallet)) {
+      void addOptimisticPendingTx(historyHashForSubmittedTx(result), draft, true, { ledgerHash: !!result.ledgerTxHash, fromAddress: wallet.baseAddress });
+    }
     if (!current()) return;
     await new Promise((r) => setTimeout(r, 550));
     if (!current()) return;
@@ -1501,11 +1504,18 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
 // Insert the just-submitted tx into history immediately, from the values the
 // send started with (a later resetForm can't blank them out). Not tied to the
 // view: an accepted transaction gets its pending row even if the dialog is gone.
-async function addOptimisticPendingTx(hash: string, draft: { amount: bigint; to: string; token: string }, shielded = false) {
+async function addOptimisticPendingTx(
+  hash: string,
+  draft: { amount: bigint; to: string; token: string },
+  shielded: boolean,
+  sent: { ledgerHash: boolean; fromAddress: string },
+) {
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
     // Preserve the selected public or private custom token in pending history.
-    await addPendingMidnightTx(hash, draft.amount, draft.to, shielded, draft.token);
+    // `ledgerHash`: whether `hash` is the ledger hash the indexer knows (midnightPendingSends.ts);
+    // `fromAddress`: the background records the row only into the sending wallet's history.
+    await addPendingMidnightTx(hash, draft.amount, draft.to, shielded, draft.token, sent.fromAddress, sent.ledgerHash);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -1525,6 +1535,22 @@ function onDialogClose() {
   clearSendOutcome();
   emit('close');
 }
+
+/**
+ * "Send again" for a send that never went through (midnightPendingSends.ts):
+ * the dialog opens at step 1 with the recipient, token and amount filled in,
+ * and waits for the user.
+ */
+function applySendAgain() {
+  const prefill = takeMidnightSendPrefill();
+  if (!prefill) return;
+  activeTab.value = prefill.shielded ? 1 : 0;
+  selectedToken.value = prefill.token || 'NIGHT';
+  recipient.value = prefill.recipient;
+  amount.value = toAmountInput(prefill.amount, selectedDecimals.value);
+  currentStep.value = 1;
+}
+watch(() => props.isOpen, (open) => { if (open) applySendAgain(); }, { immediate: true });
 
 function resetForm() {
   recipient.value = '';

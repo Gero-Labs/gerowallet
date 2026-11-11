@@ -38,6 +38,21 @@ export const SUBMITTED_TX_QUERY = `query GeroSubmittedTx($id: HexEncoded!) {
   }
 }`;
 
+/**
+ * The same lookup by the ledger hash a history row carries, for a pending row
+ * the wallet checks again later (midnightPendingSends.ts): pending rows keep
+ * the hash, not the identifiers. With the indexer's latest block, so "not
+ * found" can be told apart from "not indexed that far yet".
+ */
+export const PENDING_TX_QUERY = `query GeroPendingTx($hash: HexEncoded!) {
+  transactions(offset: {hash: $hash}) {
+    __typename
+    hash
+    ... on RegularTransaction { transactionResult { status } }
+  }
+  block { height timestamp }
+}`;
+
 const LOST_REPLY_CODES: ReadonlySet<string> = new Set(['ECONNABORTED', 'ETIMEDOUT', 'ERR_NETWORK']);
 // Gateway and Cloudflare "the origin did not answer in time" statuses.
 const LOST_REPLY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504, 520, 522, 524]);

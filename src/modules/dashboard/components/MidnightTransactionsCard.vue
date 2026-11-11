@@ -5,9 +5,11 @@
   <v-card
     variant="outlined"
     class="fill-height d-flex flex-column glass-panel recent-tx-card"
+    data-pending-list
   >
     <div class="recent-tx-header flex-grow-0">
-      <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
+      <!-- Focus lands here after a pending row is dismissed (MidnightPendingRowStatus.vue). -->
+      <span class="recent-tx-heading" tabindex="-1" data-pending-list-heading>{{ $t('dashboard.recentTransactions') }}</span>
       <router-link to="/transactions" class="recent-tx-view-all">
         {{ $t('dashboard.viewAll') }}
       </router-link>
@@ -44,6 +46,8 @@
             <div class="recent-tx-time">
               <span v-if="tx.counterparty">{{ shortAddress(tx.counterparty) }} · </span>{{ formatTime(tx.timestamp) }}
             </div>
+            <!-- A pending send past its time limit: "Not confirmed", Check again, Dismiss. -->
+            <MidnightPendingRowStatus v-if="tx.status === 'pending' || hasPendingOutcome(tx)" :tx="tx" />
           </div>
           <div class="recent-tx-amount-wrap">
             <span class="recent-tx-amount" :style="{ color: amountColor(tx.type) }">
@@ -75,6 +79,8 @@ import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import { useNow } from '@/shared/composables/useNow';
+import MidnightPendingRowStatus from './MidnightPendingRowStatus.vue';
+import { hasPendingOutcome } from '@/shared/composables/useMidnightPendingActions';
 
 const { t } = useTranslation();
 const { refreshing: midnightRefreshing } = useMidnightRefresh();

@@ -78,8 +78,8 @@ describe('Midnight Stagenet notice (issue 1477, step 1)', () => {
     const portfolio = readFileSync(join(src, 'modules/portfolio/PortfolioPage.vue'), 'utf8');
     const home = readFileSync(join(src, 'sidepanel/pages/HomePage.vue'), 'utf8');
     const slot = readFileSync(join(src, 'modules/dashboard/components/MidnightNoticeSlot.vue'), 'utf8');
-    expect(portfolio).toContain('<MidnightNoticeSlot class="portfolio-upgrade-banner" />');
-    expect(home).toContain('<MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner" />');
+    expect(portfolio).toContain('<MidnightNoticeSlot class="portfolio-upgrade-banner"');
+    expect(home).toContain('<MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner"');
     expect(slot).toContain('stagenet: MidnightStagenetNotice,');
   });
 });

@@ -1,4 +1,5 @@
 import { MidnightGenerationQueue, clearMidnightNetworkCheckpoints } from '@/chains/midnight/midnightSyncGeneration';
+import { checkPendingTx, keptRowsToCheck, keptRowsRetryDelay } from '@/chains/midnight/midnightPendingSends';
 /**
  * Midnight Sync Service
  *
@@ -221,6 +222,10 @@ class MidnightSyncService {
   private refreshTracker: MidnightRefreshTracker | null = null;
   /** Re-checks a running rebuild; armed only while one runs. */
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Looks kept sends up again after a lookup that gave no verdict; armed only then. */
+  private keptRowsTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Lookups in a row that gave no verdict, for the retry's backoff. */
+  private keptRowsAttempts = 0;
 
   /**
    * Start syncing a Midnight wallet. Idempotent — calling start while already
@@ -316,15 +321,24 @@ class MidnightSyncService {
     this.writeStatusTimer = setInterval(() => { void refreshMidnightWriteStatus(network, { force: true }); }, MIDNIGHT_STATUS_POLL_MS);
     // A rebuild that was running when this session last stopped picks up again,
     // also when the worker restarted in between (its snapshot is persisted).
+    let restoringRefresh: Promise<unknown> = Promise.resolve();
     if (midnightStore.refreshing && midnightStore.refreshSnapshot) {
       this.trackRefresh(refreshTargetOf(midnightStore.refreshSnapshot.transactions), true);
     } else {
-      void midnightActions.restoreRefreshAfterRestart().then((restored) => {
+      restoringRefresh = midnightActions.restoreRefreshAfterRestart().then((restored) => {
         if (restored && this.sessionEpoch === sessionEpoch && midnightStore.refreshSnapshot && !this.refreshTracker) {
           this.trackRefresh(refreshTargetOf(midnightStore.refreshSnapshot.transactions), true);
         }
-      });
+      }).catch(() => undefined);
     }
+    // Then the pending sends, which aren't in the replay a restarted worker
+    // starts with (midnightPendingSends.ts): put them back, and ask about any
+    // that were kept through a reset and have no verdict yet. In this order, so
+    // the restored refresh is in place before the pending rows land.
+    this.keptRowsAttempts = 0;
+    void restoringRefresh.then(() => midnightActions.restorePendingAfterRestart()).then(() => {
+      if (this.sessionEpoch === sessionEpoch) void this.checkKeptPendingRows();
+    });
   }
 
   private refreshTipFromNexus(network: string): Promise<void> {
@@ -374,6 +388,7 @@ class MidnightSyncService {
     this.writeStatusTimer = null;
     this.tipRequest = null;
     this.stopRefreshTracking();
+    this.stopKeptRowsRetry();
     if (!this.active) return;
     webSocketService.close();
     midnightActions.setNetworkStatus('disconnected');
@@ -399,9 +414,10 @@ class MidnightSyncService {
    */
   forceResync(): void {
     if (!this.active) return;
-    // The rebuild shows "Refreshing" over what was on screen (midnightRefresh.ts).
+    // The rebuild shows "Refreshing" over what was on screen (midnightRefresh.ts);
+    // pending sends stay in the history it rebuilds (midnightPendingSends.ts).
     this.beginRefresh();
-    midnightActions.setTransactions([]);
+    midnightActions.clearHistoryKeepingPending();
     midnightActions.setUtxos([]);
     // Fire-and-forget: clearing the SDK state blobs is best-effort and must
     // not block the WS resubscribe. Clear ALL of them (no network scope) —
@@ -438,6 +454,8 @@ class MidnightSyncService {
     const now = Date.now();
     this.refreshTracker = { startedAt: now, lastFrameAt: now, lastTxAt: now, target, sameChain };
     this.scheduleRefreshCheck();
+    // Kept sends are looked up when this rebuild ends, not before.
+    this.stopKeptRowsRetry();
   }
 
   private stopRefreshTracking(): void {
@@ -466,10 +484,61 @@ class MidnightSyncService {
     if (verdict === 'done') {
       this.stopRefreshTracking();
       midnightActions.endRefresh();
+      // Only now, with the rebuild done, ask about the sends kept through the reset.
+      this.keptRowsAttempts = 0;
+      void this.checkKeptPendingRows();
       return;
     }
     midnightActions.setRefreshStatus({ stalled: verdict === 'stalled' });
     if (!this.refreshTimer) this.scheduleRefreshCheck();
+  }
+
+  /**
+   * Look up each send kept through a chain reset (midnightPendingSends.ts):
+   * confirmed or rejected settles the row; not found by an indexer past the
+   * send's time to live marks it "didn't go through". A lookup that gave no
+   * verdict (failed, or too early) leaves the row and tries again later, with
+   * a backoff, while this session runs; the next session start or rebuild end
+   * tries too. Rows keyed by an extrinsic hash can't be looked up and stay
+   * "Not confirmed". Never while a rebuild runs.
+   */
+  private async checkKeptPendingRows(): Promise<void> {
+    const network = this.currentNetwork;
+    if (!network || midnightStore.refreshing) return;
+    const rows = keptRowsToCheck(midnightStore.transactions);
+    if (!rows.length) return;
+    const epoch = this.sessionEpoch;
+    const api = getMidnightApi(network);
+    const undecided: typeof rows = [];
+    let failed = false;
+    for (const tx of rows) {
+      const current = () => this.sessionEpoch === epoch && !midnightStore.refreshing;
+      const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), tx, current);
+      if (!current()) return;
+      if (outcome === 'notFound') midnightActions.markPendingNotIncluded(tx.hash, tx.token);
+      else if (outcome === 'confirmed' || outcome === 'failed') midnightActions.settlePendingTx(tx.hash, tx.token, outcome);
+      else {
+        undecided.push(tx);
+        if (outcome === 'unknown') failed = true;
+      }
+    }
+    if (!undecided.length) {
+      this.keptRowsAttempts = 0;
+      return;
+    }
+    const delay = keptRowsRetryDelay(undecided, this.keptRowsAttempts, failed, Date.now());
+    this.keptRowsAttempts += 1;
+    if (delay === null) return;
+    this.stopKeptRowsRetry();
+    this.keptRowsTimer = setTimeout(() => {
+      this.keptRowsTimer = null;
+      if (this.sessionEpoch === epoch) void this.checkKeptPendingRows();
+    }, delay);
+  }
+
+  private stopKeptRowsRetry(): void {
+    if (this.keptRowsTimer) clearTimeout(this.keptRowsTimer);
+    this.keptRowsTimer = null;
   }
 
   /** A frame arrived for a running rebuild: any frame shows the connection lives; one with transactions moves it. */
@@ -668,7 +737,7 @@ class MidnightSyncService {
   private async handleForceResync(): Promise<void> {
     debugLog('🌙 Midnight force resync triggered');
     this.beginRefresh();
-    midnightActions.setTransactions([]);
+    midnightActions.clearHistoryKeepingPending();
     midnightActions.setUtxos([]);
     midnightActions.setNetworkStatus('connecting');
   }

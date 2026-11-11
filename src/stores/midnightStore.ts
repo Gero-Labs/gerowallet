@@ -47,6 +47,7 @@ import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTxRowKey, normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
 import { hasDataToKeep, hasShieldedFigures } from '@/chains/midnight/midnightRefresh';
 import type { MidnightRefreshReason, MidnightRefreshSnapshot, MidnightRefreshStatus } from '@/chains/midnight/midnightRefresh';
+import { pendingRowsToKeep } from '@/chains/midnight/midnightPendingSends';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -526,8 +527,17 @@ function hydrateTransactions(stored: unknown): MidnightTransaction[] {
       isShielded: !!t.isShielded,
       proofTimeMs: t.proofTimeMs,
       raw: t.raw,
+      ...(hydrateBeforeReset(t.beforeReset)),
+      ...(t.ledgerHash === true ? { ledgerHash: true } : {}),
     };
   });
+}
+
+/** A kept-through-reset mark (midnightPendingSends.ts); anything malformed is no mark. */
+function hydrateBeforeReset(value: unknown): Pick<MidnightTransaction, 'beforeReset'> {
+  const v = value as { at?: unknown; upgrade?: unknown; notFound?: unknown } | null | undefined;
+  if (!v || typeof v !== 'object' || typeof v.at !== 'number') return {};
+  return { beforeReset: { at: v.at, upgrade: v.upgrade === true, ...(v.notFound === true ? { notFound: true } : {}) } };
 }
 
 function hydrateDustState(stored: unknown): MidnightDustState | null {
@@ -792,6 +802,8 @@ let bootRecord: {
   transactions: MidnightTransaction[];
   utxos: MidnightUnshieldedUtxo[];
   refreshSnapshot: MidnightRefreshSnapshot | null;
+  /** Its pending rows are back in memory (restorePendingAfterRestart): never taken twice. */
+  pendingTaken: boolean;
   /** The bulk fields above were read (IndexedDB answered in time). */
   bulkRead: boolean;
 } | null = null;
@@ -876,6 +888,7 @@ if (context === 'background') {
       utxos: [],
       refreshSnapshot: null,
       bulkRead: false,
+      pendingTaken: false,
     };
   }, {
     migrate: true,
@@ -891,9 +904,13 @@ if (context === 'background') {
   }).catch(() => undefined);
 }
 
-/** The previous worker's history rows this worker may still show and save in place of its own. */
+/**
+ * The previous worker's history rows this worker may still show and save in place
+ * of its own. Once its pending rows are back in memory (restorePendingAfterRestart),
+ * memory decides about those: a send dismissed since stays gone.
+ */
 function bootRowsToKeep(boot: NonNullable<typeof bootRecord>): MidnightTransaction[] {
-  return boot.transactions;
+  return boot.pendingTaken ? boot.transactions.filter((tx) => tx.status !== 'pending') : boot.transactions;
 }
 
 /**
@@ -1236,13 +1253,38 @@ export const midnightActions = {
     bgDurableTouched.chainIdentity = true;
     // "Refreshing" (midnightRefresh.ts): what was on screen is kept, in the same
     // broadcast as the wipe, so no view ever renders the empty state in between.
+    // Pending sends survive the wipe too (midnightPendingSends.ts): collected
+    // before anything is cleared, from memory and from the previous worker's
+    // record (a restarted worker may not have put them back yet), once each,
+    // memory first; put back marked as sent before the reset. One the rebuilt
+    // history confirms replaces its pending copy.
+    const key = midnightStore.activeWalletKey;
+    const boot = key && bootRecord && bootRecord.activeWalletKey === key ? bootRecord : null;
+    const previous = boot ? (boot.pendingTaken ? [] : boot.transactions) : options.persisted?.transactions ?? [];
+    const seen = new Set<string>();
+    const source = [...midnightStore.transactions, ...previous].filter((tx) => {
+      const rowKey = txRowKey(tx);
+      if (seen.has(rowKey)) return false;
+      seen.add(rowKey);
+      return true;
+    });
+    const kept = pendingRowsToKeep(source, Date.now(), options.reason === 'upgrade');
     // The previous worker's record has served (what it showed is the snapshot now),
     // and the emptied fields below are this reset's own, saved as they are.
     dropBootRecord();
+    // A snapshot from the persisted record shows the sends kept here, not the
+    // record's own pending rows (one may have been dismissed since).
+    const persisted = options.persisted
+      ? {
+        ...options.persisted,
+        transactions: [...kept, ...options.persisted.transactions.filter((tx) => tx.status !== 'pending')]
+          .sort((a, b) => b.timestamp - a.timestamp),
+      }
+      : null;
     const updates: Partial<MidnightStore> = {
-      ...refreshStartFields(options.reason ?? null, options.persisted ?? null),
+      ...refreshStartFields(options.reason ?? null, persisted),
       chainIdentity: identity, privateSyncStatus: 'idle', privateSyncProgress: null, lastSync: null, tip: { ...EMPTY_TIP },
-      balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
+      balances: { ...EMPTY_BALANCES }, transactions: kept, utxos: [], dustState: null,
       lastMidnightTxId: null, provingOperations: new Map(), sendProgress: null,
       networkStatus: 'connecting',
     };
@@ -1631,6 +1673,72 @@ export const midnightActions = {
       midnightStore.transactions.unshift(tx);
     }
     broadcastFromBackground({ transactions: midnightStore.transactions });
+  },
+
+  /** A forced resync clears history, but pending sends stay (midnightPendingSends.ts). */
+  clearHistoryKeepingPending() {
+    const pending = midnightStore.transactions.filter(tx => tx.status === 'pending');
+    midnightStore.transactions = pending;
+    broadcastFromBackground({ transactions: pending });
+  },
+
+  /** Dismiss: the user is done with a pending row that never confirmed. Confirmed rows stay. */
+  dismissPendingTx(hash: string, token: string) {
+    const key = midnightTxRowKey({ hash, token });
+    const next = midnightStore.transactions.filter(tx => !(txRowKey(tx) === key && tx.status !== 'confirmed'));
+    if (next.length === midnightStore.transactions.length) return;
+    midnightStore.transactions = next;
+    broadcastFromBackground({ transactions: next });
+  },
+
+  /** The lookup after the rebuild didn't find a kept row: it didn't go through (midnightPendingSends.ts). */
+  markPendingNotIncluded(hash: string, token: string) {
+    const key = midnightTxRowKey({ hash, token });
+    let changed = false;
+    const next = midnightStore.transactions.map((tx) => {
+      if (txRowKey(tx) !== key || tx.status !== 'pending' || !tx.beforeReset || tx.beforeReset.notFound) return tx;
+      changed = true;
+      return { ...tx, beforeReset: { ...tx.beforeReset, notFound: true } };
+    });
+    if (!changed) return;
+    midnightStore.transactions = next;
+    broadcastFromBackground({ transactions: next });
+  },
+
+  /**
+   * After a worker restart the history is replayed from scratch, and pending
+   * sends are not in that replay: put back the ones in the previous worker's
+   * record for this wallet (read at boot), each unless a copy has arrived
+   * meanwhile. Once per record: a row dismissed since never comes back.
+   */
+  async restorePendingAfterRestart(): Promise<number> {
+    await bootRead;
+    const key = midnightStore.activeWalletKey;
+    const boot = key && bootRecord?.activeWalletKey === key && !bootRecord.pendingTaken ? bootRecord : null;
+    if (!boot) return 0;
+    boot.pendingTaken = true;
+    const known = new Set(midnightStore.transactions.map(txRowKey));
+    const pending = boot.transactions.filter((tx) => tx.status === 'pending' && !known.has(txRowKey(tx)));
+    if (!pending.length) return 0;
+    midnightStore.transactions = [...midnightStore.transactions, ...pending].sort((a, b) => b.timestamp - a.timestamp);
+    broadcastFromBackground({ transactions: midnightStore.transactions });
+    return pending.length;
+  },
+
+  /** Check again found the row's transaction: confirmed (it went through) or failed (rejected). */
+  settlePendingTx(hash: string, token: string, status: 'confirmed' | 'failed') {
+    const key = midnightTxRowKey({ hash, token });
+    let changed = false;
+    const next = midnightStore.transactions.map((tx) => {
+      if (txRowKey(tx) !== key || tx.status !== 'pending') return tx;
+      changed = true;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the mark is dropped with the pending state
+      const { beforeReset: _mark, ...rest } = tx;
+      return { ...rest, status };
+    });
+    if (!changed) return;
+    midnightStore.transactions = next;
+    broadcastFromBackground({ transactions: next });
   },
 
   /** Bulk-replace transactions (e.g. after catch-up). */
