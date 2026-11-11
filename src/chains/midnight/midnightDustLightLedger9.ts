@@ -1,6 +1,6 @@
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { DustAddress } from 'midnight-v9-address-format';
-import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-dust-wallet/v1';
+import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-dust-wallet/v2';
 import { dustHexBytes, type DustLightLedger, type DustSpendEvent } from './midnightDustLightSync';
 
 export const dustLedger9: DustLightLedger<ledger.DustLocalState, ledger.DustSecretKey> = {

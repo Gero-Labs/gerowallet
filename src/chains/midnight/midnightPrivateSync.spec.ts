@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
     chainIdentity: { network: 'midnight-stagenet', generation: 1, genesisHash: `0x${'ab'.repeat(32)}` } },
   wallet: { loggedWallet: { id: 7, network: 'Stagenet', chain: 'Midnight' }, isLocked: false },
 }));
-vi.mock('midnight-v9-shielded', () => ({ ShieldedWallet: h.factory }));
+vi.mock('midnight-v9-shielded', () => ({ CustomShieldedWallet: h.factory }));
 vi.mock('midnight-v9-abstractions', () => ({
   InMemoryTransactionHistoryStorage: class { getAll() { return h.history(); } },
 }));

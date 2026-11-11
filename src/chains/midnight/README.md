@@ -22,8 +22,24 @@ building/signing; sync and orchestration live in `src/services/midnight-*.ts`.
 ## SDK packages
 
 Canonical npm scope is `@midnightntwrk/*` (see ADR 0007 in midnightntwrk/midnight-wallet).
-Exception: `@midnight-ntwrk/ledger-v8` stays on the dashed scope (upstream package).
 Pinned versions live in `package.json` — don't trust docs' version tables, they drift.
+
+- Ledger 9 runs on `@midnightntwrk/ledger-v9` (exact pin) and wallet SDK 2.0.0,
+  installed under the `midnight-v9-*` aliases so they sit beside the wallet SDK
+  1.x packages the ledger 8 modules still import (`midnight-v9-dust-wallet` is
+  `wallet-sdk-dust-wallet` 5.0.0, `-shielded` and `-unshielded-wallet` 4.0.0,
+  `-address-format` 4.0.0, `-abstractions` 3.0.0, all exact).
+- In SDK 2 each wallet package has two variants: `…/v1` runs ledger 8
+  (`@midnightntwrk/ledger-v8`) and `…/v2` runs ledger 9. Ledger 9 modules import
+  `…/v2` only. `tsconfig.json` maps each `/v2` subpath, because the repository's
+  legacy resolver does not read package exports.
+- SDK 2 hands transactions back as `WalletTransaction` handles stamped with their
+  protocol version. Read their bytes with `handle.serialize()` and this module's
+  ledger (`midnightShieldedWallet9.ts`): each SDK package installs its own copy of
+  the abstractions package, and a copy refuses a handle another copy sealed.
+- SDK 2 rejects ledger 8 objects from the old dashed `@midnight-ntwrk/ledger-v8`;
+  its ledger 8 side needs `@midnightntwrk/ledger-v8`. The ledger 8 modules here
+  still use the dashed package with SDK 1.x, which is a separate stack.
 
 ## Transaction requirements
 

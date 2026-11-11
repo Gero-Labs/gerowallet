@@ -1,6 +1,6 @@
-/** The Stagenet rc.3 stack is isolated from Mainnet/Preprod's ledger 8 SDK. */
+/** Ledger 9 (`@midnightntwrk/ledger-v9`) with wallet SDK 2.0.0, isolated from the ledger 8 SDK. */
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { createKeystore } from 'midnight-v9-unshielded-wallet';
+import { createKeystore } from 'midnight-v9-unshielded-wallet/v2';
 import type { BalanceAndSignUnshieldedTransferArgs, SyncDustAndBalanceFeesArgs } from './midnightTxBuilder';
 import { midnightLedgerVersion, strictMidnightHex } from './midnightLedger';
 import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } from './midnightChainIdentity';
@@ -8,6 +8,11 @@ import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
 import { dustLedger9, balanceLightDust9 } from './midnightDustLightLedger9';
 import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
+
+/** Wallet SDK 2's Schnorr keystore for the unshielded key on `network`. */
+export function ledger9Keystore(secret: Uint8Array, network: string) {
+  return createKeystore({ kind: 'schnorr', secret }, network);
+}
 
 /** Deserialize unproven ledger-9 transaction bytes; throws when they are not one. */
 export function readLedger9UnprovenTransaction(bytes: Uint8Array): ledger.UnprovenTransaction {
@@ -40,7 +45,7 @@ export function deserializeLedger9Transaction(network: string, hex: string): led
   return tx;
 }
 
-/** Sign only the sender's inputs using the canonical rc.3 intent envelope. */
+/** Sign only the sender's inputs using the canonical ledger 9 intent envelope. */
 export function signLedger9Transaction(
   network: string,
   hex: string,

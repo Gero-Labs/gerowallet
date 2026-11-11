@@ -1,6 +1,6 @@
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { ShieldedWallet, type ShieldedWalletState, type ShieldedTransactionHistoryEntry } from 'midnight-v9-shielded';
-import { TransactionHistory } from 'midnight-v9-shielded/v1';
+import type { ShieldedWalletState, ShieldedTransactionHistoryEntry } from 'midnight-v9-shielded';
+import { TransactionHistory } from 'midnight-v9-shielded/v2';
 import { InMemoryTransactionHistoryStorage } from 'midnight-v9-abstractions';
 import { sampleTime } from 'rxjs';
 import { walletStore } from '@/stores/walletStore';
@@ -10,6 +10,7 @@ import type { MidnightNetworkEndpoints } from './midnightConfig';
 import type { MidnightTransaction } from './midnightTypes';
 import { readVerifiedMidnightChainIdentity, midnightCheckpointNamespace, type MidnightChainIdentity } from './midnightChainIdentity';
 import { saveWalletState } from './midnightWalletStatePersistence';
+import { ledger9ShieldedWallet, type Ledger9ShieldedWallet } from './midnightShieldedWallet9';
 
 export interface MidnightPrivateSyncArgs {
   walletId: string;
@@ -53,7 +54,7 @@ async function bounded<T>(work: Promise<T>): Promise<T> {
   } finally { if (timer) clearTimeout(timer); }
 }
 
-type Wallet = ReturnType<ReturnType<typeof ShieldedWallet>['startWithSecretKeys']>;
+type Wallet = Ledger9ShieldedWallet;
 let current: PrivateSync | undefined;
 
 class PrivateSync {
@@ -122,14 +123,7 @@ class PrivateSync {
           || expected.encryptionPublicKey.toHexString() !== this.keys.encryptionPublicKey)
           throw new Error('Private key does not belong to the active wallet');
         this.history = new InMemoryTransactionHistoryStorage(TransactionHistory.ShieldedTransactionHistoryEntrySchema);
-        this.wallet = ShieldedWallet({
-          networkId: 'stagenet',
-          indexerClientConnection: {
-            indexerHttpUrl: this.args.endpoints.publicIndexerUrl,
-            indexerWsUrl: this.args.endpoints.publicIndexerWsUrl,
-          },
-          txHistoryStorage: this.history,
-        }).startWithSecretKeys(this.keys);
+        this.wallet = ledger9ShieldedWallet('stagenet', this.args.endpoints, this.history).startWithSecretKeys(this.keys);
         // Cold replay reconstructs private history too. A state-only checkpoint
         // cannot recover historical spends for a newly restored wallet.
         midnightActions.setPrivateSyncStatus('syncing');
@@ -158,7 +152,7 @@ class PrivateSync {
             }
           },
         });
-        await bounded(wallet.start(this.keys));
+        await bounded(wallet.start({ v9: this.keys }));
         // A complete event can arrive while start() is pending. The finally
         // below queues a fresh verified cycle without losing that first event.
         return;
