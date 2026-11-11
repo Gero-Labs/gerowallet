@@ -77,13 +77,15 @@ describe('Midnight network upgrade wiring', () => {
 
   it('the dashboard shows the banner on the Midnight page, with no wrapper left behind when it is hidden', () => {
     const page = read('modules/portfolio/PortfolioPage.vue');
-    expect(page).toContain('<MidnightNetworkUpgradeBanner class="portfolio-upgrade-banner" />');
-    expect(page).not.toMatch(/<div class="pa-2 pb-0">\s*<MidnightNetworkUpgradeBanner/);
+    // Through the notice slot (MidnightNoticeSlot.vue), which shows the banner first among its notices.
+    expect(page).toContain('<MidnightNoticeSlot class="portfolio-upgrade-banner" />');
+    expect(page).not.toMatch(/<div class="pa-2 pb-0">\s*<MidnightNoticeSlot/);
+    expect(read('modules/dashboard/components/MidnightNoticeSlot.vue')).toContain('upgrade: MidnightNetworkUpgradeBanner,');
   });
 
   it('the side panel home shows the banner above the balance and holds Midnight Send with the reason under it', () => {
     const home = read('sidepanel/pages/HomePage.vue');
-    const banner = home.indexOf('<MidnightNetworkUpgradeBanner v-if="isMidnight" class="home-upgrade-banner" />');
+    const banner = home.indexOf('<MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner" />');
     expect(banner).toBeGreaterThan(-1);
     expect(banner).toBeLessThan(home.indexOf('<BalanceSection'));
     expect(home).toContain(':disabled-ids="midnightSendPaused ? [\'send\'] : []"');
