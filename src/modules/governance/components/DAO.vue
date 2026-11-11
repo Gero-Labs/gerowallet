@@ -77,7 +77,6 @@
                   v-if="!isMember && loggedWallet"
                   size="small"
                   class="geroButton"
-                  style="color: var(--g-on-grad) !important"
                   :loading="joiningDao"
                   @click="showJoinFlow()"
                 >
@@ -349,7 +348,6 @@
           <v-btn
             size="small"
             class="geroButton"
-            style="color: var(--g-on-grad) !important"
             :loading="joiningDao"
             :disabled="!loggedWallet?.stakeAddress || !meetsRequirements"
             @click="confirmJoinDao()"

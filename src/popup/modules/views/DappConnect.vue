@@ -34,7 +34,7 @@
             </v-btn>
           </v-col>
           <v-col cols="6">
-            <v-btn block class="geroButton" style="color: black!important;" :disabled="!consent" @click="confirm">
+            <v-btn block class="geroButton" :disabled="!consent" @click="confirm">
               {{ $t('navigation.confirm') }}
             </v-btn>
           </v-col>
