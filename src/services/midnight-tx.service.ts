@@ -47,7 +47,13 @@ import type {
   SubmitMidnightTxResponse,
 } from '@/api/midnight-api';
 import i18n from '@/plugins/i18n';
-import { MIDNIGHT_BUILT_TX_MISMATCH } from '@/chains/midnight/midnightBuiltTxGuard';
+import {
+  MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED,
+  MIDNIGHT_BUILT_TX_MISMATCH,
+  MIDNIGHT_BUILT_TX_UNREADABLE,
+  type MidnightBuiltTxRefusal,
+} from '@/chains/midnight/midnightBuiltTxGuard';
+import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 
 export interface SignedSegment {
   index: number;
@@ -64,12 +70,31 @@ function assertCurrentApproval(current: () => boolean): void {
   if (!current()) throw new StaleApprovalError();
 }
 
+const BUILT_TX_REFUSAL_COPY: Record<MidnightBuiltTxRefusal, string> = {
+  [MIDNIGHT_BUILT_TX_MISMATCH]: 'txGuard.builtTxMismatch',
+  [MIDNIGHT_BUILT_TX_UNREADABLE]: 'txGuard.builtTxUnreadable',
+  [MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED]: 'midnight.errors.updateRequired',
+};
+
 /**
- * The background refused to sign a transaction Nexus built because it is not
- * what the user asked for: say so in the user's language. Other errors pass through.
+ * The background refused to sign a transaction Nexus built, before signing
+ * anything. `code` says why: it does not match the request, it cannot be read,
+ * or it is for a newer ledger than this build signs with.
  */
+export class MidnightBuiltTxRefusedError extends Error {
+  readonly code: MidnightBuiltTxRefusal;
+  constructor(code: MidnightBuiltTxRefusal) {
+    super(String(i18n.t(BUILT_TX_REFUSAL_COPY[code])));
+    this.name = 'MidnightBuiltTxRefusedError';
+    this.code = code;
+  }
+}
+
+/** Say a background refusal in the user's language. Other errors pass through. */
 function backgroundError(error: string | undefined, fallback: string): Error {
-  if (error === MIDNIGHT_BUILT_TX_MISMATCH) return new Error(String(i18n.t('txGuard.builtTxMismatch')));
+  if (error && Object.prototype.hasOwnProperty.call(BUILT_TX_REFUSAL_COPY, error)) {
+    return new MidnightBuiltTxRefusedError(error as MidnightBuiltTxRefusal);
+  }
   return new Error(error || fallback);
 }
 
@@ -774,6 +799,8 @@ export interface DustRegistrationOutcome {
   txHash?: string;
   /** Human-readable detail for `no_night_utxos` / `failed`. */
   message?: string;
+  /** For a `failed` server answer: what it means (midnightApiError.ts). */
+  errorKind?: MidnightApiErrorKind;
 }
 
 /** Nexus/sidecar phrasing for the "wallet holds no NIGHT" case. */
@@ -822,11 +849,13 @@ export async function registerNightForDust(
     return { status: 'registered', txHash: res.txHash };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // Classify by the server's own sentence; `message` is already the readable one.
+    const serverMessage = isMidnightApiError(e) ? (e.serverMessage ?? '') : message;
     // The "no NIGHT" case is a normal business state (fund the wallet first),
     // not a failure — classify it so the dialog can show the right guidance.
-    if (NO_NIGHT_UTXOS_PATTERN.test(message)) {
+    if (NO_NIGHT_UTXOS_PATTERN.test(serverMessage)) {
       return { status: 'no_night_utxos', message };
     }
-    return { status: 'failed', message };
+    return { status: 'failed', message, ...(isMidnightApiError(e) ? { errorKind: e.kind } : {}) };
   }
 }

@@ -28,6 +28,7 @@ vi.mock('@/chains/midnight/midnightZkpaas', () => ({
 }));
 
 import { MessageTypes } from '@/models/MessageTypes';
+import { MidnightApiError } from '@/api/midnightApiError';
 import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
 
 function deferred<T>() {
@@ -342,6 +343,51 @@ describe('Midnight ledger-specific orchestration', () => {
       method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
       data: expect.objectContaining({ unprovenTxHex: 'aa', intendedOutputs: outputs }),
     }));
+  });
+
+  it.each([
+    ['MIDNIGHT_BUILT_TX_MISMATCH', 'txGuard.builtTxMismatch'],
+    ['MIDNIGHT_BUILT_TX_UNREADABLE', 'txGuard.builtTxUnreadable'],
+    ['MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED', 'midnight.errors.updateRequired'],
+  ])('reports the background refusal %s with its own copy and code, and submits nothing', async (code, copy) => {
+    const submit = vi.fn();
+    const submitProven = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit, submitProvenMidnightTx: submitProven });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: false, error: code } });
+    const thrown = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {})
+      .catch((e: unknown) => e);
+    expect(thrown).toMatchObject({ name: 'MidnightBuiltTxRefusedError', code, message: copy });
+    expect(submit).not.toHaveBeenCalled();
+    expect(submitProven).not.toHaveBeenCalled();
+  });
+
+  it('a LEDGER_MISMATCH send can be tried again, and the retry asks for a new build', async () => {
+    const build = vi.fn().mockResolvedValue({ unprovenTxHex: 'aa', txHash: 'built' });
+    const submitProven = vi.fn()
+      .mockRejectedValueOnce(new MidnightApiError('ledgerMismatch', { status: 409, errorCode: 'LEDGER_MISMATCH' }, 'Preprod'))
+      .mockResolvedValueOnce({ txHash: 'ok', status: 'InBlock' });
+    mocks.api.mockReturnValue({ buildUnshieldedTx: build, submitProvenMidnightTx: submitProven });
+    mocks.send.mockImplementation(async ({ method }: { method: MessageTypes }) => (method === MessageTypes.GET_MIDNIGHT_WALLET_KEYS
+      ? { data: { success: true, publicKeyHex: '11', addressHex: '22' } }
+      : { data: { success: true, signedTxHex: 'signed', proven: true } }));
+    const request = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
+    await expect(sendUnshieldedNight('Preprod', request, {})).rejects.toMatchObject({ kind: 'ledgerMismatch', message: 'midnight.errors.ledgerMismatch' });
+    expect(build).toHaveBeenCalledTimes(1);
+    await expect(sendUnshieldedNight('Preprod', request, {})).resolves.toMatchObject({ txHash: 'ok' });
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('classifies a DUST registration failure by the server\'s own sentence, and keeps its kind', async () => {
+    const build = vi.fn();
+    mocks.api.mockReturnValue({ buildNightDustRegistrationTx: build });
+    mocks.send.mockResolvedValue({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } });
+    build.mockRejectedValueOnce(new MidnightApiError('server', { status: 400, message: 'No NIGHT UTxOs available' }, 'Preprod'));
+    await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
+      .resolves.toEqual({ status: 'no_night_utxos', message: 'No NIGHT UTxOs available' });
+    build.mockRejectedValueOnce(new MidnightApiError('networkUpgrading', { status: 501, errorCode: 'MIDNIGHT_NETWORK_UPGRADING' }, 'Preprod'));
+    await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
+      .resolves.toEqual({ status: 'failed', message: 'midnight.errors.networkUpgrading', errorKind: 'networkUpgrading' });
   });
 
   // ── which side names the ledger hash ─────────────────────────────────────

@@ -9,7 +9,8 @@
  * (`Transaction.identifiers()`, identical before and after proving) and this
  * module asks the indexer whether the transaction arrived.
  */
-import { parseHttpError } from '@/shared/utils/parser';
+import i18n from '@/plugins/i18n';
+import { toMidnightApiError } from './midnightApiError';
 import type { SubmitMidnightTxResponse } from './midnight-api';
 
 /** What a caller knows about the transaction it is submitting, enough to find it again. */
@@ -24,7 +25,7 @@ export const SUBMIT_POLL_WINDOW_MS = 120_000;
 /** The wallet gave up waiting, not the network: the transaction may still be included. */
 export class MidnightSubmitUnconfirmedError extends Error {
   constructor() {
-    super('Gero stopped waiting for the network, but this transaction may still go through. Check your activity before you send again.');
+    super(String(i18n.t('midnight.errors.submitUnconfirmed')));
     this.name = 'MidnightSubmitUnconfirmedError';
   }
 }
@@ -67,6 +68,8 @@ export function isLostReply(error: unknown): boolean {
 export interface SubmitRecoveryDeps {
   /** Indexer GraphQL passthrough (`MidnightApi.graphql`). */
   graphql: (query: string, variables: Record<string, unknown>) => Promise<unknown>;
+  /** The wallet network (`Mainnet`, ...), named in the readable error. */
+  network?: string;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   intervalMs?: number;
@@ -128,15 +131,17 @@ export async function awaitSubmittedTx(
 }
 
 /**
- * Called from a submit method's `catch`. A real failure is rethrown exactly as
- * before (`parseHttpError`); a lost reply becomes a lookup of the transaction.
+ * Called from a submit method's `catch`. A real failure is rethrown as a
+ * readable {@link import('./midnightApiError').MidnightApiError}; a lost reply
+ * becomes a lookup of the transaction.
  */
 export async function recoverLostSubmit(
   error: unknown,
   watch: MidnightSubmitWatch | undefined,
   deps: SubmitRecoveryDeps,
 ): Promise<SubmitMidnightTxResponse> {
-  if (!isLostReply(error)) throw parseHttpError(error);
+  // Only submits come here: an answer with no usable body may still have reached the network.
+  if (!isLostReply(error)) throw toMidnightApiError(error, deps.network, 'submit');
   const identifier = watch?.identifiers?.[0];
   if (!identifier) throw new MidnightSubmitUnconfirmedError();
   return awaitSubmittedTx(identifier, deps);

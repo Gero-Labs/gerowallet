@@ -68,6 +68,7 @@ import { announcementActions, announcementsRefresh, getNotifyState, installNotif
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
+import { isMidnightServerSideFailure } from '@/api/midnightApiError';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { grantMarketSignAllowance, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
 import { marketPrepareHandler, type MarketHandlerDeps } from '@/chrome/nftMarket/marketPrepare';
@@ -7403,7 +7404,11 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     midnightActions.recordSiteActivity(origin, { type: 'submit-failed', reason: 'other' });
-    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+    // A paused network, a changed ledger, a busy prover or no answer is not the
+    // dapp's mistake: InternalError with the readable reason (midnightApiError.ts).
+    // InvalidRequest stays for a request the dapp got wrong.
+    const code = isMidnightServerSideFailure(error) ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+    sendResponse({ id: request.id, error: midnightApiError(code, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
   }
 });
 

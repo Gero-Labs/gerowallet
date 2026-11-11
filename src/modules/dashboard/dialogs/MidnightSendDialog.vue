@@ -318,19 +318,17 @@
                    verified on preprod, the old "reset" was an estimator bug).
                    Suppressed when the low-DUST hint below is showing, so only
                    one DUST note renders at a time. -->
-              <div v-if="!isShielded && !isDustLow" class="midnight-dust-note mt-3">
-                <v-icon size="14" color="warning" class="mr-1">mdi-information-outline</v-icon>
-                <span>{{ t('midnight.send.dustResetWarning') }}</span>
-              </div>
+              <GNote v-if="!isShielded && !isDustLow" icon="mdi-information-outline" class="mt-3">
+                {{ t('midnight.send.dustResetWarning') }}
+              </GNote>
               <!-- Low-DUST hint: informational (neutral) while any DUST remains —
                    the fee is tiny so the send still goes through. Red only when
                    DUST is genuinely empty and the fee can't be paid. -->
-              <div
-                v-if="!isShielded && isDustLow"
-                class="mt-3"
-                :class="isDustEmpty ? 'midnight-dust-note midnight-dust-note--low' : 'midnight-info-note'"
-              >
-                <v-icon size="14" :color="isDustEmpty ? 'error' : 'var(--g-text-3)'" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+              <GNote v-if="!isShielded && isDustLow && isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+                {{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
+              </GNote>
+              <div v-else-if="!isShielded && isDustLow" class="midnight-info-note mt-3">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
                 <span>{{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
             </div>
@@ -346,12 +344,13 @@
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="false"
-            :loading="sending || checkingLocalProver"
+            :loading="sending || checkingLocalProver || !!sendBlock"
             :password="password"
             @update:password="password = $event"
             :password-label="t('send.spendingPassword')"
             :password-rules="passwordRules"
-            :submit-text="t('midnight.signAndSend')"
+            :submit-text="sendCtaText"
+            :passkey-text="ledgerMismatch ? t('common.tryAgain') : ''"
             @passkey-prf-output="onPasskeyPrfOutput"
             @passkey-error="onPasskeyError"
             @submit="submitWithPassword"
@@ -379,9 +378,15 @@
           </div>
         </div>
 
-        <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3">
+        <!-- Not an error: sends are paused on this network, or this build can't sign
+             for the network's ledger. The amber note, and the CTA is disabled. -->
+        <GNote v-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-blocked">
+          {{ sendBlockText }}
+        </GNote>
+
+        <p v-if="errorMessage" role="alert" class="error--text t-caption mb-2 text-center px-3" data-test="midnight-send-error">
           {{ errorMessage }}
-        </div>
+        </p>
 
         <div>
           <v-btn
@@ -394,24 +399,27 @@
             <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
           </v-btn>
           <!-- Step 1: advance to the review. -->
-          <v-btn
+          <GButton
             v-if="currentStep === 1"
-            :class="['continue-button', { shake: shakeError }]"
-            @click="nextStep()"
+            tier="primary"
+            :class="{ shake: shakeError }"
             :disabled="sending"
-          >{{ t('common.continue') + ' ' }}
-            <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-arrow-right</v-icon>
-          </v-btn>
+            data-test="midnight-send-continue"
+            @click="nextStep()"
+          >{{ t('common.continue') }}
+            <v-icon size="small" class="ml-1">mdi-arrow-right</v-icon>
+          </GButton>
           <!-- Step 2: password wallets submit here (TransactionAuthSection only
                renders the field for them); PRF wallets submit via the PassKey
                button rendered inside TransactionAuthSection above. -->
-          <v-btn
+          <GButton
             v-else-if="currentStep === 2 && !isPrfWallet"
-            class="continue-button"
-            @click="submitWithPassword"
-            :disabled="sending || checkingLocalProver"
+            tier="primary"
+            :disabled="sending || checkingLocalProver || !!sendBlock"
             :loading="sending || checkingLocalProver"
-          >{{ t('midnight.signAndSend') }}</v-btn>
+            data-test="midnight-send-submit"
+            @click="submitWithPassword()"
+          >{{ sendCtaText }}</GButton>
         </div>
       </v-card-actions>
     </BaseDialog>
@@ -433,6 +441,8 @@ import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/m
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import TransactionDetailsCard, {
@@ -474,6 +484,7 @@ import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
 import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
+import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
 
 interface Props {
   isOpen: boolean;
@@ -723,6 +734,28 @@ const amount = ref('');
 const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
+/** The last send failed with LEDGER_MISMATCH: "Try again" builds it from scratch. */
+/** The last send failed with LEDGER_MISMATCH: the CTA reads "Try again" and sends from a new build. */
+const ledgerMismatch = ref(false);
+const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('midnight.signAndSend')));
+/**
+ * The last send was refused for a state the user can't fix here: the network's
+ * sends are paused for an upgrade, or this build can't sign for the network's
+ * ledger. Shown as a note, not an error, with the CTA disabled.
+ */
+const sendBlock = ref<MidnightSendBlock | null>(null);
+const sendBlockText = ref('');
+
+/**
+ * Forget the last send's outcome note and its "Try again" CTA. The dialog stays
+ * mounted while closed and keeps its step, so a block left set would greet the
+ * next open (even on another wallet or network) with a disabled CTA.
+ */
+function clearSendOutcome() {
+  sendBlock.value = null;
+  sendBlockText.value = '';
+  ledgerMismatch.value = false;
+}
 
 // ── Send progress timeline ──
 // High-level stage of the in-flight send, driven by sendUnshieldedNight's
@@ -906,6 +939,8 @@ const approval = useApprovalFreshness(
     localProverUnavailable.value = false;
     checkingLocalProver.value = false;
     forceRemoteForNextSend.value = false;
+    // A change of wallet, network, form or open state: the last refusal no longer applies.
+    clearSendOutcome();
   },
 );
 
@@ -1052,12 +1087,14 @@ async function nextStep() {
 function prevStep() {
   approval.invalidate();
   errorMessage.value = null;
+  clearSendOutcome();
   localProverUnavailable.value = false;
   currentStep.value = 1;
 }
 
 function preflight(): boolean {
   errorMessage.value = null;
+  ledgerMismatch.value = false;
   if (loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
     errorMessage.value = 'Not a Midnight wallet';
     return false;
@@ -1072,6 +1109,20 @@ function hasFreshConsent(provider: MidnightRemoteProver): boolean {
 async function submitWithPassword() {
   if (!preflight() || isPrfWallet.value) return;
   await approval.run(() => routeSend({ password: password.value }, approval.capture()));
+}
+
+/** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
+function showSendError(e: unknown) {
+  const block = midnightSendBlockOf(e);
+  if (block) {
+    sendBlock.value = block;
+    sendBlockText.value = e instanceof Error ? e.message : String(e);
+    errorMessage.value = null;
+    ledgerMismatch.value = false;
+    return;
+  }
+  errorMessage.value = e instanceof Error ? e.message : String(e);
+  ledgerMismatch.value = midnightApiErrorKind(e) === 'ledgerMismatch';
 }
 
 async function onPasskeyPrfOutput(prfBytes: Uint8Array) {
@@ -1296,7 +1347,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
     emit('close');
   } catch (e) {
     if (!current()) return;
-    errorMessage.value = e instanceof Error ? e.message : String(e);
+    showSendError(e);
   } finally {
     sponsor?.prfSecret?.fill(0);
     sending.value = false;
@@ -1359,7 +1410,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       proverFallbackReason.value = (e as { reason?: ProvingUnconfiguredTarget['reason'] }).reason;
       localProverUnavailable.value = true;
     } else {
-      errorMessage.value = e instanceof Error ? e.message : String(e);
+      showSendError(e);
     }
   } finally {
     sponsor?.prfSecret?.fill(0);
@@ -1395,6 +1446,7 @@ function onDialogClose() {
   localProverUnavailable.value = false;
   pendingCredentials.value = null;
   forceRemoteForNextSend.value = false;
+  clearSendOutcome();
   emit('close');
 }
 
@@ -1408,6 +1460,7 @@ function resetForm() {
   sendStage.value = 'idle';
   localProverUnavailable.value = false;
   forceRemoteForNextSend.value = false;
+  clearSendOutcome();
 }
 
 // Reset to step 1 whenever the dialog re-opens.
@@ -1494,15 +1547,6 @@ function shortToken(colour: string): string {
 .send-dialog-actions {
   text-align: center;
   justify-content: center;
-}
-
-.continue-button {
-  background: var(--g-grad);
-  color: var(--g-on-grad);
-}
-.continue-button:disabled {
-  opacity: 0.5;
-  color: var(--g-on-grad) !important;
 }
 
 .stepper-container {
@@ -1737,23 +1781,6 @@ function shortToken(colour: string): string {
 }
 .midnight-summary-wrapper {
   padding: 8px 0 4px;
-}
-.midnight-dust-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--g-warning);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
-  padding: 8px 10px;
-}
-.midnight-dust-note--low {
-  color: var(--g-error);
-  background: var(--g-error-fill);
-  border-color: var(--g-error-line);
 }
 .midnight-info-note {
   @include g-glass-tier(false);
