@@ -159,11 +159,28 @@
             size="large"
             class="geroButton"
             :disabled="!dustAddress"
+            :aria-disabled="writesPaused ? 'true' : undefined"
+            :aria-describedby="writesPaused ? 'dust-register-paused' : undefined"
+            :ripple="!writesPaused"
+            data-test="dust-register"
             @click="startRegistration"
           >
             <v-icon start>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
+          <!-- Native registration on this network is paused (midnightWriteGate.ts):
+               Register stays, held but focusable, with this reason linked to it.
+               The Cardano-held NIGHT sources below stay available. -->
+          <GNote
+            v-if="writesPaused"
+            id="dust-register-paused"
+            icon="mdi-pause-circle-outline"
+            role="status"
+            class="mt-2"
+            data-test="dust-register-paused"
+          >
+            {{ t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+          </GNote>
 
           <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
                sources panel), with the external portal kept as a low-prominence
@@ -252,6 +269,7 @@
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
@@ -260,6 +278,8 @@ import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccou
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
@@ -518,6 +538,12 @@ const submitError = ref<string | null>(null);
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
+/** Native registration on this wallet's network is paused for a network upgrade (midnightWriteGate.ts). */
+const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
+// Turned on while the password step is open: back out, so no password or PassKey is asked for.
+watch(writesPaused, (paused) => {
+  if (paused && inSigningPhase.value && !submitBusy.value) resetRegistrationState();
+});
 
 const isPrfWalletForSign = computed(() => isPrfWallet.value);
 
@@ -529,7 +555,7 @@ function resetRegistrationState() {
 }
 
 function startRegistration() {
-  if (!dustAddress.value) return;
+  if (!dustAddress.value || writesPaused.value) return;
   // For PRF wallets, kick straight into the PassKey gesture (no input field).
   // For password wallets, show the inline password field first.
   inSigningPhase.value = true;
@@ -539,7 +565,7 @@ function startRegistration() {
 }
 
 const canConfirmRegistration = computed(() => {
-  if (submitBusy.value) return false;
+  if (submitBusy.value || writesPaused.value) return false;
   if (!dustAddress.value) return false;
   if (isPrfWalletForSign.value) return true;
   return !!localPassword.value;
@@ -547,7 +573,7 @@ const canConfirmRegistration = computed(() => {
 
 async function confirmRegistration() {
   const wallet = loggedWallet.value;
-  if (!wallet) return;
+  if (!wallet || writesPaused.value) return;
   if (!dustAddress.value) return;
   if (!wallet.baseAddress) {
     submitError.value = 'Wallet missing Midnight address';

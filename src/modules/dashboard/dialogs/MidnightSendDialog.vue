@@ -378,9 +378,15 @@
           </div>
         </div>
 
+        <!-- Sends on this network are paused (midnightWriteGate.ts): Continue stays,
+             held but focusable (aria-disabled), with this reason linked to it, and
+             step 2 can't be opened. -->
+        <GNote v-if="writesPaused" id="midnight-send-paused" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-paused">
+          {{ t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+        </GNote>
         <!-- Not an error: sends are paused on this network, or this build can't sign
              for the network's ledger. The amber note, and the CTA is disabled. -->
-        <GNote v-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-blocked">
+        <GNote v-else-if="sendBlock" id="midnight-send-blocked" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-blocked">
           {{ sendBlockText }}
         </GNote>
 
@@ -404,6 +410,9 @@
             tier="primary"
             :class="{ shake: shakeError }"
             :disabled="sending"
+            :aria-disabled="writesPaused ? 'true' : undefined"
+            :aria-describedby="writesPaused ? 'midnight-send-paused' : undefined"
+            :ripple="!writesPaused"
             data-test="midnight-send-continue"
             @click="nextStep()"
           >{{ t('common.continue') }}
@@ -484,7 +493,8 @@ import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
 import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
-import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { midnightApiErrorKind, midnightNetworkDisplayName, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 
 interface Props {
   isOpen: boolean;
@@ -734,6 +744,13 @@ const amount = ref('');
 const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
+/** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
+const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
+// Turned on while the review step is open (a status read, a 501 elsewhere):
+// back to step 1, so no password or PassKey gesture is offered.
+watch(writesPaused, (paused) => {
+  if (paused && currentStep.value === 2 && !sending.value) prevStep();
+});
 /** The last send failed with LEDGER_MISMATCH: "Try again" builds it from scratch. */
 /** The last send failed with LEDGER_MISMATCH: the CTA reads "Try again" and sends from a new build. */
 const ledgerMismatch = ref(false);
@@ -1068,6 +1085,7 @@ function initialsOf(name: string): string {
 async function nextStep() {
   const current = approval.capture();
   errorMessage.value = null;
+  if (writesPaused.value) return;
   if (currentStep.value === 1) {
     if (blockedByFee.value) {
       errorMessage.value = t('midnight.send.noDustFee');
@@ -1099,6 +1117,7 @@ function preflight(): boolean {
     errorMessage.value = 'Not a Midnight wallet';
     return false;
   }
+  if (writesPaused.value) return false;
   return true;
 }
 

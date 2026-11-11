@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -29,7 +29,9 @@ vi.mock('@/chains/midnight/midnightZkpaas', () => ({
 
 import { MessageTypes } from '@/models/MessageTypes';
 import { MidnightApiError } from '@/api/midnightApiError';
-import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
+import { resetMidnightWriteStatusForTests } from '@/chains/midnight/midnightWriteStatus';
+import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -57,7 +59,8 @@ describe('Midnight ledger-specific orchestration', () => {
       ? sendUnshieldedNight('Preprod', request, {}, undefined, undefined, false, () => current)
       : buildAndSignUnshieldedTransfer('Preprod', request, {}, undefined, () => current);
     const rejected = expect(result).rejects.toThrow('Approval is no longer current');
-    expect(mocks.send).toHaveBeenCalledOnce();
+    // The write-gate check (midnightWriteGate.ts) runs first, so the key request is one tick later.
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     current = false;
     keys.resolve({ data: { success: true, publicKeyHex: '11', addressHex: '22' } });
     await rejected;
@@ -120,13 +123,15 @@ describe('Midnight ledger-specific orchestration', () => {
 
   it('refuses stale connector balancing before dispatch and discards stale completions', async () => {
     let current = false;
-    await expect(balanceConnectorTransaction('aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
+    await expect(balanceConnectorTransaction('Preprod', 'aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
     expect(mocks.send).not.toHaveBeenCalled();
     current = true;
     const signed = deferred<{ data: { success: boolean; tx: string } }>();
     mocks.send.mockReturnValue(signed.promise);
-    const result = balanceConnectorTransaction('aa', {}, () => current);
+    const result = balanceConnectorTransaction('Preprod', 'aa', {}, () => current);
     const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    // The write-gate check runs first, so the dispatch is one tick later.
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     current = false;
     signed.resolve({ data: { success: true, tx: 'signed' } });
     await rejected;
@@ -388,6 +393,64 @@ describe('Midnight ledger-specific orchestration', () => {
     build.mockRejectedValueOnce(new MidnightApiError('networkUpgrading', { status: 501, errorCode: 'MIDNIGHT_NETWORK_UPGRADING' }, 'Preprod'));
     await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
       .resolves.toEqual({ status: 'failed', message: 'midnight.errors.networkUpgrading', errorKind: 'networkUpgrading' });
+  });
+
+  describe('on a network whose sends are paused for an upgrade', () => {
+    beforeEach(async () => {
+      resetMidnightWriteGateForTests();
+      resetMidnightWriteStatusForTests();
+      await noteMidnightNetworkUpgrading('Preprod', 'response');
+    });
+    afterEach(() => resetMidnightWriteGateForTests());
+    const request = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
+
+    it('a public send stops before keys, build or signing', async () => {
+      const build = vi.fn();
+      mocks.api.mockReturnValue({ buildUnshieldedTx: build });
+      await expect(sendUnshieldedNight('Preprod', request, {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(build).not.toHaveBeenCalled();
+    });
+
+    it('a private send stops before the shielded sync and before proving', async () => {
+      const proveAndSubmit = vi.fn();
+      mocks.api.mockReturnValue({ proveAndSubmitMidnightTx: proveAndSubmit, getWriteStatus: async () => ({ kind: 'unknown', unsupported: true }) });
+      await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
+      // The background builds, syncs and proves: it is never asked.
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(mocks.health).not.toHaveBeenCalled();
+      expect(proveAndSubmit).not.toHaveBeenCalled();
+    });
+
+    it('a private send asks the status read first, so a pause the wallet did not know about also stops it there', async () => {
+      resetMidnightWriteGateForTests();
+      const getWriteStatus = vi.fn(async () => ({ kind: 'closed', reason: 'NETWORK_UPGRADING' }));
+      mocks.api.mockReturnValue({ getWriteStatus });
+      await expect(sendShieldedNight('Mainnet', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
+      expect(getWriteStatus).toHaveBeenCalledOnce();
+      expect(mocks.send).not.toHaveBeenCalled();
+    });
+
+    it('a dapp makeTransfer, balance, makeIntent and a DUST registration stop before keys', async () => {
+      mocks.api.mockReturnValue({ buildUnshieldedTx: vi.fn(), buildNightDustRegistrationTx: vi.fn() });
+      await expect(buildAndSignUnshieldedTransfer('Preprod', request, {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(balanceConnectorTransaction('Preprod', 'aa', {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
+        .resolves.toEqual({ status: 'failed', message: 'midnight.errors.networkUpgrading', errorKind: 'networkUpgrading' });
+      expect(mocks.send).not.toHaveBeenCalled();
+    });
+
+    it('another network is not affected', async () => {
+      const build = vi.fn().mockRejectedValue(new Error('reached the build'));
+      mocks.api.mockReturnValue({ buildUnshieldedTx: build });
+      mocks.send.mockResolvedValue({ data: { success: true, publicKeyHex: '11', addressHex: '22' } });
+      await expect(sendUnshieldedNight('Mainnet', request, {})).rejects.toThrow('reached the build');
+      expect(build).toHaveBeenCalledOnce();
+    });
   });
 
   // ── which side names the ledger hash ─────────────────────────────────────

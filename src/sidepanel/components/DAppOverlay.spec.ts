@@ -78,6 +78,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import networks from '@/utils/networks';
 import { NFT_MARKET_DEPLOYMENTS_PREPROD } from '@/utils/nftMarketDeployments';
+import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
+import BottomSheetStub from './BottomSheet.vue';
 import { inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
 
 // Synthetic enterprise address from a fixed public payment-key hash.
@@ -492,6 +494,42 @@ describe('Midnight makeIntent: the approval shows what the wallet gives and asks
     await button(wrapper, 'reject').trigger('click');
     expect(mocks.approve).not.toHaveBeenCalled();
     expect(JSON.parse(mocks.reject.mock.calls.at(-1)![0])).toMatchObject({ code: 'InsufficientFunds' });
+  });
+});
+
+describe('Midnight approvals while sends on the network are paused', () => {
+  const intent = () => ({
+    requestId: 'intent-paused', method: 'midnight_makeIntent',
+    payload: { website: 'https://dapp.example', data: {
+      desiredInputs: [{ kind: 'unshielded', type: '0'.repeat(64), value: '30000000' }],
+      desiredOutputs: [], options: { intentId: 'random', payFees: true }, ttlMinutes: 60,
+    } },
+  });
+
+  beforeEach(async () => {
+    WalletStore.state.loggedWallet = { id: 1, type: WalletType.Normal, chain: Blockchain.MIDNIGHT, network: Network.PREPROD } as never;
+    resetMidnightWriteGateForTests();
+    await noteMidnightNetworkUpgrading(Network.PREPROD, 'response');
+  });
+  afterEach(() => resetMidnightWriteGateForTests());
+
+  it('makeIntent: the reason in place of the password and Approve, no DUST fee line', () => {
+    overlay.currentRequest.value = intent() as never;
+    const wrapper = render();
+    expect(wrapper.get('[data-testid="midnight-writes-paused"]').text()).toContain('midnight.errors.networkUpgrading');
+    expect(wrapper.find('[data-label="miniGero.spendingPassword"]').exists()).toBe(false);
+    expect(button(wrapper, 'approve')).toBeUndefined();
+    expect(wrapper.find('[data-testid="midnight-intent-fees"]').exists()).toBe(false);
+  });
+
+  it.each(['Close', 'Escape'] as const)('%s answers InternalError with the reason, not Rejected', async (how) => {
+    overlay.currentRequest.value = intent() as never;
+    const wrapper = render();
+    if (how === 'Close') await wrapper.findAll('button').find(entry => entry.text() === 'common.close')!.trigger('click');
+    else wrapper.findComponent(BottomSheetStub).vm.$emit('escape');
+    await flushPromises();
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(JSON.parse(mocks.reject.mock.calls.at(-1)![0])).toMatchObject({ code: 'InternalError', reason: 'midnight.errors.networkUpgrading' });
   });
 });
 

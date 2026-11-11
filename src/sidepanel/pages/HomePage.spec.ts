@@ -29,6 +29,7 @@ vi.mock('@/modules/portfolio/components/FundingCard.vue', () => ({ default: { te
 vi.mock('@/modules/portfolio/components/PerkTeasers.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../components/BalanceSection.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../components/QuickActions.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('@/modules/dashboard/components/MidnightNetworkUpgradeBanner.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../components/FeaturedCarousel.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../components/MiniDustGauge.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../components/MiniProofServerWidget.vue', () => ({ default: { template: '<div />' } }));

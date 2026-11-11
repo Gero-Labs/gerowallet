@@ -50,6 +50,7 @@ import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { isSiteActivityVisible } from '@/chains/midnight/midnightSiteActivity';
 import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -160,6 +161,7 @@ const statusText = computed(() => {
     case 'failed':
       if (a.reason === 'proof-server') return t('midnight.siteActivity.failedProofServer');
       if (a.reason === 'declined') return t('midnight.siteActivity.failedDeclined');
+      if (a.reason === 'paused') return t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(network.value) });
       return t('midnight.siteActivity.failedOther');
     default:
       return '';

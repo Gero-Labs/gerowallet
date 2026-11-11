@@ -36,6 +36,7 @@ import { debugLog } from '@/utils/debug';
 import { Network } from '@/models/types';
 import { getMidnightApi } from '@/api/midnight-api';
 import { blockTimeToMs } from '@/chains/midnight/midnightDataFreshness';
+import { MIDNIGHT_STATUS_POLL_MS, refreshMidnightWriteStatus } from '@/chains/midnight/midnightWriteStatus';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import type {
   MidnightAddresses,
@@ -206,6 +207,8 @@ export function resolveOutputIndex(
 class MidnightSyncService {
   private active = false;
   private tipTimer: ReturnType<typeof setInterval> | null = null;
+  /** Re-reads the network's write status (midnightWriteGate.ts) while the session lives. */
+  private writeStatusTimer: ReturnType<typeof setInterval> | null = null;
   private tipRequest: Promise<void> | null = null;
   private readonly generationQueue = new MidnightGenerationQueue();
   private sessionEpoch = 0;
@@ -298,6 +301,12 @@ class MidnightSyncService {
     // This is display metadata; fetching it must not mark wallet sync complete.
     void this.refreshTipFromNexus(network);
     this.tipTimer = setInterval(() => { void this.refreshTipFromNexus(network); }, 30_000);
+
+    // Whether sends on this network are paused, read when the wallet opens and
+    // every few minutes, so Send and Register show it before the password.
+    if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
+    void refreshMidnightWriteStatus(network, { force: true });
+    this.writeStatusTimer = setInterval(() => { void refreshMidnightWriteStatus(network, { force: true }); }, MIDNIGHT_STATUS_POLL_MS);
   }
 
   private refreshTipFromNexus(network: string): Promise<void> {
@@ -343,6 +352,8 @@ class MidnightSyncService {
   stop(): void {
     if (this.tipTimer) clearInterval(this.tipTimer);
     this.tipTimer = null;
+    if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
+    this.writeStatusTimer = null;
     this.tipRequest = null;
     if (!this.active) return;
     webSocketService.close();

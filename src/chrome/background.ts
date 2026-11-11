@@ -68,7 +68,8 @@ import { announcementActions, announcementsRefresh, getNotifyState, installNotif
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
-import { isMidnightServerSideFailure } from '@/api/midnightApiError';
+import { isMidnightServerSideFailure, readableMidnightError } from '@/api/midnightApiError';
+import { isMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 import { grantCip113SignAllowance, hasCip113SignAllowance } from '@/chrome/cip113Allowance';
 import { grantMarketSignAllowance, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
 import { marketPrepareHandler, type MarketHandlerDeps } from '@/chrome/nftMarket/marketPrepare';
@@ -7367,6 +7368,20 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
   const tx = (request.data as { tx?: string } | undefined)?.tx;
   if (typeof tx !== 'string' || !tx) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is required'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  // Sends on this network are paused for a network upgrade (midnightWriteGate.ts):
+  // answer at once, with the same sentence the wallet shows, before any request.
+  // The side panel's site tracker shows the refusal too.
+  if (await isMidnightNetworkUpgrading(wallet.network)) {
+    const { midnightActions } = await import('@/stores/midnightStore');
+    midnightActions.recordSiteActivity(request.origin as string, { type: 'submit-failed', reason: 'paused' });
+    sendResponse({
+      id: request.id,
+      error: midnightApiError(MidnightErrorCode.InternalError, readableMidnightError('networkUpgrading', {}, wallet.network)),
+      target: TARGET,
+      sender: SENDER.extension,
+    });
     return;
   }
   const origin = request.origin as string;

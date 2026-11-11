@@ -666,7 +666,8 @@
             <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <!-- No DUST fee while sends are paused: nothing is sent. -->
+          <p v-if="!midnightWritesPaused" class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
           <!-- Who proves this transfer: the user's own setting, never silently Gero Cloud. -->
           <div class="d-flex align-start mt-2" data-testid="midnight-transfer-prover">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
@@ -674,7 +675,18 @@
           </div>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Sends on this network are paused (midnightWriteGate.ts): the reason in place
+             of Approve, no password or PassKey. Closing tells the dapp why. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -761,10 +773,20 @@
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <p v-if="!midnightWritesPaused" class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Same pause as makeTransfer above. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -861,7 +883,7 @@
             <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-fees">
+          <p v-if="!(midnightWritesPaused && intentPaysFees)" class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-fees">
             {{ intentPaysFees ? $t('midnight.connector.transferFeesNote') : $t('midnight.connector.intentFeesNotPaid') }}
           </p>
           <div v-if="intentPaysFees" class="d-flex align-start mt-2">
@@ -871,7 +893,17 @@
           <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Same pause as makeTransfer above. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -1222,6 +1254,10 @@ import KeystoneSignSheet from './KeystoneSignSheet.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -3056,7 +3092,10 @@ function rejectMidnightSignData() {
 // calling reject() bare for those two methods.
 function onEscapeReject() {
   approval.invalidate();
-  if (currentRequest.value?.method === 'midnight_connect') {
+  if (midnightWritesPaused.value && MIDNIGHT_PAUSABLE_METHODS.has(currentRequest.value?.method ?? '')) {
+    // Same answer as Close: the dapp learns why, not that the user declined.
+    declineMidnightWhilePaused();
+  } else if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {
     rejectMidnightSignData();
@@ -3227,6 +3266,7 @@ async function signMidnightTransferNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -3261,6 +3301,7 @@ async function signMidnightTransferPrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -3344,6 +3385,27 @@ function rejectMidnightBalance() {
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
 }
 
+// ── Midnight network upgrade (midnightWriteGate.ts) ─────────────────────────
+// While sends on the wallet's network are paused, makeTransfer,
+// balanceUnsealedTransaction and makeIntent show the reason instead of
+// Approve, and the dapp gets InternalError with the same sentence (on Close
+// and on Escape): a server-side state, not a request the dapp got wrong.
+const MIDNIGHT_PAUSABLE_METHODS: ReadonlySet<string> = new Set([
+  'midnight_makeTransfer', 'midnight_balanceUnsealedTransaction', 'midnight_makeIntent',
+]);
+const midnightWritesPaused = useMidnightNetworkUpgrading(() => (
+  loggedWallet.value?.chain === Blockchain.MIDNIGHT ? loggedWallet.value?.network : ''
+));
+const midnightWritesPausedReason = computed(() => t('midnight.errors.networkUpgrading', {
+  network: midnightNetworkDisplayName(loggedWallet.value?.network),
+}));
+function declineMidnightWhilePaused() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.InternalError, midnightWritesPausedReason.value));
+}
+
 async function buildMidnightBalanceTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
 ): Promise<{ tx: string }> {
@@ -3352,13 +3414,14 @@ async function buildMidnightBalanceTx(
   const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
   if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
   const { balanceConnectorTransaction } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return balanceConnectorTransaction(data.tx, credentials, approvalCurrent);
+  return balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent);
 }
 
 async function signMidnightBalanceNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   // Capture the request identity BEFORE the multi-second balance round-trip
   // (see signMidnightTransferNormal): never deliver this tx to a superseded request.
@@ -3385,6 +3448,7 @@ async function signMidnightBalancePrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
@@ -3480,7 +3544,7 @@ async function buildMidnightIntentTx(
   if (!approvalCurrent()) throw new StaleApprovalError();
   const { desiredInputs, desiredOutputs, options } = intentPayload.value;
   const { buildConnectorIntent } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return buildConnectorIntent({ desiredInputs, desiredOutputs, options }, credentials, approvalCurrent);
+  return buildConnectorIntent(loggedWallet.value?.network ?? '', { desiredInputs, desiredOutputs, options }, credentials, approvalCurrent);
 }
 
 /** Shows the failure; an insufficient-funds build is remembered for the decline. */
@@ -3496,6 +3560,7 @@ async function signMidnightIntentNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   // Never deliver this tx to a superseded request (see signMidnightTransferNormal).
   const reqId = currentRequest.value.requestId;
@@ -3522,6 +3587,7 @@ async function signMidnightIntentPrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
