@@ -27,8 +27,9 @@
         <template v-else>
           <span class="dust-gauge__balance-num">{{ dustCurrentFmt }}</span>
           <span class="dust-gauge__balance-unit">{{ dustCurrency }}</span>
-          <!-- Midnight data is paused: the last reading, not ticking. -->
-          <span v-if="dustEstimate" class="dust-gauge__estimate t-caption" data-test="dust-estimate">{{ $t('midnight.dataPaused.estimate') }}</span>
+          <!-- Midnight data is paused: the last reading, not ticking. Only for a
+               registered wallet; an unregistered one has nothing generating. -->
+          <span v-if="showEstimate" class="dust-gauge__estimate t-caption" data-test="dust-estimate">{{ $t('midnight.dataPaused.estimate') }}</span>
         </template>
       </div>
     </div>
@@ -199,6 +200,8 @@ const pct = computed(() => {
 const isFull = computed(() => isRegistered.value && dustCap.value > 0n && pct.value >= 99.95);
 // No charging animation while Midnight data is paused: the value is not moving.
 const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value && !dustEstimate.value);
+// "Estimate" labels a registered wallet's generating balance: the registration state outranks it.
+const showEstimate = computed(() => isRegistered.value && dustEstimate.value);
 
 function fmt(value: bigint, digits: number): string {
   const whole = value / DUST_DIVISOR;
