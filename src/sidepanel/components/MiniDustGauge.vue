@@ -29,8 +29,9 @@
       <DustParticleCanvas :active="isCharging" :fill-pct="pct" />
     </div>
     <div class="mini-dust__sub">
-      <!-- Midnight data is paused: the last reading, and the block it is based on, in place of the rate. -->
-      <span v-if="dustEstimate" class="mini-dust__estimate g-num" data-test="dust-estimate">
+      <!-- Midnight data is paused: the last reading, and the block it is based on, in place of the rate.
+           Only for a registered wallet; "Not registered" and "pending" say more and stay. -->
+      <span v-if="showEstimate" class="mini-dust__estimate g-num" data-test="dust-estimate">
         <v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>{{ $t('midnight.dataPaused.estimateCaption', { block: tipHeightLabel, age: tipAge }) }}
       </span>
       <span v-else-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
@@ -158,6 +159,8 @@ const pct = computed(() => {
 const isFull = computed(() => isRegistered.value && dustCap.value > 0n && pct.value >= 99.95);
 // No charging animation while Midnight data is paused: the value is not moving.
 const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value && !dustEstimate.value);
+// The paused caption replaces the rate only: the registration state outranks it.
+const showEstimate = computed(() => isRegistered.value && dustEstimate.value);
 
 function fmt(value: bigint, digits: number): string {
   const whole = value / DUST_DIVISOR;
