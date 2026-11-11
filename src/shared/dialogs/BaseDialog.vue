@@ -44,7 +44,7 @@
             <slot name="art"></slot>
           </div>
           <div class="g-list-content">
-            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;" :style="{ WebkitLineClamp: titleLines }">
               {{ title }}
               <v-tooltip location="bottom" v-if="titleInfo"  max-width="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
@@ -136,6 +136,11 @@ const props = defineProps({
   },
   titleInfo: {
     type: String,
+  },
+  /** Lines the title may take before it is clamped with an ellipsis. */
+  titleLines: {
+    type: Number,
+    default: 1,
   },
   subtitle: {
     type: String

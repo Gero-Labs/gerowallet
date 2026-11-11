@@ -145,10 +145,7 @@
                   <div class="ps-step-title-row">
                     <span class="t-body-lg">{{ t('midnight.proofServerPage.step2Title') }}</span>
                   </div>
-                  <div class="proof-server-command-row">
-                    <code class="proof-server-command g-mono">{{ dockerRunCommand }}</code>
-                    <CopyButton :value="dockerRunCommand" small />
-                  </div>
+                  <CommandBlock :command="dockerRunCommand" class="ps-command" />
                   <p class="t-caption ps-step-hint">{{ t('midnight.proofServer.firstRunNote') }}</p>
                 </div>
               </div>
@@ -431,7 +428,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { useMidnightProofServer, formatRelativeTime } from '@/chains/midnight/useProofServerSettings';
-import CopyButton from '@/shared/components/CopyButton.vue';
+import CommandBlock from '@/shared/components/CommandBlock.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
@@ -694,24 +691,8 @@ const faqs = computed(() => ([
   text-decoration: underline;
 }
 
-.proof-server-command-row {
-  display: flex;
-  align-items: center;
-  gap: var(--g-s-2);
-  background: var(--g-canvas);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-control);
-  padding: var(--g-s-2) var(--g-s-3);
+.ps-command {
   margin-top: var(--g-s-2);
-  overflow-x: auto;
-}
-
-.proof-server-command {
-  color: var(--g-text-1);
-  font-size: 12.5px;
-  white-space: pre;
-  flex: 1;
-  min-width: 0;
 }
 
 .proof-server-status-row {

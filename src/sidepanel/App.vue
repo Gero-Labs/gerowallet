@@ -77,6 +77,12 @@
     <!-- Global, so every hardware-wallet signing path gets the "continue on
          your device" prompt without each sheet re-declaring it. -->
     <HardwareSignPrompt />
+    <!-- One-time "Restart your local proof server" notice (proofServerRestartNotice.ts),
+         here too for people who only use the side panel; waits behind the open sheets. -->
+    <ProofServerRestartNotice
+      v-if="hasActiveWallet && !isLocked"
+      :suppressed="showWalletSwitcher || showNotifications || dappRequestPending || announcementOpen"
+    />
     <!-- In-app toast for a push that arrives while the panel is focused (B8). -->
 
   </v-app>
@@ -88,6 +94,7 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import ProofServerRestartNotice from '@/modules/midnight/ProofServerRestartNotice.vue';
 import MiniLayout from './layouts/MiniLayout.vue';
 import NoWalletScreen from './components/NoWalletScreen.vue';
 import WalletSelector from './components/WalletSelector.vue';
@@ -96,7 +103,8 @@ import DAppOverlay from './components/DAppOverlay.vue';
 import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import AnnouncementSheet from './components/AnnouncementSheet.vue';
-import { initDappRequestHub } from './services/dappRequestHub';
+import { announcementsStore } from '@/stores/announcementsStore';
+import { hub, initDappRequestHub } from './services/dappRequestHub';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
@@ -136,6 +144,10 @@ const pendingSwitchWallet = ref<Wallet | null>(null);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
+/** A DApp request is waiting for approval: the restart notice never opens over it. */
+const dappRequestPending = computed(() => !!hub.currentRequest.value || hub.requestQueue.value.length > 0);
+// An announcement opened in full (AnnouncementSheet): the notice waits behind it too.
+const announcementOpen = computed(() => announcementsStore.state.openId !== null);
 const isLocked = computed(() => walletStore.isLocked);
 // No Gero Companion dock here by design: the mini panel is ~360px of
 // single-purpose surface, and a fixed FAB parked over it covered the very
