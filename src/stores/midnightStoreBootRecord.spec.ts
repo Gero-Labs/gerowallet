@@ -214,6 +214,53 @@ describe('the previous worker\'s record across restarts', () => {
     expect(manager).toMatch(/if \(walletBg\.chain !== Blockchain\.MIDNIGHT\) \{\n\s+void import\('@\/stores\/midnightStore'\)\.then\(\(\{ midnightActions \}\) => midnightActions\.releaseBootRecord\(\)\)/);
   });
 
+  /**
+   * The first replay frame after a restart, for a wallet emptied from another
+   * device while the worker was down (no DUST registration, so every balance is
+   * zero): its settled history, no UTxOs, zero balances. `balancesFirst` sends
+   * the UTxO set and balances before the history rows land, the other order
+   * after. Then the release, as the sync service does after each frame.
+   */
+  function emptiedElsewhereFrame(r: Loaded, balancesFirst: boolean) {
+    const rows = [...history(3), { ...sent('f0'.repeat(32)), status: 'confirmed' as const, blockHeight: 100_010 }];
+    const zero = () => { r.midnightActions.setUtxos([]); r.midnightActions.updateBalances({ nightUnshielded: 0n }); };
+    if (balancesFirst) zero();
+    rows.forEach((tx) => r.midnightActions.applyTransaction(tx));
+    if (!balancesFirst) zero();
+    if (hasDataToKeep(r.midnightStore.balances, r.midnightStore.transactions)) r.midnightActions.releaseBootRecord();
+  }
+  const lastSent = <T,>(field: string) => (env.broadcasts.filter((u) => field in u).at(-1) as Record<string, T>)[field];
+
+  for (const balancesFirst of [true, false]) {
+    it(`emptied from another device while down: the views and the saved record end at zero (${balancesFirst ? 'balances' : 'history'} first)`, async () => {
+      await previousWorker();
+      const r = await restartOffline();
+      // Before any frame the views were shown the previous worker's figures.
+      expect(lastSent<{ nightUnshielded: string }>('balances').nightUnshielded).toBe('7000000');
+      expect(lastSent<unknown[]>('utxos')).toHaveLength(5);
+      emptiedElsewhereFrame(r, balancesFirst);
+      expect(lastSent<{ nightUnshielded: string }>('balances').nightUnshielded).toBe('0');
+      expect(lastSent<unknown[]>('utxos')).toEqual([]);
+      await settle();
+      const saved = env.data.get('midnightStore') as { balances: { nightUnshielded: string } };
+      expect(saved.balances.nightUnshielded).toBe('0');
+      // A later restart finds the emptied wallet, not the old figures.
+      const restarted = await load();
+      restarted.midnightActions.setActive(addresses(wallet));
+      const snapshot = await restarted.midnightActions.persistedRefreshSnapshot();
+      expect(snapshot?.balances.nightUnshielded).toBe(0n);
+      expect(snapshot?.utxos).toEqual([]);
+    });
+  }
+
+  it('released with nothing stood in, nothing is sent again', async () => {
+    m.midnightActions.setActive(addresses(wallet));
+    m.midnightActions.setTransactions(history(1));
+    const before = env.broadcasts.length;
+    m.midnightActions.releaseBootRecord();
+    expect(env.broadcasts).toHaveLength(before);
+  });
+
   it('released, nothing stands in any more', async () => {
     await previousWorker();
     const r = await load();
