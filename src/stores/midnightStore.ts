@@ -62,12 +62,14 @@ export interface MidnightChainTip {
   hash: string | null;
   height: number;
   /**
-   * Epoch MILLISECONDS. Both writers pass ms (midnight-sync's tip bootstrap
-   * documents Nexus's BlockDto as epoch ms) and ContentLayout feeds it
-   * straight to `new Date()`. The old `// Unix seconds` note here was the
-   * only claim to the contrary and would have cost someone an afternoon.
+   * Block time, epoch MILLISECONDS (0 = unknown). The sources differ:
+   * `/api/blocks/latest` `time` is epoch seconds, while sync frames may carry
+   * milliseconds, so the one writer (`applyBlockTip` in midnight-sync.service)
+   * normalises through `blockTimeToMs` (midnightDataFreshness.ts).
    */
   timestamp: number;
+  /** Local clock (epoch ms) when the sync session last saw this tip; absent after a restore. */
+  observedAt?: number;
 }
 
 /**

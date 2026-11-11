@@ -79,7 +79,9 @@
                     <v-tooltip
                       location="bottom"
                       :content-class="
-                        (isMidnight ? isMidnightConnected : connected)
+                        isMidnightPaused
+                          ? 'network-tooltip connecting'
+                          : (isMidnight ? isMidnightConnected : connected)
                           ? 'network-tooltip'
                           : (isMidnight ? isMidnightConnecting : connecting)
                           ? 'network-tooltip connecting'
@@ -87,16 +89,27 @@
                       "
                     >
                       <template v-slot:activator="{ props: activatorProps }">
+                        <!-- Focusable, so keyboard and touch users can open the status tooltip. -->
                         <div
                           style="display: flex; align-items: center; gap: 4px"
                           :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
                           v-bind="activatorProps"
-
+                          tabindex="0"
+                          role="button"
+                          :aria-label="`${t('navigation.status')}: ${networkStatusText}`"
                         >
+                          <!-- Midnight: a connected socket whose blocks are old is "Paused", never
+                               "Online": a chip on the muted warning pair, with no streaming animation. -->
+                          <span v-if="isMidnightPaused" class="network-paused-chip t-caption" data-test="network-chip-paused">
+                            <v-icon size="small" color="warning">mdi-pause-circle-outline</v-icon>
+                            {{ t('midnight.dataPaused.chip') }}
+                          </span>
                           <v-icon
+                            v-else
                             size="small"
                             :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                             :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
+                            data-test="network-chip-icon"
                           >
                             {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                           </v-icon>
@@ -123,9 +136,14 @@
 
                       <div class="network-tooltip-content">
                         <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
-                        <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                        <!-- A local clock time looks fresh while the data is not: hidden while paused. -->
+                        <div v-if="!isMidnightPaused"><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                         <template v-if="isMidnight">
-                          <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
+                          <div>
+                            <strong>Block:</strong>
+                            <span class="g-num">{{ midnightTip?.hash ? formatInt(midnightTip.height) : 'N/A' }}</span>
+                            <template v-if="isMidnightPaused"> · {{ midnightFreshness.ageLabel.value }}</template>
+                          </div>
                         </template>
                         <template v-else-if="isBitcoin">
                           <!-- Bitcoin has no epoch — show block height instead. -->
@@ -139,10 +157,14 @@
                           <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                           <span
                             :style="
-                              (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
+                              isMidnightPaused ? { color: 'var(--g-warning)' } : (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
                             "
-                            >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
+                            >{{ networkStatusText }}</span
                           >
+                        </div>
+                        <!-- Last, after the facts it explains. -->
+                        <div v-if="isMidnightPaused" class="network-tooltip-detail" data-test="network-paused-detail">
+                          {{ t('midnight.dataPaused.detail', { block: midnightFreshness.heightLabel.value, age: midnightFreshness.ageLabel.value }) }}
                         </div>
                       </div>
                     </v-tooltip>
@@ -326,6 +348,9 @@ import { OPEN_SETTINGS_ON_LOAD_KEY } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { midnightNetworkChipState } from '@/chains/midnight/midnightDataFreshness';
+import { formatInt } from '@/shared/utils/format';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -493,9 +518,21 @@ const lastSyncTimestamp = computed(() => {
 });
 
 // Midnight WS connection state mirrors midnightStore.networkStatus rather than
-// the global Cardano `loadingState.connected/connecting`.
-const isMidnightConnected = computed(() => midnightNetworkStatus.value === 'connected');
-const isMidnightConnecting = computed(() => midnightNetworkStatus.value === 'connecting');
+// the global Cardano `loadingState.connected/connecting`. A connected socket
+// whose tip is more than ten minutes old is "paused", not online
+// (midnightDataFreshness.ts): the data behind balances is not advancing.
+const midnightFreshness = useMidnightDataFreshness();
+const midnightChipState = computed(() =>
+  midnightNetworkChipState(midnightNetworkStatus.value, midnightFreshness.paused.value));
+const isMidnightConnected = computed(() => midnightChipState.value === 'online');
+const isMidnightPaused = computed(() => isMidnight.value && midnightChipState.value === 'paused');
+const isMidnightConnecting = computed(() => midnightChipState.value === 'connecting');
+/** The status in words, for the tooltip and the chip's accessible name ("Status: Paused"). */
+const networkStatusText = computed(() => (isMidnightPaused.value
+  ? t('midnight.dataPaused.chip')
+  : (isMidnight.value ? isMidnightConnected.value : connected.value) ? t('navigation.online')
+    : (isMidnight.value ? isMidnightConnecting.value : connecting.value) ? t('navigation.connecting')
+      : t('navigation.offline')));
 
 const isWelcomeDone = computed({
   get() {
@@ -997,6 +1034,27 @@ div.v-toolbar__content {
 
 .network-tooltip-content strong {
   color: var(--g-accent) !important;
+}
+
+/* The "Data paused" sentence: last, wraps instead of widening the tooltip. */
+.network-tooltip-detail {
+  max-width: 300px;
+  margin-top: var(--g-s-2);
+  white-space: normal;
+  color: var(--g-text-1);
+}
+
+/* The "Paused" chip: the muted warning pair, a pill, the label in g-warning. */
+.network-paused-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  padding: 0 var(--g-s-2);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-pill);
+  color: var(--g-warning);
+  white-space: nowrap;
 }
 
 /* Search field in top nav bar */
