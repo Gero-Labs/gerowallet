@@ -457,6 +457,33 @@ describe('Midnight ledger-specific orchestration', () => {
     });
   });
 
+  it('a busy Gero Cloud gets the same signed bytes again, without asking for keys or a signature again', async () => {
+    vi.useFakeTimers();
+    try {
+      const busy = () => new MidnightApiError('proverBusy', { status: 503, errorCode: 'MIDNIGHT_PROVER_BUSY', message: 'busy', retryAfter: 2 }, 'Preprod');
+      const submitProven = vi.fn().mockRejectedValueOnce(busy()).mockRejectedValueOnce(busy()).mockResolvedValueOnce({ txHash: 'ok', status: 'InBlock' });
+      mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitProvenMidnightTx: submitProven });
+      mocks.send.mockImplementation(async ({ method }: { method: MessageTypes }) => (method === MessageTypes.GET_MIDNIGHT_WALLET_KEYS
+        ? { data: { success: true, publicKeyHex: '11', addressHex: '22' } }
+        : { data: { success: true, signedTxHex: 'signed-once', proven: true } }));
+      const countdown: Array<number | null> = [];
+      const stages: string[] = [];
+      const sent = sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 5 * 60_000 }, {},
+        (stage) => stages.push(stage), undefined, false, () => true, { onCountdown: (s) => countdown.push(s) });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(sent).resolves.toMatchObject({ txHash: 'ok' });
+      expect(submitProven).toHaveBeenCalledTimes(3);
+      expect(submitProven.mock.calls.every(([body]) => body.signedTxHex === 'signed-once')).toBe(true);
+      // One key request and one signing round trip: no second password or signature.
+      expect(mocks.send).toHaveBeenCalledTimes(2);
+      expect(countdown).toEqual([2, 1, null, 2, 1, null]);
+      // The timeline waits during each countdown and submits again after it.
+      expect(stages.slice(stages.indexOf('submitting'))).toEqual(['submitting', 'waiting', 'submitting', 'waiting', 'submitting', 'done']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // ── which side names the ledger hash ─────────────────────────────────────
   //
   // The relay's txHash is the Substrate extrinsic hash; history is keyed on

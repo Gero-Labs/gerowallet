@@ -21,7 +21,7 @@ describe('Midnight send live region', () => {
     const before = file.slice(Math.max(0, region - 400), region);
     expect(before).not.toMatch(/v-if="(sending|submitting)"[^>]*>\s*(<!--[\s\S]*?-->\s*)?$/);
     expect(file).toContain('const { message: liveMessage, announce } = usePoliteAnnouncer();');
-    expect(file).toMatch(/useMidnightSendTimeline\([\s\S]*?\bannounce,\s*\}/);
+    expect(file).toMatch(/useMidnightSendTimeline\([\s\S]*?\bannounce,\s*(\/\/[^\n]*\n\s*submitDetail:[^\n]*\n\s*)?\}/);
   });
 
   it('the side panel says to keep it open (the send runs in the panel) and nothing contrary', () => {

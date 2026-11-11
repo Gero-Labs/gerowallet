@@ -68,6 +68,18 @@
 
           <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
         </div>
+        <!-- Gero Cloud stayed busy after the automatic resubmits: the transaction is
+             signed and kept in memory; Try again resends the same bytes, no password.
+             Full width under the progress view; the buttons wrap in a narrow card. -->
+        <template v-if="busyPrompt">
+          <GNote icon="mdi-clock-outline" role="status" class="mt-1" data-test="midnight-send-still-busy">
+            {{ t('midnight.busy.stillBusy') }}
+          </GNote>
+          <div ref="busyActionsEl" class="mpv-busy-actions mt-2 mb-3">
+            <GButton tier="secondary" compact data-test="midnight-send-busy-cancel" @click="answerBusy('cancel')">{{ t('common.cancel') }}</GButton>
+            <GButton tier="primary" compact data-test="midnight-send-busy-retry" @click="answerBusy('retry')">{{ t('common.tryAgain') }}</GButton>
+          </div>
+        </template>
         </div>
 
         <CustomStepper v-else :currentStep="currentStep" :steps="steps">
@@ -395,6 +407,9 @@
           {{ sendBlockText }}
         </GNote>
 
+        <p v-if="busyCancelled && !sending" role="status" class="mpv-cancelled t-caption mb-2 text-center px-3" data-test="midnight-send-cancelled">
+          {{ t('midnight.busy.nothingSent') }}
+        </p>
         <p v-if="errorMessage" role="alert" class="error--text t-caption mb-2 text-center px-3" data-test="midnight-send-error">
           {{ errorMessage }}
         </p>
@@ -453,7 +468,7 @@
 <script setup lang="ts">
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
@@ -502,6 +517,7 @@ import rules from '@/utils/rules';
 import assets from '@/utils/assets';
 import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightNetworkDisplayName, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { isMidnightBusyCancelled, type MidnightBusyHandlers } from '@/services/midnightBusyRetry';
 import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
 
 interface Props {
@@ -752,6 +768,40 @@ const amount = ref('');
 const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
+/** Seconds until the automatic resubmit while Gero Cloud is busy (midnightBusyRetry.ts). */
+const busySeconds = ref<number | null>(null);
+/** Set while the send waits for Try again or Cancel after the automatic resubmits. */
+const busyPrompt = ref<((choice: 'retry' | 'cancel') => void) | null>(null);
+/** Shown after Cancel on the still-busy prompt: nothing went out, and nothing went wrong. */
+const busyCancelled = ref(false);
+const busyActionsEl = ref<HTMLElement | null>(null);
+/** Ends the current send's busy countdown at once (Cancel, the dialog going away), timer included. */
+let busyAbort: AbortController | null = null;
+
+/** The busy countdown and the still-busy prompt for one send. */
+function busyHandlers(current: () => boolean): MidnightBusyHandlers {
+  busyAbort?.abort();
+  busyAbort = new AbortController();
+  return {
+    signal: busyAbort.signal,
+    onCountdown: (seconds) => { if (current()) busySeconds.value = seconds; },
+    onStillBusy: () => new Promise<'retry' | 'cancel'>((resolve) => {
+      if (!current()) { resolve('cancel'); return; }
+      busyPrompt.value = (choice) => { busyPrompt.value = null; resolve(choice); };
+    }),
+  };
+}
+
+function answerBusy(choice: 'retry' | 'cancel') {
+  if (choice === 'cancel') busyAbort?.abort();
+  busyPrompt.value?.(choice);
+}
+onBeforeUnmount(() => answerBusy('cancel'));
+// The prompt is the next thing to act on: focus Try again when it appears.
+watch(busyPrompt, (prompt) => {
+  if (!prompt) return;
+  void nextTick(() => busyActionsEl.value?.querySelector<HTMLElement>('[data-test="midnight-send-busy-retry"]')?.focus());
+});
 /** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
 const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
 // Turned on while the review step is open (a status read, a 501 elsewhere):
@@ -811,6 +861,8 @@ const timelineLabels = computed<SendTimelineLabels>(() => ({
 const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels, {
   provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params))),
   announce,
+  // Gero Cloud is busy: counting down to the automatic resubmit.
+  submitDetail: computed(() => (busySeconds.value != null ? String(t('midnight.busy.retrying', { n: busySeconds.value })) : undefined)),
 });
 
 // Compact DUST battery for the progress summary (current / cap), so the user
@@ -1056,6 +1108,7 @@ async function nextStep() {
 function prevStep() {
   approval.invalidate();
   errorMessage.value = null;
+  busyCancelled.value = false;
   clearSendOutcome();
   localProverUnavailable.value = false;
   currentStep.value = 1;
@@ -1064,6 +1117,7 @@ function prevStep() {
 function preflight(): boolean {
   errorMessage.value = null;
   ledgerMismatch.value = false;
+  busyCancelled.value = false;
   if (loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
     errorMessage.value = 'Not a Midnight wallet';
     return false;
@@ -1083,6 +1137,11 @@ async function submitWithPassword() {
 
 /** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
 function showSendError(e: unknown) {
+  // Cancel while Gero Cloud was busy: nothing was sent and nothing went wrong.
+  if (isMidnightBusyCancelled(e)) {
+    busyCancelled.value = true;
+    return;
+  }
   const block = midnightSendBlockOf(e);
   if (block) {
     sendBlock.value = block;
@@ -1248,6 +1307,10 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
   localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
+  // Captured now: the pending row and the sponsor link are recorded once the
+  // submit is accepted, even if the dialog has been reset or closed by then.
+  const draft = sendDraft();
+  const paying = sponsorWallet.value;
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
     const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
@@ -1258,31 +1321,36 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       {
         fromAddress: wallet.baseAddress,
         outputs: [{
-          address: recipient.value.trim(),
-          amount: parseAmount(amount.value).toString(),
-          token: selectedToken.value,
+          address: draft.to,
+          amount: draft.amount.toString(),
+          token: draft.token,
         }],
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
-      (stage) => { if (current()) sendStage.value = stage; },
+      (stage) => {
+        // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
+        if (stage === 'submitting' || stage === 'provingCloud') wipePasskeySecrets(credentials, sponsor);
+        if (current()) sendStage.value = stage;
+      },
       sponsor,
       forceRemote,
       current,
+      busyHandlers(current),
     );
-    if (!current()) return;
     debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
-      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+      'status:', result.status, 'sponsor:', paying?.id ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
     // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
     // match the row later keys on it.
     const historyHash = historyHashForSubmittedTx(result);
 
+    // The transaction is accepted: record it whether or not this view is
+    // still the current one. Only the screen updates below wait on that.
     // Remember who paid — for the dashboard indicator on BOTH wallets, and so
     // the transaction details screen can say the fee came from elsewhere.
     // Best effort: a storage failure must never fail a submitted transaction.
-    if (sponsorWallet.value) {
-      const paying = sponsorWallet.value;
+    if (paying) {
       try {
         const { recordSponsoredTx, saveSponsorLink } = await import('@/chains/midnight/midnightSponsorLinks');
         const at = Date.now();
@@ -1300,16 +1368,17 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
           at,
           sponsoredWalletId: wallet.id,
           sponsoredWalletName: wallet.name,
-          amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
-          recipient: recipient.value.trim(),
+          amountLabel: draft.amountLabel,
+          recipient: draft.to,
         });
       } catch (e) {
         debugLog('🌙 could not record sponsorship for this tx', e);
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
+    // Into this wallet's history only: after a wallet switch it would land in another's.
+    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft);
     if (!current()) return;
-    void addOptimisticPendingTx(historyHash, current);
     // Brief completed-state hold so the user sees the timeline finish.
     await new Promise((r) => setTimeout(r, 550));
     if (!current()) return;
@@ -1320,9 +1389,33 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
     showSendError(e);
   } finally {
     sponsor?.prfSecret?.fill(0);
+    busySeconds.value = null;
+    answerBusy('cancel');
     sending.value = false;
     sendStage.value = 'idle';
   }
+}
+
+/** The wallet that sent is still the one logged in (the dialog may be gone, the wallet not switched). */
+function isSameWallet(sent: { id: number; network: string }): boolean {
+  return loggedWallet.value?.id === sent.id && loggedWallet.value?.network === sent.network;
+}
+
+/** What this send is, captured when it starts. */
+function sendDraft() {
+  const token = selectedToken.value;
+  return {
+    amount: parseAmount(amount.value),
+    to: recipient.value.trim(),
+    token,
+    amountLabel: `${amount.value} ${token === 'NIGHT' ? 'NIGHT' : shortToken(token)}`,
+  };
+}
+
+/** Zero the PassKey secrets this send was given (the wallet's and a sponsor's). */
+function wipePasskeySecrets(credentials: { prfSecret?: Uint8Array }, sponsor?: { prfSecret?: Uint8Array } | null) {
+  credentials.prfSecret?.fill(0);
+  sponsor?.prfSecret?.fill(0);
 }
 
 async function sendShielded(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
@@ -1340,6 +1433,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
   localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
+  const draft = sendDraft();
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
     const { sendShieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
@@ -1348,20 +1442,27 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     const result = await sendShieldedNight(
       wallet.network,
       [{
-        receiverAddress: recipient.value.trim(),
-        amount: parseAmount(amount.value),
-        tokenType: selectedToken.value,
+        receiverAddress: draft.to,
+        amount: draft.amount,
+        tokenType: draft.token,
       }],
       credentials,
       'InBlock',
-      (stage) => { if (current()) sendStage.value = stage; },
+      (stage) => {
+        // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
+        if (stage === 'submitting' || stage === 'provingCloud') wipePasskeySecrets(credentials, sponsor);
+        if (current()) sendStage.value = stage;
+      },
       forceRemote,
       sponsor,
       current,
+      busyHandlers(current),
     );
-    if (!current()) return;
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a', 'status:', result.status);
-    void addOptimisticPendingTx(historyHashForSubmittedTx(result), current, true);
+    // Accepted: in history right away, whether or not this view is still current
+    // (but only this wallet's history).
+    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHashForSubmittedTx(result), draft, true);
+    if (!current()) return;
     await new Promise((r) => setTimeout(r, 550));
     if (!current()) return;
     resetForm();
@@ -1384,22 +1485,21 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     }
   } finally {
     sponsor?.prfSecret?.fill(0);
+    busySeconds.value = null;
+    answerBusy('cancel');
     sending.value = false;
     sendStage.value = 'idle';
   }
 }
 
-// Insert the just-submitted tx into history immediately (values captured
-// synchronously so a later resetForm can't blank them out).
-async function addOptimisticPendingTx(hash: string, current: () => boolean, shielded = false) {
-  const amountBig = parseAmount(amount.value);
-  const to = recipient.value.trim();
-  // Preserve the selected public or private custom token in pending history.
-  const token = selectedToken.value;
+// Insert the just-submitted tx into history immediately, from the values the
+// send started with (a later resetForm can't blank them out). Not tied to the
+// view: an accepted transaction gets its pending row even if the dialog is gone.
+async function addOptimisticPendingTx(hash: string, draft: { amount: bigint; to: string; token: string }, shielded = false) {
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    if (!current()) return;
-    await addPendingMidnightTx(hash, amountBig, to, shielded, token);
+    // Preserve the selected public or private custom token in pending history.
+    await addPendingMidnightTx(hash, draft.amount, draft.to, shielded, draft.token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -1956,5 +2056,15 @@ function shortToken(colour: string): string {
   color: var(--g-accent);
   font-size: 11px;
   font-weight: 600;
+}
+/* The still-busy prompt's buttons: right-aligned, wrapping in a narrow card. */
+.mpv-cancelled {
+  color: var(--g-text-2);
+}
+.mpv-busy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+  justify-content: flex-end;
 }
 </style>

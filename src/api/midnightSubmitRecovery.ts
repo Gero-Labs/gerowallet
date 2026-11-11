@@ -10,7 +10,7 @@
  * module asks the indexer whether the transaction arrived.
  */
 import i18n from '@/plugins/i18n';
-import { toMidnightApiError } from './midnightApiError';
+import { parseMidnightErrorEnvelope, toMidnightApiError } from './midnightApiError';
 import type { SubmitMidnightTxResponse } from './midnight-api';
 
 /** What a caller knows about the transaction it is submitting, enough to find it again. */
@@ -45,7 +45,7 @@ const LOST_REPLY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504, 520, 52
 interface AxiosLikeError {
   isAxiosError: true;
   code?: string;
-  response?: { status?: number };
+  response?: { status?: number; data?: unknown; headers?: unknown };
 }
 
 /**
@@ -53,6 +53,11 @@ interface AxiosLikeError {
  * back. Anything the server actually answered (400, 401, 409, a 500 with a
  * body, ...) is a real failure. Non-axios errors (a token that could not be
  * fetched before the request left) are never a lost reply.
+ *
+ * A gateway status with the server's own envelope and an `errorCode` (for
+ * example 503 MIDNIGHT_PROVER_BUSY) is an answer too: the server says what
+ * happened, so there is nothing to look up. Only a body-less or HTML gateway
+ * reply is a lost one.
  */
 export function isLostReply(error: unknown): boolean {
   // Same test axios applies in `axios.isAxiosError`, without needing the module.
@@ -62,7 +67,8 @@ export function isLostReply(error: unknown): boolean {
   const { code, response } = error as AxiosLikeError;
   if (code && LOST_REPLY_CODES.has(code)) return true;
   if (!response) return true;
-  return typeof response.status === 'number' && LOST_REPLY_STATUSES.has(response.status);
+  if (typeof response.status !== 'number' || !LOST_REPLY_STATUSES.has(response.status)) return false;
+  return !parseMidnightErrorEnvelope(response.status, response.data, response.headers)?.errorCode;
 }
 
 export interface SubmitRecoveryDeps {
