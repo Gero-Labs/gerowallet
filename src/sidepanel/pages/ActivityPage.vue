@@ -7,7 +7,7 @@
         <v-icon size="56" color="var(--g-text-3)">mdi-history</v-icon>
         <div class="text-body-1 white--text mt-3">{{ $t('miniGero.noTransactions') }}</div>
       </div>
-      <div v-else class="tx-list">
+      <div v-else class="tx-list" :class="{ 'g-stale': midnightRefreshing }">
         <div
           v-for="tx in midnightTxs"
           :key="tx.hash"
@@ -19,13 +19,13 @@
             </v-icon>
           </div>
           <div class="tx-info">
-            <div class="tx-title white--text text-body-2">{{ midnightTxLabel(tx) }}</div>
+            <div class="tx-title tx-title--midnight text-body-2">{{ midnightTxLabel(tx) }}</div>
             <div class="tx-time text-caption grey--text">{{ formatTimestamp(tx.timestamp) }}</div>
           </div>
           <div class="tx-amount-col text-right">
             <div
               class="text-body-2 font-weight-medium"
-              :class="tx.type === 'receive' ? 'accent-text' : tx.type === 'send' ? 'error-text' : 'grey--text'"
+              :class="midnightRefreshing ? 'stale-amount' : tx.type === 'receive' ? 'accent-text' : tx.type === 'send' ? 'error-text' : 'grey--text'"
             >
               {{ formatMidnightAmount(tx) }}
             </div>
@@ -85,6 +85,7 @@
 import { ref, shallowRef, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { formatTokenAmount } from '@/chains/midnight/midnightAmount';
@@ -106,6 +107,8 @@ const loading = computed(() => !walletStore.transactions);
 
 // ── Midnight branch ───────────────────────────────────────────────────────────
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+// While Midnight data is rebuilt the list is the last one the wallet knew, greyed.
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
 
 const midnightTxs = computed<MidnightTransaction[]>(() =>
@@ -247,6 +250,16 @@ function openTxDetail(tx: StoredTransaction) {
 </script>
 
 <style scoped lang="scss">
+/* Midnight rows: tokens, so the last-known history greys with .g-stale while it is rebuilt. */
+.tx-title--midnight {
+  color: var(--g-text-1);
+}
+
+/* An amount from the last-known history: metadata, not news. */
+.stale-amount {
+  color: var(--g-text-3);
+}
+
 .activity-page {
   min-height: 100%;
 }

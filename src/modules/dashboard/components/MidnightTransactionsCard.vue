@@ -73,9 +73,11 @@ import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
 import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import { useNow } from '@/shared/composables/useNow';
 
 const { t } = useTranslation();
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 
 const { transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
@@ -144,6 +146,8 @@ function statusLabel(tx: MidnightTransaction): string {
 }
 
 function amountColor(type: MidnightTransactionType): string {
+  // While Midnight data is rebuilt these are the last rows the wallet knew: metadata, not news.
+  if (midnightRefreshing.value) return 'var(--g-text-3)';
   if (type === 'receive') return '#47CD89';
   if (type === 'send') return '#F97066';
   return '#c4c4c4';
@@ -223,7 +227,7 @@ watch(() => recent.value.length, loadAttribution);
 .recent-tx-heading {
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
   line-height: 1;
 }
 
@@ -278,7 +282,7 @@ watch(() => recent.value.length, loadAttribution);
 .recent-tx-status {
   font-size: 11px;
   font-weight: 500;
-  color: #ffffff;
+  color: var(--g-text-1);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;

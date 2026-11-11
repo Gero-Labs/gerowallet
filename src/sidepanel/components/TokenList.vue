@@ -8,7 +8,7 @@
           <img :src="midnightLogo" alt="NIGHT" style="width: 24px; height: 24px" />
         </v-avatar>
         <div class="token-info">
-          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
+          <div class="token-name text-body-2 text-truncate" style="font-weight: 600">
             {{ nightTicker }}
             <v-icon size="x-small" color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
           </div>
@@ -34,14 +34,14 @@
           <v-icon v-else size="20" color="grey">mdi-circle-multiple-outline</v-icon>
         </v-avatar>
         <div class="token-info">
-          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">{{ row.ticker }}</div>
+          <div class="token-name text-body-2 text-truncate" style="font-weight: 600">{{ row.ticker }}</div>
           <div class="token-amount text-caption grey--text">
             {{ hideBalances ? '••••••' : row.balanceFormatted }}
           </div>
         </div>
       </div>
       <div class="token-right">
-        <div v-if="row.valueFormatted" class="token-value text-body-2 white--text">
+        <div v-if="row.valueFormatted" class="token-value text-body-2">
           {{ hideBalances ? '$•••' : row.valueFormatted }}
         </div>
         <div v-else class="token-value text-body-2 grey--text">--</div>
@@ -64,7 +64,7 @@
           <img :src="nativeLogo" :alt="nativeTicker" />
         </v-avatar>
         <div class="token-info">
-          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
+          <div class="token-name text-body-2 text-truncate" style="font-weight: 600">
             {{ nativeTicker }}
             <v-icon size="x-small" color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
           </div>
@@ -74,7 +74,7 @@
         </div>
       </div>
       <div class="token-right">
-        <div class="token-value text-body-2 white--text" v-if="adaFiatValue">
+        <div class="token-value text-body-2" v-if="adaFiatValue">
           {{ hideBalances ? '$•••' : formattedAdaFiat }}
         </div>
         <div class="token-value text-body-2 grey--text" v-else>--</div>
@@ -111,7 +111,7 @@
                  name ("Minswap Dummy Test") no longer cuts its badge off with it. The flex row
                  centres the icon, so it needs no nudge: with the old -2px it sat 1px higher
                  than in the inline layout it replaced. -->
-            <div class="token-name token-name-row text-body-2 white--text">
+            <div class="token-name token-name-row text-body-2">
               <span class="text-truncate">{{ getTokenName(token) }}</span>
               <v-tooltip location="top" v-if="token.isProgrammable && token.cip113Registered"  :open-delay="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
@@ -137,7 +137,7 @@
           </div>
         </div>
         <div class="token-right">
-          <div class="token-value text-body-2 white--text" v-if="getTokenPrice(token)">
+          <div class="token-value text-body-2" v-if="getTokenPrice(token)">
             {{ hideBalances ? '$•••' : formatFiatValue(token) }}
           </div>
           <div class="token-value text-body-2 grey--text" v-else>--</div>
@@ -500,6 +500,7 @@ function onImgError(event: Event) {
 .token-name {
   font-size: 13px !important;
   font-weight: 500;
+  color: var(--g-text-1);
   max-width: 140px;
 }
 
@@ -524,6 +525,7 @@ function onImgError(event: Event) {
 .token-value {
   font-size: 13px !important;
   font-weight: 500;
+  color: var(--g-text-1);
 }
 
 .token-change {

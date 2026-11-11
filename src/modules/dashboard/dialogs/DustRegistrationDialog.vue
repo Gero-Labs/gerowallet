@@ -174,7 +174,7 @@
           <GNote
             v-if="writesPaused"
             id="dust-register-paused"
-            icon="mdi-pause-circle-outline"
+            :icon="sendHold.icon.value"
             role="status"
             class="mt-2"
             data-test="dust-register-paused"
@@ -278,8 +278,7 @@ import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccou
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
-import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
-import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
@@ -538,13 +537,14 @@ const submitError = ref<string | null>(null);
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
-/** Why native registration on this wallet's network is held, if it is: update required or network upgrade (midnightWriteGate.ts). */
-const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
-/** `writesPaused`: held for either reason. The copy says which; update required takes precedence. */
-const writesPaused = computed(() => writeBlock.value !== null);
-const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
-  ? t('midnight.update.registrationHeld')
-  : t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
+/**
+ * Why native registration on this wallet's network is held, if it is, as one
+ * reason: update required, the network upgrade, or a rebuild in progress
+ * (useMidnightSendHold.ts). `writesPaused` is "held for any of them".
+ */
+const sendHold = useMidnightSendHold(() => loggedWallet.value?.network);
+const writesPaused = sendHold.held;
+const writesHeldText = sendHold.registrationText;
 // Turned on while the password step is open: back out, so no password or PassKey is asked for.
 watch(writesPaused, (paused) => {
   if (paused && inSigningPhase.value && !submitBusy.value) resetRegistrationState();

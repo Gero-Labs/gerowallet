@@ -8,7 +8,7 @@
  */
 
 /** Every notice the slot knows, highest precedence first. */
-export const MIDNIGHT_NOTICE_ORDER = ['update', 'upgrade', 'stagenet'] as const;
+export const MIDNIGHT_NOTICE_ORDER = ['update', 'upgrade', 'refreshing', 'stagenet'] as const;
 
 export type MidnightNoticeId = (typeof MIDNIGHT_NOTICE_ORDER)[number];
 

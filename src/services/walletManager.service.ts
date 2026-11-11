@@ -497,6 +497,12 @@ export class WalletManager {
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
 
+    // The previous worker's Midnight record, kept aside for a Midnight wallet's
+    // first reset after a restart (midnightStore.ts), has no use for another chain.
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      void import('@/stores/midnightStore').then(({ midnightActions }) => midnightActions.releaseBootRecord()).catch(() => undefined);
+    }
+
     LoadingState.setText('Loading blockchain data...');
 
     // Phase-5 cutover: BTC syncs via gero-sync WS by default. The Esplora poller is

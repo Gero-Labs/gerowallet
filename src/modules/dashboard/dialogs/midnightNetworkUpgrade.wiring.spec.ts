@@ -12,13 +12,12 @@ const read = (path: string) => readFileSync(join(src, path), 'utf8');
 describe('Midnight network upgrade wiring', () => {
   it('send dialog: Continue held (aria-disabled) with the reason linked, step 2 never opens, and backs out if it turns on', () => {
     const dialog = read('modules/dashboard/dialogs/MidnightSendDialog.vue');
-    expect(dialog).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
-    expect(dialog).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
-    expect(dialog).toContain("? t('midnight.errors.updateRequired')");
+    expect(dialog).toContain('const sendHold = useMidnightSendHold(() => loggedWallet.value?.network);');
+    expect(dialog).toContain('const writesPaused = sendHold.held;');
+    expect(dialog).toContain('const writesHeldText = sendHold.sendText;');
     expect(dialog).toContain(':aria-disabled="writesPaused ? \'true\' : undefined"');
     expect(dialog).toContain(':aria-describedby="writesPaused ? \'midnight-send-paused\' : undefined"');
     expect(dialog).toContain('<GNote v-if="writesPaused" id="midnight-send-paused"');
-    expect(dialog).toContain("t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
     expect(dialog).toContain('{{ writesHeldText }}');
     expect(dialog).toContain('if (writesPaused.value) return;\n  if (currentStep.value === 1) {');
     expect(dialog).toContain('if (paused && currentStep.value === 2 && !sending.value) prevStep();');
@@ -27,15 +26,14 @@ describe('Midnight network upgrade wiring', () => {
 
   it('side panel sheet: the reason from step 1, Confirm held with it linked, no DUST fee note, the password step never opens', () => {
     const sheet = read('sidepanel/components/flows/MidnightSendSheet.vue');
-    expect(sheet).toContain('<GNote v-if="writesPaused" icon="mdi-pause-circle-outline" role="status" class="mb-3" data-test="midnight-send-paused-start">');
+    expect(sheet).toContain('<GNote v-if="writesPaused" :icon="sendHold.icon.value" role="status" class="mb-3" data-test="midnight-send-paused-start">');
     expect(sheet).toContain(':aria-disabled="writesPaused ? \'true\' : undefined"');
     expect(sheet).toContain(':aria-describedby="writesPaused ? \'midnight-sheet-send-paused\' : undefined"');
     expect(sheet).toMatch(/<template v-if="!writesPaused">\s*<GNote v-if="!isDustLow"/);
     expect(sheet).toContain('if (target === 4 && writesPaused.value) return;');
-    expect(sheet).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
-    expect(sheet).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
-    expect(sheet).toContain("? t('midnight.errors.updateRequired')");
-    expect(sheet).toContain("t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
+    expect(sheet).toContain('const sendHold = useMidnightSendHold(() => loggedWallet.value?.network);');
+    expect(sheet).toContain('const writesPaused = sendHold.held;');
+    expect(sheet).toContain('const writesHeldText = sendHold.sendText;');
     expect(sheet.match(/\{\{ writesHeldText \}\}/g)?.length).toBe(2);
     expect(sheet).toMatch(/if \(paused && step\.value === 4 && !submitting\.value\) \{\s*approval\.invalidate\(\);\s*step\.value = 3;/);
   });
@@ -45,10 +43,9 @@ describe('Midnight network upgrade wiring', () => {
     expect(dialog).toContain(':aria-disabled="writesPaused ? \'true\' : undefined"');
     expect(dialog).toContain(':aria-describedby="writesPaused ? \'dust-register-paused\' : undefined"');
     expect(dialog).toContain('id="dust-register-paused"');
-    expect(dialog).toContain('const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);');
-    expect(dialog).toContain('const writesPaused = computed(() => writeBlock.value !== null);');
-    expect(dialog).toContain("? t('midnight.update.registrationHeld')");
-    expect(dialog).toContain("t('midnight.upgrade.registrationPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })");
+    expect(dialog).toContain('const sendHold = useMidnightSendHold(() => loggedWallet.value?.network);');
+    expect(dialog).toContain('const writesPaused = sendHold.held;');
+    expect(dialog).toContain('const writesHeldText = sendHold.registrationText;');
     expect(dialog).toContain('{{ writesHeldText }}');
     expect(dialog).toContain('if (!dustAddress.value || writesPaused.value) return;');
     expect(dialog).toContain('<v-btn block variant="outlined" class="mt-3" @click="sourcesOpen = true">');

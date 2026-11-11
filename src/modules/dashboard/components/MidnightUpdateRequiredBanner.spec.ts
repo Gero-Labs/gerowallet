@@ -132,7 +132,7 @@ describe('"Update required" banner', () => {
     expect(slot).toContain('update: MidnightUpdateRequiredBanner,');
     expect(slot).toContain("return id === 'update' ? { block: props.layout === 'panel' } : {};");
     // Send held for either reason; the line under it says "update" when that is the reason.
-    expect(home).toContain('const midnightSendPaused = computed(() => midnightWriteBlock.value !== null);');
-    expect(home).toContain("? t('midnight.update.sendHeld')");
+    expect(home).toContain('const midnightSendPaused = midnightSendHold.held;');
+    expect(home).toContain('const midnightSendHeldText = midnightSendHold.sendTextShort;');
   });
 });

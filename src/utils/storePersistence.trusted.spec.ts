@@ -5,8 +5,8 @@
 // the two StorePersister options built for that: `redact` keeps a value out of the
 // compact record, and `trustedFields` makes the extension's private IndexedDB copy
 // the one every context believes.
-import { describe, it, expect, beforeEach } from 'vitest';
-import { StorePersister, type BulkStorage, type CompactStorage, type TrustedStorage } from './storePersistence';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { BULK_HYDRATE_TIMEOUT_MS, StorePersister, type BulkStorage, type CompactStorage, type TrustedStorage } from './storePersistence';
 import type { StoreCacheEntry } from './storeCache';
 
 class MemoryCompact implements CompactStorage {
@@ -208,6 +208,61 @@ describe('StorePersister redaction and trusted fields', () => {
     let applied: Record<string, unknown> | null = null;
     await persisterFor(fresh(), compact, bulk, trusted).hydrateWith((stored) => { applied = stored; });
     expect(applied!['loggedWallet']).toEqual(WALLET);
+  });
+
+  it('hydrateWith({ bulk }) hands back the bulk fields as stored, before any write can replace them', async () => {
+    const state = fresh();
+    const p = persisterFor(state, compact, bulk, trusted);
+    await p.hydrate({ migrate: true });
+    state.loggedWallet = { ...WALLET };
+    state.items = [1, 2, 3];
+    p.markDirty(['loggedWallet', 'items']);
+    await p.flush();
+
+    // A restarted context: it changes the bulk field at once, and keeps the old copy aside.
+    const next = fresh();
+    const restarted = persisterFor(next, compact, bulk, trusted);
+    let small: Record<string, unknown> | null = null;
+    let full: Record<string, unknown> | null = null;
+    const booting = restarted.hydrateWith((stored) => { small = stored; }, { bulk: (stored) => { full = stored; } });
+    next.loggedWallet = { ...WALLET };
+    next.items = [9];
+    restarted.markDirty(['loggedWallet', 'items']);
+    const writing = restarted.flush();
+    await booting;
+    await writing;
+    expect(small!['items']).toBeUndefined(); // the small fields alone, before IndexedDB
+    expect(full!['items']).toEqual([1, 2, 3]);
+    expect(JSON.parse(bulk.data.get('testStore.items')!.json)).toEqual([9]);
+  });
+
+  it('a hung IndexedDB read holds writes for 3 s at most, and the small fields not at all', async () => {
+    const state = fresh();
+    const p = persisterFor(state, compact, bulk, trusted);
+    await p.hydrate({ migrate: true });
+    state.loggedWallet = { ...WALLET };
+    p.markDirty(['loggedWallet']);
+    await p.flush();
+
+    vi.useFakeTimers();
+    try {
+      const hung = new MemoryBulk();
+      hung.read = () => new Promise(() => undefined);
+      const next = fresh();
+      const restarted = persisterFor(next, compact, hung, trusted);
+      let small: Record<string, unknown> | null = null;
+      let full: Record<string, unknown> | null = null;
+      let done = false;
+      void restarted.hydrateWith((stored) => { small = stored; }, { bulk: (stored) => { full = stored; } }).then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(10);
+      expect((small!['loggedWallet'] as Wallet).id).toBe(1);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(BULK_HYDRATE_TIMEOUT_MS);
+      expect(done).toBe(true);
+      expect(full).toBeNull(); // nothing late, nothing half-read
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('pairs bulk data with the trusted session, not a planted one', async () => {

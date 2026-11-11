@@ -57,6 +57,12 @@ export interface StorePersisterOptions {
    */
   redact?: (field: string, value: unknown) => unknown;
   /**
+   * The value to write for a field (compact or bulk) in place of the store's own, for
+   * a store that keeps the previous session's data aside until it holds its own: an
+   * emptied field must not be written over the stored one. Applied before `redact`.
+   */
+  standIn?: (field: string, value: unknown) => unknown;
+  /**
    * Compact fields whose authoritative copy is kept in the extension's private
    * IndexedDB as well. Hydration takes them from there; the chrome.storage copy
    * (redacted) only serves a value that was never written there yet (an upgrade).
@@ -65,6 +71,20 @@ export interface StorePersisterOptions {
   compact?: CompactStorage;
   bulk?: BulkStorage;
   trusted?: TrustedStorage;
+}
+
+/** The longest a bulk read at hydration may hold writes back (hydrateWith's `bulk`). */
+export const BULK_HYDRATE_TIMEOUT_MS = 3_000;
+
+/** `promise`'s value, or null when it takes longer than `ms` (or fails). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      () => { clearTimeout(timer); resolve(null); },
+    );
+  });
 }
 
 export interface HydrateOptions {
@@ -288,7 +308,7 @@ export class StorePersister {
       for (const field of bulkFields) {
         // A held legacy value is what the field still is on disk; the store's copy may
         // have been emptied without a setter (clearForWalletSwitch at login).
-        const value = this.legacyHeld.has(field) ? this.legacyHeld.get(field) : this.state[field];
+        const value = this.legacyHeld.has(field) ? this.legacyHeld.get(field) : this.standInFor(field, this.state[field]);
         let json: string;
         try {
           json = JSON.stringify(value ?? null, replacer);
@@ -385,11 +405,15 @@ export class StorePersister {
     const view: State = {};
     for (const key of Object.keys(this.state)) {
       if (!this.bulkFields.has(key)) {
-        const value = this.redactCompact(key, this.state[key]);
+        const value = this.redactCompact(key, this.standInFor(key, this.state[key]));
         if (value !== undefined) view[key] = value;
       } else if (this.legacyInline.has(key)) view[key] = this.legacyHeld.has(key) ? this.legacyHeld.get(key) : this.state[key];
     }
     return view;
+  }
+
+  private standInFor(field: string, value: unknown): unknown {
+    return this.options.standIn ? this.options.standIn(field, value) : value;
   }
 
   private redactCompact(field: string, value: unknown): unknown {
@@ -573,16 +597,39 @@ export class StorePersister {
    * it, as hydrate() does. For a store that restores only some fields, through its own
    * validators, rather than the whole record.
    */
-  async hydrateWith(apply: (stored: State | null) => void, { migrate = false }: Pick<HydrateOptions, 'migrate'> = {}): Promise<void> {
+  async hydrateWith(
+    apply: (stored: State | null) => void,
+    { migrate = false, bulk }: Pick<HydrateOptions, 'migrate'> & {
+      /**
+       * Also hand over the record with its bulk fields merged in, as read() does, read
+       * before any write can replace them: for a store that keeps the previous
+       * session's data aside. Runs after `apply`, so the small fields never wait on
+       * IndexedDB, and only if the read ends within BULK_HYDRATE_TIMEOUT_MS: a hung
+       * IndexedDB holds writes no longer than that.
+       */
+      bulk?: (stored: State) => void;
+    } = {},
+  ): Promise<void> {
     const trustedRead = this.readTrusted();
     const reading = this.readCompactRecord().then(async (stored) => {
       const trusted = await trustedRead;
+      const record = this.withTrusted(stored, trusted);
       try {
-        apply(this.withTrusted(stored, trusted));
+        apply(record);
       } catch (error) {
         console.error(`Failed to hydrate ${this.options.storeName}:`, error);
       }
       if (migrate) this.adoptStoredRecord(stored, trusted);
+      if (bulk && record) {
+        const full = await withTimeout(this.withBulk(record), BULK_HYDRATE_TIMEOUT_MS);
+        if (full) {
+          try {
+            bulk(full);
+          } catch (error) {
+            console.error(`Failed to hydrate ${this.options.storeName}:`, error);
+          }
+        }
+      }
       return stored;
     });
     // Set before the first await: a flush from here on waits for this read (see flush).
@@ -602,10 +649,14 @@ export class StorePersister {
    * hydrate(): it is always the later write.
    */
   async read(): Promise<State | null> {
-    const { storeName } = this.options;
     const [compact, trusted] = await Promise.all([this.readCompactRecord(), this.readTrusted()]);
     const stored = this.withTrusted(compact, trusted);
-    if (!stored) return null;
+    return stored ? this.withBulk(stored) : null;
+  }
+
+  /** `stored` with the bulk fields of its own session merged in (an inline copy wins). */
+  private async withBulk(stored: State): Promise<State> {
+    const { storeName } = this.options;
     let entries = new Map<string, StoreCacheEntry>();
     try {
       entries = await this.bulk.read([...this.bulkFields].map((field) => this.bulkKey(field)));

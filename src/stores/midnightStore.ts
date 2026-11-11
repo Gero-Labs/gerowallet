@@ -45,6 +45,8 @@ import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 
 import { isLoopbackProverUrl } from '@/chains/midnight/midnightProvingTarget';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTxRowKey, normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
+import { hasDataToKeep, hasShieldedFigures } from '@/chains/midnight/midnightRefresh';
+import type { MidnightRefreshReason, MidnightRefreshSnapshot, MidnightRefreshStatus } from '@/chains/midnight/midnightRefresh';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -291,6 +293,17 @@ export interface MidnightStore {
    * to the sync service; the UI only ever needs this boolean.
    */
   shieldedSyncAvailable: boolean;
+
+  /**
+   * "Refreshing" (midnightRefresh.ts): what the wallet showed before a chain
+   * reset or a forced resync, shown again by browser views (greyed) instead of
+   * the rebuild's partial state until the background ends the refresh. Null
+   * when no rebuild is running, or when there was nothing to keep. Held in
+   * IndexedDB with the history it carries.
+   */
+  refreshSnapshot: MidnightRefreshSnapshot | null;
+  /** The small part of a refresh in progress: when, why, stalled, progress. Null when none. */
+  refreshing: MidnightRefreshStatus | null;
 }
 
 /**
@@ -382,6 +395,8 @@ export const midnightStore = reactive<MidnightStore>({
   sendProgress: null,
   shieldedSyncAvailable: false,
   proofServer: { ...DEFAULT_PROOF_SERVER },
+  refreshSnapshot: null,
+  refreshing: null,
 });
 
 // ---------------------------------------------------------------- serializer
@@ -408,11 +423,13 @@ function serializeValue(_key: string, value: unknown): unknown {
 // extension's private copy.
 const persister = new StorePersister(midnightStore as unknown as Record<string, unknown>, {
   storeName: STORE_NAME,
-  bulkFields: ['transactions', 'utxos'],
+  bulkFields: ['transactions', 'utxos', 'refreshSnapshot'],
   replacer: serializeValue,
   // Per-wallet chain state is keyed by the active unshielded address.
   scope: (state) => (typeof state['activeWalletKey'] === 'string' ? state['activeWalletKey'] : null),
   redact: (field, value) => (field === 'proofServer' ? withoutProofServerCredentials(value) : value),
+  // After a restart, the previous worker's values until this one has its own (see bootStandIn).
+  standIn: (field, value) => bootStandIn(field, value),
   trustedFields: ['proofServer', 'shieldedProvingConsent'],
 });
 
@@ -544,6 +561,39 @@ function hydrateProvingHistory(stored: unknown): MidnightProvingLogEntry[] {
     .slice(0, PROVING_HISTORY_LIMIT);
 }
 
+/** A persisted or broadcast refresh snapshot; anything malformed is no snapshot. */
+export function hydrateRefreshSnapshot(stored: unknown): MidnightRefreshSnapshot | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const s = stored as Partial<MidnightRefreshSnapshot>;
+  if (!Array.isArray(s.transactions) || !s.balances || typeof s.balances !== 'object') return null;
+  const tip = (s.tip ?? {}) as Partial<MidnightRefreshSnapshot['tip']>;
+  return {
+    balances: hydrateBalances(s.balances),
+    transactions: hydrateTransactions(s.transactions),
+    utxos: hydrateUtxos(s.utxos ?? []),
+    dustState: hydrateDustState(s.dustState),
+    tip: {
+      hash: typeof tip.hash === 'string' ? tip.hash : null,
+      height: typeof tip.height === 'number' ? tip.height : 0,
+      timestamp: typeof tip.timestamp === 'number' ? tip.timestamp : 0,
+      ...(typeof tip.observedAt === 'number' ? { observedAt: tip.observedAt } : {}),
+    },
+  };
+}
+
+/** A persisted or broadcast refresh status; anything malformed is none. */
+export function hydrateRefreshStatus(stored: unknown): MidnightRefreshStatus | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const s = stored as Partial<MidnightRefreshStatus>;
+  if (typeof s.startedAt !== 'number') return null;
+  return {
+    startedAt: s.startedAt,
+    reason: s.reason === 'upgrade' ? 'upgrade' : null,
+    stalled: s.stalled === true,
+    progress: typeof s.progress === 'number' && Number.isFinite(s.progress) ? Math.max(0, Math.min(99, Math.floor(s.progress))) : null,
+  };
+}
+
 function toBig(value: unknown): bigint {
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(Math.trunc(value));
@@ -555,35 +605,85 @@ function toBig(value: unknown): bigint {
 
 // ---------------------------------------------------------------- browser-context
 
+/**
+ * Fields a browser view shows from the refresh snapshot while a rebuild runs
+ * (midnightRefresh.ts): never the rebuild's partial balances or history.
+ */
+const REFRESH_FROZEN_FIELDS: ReadonlySet<string> = new Set(['balances', 'transactions', 'utxos', 'dustState']);
+/** Live values that arrived while the snapshot was on screen, swapped in when the refresh ends. */
+let heldLive: Record<string, unknown> = {};
+
+/** One broadcast field into the browser copy, re-hydrating the typed collections. */
+function applyBroadcastField(key: string, val: unknown): void {
+  const k = key as keyof MidnightStore;
+  if (k === 'balances') {
+    midnightStore.balances = hydrateBalances(val);
+  } else if (k === 'utxos') {
+    midnightStore.utxos = hydrateUtxos(val);
+  } else if (k === 'transactions') {
+    midnightStore.transactions = hydrateTransactions(val);
+  } else if (k === 'dustState') {
+    midnightStore.dustState = hydrateDustState(val);
+  } else if (k === 'provingOperations') {
+    midnightStore.provingOperations = hydrateProvingOperations(val);
+  } else if (k === 'provingHistory') {
+    midnightStore.provingHistory = hydrateProvingHistory(val);
+  } else if (k === 'refreshSnapshot') {
+    midnightStore.refreshSnapshot = hydrateRefreshSnapshot(val);
+  } else if (k === 'refreshing') {
+    midnightStore.refreshing = hydrateRefreshStatus(val);
+  } else if (k in midnightStore) {
+    (midnightStore as unknown as Record<string, unknown>)[key] = val;
+  }
+}
+
+/**
+ * Apply one background broadcast to this browser context's copy. While a
+ * refresh snapshot is set, balances, history and DUST state stay the
+ * snapshot's (the rebuild's partial values are held aside); when the refresh
+ * ends, the live values replace them in one step.
+ */
+export function receiveMidnightBroadcast(updates: Partial<MidnightStore>, delivered?: Set<string>): void {
+  const raw = updates as Record<string, unknown>;
+  const snapshotChanges = 'refreshSnapshot' in raw;
+  const snapshot = snapshotChanges ? hydrateRefreshSnapshot(raw['refreshSnapshot']) : midnightStore.refreshSnapshot;
+  if (snapshotChanges && !snapshot) {
+    // The rebuild ended: what arrived meanwhile first, then this message's own (newer) values.
+    for (const [key, value] of Object.entries(heldLive)) if (!(key in raw)) applyBroadcastField(key, value);
+    heldLive = {};
+  }
+  for (const key of Object.keys(raw)) {
+    delivered?.add(key);
+    if (snapshot && REFRESH_FROZEN_FIELDS.has(key)) {
+      heldLive[key] = raw[key];
+      continue;
+    }
+    applyBroadcastField(key, raw[key]);
+  }
+  if (snapshotChanges && snapshot) {
+    for (const key of REFRESH_FROZEN_FIELDS) {
+      if (!(key in heldLive)) heldLive[key] = (midnightStore as unknown as Record<string, unknown>)[key];
+    }
+    midnightStore.balances = snapshot.balances;
+    midnightStore.transactions = snapshot.transactions;
+    midnightStore.utxos = snapshot.utxos;
+    midnightStore.dustState = snapshot.dustState;
+  }
+}
+
+/** Test hook: forget held live values. */
+export function resetMidnightBroadcastForTests(): void {
+  heldLive = {};
+}
+
 if (context === 'browser') {
   // Fields the port has delivered: fresher than anything the cold-start read returns.
   const deliveredFields = new Set<string>();
 
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<MidnightStore>) => {
-    // Mirror walletStore's pattern — direct per-key assignment is what triggers
-    // Vue 2's reactivity reliably. Re-hydrate the typed collections (BigInts,
-    // Maps) but write to top-level keys directly so the outer observable's
-    // setters fire for every changed property.
-    Object.keys(updates as object).forEach((key) => {
-      const k = key as keyof MidnightStore;
-      const val = (updates as Record<string, unknown>)[key];
-      deliveredFields.add(key);
-      if (k === 'balances') {
-        midnightStore.balances = hydrateBalances(val);
-      } else if (k === 'utxos') {
-        midnightStore.utxos = hydrateUtxos(val);
-      } else if (k === 'transactions') {
-        midnightStore.transactions = hydrateTransactions(val);
-      } else if (k === 'dustState') {
-        midnightStore.dustState = hydrateDustState(val);
-      } else if (k === 'provingOperations') {
-        midnightStore.provingOperations = hydrateProvingOperations(val);
-      } else if (k === 'provingHistory') {
-        midnightStore.provingHistory = hydrateProvingHistory(val);
-      } else if (k in midnightStore) {
-        (midnightStore as unknown as Record<string, unknown>)[key] = val;
-      }
-    });
+    // Direct per-key assignment (receiveMidnightBroadcast) is what triggers
+    // reactivity reliably; the typed collections are re-hydrated there.
+    receiveMidnightBroadcast(updates, deliveredFields);
   });
 
   // Hydrate from the persisted record on cold start: the chrome.storage record plus
@@ -640,12 +740,28 @@ if (context === 'browser') {
     // A site's transaction may be mid-flight when the panel opens; the card
     // applies its own staleness window, so restoring the record is safe.
     next.siteActivity = hydrateSiteActivity(stored.siteActivity);
+    next.refreshing = hydrateRefreshStatus(stored.refreshing);
+    next.refreshSnapshot = hydrateRefreshSnapshot(stored.refreshSnapshot);
 
     // The history and UTxOs belong to the wallet that wrote this record, and the
     // port may already have switched to another one.
     if (deliveredFields.has('activeWalletKey') && midnightStore.activeWalletKey !== next.activeWalletKey) {
       delete next.transactions;
       delete next.utxos;
+      delete next.refreshSnapshot;
+      delete next.refreshing;
+    }
+    // A rebuild was running when this record was written: show what the wallet
+    // showed before it, and hold the stored (partial) values for the swap.
+    const snapshot = deliveredFields.has('refreshSnapshot') ? null : next.refreshSnapshot;
+    if (snapshot) {
+      for (const key of REFRESH_FROZEN_FIELDS) {
+        if (key in next && !deliveredFields.has(key)) heldLive[key] = (next as Record<string, unknown>)[key];
+      }
+      next.balances = snapshot.balances;
+      next.transactions = snapshot.transactions;
+      next.utxos = snapshot.utxos;
+      next.dustState = snapshot.dustState;
     }
     for (const [key, value] of Object.entries(next)) {
       if (!deliveredFields.has(key)) (midnightStore as unknown as Record<string, unknown>)[key] = value;
@@ -659,6 +775,48 @@ if (context === 'browser') {
  * Boot-race guards for the background hydrate below: a setter that runs
  * before the async storage read lands must win over the stored copy.
  */
+/**
+ * What the previous worker persisted for its wallet, read once at boot, before
+ * this worker can write over any of it (see the background hydrate): the small
+ * fields its first write replaces, and the bulk ones (history, UTxOs, a running
+ * refresh's snapshot) that any later write of them replaces. A chain reset is
+ * usually first seen right after a restart, by a worker whose memory is empty.
+ * Released once this worker holds the wallet's data itself.
+ */
+let bootRecord: {
+  activeWalletKey: string | null;
+  balances: MidnightBalances;
+  dustState: MidnightDustState | null;
+  tip: MidnightRefreshSnapshot['tip'];
+  refreshing: MidnightRefreshStatus | null;
+  transactions: MidnightTransaction[];
+  utxos: MidnightUnshieldedUtxo[];
+  refreshSnapshot: MidnightRefreshSnapshot | null;
+  /** The bulk fields above were read (IndexedDB answered in time). */
+  bulkRead: boolean;
+} | null = null;
+/** Settles once the boot read above has landed. */
+let bootRead: Promise<void> = Promise.resolve();
+/** Dropped (or its wallet removed) before the boot read landed: not kept when it does. */
+let bootDropped = false;
+const bootForgotten = new Set<string>();
+
+/**
+ * The fields derived from the wallet's history that the views were last sent
+ * the record's value for (see withBootStandIns). This worker's own values go out
+ * once the record is released: nothing else re-sends a field whose value has not
+ * changed since, such as balances that really are zero. (The tip and the DUST
+ * state are left to their own frames, which keep arriving.)
+ */
+const bootShownToViews = new Set<'balances' | 'utxos'>();
+
+/** Let go of the previous worker's record, also if its read is still to land. */
+function dropBootRecord(): void {
+  bootRecord = null;
+  bootDropped = true;
+  bootShownToViews.clear();
+}
+
 const bgDurableTouched = {
   proofServer: false,
   shieldedProvingConsent: false,
@@ -682,7 +840,7 @@ const bgDurableTouched = {
 // would otherwise replace the record with these fields' defaults before they were
 // restored, and a lost chainIdentity costs a full private-note rescan.
 if (context === 'background') {
-  void persister.hydrateWith((record) => {
+  bootRead = persister.hydrateWith((record) => {
     const stored = record as Partial<MidnightStore> | null;
     if (!stored) return;
     if (!bgDurableTouched.proofServer) {
@@ -702,7 +860,86 @@ if (context === 'background') {
     if (!bgDurableTouched.chainIdentity) {
       midnightStore.chainIdentity = hydrateChainIdentity(stored.chainIdentity);
     }
-  }, { migrate: true });
+    // What the previous worker left, kept aside (never into the store: sync owns
+    // per-wallet state). The bulk fields follow from IndexedDB, in the same step,
+    // so no write of this worker can land first (the persister holds writes until
+    // it ends, or for 3 s at most).
+    const bootKey = typeof stored.activeWalletKey === 'string' ? stored.activeWalletKey : null;
+    if (bootDropped || (bootKey && bootForgotten.has(bootKey))) return;
+    bootRecord = {
+      activeWalletKey: bootKey,
+      balances: hydrateBalances(stored.balances),
+      dustState: hydrateDustState(stored.dustState),
+      tip: { hash: stored.tip?.hash ?? null, height: stored.tip?.height ?? 0, timestamp: stored.tip?.timestamp ?? 0 },
+      refreshing: hydrateRefreshStatus(stored.refreshing),
+      transactions: [],
+      utxos: [],
+      refreshSnapshot: null,
+      bulkRead: false,
+    };
+  }, {
+    migrate: true,
+    bulk: (record) => {
+      const stored = record as Partial<MidnightStore>;
+      const boot = bootRecord;
+      if (!boot || boot.activeWalletKey !== (typeof stored.activeWalletKey === 'string' ? stored.activeWalletKey : null)) return;
+      boot.transactions = hydrateTransactions(stored.transactions);
+      boot.utxos = hydrateUtxos(stored.utxos);
+      boot.refreshSnapshot = hydrateRefreshSnapshot(stored.refreshSnapshot);
+      boot.bulkRead = true;
+    },
+  }).catch(() => undefined);
+}
+
+/** The previous worker's history rows this worker may still show and save in place of its own. */
+function bootRowsToKeep(boot: NonNullable<typeof bootRecord>): MidnightTransaction[] {
+  return boot.transactions;
+}
+
+/**
+ * While the previous worker's record is held for the active wallet and this
+ * worker has none of that data of its own yet (a restart, before sync delivers
+ * any), the value saved, and sent to the views, for an emptied per-wallet field
+ * is the record's: the first write after a restart (setActive's) must not save
+ * zero balances over the stored ones, nor a send recorded meanwhile the history.
+ * History this worker holds is kept, and the record's rows it lacks are added.
+ */
+function bootStandIn(field: string, value: unknown): unknown {
+  const boot = bootRecord;
+  const key = midnightStore.activeWalletKey;
+  if (!boot || !key || boot.activeWalletKey !== key) return value;
+  // Settled history or a balance of its own is this worker's data (the same test
+  // that releases the record): zero balances and no UTxOs are then real, as after
+  // the wallet was emptied from another device while this worker was down.
+  const ownData = hasDataToKeep(midnightStore.balances, midnightStore.transactions);
+  switch (field) {
+    case 'balances': return ownData ? value : boot.balances;
+    case 'dustState': return midnightStore.dustState ?? boot.dustState;
+    case 'tip': return midnightStore.tip.hash ? value : { ...midnightStore.tip, ...boot.tip };
+    case 'utxos': return boot.bulkRead && !ownData && midnightStore.utxos.length === 0 ? boot.utxos : value;
+    case 'transactions': {
+      if (!boot.bulkRead || midnightStore.transactions.some((tx) => tx.status !== 'pending')) return value;
+      const own = new Set(midnightStore.transactions.map(txRowKey));
+      return [...midnightStore.transactions, ...bootRowsToKeep(boot).filter((tx) => !own.has(txRowKey(tx)))]
+        .sort((a, b) => b.timestamp - a.timestamp);
+    }
+    default: return value;
+  }
+}
+
+/** `updates` as they go out to the views, with the stand-ins above. */
+function withBootStandIns(updates: Partial<MidnightStore>): Partial<MidnightStore> {
+  if (!bootRecord) return updates;
+  const out: Record<string, unknown> = { ...updates };
+  for (const key of Object.keys(updates)) {
+    const own = (updates as Record<string, unknown>)[key];
+    out[key] = bootStandIn(key, own);
+    if (key === 'balances' || key === 'utxos') {
+      if (out[key] !== own) bootShownToViews.add(key);
+      else bootShownToViews.delete(key);
+    }
+  }
+  return out as Partial<MidnightStore>;
 }
 
 /**
@@ -846,7 +1083,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId', 'chainIdentity', 'privateSyncStatus',
     'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'privateSyncProgress', 'shieldedSyncAvailable', 'siteActivity',
-    'proofServer',
+    'proofServer', 'refreshSnapshot', 'refreshing',
   ] as const) {
     if (key in updates) {
       (midnightStore as unknown as Record<string, unknown>)[key] = updates[key];
@@ -871,7 +1108,7 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
   // Apply to in-memory state in background context
   applyUpdates(updates);
 
-  const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
+  const serializedUpdates = JSON.parse(JSON.stringify(withBootStandIns(updates), serializeValue));
   backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
   persister.markDirty(Object.keys(updates));
@@ -918,6 +1155,37 @@ export function hasMidnightShieldedAddress(address: string | undefined | null): 
 }
 
 /**
+ * The refresh fields for a rebuild starting now. A rebuild already running keeps
+ * its snapshot (the second reset must not snapshot the first one's partial
+ * state); otherwise what is on screen is kept when there is anything to keep.
+ * Nothing to keep (an empty wallet): no snapshot, and the views show the
+ * rebuild as it lands, through the usual loading state.
+ */
+function refreshStartFields(reason: MidnightRefreshReason, persisted: MidnightRefreshSnapshot | null = null): Pick<MidnightStore, 'refreshSnapshot' | 'refreshing'> {
+  const running = midnightStore.refreshSnapshot;
+  const snapshot: MidnightRefreshSnapshot | null = running ?? (hasDataToKeep(midnightStore.balances, midnightStore.transactions)
+    ? {
+      balances: { ...midnightStore.balances, shieldedTokens: { ...midnightStore.balances.shieldedTokens } },
+      transactions: [...midnightStore.transactions],
+      utxos: [...midnightStore.utxos],
+      dustState: midnightStore.dustState ? { ...midnightStore.dustState } : null,
+      tip: { ...midnightStore.tip },
+    }
+    // A worker that restarted holds nothing in memory: what it last persisted.
+    : persisted);
+  if (!snapshot) return { refreshSnapshot: null, refreshing: null };
+  return {
+    refreshSnapshot: snapshot,
+    refreshing: {
+      startedAt: running && midnightStore.refreshing ? midnightStore.refreshing.startedAt : Date.now(),
+      reason: reason ?? (running ? midnightStore.refreshing?.reason ?? null : null),
+      stalled: false,
+      progress: null,
+    },
+  };
+}
+
+/**
  * Background-context actions. Browser code should never call these directly —
  * trigger them via Chrome messaging if needed.
  */
@@ -959,14 +1227,20 @@ export const midnightActions = {
     Object.assign(midnightStore, { balances, transactions: combined, privateSyncStatus: 'synced' });
     broadcastFromBackground({ balances, transactions: combined, privateSyncStatus: 'synced' });
   },
-  resetChainState(identity: MidnightSyncIdentity) {
+  resetChainState(identity: MidnightSyncIdentity, options: { reason?: MidnightRefreshReason; persisted?: MidnightRefreshSnapshot | null } = {}) {
     // `idle`, not `syncing`: this runs on every identity change, including the
     // first sync after a service-worker restart, and it starts no private
     // scan. A loop that IS running re-asserts `syncing` on its next sample;
     // a PassKey wallet has nothing running and must be offered the unlock,
     // not a "Synchronizing private notes…" line with no counter behind it.
     bgDurableTouched.chainIdentity = true;
+    // "Refreshing" (midnightRefresh.ts): what was on screen is kept, in the same
+    // broadcast as the wipe, so no view ever renders the empty state in between.
+    // The previous worker's record has served (what it showed is the snapshot now),
+    // and the emptied fields below are this reset's own, saved as they are.
+    dropBootRecord();
     const updates: Partial<MidnightStore> = {
+      ...refreshStartFields(options.reason ?? null, options.persisted ?? null),
       chainIdentity: identity, privateSyncStatus: 'idle', privateSyncProgress: null, lastSync: null, tip: { ...EMPTY_TIP },
       balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
       lastMidnightTxId: null, provingOperations: new Map(), sendProgress: null,
@@ -974,6 +1248,108 @@ export const midnightActions = {
     };
     Object.assign(midnightStore, updates);
     broadcastFromBackground(updates, true);
+  },
+  /**
+   * Keep what is on screen for a rebuild that doesn't go through a chain reset
+   * (a forced resync). Call before the history is cleared.
+   */
+  beginRefresh(reason: MidnightRefreshReason = null) {
+    const updates = refreshStartFields(reason);
+    Object.assign(midnightStore, updates);
+    broadcastFromBackground(updates, true);
+  },
+  /** A refresh in progress: stalled or not, and the sync service's progress when it reports one. */
+  setRefreshStatus(change: Partial<Pick<MidnightRefreshStatus, 'stalled' | 'progress'>>) {
+    const current = midnightStore.refreshing;
+    if (!current) return;
+    const next = { ...current, ...change };
+    if (next.stalled === current.stalled && next.progress === current.progress) return;
+    midnightStore.refreshing = next;
+    broadcastFromBackground({ refreshing: next });
+  },
+  /**
+   * The rebuild is complete: drop the snapshot, and send the live balances,
+   * history, UTxOs and DUST state with it, so views swap to them in one step.
+   * Private figures are rebuilt by the on-device scan, not this rebuild: until
+   * it reports synced, the snapshot's shielded balances and rows are carried
+   * over (the scan's result replaces them), so a shielded-only wallet never
+   * reads 0 when the public rebuild ends.
+   */
+  endRefresh() {
+    const snapshot = midnightStore.refreshSnapshot;
+    if (!midnightStore.refreshing && !snapshot) return;
+    if (snapshot && hasShieldedFigures(snapshot.balances) && midnightStore.privateSyncStatus !== 'synced') {
+      midnightStore.balances = {
+        ...midnightStore.balances,
+        nightShielded: snapshot.balances.nightShielded,
+        shieldedTokens: { ...snapshot.balances.shieldedTokens },
+      };
+      const live = midnightStore.transactions;
+      // Rows the scan will deliver again; never a pending row, which live history
+      // holds if it is still wanted (the user may have dismissed it).
+      const keptShielded = snapshot.transactions.filter((tx) => tx.isShielded && tx.status !== 'pending'
+        && !live.some((t) => txRowKey(t) === txRowKey(tx)));
+      if (keptShielded.length) {
+        midnightStore.transactions = [...live, ...keptShielded].sort((a, b) => b.timestamp - a.timestamp);
+      }
+    }
+    midnightStore.refreshSnapshot = null;
+    midnightStore.refreshing = null;
+    broadcastFromBackground({
+      refreshSnapshot: null, refreshing: null,
+      balances: midnightStore.balances, transactions: midnightStore.transactions,
+      utxos: midnightStore.utxos, dustState: midnightStore.dustState,
+    }, true);
+  },
+  /**
+   * What the wallet last showed, from the previous worker's record read at boot,
+   * for a rebuild that starts while this worker's memory holds none of it (it
+   * restarted, which is the usual way a reset is first seen). Same wallet only;
+   * null when there is nothing to keep.
+   */
+  async persistedRefreshSnapshot(): Promise<MidnightRefreshSnapshot | null> {
+    await bootRead;
+    const key = midnightStore.activeWalletKey;
+    const boot = key && bootRecord?.activeWalletKey === key ? bootRecord : null;
+    if (!boot) return null;
+    // A rebuild was running: what the wallet showed before it.
+    if (boot.refreshSnapshot) return boot.refreshSnapshot;
+    if (!hasDataToKeep(boot.balances, boot.transactions)) return null;
+    // No pending rows: the record may hold one the user has dismissed since, and a
+    // send still pending is the reset's to keep, not the snapshot's.
+    return {
+      balances: boot.balances, transactions: boot.transactions.filter((tx) => tx.status !== 'pending'), utxos: [...boot.utxos],
+      dustState: boot.dustState, tip: { ...boot.tip },
+    };
+  },
+  /**
+   * This worker holds the wallet's data now (or the wallet is gone): the
+   * previous worker's record read at boot is no longer needed.
+   */
+  releaseBootRecord() {
+    // The views may still show a stand-in sent before this worker had data of its
+    // own; send them, and save, this worker's values in its place.
+    const held = bootRecord && bootRecord.activeWalletKey === midnightStore.activeWalletKey ? [...bootShownToViews] : [];
+    dropBootRecord();
+    if (held.length === 0) return;
+    const own: Partial<MidnightStore> = {};
+    for (const field of held) (own as Record<string, unknown>)[field] = midnightStore[field];
+    broadcastFromBackground(own);
+  },
+  /**
+   * A refresh the previous worker was running when it stopped: back into
+   * memory, and to the views, so the rebuild can end. True when there was one.
+   */
+  async restoreRefreshAfterRestart(): Promise<boolean> {
+    await bootRead;
+    if (midnightStore.refreshSnapshot || !bootRecord?.refreshing) return false;
+    const status = bootRecord.refreshing;
+    const snapshot = await midnightActions.persistedRefreshSnapshot();
+    if (!snapshot || midnightStore.refreshSnapshot) return false;
+    const updates: Partial<MidnightStore> = { refreshSnapshot: snapshot, refreshing: { ...status, stalled: false } };
+    Object.assign(midnightStore, updates);
+    broadcastFromBackground(updates, true);
+    return true;
   },
   /**
    * Mark the wallet as active and seed initial addresses (called when the user
@@ -1032,6 +1408,8 @@ export const midnightActions = {
         privateSyncStatus: 'idle',
         privateSyncProgress: null,
         siteActivity: null,
+        refreshSnapshot: null,
+        refreshing: null,
       });
       debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
     }
@@ -1060,6 +1438,8 @@ export const midnightActions = {
           privateSyncStatus: 'idle',
           privateSyncProgress: null,
           siteActivity: null,
+          refreshSnapshot: null,
+          refreshing: null,
         }
         : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
@@ -1093,6 +1473,11 @@ export const midnightActions = {
    * wallet is the active one; its own state stays.
    */
   forgetWallet(address: string) {
+    // The previous worker's record of a removed wallet must not reach a re-import of its seed.
+    if (address) {
+      bootForgotten.add(address);
+      if (bootRecord?.activeWalletKey === address) bootRecord = null;
+    }
     if (!address || midnightStore.activeWalletKey !== address) return;
     const wiped = {
       isActive: false,
@@ -1110,12 +1495,15 @@ export const midnightActions = {
       addresses: { ...EMPTY_ADDRESSES },
       activeWalletKey: null,
       shieldedSyncAvailable: false,
+      refreshSnapshot: null,
+      refreshing: null,
     };
     Object.assign(midnightStore, wiped);
     broadcastFromBackground(wiped, true);
   },
 
   clear() {
+    dropBootRecord();
     Object.assign(midnightStore, {
       isActive: false,
       networkStatus: 'disconnected',

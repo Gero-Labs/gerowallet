@@ -40,7 +40,7 @@
       <!-- Midnight: a connected site's transaction in flight (Prove → Fund → Submit) -->
       <MiniSiteActivity v-if="isMidnight" />
       <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
-      <MiniDustGauge v-if="isMidnight" />
+      <MiniDustGauge v-if="isMidnight" :class="{ 'g-stale': midnightRefreshing }" />
       <MiniProofServerWidget v-if="isMidnight" />
       <FeaturedCarousel v-else />
 
@@ -53,7 +53,7 @@
         </span>
       </div>
 
-      <TokenList @select="handleTokenSelect" />
+      <TokenList :class="{ 'g-stale': isMidnight && midnightRefreshing }" @select="handleTokenSelect" />
     </template>
 
     <!-- Flow sheets -->
@@ -166,9 +166,8 @@ import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
-import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
 import MiniProofServerWidget from '../components/MiniProofServerWidget.vue';
@@ -224,14 +223,13 @@ function openProgrammableSend() {
 }
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
-/** Sends on this Midnight network are paused for a network upgrade: Send stays visible, held, with the reason under it. */
-const { t } = useTranslation();
-const midnightWriteBlock = useMidnightWriteBlock(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
-const midnightSendPaused = computed(() => midnightWriteBlock.value !== null);
-/** "Update required" takes precedence over the network upgrade; the banner above carries the rest. */
-const midnightSendHeldText = computed(() => (midnightWriteBlock.value === 'updateRequired'
-  ? t('midnight.update.sendHeld')
-  : t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(walletStore.loggedWallet?.network) })));
+// One reason Midnight Send is held, if it is: update required, the network
+// upgrade, or a rebuild in progress (useMidnightSendHold.ts), said once under it.
+const midnightSendHold = useMidnightSendHold(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
+const midnightSendPaused = midnightSendHold.held;
+const midnightSendHeldText = midnightSendHold.sendTextShort;
+/** Midnight data is being rebuilt (midnightRefresh.ts): the values below show the last ones the wallet knew, greyed. */
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 
 // Mirrors the dashboard's isEmptyMainnet exactly (mini-gero must mirror the
 // dashboard, never approximate): mainnet Cardano whose account row is absent

@@ -37,7 +37,8 @@ describe('Midnight network upgrade banner', () => {
     expect(banner.find('a').attributes('rel')).toContain('noopener');
     // Learn more sits inside the body, after the sentence.
     expect(banner.find('.upgrade-banner__body a').exists()).toBe(true);
-    expect(banner.attributes('role')).toBe('status');
+    // The notice slot's always-mounted region says it; a region added with its text is often not read.
+    expect(banner.attributes('role')).toBeUndefined();
 
     await noteMidnightWritesOpen('Preprod');
     await flushPromises();
