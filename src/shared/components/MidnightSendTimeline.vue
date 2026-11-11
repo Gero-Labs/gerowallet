@@ -18,7 +18,10 @@
         ></div>
       </div>
       <div class="mtl-node__body">
-        <div class="mtl-node__label">{{ node.label }}</div>
+        <!-- The counter sits with the label ("Proving with Gero Cloud · 6 s"). -->
+        <div class="mtl-node__label">
+          {{ node.label }}<span v-if="node.elapsed && node.state === 'active'" class="mtl-node__elapsed g-num"> · {{ node.elapsed }}</span>
+        </div>
         <div
           v-if="node.showBar && node.state === 'active'"
           class="mtl-bar"
@@ -29,8 +32,11 @@
             :style="node.percent != null ? { width: node.percent + '%' } : undefined"
           ></div>
         </div>
-        <div v-if="node.detail && node.state === 'active'" class="mtl-node__detail">
+        <div v-if="node.detail && node.state === 'active'" class="mtl-node__detail g-num">
           {{ node.detail }}
+        </div>
+        <div v-if="node.hint && node.state === 'active'" class="mtl-node__hint t-caption">
+          {{ node.hint }}
         </div>
       </div>
     </div>
@@ -156,6 +162,11 @@ withDefaults(defineProps<{
   padding-top: 2px;
 }
 
+/* Room under the working node's bar and lines before the next node. */
+.mtl-node.active .mtl-node__body {
+  padding-bottom: var(--g-s-3);
+}
+
 .mtl-node__label {
   font-size: 13px;
   font-weight: 600;
@@ -215,9 +226,26 @@ withDefaults(defineProps<{
   color: var(--g-text-3);
 }
 
+.mtl-node__elapsed {
+  font-weight: 400;
+  color: var(--g-text-2);
+}
+
+/* How long this kind of proving takes: its own line, readable. */
+.mtl-node__hint {
+  margin-top: var(--g-s-1);
+  color: var(--g-text-2);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mtl-pulse,
   .mtl-bar.indeterminate .mtl-bar__fill { animation: none; }
+  /* A still 40% bar would read as 40% done: a faint full-width fill instead;
+     the counter beside the label shows the time passing. */
+  .mtl-bar.indeterminate .mtl-bar__fill {
+    width: 100%;
+    opacity: 0.35;
+  }
   .mtl-bar__fill,
   .mtl-dot,
   .mtl-conn,

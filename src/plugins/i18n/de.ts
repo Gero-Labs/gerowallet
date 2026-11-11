@@ -5559,7 +5559,7 @@ export default {
   'midnight.sponsor.turnOff': 'Deaktivieren',
   'midnight.sponsor.feePaidByLabel': 'Gebühr bezahlt von',
   'midnight.sponsor.feeWallet': 'Gebühren-Wallet',
-  'midnight.sponsor.tipPreSelected': 'Überspringt nur die Auswahlliste. {name} wird bei jedem Senden mit dem eigenen Passwort entsperrt, und nichts wird gespeichert.',  'midnight.sponsor.tipPreSelectedPasskey': 'Überspringt nur die Auswahlliste. {name} wird bei jedem Senden mit dem eigenen PassKey entsperrt, und nichts wird gespeichert.',  'midnight.sponsor.tipPaysFees': 'Jeder Sendevorgang von {name} fordert Sie auf, diese Wallet zu entsperren. DUST fließt nur dann ab.',  'midnight.sponsor.tipUnlock': 'Die zahlende Wallet wird bei jedem Senden mit eigenen Zugangsdaten entsperrt. Der Schlüssel wird nie gespeichert, und keine dApp kann sie auslösen.',  'midnight.sponsor.keepOpen': 'Der Sendevorgang läuft weiter, wenn Sie dies schließen.',
+  'midnight.sponsor.tipPreSelected': 'Überspringt nur die Auswahlliste. {name} wird bei jedem Senden mit dem eigenen Passwort entsperrt, und nichts wird gespeichert.',  'midnight.sponsor.tipPreSelectedPasskey': 'Überspringt nur die Auswahlliste. {name} wird bei jedem Senden mit dem eigenen PassKey entsperrt, und nichts wird gespeichert.',  'midnight.sponsor.tipPaysFees': 'Jeder Sendevorgang von {name} fordert Sie auf, diese Wallet zu entsperren. DUST fließt nur dann ab.',  'midnight.sponsor.tipUnlock': 'Die zahlende Wallet wird bei jedem Senden mit eigenen Zugangsdaten entsperrt. Der Schlüssel wird nie gespeichert, und keine dApp kann sie auslösen.',
   'midnight.sponsor.passkeyPopupNote': 'Öffnet sich in einem kleinen Fenster.',
   'midnight.sponsor.feeFrom': 'Gebühr von {name}',
   'midnight.sponsor.feesSelfOnly': 'Gebühren · nur diese Wallet',
@@ -5616,9 +5616,15 @@ export default {
   'midnight.send.stageSync': 'DUST-Ledger synchronisieren',
   'midnight.send.stageSign': 'Transaktion signieren',
   'midnight.send.stageSubmit': 'Senden',
-  'midnight.send.stageProvingLocal': 'Beweis wird lokal erstellt...',
-  'midnight.send.stageProvingDevice': 'Beweis wird auf diesem Gerät erstellt...',
-  'midnight.send.stageProvingZkpaas': 'Beweis wird über Arkhia erstellt...',
+  'midnight.send.stageProvingLocal': 'Beweis wird lokal erstellt',
+  'midnight.send.stageProvingDevice': 'Beweis wird auf diesem Gerät erstellt',
+  'midnight.send.stageProvingZkpaas': 'Beweis wird über Arkhia erstellt',
+  'midnight.send.stageProvingCloud': 'Beweis wird mit Gero Cloud erstellt',
+  'midnight.send.provingElapsed': '{n}\u00a0s',
+  'midnight.send.provingDeviceHint': 'Das kann auf diesem Gerät bis zu einer Minute dauern.',
+  'midnight.send.provingSlowHint': 'Das dauert länger als üblich. Lass dieses Fenster geöffnet.',
+  'midnight.send.provingSlowHintShort': 'Das dauert länger als üblich.',
+  'midnight.send.keepPanelOpen': 'Lass dieses Panel geöffnet, bis das Senden abgeschlossen ist.',
   // Umwandlungsdialog Shield/Unshield (WP-SH4). Vorerst nur die Verschleiern-
   // Richtung; der Umschalter zeigt "Öffentlich machen" trotzdem an, damit die
   // Option nicht versteckt ist, aber sichtbar deaktiviert mit einem

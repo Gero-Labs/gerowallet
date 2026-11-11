@@ -120,6 +120,8 @@ export type MidnightSendStage =
   | 'provingLocal'
   | 'provingZkpaas'
   | 'submitting'
+  // The submit request also proves: Gero Cloud proves the transaction on the way through.
+  | 'provingCloud'
   | 'done';
 
 /**
@@ -333,7 +335,8 @@ export async function sendUnshieldedNight(
     built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, sponsor, target?.request,
   );
   assertCurrentApproval(current);
-  onStage?.('submitting');
+  // An unproven transaction is proved by Gero Cloud inside the submit request.
+  onStage?.(signed.proven ? 'submitting' : 'provingCloud');
   const result = await submitSignedTx(network, signed);
   onStage?.('done');
   return withLedgerTxHash(result, signed.ledgerTxHash);
@@ -784,7 +787,8 @@ export async function sendShieldedNight(
   onStage?.('working');
   const { signedTxHex, txIdentifiers } = await buildAndSignShieldedInBg(outputs, credentials, undefined, sponsor);
   assertCurrentApproval(current);
-  onStage?.('submitting');
+  // Gero Cloud proves inside this request.
+  onStage?.('provingCloud');
   const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor }, { identifiers: txIdentifiers });
   onStage?.('done');
   return result;

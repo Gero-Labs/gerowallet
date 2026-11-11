@@ -1,6 +1,9 @@
 <template>
   <BottomSheet :model-value="modelValue" @update:model-value="onSheetInput" :title="sheetTitle" height="92%" :persistent="sendDispatched">
     <div class="midnight-send-sheet" ref="stepperEl">
+      <!-- One polite live region for the whole sheet, mounted before any send so
+           its first message is read: proving steps and their hints. -->
+      <div class="g-sr-only" aria-live="polite" aria-atomic="true" data-test="midnight-send-live">{{ liveMessage }}</div>
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
       <div v-if="txSuccess" class="success-overlay">
@@ -370,7 +373,8 @@
                   {{ $t('midnight.sponsor.feePaidByLabel') }}: {{ sponsorWallet.name }}
                 </div>
                 <MidnightSendTimeline compact :nodes="timelineNodes" />
-                <div class="mini-tl__keep">{{ $t('midnight.sponsor.keepOpen') }}</div>
+                <!-- The send runs in this panel: closing it stops the send. -->
+                <div class="mini-tl__keep">{{ $t('midnight.send.keepPanelOpen') }}</div>
               </div>
 
               <!-- Not an error: sends are paused on this network, or this build can't sign
@@ -406,6 +410,8 @@
 import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
+import { provingDetail } from '@/shared/composables/useProvingElapsed';
+import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import BottomSheet from '../BottomSheet.vue';
@@ -1093,8 +1099,18 @@ const timelineLabels = computed(() => ({
   provingDevice: t('midnight.send.stageProvingDevice') as string,
   provingLocal: t('midnight.send.stageProvingLocal') as string,
   provingZkpaas: t('midnight.send.stageProvingZkpaas') as string,
+  provingCloud: t('midnight.send.stageProvingCloud') as string,
 }));
-const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels);
+const { message: liveMessage, announce } = usePoliteAnnouncer();
+const timelineNodes = useMidnightSendTimeline(
+  computed(() => sendStage.value),
+  timelineLabels,
+  {
+    // "Keep this panel open" is always shown under the timeline, so the slow hint need not repeat it.
+    provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), { keepOpenShown: true }),
+    announce,
+  },
+);
 </script>
 
 <style scoped lang="scss">

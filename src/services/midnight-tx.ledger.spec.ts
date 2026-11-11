@@ -170,7 +170,11 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.api.mockReturnValue({ submitProvenMidnightTx: submitProven, proveAndSubmitMidnightTx: proveAndSubmit });
     mocks.send.mockResolvedValue({ data: { success: true, signedTxHex: 'aabb', proven: mode !== 'remote' } });
     const sponsor = { walletId: 2, password: 'synthetic-test-password' };
-    await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {}, 'InBlock', undefined, false, sponsor);
+    const stages: string[] = [];
+    await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {}, 'InBlock', (s) => stages.push(s), false, sponsor);
+    // Gero Cloud proves inside the submit request: the timeline names it (X-09).
+    expect(stages).toContain(mode === 'remote' ? 'provingCloud' : 'submitting');
+    expect(stages).not.toContain(mode === 'remote' ? 'submitting' : 'provingCloud');
     expect(mocks.send.mock.calls[0][0].data.outputs[0].tokenType).toBe('12'.repeat(32));
     expect(mocks.send.mock.calls[0][0].data.sponsor.walletId).toBe(2);
     expect(submitProven).toHaveBeenCalledTimes(mode === 'remote' ? 0 : 1);
@@ -465,8 +469,11 @@ describe('Midnight ledger-specific orchestration', () => {
       submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
-    const result = await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const stages: string[] = [];
+    const result = await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, (s) => stages.push(s));
     expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' });
+    // The transaction is unproven, so Gero Cloud proves it inside the submit.
+    expect(stages.slice(-2)).toEqual(['provingCloud', 'done']);
   });
 
   it('carries the wallet-proved ledger hash onto a submit-proven result that has none', async () => {
