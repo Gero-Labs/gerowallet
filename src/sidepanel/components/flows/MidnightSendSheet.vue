@@ -40,10 +40,10 @@
 
           <v-expand-transition>
             <div v-show="step === 1" class="step-body">
-              <!-- Sends on this network are paused (midnightWriteGate.ts): said up front,
+              <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): said up front,
                    before the user fills in anything. Review and Confirm stay held. -->
               <GNote v-if="writesPaused" icon="mdi-pause-circle-outline" role="status" class="mb-3" data-test="midnight-send-paused-start">
-                {{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+                {{ writesHeldText }}
               </GNote>
               <div class="quick-row">
                 <v-btn size="x-small" variant="outlined" :color="primaryColor" @click="showQR = true">
@@ -261,7 +261,7 @@
                 </div>
               </template>
 
-              <!-- Sends on this network are paused (midnightWriteGate.ts): the button
+              <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): the button
                    stays, held but focusable (aria-disabled), with the reason linked
                    to it, and the password step can't open. -->
               <GNote
@@ -272,7 +272,7 @@
                 class="mt-3"
                 data-test="midnight-send-paused"
               >
-                {{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+                {{ writesHeldText }}
               </GNote>
 
               <div class="step-actions-row mt-4">
@@ -465,7 +465,7 @@ import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightNetworkDisplayName, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
 import { isMidnightBusyCancelled, type MidnightBusyHandlers } from '@/services/midnightBusyRetry';
-import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 
@@ -480,8 +480,13 @@ const { loggedWallet } = toRefs(walletStore);
 
 // ── State ──
 const step = ref(1);
-/** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
-const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
+/** Why sends on this wallet's network are held, if they are: update required or network upgrade (midnightWriteGate.ts). */
+const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
+/** `writesPaused`: held for either reason. The copy says which; update required takes precedence. */
+const writesPaused = computed(() => writeBlock.value !== null);
+const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
+  ? t('midnight.errors.updateRequired')
+  : t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
 const stepperEl = ref<HTMLElement | null>(null);
 
 const recipient = ref('');

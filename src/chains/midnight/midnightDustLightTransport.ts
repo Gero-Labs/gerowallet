@@ -2,6 +2,7 @@ import type { MidnightNetworkEndpoints } from './midnightConfig';
 import type { CollapsedDustTree, DustLightTransport, DustSnapshot, DustSpendTransaction } from './midnightDustLightSync';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { withMidnightAbort } from './midnightAbort';
+import { geroClientHeaders } from './midnightClientVersion';
 
 const MAX_RATE_LIMIT_RETRIES = 5;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -36,7 +37,7 @@ export function createDustLightTransport(
   const url = `${endpoints.nexusBaseUrl}/api/midnight/midnight-${endpoints.sdkNetworkId}/dust/light-sync`;
   async function request<T>(body: { operation: string } & Record<string, unknown>): Promise<T> {
     const attempt = async (token: string) => fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...geroClientHeaders() },
       body: JSON.stringify(body), signal,
     });
     let token = await withMidnightAbort(getNexusAccessToken(), signal);

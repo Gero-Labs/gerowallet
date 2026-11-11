@@ -21,10 +21,14 @@ export const MIDNIGHT_NETWORK_UPGRADING = 'MIDNIGHT_NETWORK_UPGRADING';
 export const LEDGER_MISMATCH = 'LEDGER_MISMATCH';
 export const MIDNIGHT_PROVER_BUSY = 'MIDNIGHT_PROVER_BUSY';
 export const MIDNIGHT_RESET_PENDING = 'MIDNIGHT_RESET_PENDING';
+/** The `reason` of a MIDNIGHT_NETWORK_UPGRADING 501 (and of the status read) that says this build must update. */
+export const CLIENT_UPDATE_REQUIRED = 'CLIENT_UPDATE_REQUIRED';
 
 /**
  * What the failure means for the wallet:
  * - `networkUpgrading`: writes on this network are paused for a network upgrade.
+ * - `updateRequired`: writes on this network are closed to this build (a 501
+ *   MIDNIGHT_NETWORK_UPGRADING with reason CLIENT_UPDATE_REQUIRED); a newer build may send.
  * - `ledgerMismatch`: the network's ledger changed under the transaction; a fresh build may work.
  * - `proverBusy`: the server's prover is at capacity (`retryAfter` says when to try again).
  * - `resetPending`: the server's view of the chain is being rebuilt.
@@ -33,6 +37,7 @@ export const MIDNIGHT_RESET_PENDING = 'MIDNIGHT_RESET_PENDING';
  */
 export type MidnightApiErrorKind =
   | 'networkUpgrading'
+  | 'updateRequired'
   | 'ledgerMismatch'
   | 'proverBusy'
   | 'resetPending'
@@ -112,14 +117,17 @@ export function isMidnightServerSideFailure(error: unknown): boolean {
  * A send refused for a state the user can't fix from the send screen. Not an
  * error: the screen shows it as a note and disables its CTA.
  * - `networkUpgrading`: the server answered MIDNIGHT_NETWORK_UPGRADING.
- * - `updateRequired`: the pre-sign guard read the built transaction as a newer
- *   ledger than this build signs for (MidnightBuiltTxRefusedError, code
+ * - `updateRequired`: the server closed sends to this build (reason
+ *   CLIENT_UPDATE_REQUIRED), or the pre-sign guard read the built transaction as
+ *   a newer ledger than this build signs for (MidnightBuiltTxRefusedError, code
  *   MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED).
  */
 export type MidnightSendBlock = 'networkUpgrading' | 'updateRequired';
 
 export function midnightSendBlockOf(error: unknown): MidnightSendBlock | null {
-  if (midnightApiErrorKind(error) === 'networkUpgrading') return 'networkUpgrading';
+  const kind = midnightApiErrorKind(error);
+  if (kind === 'networkUpgrading') return 'networkUpgrading';
+  if (kind === 'updateRequired') return 'updateRequired';
   if (error instanceof Error && error.name === 'MidnightBuiltTxRefusedError'
     && (error as { code?: unknown }).code === 'MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED') return 'updateRequired';
   return null;
@@ -205,7 +213,7 @@ export function parseMidnightErrorEnvelope(status: number | undefined, data: unk
 /** The kind an envelope maps to. `LEDGER_MISMATCH` is also read from `message` until the server sends the code. */
 export function midnightErrorKindOf(envelope: MidnightErrorEnvelope): MidnightApiErrorKind {
   switch (envelope.errorCode) {
-    case MIDNIGHT_NETWORK_UPGRADING: return 'networkUpgrading';
+    case MIDNIGHT_NETWORK_UPGRADING: return envelope.reason === CLIENT_UPDATE_REQUIRED ? 'updateRequired' : 'networkUpgrading';
     case LEDGER_MISMATCH: return 'ledgerMismatch';
     case MIDNIGHT_PROVER_BUSY: return 'proverBusy';
     case MIDNIGHT_RESET_PENDING: return 'resetPending';
@@ -225,6 +233,8 @@ export function readableMidnightError(
   switch (kind) {
     case 'networkUpgrading':
       return String(i18n.t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(network) }));
+    case 'updateRequired':
+      return String(i18n.t('midnight.errors.updateRequired'));
     case 'ledgerMismatch':
       return String(i18n.t('midnight.errors.ledgerMismatch'));
     case 'noAnswer':

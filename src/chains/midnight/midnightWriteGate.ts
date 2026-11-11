@@ -18,6 +18,14 @@
  * (A remote feature flag was the ticket's second trigger. The flag channel
  * carries one boolean per flag with no per-network values, so none is wired.)
  *
+ * "Update required" lives in the same entry (`block: 'updateRequired'`): sends
+ * on the network are closed to this build, and a newer one may send. It turns
+ * on for a 501 whose `reason` is CLIENT_UPDATE_REQUIRED, or a status read that
+ * names a minimum extension version above this build, a ledger this build
+ * can't sign for, or that reason (midnightWriteStatus.ts). It takes precedence
+ * over the network upgrade: one entry per network, and the status read decides
+ * which. Both hold sends and DUST registration; only the copy differs.
+ *
  * Each network's entry lives under its own chrome.storage.session key
  * (`midnightWriteGate:<network>`): shared by the worker, the dashboard and the
  * side panel, cleared with the browser session, and not readable by content
@@ -26,6 +34,7 @@
  */
 import { computed, reactive, type ComputedRef } from 'vue';
 import { Network } from '@/models/types';
+import { extensionVersion, isVersionBelow } from './midnightClientVersion';
 
 export const MIDNIGHT_WRITE_GATE_KEY = 'midnightWriteGate';
 /** How long a 501 alone keeps a network paused before the next attempt asks the server again. */
@@ -39,10 +48,21 @@ export const STATUS_GATE_TTL_MS = 15 * 60_000;
 
 export type MidnightWriteGateSource = 'status' | 'response';
 
+/** Why writes are held: the network is upgrading, or this build must update. */
+export type MidnightWriteBlock = 'networkUpgrading' | 'updateRequired';
+
 export interface MidnightWriteGateEntry {
   source: MidnightWriteGateSource;
   /** When this entry was written, epoch ms. */
   at: number;
+  /** Absent: the network upgrade (the entry's original meaning). */
+  block?: 'updateRequired';
+  /**
+   * Set only when the minimum version alone made this build "update required":
+   * a build at or above it is not held by this entry, so an update clears it
+   * even before the next status read.
+   */
+  minVersion?: string;
 }
 
 /** Network key (lowercased wallet network name) → why it is paused. Absent = open. */
@@ -50,19 +70,36 @@ export type MidnightWriteGateRecord = Record<string, MidnightWriteGateEntry>;
 
 export const midnightGateKey = (network: string): string => network.trim().toLowerCase();
 
-/** Pure: is `network` paused in `record` at `now`? */
-export function isPausedIn(record: MidnightWriteGateRecord | null | undefined, network: string, now: number): boolean {
-  if (!network) return false;
+const isLive = (entry: MidnightWriteGateEntry, now: number): boolean =>
+  now - entry.at < (entry.source === 'response' ? RESPONSE_GATE_TTL_MS : STATUS_GATE_TTL_MS);
+
+/** Pure: why `network`'s writes are held in `record` at `now`, or null when they aren't. */
+export function writeBlockIn(
+  record: MidnightWriteGateRecord | null | undefined,
+  network: string,
+  now: number,
+  version: string = extensionVersion(),
+): MidnightWriteBlock | null {
+  if (!network) return null;
   const entry = record?.[midnightGateKey(network)];
-  if (!entry) return false;
-  return now - entry.at < (entry.source === 'response' ? RESPONSE_GATE_TTL_MS : STATUS_GATE_TTL_MS);
+  if (!entry || !isLive(entry, now)) return null;
+  if (entry.block !== 'updateRequired') return 'networkUpgrading';
+  if (entry.minVersion && version && !isVersionBelow(version, entry.minVersion)) return null;
+  return 'updateRequired';
+}
+
+/** Pure: is `network` paused for the network upgrade (not for an update) in `record` at `now`? */
+export function isPausedIn(record: MidnightWriteGateRecord | null | undefined, network: string, now: number): boolean {
+  return writeBlockIn(record, network, now) === 'networkUpgrading';
 }
 
 /** Pure: the record after a status read or a write outcome. */
 export function nextGateRecord(
   record: MidnightWriteGateRecord,
   network: string,
-  change: { paused: true; source: MidnightWriteGateSource; at: number } | { paused: false; onlySource?: MidnightWriteGateSource },
+  change:
+    | { paused: true; source: MidnightWriteGateSource; at: number; block?: 'updateRequired'; minVersion?: string }
+    | { paused: false; onlySource?: MidnightWriteGateSource },
 ): MidnightWriteGateRecord {
   const key = midnightGateKey(network);
   if (!key) return record;
@@ -75,14 +112,28 @@ export function nextGateRecord(
   }
   // A live status-read pause outranks a 501, never the other way round. An
   // expired one doesn't: the 501 replaces it, or the network would read open.
-  if (change.source === 'response' && record[key]?.source === 'status' && isPausedIn(record, network, change.at)) return record;
-  return { ...record, [key]: { source: change.source, at: change.at } };
+  // One exception: a 501 saying this build must update raises a live
+  // status-read upgrade pause, since "update required" takes precedence.
+  const current = record[key];
+  if (change.source === 'response' && current?.source === 'status' && isLive(current, change.at)
+    && !(change.block === 'updateRequired' && current.block !== 'updateRequired')) return record;
+  const entry: MidnightWriteGateEntry = { source: change.source, at: change.at };
+  if (change.block === 'updateRequired') {
+    entry.block = 'updateRequired';
+    if (change.minVersion) entry.minVersion = change.minVersion;
+  }
+  return { ...record, [key]: entry };
 }
 
 function readEntry(value: unknown): MidnightWriteGateEntry | null {
   const e = value as Partial<MidnightWriteGateEntry> | null;
-  return e && typeof e === 'object' && (e.source === 'status' || e.source === 'response') && typeof e.at === 'number'
-    ? { source: e.source, at: e.at } : null;
+  if (!e || typeof e !== 'object' || (e.source !== 'status' && e.source !== 'response') || typeof e.at !== 'number') return null;
+  const entry: MidnightWriteGateEntry = { source: e.source, at: e.at };
+  if (e.block === 'updateRequired') {
+    entry.block = 'updateRequired';
+    if (typeof e.minVersion === 'string' && e.minVersion) entry.minVersion = e.minVersion;
+  }
+  return entry;
 }
 
 type SessionArea = {
@@ -169,26 +220,43 @@ function startMirror(): void {
   }, () => undefined);
 }
 
-/** Reactive: is `network` paused? For buttons and banners. */
-export function useMidnightNetworkUpgrading(network: () => string | undefined | null): ComputedRef<boolean> {
+/** Reactive: why `network`'s writes are held (network upgrade or update required), or null. For the copy. */
+export function useMidnightWriteBlock(network: () => string | undefined | null): ComputedRef<MidnightWriteBlock | null> {
   startMirror();
-  return computed(() => isPausedIn(mirror.record, network() ?? '', mirror.now));
+  return computed(() => writeBlockIn(mirror.record, network() ?? '', mirror.now));
+}
+
+/** Reactive: is `network` paused for the network upgrade (and not for an update)? For its banner. */
+export function useMidnightNetworkUpgrading(network: () => string | undefined | null): ComputedRef<boolean> {
+  const block = useMidnightWriteBlock(network);
+  return computed(() => block.value === 'networkUpgrading');
+}
+
+/** Reactive: must this build update to send on `network`? For its banner. */
+export function useMidnightUpdateRequired(network: () => string | undefined | null): ComputedRef<boolean> {
+  const block = useMidnightWriteBlock(network);
+  return computed(() => block.value === 'updateRequired');
 }
 
 // ── Reads and writes ──────────────────────────────────────────────────────
 
-/** The current state, read from session storage (not the mirror, which may lag one event). */
-export async function isMidnightNetworkUpgrading(network: string): Promise<boolean> {
+/** Why writes are held now, read from session storage (not the mirror, which may lag one event). */
+export async function midnightWriteBlock(network: string): Promise<MidnightWriteBlock | null> {
   const area = sessionArea();
-  if (!area) return isPausedIn(mirror.record, network, Date.now());
+  if (!area) return writeBlockIn(mirror.record, network, Date.now());
   try {
     const storageKey = storageKeyOf(network);
     const items = await area.get(storageKey);
     const entry = readEntry(items?.[storageKey]);
-    return isPausedIn(entry ? { [midnightGateKey(network)]: entry } : {}, network, Date.now());
+    return writeBlockIn(entry ? { [midnightGateKey(network)]: entry } : {}, network, Date.now());
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** Paused for the network upgrade now (not for an update)? */
+export async function isMidnightNetworkUpgrading(network: string): Promise<boolean> {
+  return (await midnightWriteBlock(network)) === 'networkUpgrading';
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -228,6 +296,21 @@ function update(network: string, change: Parameters<typeof nextGateRecord>[2]): 
 /** A write route answered 501 MIDNIGHT_NETWORK_UPGRADING, or the status read says writes are closed. */
 export function noteMidnightNetworkUpgrading(network: string, source: MidnightWriteGateSource, now: number = Date.now()): Promise<void> {
   return update(network, { paused: true, source, at: now });
+}
+
+/**
+ * Sends on this network are closed to this build: a 501 with reason
+ * CLIENT_UPDATE_REQUIRED, or a status read whose minimum version or ledger is
+ * beyond it. `minVersion` only when the minimum alone is the cause.
+ */
+export function noteMidnightUpdateRequired(
+  network: string,
+  source: MidnightWriteGateSource,
+  options: { minVersion?: string; now?: number } = {},
+): Promise<void> {
+  return update(network, {
+    paused: true, source, at: options.now ?? Date.now(), block: 'updateRequired', minVersion: options.minVersion,
+  });
 }
 
 /** A write succeeded, or the status read says writes are open. */

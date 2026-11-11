@@ -34,7 +34,7 @@
         @action="handleAction"
       />
       <p v-if="midnightSendPaused" id="home-send-paused" class="home-send-paused t-caption" data-testid="home-send-paused">
-        {{ $t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(walletStore.loggedWallet?.network) }) }}
+        {{ midnightSendHeldText }}
       </p>
 
       <!-- Midnight: a connected site's transaction in flight (Prove → Fund → Submit) -->
@@ -166,7 +166,8 @@ import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
-import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
@@ -224,7 +225,13 @@ function openProgrammableSend() {
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 /** Sends on this Midnight network are paused for a network upgrade: Send stays visible, held, with the reason under it. */
-const midnightSendPaused = useMidnightNetworkUpgrading(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
+const { t } = useTranslation();
+const midnightWriteBlock = useMidnightWriteBlock(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
+const midnightSendPaused = computed(() => midnightWriteBlock.value !== null);
+/** "Update required" takes precedence over the network upgrade; the banner above carries the rest. */
+const midnightSendHeldText = computed(() => (midnightWriteBlock.value === 'updateRequired'
+  ? t('midnight.update.sendHeld')
+  : t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(walletStore.loggedWallet?.network) })));
 
 // Mirrors the dashboard's isEmptyMainnet exactly (mini-gero must mirror the
 // dashboard, never approximate): mainnet Cardano whose account row is absent

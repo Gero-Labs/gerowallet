@@ -27,8 +27,9 @@ import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import { recoverLostSubmit, type MidnightSubmitWatch } from './midnightSubmitRecovery';
-import { MIDNIGHT_NETWORK_UPGRADING, midnightApiErrorFromResponse, toMidnightApiError } from './midnightApiError';
-import { noteMidnightNetworkUpgrading, noteMidnightWritesOpen } from '@/chains/midnight/midnightWriteGate';
+import { CLIENT_UPDATE_REQUIRED, MIDNIGHT_NETWORK_UPGRADING, midnightApiErrorFromResponse, toMidnightApiError } from './midnightApiError';
+import { noteMidnightNetworkUpgrading, noteMidnightUpdateRequired, noteMidnightWritesOpen } from '@/chains/midnight/midnightWriteGate';
+import { geroClientHeaders } from '@/chains/midnight/midnightClientVersion';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -680,6 +681,9 @@ export class MidnightApi {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
+        // Which extension build is asking (`X-Gero-Client: extension/<version>`),
+        // so the server can keep sends closed to a build that can't sign for the network.
+        ...geroClientHeaders(),
       },
     });
 
@@ -736,6 +740,7 @@ export class MidnightApi {
 
   /**
    * The server's write status for this network: `GET /api/midnight/{network}/status`.
+   * Sent with the build's `X-Gero-Client` header, like every other request here.
    * A server without the route answers 404 (`unsupported`). Never throws.
    */
   async getWriteStatus(): Promise<MidnightWriteStatus> {
@@ -1432,23 +1437,37 @@ export function isMidnightWriteRoute(url: string | undefined): boolean {
 /**
  * What a write route's answer says about the network's write gate
  * (midnightWriteGate.ts): a 501 MIDNIGHT_NETWORK_UPGRADING closes it for this
- * session, any success opens it. Anything else says nothing. Registered as a
- * response interceptor on every MidnightApi instance.
+ * session, as "update required" when its `reason` is CLIENT_UPDATE_REQUIRED;
+ * any success opens it. Anything else says nothing. Registered as a response
+ * interceptor on every MidnightApi instance.
  */
 export function midnightWriteOutcome(
   network: string,
   response: { url?: string; status?: number; data?: unknown } | undefined,
-): 'paused' | 'open' | null {
+): 'paused' | 'updateRequired' | 'open' | null {
   if (!response || !isMidnightWriteRoute(response.url) || typeof response.status !== 'number') return null;
   if (response.status >= 200 && response.status < 300) return 'open';
-  const code = response.data && typeof response.data === 'object' ? (response.data as { errorCode?: unknown }).errorCode : undefined;
-  return response.status === 501 && code === MIDNIGHT_NETWORK_UPGRADING ? 'paused' : null;
+  const body = response.data && typeof response.data === 'object' ? response.data as { errorCode?: unknown; reason?: unknown } : {};
+  if (response.status !== 501 || body.errorCode !== MIDNIGHT_NETWORK_UPGRADING) return null;
+  return body.reason === CLIENT_UPDATE_REQUIRED ? 'updateRequired' : 'paused';
 }
 
 function recordWriteOutcome(network: string, response: { url?: string; status?: number; data?: unknown } | undefined): void {
   const outcome = midnightWriteOutcome(network, response);
   if (outcome === 'paused') void noteMidnightNetworkUpgrading(network, 'response');
+  else if (outcome === 'updateRequired') void noteMidnightUpdateRequired(network, 'response');
   else if (outcome === 'open') void noteMidnightWritesOpen(network);
+}
+
+/**
+ * What a status read says about the clients it accepts, when it says it:
+ * `minExtensionVersion` from `minClientVersion.extension`, and the major
+ * `ledger` the network runs. Both are optional; a server that doesn't send them
+ * leaves the "update required" state to the 501's `reason`.
+ */
+export interface MidnightClientRequirements {
+  minExtensionVersion?: string;
+  ledger?: number;
 }
 
 /**
@@ -1457,20 +1476,40 @@ function recordWriteOutcome(network: string, response: { url?: string; status?: 
  * read; neither may change the gate.
  */
 export type MidnightWriteStatus =
-  | { kind: 'open' }
-  | { kind: 'closed'; reason?: string; message?: string }
+  | ({ kind: 'open'; reason?: string } & MidnightClientRequirements)
+  | ({ kind: 'closed'; reason?: string; message?: string } & MidnightClientRequirements)
   | { kind: 'unknown'; unsupported: boolean };
 
-/** Read a status body. Only `writesOpen` as a boolean counts. */
+/** A ledger as the status read may give it (`9`, `"9"`, `"9.0.1"`, `"ledger-9"`): its major number. */
+function parseLedgerMajor(value: unknown): number | undefined {
+  const major = typeof value === 'number' ? Math.trunc(value)
+    : typeof value === 'string' ? Number(/(\d+)/.exec(value)?.[1] ?? NaN) : NaN;
+  return Number.isSafeInteger(major) && major > 0 && major < 100 ? major : undefined;
+}
+
+function parseClientRequirements(body: Record<string, unknown>): MidnightClientRequirements {
+  const min = body['minClientVersion'];
+  const extension = min && typeof min === 'object' ? (min as Record<string, unknown>)['extension'] : undefined;
+  const requirements: MidnightClientRequirements = {};
+  if (typeof extension === 'string' && /^\s*v?\d+(\.\d+)*/.test(extension)) requirements.minExtensionVersion = extension.trim();
+  const ledger = parseLedgerMajor(body['ledger']);
+  if (ledger !== undefined) requirements.ledger = ledger;
+  return requirements;
+}
+
+/** Read a status body. Only `writesOpen` as a boolean counts; the client requirements ride along when present. */
 export function parseMidnightWriteStatus(data: unknown): MidnightWriteStatus {
   if (!data || typeof data !== 'object') return { kind: 'unknown', unsupported: false };
-  const body = data as { writesOpen?: unknown; reason?: unknown; message?: unknown };
-  if (typeof body.writesOpen !== 'boolean') return { kind: 'unknown', unsupported: false };
-  if (body.writesOpen) return { kind: 'open' };
+  const body = data as Record<string, unknown>;
+  if (typeof body['writesOpen'] !== 'boolean') return { kind: 'unknown', unsupported: false };
+  const reason = typeof body['reason'] === 'string' ? body['reason'] : undefined;
+  const requirements = parseClientRequirements(body);
+  if (body['writesOpen']) return { kind: 'open', ...(reason ? { reason } : {}), ...requirements };
   return {
     kind: 'closed',
-    reason: typeof body.reason === 'string' ? body.reason : undefined,
-    message: typeof body.message === 'string' ? body.message : undefined,
+    reason,
+    message: typeof body['message'] === 'string' ? body['message'] : undefined,
+    ...requirements,
   };
 }
 

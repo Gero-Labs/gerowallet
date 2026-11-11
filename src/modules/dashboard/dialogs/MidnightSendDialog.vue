@@ -395,11 +395,11 @@
           </div>
         </div>
 
-        <!-- Sends on this network are paused (midnightWriteGate.ts): Continue stays,
+        <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): Continue stays,
              held but focusable (aria-disabled), with this reason linked to it, and
              step 2 can't be opened. -->
         <GNote v-if="writesPaused" id="midnight-send-paused" icon="mdi-pause-circle-outline" role="status" class="mb-2" data-test="midnight-send-paused">
-          {{ t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet?.network) }) }}
+          {{ writesHeldText }}
         </GNote>
         <!-- Not an error: sends are paused on this network, or this build can't sign
              for the network's ledger. The amber note, and the CTA is disabled. -->
@@ -518,7 +518,7 @@ import assets from '@/utils/assets';
 import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightNetworkDisplayName, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
 import { isMidnightBusyCancelled, type MidnightBusyHandlers } from '@/services/midnightBusyRetry';
-import { useMidnightNetworkUpgrading } from '@/chains/midnight/midnightWriteGate';
+import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
 
 interface Props {
   isOpen: boolean;
@@ -802,8 +802,13 @@ watch(busyPrompt, (prompt) => {
   if (!prompt) return;
   void nextTick(() => busyActionsEl.value?.querySelector<HTMLElement>('[data-test="midnight-send-busy-retry"]')?.focus());
 });
-/** Sends on this wallet's network are paused for a network upgrade (midnightWriteGate.ts). */
-const writesPaused = useMidnightNetworkUpgrading(() => loggedWallet.value?.network);
+/** Why sends on this wallet's network are held, if they are: update required or network upgrade (midnightWriteGate.ts). */
+const writeBlock = useMidnightWriteBlock(() => loggedWallet.value?.network);
+/** `writesPaused`: held for either reason. The copy says which; update required takes precedence. */
+const writesPaused = computed(() => writeBlock.value !== null);
+const writesHeldText = computed(() => (writeBlock.value === 'updateRequired'
+  ? t('midnight.errors.updateRequired')
+  : t('midnight.upgrade.sendPaused', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
 // Turned on while the review step is open (a status read, a 501 elsewhere):
 // back to step 1, so no password or PassKey gesture is offered.
 watch(writesPaused, (paused) => {
