@@ -1,6 +1,6 @@
 // Bounds DUST fee preparation by silence and by the transaction's TTL instead of a flat time
 // (gero-ios#241: a flat 120 s stopped every NIGHT send on a slow device). Shared by the ledger 8
-// builder (midnightTxBuilder.ts) and its Stagenet ledger 9 twin (midnightLedger9.ts). It imports
+// builder (midnightTxBuilder.ts) and its ledger 9 twin (midnightLedger9.ts). It imports
 // no Midnight SDK, so neither stack loads the other's.
 
 /**

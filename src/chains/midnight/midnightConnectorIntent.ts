@@ -13,7 +13,7 @@
  * copy is never trusted.
  */
 
-import { midnightLedgerVersion } from './midnightLedger';
+import { knownMidnightLedger, midnightNetworkName } from './midnightLedger';
 import { isUnshieldedRecipient, unshieldedAddressPrefix } from './midnightConnectorTransfer';
 import type { MidnightConnectorOutput } from './midnightConnectorTransfer';
 import { isNativeNight, midnightTokenBalances } from './midnightTokenBalances';
@@ -80,13 +80,10 @@ function parseIntentId(raw: unknown): ConnectorIntentId | undefined {
 /** Validate and normalize a `makeIntent` request against the wallet's network. */
 export function validateConnectorIntentRequest(data: unknown, network: string): ConnectorIntentValidation {
   if (!isRecord(data)) return { ok: false, reason: 'Invalid intent request' };
-  let version: 8 | 9;
-  try {
-    version = midnightLedgerVersion(network);
-  } catch {
-    return { ok: false, reason: `Unsupported Midnight network: ${network}` };
-  }
-  if (version !== 8) return { ok: false, reason: 'makeIntent is not supported on Stagenet in this version' };
+  // The caller reads the chain's ledger first (resolveMidnightLedger).
+  const version = knownMidnightLedger(network);
+  if (version === undefined) return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs` };
+  if (version !== 8) return { ok: false, reason: `makeIntent is not supported on Midnight ${midnightNetworkName(network)} (ledger ${version}) in this version` };
 
   const { desiredInputs, desiredOutputs } = data as { desiredInputs?: unknown; desiredOutputs?: unknown };
   const rawOptions = (data as { options?: unknown }).options;

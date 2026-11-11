@@ -57,6 +57,7 @@ import {
   DEFAULT_LOCAL_PROOF_SERVER_URL,
   DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9,
   midnightProofServerCommand,
+  midnightProofServerCommandForLedger,
 } from '@/chains/midnight/midnightConfig';
 import {
   isProofServerRestartNoticeDone,
@@ -119,7 +120,7 @@ watch(open, (value) => emit('open-change', value), { immediate: true });
 const commands = computed(() => {
   const ps = midnightStore.proofServer;
   if (ps.localUrl !== DEFAULT_LOCAL_PROOF_SERVER_URL && ps.localUrlLedger9 !== DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9) {
-    return [midnightProofServerCommand('Mainnet'), midnightProofServerCommand('Stagenet')];
+    return [midnightProofServerCommandForLedger(8), midnightProofServerCommandForLedger(9)];
   }
   return [midnightProofServerCommand(walletStore.loggedWallet?.network)];
 });

@@ -48,14 +48,15 @@ describe('validateConnectorBalanceRequest', () => {
     expect(validateConnectorBalanceRequest({ tx: 'abcd', options: { payFees: false } }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/payFees:false/) });
     expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Stagenet'))
-      .toMatchObject({ ok: false, reason: expect.stringMatching(/Stagenet/) });
+      .toMatchObject({ ok: false, reason: expect.stringMatching(/Midnight Stagenet \(ledger 9\)/) });
     expect(validateConnectorBalanceRequest({ tx: 'xyz' }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/hex/) });
     expect(validateConnectorBalanceRequest({ tx: 'ab'.repeat(2 * 1024 * 1024 + 1) }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/large/) });
     expect(validateConnectorBalanceRequest({ tx: '' }, 'Preprod')).toMatchObject({ ok: false });
     expect(validateConnectorBalanceRequest(null, 'Preprod')).toMatchObject({ ok: false });
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, reason: expect.stringMatching(/Unsupported/) });
+    // A chain whose ledger hasn't been read is refused, naming it.
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, reason: expect.stringMatching(/Could not read which ledger Midnight Preview runs/) });
   });
 });
 

@@ -1,5 +1,6 @@
 import type { DustGenerationInfo, QualifiedDustOutput } from '@midnight-ntwrk/ledger-v8';
 import { ScaleBigInt } from '@midnightntwrk/wallet-sdk-address-format';
+import { MidnightLedgerChangedError, ledgerForProtocolVersion, noteMidnightProtocolVersion, type MidnightLedger } from './midnightLedger';
 
 export interface DustSyncBlock {
   hash: string;
@@ -60,6 +61,8 @@ export interface DustLightTransport {
 
 /** Keep WASM objects within their own ledger module; only wire values cross adapters. */
 export interface DustLightLedger<State, Key> {
+  /** The ledger this adapter's WASM module implements. */
+  ledger: MidnightLedger;
   createState(parametersHex: string): State;
   publicKey(key: Key): bigint;
   address(key: Key, network: string): string;
@@ -147,6 +150,12 @@ async function reconstructDustStateOnce<State, Key>(
   const { block } = snapshot;
   if (!/^[0-9a-f]{64}$/i.test(block.hash)) throw new Error('Invalid DUST snapshot block');
   index(block.height); index(block.protocolVersion);
+  // The snapshot block says which ledger the chain is on. Record it, and never
+  // rebuild ledger 9 DUST state with ledger 8 (or the reverse): that is a
+  // network that changed ledger since this send chose its path.
+  noteMidnightProtocolVersion(network, block.protocolVersion);
+  const snapshotLedger = ledgerForProtocolVersion(block.protocolVersion);
+  if (snapshotLedger !== ledger.ledger) throw new MidnightLedgerChangedError(network, snapshotLedger);
   const generationEnd = index(block.dustGenerationEndIndex);
   const commitmentEnd = index(block.dustCommitmentEndIndex);
   const timestamp = new Date(index(block.timestamp));

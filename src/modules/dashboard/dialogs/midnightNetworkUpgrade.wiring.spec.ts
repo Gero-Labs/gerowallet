@@ -76,10 +76,11 @@ describe('Midnight network upgrade wiring', () => {
     expect(refusal).toContain("recordSiteActivity(request.origin as string, { type: 'submit-failed', reason: 'paused' })");
   });
 
-  it('the status is read when a Midnight wallet opens and every few minutes', () => {
+  it('the status, and the chain\'s ledger, are read when a Midnight wallet opens and every few minutes', () => {
     const sync = read('services/midnight-sync.service.ts');
     expect(sync).toContain('void refreshMidnightWriteStatus(network, { force: true });');
-    expect(sync).toContain('setInterval(() => { void refreshMidnightWriteStatus(network, { force: true }); }, MIDNIGHT_STATUS_POLL_MS);');
+    expect(sync).toContain('void resolveMidnightChain(network, { maxAgeMs: 0 })');
+    expect(sync).toContain('readStatus();\n    this.writeStatusTimer = setInterval(readStatus, MIDNIGHT_STATUS_POLL_MS);');
     expect(sync).toContain('if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);\n    this.writeStatusTimer = null;');
   });
 

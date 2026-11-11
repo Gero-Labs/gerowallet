@@ -20,7 +20,7 @@ import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import { countWalletOwnedInputs, decodeUnboundTransaction, summarizeContributions } from './midnightConnectorBalance';
 import type { ConnectorContribution, UnboundTransaction } from './midnightConnectorBalance';
-import { requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8 } from './midnightChainLedger';
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 import { debugLog } from '@/utils/debug';
@@ -92,7 +92,7 @@ export async function balanceDappTransaction(
   args: BalanceDappTransactionArgs,
   deps?: BalanceDappTransactionDeps,
 ): Promise<BalanceDappTransactionResult> {
-  requireMidnightLedger8(args.sdkNetworkId, 'Dapp transaction balancing');
+  await requireChainLedger8(args.sdkNetworkId, 'Dapp transaction balancing');
   const tx = await decodeUnboundTransaction(args.txHex, args.sdkNetworkId);
   const contributions = summarizeContributions(tx);
   const ttl = earliestTtl(tx);

@@ -56,9 +56,9 @@ Per-chain visual assets are switched by a literal `switch (loggedWallet.chain)` 
 
 Four places at once, or you get a runtime throw rather than a graceful degrade:
 
-`src/utils/networks.ts`, `MIDNIGHT_NETWORK_ENDPOINTS`, `midnightLedgerVersion()`'s switch, and `midnightKeyManager`'s `midnightNetworkId` switch - plus `toGeroSyncMidnightNetwork` if it needs live push.
+`src/utils/networks.ts`, `MIDNIGHT_NETWORK_ENDPOINTS`, and `midnightKeyManager`'s `midnightNetworkId` switch - plus `toGeroSyncMidnightNetwork` if it needs live push.
 
-Midnight runs **two incompatible ledger generations selected purely by network**: Mainnet/Preprod use ledger 8, Stagenet uses ledger 9, reached through different npm packages via package.json aliases. `midnightLedgerVersion(network)` is the single dispatcher and throws on anything else.
+Midnight has **two incompatible ledger generations, chosen by the chain, never by the network name**: a chain reporting protocol version `>= 2000000` runs ledger 9 (mainnet, preprod and Preview all do now; preprod moved in place). `resolveMidnightChain(network)` (`midnightChainLedger.ts`) reads it from the indexer; `midnightLedgerVersion(network)` returns the last read and throws `MidnightLedgerUnknownError` before one. Ledger 9 code uses `@midnightntwrk/ledger-v9` and wallet SDK 2's `/v2` subpaths under the `midnight-v9-*` aliases; the ledger 8 modules use `@midnight-ntwrk/ledger-v8` with SDK 1.x.
 
 ## Not everything is proxied
 

@@ -8,7 +8,8 @@
  */
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
-import { midnightLedgerVersion } from './midnightLedger';
+import { knownMidnightLedger, midnightNetworkName } from './midnightLedger';
+import { resolveMidnightLedger } from './midnightChainLedger';
 // Static: in the background's single iife an inlined dynamic import is read through a
 // namespace const that lands after this module (scripts/check-bundle-tdz.mjs).
 import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
@@ -34,13 +35,12 @@ export function validateConnectorBalanceRequest(data: unknown, network: string):
   if (payFees !== undefined && payFees !== true) {
     return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
   }
-  let version: number;
-  try {
-    version = midnightLedgerVersion(network);
-  } catch {
-    return { ok: false, reason: `Unsupported Midnight network: ${network}` };
+  // The caller reads the chain's ledger first (resolveMidnightLedger).
+  const version = knownMidnightLedger(network);
+  if (version === undefined) return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs` };
+  if (version !== 8) {
+    return { ok: false, reason: `balanceUnsealedTransaction is not supported on Midnight ${midnightNetworkName(network)} (ledger ${version}) in this version` };
   }
-  if (version !== 8) return { ok: false, reason: 'balanceUnsealedTransaction is not supported on Stagenet in this version' };
   return { ok: true, tx, payFees: true };
 }
 
@@ -235,7 +235,7 @@ export async function isSealedMidnightTransaction(hex: string, sdkNetworkId: str
   if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return false;
   let version: number;
   try {
-    version = midnightLedgerVersion(sdkNetworkId);
+    version = await resolveMidnightLedger(sdkNetworkId);
   } catch {
     return false;
   }

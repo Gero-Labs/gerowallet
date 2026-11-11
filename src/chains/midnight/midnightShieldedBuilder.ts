@@ -28,7 +28,7 @@
 // since last persist).
 //
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
-import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8, resolveMidnightLedger } from './midnightChainLedger';
 import { validateShieldedTokenType } from './midnightTokenCapabilities';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
@@ -151,7 +151,7 @@ export async function buildAndSignShieldedTransfer(
   args: BuildAndSignShieldedTransferArgs,
 ): Promise<BuildAndSignShieldedTransferResult> {
   args.outputs.forEach(output => validateShieldedTokenType(output.tokenType));
-  if (midnightLedgerVersion(args.sdkNetworkId) === 9) {
+  if (await resolveMidnightLedger(args.sdkNetworkId) === 9) {
     const { buildAndSignShieldedLedger9Transfer } = await import('./midnightShieldedLedger9');
     return buildAndSignShieldedLedger9Transfer(args);
   }
@@ -311,7 +311,7 @@ export async function startAndSyncShieldedWallet(
   args: StartAndSyncShieldedWalletArgs,
   zswapKeys: ledger.ZswapSecretKeys,
 ): Promise<ShieldedWalletInstance> {
-  requireMidnightLedger8(args.sdkNetworkId, 'Shielded wallet synchronization');
+  await requireChainLedger8(args.sdkNetworkId, 'Shielded wallet synchronization');
   const [shieldedMod, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-shielded'),
     import('@midnightntwrk/wallet-sdk-abstractions'),

@@ -38,6 +38,7 @@ import { Network } from '@/models/types';
 import { getMidnightApi } from '@/api/midnight-api';
 import { blockTimeToMs } from '@/chains/midnight/midnightDataFreshness';
 import { MIDNIGHT_STATUS_POLL_MS, refreshMidnightWriteStatus } from '@/chains/midnight/midnightWriteStatus';
+import { resolveMidnightChain } from '@/chains/midnight/midnightChainLedger';
 import {
   REFRESH_CHECK_MS, hasDataToKeep, refreshProgressOf, refreshReasonOf, refreshTargetOf, refreshVerdict, type MidnightRefreshTracker,
 } from '@/chains/midnight/midnightRefresh';
@@ -316,9 +317,15 @@ class MidnightSyncService {
 
     // Whether sends on this network are paused, read when the wallet opens and
     // every few minutes, so Send and Register show it before the password.
+    // With it, which ledger the chain runs (its protocol version): the dApp
+    // connector's synchronous checks and the pages read the last answer.
     if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
-    void refreshMidnightWriteStatus(network, { force: true });
-    this.writeStatusTimer = setInterval(() => { void refreshMidnightWriteStatus(network, { force: true }); }, MIDNIGHT_STATUS_POLL_MS);
+    const readStatus = () => {
+      void refreshMidnightWriteStatus(network, { force: true });
+      void resolveMidnightChain(network, { maxAgeMs: 0 }).catch(() => { /* fails closed where it is needed */ });
+    };
+    readStatus();
+    this.writeStatusTimer = setInterval(readStatus, MIDNIGHT_STATUS_POLL_MS);
     // A rebuild that was running when this session last stopped picks up again,
     // also when the worker restarted in between (its snapshot is persisted).
     let restoringRefresh: Promise<unknown> = Promise.resolve();

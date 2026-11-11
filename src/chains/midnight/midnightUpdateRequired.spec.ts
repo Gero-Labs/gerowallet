@@ -37,9 +37,11 @@ describe('what turns "update required" on', () => {
   });
 
   it('a status read whose ledger this build cannot sign for, while writes are open', async () => {
-    // This build signs ledger 8 on Mainnet and Preprod, ledger 9 on Stagenet.
-    await expect(read({ kind: 'open', ledger: 9 })).resolves.toBe('updateRequired');
+    // This build follows each chain to ledger 9 on every network; only a newer one needs an update.
+    await expect(read({ kind: 'open', ledger: 10 })).resolves.toBe('updateRequired');
+    await expect(read({ kind: 'open', ledger: 9 })).resolves.toBeNull();
     await expect(read({ kind: 'open', ledger: 9 }, 'Stagenet')).resolves.toBeNull();
+    await expect(read({ kind: 'open', ledger: 9 }, 'Preprod')).resolves.toBeNull();
     await expect(read({ kind: 'open', ledger: 8 }, 'Preprod')).resolves.toBeNull();
   });
 
@@ -130,12 +132,12 @@ describe('what turns it off', () => {
 });
 
 describe('status bodies as the server sends them (parsed, then read)', () => {
-  // This build signs ledger 8 on Mainnet.
-  const closedForUpgrade = { writesOpen: false, reason: 'NETWORK_UPGRADING', ledger: 9, minClientVersion: { extension: '9.0.0' } };
+  // This build signs up to ledger 9 on Mainnet.
+  const closedForUpgrade = { writesOpen: false, reason: 'NETWORK_UPGRADING', ledger: 10, minClientVersion: { extension: '9.0.0' } };
   const openClientUpdate = { writesOpen: true, reason: 'CLIENT_UPDATE_REQUIRED' };
-  const openNewerLedger = { writesOpen: true, ledger: 9 };
-  const openNewerLedgerName = { writesOpen: true, ledger: 'ledger-9' };
-  const openSameLedger = { writesOpen: true, ledger: 8 };
+  const openNewerLedger = { writesOpen: true, ledger: 10 };
+  const openNewerLedgerName = { writesOpen: true, ledger: 'ledger-10' };
+  const openSameLedger = { writesOpen: true, ledger: 9 };
   const feed = async (body: Record<string, unknown>) => {
     const { parseMidnightWriteStatus } = await vi.importActual<typeof import('@/api/midnight-api')>('@/api/midnight-api');
     return read(parseMidnightWriteStatus(body) as unknown as Record<string, unknown>);

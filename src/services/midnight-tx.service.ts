@@ -53,6 +53,7 @@ import {
   MIDNIGHT_BUILT_TX_UNREADABLE,
   type MidnightBuiltTxRefusal,
 } from '@/chains/midnight/midnightBuiltTxGuard';
+import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN } from '@/chains/midnight/midnightLedger';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
 import { submitWithBusyRetry, type BusyRetryOptions, type MidnightBusyHandlers } from './midnightBusyRetry';
@@ -92,10 +93,19 @@ export class MidnightBuiltTxRefusedError extends Error {
   }
 }
 
+/** The chain's ledger couldn't be read, or changed while the transaction was prepared. */
+const LEDGER_REFUSAL_COPY: Record<string, string> = {
+  [MIDNIGHT_LEDGER_UNKNOWN]: 'midnight.errors.ledgerUnknown',
+  [MIDNIGHT_LEDGER_CHANGED]: 'midnight.errors.ledgerMismatch',
+};
+
 /** Say a background refusal in the user's language. Other errors pass through. */
-function backgroundError(error: string | undefined, fallback: string): Error {
+export function backgroundError(error: string | undefined, fallback: string): Error {
   if (error && Object.prototype.hasOwnProperty.call(BUILT_TX_REFUSAL_COPY, error)) {
     return new MidnightBuiltTxRefusedError(error as MidnightBuiltTxRefusal);
+  }
+  if (error && Object.prototype.hasOwnProperty.call(LEDGER_REFUSAL_COPY, error)) {
+    return new Error(String(i18n.t(LEDGER_REFUSAL_COPY[error])));
   }
   return new Error(error || fallback);
 }

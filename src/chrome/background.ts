@@ -131,6 +131,7 @@ import {
   isSealedMidnightTransaction,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
+import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import { uncoveredIntentInput, validateConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { CONNECTOR_INTENT_TTL_MS, IntentInsufficientFundsError } from '@/chains/midnight/midnightIntentBuilder';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
@@ -6094,7 +6095,8 @@ app.addToOptions(
       if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
       const { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } = await import('@/chains/midnight/midnightChainIdentity');
-      const endpoints = network.toLowerCase() === 'stagenet' ? getMidnightEndpoints(network) : undefined;
+      // Ledger 9 sends are checked against the chain identity across signing and proving.
+      const endpoints = await resolveMidnightLedger(network) === 9 ? getMidnightEndpoints(network) : undefined;
       const identity = endpoints ? await readVerifiedMidnightChainIdentity(endpoints) : undefined;
       assertSession();
       let signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
@@ -6194,6 +6196,7 @@ app.addToOptions(MessageTypes.BUILD_MIDNIGHT_CONNECTOR_INTENT, async (request, s
     if (!walletBg) throw new Error('No wallet logged in');
     if (walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('BUILD_MIDNIGHT_CONNECTOR_INTENT called on non-Midnight wallet');
     const { desiredInputs, desiredOutputs, options, password, prfSecret } = request.data || {};
+    await resolveMidnightLedger(walletBg.network);
     const validation = validateConnectorIntentRequest({ desiredInputs, desiredOutputs, options }, walletBg.network);
     if (validation.ok === false) throw new Error(validation.reason);
     if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
@@ -7606,6 +7609,7 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     return true;
   }
   void (async () => {
+    await resolveMidnightLedger(currentWallet.network).catch(() => { /* the check below names it */ });
     const validation = validateConnectorBalanceRequest(data, currentWallet.network);
     if (validation.ok === false) {
       reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
@@ -7866,6 +7870,10 @@ app.add(MIDNIGHT_METHOD.makeIntent, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  // Synchronous (the dapp's gesture): the chain's ledger as last read. A
+  // session reads it when it starts and every few minutes; read it now too,
+  // so a retry after "could not read" works.
+  void resolveMidnightLedger(currentWallet.network).catch(() => { /* named by the check */ });
   const validation = validateConnectorIntentRequest(data, currentWallet.network);
   if (validation.ok === false) {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });

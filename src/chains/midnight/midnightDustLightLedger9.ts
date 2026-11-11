@@ -4,6 +4,7 @@ import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-dus
 import { dustHexBytes, type DustLightLedger, type DustSpendEvent } from './midnightDustLightSync';
 
 export const dustLedger9: DustLightLedger<ledger.DustLocalState, ledger.DustSecretKey> = {
+  ledger: 9,
   createState: raw => new ledger.DustLocalState(ledger.LedgerParameters.deserialize(dustHexBytes(raw)).dust),
   publicKey: key => key.publicKey,
   address: (key, network) => DustAddress.encodePublicKey(network, key.publicKey),
@@ -22,13 +23,13 @@ export const dustLedger9: DustLightLedger<ledger.DustLocalState, ledger.DustSecr
   roots: state => [state.generatingTreeRoot(), state.commitmentTreeRoot()],
 };
 
-export function balanceLightDust9(state: ledger.DustLocalState, key: ledger.DustSecretKey,
+export function balanceLightDust9(state: ledger.DustLocalState, key: ledger.DustSecretKey, network: string,
   transactions: readonly ledger.UnprovenTransaction[], ttl: Date, timestamp: Date, parameters: string): ledger.UnprovenTransaction {
   const keysCapability = Keys.makeDefaultKeysCapability();
   const context = { keysCapability, coinSelection: CoinsAndBalances.chooseCoin,
     coinsAndBalancesCapability: CoinsAndBalances.makeDefaultCoinsAndBalancesCapability({}, () => ({ keysCapability })) };
-  const capability = Transacting.makeDefaultTransactingCapability({ networkId: 'stagenet', costParameters: { feeBlocksMargin: 1 } }, () => context);
-  const result = capability.balanceTransactions(key, CoreWallet.init(state, key, 'stagenet'), transactions, ttl, timestamp,
+  const capability = Transacting.makeDefaultTransactingCapability({ networkId: network, costParameters: { feeBlocksMargin: 1 } }, () => context);
+  const result = capability.balanceTransactions(key, CoreWallet.init(state, key, network), transactions, ttl, timestamp,
     ledger.LedgerParameters.deserialize(dustHexBytes(parameters)));
   if (result._tag === 'Left') throw result.left;
   return result.right[0];

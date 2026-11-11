@@ -21,7 +21,7 @@ import { unreachableProver } from './midnightConnectorBalance';
 import type { UnboundTransaction } from './midnightConnectorBalance';
 import { expectedIntentImbalances } from './midnightConnectorIntent';
 import type { ConnectorIntentId, ConnectorIntentRequest } from './midnightConnectorIntent';
-import { requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8 } from './midnightChainLedger';
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 import { debugLog } from '@/utils/debug';
@@ -217,7 +217,7 @@ export async function buildConnectorIntent(
   args: BuildConnectorIntentArgs,
   deps?: BuildConnectorIntentDeps,
 ): Promise<BuildConnectorIntentResult> {
-  requireMidnightLedger8(args.sdkNetworkId, 'makeIntent');
+  await requireChainLedger8(args.sdkNetworkId, 'makeIntent');
   const { request } = args;
   const ttl = args.ttl ?? new Date(Date.now() + CONNECTOR_INTENT_TTL_MS);
   const d = deps ?? await defaultDeps();

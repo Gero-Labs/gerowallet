@@ -32,7 +32,7 @@ import { DustSecretKey } from '@midnight-ntwrk/ledger-v8';
 import { dustLedger8, balanceLightDust8 } from './midnightDustLightLedger8';
 import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
-import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8, resolveMidnightLedger } from './midnightChainLedger';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } from './midnightChainIdentity';
@@ -89,7 +89,7 @@ export async function syncDustWalletAndBalanceFees(
   args: SyncDustAndBalanceFeesArgs,
   txs: ReadonlyArray<DustBalanceableTransaction>,
 ): Promise<ledger.UnprovenTransaction> {
-  requireMidnightLedger8(args.sdkNetworkId, 'DUST balancing');
+  await requireChainLedger8(args.sdkNetworkId, 'DUST balancing');
   if (args.endpoints.sdkNetworkId !== args.sdkNetworkId) throw new Error('Midnight endpoint network mismatch');
   if (!txs.length) throw new Error('At least one Midnight transaction is required');
   if (!Number.isFinite(args.ttl.getTime()) || args.ttl.getTime() <= Date.now()) throw new Error('Midnight transaction expiry must be in the future');
@@ -175,7 +175,7 @@ export async function startUnshieldedWalletForKey(
   wallet: Awaited<ReturnType<typeof unshieldedBuilderStart>>;
   keystore: ReturnType<typeof import('@midnightntwrk/wallet-sdk-unshielded-wallet').createKeystore>;
 }> {
-  requireMidnightLedger8(sdkNetworkId, 'Legacy segment signing');
+  await requireChainLedger8(sdkNetworkId, 'Legacy segment signing');
   const [{ UnshieldedWallet, createKeystore }, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
     import('@midnightntwrk/wallet-sdk-abstractions'),
@@ -222,7 +222,8 @@ export async function startUnshieldedWalletForKey(
 export async function balanceAndSignUnshieldedTransfer(
   args: BalanceAndSignUnshieldedTransferArgs,
 ): Promise<string> {
-  if (midnightLedgerVersion(args.sdkNetworkId) === 9) {
+  // The chain says which ledger to build for; never the network's name.
+  if (await resolveMidnightLedger(args.sdkNetworkId) === 9) {
     const { balanceAndSignLedger9Transfer } = await import('./midnightLedger9');
     return balanceAndSignLedger9Transfer(args);
   }

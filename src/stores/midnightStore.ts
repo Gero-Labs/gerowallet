@@ -2,6 +2,7 @@ import { MIDNIGHT_PROVING_CONSENT_VERSION, type MidnightProvingConsent, type Mid
 import type { MidnightSyncIdentity } from '@/chains/midnight/midnightSyncGeneration';
 import { hydrateSiteActivity, reduceSiteActivity } from '@/chains/midnight/midnightSiteActivity';
 import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/midnightSiteActivity';
+import { midnightLedgerKey, noteMidnightProtocolVersion, onMidnightLedgerObserved } from '@/chains/midnight/midnightLedger';
 /**
  * Midnight Wallet Store
  *
@@ -199,6 +200,13 @@ export interface MidnightStore {
    */
   lastMidnightTxId: number | null;
   chainIdentity: MidnightSyncIdentity | null;
+  /**
+   * The protocol version each Midnight chain last reported to the background
+   * (network key → version), mirrored so the extension pages show the same
+   * ledger the background builds for (`midnightLedgerOrNewest`). Display only:
+   * the background reads the chain itself before it builds anything.
+   */
+  chainLedgers: Record<string, number>;
   privateSyncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   /** See {@link MidnightPrivateSyncProgress}; only meaningful while `privateSyncStatus` is `syncing`. */
   privateSyncProgress: MidnightPrivateSyncProgress | null;
@@ -388,6 +396,7 @@ export const midnightStore = reactive<MidnightStore>({
   provingHistory: [],
   lastMidnightTxId: null,
   chainIdentity: null,
+  chainLedgers: {},
   privateSyncStatus: 'idle',
   privateSyncProgress: null,
   siteActivity: null,
@@ -642,6 +651,9 @@ function applyBroadcastField(key: string, val: unknown): void {
     midnightStore.refreshSnapshot = hydrateRefreshSnapshot(val);
   } else if (k === 'refreshing') {
     midnightStore.refreshing = hydrateRefreshStatus(val);
+  } else if (k === 'chainLedgers') {
+    midnightStore.chainLedgers = hydrateChainLedgers(val);
+    adoptChainLedgers(midnightStore.chainLedgers);
   } else if (k in midnightStore) {
     (midnightStore as unknown as Record<string, unknown>)[key] = val;
   }
@@ -733,6 +745,8 @@ if (context === 'browser') {
     next.provingOperations = hydrateProvingOperations(stored.provingOperations);
     next.provingHistory = hydrateProvingHistory(stored.provingHistory);
     next.chainIdentity = stored.chainIdentity ?? null;
+    next.chainLedgers = hydrateChainLedgers(stored.chainLedgers);
+    if (!deliveredFields.has('chainLedgers')) adoptChainLedgers(next.chainLedgers);
     next.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
@@ -852,6 +866,8 @@ const bgDurableTouched = {
 // would otherwise replace the record with these fields' defaults before they were
 // restored, and a lost chainIdentity costs a full private-note rescan.
 if (context === 'background') {
+  // Every chain read the background makes reaches the pages' copy.
+  onMidnightLedgerObserved((network, chain) => midnightActions.setChainProtocolVersion(network, chain.protocolVersion));
   bootRead = persister.hydrateWith((record) => {
     const stored = record as Partial<MidnightStore> | null;
     if (!stored) return;
@@ -1015,6 +1031,23 @@ export function hydrateChainIdentity(stored: unknown): MidnightSyncIdentity | nu
   if (!Number.isSafeInteger(generation) || (generation as number) < 1) return null;
   if (typeof genesisHash !== 'string' || !/^0x[0-9a-f]{64}$/.test(genesisHash)) return null;
   return { network, generation: generation as number, genesisHash };
+}
+
+/** Persisted or broadcast chain protocol versions; malformed entries are dropped. */
+export function hydrateChainLedgers(stored: unknown): Record<string, number> {
+  if (!stored || typeof stored !== 'object') return {};
+  const out: Record<string, number> = {};
+  for (const [network, version] of Object.entries(stored as Record<string, unknown>)) {
+    if (/^[a-z0-9-]{1,32}$/.test(network) && typeof version === 'number' && Number.isSafeInteger(version) && version >= 0) {
+      out[network] = version;
+    }
+  }
+  return out;
+}
+
+/** In an extension page, the background's reports feed this context's `midnightLedgerOrNewest`. */
+function adoptChainLedgers(chainLedgers: Record<string, number>): void {
+  for (const [network, version] of Object.entries(chainLedgers)) noteMidnightProtocolVersion(network, version);
 }
 
 const PRIVATE_SYNC_STATUSES: ReadonlyArray<MidnightStore['privateSyncStatus']> = ['idle', 'syncing', 'synced', 'error'];
@@ -1207,6 +1240,13 @@ function refreshStartFields(reason: MidnightRefreshReason, persisted: MidnightRe
  * trigger them via Chrome messaging if needed.
  */
 export const midnightActions = {
+  /** Mirror a chain's reported protocol version to the extension pages. */
+  setChainProtocolVersion(network: string, protocolVersion: number) {
+    const key = midnightLedgerKey(network);
+    if (midnightStore.chainLedgers[key] === protocolVersion) return;
+    midnightStore.chainLedgers = { ...midnightStore.chainLedgers, [key]: protocolVersion };
+    broadcastFromBackground({ chainLedgers: midnightStore.chainLedgers });
+  },
   setPrivateSyncStatus(privateSyncStatus: MidnightStore['privateSyncStatus']) {
     midnightStore.privateSyncStatus = privateSyncStatus;
     if (privateSyncStatus === 'syncing') {

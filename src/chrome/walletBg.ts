@@ -122,6 +122,7 @@ import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
+import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import {
   assertNativeNightConversionSupported,
   validateShieldedTokenType,
@@ -2956,6 +2957,7 @@ export class WalletBg {
     if (!unprovenTxHex || !dustReceiverAddressBech32) {
       throw new Error('The registration transaction and DUST address are required to check it before signing');
     }
+    await resolveMidnightLedger(this.network);
     await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
 
     // Decrypt the mnemonic once for the batch — we wipe it before returning.
@@ -3336,8 +3338,9 @@ export class WalletBg {
           dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
           unprovenTxHex,
           ttl: new Date(ttlMs),
-          // Restore timestamps are not proof of the original registration time.
-          dustRegisteredAt: sdkNetworkId === 'stagenet' ? undefined : dustRegisteredAt,
+          // Deprecated and unread: compact DUST sync finds registrations on chain,
+          // on either ledger (a restore timestamp proves nothing anyway).
+          dustRegisteredAt,
           // Forward the (long) DUST-ledger sync percentage to the store so the
           // send dialog's stage timeline renders a real bar. Broadcast-only,
           // cleared in the finally below.

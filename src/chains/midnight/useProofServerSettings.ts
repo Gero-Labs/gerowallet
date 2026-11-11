@@ -19,7 +19,8 @@ import {
  * importing this composable, which pulls in Vue, snackbar and the stores.
  */
 export { PROOF_SERVER_DOCKER_TAG, PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
-import { isLedger9Network, midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
+import { isLedger9Network, midnightProofServerCommand, midnightProofServerTag } from '@/chains/midnight/midnightConfig';
+import { midnightNetworkName } from '@/chains/midnight/midnightLedger';
 import { isLoopbackProverUrl, localUrlForNetwork } from '@/chains/midnight/midnightProvingTarget';
 
 
@@ -309,8 +310,13 @@ export function useMidnightProofServer() {
     localUrlLedger9Draft,
     localUrlLedger9Error,
     onLocalUrlLedger9Blur,
-    /** Which ledger the active wallet is on, so the page can label the relevant server. */
+    /** Which ledger the active wallet's chain runs, so the page can label the relevant server. */
     activeLedger9: computed(() => isLedger9Network(walletNetwork.value)),
+    /** The network and server release the page names for it. */
+    activeServer: computed(() => ({
+      network: midnightNetworkName(walletNetwork.value ?? ''),
+      tag: midnightProofServerTag(walletNetwork.value),
+    })),
     zkpaasUrlDraft,
     zkpaasUrlError,
     onZkpaasUrlBlur,
