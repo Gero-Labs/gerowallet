@@ -8,13 +8,13 @@
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type * as ledger9 from '@midnightntwrk/ledger-v9';
 import type { WalletProvingRequest } from './midnightProvingTarget';
+import { resolveMidnightLedger } from './midnightChainLedger';
+import { midnightNetworkName, type MidnightLedger } from './midnightLedger';
 
 /** Inlined (not midnightProvingTarget's): this module stays free of that one's value imports. */
 function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
   return 'device' in request && request.device === true;
 }
-import { resolveMidnightLedger } from './midnightChainLedger';
-import { midnightNetworkName, type MidnightLedger } from './midnightLedger';
 
 export async function walletProvingProvider(
   proving: WalletProvingRequest,
