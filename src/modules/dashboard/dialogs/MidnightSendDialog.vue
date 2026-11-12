@@ -742,7 +742,7 @@ const formattedAvailable = computed(() => {
 // pre-build value (it's computed during the BG dust-balance step, post-auth),
 // so the review shows a conservative estimate in DUST, matching the Cardano
 // flow's fee row.
-// Ledger 9's fee floor: see midnightFeeEstimate.ts (#1452 M14).
+// Ledger 9's fee floor: see midnightFeeEstimate.ts (issue 1452, M14).
 const feeEstimateDisplay = MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY;
 
 const step1FormRef = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null);
