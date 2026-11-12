@@ -5575,7 +5575,7 @@ export default {
   'midnight.send.addressRequired': 'Empfängeradresse erforderlich',
   'midnight.send.addressPrefix': 'Adresse muss mit {prefix} beginnen',
   'midnight.send.amountRequired': 'Betrag erforderlich',
-  'midnight.send.noDustFee': 'Diese Wallet zeigt derzeit kein DUST an, daher lässt sich die Gebühr möglicherweise nicht bezahlen. Wählen Sie eine Wallet für die Zahlung oder versuchen Sie es trotzdem.',
+  'midnight.send.noDustFee': 'Diese Wallet zeigt derzeit kein DUST an, daher lässt sich die Gebühr möglicherweise nicht bezahlen. Wähle eine Wallet für die Zahlung oder versuche es trotzdem.',
   'midnight.send.lowDustFee': 'Diese Wallet hat weniger als 1 DUST, daher lässt sich die Gebühr möglicherweise nicht bezahlen. Wähle eine Wallet für die Zahlung oder versuche es trotzdem.',
   'midnight.sponsor.title': 'Gebühren aus einer anderen Wallet zahlen',
   'midnight.sponsor.lede': 'Eine andere Wallet kann diese Gebühr zahlen.',
