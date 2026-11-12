@@ -250,6 +250,8 @@ async function reconstructDustStateOnce<State, Key>(
           // snapshot lists was created on the snapshot's ledger, so a spend
           // from before the crossing (another ledger's events) cannot be one
           // of them. Skip that history rather than fail on it.
+          // A malformed version is a bad page, not another ledger's history.
+          if (!Number.isSafeInteger(tx.protocolVersion) || tx.protocolVersion < 0) throw new Error('Invalid DUST spend protocol version');
           if (!onLedger(tx.protocolVersion, ledger.ledger)) continue;
           for (const encoded of tx.matchedNullifiers) {
             if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
