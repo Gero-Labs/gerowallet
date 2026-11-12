@@ -1,36 +1,35 @@
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import { HexBlob } from '@cardano-sdk/util';
-import { verifyTxIntent, type TxIntentViolation } from '@/shared/utils/txIntentGuard';
+import { Cardano } from '@cardano-sdk/core';
+import {
+  verifySpendBound,
+  type OwnWalletView,
+  type TxIntentViolation,
+} from '@/shared/utils/txIntentGuard';
 
 /**
  * Strike builds the deposit transaction (POST /v2/deposit/build-tx) from every
- * UTxO the wallet offers, so it is checked against the quote the user confirmed
- * before signing: exactly the quoted lovelace to the quoted deposit address (a
- * script address) and no tokens there; every other output back to the wallet;
- * no certificate, withdrawal, mint or collateral; only the wallet's own required
- * signers; a capped fee. Without this a compromised build endpoint could take
- * the whole wallet with one confirmed deposit, not just the quoted amount.
+ * UTxO the wallet offers, so before signing it is held to the quote the user
+ * confirmed. Without this a compromised build endpoint could take the whole
+ * wallet with one confirmed deposit, not just the quoted amount.
  *
- * Tolerances: the deposit output's datum, which the wallet has no reviewed
- * schema for (it carries Strike's request id); the inputs, which Strike selects
- * (outputs, fee and collateral are bounded, so an input can only add to what
- * returns to the wallet).
- *
- * The deposit address is only known from the quote, as for the withdraw
- * validator (strikeWithdrawGuard.ts): pinning it needs Strike's published V2
- * vault script hash per network, reviewed into a constant.
+ * Where the ADA goes cannot be checked: for an ADA deposit the transaction pays
+ * an exchanger address Strike creates during build-tx (Strike's strike-deposit
+ * reference), not the quote's `deposit_address`. So the check is a spend bound,
+ * as for a DEX order: what leaves the wallet is at most the quoted lovelace plus
+ * {@link STRIKE_DEPOSIT_MAX_EXTRA_LOVELACE}, and the network fee (capped); no
+ * token leaves; every input is one the wallet holds, valued from the transaction
+ * that created it (provenInputs.ts), never from the UTxO list. On top of the
+ * bound: no certificate, withdrawal, vote, mint or collateral, and no required
+ * signer but the wallet's own keys.
  */
 
-export type StrikeDepositTxViolation = TxIntentViolation | 'depositNotScript' | 'invalidAmount' | 'undecodable';
+/**
+ * Lovelace a build may send beyond the quoted amount: what an exchanger output
+ * may need on top (its own costs or minimum). A compromised builder gains at
+ * most this over the deposit the user agreed to give Strike.
+ */
+export const STRIKE_DEPOSIT_MAX_EXTRA_LOVELACE = 10_000_000n;
 
-function isScriptAddress(address: string): boolean {
-  try {
-    const props = Cardano.Address.fromBech32(address.trim()).getProps();
-    return props.paymentPart?.type === Cardano.CredentialType.ScriptHash;
-  } catch {
-    return false;
-  }
-}
+export type StrikeDepositTxViolation = TxIntentViolation | 'invalidAmount';
 
 /** The quoted amount as positive lovelace, or null. Strike sends it as a decimal string. */
 function quotedLovelace(amount: string | undefined): bigint | null {
@@ -39,35 +38,44 @@ function quotedLovelace(amount: string | undefined): bigint | null {
   return lovelace > 0n ? lovelace : null;
 }
 
-/** Every way the built deposit departs from the confirmed quote; empty when it matches. */
+function hasEntries(value: unknown): boolean {
+  if (value == null) return false;
+  if (value instanceof Map) return value.size > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return typeof value === 'object' && Object.keys(value as object).length > 0;
+}
+
+/** Every way the built deposit departs from the confirmed quote; empty when it fits. */
 export function verifyStrikeDepositTx(
-  txCborHex: string,
-  expectation: {
-    depositAddress: string | undefined;
+  tx: Cardano.Tx,
+  expectation: OwnWalletView & {
     /** The quote's `asset_symbol`: the amount is lovelace only for ADA. */
     assetSymbol: string | undefined;
     /** The quote's `asset_amount`, in lovelace. */
     lovelace: string | undefined;
-    ownAddresses: Iterable<string>;
+    /** Key hashes that may be required signers (derivedOwnKeyHashes). */
     ownKeyHashes: Iterable<string>;
   },
 ): StrikeDepositTxViolation[] {
-  const { depositAddress } = expectation;
-  if (!depositAddress || !isScriptAddress(depositAddress)) return ['depositNotScript'];
   const lovelace = quotedLovelace(expectation.lovelace);
   if (lovelace == null || expectation.assetSymbol?.toUpperCase() !== 'ADA') return ['invalidAmount'];
-  let tx: Cardano.Tx;
-  try {
-    tx = Serialization.Transaction.fromCbor(HexBlob(txCborHex)).toCore();
-  } catch {
-    return ['undecodable'];
+
+  const violations = new Set<StrikeDepositTxViolation>(
+    verifySpendBound(tx, expectation, {
+      maxOutflow: new Map([['lovelace', lovelace + STRIKE_DEPOSIT_MAX_EXTRA_LOVELACE]]),
+    }),
+  );
+  const body = tx.body;
+  // The spend bound tolerates these for DEX orders; a deposit has no use for them.
+  if (hasEntries(body.mint)) violations.add('unexpectedMint');
+  if (hasEntries(body.collaterals) || body.collateralReturn || body.totalCollateral != null) {
+    violations.add('unexpectedCollateral');
   }
-  return verifyTxIntent(tx, {
-    outputs: [],
-    boundedOutputs: [{ address: depositAddress, minLovelace: lovelace, maxLovelace: lovelace }],
-    ownAddresses: expectation.ownAddresses,
-    requiredSigners: expectation.ownKeyHashes,
-  });
+  const ownKeys = new Set(Array.from(expectation.ownKeyHashes, (h) => h.toLowerCase()));
+  if ((body.requiredExtraSignatures ?? []).some((h) => !ownKeys.has(String(h).toLowerCase()))) {
+    violations.add('unexpectedRequiredSigner');
+  }
+  return [...violations];
 }
 
 /**

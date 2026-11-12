@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { backendSource, historySource, outputRef, proveOutputs, provenOutput, provenTxOutput, sameOutput } from './provenInputs';
+import { backendSource, historySource, outputRef, proveOutputs, proveOwnInputs, provenOutput, provenTxOutput, sameOutput } from './provenInputs';
 
 const keyCred = (c: string) => ({ type: Cardano.CredentialType.KeyHash, hash: c.repeat(56) as Cardano.Credential['hash'] });
 const base = (pay: string, stake: string) =>
@@ -164,5 +164,41 @@ describe('sameOutput / outputRef', () => {
 
   it('formats refs the way txIntentGuard does', () => {
     expect(outputRef({ txId: 'AB'.repeat(32), index: 3 })).toBe(`${'ab'.repeat(32)}#3`);
+  });
+});
+
+describe('proveOwnInputs', () => {
+  const spending = (inputs: { txId: string; index: number }[], extra: Partial<Cardano.TxBody> = {}): Cardano.Tx =>
+    ({ id: '9'.repeat(64), body: { inputs, outputs: [], fee: 200_000n, ...extra }, witness: { signatures: new Map() } } as unknown as Cardano.Tx);
+
+  it('values the wallet\'s inputs from their creating transaction and leaves out other addresses\' outputs', async () => {
+    const { cbor, hash } = creatingTx(50_000_000n);
+    const tx = spending([{ txId: hash, index: 0 }, { txId: hash, index: 1 }]);
+    const claimed: Cardano.Utxo[] = [[{ txId: hash as Cardano.TransactionId, index: 0, address: OWN as Cardano.PaymentAddress },
+      { address: OWN as Cardano.PaymentAddress, value: { coins: 50_000_000n, assets: new Map([[TOKEN, 7n]]) } }]];
+    const result = await proveOwnInputs(tx, { ownAddresses: [OWN], claimed, sources: [historySource([{ tx_hash: hash, cbor }])] });
+    expect(result.violation).toBeUndefined();
+    expect(result.ownUtxos?.map(([txIn, txOut]) => [`${txIn.txId}#${txIn.index}`, txOut.value.coins])).toEqual([[`${hash}#0`, 50_000_000n]]);
+  });
+
+  it('refuses an input no source proves, and one the UTxO list misreports', async () => {
+    const { cbor, hash } = creatingTx(50_000_000n);
+    const tx = spending([{ txId: hash, index: 0 }]);
+    expect((await proveOwnInputs(tx, { ownAddresses: [OWN], claimed: [], sources: [historySource([])] })).violation)
+      .toBe('unprovenInput');
+    const understated: Cardano.Utxo[] = [[{ txId: hash as Cardano.TransactionId, index: 0, address: OWN as Cardano.PaymentAddress },
+      { address: OWN as Cardano.PaymentAddress, value: { coins: 1_000_000n, assets: new Map([[TOKEN, 7n]]) } }]];
+    expect((await proveOwnInputs(tx, { ownAddresses: [OWN], claimed: understated, sources: [historySource([{ tx_hash: hash, cbor }])] })).violation)
+      .toBe('misreportedInput');
+  });
+
+  it('does not ask about an input a script spends', async () => {
+    const tx = spending([{ txId: 'f'.repeat(64), index: 0 }]);
+    (tx as { witness: Cardano.Witness }).witness = {
+      signatures: new Map(),
+      redeemers: [{ purpose: Cardano.RedeemerPurpose.spend, index: 0, data: 0n, executionUnits: { memory: 0, steps: 0 } }],
+    } as unknown as Cardano.Witness;
+    const result = await proveOwnInputs(tx, { ownAddresses: [OWN], claimed: [], sources: [historySource([])] });
+    expect(result).toEqual({ ownUtxos: [] });
   });
 });

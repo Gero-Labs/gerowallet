@@ -2,7 +2,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { Network } from '@/models/types';
 import { debugLog } from '@/utils/debug';
-import { canonicalAddress } from '@/shared/utils/txIntentGuard';
+import { canonicalAddress, scriptSpentInputRefs } from '@/shared/utils/txIntentGuard';
 
 /**
  * Input values the wallet can prove instead of taking a server's word for them.
@@ -190,4 +190,45 @@ export function sameOutput(claimed: Cardano.TxOut, proven: Cardano.TxOut): boole
   return canonicalAddress(String(claimed.address)) === canonicalAddress(String(proven.address))
     && BigInt(claimed.value?.coins ?? 0n) === BigInt(proven.value?.coins ?? 0n)
     && assetsEqual(claimed.value?.assets, proven.value?.assets);
+}
+
+/** The wallet's own inputs of a transaction with proven values, or why they could not be proven. */
+export type ProvenOwnInputs =
+  | { ownUtxos: Cardano.Utxo[]; violation?: undefined }
+  | { ownUtxos?: undefined; violation: 'unprovenInput' | 'misreportedInput' };
+
+/**
+ * The inputs and collateral of `tx` at one of `ownAddresses`, each with the value
+ * proven by the transaction that created it, for a spend bound (verifySpendBound
+ * `ownUtxos`). An input a script spends (a redeemer names it) is not the wallet's
+ * and is not asked about. Any other input that no source proves refuses the
+ * transaction (`unprovenInput`), and so does a UTxO the wallet's own list
+ * (`claimed`, from gero-sync) describes differently from its proof
+ * (`misreportedInput`).
+ */
+export async function proveOwnInputs(
+  tx: Cardano.Tx,
+  wallet: { ownAddresses: Iterable<string>; claimed: readonly Cardano.Utxo[]; sources: TxCborSource[] },
+): Promise<ProvenOwnInputs> {
+  const scriptSpent = scriptSpentInputRefs(tx);
+  const refs = [
+    ...(tx.body.inputs ?? []).map(outputRef).filter((ref) => !scriptSpent.has(ref)),
+    ...(tx.body.collaterals ?? []).map(outputRef),
+  ];
+  const { proven, unproven } = await proveOutputs(refs, wallet.sources);
+  if (unproven.length > 0) return { violation: 'unprovenInput' };
+  const misreported = wallet.claimed.some(([txIn, txOut]) => {
+    const actual = proven.get(outputRef(txIn));
+    return !!actual && !sameOutput(txOut, actual);
+  });
+  if (misreported) return { violation: 'misreportedInput' };
+
+  const own = new Set(Array.from(wallet.ownAddresses, canonicalAddress));
+  const ownUtxos: Cardano.Utxo[] = [];
+  for (const [ref, txOut] of proven) {
+    if (!own.has(canonicalAddress(String(txOut.address)))) continue;
+    const [txId, index] = ref.split('#');
+    ownUtxos.push([{ txId: txId as Cardano.TransactionId, index: Number(index), address: txOut.address }, txOut]);
+  }
+  return { ownUtxos };
 }

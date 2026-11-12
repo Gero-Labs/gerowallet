@@ -16,6 +16,7 @@ import i18n from '@/plugins/i18n';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
 import { isStrikeQuoteExpired, verifyStrikeDepositTx } from '@/modules/market/utils/strikeDepositGuard';
 import { derivedOwnAddresses, derivedOwnKeyHashes } from '@/shared/utils/ownAddresses';
+import { backendSource, historySource, proveOwnInputs } from '@/shared/utils/provenInputs';
 
 /**
  * Lifecycle states for the deposit flow.
@@ -255,7 +256,8 @@ export function useStrikeDeposit() {
       // transfer to the deposit address: a plain ADA send to the vault script is
       // NOT a creditable Strike deposit (that's why a self-built deposit didn't
       // credit). The wallet signs + submits what Strike builds only once it
-      // matches the confirmed quote (checked below, before signing).
+      // fits the confirmed quote (checked below, before signing). For ADA it pays
+      // an exchanger address Strike creates during build-tx, not deposit_address.
       status.value = 'building';
       const cip30Utxos = utxos.map(utxoToCip30Hex);
       const buildResp = await strikeUserApi.buildDepositTx({
@@ -272,21 +274,29 @@ export function useStrikeDeposit() {
       const txCbor = serializeCardanoJsSdkTx(txCore);
 
       // Strike built this transaction from every UTxO the wallet holds: sign it
-      // only if it is the deposit the user confirmed (see strikeDepositGuard.ts).
-      // The bytes checked are the bytes signed and submitted.
+      // only if what leaves the wallet fits the deposit the user confirmed (see
+      // strikeDepositGuard.ts). The bytes checked are the bytes signed and submitted.
       if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at) || isStrikeQuoteExpired(buildResp.expires_at)) {
         throw new Error(String(i18n.t('perpetuals.deposit.quoteExpired')));
       }
-      // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts).
+      const signedTx = Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
+      // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts),
+      // and so do its values, so each input is valued from its creating transaction.
       const ownAddresses = derivedOwnAddresses(keys, wallet.baseAddress);
-      const ownKeyHashes = derivedOwnKeyHashes(keys);
-      const violations = verifyStrikeDepositTx(txCbor, {
-        depositAddress: confirmedQuote.deposit_address,
-        assetSymbol: confirmedQuote.quote.asset_symbol,
-        lovelace: confirmedQuote.quote.asset_amount,
+      const inputs = await proveOwnInputs(signedTx, {
         ownAddresses,
-        ownKeyHashes,
+        claimed: utxos,
+        sources: [historySource(walletStore.transactions as unknown[]), backendSource(wallet.network)],
       });
+      const violations = inputs.violation
+        ? [inputs.violation]
+        : verifyStrikeDepositTx(signedTx, {
+          assetSymbol: confirmedQuote.quote.asset_symbol,
+          lovelace: confirmedQuote.quote.asset_amount,
+          ownAddresses,
+          ownUtxos: inputs.ownUtxos,
+          ownKeyHashes: derivedOwnKeyHashes(keys),
+        });
       if (violations.length > 0) {
         debugLog('[strike-deposit] refused the built transaction:', violations);
         throw new Error(String(i18n.t('txGuard.builtTxMismatch')));
