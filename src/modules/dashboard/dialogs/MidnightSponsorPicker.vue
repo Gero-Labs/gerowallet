@@ -40,10 +40,14 @@
               <i :style="{ width: (pctOf(candidate) ?? 0) + '%' }"></i>
             </span>
           </template>
+          <!-- Relaying with a known capacity is a live registration still
+               charging toward a fee's worth of DUST, not a pending one. -->
           <span v-else class="sponsor-row__unknown">
-            {{ candidate.state === 'relaying'
-              ? t('midnight.sponsor.relaying')
-              : t('midnight.sponsor.notChecked') }}
+            {{ candidate.state !== 'relaying'
+              ? t('midnight.sponsor.notChecked')
+              : candidate.capacity != null
+                ? t('midnight.sponsor.charging')
+                : t('midnight.sponsor.relaying') }}
           </span>
         </span>
         <!-- Which credential this wallet will ask for, up front. -->

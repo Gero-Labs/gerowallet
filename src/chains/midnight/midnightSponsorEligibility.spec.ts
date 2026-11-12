@@ -9,6 +9,10 @@ import {
   type DustStatusRow,
   type SponsorWalletRef,
 } from './midnightSponsorEligibility';
+import { dustShortForFee } from './midnightFeeEstimate';
+
+/** 1 DUST in Specks. */
+const DUST = 10n ** 15n;
 
 // The real addresses from the mainnet session, which is where every rule here
 // came from. Cyber Nexus turned out to be the DUST destination; Primal Spectre
@@ -26,7 +30,7 @@ function row(over: Partial<DustStatusRow> = {}): DustStatusRow {
     cardanoRewardAddress: ADAM_STAKE,
     dustAddress: CYBER_NEXUS_DUST,
     registered: true,
-    currentCapacity: '4880300000',
+    currentCapacity: '4880300000000000',
     ...over,
   };
 }
@@ -35,7 +39,7 @@ describe('sponsorStateFor', () => {
   it('is ready when a live registration pays into the wallet', () => {
     const c = sponsorStateFor(wallet(), [row()]);
     expect(c.state).toBe('ready');
-    expect(c.capacity).toBe(4_880_300_000n);
+    expect(c.capacity).toBe(4_880_300_000_000_000n);
     expect(c.fundedBy).toEqual([ADAM_STAKE]);
   });
 
@@ -102,6 +106,20 @@ describe('sponsorStateFor', () => {
     expect(c.state).toBe('relaying');
     expect(c.capacity).toBe(0n);
   });
+
+  // A ledger 9 send's fee is around 0.6 DUST: a sponsor holding less than the
+  // 1 DUST the send review warns at (dustShortForFee) cannot be offered as ready.
+  it('is relaying, not ready, below a fee\'s worth of DUST', () => {
+    const c = sponsorStateFor(wallet(), [row({ currentCapacity: String(3n * 10n ** 14n) })]);
+    expect(c.state).toBe('relaying');
+    expect(c.capacity).toBe(3n * 10n ** 14n);
+  });
+
+  it('agrees with the send review\'s low-DUST bound at exactly 1 DUST', () => {
+    expect(dustShortForFee(DUST - 1n)).toBe(true);
+    expect(sponsorStateFor(wallet(), [row({ currentCapacity: String(DUST - 1n) })]).state).toBe('relaying');
+    expect(sponsorStateFor(wallet(), [row({ currentCapacity: String(DUST) })]).state).toBe('ready');
+  });
 });
 
 describe('sponsorCandidates', () => {
@@ -144,7 +162,7 @@ describe('sponsorCandidates', () => {
     ];
     const rows = [
       row({ dustAddress: 'mn_dust1relay', registered: false, registrationUtxoTxHash: 'tx' }),
-      row({ dustAddress: 'mn_dust1ready', currentCapacity: '5' }),
+      row({ dustAddress: 'mn_dust1ready', currentCapacity: '5000000000000000' }),
     ];
     expect(sponsorCandidates(many, rows, 99, 'Mainnet').map((c) => c.state))
       .toEqual(['ready', 'relaying', 'unknown']);
@@ -176,6 +194,12 @@ describe('hasReadySponsor', () => {
 
   it('is true once one candidate can pay now', () => {
     expect(hasReadySponsor(sponsorCandidates([wallet()], [row()], 36, 'Mainnet'))).toBe(true);
+  });
+
+  it('is false when the only registered candidate holds less than a fee', () => {
+    const out = sponsorCandidates([wallet()], [row({ currentCapacity: String(3n * 10n ** 14n) })], 36, 'Mainnet');
+    expect(out[0].state).toBe('relaying');
+    expect(hasReadySponsor(out)).toBe(false);
   });
 });
 
@@ -224,8 +248,8 @@ describe('sponsorStateFromDestination', () => {
   const destination = (over: Partial<DustDestinationRow> = {}): DustDestinationRow => ({
     dustAddress: CYBER_NEXUS_DUST,
     registered: true,
-    currentCapacity: '4880300000',
-    maxCapacity: '9000000000',
+    currentCapacity: '4880300000000000',
+    maxCapacity: '9000000000000000',
     stakes: [stake('active')],
     ...over,
   });
@@ -233,8 +257,8 @@ describe('sponsorStateFromDestination', () => {
   it('is ready when a stake is active and the destination has capacity', () => {
     const c = sponsorStateFromDestination(wallet(), destination());
     expect(c.state).toBe('ready');
-    expect(c.capacity).toBe(4_880_300_000n);
-    expect(c.cap).toBe(9_000_000_000n);
+    expect(c.capacity).toBe(4_880_300_000_000_000n);
+    expect(c.cap).toBe(9_000_000_000_000_000n);
     expect(c.fundedBy).toEqual([ADAM_STAKE]);
   });
 
@@ -243,8 +267,8 @@ describe('sponsorStateFromDestination', () => {
     const c = sponsorStateFromDestination(wallet(), destination({
       stakes: [stake('active'), stake('active', 'stake1other')],
     }));
-    expect(c.capacity).toBe(4_880_300_000n);
-    expect(c.cap).toBe(9_000_000_000n);
+    expect(c.capacity).toBe(4_880_300_000_000_000n);
+    expect(c.cap).toBe(9_000_000_000_000_000n);
     expect(c.fundedBy).toEqual([ADAM_STAKE, 'stake1other']);
     expect(chargePercent(c)).toBe(54);
   });
@@ -258,6 +282,14 @@ describe('sponsorStateFromDestination', () => {
     const c = sponsorStateFromDestination(wallet(), destination({ currentCapacity: '0' }));
     expect(c.state).toBe('relaying');
     expect(c.capacity).toBe(0n);
+  });
+
+  it('is relaying, not ready, below a fee\'s worth of DUST, with the capacity kept', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({ currentCapacity: String(3n * 10n ** 14n) }));
+    expect(c.state).toBe('relaying');
+    expect(c.capacity).toBe(3n * 10n ** 14n);
+    expect(sponsorStateFromDestination(wallet(), destination({ currentCapacity: String(DUST - 1n) })).state).toBe('relaying');
+    expect(sponsorStateFromDestination(wallet(), destination({ currentCapacity: String(DUST) })).state).toBe('ready');
   });
 
   it('keeps capacity null when it is unparseable rather than claiming zero', () => {
