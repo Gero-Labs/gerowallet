@@ -167,20 +167,30 @@ proves a transaction can therefore spend what it reveals.
 | local | the user's loopback proof server | same |
 | zkPaaS | Arkhia, consent-gated | same |
 
-- **This device** (`midnightDeviceProver.ts`): zkir-v2 2.1.0 (the prover the Nexus
-  sidecar uses) in a Worker inside an offscreen document, reached over one
-  dedicated port. Chains on ledger 8 only; a ledger 9 chain keeps Gero Cloud until
-  the generation 10 keys ship (#1452 M7). Keys are
-  pinned to the ledger source's SHA-256 (`midnightZkKeys.ts`): the DUST set ships
-  in the package (`src/assets/midnight-zk`, 3.75 MB), the Zswap set (~29 MB) is
-  fetched from `VITE_MIDNIGHT_ZK_KEYS_URL` and is needed only by the shielded flag.
-  The worker exists only in built pages, not under the Vite dev server.
+- **This device** (`midnightDeviceProver.ts`): zkir-v2 2.2.0 (which fixes
+  in-process DUST proofs being rejected, midnight-ledger#832) in a Worker inside
+  an offscreen document, reached over one dedicated port. Chains on ledger 9
+  only: the pinned keys are ledger 9.1.0.1's generation 10 DUST spend keys
+  (`midnightZkKeys.ts`, pinned to the ledger source's SHA-256 and checked by
+  `node scripts/midnight-zk-keys.mjs --verify` against `srs.midnight.network`).
+  A chain still on ledger 8 keeps the proof-server paths. The DUST set ships in
+  the package (`src/assets/midnight-zk`, 3.75 MB), the Zswap set (~29 MB,
+  unchanged by ledger 9) is fetched from `VITE_MIDNIGHT_ZK_KEYS_URL` and is
+  needed only by the shielded flag; that host must serve the released files
+  (`--verify --host <url>` checks it). The worker exists only in built pages,
+  not under the Vite dev server.
+- **Local proof server**: `midnightntwrk/proof-server:9.0.0` for ledger 9 on
+  `127.0.0.1:6301`, the ledger 8 server (8.1.0) on 6300. Ledger 9 keeps 6301
+  on every network so a ledger 8 server still running on 6300 never gets
+  ledger 9 jobs; the default URL follows the chain's ledger
+  (`defaultLocalProofServerUrl`). Cross-device proving serves the ledger 9
+  server and advertises `9.0.0`.
 - A proven transaction goes to `/tx/submit-proven`, which carries no witness.
   `/tx/submit` (Gero Cloud proves) is left for the one-off fallback on Stagenet
   and for an unsealed transaction a dapp submits itself.
 - Submits wait 110 s; a lost reply is settled by looking the transaction up by
   its ledger identifiers (`midnightSubmitRecovery.ts`). Identifiers are fixed at
   build time and survive proving and binding.
-- Measured (Apple M4, Node/V8, other sessions running): DUST spend 7.5-9.5 s,
-  Zswap spend 56 s. `MIDNIGHT_PROVE=1 npx vitest run
+- Measured (Apple M-series, Node/V8, ledger 9 and zkir 2.2.0): DUST spend
+  6-7 s, Zswap spend 37 s. `MIDNIGHT_PROVE=1 npx vitest run
   src/chains/midnight/midnightZkKeyMaterial.spec.ts` reproduces them.

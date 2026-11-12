@@ -7,10 +7,14 @@
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type * as ledger9 from '@midnightntwrk/ledger-v9';
-import { isDeviceProving, type WalletProvingRequest } from './midnightProvingTarget';
+import type { WalletProvingRequest } from './midnightProvingTarget';
+
+/** Inlined (not midnightProvingTarget's): this module stays free of that one's value imports. */
+function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
+  return 'device' in request && request.device === true;
+}
 import { resolveMidnightLedger } from './midnightChainLedger';
 import { midnightNetworkName, type MidnightLedger } from './midnightLedger';
-import { makeDeviceProvingProvider } from './midnightDeviceProver';
 
 export async function walletProvingProvider(
   proving: WalletProvingRequest,
@@ -28,10 +32,12 @@ export async function walletProvingProvider(
 ): Promise<ledger.ProvingProvider & Partial<ledger9.ProvingProvider>> {
   const ledger = options.ledger ?? await resolveMidnightLedger(options.sdkNetworkId);
   if (isDeviceProving(proving)) {
-    // The pinned keys are the ledger-8 set; refuse before any preimage is made.
-    if (ledger !== 8) {
+    // The pinned keys are ledger 9's (generation 10 DUST); refuse before any preimage is made.
+    if (ledger !== 9) {
       throw new Error(`On-device proving is not supported on Midnight ${midnightNetworkName(options.sdkNetworkId)} (ledger ${ledger}) in this version`);
     }
+    // Loaded only when this device proves: a host bundle can shim it (gero-ios).
+    const { makeDeviceProvingProvider } = await import('./midnightDeviceProver');
     return makeDeviceProvingProvider({ shielded: options.shielded });
   }
   const { makeLocalProvingProvider } = await import('./midnightLocalProver');

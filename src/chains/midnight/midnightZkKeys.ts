@@ -1,18 +1,24 @@
 /**
- * The pinned key material for the ledger-8 built-in circuits the wallet can
+ * The pinned key material for the ledger 9 built-in circuits the wallet can
  * prove on this device (see midnightDeviceProver.ts).
  *
  * Pins: every SHA-256 below is the value the OFFICIAL ledger source publishes
- * for `@midnight-ntwrk/ledger-v8` 8.1.2 (the version this wallet ships), at
- * `midnightntwrk/midnight-ledger` tag `ledger-8.1.2`:
- *   - `ledger/static/dust/spend.{prover,verifier,bzkir}.sha256`
+ * for `@midnightntwrk/ledger-v9` 1.0.1 (ledger 9.1.0.1, the version this wallet
+ * ships), at `midnightntwrk/midnight-ledger` tag `ledger-9.1.0.1`:
+ *   - `ledger/static/dust/spend.{prover,verifier,bzkir}.sha256` (generation 10)
  *   - `zswap/static/{spend,output,sign}.{prover,verifier,bzkir}.sha256`
  *   - the `bls_midnight_2p{k}` entries of `base-crypto/src/data_provider.rs`
- * The bytes were fetched from `srs.midnight.network` (the ledger's own default
- * parameter host, which the ledger itself treats as untrusted and verifies
- * against these hashes) and matched all fifteen pins on 2026-11-03. Recheck
- * them whenever the ledger package or `MIDNIGHT_ZK_KEY_VERSION` changes:
- * `scripts/midnight-zk-keys.mjs --verify`.
+ * Ledger 9 moved the DUST spend circuit to generation 10. The Zswap circuits
+ * are unchanged: `zswap/10/*` is byte for byte the generation 9 set, so those
+ * pins and file names stay. The bytes are fetched from `srs.midnight.network`
+ * (the ledger's own default parameter host, which the ledger itself treats as
+ * untrusted and verifies against these hashes; `hostPath` below). It serves
+ * the released generation 10; other buckets have served different `dust/10`
+ * bytes, so never take keys from a host the script has not verified. Recheck
+ * whenever the ledger package or a generation changes:
+ * `node scripts/midnight-zk-keys.mjs --verify` (the bundled files, and every
+ * pin against the host; `--host <url>` also checks a copy such as
+ * `VITE_MIDNIGHT_ZK_KEYS_URL`).
  *
  * Where the bytes live:
  *   - `bundled`: shipped inside the extension package (`src/assets/midnight-zk`
@@ -28,14 +34,25 @@
  * prover worker and Node tests alike.
  */
 
-/** Key generation of the ledger-8 built-in circuits (`dust/9/…`, `zswap/9/…`). */
+/**
+ * Key generation of the hosted (Zswap) set, which names its download cache.
+ * Unchanged by ledger 9 (see above).
+ */
 export const MIDNIGHT_ZK_KEY_VERSION = 9;
+
+/** Key generation of the ledger 9 DUST spend circuit (`dust/10/…`). */
+export const MIDNIGHT_DUST_KEY_GENERATION = 10;
+
+/** The ledger's own parameter host: the reference copy `--verify` checks pins against. */
+export const MIDNIGHT_ZK_KEY_HOST = 'https://srs.midnight.network';
 
 export type MidnightZkKeySource = 'bundled' | 'hosted';
 
 export interface MidnightZkFile {
-  /** Flat file name, the same in the package and on the key host. */
+  /** Flat file name, the same in the package and on Gero's key host. */
   readonly name: string;
+  /** Path on `MIDNIGHT_ZK_KEY_HOST`. */
+  readonly hostPath: string;
   readonly bytes: number;
   readonly sha256: string;
   readonly source: MidnightZkKeySource;
@@ -53,51 +70,51 @@ export interface MidnightZkCircuit {
   readonly ir: MidnightZkFile;
 }
 
-const file = (name: string, bytes: number, sha256: string, source: MidnightZkKeySource): MidnightZkFile => ({
-  name, bytes, sha256, source,
+const file = (name: string, hostPath: string, bytes: number, sha256: string, source: MidnightZkKeySource): MidnightZkFile => ({
+  name, hostPath, bytes, sha256, source,
 });
 
 export const DUST_SPEND_CIRCUIT: MidnightZkCircuit = {
   keyLocation: 'midnight/dust/spend',
   k: 13,
   shielded: false,
-  prover: file('dust-9-spend.prover', 2_175_671, '996602da7ca386284e656c78ea03e55bffdba29475e6a67965c50de05e13efc2', 'bundled'),
-  verifier: file('dust-9-spend.verifier', 1_351, '3f1569ebcab0655c5c145b28947c74edc4e3f5c6b276e4404b661cf0905b49d3', 'bundled'),
-  ir: file('dust-9-spend.bzkir', 2_555, '904181287e75b0fb596ba5fcc116c882ee5d28e3115304c93ebd913722ce5841', 'bundled'),
+  prover: file('dust-10-spend.prover', 'dust/10/spend.prover', 2_175_878, '3dff9f54add761350ad02621a425d67fe3d656c8145fef8ef147870489ffdc81', 'bundled'),
+  verifier: file('dust-10-spend.verifier', 'dust/10/spend.verifier', 1_351, 'd15a1295780549f534287a39c938005e1faa3232be21861573bd0cdb148949cb', 'bundled'),
+  ir: file('dust-10-spend.bzkir', 'dust/10/spend.bzkir', 2_584, 'd211cacb22391b9db60f945787d98c16d344cbb4790246132117084c080399c1', 'bundled'),
 };
 
 export const ZSWAP_SPEND_CIRCUIT: MidnightZkCircuit = {
   keyLocation: 'midnight/zswap/spend',
   k: 15,
   shielded: true,
-  prover: file('zswap-9-spend.prover', 11_020_001, '19d234b5c68b7212ad6b0ec9334a95594748154128f3704eb576bcc843cc5c45', 'hosted'),
-  verifier: file('zswap-9-spend.verifier', 2_311, '544554effd7ae9fb9063be52a9ec2a986756301071fcd97bb4598fb45a335658', 'hosted'),
-  ir: file('zswap-9-spend.bzkir', 1_294, '7cb5bbcf67cb212a3336fb439a77e8f32f0aa8a56185c8e1247d6cbfc7300205', 'hosted'),
+  prover: file('zswap-9-spend.prover', 'zswap/10/spend.prover', 11_020_001, '19d234b5c68b7212ad6b0ec9334a95594748154128f3704eb576bcc843cc5c45', 'hosted'),
+  verifier: file('zswap-9-spend.verifier', 'zswap/10/spend.verifier', 2_311, '544554effd7ae9fb9063be52a9ec2a986756301071fcd97bb4598fb45a335658', 'hosted'),
+  ir: file('zswap-9-spend.bzkir', 'zswap/10/spend.bzkir', 1_294, '7cb5bbcf67cb212a3336fb439a77e8f32f0aa8a56185c8e1247d6cbfc7300205', 'hosted'),
 };
 
 export const ZSWAP_OUTPUT_CIRCUIT: MidnightZkCircuit = {
   keyLocation: 'midnight/zswap/output',
   k: 14,
   shielded: true,
-  prover: file('zswap-9-output.prover', 5_730_182, 'd992b04f13c3fd432f55fb8bfe6466d87bc181f1a2acf233ec228030bbdd4ed8', 'hosted'),
-  verifier: file('zswap-9-output.verifier', 2_311, '72e8074856f2f5c504ade25a86a2b8902c64aeb9497c4c8e6b26dea842a0ab08', 'hosted'),
-  ir: file('zswap-9-output.bzkir', 494, '91dc8b401dd8385e8d29eaac018c70b578505f48c7952452ef319bc397fa1f1b', 'hosted'),
+  prover: file('zswap-9-output.prover', 'zswap/10/output.prover', 5_730_182, 'd992b04f13c3fd432f55fb8bfe6466d87bc181f1a2acf233ec228030bbdd4ed8', 'hosted'),
+  verifier: file('zswap-9-output.verifier', 'zswap/10/output.verifier', 2_311, '72e8074856f2f5c504ade25a86a2b8902c64aeb9497c4c8e6b26dea842a0ab08', 'hosted'),
+  ir: file('zswap-9-output.bzkir', 'zswap/10/output.bzkir', 494, '91dc8b401dd8385e8d29eaac018c70b578505f48c7952452ef319bc397fa1f1b', 'hosted'),
 };
 
 export const ZSWAP_SIGN_CIRCUIT: MidnightZkCircuit = {
   keyLocation: 'midnight/zswap/sign',
   k: 13,
   shielded: true,
-  prover: file('zswap-9-sign.prover', 2_814_823, 'fe7268dd2bdd107f862f881ac3c5bc71a6df77ce80bfed51cf71514648e660e0', 'hosted'),
-  verifier: file('zswap-9-sign.verifier', 2_023, 'e39a727caa0de167e6dd6122a9e3b758fecf48f9093ab77c0309648de8ce07e1', 'hosted'),
-  ir: file('zswap-9-sign.bzkir', 114, '37ea2094516e145a738126307cf92bd293f7cb524b1ccd49fa6f3225a9ec3a50', 'hosted'),
+  prover: file('zswap-9-sign.prover', 'zswap/10/sign.prover', 2_814_823, 'fe7268dd2bdd107f862f881ac3c5bc71a6df77ce80bfed51cf71514648e660e0', 'hosted'),
+  verifier: file('zswap-9-sign.verifier', 'zswap/10/sign.verifier', 2_023, 'e39a727caa0de167e6dd6122a9e3b758fecf48f9093ab77c0309648de8ce07e1', 'hosted'),
+  ir: file('zswap-9-sign.bzkir', 'zswap/10/sign.bzkir', 114, '37ea2094516e145a738126307cf92bd293f7cb524b1ccd49fa6f3225a9ec3a50', 'hosted'),
 };
 
 /** Public parameters (SRS) per circuit size. Sizes are `192 * 2^k + 388`. */
 export const MIDNIGHT_SRS_FILES: Readonly<Record<number, MidnightZkFile>> = {
-  13: file('bls_midnight_2p13', 1_573_252, 'd3324910969c4cc54143b8045b649e5c3a4bd5fb7b8f85fe1b770f640ce1c803', 'bundled'),
-  14: file('bls_midnight_2p14', 3_146_116, 'fc253016885ec830e97808c9ec920bb5cab5c21af590380a6cb5eb0538e2b244', 'hosted'),
-  15: file('bls_midnight_2p15', 6_291_844, '724c7c3d779148bb113c7ee9c034b2f27db16e6bdf315fde90105a9bad00b1de', 'hosted'),
+  13: file('bls_midnight_2p13', 'bls_midnight_2p13', 1_573_252, 'd3324910969c4cc54143b8045b649e5c3a4bd5fb7b8f85fe1b770f640ce1c803', 'bundled'),
+  14: file('bls_midnight_2p14', 'bls_midnight_2p14', 3_146_116, 'fc253016885ec830e97808c9ec920bb5cab5c21af590380a6cb5eb0538e2b244', 'hosted'),
+  15: file('bls_midnight_2p15', 'bls_midnight_2p15', 6_291_844, '724c7c3d779148bb113c7ee9c034b2f27db16e6bdf315fde90105a9bad00b1de', 'hosted'),
 };
 
 export const MIDNIGHT_ZK_CIRCUITS: readonly MidnightZkCircuit[] = [

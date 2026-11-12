@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -46,6 +47,8 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.proofServer.mode = 'remote';
     mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
+    // Preprod and Stagenet on ledger 9 (device-provable); Mainnet stands in for a chain still on ledger 8.
+    useMidnightChains({ preprod: [L9, L8], stagenet: [L9, L9], mainnet: [L8, L8] });
   });
 
   it.each(['send', 'connector'])('stops %s before building or signing when authorization becomes stale', async operation => {
@@ -202,7 +205,7 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: cloud });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true } });
-    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const { tx } = await buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(tx).toBe('sealed');
     expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6300' : 'https://prover.example');
     expect(cloud).not.toHaveBeenCalled();
@@ -232,14 +235,14 @@ describe('Midnight ledger-specific orchestration', () => {
     for (const method of Object.values(client)) expect(method).not.toHaveBeenCalled();
   });
 
-  it('in Gero Cloud mode needs consent only where Gero Cloud still proves: private sends and Stagenet', async () => {
+  it('in Gero Cloud mode needs consent only where Gero Cloud still proves: private sends and a chain on ledger 8', async () => {
     mocks.consented = false;
     const client = { buildUnshieldedTx: vi.fn(), submitMidnightTx: vi.fn(), submitProvenMidnightTx: vi.fn(), proveAndSubmitMidnightTx: vi.fn() };
     mocks.api.mockReturnValue(client);
     const req = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
     await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {})).rejects.toThrow('needs your consent');
-    await expect(sendUnshieldedNight('Stagenet', req, {})).rejects.toThrow('needs your consent');
-    await expect(buildAndSignUnshieldedTransfer('Stagenet', req, {}, 'cloud')).rejects.toThrow('needs your consent');
+    await expect(sendUnshieldedNight('Mainnet', req, {})).rejects.toThrow('needs your consent');
+    await expect(buildAndSignUnshieldedTransfer('Mainnet', req, {}, 'cloud')).rejects.toThrow('needs your consent');
     expect(mocks.send).not.toHaveBeenCalled();
     for (const method of Object.values(client)) expect(method).not.toHaveBeenCalled();
   });
@@ -281,11 +284,11 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.send.mock.calls[1][0].data.proving).toEqual({ device: true });
   });
 
-  it('dapp makeTransfer on Stagenet in Gero Cloud mode returns the tx unproven, for Gero Cloud to prove on submit', async () => {
+  it('dapp makeTransfer on a chain still on ledger 8, in Gero Cloud mode, returns the tx unproven, for Gero Cloud to prove on submit', async () => {
     mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'unproven', proven: false } });
-    const { tx } = await buildAndSignUnshieldedTransfer('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const { tx } = await buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(tx).toBe('unproven');
     expect(mocks.send.mock.calls[1][0].data.proving).toBeUndefined();
   });
@@ -293,13 +296,13 @@ describe('Midnight ledger-specific orchestration', () => {
   it('dapp makeTransfer refuses an unreachable or non-loopback local prover instead of falling back to Gero Cloud', async () => {
     mocks.proofServer.mode = 'local';
     mocks.health.mockResolvedValue(false);
-    await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+    await expect(buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
       .rejects.toThrow('Proof server not reachable');
     mocks.health.mockResolvedValue(true);
     const saved = mocks.proofServer.localUrl;
     mocks.proofServer.localUrl = 'https://abc.trycloudflare.com';
     try {
-      await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+      await expect(buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
         .rejects.toThrow('Proof server not reachable');
     } finally { mocks.proofServer.localUrl = saved; }
     expect(mocks.send).not.toHaveBeenCalled();
@@ -502,13 +505,13 @@ describe('Midnight ledger-specific orchestration', () => {
   // on the remote paths, the wallet's own prover on the proven path.
 
   it('surfaces the sidecar ledger hash on a remote public send', async () => {
-    // Gero Cloud still proves public sends on Stagenet (no on-device keys for ledger 9).
+    // Gero Cloud still proves public sends on a chain on ledger 8 (the device keys are ledger 9's).
     mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
       submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
     const stages: string[] = [];
-    const result = await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, (s) => stages.push(s));
+    const result = await sendUnshieldedNight('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, (s) => stages.push(s));
     expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' });
     // The transaction is unproven, so Gero Cloud proves it inside the submit.
     expect(stages.slice(-2)).toEqual(['provingCloud', 'done']);
@@ -538,7 +541,7 @@ describe('Midnight ledger-specific orchestration', () => {
       submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
-    const result = await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const result = await sendUnshieldedNight('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock' });
     expect('ledgerTxHash' in result).toBe(false);
   });
