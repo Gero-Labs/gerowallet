@@ -12,6 +12,7 @@ import {
   assertMidnightDustRegistrationMatches,
   assertMidnightTransferMatches,
   decodeUnprovenMidnightTransaction,
+  isMidnightBuiltTxForOtherLedger,
   midnightAddressDecoder,
   rawTokenOf,
   verifyMidnightDustRegistration,
@@ -166,6 +167,11 @@ describe('a built transaction that cannot be read is refused apart from one that
     onLedger9();
     await expect(assertMidnightTransferMatches(network, nightVector(network).unprovenTxHex, own, toSelf(network)))
       .rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
+    // Typed for hosts that name it (the mobile apps' UNSUPPORTED_LEDGER).
+    const error = await decodeUnprovenMidnightTransaction(network, nightVector(network).unprovenTxHex).catch((e: unknown) => e);
+    expect(isMidnightBuiltTxForOtherLedger(error)).toBe(true);
+    expect(error).toMatchObject({ chainLedger: 9, txLedger: 8, newerLedger: false });
+    expect(isMidnightBuiltTxForOtherLedger(await decodeUnprovenMidnightTransaction(network, 'deadbeef').catch((e: unknown) => e))).toBe(false);
     await expect(assertMidnightTransferMatches(network, 'deadbeef', own, toSelf(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
   });
 
@@ -213,6 +219,7 @@ describe('a built transaction that cannot be read is refused apart from one that
   it('decoding reports which unreadable case it is', async () => {
     await expect(decodeUnprovenMidnightTransaction('preprod', 'deadbeef')).rejects.toBeInstanceOf(MidnightBuiltTxUnreadableError);
     const newer = await decodeUnprovenMidnightTransaction('preprod', hexOf(ledger9.Transaction.fromParts('preprod').serialize())).catch((e: unknown) => e);
-    expect(newer).toMatchObject({ newerLedger: true, message: MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED });
+    expect(newer).toMatchObject({ newerLedger: true, chainLedger: 8, txLedger: 9, message: MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED });
+    expect(isMidnightBuiltTxForOtherLedger(newer)).toBe(true);
   });
 });

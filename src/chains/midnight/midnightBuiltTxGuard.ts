@@ -183,15 +183,29 @@ export type MidnightBuiltTxRefusal =
   | typeof MIDNIGHT_BUILT_TX_UNREADABLE
   | typeof MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED;
 
-/** The transaction bytes do not decode under the network's ledger. */
+/**
+ * The transaction bytes do not decode under the ledger the network's chain
+ * runs. `chainLedger` is that ledger and `txLedger` the one the bytes do decode
+ * under, when it is the other one, so a host (the mobile apps) can name an
+ * unsupported ledger without parsing messages.
+ */
 export class MidnightBuiltTxUnreadableError extends Error {
   /** True when the bytes decode under a newer ledger than this build signs with for the network. */
   readonly newerLedger: boolean;
-  constructor(newerLedger: boolean) {
+  readonly chainLedger?: 8 | 9;
+  readonly txLedger?: 8 | 9;
+  constructor(newerLedger: boolean, ledgers: { chainLedger?: 8 | 9; txLedger?: 8 | 9 } = {}) {
     super(newerLedger ? MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED : MIDNIGHT_BUILT_TX_UNREADABLE);
     this.name = 'MidnightBuiltTxUnreadableError';
     this.newerLedger = newerLedger;
+    this.chainLedger = ledgers.chainLedger;
+    this.txLedger = ledgers.txLedger;
   }
+}
+
+/** The typed form of the "built for a ledger the chain doesn't run" refusal. */
+export function isMidnightBuiltTxForOtherLedger(error: unknown): error is MidnightBuiltTxUnreadableError & { txLedger: 8 | 9 } {
+  return error instanceof MidnightBuiltTxUnreadableError && error.txLedger !== undefined && error.txLedger !== error.chainLedger;
 }
 
 function refuse(what: string, detail: unknown, code: MidnightBuiltTxRefusal = MIDNIGHT_BUILT_TX_MISMATCH): never {
@@ -300,8 +314,14 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
     try {
       tx = readLedger9UnprovenTransaction(bytes);
     } catch {
-      // No newer ledger in this build to try.
-      throw new MidnightBuiltTxUnreadableError(false);
+      // No newer ledger in this build. Say whether it is a ledger 8 build (Nexus
+      // still building for the chain's previous ledger): typed, same refusal.
+      const legacy = await loadModule(() => import('@midnight-ntwrk/ledger-v8'));
+      let txLedger: 8 | undefined;
+      try {
+        if (legacy) { legacy.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', bytes); txLedger = 8; }
+      } catch { /* not ledger 8 either */ }
+      throw new MidnightBuiltTxUnreadableError(false, { chainLedger: 9, txLedger });
     }
     assertLedger9TransactionNetwork(sdkNetworkId, tx);
     return tx as unknown as MidnightTxView;
@@ -313,7 +333,8 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
     tx = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', bytes);
   } catch {
     const ledger9 = await loadLedger9();
-    throw new MidnightBuiltTxUnreadableError(!!ledger9 && ledger9.isLedger9TransactionFor(sdkNetworkId, bytes));
+    const newer = !!ledger9 && ledger9.isLedger9TransactionFor(sdkNetworkId, bytes);
+    throw new MidnightBuiltTxUnreadableError(newer, { chainLedger: 8, txLedger: newer ? 9 : undefined });
   }
   // The ledger refuses to merge transactions of different networks.
   ledger.Transaction.fromParts(ledgerHelpers.midnightLedgerKey(sdkNetworkId)).merge(tx);

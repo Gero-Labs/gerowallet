@@ -128,7 +128,8 @@ import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorA
 import { connectorConfiguration } from '@/chains/midnight/midnightConnectorConfiguration';
 import {
   connectorBalancePrompt,
-  isSealedMidnightTransaction,
+  classifyConnectorSubmission,
+  otherLedgerSubmissionReason,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
@@ -7468,7 +7469,10 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
     // proved and bound itself) is already final: the sidecar's finalize relay
     // would try to prove it again and throw. Route it to submit-proven.
-    const sealed = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network));
+    // Judged by the ledger the chain runs; a transaction of the other ledger can't be submitted at all.
+    const submission = await classifyConnectorSubmission(tx, midnightSdkNetworkId(wallet.network));
+    if (submission.kind === 'otherLedger') throw new Error(otherLedgerSubmissionReason(wallet.network, submission));
+    const sealed = submission.kind === 'sealed';
     // An unsealed tx is proved by Gero Cloud on the way through (`/tx/submit`
     // → sidecar finalize), which hands Gero its proof inputs. Allowed only when
     // the user chose Gero Cloud and accepted its notice (PRIV-01); in local or
@@ -7798,6 +7802,8 @@ async function handleMidnightDappProving(
           origin,
           network: wallet.network,
           sdkNetworkId: midnightSdkNetworkId(wallet.network),
+          // The payload codec follows the chain's ledger.
+          ledger: await resolveMidnightLedger(wallet.network),
           proofServer: midnightStore.proofServer,
           provingConsent: midnightStore.shieldedProvingConsent,
           tabId: request.send?.tab?.id,

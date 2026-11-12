@@ -18,6 +18,7 @@
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { ProverRequestOptions } from '@/chains/midnight/midnightLocalProver';
+import type { MidnightLedger } from '@/chains/midnight/midnightLedger';
 import {
   DappProvingUnavailableError,
   describeDappProvingFailure,
@@ -261,8 +262,10 @@ export const DAPP_PROVING_TIMEOUT_MS = 300_000;
 export interface DappProvingContext {
   origin: string;
   network: string;
-  /** SDK network id (`mainnet` / `preprod` / `stagenet`) — selects the ledger 8 vs 9 payload codec. */
+  /** SDK network id (`mainnet` / `preprod` / `stagenet`). */
   sdkNetworkId: string;
+  /** The ledger the chain runs, read by the caller: selects the ledger 8 vs 9 payload codec. */
+  ledger?: MidnightLedger;
   proofServer: ProofServerPreference;
   /** The user's recorded remote-prover consent (`midnightStore.shieldedProvingConsent`). */
   provingConsent: unknown;
@@ -393,6 +396,7 @@ export async function runDappProvingCheck(
     const provider = deps.makeProvider(target.url, {
       headers: target.headers,
       sdkNetworkId: ctx.sdkNetworkId,
+      ledger: ctx.ledger,
       timeoutMs: DAPP_PROVING_TIMEOUT_MS,
       resolveKeyMaterial: async () => (ir ? { ir } : undefined),
     });
@@ -428,6 +432,7 @@ export async function runDappProvingProve(
     const provider = deps.makeProvider(target.url, {
       headers: target.headers,
       sdkNetworkId: ctx.sdkNetworkId,
+      ledger: ctx.ledger,
       timeoutMs: DAPP_PROVING_TIMEOUT_MS,
       resolveKeyMaterial: async () => keyMaterial,
     });

@@ -9,7 +9,7 @@ import { resolveMidnightLedger } from './midnightChainLedger';
 import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } from './midnightChainIdentity';
 import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
-import { dustLedger9, balanceLightDust9 } from './midnightDustLightLedger9';
+import { dustLedger9, balanceLightDust9, type DustBalanceable9 } from './midnightDustLightLedger9';
 import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 
 /** Wallet SDK 2's Schnorr keystore for the unshielded key on `network`. */
@@ -56,14 +56,19 @@ export function deserializeLedger9Transaction(network: string, hex: string): led
   return tx;
 }
 
-/** Sign only the sender's inputs using the canonical ledger 9 intent envelope. */
-export function signLedger9Transaction(
-  network: string,
-  hex: string,
-  secret: Uint8Array,
-): string {
-  const tx = deserializeLedger9Transaction(network, hex);
-  const keystore = ledger9Keystore(secret, midnightLedgerKey(network));
+/** A ledger 9 transaction whose intents can still take signatures: unproven, or proven and not yet bound. */
+export type Ledger9SignableTransaction = ledger.Transaction<ledger.SignatureEnabled, ledger.Proofish, ledger.PreBinding>;
+
+/**
+ * Sign every unsigned unshielded input of `tx` that `keystore`'s key owns, in
+ * every intent, over the canonical intent envelope. Refuses an unsigned input
+ * of another key: signing it would not authorise it, and an approval never
+ * covers someone else's coins. Mutates and returns `tx`.
+ */
+export function signLedger9Intents<T extends Ledger9SignableTransaction>(
+  tx: T,
+  keystore: { getPublicKey(): ledger.SignatureVerifyingKey; signData(data: Uint8Array): ledger.Signature },
+): T {
   const key = keystore.getPublicKey();
   for (const [segment, intent] of tx.intents ?? []) {
     const signature = keystore.signData(intent.signatureData(segment));
@@ -83,6 +88,17 @@ export function signLedger9Transaction(
     }
     if (tx.intents) tx.intents = tx.intents.set(segment, intent);
   }
+  return tx;
+}
+
+/** Sign only the sender's inputs using the canonical ledger 9 intent envelope. */
+export function signLedger9Transaction(
+  network: string,
+  hex: string,
+  secret: Uint8Array,
+): string {
+  const tx = deserializeLedger9Transaction(network, hex);
+  signLedger9Intents(tx, ledger9Keystore(secret, midnightLedgerKey(network)));
   return Buffer.from(tx.serialize()).toString('hex');
 }
 
@@ -94,17 +110,22 @@ export async function balanceAndSignLedger9Transfer(args: BalanceAndSignUnshield
   return signLedger9Transaction(args.sdkNetworkId, Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
 }
 
-/** Fee ownership follows the supplied DUST seed, independently of the transaction signer. */
+/**
+ * Fee ownership follows the supplied DUST seed, independently of the
+ * transaction signer. `minimumDustSpends: 2` for a dApp's contract call (see
+ * `BalanceLightDust9Options`).
+ */
 export async function balanceLedger9Fees(
-  args: SyncDustAndBalanceFeesArgs,
-  transactions: ledger.UnprovenTransaction[],
+  args: SyncDustAndBalanceFeesArgs & { readonly minimumDustSpends?: number },
+  transactions: DustBalanceable9[],
 ): Promise<ledger.UnprovenTransaction> {
   const network = midnightLedgerKey(args.sdkNetworkId);
   if (args.endpoints.sdkNetworkId !== network) throw new Error('Midnight endpoint network mismatch');
   if (await resolveMidnightLedger(network) !== 9) throw new MidnightLedgerChangedError(network, midnightLedgerVersion(network));
   if (!transactions.length) throw new Error('At least one Midnight transaction is required');
   if (!Number.isFinite(args.ttl.getTime()) || args.ttl.getTime() <= Date.now()) throw new Error('Midnight transaction expiry must be in the future');
-  for (const tx of transactions) ledger.Transaction.fromParts(network).merge(tx);
+  // The ledger refuses to merge transactions of different networks; proofs are erased so a dApp's proven one merges too.
+  for (const tx of transactions) ledger.Transaction.fromParts(network).eraseProofs().merge(tx.eraseProofs());
   const dustKey = ledger.DustSecretKey.fromSeed(args.dustSecretSeed);
   const controller = new AbortController();
   // The same silence and TTL bounds as the ledger 8 builder (gero-ios#241), not a flat time.
@@ -116,7 +137,8 @@ export async function balanceLedger9Fees(
     const { state, block } = await reconstructDustState(dustLedger9, dustKey, network,
       createDustLightTransport(args.endpoints, controller.signal, reply), progress);
     controller.signal.throwIfAborted();
-    const fee = balanceLightDust9(state, dustKey, network, transactions, args.ttl, new Date(block.timestamp), block.ledgerParameters);
+    const fee = balanceLightDust9(state, dustKey, network, transactions, args.ttl, new Date(block.timestamp), block.ledgerParameters,
+      { minimumSpends: args.minimumDustSpends });
     watchdog.activity();
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal);
     return fee;
