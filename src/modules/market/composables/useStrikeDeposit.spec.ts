@@ -52,7 +52,7 @@ describe('account deposits reject managed-vault requests', () => {
   });
 });
 
-describe('a Strike-built deposit is signed only when it matches the confirmed quote', () => {
+describe('a Strike-built deposit is signed only when it fits the confirmed quote', () => {
   const net = Cardano.NetworkId.Mainnet;
   const keyCred = (c: string) => ({ type: Cardano.CredentialType.KeyHash, hash: c.repeat(56) as Cardano.Credential['hash'] });
   const OWN = Cardano.BaseAddress.fromCredentials(net, keyCred('a'), keyCred('b')).toAddress().toBech32();
@@ -61,15 +61,25 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
   const DEPOSIT = Cardano.EnterpriseAddress.fromCredentials(net, {
     type: Cardano.CredentialType.ScriptHash, hash: 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5' as Cardano.Credential['hash'],
   }).toAddress().toBech32();
-  const TX = '9'.repeat(64);
+  // For ADA, Strike's build pays an exchanger address it creates per deposit, not deposit_address.
+  const EXCHANGER = Cardano.EnterpriseAddress.fromCredentials(net, keyCred('e')).toAddress().toBech32();
+  const WALLET = 10_000_000_000n;
   const AMOUNT = 100_000_000n;
   const later = () => Math.floor(Date.now() / 1000) + 600;
 
+  // The transaction that created the wallet's UTxO: the deposit's input is valued from it.
+  const FUNDING_CBOR = Serialization.Transaction.fromCore({
+    id: '3'.repeat(64),
+    body: { inputs: [{ txId: '3'.repeat(64), index: 0 }], outputs: [{ address: OWN, value: { coins: WALLET } }], fee: 170_000n },
+    witness: { signatures: new Map() },
+  } as unknown as Cardano.Tx).toCbor();
+  const FUND = String(Serialization.Transaction.fromCbor(FUNDING_CBOR).getId());
+
   function body(outputs: [string, bigint][], fee = 200_000n, requiredExtraSignatures?: string[]): string {
     const core = {
-      id: TX,
+      id: '9'.repeat(64),
       body: {
-        inputs: [{ txId: TX, index: 0 }],
+        inputs: [{ txId: FUND, index: 0 }],
         outputs: outputs.map(([address, coins]) => ({ address, value: { coins } })),
         fee,
         ...(requiredExtraSignatures ? { requiredExtraSignatures } : {}),
@@ -86,7 +96,8 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
   async function quoted(expirationAt: number) {
     Object.assign(walletStore, {
       loggedWallet: { baseAddress: OWN },
-      utxos: [{ ref: `${TX}#0` }],
+      utxos: [[{ txId: FUND, index: 0, address: OWN }, { address: OWN, value: { coins: WALLET } }]],
+      transactions: [{ tx_hash: FUND, cbor: FUNDING_CBOR }],
       keys: {
         payment: [{ address: OWN, cred: 'a'.repeat(56) }],
         change: [{ address: OWN_CHANGE, cred: 'c'.repeat(56) }],
@@ -124,17 +135,17 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
     expect(sentMethods()).not.toContain(MessageTypes.SUBMIT_TX);
   });
 
-  it('refuses a deposit output above the quoted amount', async () => {
+  it('refuses sending more than the quote allows', async () => {
     const deposit = await quoted(later());
-    calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[DEPOSIT, AMOUNT * 99n], [OWN, 100_000_000n]]) });
+    calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[EXCHANGER, AMOUNT * 99n], [OWN, 99_800_000n]]) });
     expect(await deposit.buildAndSign('spending-password')).toBe(false);
     expect(deposit.error.value).toBe('txGuard.builtTxMismatch');
     expect(sentMethods()).not.toContain(MessageTypes.SIGN_TX);
   });
 
-  it('signs and submits the exact checked bytes when the body matches the quote', async () => {
+  it('signs and submits the exact checked bytes when the quoted amount goes to the exchanger', async () => {
     const deposit = await quoted(later());
-    const unsigned = body([[DEPOSIT, AMOUNT], [OWN, 9_899_800_000n]]);
+    const unsigned = body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]);
     calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: unsigned, expires_at: later() });
     expect(await deposit.buildAndSign('spending-password')).toBe(true);
     const sign = calls.send.mock.calls.find(([m]) => m.method === MessageTypes.SIGN_TX)?.[0] as { data: { txCbor: string } };
@@ -146,7 +157,7 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
 
   it('accepts a change key of the wallet as a required signer, but no one else', async () => {
     const deposit = await quoted(later());
-    const own = body([[DEPOSIT, AMOUNT], [OWN_CHANGE, 9_899_800_000n]], 200_000n, ['c'.repeat(56)]);
+    const own = body([[EXCHANGER, AMOUNT], [OWN_CHANGE, 9_899_800_000n]], 200_000n, ['c'.repeat(56)]);
     calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: own });
     expect(await deposit.buildAndSign('spending-password')).toBe(true);
     expect(sentMethods()).toContain(MessageTypes.SIGN_TX);
@@ -154,10 +165,28 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
     calls.send.mockClear();
     const other = await quoted(later());
     calls.build.mockResolvedValue({
-      blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[DEPOSIT, AMOUNT], [OWN, 9_899_800_000n]], 200_000n, ['e'.repeat(56)]),
+      blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]], 200_000n, ['e'.repeat(56)]),
     });
     expect(await other.buildAndSign('spending-password')).toBe(false);
     expect(other.error.value).toBe('txGuard.builtTxMismatch');
+    expect(sentMethods()).not.toContain(MessageTypes.SIGN_TX);
+  });
+
+  it('refuses when an input cannot be valued from the transaction that created it', async () => {
+    const deposit = await quoted(later());
+    Object.assign(walletStore, { transactions: [] });
+    calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+    expect(await deposit.buildAndSign('spending-password')).toBe(false);
+    expect(deposit.error.value).toBe('txGuard.builtTxMismatch');
+    expect(sentMethods()).not.toContain(MessageTypes.SIGN_TX);
+  });
+
+  it('refuses when the UTxO list understates an input its creating transaction proves', async () => {
+    const deposit = await quoted(later());
+    Object.assign(walletStore, { utxos: [[{ txId: FUND, index: 0, address: OWN }, { address: OWN, value: { coins: 101_000_000n } }]] });
+    calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+    expect(await deposit.buildAndSign('spending-password')).toBe(false);
+    expect(deposit.error.value).toBe('txGuard.builtTxMismatch');
     expect(sentMethods()).not.toContain(MessageTypes.SIGN_TX);
   });
 
@@ -172,7 +201,7 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
   it('refuses a build whose own expiry has passed', async () => {
     const deposit = await quoted(later());
     calls.build.mockResolvedValue({
-      blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[DEPOSIT, AMOUNT], [OWN, 9_899_800_000n]]), expires_at: 1,
+      blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]), expires_at: 1,
     });
     expect(await deposit.buildAndSign('spending-password')).toBe(false);
     expect(deposit.error.value).toBe('perpetuals.deposit.quoteExpired');

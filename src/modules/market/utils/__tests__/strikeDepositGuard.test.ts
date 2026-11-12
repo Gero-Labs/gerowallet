@@ -1,100 +1,119 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { isStrikeQuoteExpired, verifyStrikeDepositTx } from '../strikeDepositGuard';
+import { isStrikeQuoteExpired, STRIKE_DEPOSIT_MAX_EXTRA_LOVELACE, verifyStrikeDepositTx } from '../strikeDepositGuard';
 
 const net = Cardano.NetworkId.Mainnet;
 const keyCred = (c: string) => ({ type: Cardano.CredentialType.KeyHash, hash: c.repeat(56) as Cardano.Credential['hash'] });
 const OWN = Cardano.BaseAddress.fromCredentials(net, keyCred('a'), keyCred('b')).toAddress().toBech32();
 const OWN_CHANGE = Cardano.BaseAddress.fromCredentials(net, keyCred('c'), keyCred('b')).toAddress().toBech32();
+// For ADA, Strike's build pays an exchanger address it creates per deposit: any address.
+const EXCHANGER = Cardano.EnterpriseAddress.fromCredentials(net, keyCred('e')).toAddress().toBech32();
 const ATTACKER = Cardano.BaseAddress.fromCredentials(net, keyCred('f'), keyCred('f')).toAddress().toBech32();
-const DEPOSIT = Cardano.EnterpriseAddress.fromCredentials(net, {
-  type: Cardano.CredentialType.ScriptHash, hash: 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5' as Cardano.Credential['hash'],
-}).toAddress().toBech32();
-const TX = '9'.repeat(64);
+const FUND = '1'.repeat(64);
+const OTHER = '2'.repeat(64);
+const TOKEN = `${'7'.repeat(56)}` as Cardano.AssetId;
+const WALLET = 10_000_000_000n;
 const AMOUNT = 100_000_000n;
-const own = { ownAddresses: [OWN, OWN_CHANGE], ownKeyHashes: ['a'.repeat(56), 'b'.repeat(56)] };
-const expect100 = { depositAddress: DEPOSIT, assetSymbol: 'ADA', lovelace: AMOUNT.toString(), ...own };
+const FEE = 200_000n;
 
-const out = (address: string, coins: bigint, extra: Partial<Cardano.TxOut> = {}): Cardano.TxOut =>
-  ({ address: address as Cardano.PaymentAddress, value: { coins }, ...extra });
-function cbor(body: Partial<Cardano.TxBody>): string {
+const out = (address: string, coins: bigint, assets?: Map<Cardano.AssetId, bigint>): Cardano.TxOut =>
+  ({ address: address as Cardano.PaymentAddress, value: assets ? { coins, assets } : { coins } });
+const utxo = (txId: string, txOut: Cardano.TxOut): Cardano.Utxo =>
+  [{ txId: txId as Cardano.TransactionId, index: 0, address: txOut.address }, txOut];
+
+function tx(body: Partial<Cardano.TxBody>): Cardano.Tx {
   const core = {
-    id: TX,
-    body: { inputs: [{ txId: TX, index: 0 }], outputs: [], fee: 200_000n, ...body },
+    id: '9'.repeat(64),
+    body: { inputs: [{ txId: FUND, index: 0 }], outputs: [], fee: FEE, ...body },
     witness: { signatures: new Map() },
   } as unknown as Cardano.Tx;
-  return Serialization.Transaction.fromCore(core).toCbor();
+  return Serialization.Transaction.fromCore(core).toCore();
 }
-const DATUM = { datum: 42n as unknown as Cardano.PlutusData };
+
+const own = {
+  ownAddresses: [OWN, OWN_CHANGE],
+  ownUtxos: [utxo(FUND, out(OWN, WALLET))],
+  ownKeyHashes: ['a'.repeat(56), 'c'.repeat(56), 'b'.repeat(56)],
+};
+const quote = { assetSymbol: 'ADA', lovelace: AMOUNT.toString(), ...own };
+const change = (sent: bigint) => out(OWN_CHANGE, WALLET - sent - FEE);
 
 describe('Strike deposit transaction check', () => {
-  it('accepts the quoted amount to the deposit script, with a datum, and change back to the wallet', () => {
-    const tx = cbor({ outputs: [out(DEPOSIT, AMOUNT, DATUM), out(OWN_CHANGE, 9_899_800_000n)] });
-    expect(verifyStrikeDepositTx(tx, expect100)).toEqual([]);
+  it('accepts the quoted amount to an exchanger address, with change back to the wallet', () => {
+    expect(verifyStrikeDepositTx(tx({ outputs: [out(EXCHANGER, AMOUNT), change(AMOUNT)] }), quote)).toEqual([]);
+  });
+
+  it('accepts the quoted amount at the quote\'s vault script too', () => {
+    const vault = Cardano.EnterpriseAddress.fromCredentials(net, {
+      type: Cardano.CredentialType.ScriptHash, hash: 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5' as Cardano.Credential['hash'],
+    }).toAddress().toBech32();
+    expect(verifyStrikeDepositTx(tx({ outputs: [out(vault, AMOUNT), change(AMOUNT)] }), quote)).toEqual([]);
+  });
+
+  it('accepts up to the extra allowance over the quote, and refuses one lovelace more', () => {
+    const most = AMOUNT + STRIKE_DEPOSIT_MAX_EXTRA_LOVELACE;
+    expect(verifyStrikeDepositTx(tx({ outputs: [out(EXCHANGER, most), change(most)] }), quote)).toEqual([]);
+    expect(verifyStrikeDepositTx(tx({ outputs: [out(EXCHANGER, most + 1n), change(most + 1n)] }), quote))
+      .toContain('spendExceeded');
   });
 
   it('refuses the quoted deposit plus the rest of the wallet to someone else', () => {
-    const tx = cbor({ outputs: [out(DEPOSIT, AMOUNT), out(ATTACKER, 9_900_000_000n)], fee: 0n });
-    expect(verifyStrikeDepositTx(tx, expect100)).toContain('foreignOutput');
+    const body = { outputs: [out(EXCHANGER, AMOUNT), out(ATTACKER, WALLET - AMOUNT)], fee: 0n };
+    expect(verifyStrikeDepositTx(tx(body), quote)).toContain('spendExceeded');
   });
 
-  it('refuses a deposit output larger or smaller than the quote', () => {
-    const more = cbor({ outputs: [out(DEPOSIT, AMOUNT + 1n), out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(more, expect100)).toContain('missingOutput');
-    const less = cbor({ outputs: [out(DEPOSIT, AMOUNT - 1n), out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(less, expect100)).toContain('missingOutput');
+  it('refuses an amount split over several outputs that adds up past the quote', () => {
+    const body = { outputs: [out(EXCHANGER, AMOUNT), out(ATTACKER, 50_000_000n), change(AMOUNT + 50_000_000n)] };
+    expect(verifyStrikeDepositTx(tx(body), quote)).toContain('spendExceeded');
   });
 
-  it('refuses a second output to the deposit script', () => {
-    const tx = cbor({ outputs: [out(DEPOSIT, AMOUNT), out(DEPOSIT, AMOUNT), out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(tx, expect100)).toContain('foreignOutput');
+  it('refuses tokens leaving the wallet', () => {
+    const withTokens = { ...own, ownUtxos: [utxo(FUND, out(OWN, WALLET, new Map([[TOKEN, 5n]])))] };
+    const kept = tx({ outputs: [out(EXCHANGER, AMOUNT), out(OWN_CHANGE, WALLET - AMOUNT - FEE, new Map([[TOKEN, 5n]]))] });
+    expect(verifyStrikeDepositTx(kept, { ...quote, ...withTokens })).toEqual([]);
+    const taken = tx({ outputs: [out(EXCHANGER, AMOUNT, new Map([[TOKEN, 5n]])), change(AMOUNT)] });
+    expect(verifyStrikeDepositTx(taken, { ...quote, ...withTokens })).toContain('spendExceeded');
   });
 
-  it('refuses a deposit output carrying tokens', () => {
-    const assets = new Map([[`${'7'.repeat(56)}` as Cardano.AssetId, 5n]]);
-    const tx = cbor({ outputs: [{ address: DEPOSIT as Cardano.PaymentAddress, value: { coins: AMOUNT, assets } }, out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(tx, expect100)).toContain('missingOutput');
+  it('refuses an input the wallet cannot value', () => {
+    const body = { inputs: [{ txId: FUND, index: 0 }, { txId: OTHER, index: 0 }], outputs: [out(EXCHANGER, AMOUNT), change(AMOUNT)] };
+    expect(verifyStrikeDepositTx(tx(body as Partial<Cardano.TxBody>), quote)).toContain('unknownInput');
   });
 
   it('refuses a fee above the cap', () => {
-    const tx = cbor({ outputs: [out(DEPOSIT, AMOUNT), out(OWN, 9_000_000_000n)], fee: 5_000_001n });
-    expect(verifyStrikeDepositTx(tx, expect100)).toContain('feeTooHigh');
+    const fee = 5_000_001n;
+    const body = { outputs: [out(EXCHANGER, AMOUNT), out(OWN_CHANGE, WALLET - AMOUNT - fee)], fee };
+    expect(verifyStrikeDepositTx(tx(body), quote)).toContain('feeTooHigh');
   });
 
-  it('refuses certificates, withdrawals, minting, collateral and foreign required signers', () => {
-    const base = { outputs: [out(DEPOSIT, AMOUNT), out(OWN, 9_000_000_000n)] };
+  it('refuses certificates, withdrawals, minting and collateral', () => {
+    const base = { outputs: [out(EXCHANGER, AMOUNT), change(AMOUNT)] };
     const cert = { __typename: Cardano.CertificateType.StakeDeregistration, stakeCredential: keyCred('b') };
-    expect(verifyStrikeDepositTx(cbor({ ...base, certificates: [cert as Cardano.Certificate] }), expect100))
-      .toContain('unexpectedCertificate');
+    expect(verifyStrikeDepositTx(tx({ ...base, certificates: [cert as Cardano.Certificate] }), quote)).toContain('unexpectedCertificate');
     const reward = Cardano.RewardAddress.fromCredentials(net, keyCred('b')).toAddress().toBech32();
-    expect(verifyStrikeDepositTx(cbor({ ...base, withdrawals: [{ stakeAddress: reward as Cardano.RewardAccount, quantity: 5n }] }), expect100))
+    expect(verifyStrikeDepositTx(tx({ ...base, withdrawals: [{ stakeAddress: reward as Cardano.RewardAccount, quantity: 5n }] }), quote))
       .toContain('unexpectedWithdrawal');
-    expect(verifyStrikeDepositTx(cbor({ ...base, mint: new Map([[`${'7'.repeat(56)}` as Cardano.AssetId, 1n]]) }), expect100))
-      .toContain('unexpectedMint');
-    expect(verifyStrikeDepositTx(cbor({ ...base, collaterals: [{ txId: TX as Cardano.TransactionId, index: 1 }] }), expect100))
+    expect(verifyStrikeDepositTx(tx({ ...base, mint: new Map([[TOKEN, 1n]]) }), quote)).toContain('unexpectedMint');
+    expect(verifyStrikeDepositTx(tx({ ...base, collaterals: [{ txId: FUND as Cardano.TransactionId, index: 0 }] }), quote))
       .toContain('unexpectedCollateral');
-    expect(verifyStrikeDepositTx(cbor({ ...base, requiredExtraSignatures: ['e'.repeat(56)] as Cardano.TxBody['requiredExtraSignatures'] }), expect100))
+  });
+
+  it('accepts the wallet\'s own keys as required signers and refuses any other', () => {
+    const base = { outputs: [out(EXCHANGER, AMOUNT), change(AMOUNT)] };
+    const signers = (h: string) => [h] as Cardano.TxBody['requiredExtraSignatures'];
+    expect(verifyStrikeDepositTx(tx({ ...base, requiredExtraSignatures: signers('c'.repeat(56)) }), quote)).toEqual([]);
+    expect(verifyStrikeDepositTx(tx({ ...base, requiredExtraSignatures: signers('e'.repeat(56)) }), quote))
       .toContain('unexpectedRequiredSigner');
   });
 
-  it('refuses a deposit address that is a key address, or a missing one', () => {
-    const tx = cbor({ outputs: [out(ATTACKER, AMOUNT), out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(tx, { ...expect100, depositAddress: ATTACKER })).toEqual(['depositNotScript']);
-    expect(verifyStrikeDepositTx(tx, { ...expect100, depositAddress: undefined })).toEqual(['depositNotScript']);
-  });
-
   it.each([undefined, '', '0', '-5', '1.5', '1e8', ' 100'])('refuses quoted amount %j', (lovelace) => {
-    const tx = cbor({ outputs: [out(DEPOSIT, AMOUNT), out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(tx, { ...expect100, lovelace })).toEqual(['invalidAmount']);
+    expect(verifyStrikeDepositTx(tx({ outputs: [out(EXCHANGER, AMOUNT), change(AMOUNT)] }), { ...quote, lovelace }))
+      .toEqual(['invalidAmount']);
   });
 
   it.each([undefined, '', 'USDM', 'BTC'])('refuses a quote in %j, whose amount is not lovelace', (assetSymbol) => {
-    const tx = cbor({ outputs: [out(DEPOSIT, AMOUNT), out(OWN, 9_000_000_000n)] });
-    expect(verifyStrikeDepositTx(tx, { ...expect100, assetSymbol })).toEqual(['invalidAmount']);
-  });
-
-  it('refuses CBOR it cannot decode', () => {
-    expect(verifyStrikeDepositTx('deadbeef', expect100)).toEqual(['undecodable']);
+    expect(verifyStrikeDepositTx(tx({ outputs: [out(EXCHANGER, AMOUNT), change(AMOUNT)] }), { ...quote, assetSymbol }))
+      .toEqual(['invalidAmount']);
   });
 });
 
