@@ -45,4 +45,10 @@ describe('makeIntent follows the chain\'s ledger', () => {
     expect(handler.indexOf('CONNECTOR_NOT_SYNCED_REASON', check)).toBeGreaterThan(check);
     expect(handler.indexOf('parkMidnightRequest(MIDNIGHT_METHOD.makeIntent')).toBeGreaterThan(check);
   });
+
+  it('the approval says the TTL the builders use (55 minutes, under the ledger\'s one-hour cap)', () => {
+    const handler = read('chrome/background.ts');
+    expect(handler).toContain('ttlMinutes: Math.round(CONNECTOR_INTENT_TTL_MS / 60_000),');
+    expect(read('sidepanel/components/DAppOverlay.vue')).toContain('const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 55);');
+  });
 });

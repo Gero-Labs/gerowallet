@@ -419,7 +419,7 @@ describe('Midnight makeIntent: the approval shows what the wallet gives and asks
         { kind: 'unshielded', type: 'ab'.repeat(32), value: '2', recipient: OTHER, toSelf: false },
       ],
       options: { intentId: 'random', payFees },
-      ttlMinutes: 60,
+      ttlMinutes: 55,
     } },
   });
 
@@ -502,7 +502,7 @@ describe('Midnight approvals while sends on the network are paused', () => {
     requestId: 'intent-paused', method: 'midnight_makeIntent',
     payload: { website: 'https://dapp.example', data: {
       desiredInputs: [{ kind: 'unshielded', type: '0'.repeat(64), value: '30000000' }],
-      desiredOutputs: [], options: { intentId: 'random', payFees: true }, ttlMinutes: 60,
+      desiredOutputs: [], options: { intentId: 'random', payFees: true }, ttlMinutes: 55,
     } },
   });
 

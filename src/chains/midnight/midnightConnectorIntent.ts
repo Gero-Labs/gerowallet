@@ -191,11 +191,14 @@ export function uncoveredIntentInput(
 }
 
 /**
- * How long a counterparty has to fill the intent. Below the ledger's DUST
- * grace period (3 h on ledgers 8 and 9), so the fee spend stays valid for the
- * intent's whole life.
+ * How long a counterparty has to fill the intent: 55 minutes. The ledger
+ * refuses an intent whose TTL is more than an hour past the block that
+ * includes it, so the TTL keeps a 5-minute margin for a wallet clock running
+ * ahead of the chain's when the intent is filled at once (an exact hour was
+ * refused then). Below the ledger's DUST grace period (3 h on ledgers 8 and
+ * 9), so the fee spend stays valid for the intent's whole life.
  */
-export const CONNECTOR_INTENT_TTL_MS = 60 * 60_000;
+export const CONNECTOR_INTENT_TTL_MS = 55 * 60_000;
 
 /** Raised when the wallet cannot cover what the intent gives; the worker answers `InsufficientFunds`. */
 export class IntentInsufficientFundsError extends Error {

@@ -5,7 +5,9 @@ import { MidnightBech32m, UnshieldedAddress } from 'midnight-v9-address-format';
 import { buildConnectorIntent9 } from './midnightIntentBuilder9';
 import type { BuildConnectorIntent9Deps } from './midnightIntentBuilder9';
 import { CONNECTOR_MINIMUM_DUST_SPENDS } from './midnightDappBalancer9';
-import { IntentInsufficientFundsError, MIDNIGHT_WALLET_NOT_SYNCED, validateConnectorIntentRequest } from './midnightConnectorIntent';
+import {
+  CONNECTOR_INTENT_TTL_MS, IntentInsufficientFundsError, MIDNIGHT_WALLET_NOT_SYNCED, validateConnectorIntentRequest,
+} from './midnightConnectorIntent';
 import type { ConnectorIntentRequest } from './midnightConnectorIntent';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, forgetMidnightLedgersForTests } from './midnightLedger';
 import { getMidnightEndpoints } from './midnightConfig';
@@ -199,10 +201,9 @@ describe('makeIntent on a ledger 9 chain', () => {
 describe('a sealed ledger 9 intent the ledger accepts', () => {
   const network = 'preprod';
 
-  function chainWithMakerCoin(amount: bigint) {
-    // The ledger caps an intent's TTL at an hour past the block, the intent's
-    // own TTL: blocks here are a few seconds after the intent is built.
-    let time = new Date((Math.ceil(Date.now() / 1000) + 5) * 1000);
+  /** A chain whose blocks start at `startMs` (the chain's clock), with `amount` NIGHT on the maker's address. */
+  function chainWithMakerCoin(amount: bigint, startMs = Date.now()) {
+    let time = new Date(Math.floor(startMs / 1000) * 1000);
     let chain = ledger.LedgerState.blank(network);
     const apply = (tx: ledger.Transaction<ledger.Signaturish, ledger.Proofish, ledger.Bindingish>, strict: ledger.WellFormedStrictness) => {
       const seconds = BigInt(Math.floor(time.getTime() / 1000));
@@ -227,6 +228,46 @@ describe('a sealed ledger 9 intent the ledger accepts', () => {
     }));
     return { rows, apply, utxos: () => [...chain.utxo.filter(own)], strangerUtxos: () => [...chain.utxo.filter(stranger)] };
   }
+  type Maker = ReturnType<typeof chainWithMakerCoin>;
+
+  /** Give 30 000 NIGHT, want 5 000 of it paid to `stranger`: a 25 000 NIGHT surplus. */
+  const REQUEST_ON_CHAIN: ConnectorIntentRequest = {
+    inputs: [{ type: NIGHT, value: '30000' }],
+    outputs: [{ kind: 'unshielded', type: NIGHT, value: '5000', recipient: bech32(stranger) }],
+    intentId: 9,
+    payFees: false,
+  };
+
+  /** The maker's sealed intent, built with the default TTL by a wallet whose clock runs `clockAheadMs` ahead of the chain. */
+  async function makeIntentOn(maker: Maker, options: { clockAheadMs?: number; ttl?: Date } = {}): Promise<Sealed> {
+    const real = Date.now();
+    // The chain read stays fresh for a skew under a minute, so nothing is fetched.
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(real + (options.clockAheadMs ?? 0));
+    try {
+      const result = await buildConnectorIntent9({
+        sdkNetworkId: network, endpoints: getMidnightEndpoints('Preprod')!, request: REQUEST_ON_CHAIN,
+        unshieldedSecretKey: secret, dustSecretSeed: new Uint8Array(32).fill(2), utxos: maker.rows,
+        sync: { lastSync: 1, addresses: { unshielded: bech32(own) } }, proving: { url: 'http://localhost:6301' }, ttl: options.ttl,
+      }, { balanceFees: vi.fn(), provingProvider: vi.fn() } as unknown as BuildConnectorIntent9Deps);
+      return sealed(result.txHex);
+    } finally {
+      clock.mockRestore();
+    }
+  }
+
+  /** A counterparty takes the 25 000 NIGHT surplus in its own sealed intent; merged, the chain applies the swap. */
+  async function fillAndApply(maker: Maker, tx: Sealed) {
+    const take = ledger.Intent.new(new Date(Date.now() + 30 * 60_000));
+    take.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new([], [{ value: 25_000n, owner: stranger, type: NIGHT }], []);
+    const counter = (await ledger.Transaction.fromParts(network).addIntent({ tag: 'specific', value: 2 }, take)
+      .prove(noProver, ledger.CostModel.initialCostModel())).bind();
+    const swap = tx.merge(counter);
+    expect(imbalances(swap)).toEqual({});
+    // Every signature checked; fees are not part of this check.
+    const strict = new ledger.WellFormedStrictness();
+    strict.enforceBalancing = false;
+    return maker.apply(swap, strict);
+  }
 
   beforeEach(() => {
     useMidnightChains({ preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION] });
@@ -236,40 +277,36 @@ describe('a sealed ledger 9 intent the ledger accepts', () => {
     // Above the ledger's reward payout threshold.
     const maker = chainWithMakerCoin(100_000n);
     expect(maker.rows).toHaveLength(1);
-    const request: ConnectorIntentRequest = {
-      inputs: [{ type: NIGHT, value: '30000' }],
-      outputs: [{ kind: 'unshielded', type: NIGHT, value: '5000', recipient: bech32(stranger) }],
-      intentId: 9,
-      payFees: false,
-    };
-    const result = await buildConnectorIntent9({
-      sdkNetworkId: network, endpoints: getMidnightEndpoints('Preprod')!, request,
-      unshieldedSecretKey: secret, dustSecretSeed: new Uint8Array(32).fill(2), utxos: maker.rows,
-      sync: { lastSync: 1, addresses: { unshielded: bech32(own) } }, proving: { url: 'http://localhost:6301' },
-    }, { balanceFees: vi.fn(), provingProvider: vi.fn() } as unknown as BuildConnectorIntent9Deps);
-    const tx = sealed(result.txHex);
+    const tx = await makeIntentOn(maker);
 
     // Imbalanced on purpose: the ledger's balancing check refuses it as it stands.
     expect(() => tx.wellFormed(ledger.LedgerState.blank(network), new ledger.WellFormedStrictness(), new Date())).toThrow();
 
-    // A counterparty takes the 25 000 NIGHT surplus in its own sealed intent; merged, the ledger
-    // applies the swap with every signature checked (fees are not part of this check).
-    const take = ledger.Intent.new(new Date(Date.now() + 30 * 60_000));
-    take.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new([], [{ value: 25_000n, owner: stranger, type: NIGHT }], []);
-    const counter = (await ledger.Transaction.fromParts(network).addIntent({ tag: 'specific', value: 2 }, take)
-      .prove(noProver, ledger.CostModel.initialCostModel())).bind();
-    const swap = tx.merge(counter);
-    expect(imbalances(swap)).toEqual({});
-    const strict = new ledger.WellFormedStrictness();
-    strict.enforceBalancing = false;
-    const applied = maker.apply(swap, strict);
+    const applied = await fillAndApply(maker, tx);
     expect(applied.type, applied.error).toBe('success');
     expect(maker.utxos().map(coin => coin.value)).toEqual([70_000n]);
     expect(maker.strangerUtxos().map(coin => coin.value).toSorted((x, y) => Number(x - y))).toEqual([5_000n, 25_000n]);
 
     // Alone, the imbalanced intent is refused by the chain: it would leave NIGHT unaccounted for.
+    const strict = new ledger.WellFormedStrictness();
+    strict.enforceBalancing = false;
     const alone = chainWithMakerCoin(100_000n).apply(tx, strict);
     expect(alone.type).toBe('failure');
     expect(alone.error).toMatch(/total supply of night/);
+  });
+
+  it('the default TTL keeps a margin under the ledger\'s one-hour cap: a wallet clock 30 s ahead, filled at once, still applies', async () => {
+    expect(CONNECTOR_INTENT_TTL_MS).toBe(55 * 60_000);
+    const maker = chainWithMakerCoin(100_000n);
+    const tx = await makeIntentOn(maker, { clockAheadMs: 30_000 });
+    const applied = await fillAndApply(maker, tx);
+    expect(applied.type, applied.error).toBe('success');
+  });
+
+  it('the cap is the ledger\'s own: an intent expiring more than an hour past the block is refused', async () => {
+    const maker = chainWithMakerCoin(100_000n);
+    // What a 60-minute TTL built on a clock 30 s ahead would carry.
+    const tx = await makeIntentOn(maker, { ttl: new Date(Date.now() + 30_000 + 60 * 60_000) });
+    await expect(fillAndApply(maker, tx)).rejects.toThrow(/TTL is too far in the future/);
   });
 });

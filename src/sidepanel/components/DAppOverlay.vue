@@ -3522,7 +3522,8 @@ const intentWants = computed<IntentWant[]>(() => {
 });
 const intentGivesNight = computed(() => intentGives.value.some((o) => !o.type || /^0+$/.test(o.type)));
 const intentPaysFees = computed(() => intentPayload.value.options?.payFees === true);
-const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 60);
+// The worker sends CONNECTOR_INTENT_TTL_MS in minutes; 55 is its value, for a payload without it.
+const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 55);
 // Set when a build fails because the wallet cannot cover the give, so a
 // decline after that tells the dapp why instead of a plain Rejected.
 const intentFailureCode = ref<string | null>(null);
