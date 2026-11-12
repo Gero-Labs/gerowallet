@@ -104,6 +104,14 @@ const LEDGER_REFUSAL_COPY: Record<string, string> = {
   [MIDNIGHT_WALLET_NOT_SYNCED]: 'midnight.errors.walletNotSynced',
 };
 
+/**
+ * The wallet SDK's fee-balancing shortfall: `InsufficientFundsError` names the
+ * token it could not balance, and the DUST fee's is `dust`. Exactly that message,
+ * so a shortfall of NIGHT or another token (which names its token type) keeps its
+ * own message.
+ */
+const DUST_SHORTFALL = /^Insufficient Funds: could not balance dust$/;
+
 /** Say a background refusal in the user's language. Other errors pass through. */
 export function backgroundError(error: string | undefined, fallback: string): Error {
   if (error && Object.prototype.hasOwnProperty.call(BUILT_TX_REFUSAL_COPY, error)) {
@@ -111,6 +119,10 @@ export function backgroundError(error: string | undefined, fallback: string): Er
   }
   if (error && Object.prototype.hasOwnProperty.call(LEDGER_REFUSAL_COPY, error)) {
     return new Error(String(i18n.t(LEDGER_REFUSAL_COPY[error])));
+  }
+  // Whichever wallet pays the fee, the sender's own or a sponsor: the copy names neither.
+  if (error && DUST_SHORTFALL.test(error.trim())) {
+    return new Error(String(i18n.t('midnight.errors.dustInsufficient')));
   }
   return new Error(error || fallback);
 }
@@ -557,7 +569,7 @@ async function buildAndSignShieldedInBg(
   }) as { data: SignedInBgReply };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
-    throw new Error(response?.data?.error || 'Midnight shielded build/sign failed');
+    throw backgroundError(response?.data?.error, 'Midnight shielded build/sign failed');
   }
   return signedInBg(response.data);
 }

@@ -141,11 +141,35 @@ describe.each([['dashboard', Dialog], ['side panel', Sheet]] as const)('%s send 
     await settle();
     expect(wrapper.text()).not.toContain('midnight.send.noDustFee');
     expect(wrapper.find('[data-sponsor-picker]').exists()).toBe(false);
-    review.live.dustBalance.value = 10n;
+    review.live.dustBalance.value = 10n ** 15n;
     review.live.settled.value = true;
     await settle();
     expect(wrapper.text()).not.toContain('midnight.send.noDustFee');
+    expect(wrapper.text()).not.toContain('midnight.send.lowDustFee');
     expect(wrapper.find('[data-sponsor-picker]').exists()).toBe(false);
+  });
+
+  // Ledger 9 fees are around 0.6 DUST: 0.3 DUST is some DUST, but not a fee's
+  // worth, so the sender is offered a sponsor with its own notice.
+  it('offers a sponsor below 1 DUST, with the low-DUST notice, and restores a saved one', async () => {
+    review.sponsorId = 2;
+    review.live.dustBalance.value = 3n * 10n ** 14n;
+    const wrapper = mountScreen(component);
+    await settle();
+    expect(wrapper.text()).toContain('midnight.send.lowDustFee');
+    expect(wrapper.text()).not.toContain('midnight.send.noDustFee');
+    expect(wrapper.find('[data-sponsor-picker]').exists()).toBe(true);
+    expect(state(wrapper).sponsorWalletId).toBe(2);
+    expect(state(wrapper).blockedByFee).toBe(false);
+  });
+
+  it('keeps the sender as the payer from 1 DUST, even with a saved sponsor', async () => {
+    review.sponsorId = 2;
+    review.live.dustBalance.value = 10n ** 15n;
+    const wrapper = mountScreen(component);
+    await settle();
+    expect(wrapper.find('[data-sponsor-picker]').exists()).toBe(false);
+    expect(state(wrapper).sponsorWalletId).toBeNull();
   });
 
   // Issue 1118: the store's Path-A dustState (null in this mock) has no capacity

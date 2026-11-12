@@ -224,7 +224,7 @@
                       </div>
                       <div v-if="mayLackDust" class="token-info">
                         <v-icon size="x-small" color="var(--g-warning)" class="mr-1">mdi-alert-outline</v-icon>
-                        {{ t('midnight.send.noDustFee') }}
+                        {{ t(lackDustNotice) }}
                       </div>
                       <MidnightSponsorPicker
                         v-if="mayLackDust && loggedWallet"
@@ -505,7 +505,7 @@ import { isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSendLive, mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive } from '@/chains/midnight/midnightFeeCapacity';
 import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -606,8 +606,9 @@ const amountStep = computed(() =>
 
 /**
   * Whether this wallet may be unable to pay the DUST fee. Surfaced on the amount step
-  * so the user learns it before authorizing, not after the SDK's `balanceTransactions`,
-  * which neither returns nor throws when there is no DUST to pay with.
+  * so the user learns it before authorizing, not after the DUST sync and fee
+  * balancing: on ledger 9 `balanceLightDust9` then throws the SDK's
+  * InsufficientFundsError (said as `midnight.errors.dustInsufficient`).
   *
   * Judged on the MERGED live balance (Path A + Path B) — the figure the
   * battery shows — not the store's Path-A `dustState`, which reads zero for a
@@ -625,6 +626,13 @@ const dustFeeInputs = computed(() => ({
   settled: dustLive.settled.value,
 }));
 const mayLackDust = computed(() => mayLackDustLive(dustFeeInputs.value));
+/**
+ * The notice beside the sponsor picker. Some DUST, but under a fee's worth, is
+ * not "no DUST": it gets its own wording.
+ */
+const lackDustNotice = computed(() => (midnightFeeCapacityLive(dustFeeInputs.value) === 'short'
+  ? 'midnight.send.lowDustFee'
+  : 'midnight.send.noDustFee'));
 /** A VERIFIED zero: the only reading that blocks. Nothing verifies one today, so this is never true. */
 const noFeeCapacity = computed(() => blocksMidnightSendLive(dustFeeInputs.value));
 

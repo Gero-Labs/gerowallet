@@ -32,7 +32,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { MidnightApiError } from '@/api/midnightApiError';
 import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
 import { resetMidnightWriteStatusForTests } from '@/chains/midnight/midnightWriteStatus';
-import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { backgroundError, balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -398,6 +398,49 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(thrown).toMatchObject({ name: 'MidnightBuiltTxRefusedError', code, message: copy });
     expect(submit).not.toHaveBeenCalled();
     expect(submitProven).not.toHaveBeenCalled();
+  });
+
+  // The wallet SDK's fee-balancing shortfall (InsufficientFundsError for the DUST
+  // token). A ledger 9 fee is around 0.6 DUST, so a wallet holding 0.3 that tries
+  // anyway lands here; it must read in the user's language, not as the SDK's English.
+  const DUST_SHORTFALL = 'Insufficient Funds: could not balance dust';
+  it.each([
+    ['its own DUST', undefined],
+    ['a sponsor\'s DUST', { walletId: 2, password: 'sponsor-password' }],
+  ])('a public send paid with %s that falls short of the fee says so in the user\'s language, and submits nothing', async (_payer, sponsor) => {
+    const submit = vi.fn();
+    const submitProven = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit, submitProvenMidnightTx: submitProven });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: false, error: DUST_SHORTFALL } });
+    await expect(sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, undefined, sponsor))
+      .rejects.toThrow('midnight.errors.dustInsufficient');
+    expect(mocks.send).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
+      data: expect.objectContaining({ sponsor: sponsor ? expect.objectContaining({ walletId: 2 }) : undefined }),
+    }));
+    expect(submit).not.toHaveBeenCalled();
+    expect(submitProven).not.toHaveBeenCalled();
+  });
+
+  it('a private send whose fee wallet falls short of DUST says so in the user\'s language', async () => {
+    mocks.api.mockReturnValue({ submitProvenMidnightTx: vi.fn(), proveAndSubmitMidnightTx: vi.fn() });
+    mocks.send.mockResolvedValue({ data: { success: false, error: DUST_SHORTFALL } });
+    await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'recipient', amount: 1n, tokenType: '12'.repeat(32) }], {}, 'InBlock'))
+      .rejects.toThrow('midnight.errors.dustInsufficient');
+  });
+
+  it('maps only the DUST shortfall: a token or NIGHT shortfall keeps its own message', () => {
+    expect(backgroundError(DUST_SHORTFALL, 'fallback').message).toBe('midnight.errors.dustInsufficient');
+    expect(backgroundError(`  ${DUST_SHORTFALL}\n`, 'fallback').message).toBe('midnight.errors.dustInsufficient');
+    // The SDK names any other token by its type.
+    const token = `Insufficient Funds: could not balance ${'12'.repeat(32)}`;
+    expect(backgroundError(token, 'fallback').message).toBe(token);
+    for (const other of ['Not enough NIGHT', 'Insufficient Funds', 'Insufficient Funds: could not balance dust and more',
+      'The wallet does not hold enough of a token this intent gives']) {
+      expect(backgroundError(other, 'fallback').message).toBe(other);
+    }
+    expect(backgroundError(undefined, 'fallback').message).toBe('fallback');
   });
 
   it('a LEDGER_MISMATCH send can be tried again, and the retry asks for a new build', async () => {
