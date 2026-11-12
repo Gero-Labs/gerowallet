@@ -113,14 +113,12 @@ describe('funded ledger-9 DUST projection', () => {
 
   // #1452 M6: a chain that crossed the upgrade (mainnet, preprod) answers the
   // spend queries with its whole history, ledger 8 transactions included.
-  it.each(['mainnet', 'preprod'])('%s: ignores spend history from before the ledger 9 crossing, even one matching an owned nullifier', async (network) => {
+  it.each(['mainnet', 'preprod'])('%s: ignores spend history from before the ledger 9 crossing that touches no owned nullifier', async (network) => {
     const f = fundedFixture();
     try {
       const snapshot = { ...f.snapshot, network: `midnight-${network}` };
-      const ownedNullifiers = [...new Set((await f.transport.spends(f.snapshot.block, [''], 0, f.snapshot.block.height)).transactions.flatMap(tx => tx.matchedNullifiers))];
-      expect(ownedNullifiers.length).toBeGreaterThan(0);
-      // Before the crossing: ledger 8 bytes no ledger 9 adapter can read, matching the owned chain's nullifiers.
-      const preCrossing: DustSpendTransaction = { hash: 'ee'.repeat(32), matchedNullifiers: ownedNullifiers, protocolVersion: 1_000_000,
+      // Before the crossing: ledger 8 bytes no ledger 9 adapter can read, on every page but matching no owned nullifier.
+      const preCrossing: DustSpendTransaction = { hash: 'ee'.repeat(32), matchedNullifiers: ['ff'.repeat(32)], protocolVersion: 1_000_000,
         block: { hash: 'ee'.repeat(32), height: 0, ledgerParameters: f.snapshot.block.ledgerParameters },
         dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 1_000_000 }] };
       const transport: DustLightTransport = {
@@ -134,6 +132,27 @@ describe('funded ledger-9 DUST projection', () => {
       const { state } = await reconstructDustState(dustLedger9, f.key, network, transport);
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
+    } finally { f.key.clear(); }
+  });
+
+  it.each(['mainnet', 'preprod'])('%s: refuses a pre-crossing spend of an owned nullifier: the DUST reset assumption does not hold', async (network) => {
+    const f = fundedFixture();
+    try {
+      const snapshot = { ...f.snapshot, network: `midnight-${network}` };
+      const ownedNullifiers = [...new Set((await f.transport.spends(f.snapshot.block, [''], 0, f.snapshot.block.height)).transactions.flatMap(tx => tx.matchedNullifiers))];
+      expect(ownedNullifiers.length).toBeGreaterThan(0);
+      const preCrossing: DustSpendTransaction = { hash: 'ee'.repeat(32), matchedNullifiers: ownedNullifiers, protocolVersion: 1_000_000,
+        block: { hash: 'ee'.repeat(32), height: 0, ledgerParameters: f.snapshot.block.ledgerParameters },
+        dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 1_000_000 }] };
+      const transport: DustLightTransport = {
+        snapshot: vi.fn(async () => snapshot),
+        spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+          const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+          return { ...page, transactions: fromBlock === 0 ? [preCrossing, ...page.transactions] : page.transactions };
+        }),
+        commitments: f.transport.commitments,
+      };
+      await expect(reconstructDustState(dustLedger9, f.key, network, transport)).rejects.toThrow('DUST reset at the ledger crossing does not hold');
     } finally { f.key.clear(); }
   });
 

@@ -124,6 +124,17 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it('a connector balance or makeIntent the background refused for an unread ledger is said in the user\'s language', async () => {
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'MIDNIGHT_LEDGER_UNKNOWN' } });
+    await expect(balanceConnectorTransaction('Preprod', 'aa', {})).rejects.toThrow('midnight.errors.ledgerUnknown');
+    await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+      .rejects.toThrow('midnight.errors.ledgerUnknown');
+    // Other refusals pass through, with the connector code kept.
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough NIGHT', code: 'InsufficientFunds' } });
+    await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+      .rejects.toMatchObject({ message: 'Not enough NIGHT', code: 'InsufficientFunds' });
+  });
+
   it('refuses stale connector balancing before dispatch and discards stale completions', async () => {
     let current = false;
     await expect(balanceConnectorTransaction('Preprod', 'aa', {}, () => current)).rejects.toThrow('Approval is no longer current');

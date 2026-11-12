@@ -61,9 +61,10 @@ export interface MidnightChainLedger {
   /**
    * Whether the chain's first block was already on ledger 9. False for a chain
    * that crossed the upgrade (mainnet, preprod), which has ledger 8 history.
-   * Undefined when only the tip was read.
+   * Undefined when only the tip was read; null when the indexer was asked but
+   * named no first block (read, birth unknown: treated as not born on 9).
    */
-  bornOnLedger9?: boolean;
+  bornOnLedger9?: boolean | null;
   /** When this was read (ms). */
   observedAt: number;
 }
@@ -78,14 +79,17 @@ const listeners = new Set<(network: string, chain: MidnightChainLedger) => void>
 export function noteMidnightProtocolVersion(
   network: string,
   protocolVersion: number,
-  genesisProtocolVersion?: number,
+  genesisProtocolVersion?: number | null,
 ): MidnightChainLedger {
   const ledger = ledgerForProtocolVersion(protocolVersion);
   const key = midnightLedgerKey(network);
   const previous = observed.get(key);
+  // undefined: only the tip was reported; null: the first block was asked for and not named.
   const bornOnLedger9 = genesisProtocolVersion === undefined
     ? previous?.bornOnLedger9
-    : ledgerForProtocolVersion(genesisProtocolVersion) === 9;
+    : genesisProtocolVersion === null
+      ? previous?.bornOnLedger9 ?? null
+      : ledgerForProtocolVersion(genesisProtocolVersion) === 9;
   const chain: MidnightChainLedger = { protocolVersion, ledger, bornOnLedger9, observedAt: Date.now() };
   observed.set(key, chain);
   for (const listener of listeners) {

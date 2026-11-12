@@ -51,9 +51,9 @@ const SCHEMA_VERSION = 1;
 // - preprod 2: Foundation -> Gero's self-hosted indexer. The Foundation's
 //   preprod indexer has a 22-id hole (989781-989802, midnight-wallet#781), so
 //   its checkpoints cannot carry over.
-// - mainnet 3, preprod 3: the ledger 9 upgrade. Indexer 4.4.101 re-indexes
-//   from genesis (new event ids), the network reset DUST once at the crossing,
-//   and a ledger 8 SDK checkpoint is no state a ledger 9 wallet can resume.
+// - mainnet 3, preprod 3: the ledger 9 upgrade. It reset DUST once at the
+//   crossing and invalidates ledger 8 checkpoints: a ledger 8 SDK checkpoint
+//   is no state a ledger 9 wallet can resume.
 //   The ledger 9 shielded checkpoints live under their own chain-identity
 //   namespace (midnightCheckpointNamespace) and are not affected.
 function schemaVersion(network: string): number {
