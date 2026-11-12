@@ -1,6 +1,12 @@
 import type { DustGenerationInfo, QualifiedDustOutput } from '@midnight-ntwrk/ledger-v8';
-import { ScaleBigInt } from '@midnightntwrk/wallet-sdk-address-format';
+// Wallet SDK 2's codec: the SDK 1.x one instantiates ledger 8 when imported.
+import { ScaleBigInt } from 'midnight-v9-address-format';
 import { MidnightLedgerChangedError, ledgerForProtocolVersion, noteMidnightProtocolVersion, type MidnightLedger } from './midnightLedger';
+
+/** Whether `protocolVersion` (a transaction's or an event's) is on `ledger`; malformed is not. */
+function onLedger(protocolVersion: unknown, ledger: MidnightLedger): boolean {
+  try { return ledgerForProtocolVersion(protocolVersion as number) === ledger; } catch { return false; }
+}
 
 export interface DustSyncBlock {
   hash: string;
@@ -240,10 +246,22 @@ async function reconstructDustStateOnce<State, Key>(
           if (height < fromBlock || height > toBlock || (nextBlock !== null && height >= nextBlock)) {
             throw new Error('DUST spend is outside its snapshot page');
           }
+          // DUST state resets once, at the ledger 9 crossing: every coin the
+          // snapshot lists was created on the snapshot's ledger, so a spend
+          // from before the crossing (another ledger's events) cannot be one
+          // of them. Skip that history, but only while it touches no owned
+          // nullifier: a match means the reset assumption does not hold, and
+          // the reconstructed state would be wrong, so fail loudly.
+          // A malformed version is a bad page, not another ledger's history.
+          if (!Number.isSafeInteger(tx.protocolVersion) || tx.protocolVersion < 0) throw new Error('Invalid DUST spend protocol version');
+          const sameLedger = onLedger(tx.protocolVersion, ledger.ledger);
           for (const encoded of tx.matchedNullifiers) {
             if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
             const nullifier = BigInt(`0x${Buffer.from(encoded, 'hex').reverse().toString('hex')}`);
             if (!live.has(nullifier)) continue;
+            if (!sameLedger) {
+              throw new Error(`An owned DUST coin was spent by a transaction from another ledger (protocol version ${tx.protocolVersion}); the DUST reset at the ledger crossing does not hold`);
+            }
             const prior = matches.get(nullifier);
             if (prior && prior.hash !== tx.hash) throw new Error('Conflicting DUST spends');
             matches.set(nullifier, tx);
@@ -261,8 +279,9 @@ async function reconstructDustStateOnce<State, Key>(
       if (!transaction) continue;
       let spend: DustSpendEvent | undefined;
       for (const event of transaction.dustLedgerEvents) {
-        // Decode only transactions with exact owned matches. Unrelated events
-        // can belong to another ledger, but an unreadable owned spend is fatal.
+        // Decode only transactions with exact owned matches, and only this
+        // ledger's events. An unreadable owned spend of this ledger is fatal.
+        if (!onLedger(event.protocolVersion, ledger.ledger)) continue;
         try {
           const decoded = ledger.decodeSpend(event.raw);
           if (decoded?.nullifier === nullifier) spend = decoded;

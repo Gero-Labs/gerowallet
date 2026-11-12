@@ -8,6 +8,9 @@ import {
   purgeLegacyChromeWalletState,
   resetMidnightWalletStateDbForTest,
   saveWalletState,
+  setMidnightWalletStateStore,
+  type MidnightWalletStateStore,
+  type StoredWalletState,
 } from './midnightWalletStatePersistence';
 
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
@@ -101,23 +104,24 @@ describe('Midnight provider checkpoint migration', () => {
     return row.key;
   };
 
-  it.each(['mainnet', 'preprod'] as const)('discards old-provider %s checkpoints and restores new ones', async (network) => {
+  // 1: the Foundation's indexers; 2: before the ledger 9 upgrade (#1452 M10).
+  it.each([['mainnet', 1], ['preprod', 1], ['mainnet', 2], ['preprod', 2]] as const)('discards %s checkpoints of schema %i and restores new ones', async (network, old) => {
     for (const kind of ['dust', 'shielded', 'unshielded'] as const) {
       await midnightWalletStatesForTest().clear();
       await saveWalletState(network, kind, seed, 'old-provider-state');
-      const key = await setStoredSchema(1);
+      const key = await setStoredSchema(old);
       expect(await loadWalletState(network, kind, seed)).toBeNull();
       expect((await midnightWalletStatesForTest().get(key))?.serializedState).toBe('old-provider-state');
       await saveWalletState(network, kind, seed, 'new-provider-state');
-      expect((await midnightWalletStatesForTest().get(key))?.schemaVersion).toBe(2);
+      expect((await midnightWalletStatesForTest().get(key))?.schemaVersion).toBe(3);
       expect(await loadWalletState(network, kind, seed)).toBe('new-provider-state');
     }
   });
 
-  it('retains mainnet checkpoints made against the current provider', async () => {
+  it('retains mainnet checkpoints made after the ledger 9 upgrade', async () => {
     await saveWalletState('mainnet', 'dust', seed, 'mainnet-state');
     const [row] = await midnightWalletStatesForTest().toArray();
-    expect(row.schemaVersion).toBe(2);
+    expect(row.schemaVersion).toBe(3);
     expect(await loadWalletState('mainnet', 'dust', seed)).toBe('mainnet-state');
   });
 
@@ -126,5 +130,29 @@ describe('Midnight provider checkpoint migration', () => {
     const [row] = await midnightWalletStatesForTest().toArray();
     expect(row.schemaVersion).toBe(1);
     expect(await loadWalletState('stagenet', 'dust', seed)).toBe('stagenet-state');
+  });
+});
+
+describe('an injected store (a host without the extension\'s IndexedDB)', () => {
+  it('reads, writes and clears through the adapter, with the same guards', async () => {
+    const rows = new Map<string, StoredWalletState>();
+    const store: MidnightWalletStateStore = {
+      get: async (key) => rows.get(key),
+      put: async (row) => { rows.set(row.key, row); },
+      delete: async (key) => { rows.delete(key); },
+      deleteByPrefixes: async (prefixes) => { for (const key of [...rows.keys()]) if (prefixes.some(p => key.startsWith(p))) rows.delete(key); },
+    };
+    setMidnightWalletStateStore(store);
+    try {
+      await saveWalletState('preprod', 'shielded', seed, 'adapter-state');
+      expect([...rows.values()]).toEqual([expect.objectContaining({ network: 'preprod', kind: 'shielded', schemaVersion: 3, serializedState: 'adapter-state' })]);
+      expect(await loadWalletState('preprod', 'shielded', seed)).toBe('adapter-state');
+      expect(await loadWalletState('mainnet', 'shielded', seed)).toBeNull();
+      await clearWalletState('preprod', 'shielded', seed);
+      expect(rows.size).toBe(0);
+      await saveWalletState('preprod', 'dust', seed, 'x');
+      await clearAllWalletState('preprod');
+      expect(rows.size).toBe(0);
+    } finally { setMidnightWalletStateStore(null); }
   });
 });

@@ -105,6 +105,18 @@ compare compact reconstruction with real ledger replay, including descendants,
 foreign ranges, and decay after the backing NIGHT is spent. A successful local
 test or empty-wallet live probe does not establish funded on-chain send latency.
 
+DUST state resets once, at the ledger 9 crossing, so every coin a ledger 9
+snapshot lists was created on ledger 9. On a chain that crossed (mainnet,
+preprod) the spend pages also return the history from before it: spend
+transactions and events whose protocol version is not on the snapshot's ledger
+are skipped, never decoded, so ledger 8 history cannot fail a ledger 9 rebuild.
+An unreadable spend of the snapshot's own ledger still fails. No DUST tree
+index is cached between sends (each send rebuilds from the snapshot), so there
+is none to drop at the crossing; the SDK checkpoints are invalidated by the
+mainnet and preprod schema version 3 (`midnightWalletStatePersistence.ts`). A
+preprod registration the upgrade cleared shows up as a snapshot with no
+generations: no DUST, and no spend history is asked for.
+
 Spend queries use bounded height pages and retain only owned matches locally.
 Large restored spend histories can still reach the two-minute deadline. The
 current providers have a prefix-bound bug for prefixes ending in `ff`. For a
