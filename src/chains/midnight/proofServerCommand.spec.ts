@@ -1,3 +1,4 @@
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
@@ -32,10 +33,12 @@ describe('suggested proof server command', () => {
     expect(command).toMatch(/-p 127\.0\.0\.1:\d+:6300 /);
   });
 
-  it('shows the remote signing dialog the same command Settings shows for Mainnet and Preprod', () => {
-    // Cross-Device Proving serves from the ledger-8 server (localProverProfile.ts).
+  it('shows the remote signing dialog the same command Settings shows for a ledger 9 chain', () => {
+    // Cross-Device Proving serves from the ledger 9 server (localProverProfile.ts).
+    useMidnightChains({ mainnet: [L9, L8], preprod: [L9, L8] });
     expect(PROOF_SERVER_DOCKER_COMMAND).toBe(midnightProofServerCommand(Network.MAINNET));
     expect(PROOF_SERVER_DOCKER_COMMAND).toBe(midnightProofServerCommand(Network.PREPROD));
+    expect(PROOF_SERVER_DOCKER_COMMAND).toContain('midnightntwrk/proof-server:9.0.0 ');
     expect(PROOF_SERVER_DOCKER_COMMAND).not.toMatch(/(?:^|\s)-v(?:\s|$)/);
   });
 });

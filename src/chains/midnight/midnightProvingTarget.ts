@@ -110,15 +110,15 @@ export function isDeviceProving(request: WalletProvingRequest): request is { dev
 export type WalletProver = 'device' | 'local' | 'zkpaas' | 'cloud';
 
 /**
- * Networks whose built-in circuits this device can prove: the ledger-8 key
- * set is pinned in midnightZkKeys.ts, so only a chain on ledger 8 (as last
- * read). A ledger 9 chain has other keys and keeps the proof-server paths.
- * Before any read the chain is presumed on ledger 9: a preselection only, as
- * the background reads the chain again before it builds or proves.
+ * Networks whose built-in circuits this device can prove: the ledger 9 key
+ * set (generation 10 DUST) is pinned in midnightZkKeys.ts, so a chain on
+ * ledger 9 (as last read, else the newest). A chain still on ledger 8 keeps
+ * the proof-server paths. The pre-read default (ledger 9) is a preselection
+ * only: the background reads the chain again before it builds or proves.
  */
 export function canProveOnDevice(network: string): boolean {
   try {
-    return !isLedger9Network(network) && !!getMidnightEndpoints(network);
+    return isLedger9Network(network) && !!getMidnightEndpoints(network);
   } catch {
     return false;
   }

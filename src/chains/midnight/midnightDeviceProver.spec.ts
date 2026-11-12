@@ -1,3 +1,4 @@
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   acceptMidnightProverPort,
@@ -161,9 +162,13 @@ describe('midnightDeviceProver', () => {
 });
 
 describe('walletProverFor', () => {
-  it('proves public sends on this device in Gero Cloud mode on ledger-8 networks', () => {
+  // The device keys are ledger 9's (generation 10 DUST); the chain decides, not the name.
+  beforeEach(() => useMidnightChains({ preprod: [L9, L8], mainnet: [L9, L8], stagenet: [L9, L9] }));
+
+  it('proves public sends on this device in Gero Cloud mode on ledger 9 chains', () => {
     expect(walletProverFor('Preprod', { mode: 'remote' }, 'unshielded')).toBe('device');
     expect(walletProverFor('Mainnet', { mode: 'remote' }, 'unshielded')).toBe('device');
+    expect(walletProverFor('Stagenet', { mode: 'remote' }, 'unshielded')).toBe('device');
   });
 
   it('keeps private sends on Gero Cloud unless the shielded flag is on', () => {
@@ -171,9 +176,10 @@ describe('walletProverFor', () => {
     expect(walletProverFor('Preprod', { mode: 'remote' }, 'shielded', { shieldedOnDevice: true })).toBe('device');
   });
 
-  it('leaves Stagenet (ledger 9, no pinned keys) on Gero Cloud', () => {
-    expect(walletProverFor('Stagenet', { mode: 'remote' }, 'unshielded')).toBe('cloud');
-    expect(walletProverFor('Stagenet', { mode: 'remote' }, 'shielded', { shieldedOnDevice: true })).toBe('cloud');
+  it('leaves a chain still on ledger 8 (no pinned keys) on Gero Cloud', () => {
+    useMidnightChains({ mainnet: [L8, L8] });
+    expect(walletProverFor('Mainnet', { mode: 'remote' }, 'unshielded')).toBe('cloud');
+    expect(walletProverFor('Mainnet', { mode: 'remote' }, 'shielded', { shieldedOnDevice: true })).toBe('cloud');
   });
 
   it('never overrides a local server or zkPaaS the user chose', () => {

@@ -28,8 +28,10 @@
  * the target path/host are fine. Never log auth header VALUES either.
  */
 
-import * as ledger from '@midnight-ntwrk/ledger-v8';
-import * as ledger9 from '@midnightntwrk/ledger-v9';
+// Types only: each ledger loads when a proof for it is made, so a host bundle
+// that loads ledger 9 eagerly never loads ledger 8 for a ledger 9 proof.
+import type * as ledger from '@midnight-ntwrk/ledger-v8';
+import type * as ledger9 from '@midnightntwrk/ledger-v9';
 import { midnightLedgerOrNewest, type MidnightLedger } from './midnightLedger';
 import { debugLog } from '@/utils/debug';
 
@@ -191,7 +193,10 @@ export function makeLocalProvingProvider(
   baseUrl: string,
   options?: ProverRequestOptions,
 ): ledger.ProvingProvider & ledger9.ProvingProvider {
-  const runtime = (options?.ledger ?? midnightLedgerOrNewest(options?.sdkNetworkId)) === 9 ? ledger9 : ledger;
+  const which = options?.ledger ?? midnightLedgerOrNewest(options?.sdkNetworkId);
+  const loadRuntime = (): Promise<typeof ledger | typeof ledger9> => (which === 9
+    ? import('@midnightntwrk/ledger-v9')
+    : import('@midnight-ntwrk/ledger-v8'));
   const resolveKeyMaterial = options?.resolveKeyMaterial ?? (async () => undefined);
   return {
     // Built-in transfer and DUST circuits are supplied by the native server.
@@ -200,6 +205,7 @@ export function makeLocalProvingProvider(
     // because ledger 9's ProvingProvider shape asks for it.
     lookupKey: async () => undefined,
     check: async (serializedPreimage, keyLocation) => {
+      const runtime = await loadRuntime();
       const ir = (await resolveKeyMaterial(keyLocation))?.ir;
       // Both ledgers take the optional artifact as a trailing argument; only
       // pass it when present so the built-in path stays a plain 1-arg call.
@@ -210,6 +216,7 @@ export function makeLocalProvingProvider(
       return runtime.parseCheckResult(result);
     },
     prove: async (serializedPreimage, keyLocation, overwriteBindingInput) => {
+      const runtime = await loadRuntime();
       const keyMaterial = requireFullKeyMaterial(keyLocation, await resolveKeyMaterial(keyLocation));
       const payload = keyMaterial
         ? runtime.createProvingPayload(serializedPreimage, overwriteBindingInput, keyMaterial)

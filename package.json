@@ -60,7 +60,7 @@
     "@ledgerhq/hw-transport-webusb": "^6.35.0",
     "@mdi/font": "^7.4.47",
     "@midnight-ntwrk/ledger-v8": "^8.1.2",
-    "@midnight-ntwrk/zkir-v2": "2.1.0",
+    "@midnight-ntwrk/zkir-v2": "2.2.0",
     "@midnightntwrk/dapp-connector-api": "^4.1.0",
     "@midnightntwrk/ledger-v9": "1.0.1",
     "@midnightntwrk/wallet-sdk-abstractions": "^2.1.0",

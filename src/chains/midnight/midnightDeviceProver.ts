@@ -13,7 +13,7 @@
  * a minute idle, which also returns the prover's wasm heap (76 MB for a DUST
  * proof, up to 670 MB for a Zswap spend: wasm memory never shrinks).
  *
- * Scope: the ledger-8 built-in circuits only. `midnight/dust/spend` (the fee
+ * Scope: the ledger 9 built-in circuits only (generation 10 DUST keys). `midnight/dust/spend` (the fee
  * of every send) always; the Zswap circuits only when the caller passes
  * `shielded: true` (an off-by-default flag, see midnight-tx.service.ts). Any
  * other key location is refused here, before a preimage leaves the
@@ -24,7 +24,7 @@
  * offscreen document. Never log preimages or proofs; sizes and durations only.
  */
 
-import type * as ledger from '@midnight-ntwrk/ledger-v8';
+import type * as ledger from '@midnightntwrk/ledger-v9';
 import { debugLog } from '@/utils/debug';
 import { allowedMidnightZkCircuits } from './midnightZkKeys';
 import {
@@ -224,13 +224,15 @@ function assertAllowed(keyLocation: string, shielded: boolean): void {
 }
 
 /**
- * A `ProvingProvider` for `tx.prove(provider, costModel)` on a ledger-8
- * network. `shielded` admits the Zswap circuits; without it a transaction
+ * A `ProvingProvider` for `tx.prove(provider, costModel)` on a ledger 9
+ * chain. `shielded` admits the Zswap circuits; without it a transaction
  * that needs any proof other than its DUST fee fails here, before any
  * preimage is sent anywhere.
  */
 export function makeDeviceProvingProvider(options: { shielded: boolean }): ledger.ProvingProvider {
   return {
+    // The built-in keys are loaded and verified in the worker (midnightZkKeyMaterial.ts).
+    lookupKey: async () => undefined,
     async check(serializedPreimage, keyLocation) {
       assertAllowed(keyLocation, options.shielded);
       const reply = await send({

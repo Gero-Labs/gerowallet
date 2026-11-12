@@ -4,6 +4,7 @@ import * as ledger8 from '@midnight-ntwrk/ledger-v8';
 import * as ledger9 from '@midnightntwrk/ledger-v9';
 import { proveUnshieldedTransfer } from './midnightUnshieldedProver';
 import { midnightProofServerCommand } from './midnightConfig';
+import { noteMidnightProtocolVersion } from './midnightLedger';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -52,11 +53,15 @@ describe('real ledger-specific proving envelope', () => {
   });
 
   it('shows the matching circuit server and binds its port to loopback', () => {
-    expect(midnightProofServerCommand('Stagenet')).toContain('proof-server:9.0.0-rc.6');
+    expect(midnightProofServerCommand('Stagenet')).toContain('proof-server:9.0.0 ');
     expect(midnightProofServerCommand('Preprod')).toContain('proof-server:8.1.0');
     // One host port per ledger (#1114) so both servers can run at once; each
     // binds to loopback only. The container side is always 6300.
     expect(midnightProofServerCommand('Stagenet')).toContain('127.0.0.1:6301:6300');
     expect(midnightProofServerCommand('Preprod')).toContain('127.0.0.1:6300:6300');
+    // The chain decides: preprod on ledger 9 gets the ledger 9 server.
+    noteMidnightProtocolVersion('Preprod', 2_001_100);
+    expect(midnightProofServerCommand('Preprod')).toContain('proof-server:9.0.0 ');
+    expect(midnightProofServerCommand('Preprod')).toContain('127.0.0.1:6301:6300');
   });
 });

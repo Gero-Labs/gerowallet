@@ -19,6 +19,7 @@ import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceB
 // in the emitted bundle, the temporal-dead-zone shape
 // scripts/check-bundle-tdz.mjs guards against. Its ledger imports stay lazy
 // inside it; nothing it reaches imports this service.
+import { DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
 import { createLocalProverServingOptions, localProverProfile } from '@/services/crossDevice/localProverProfile';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
@@ -1866,11 +1867,11 @@ export class WalletManager {
     const { midnightStore } = await import('@/stores/midnightStore');
     // Capture one server profile and URL for the bridge lifetime. A settings
     // change disposes this bridge before advertising the replacement.
-    // Cross-device serving advertises the device's ledger-8 server; the
-    // ledger-9 URL is send-path only for now (serving both would need the
-    // bridge to advertise two provers).
-    const profile = localProverProfile('legacy');
-    const localUrl = midnightStore.proofServer.localUrl;
+    // Cross-device serving advertises the device's ledger 9 server: mainnet,
+    // preprod and Preview all run ledger 9 (#1452 M13). One prover per bridge;
+    // serving ledger 8 as well would need the bridge to advertise two.
+    const profile = localProverProfile('ledger9');
+    const localUrl = midnightStore.proofServer.localUrlLedger9 || DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9;
     return bootstrapCrossDeviceSigning({
       label: 'Gero Extension',
       hasSigningKey: true,
