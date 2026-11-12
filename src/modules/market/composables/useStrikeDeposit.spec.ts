@@ -56,6 +56,7 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
   const net = Cardano.NetworkId.Mainnet;
   const keyCred = (c: string) => ({ type: Cardano.CredentialType.KeyHash, hash: c.repeat(56) as Cardano.Credential['hash'] });
   const OWN = Cardano.BaseAddress.fromCredentials(net, keyCred('a'), keyCred('b')).toAddress().toBech32();
+  const OWN_CHANGE = Cardano.BaseAddress.fromCredentials(net, keyCred('c'), keyCred('b')).toAddress().toBech32();
   const ATTACKER = Cardano.BaseAddress.fromCredentials(net, keyCred('f'), keyCred('f')).toAddress().toBech32();
   const DEPOSIT = Cardano.EnterpriseAddress.fromCredentials(net, {
     type: Cardano.CredentialType.ScriptHash, hash: 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5' as Cardano.Credential['hash'],
@@ -64,13 +65,14 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
   const AMOUNT = 100_000_000n;
   const later = () => Math.floor(Date.now() / 1000) + 600;
 
-  function body(outputs: [string, bigint][], fee = 200_000n): string {
+  function body(outputs: [string, bigint][], fee = 200_000n, requiredExtraSignatures?: string[]): string {
     const core = {
       id: TX,
       body: {
         inputs: [{ txId: TX, index: 0 }],
         outputs: outputs.map(([address, coins]) => ({ address, value: { coins } })),
         fee,
+        ...(requiredExtraSignatures ? { requiredExtraSignatures } : {}),
       },
       witness: { signatures: new Map() },
     } as unknown as Cardano.Tx;
@@ -85,7 +87,11 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
     Object.assign(walletStore, {
       loggedWallet: { baseAddress: OWN },
       utxos: [{ ref: `${TX}#0` }],
-      keys: { payment: [{ address: OWN, cred: 'a'.repeat(56) }], change: [], stake: [{ cred: 'b'.repeat(56) }] },
+      keys: {
+        payment: [{ address: OWN, cred: 'a'.repeat(56) }],
+        change: [{ address: OWN_CHANGE, cred: 'c'.repeat(56) }],
+        stake: [{ cred: 'b'.repeat(56) }],
+      },
     });
     calls.auth.mockReturnValue(true);
     calls.serialize.mockImplementation((core: Cardano.Tx) => Serialization.Transaction.fromCore(core).toCbor());
@@ -136,6 +142,23 @@ describe('a Strike-built deposit is signed only when it matches the confirmed qu
     expect(sign.data.txCbor).toBe(unsigned);
     expect(submit.data.txCbor).toBe(unsigned);
     expect(deposit.status.value).toBe('confirmed');
+  });
+
+  it('accepts a change key of the wallet as a required signer, but no one else', async () => {
+    const deposit = await quoted(later());
+    const own = body([[DEPOSIT, AMOUNT], [OWN_CHANGE, 9_899_800_000n]], 200_000n, ['c'.repeat(56)]);
+    calls.build.mockResolvedValue({ blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: own });
+    expect(await deposit.buildAndSign('spending-password')).toBe(true);
+    expect(sentMethods()).toContain(MessageTypes.SIGN_TX);
+
+    calls.send.mockClear();
+    const other = await quoted(later());
+    calls.build.mockResolvedValue({
+      blockchain: 'cardano', format: 'cardano_cbor', unsigned_tx: body([[DEPOSIT, AMOUNT], [OWN, 9_899_800_000n]], 200_000n, ['e'.repeat(56)]),
+    });
+    expect(await other.buildAndSign('spending-password')).toBe(false);
+    expect(other.error.value).toBe('txGuard.builtTxMismatch');
+    expect(sentMethods()).not.toContain(MessageTypes.SIGN_TX);
   });
 
   it('refuses an expired quote before asking Strike to build', async () => {

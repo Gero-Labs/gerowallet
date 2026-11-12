@@ -15,7 +15,7 @@ import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
 import { isStrikeQuoteExpired, verifyStrikeDepositTx } from '@/modules/market/utils/strikeDepositGuard';
-import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
+import { derivedOwnAddresses, derivedOwnKeyHashes } from '@/shared/utils/ownAddresses';
 
 /**
  * Lifecycle states for the deposit flow.
@@ -279,7 +279,7 @@ export function useStrikeDeposit() {
       }
       // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts).
       const ownAddresses = derivedOwnAddresses(keys, wallet.baseAddress);
-      const ownKeyHashes = [...(keys.payment ?? []), ...(keys.stake ?? [])].map((k) => k.cred).filter(Boolean);
+      const ownKeyHashes = derivedOwnKeyHashes(keys);
       const violations = verifyStrikeDepositTx(txCbor, {
         depositAddress: confirmedQuote.deposit_address,
         assetSymbol: confirmedQuote.quote.asset_symbol,
