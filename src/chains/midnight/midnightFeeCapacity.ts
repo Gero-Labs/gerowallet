@@ -1,3 +1,5 @@
+import { dustShortForFee } from './midnightFeeEstimate';
+
 /**
  * Can this wallet pay a Midnight transaction fee at all?
  *
@@ -31,10 +33,14 @@
  * would block a wallet that can pay (review of Gero-Labs/gerowallet#1216, round 1
  * and round 2).
  *
- * So the guard is four-valued and only ever WARNS today. Once the merged balance
- * has been reported, a positive figure is `ok`; a zero is `unverified`: the send
- * surfaces tell the user the fee may not be payable and offer a sponsor wallet, but
- * do not disable Send, so the user can still try with their own DUST. `none` — the
+ * So the guard is five-valued and only ever WARNS today. Once the merged balance
+ * has been reported, a figure of at least a fee's worth (1 DUST, `dustShortForFee`)
+ * is `ok`; a smaller positive one is `short`; a zero is `unverified`. For `short` and
+ * `unverified` the send surfaces tell the user the fee may not be payable and offer a
+ * sponsor wallet, but do not disable Send, so the user can still try with their own
+ * DUST. `short` exists because a ledger 9 fee is around 0.6 DUST: a wallet holding
+ * 0.3 cannot pay it, and the balancing step then fails (it does not wait for more
+ * DUST to generate). `none` — the
  * only value that blocks — needs a caller to assert `verifiedZero`, which nothing
  * does yet; it is the hook for a future balance source that accounts for existing
  * DUST outputs.
@@ -50,8 +56,13 @@
  * dust state lands, so `unknown` never warns and never blocks.
  */
 export type MidnightFeeCapacity =
-  /** DUST present — the send may proceed (it still may not be *enough*). */
+  /** At least a fee's worth of DUST (1 DUST) — the sender pays its own fee. */
   | 'ok'
+  /**
+   * Some DUST, but less than a fee can need (`dustShortForFee`). Warn and offer a
+   * sponsor; do not block: the chain decides, and the fee may still fit.
+   */
+  | 'short'
   /** VERIFIED zero: the send cannot possibly pay its fee. The only value that blocks. */
   | 'none'
   /**
@@ -85,16 +96,17 @@ export interface MidnightLiveFeeInputs {
 }
 
 /**
- * Four-valued over the merged live balance: `unknown` until both paths have reported,
- * `ok` for any positive balance, `none` only for a zero the caller asserts is verified,
- * and `unverified` for every other zero. Only `none` blocks.
+ * Five-valued over the merged live balance: `unknown` until both paths have reported,
+ * `ok` from a fee's worth (1 DUST) up, `short` for a smaller positive balance, `none`
+ * only for a zero the caller asserts is verified, and `unverified` for every other
+ * zero. Only `none` blocks.
  *
  * There is deliberately no variant over the store's Path-A `dustState`: it reads zero
  * for a wallet whose DUST comes from a Cardano cNIGHT registration (issue 1118).
  */
 export function midnightFeeCapacityLive(live: MidnightLiveFeeInputs | null | undefined): MidnightFeeCapacity {
   if (!live || !live.settled) return 'unknown';
-  if (live.dustBalance > 0n) return 'ok';
+  if (live.dustBalance > 0n) return dustShortForFee(live.dustBalance) ? 'short' : 'ok';
   return live.verifiedZero === true ? 'none' : 'unverified';
 }
 
@@ -103,8 +115,8 @@ export function midnightFeeCapacityLive(live: MidnightLiveFeeInputs | null | und
  * True only for a verified zero, so it is false for every reading the wallet can take today.
  *
  * A non-zero balance that turns out to be too small for this particular fee is the
- * chain's call, not ours: there is no fee estimate at this point, and inventing one
- * would reject valid sends.
+ * chain's call, not ours: `short` only warns, since the 1 DUST bound is above the
+ * measured fees and refusing on it would reject valid sends.
  */
 export function blocksMidnightSendLive(live: MidnightLiveFeeInputs | null | undefined): boolean {
   return midnightFeeCapacityLive(live) === 'none';
@@ -112,10 +124,22 @@ export function blocksMidnightSendLive(live: MidnightLiveFeeInputs | null | unde
 
 /**
  * Whether the UI should warn that this wallet may not be able to pay the fee, and offer a
- * sponsor: an unverified zero, or a verified one. Never true for `unknown`. Does NOT mean
- * the send should be blocked; that is {@link blocksMidnightSendLive}.
+ * sponsor: less than a fee's worth of DUST, an unverified zero, or a verified one. Never
+ * true for `unknown`. Does NOT mean the send should be blocked; that is
+ * {@link blocksMidnightSendLive}.
  */
 export function mayLackDustLive(live: MidnightLiveFeeInputs | null | undefined): boolean {
   const capacity = midnightFeeCapacityLive(live);
-  return capacity === 'unverified' || capacity === 'none';
+  return capacity === 'short' || capacity === 'unverified' || capacity === 'none';
+}
+
+/**
+ * Whether the wallet holds any DUST at all: the dashboard's fee-wallet strip says
+ * "No DUST" only when this is false. Unlike {@link mayLackDustLive} a `short`
+ * balance counts, since it is not none. `unknown` counts too, so the note
+ * doesn't flash while Path B loads.
+ */
+export function hasAnyDustLive(live: MidnightLiveFeeInputs | null | undefined): boolean {
+  const capacity = midnightFeeCapacityLive(live);
+  return capacity !== 'unverified' && capacity !== 'none';
 }

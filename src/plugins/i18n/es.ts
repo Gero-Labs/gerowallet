@@ -5483,6 +5483,7 @@ export default {
   'midnight.send.amountRequired': 'Se requiere un monto',
   'midnight.send.shieldedBalanceNote': 'Saldo privado. Se actualiza a medida que avanza la sincronización de los tokens privados.',
   'midnight.send.noDustFee': 'Esta billetera no muestra DUST en este momento, así que es posible que no se pueda pagar la comisión. Elige una billetera para pagarla o inténtalo de todos modos.',
+  'midnight.send.lowDustFee': 'Esta billetera tiene menos de 1 DUST, así que es posible que no se pueda pagar la comisión. Elige una billetera para pagarla o inténtalo de todos modos.',
   'midnight.sponsor.title': 'Pagar comisiones desde otra billetera',
   'midnight.sponsor.lede': 'Otra billetera puede pagar esta comisión.',
   'midnight.sponsor.checking': 'Revisando tus billeteras…',

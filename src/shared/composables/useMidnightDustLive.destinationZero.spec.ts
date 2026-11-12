@@ -174,10 +174,10 @@ describe('send guard on a zero destination answer', () => {
   });
 
   it('does not refuse once a registered wallet has its registration removed between two polls', async () => {
-    mocks.destination.mockResolvedValueOnce(registered('500'));
+    mocks.destination.mockResolvedValueOnce(registered('5000000000000000'));
     const live = mount();
     await settle();
-    expect(live.dustBalance.value).toBe(500n);
+    expect(live.dustBalance.value).toBe(5n * 10n ** 15n);
     expect(live.settled.value).toBe(true);
     expect(blocked(live)).toBe(false);
     expect(mayLack(live)).toBe(false); // positive: nothing to warn about
@@ -195,13 +195,13 @@ describe('send guard on a zero destination answer', () => {
   it('keeps showing the decaying output that remains after the registration was removed', async () => {
     // The snapshot from gero-sync still carries the output the ledger is decaying. The empty
     // destination answer must not zero it, so the wallet reads positive and is not warned about.
-    midnightStore.dustState = { current: 12_345n } as never;
+    midnightStore.dustState = { current: 12_345n * 10n ** 12n } as never;
     mocks.destination.mockResolvedValue(unregisteredZero());
 
     const live = mount();
     await settle();
 
-    expect(live.dustBalance.value).toBe(12_345n);
+    expect(live.dustBalance.value).toBe(12_345n * 10n ** 12n);
     expect(live.settled.value).toBe(true);
     expect(blocked(live)).toBe(false);
     expect(mayLack(live)).toBe(false);

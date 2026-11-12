@@ -5683,6 +5683,7 @@ export default {
   'midnight.send.amountRequired': 'Amount required',
   'midnight.send.shieldedBalanceNote': 'Private balance. Updates as shielded sync progresses.',
   'midnight.send.noDustFee': 'This wallet shows no DUST right now, so the fee may not be payable. Choose a wallet to pay it, or try anyway.',
+  'midnight.send.lowDustFee': 'This wallet holds less than 1 DUST, so the fee may not be payable. Choose a wallet to pay it, or try anyway.',
   'midnight.sponsor.title': 'Pay fees from another wallet',
   'midnight.sponsor.lede': 'Another wallet can pay this fee.',
   'midnight.sponsor.checking': 'Checking your wallets…',
