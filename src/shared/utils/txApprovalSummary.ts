@@ -1031,6 +1031,7 @@ export function toTransactionDetailsCardProps(summary: TxApprovalSummary, trunca
   const outputs = summary.outputs.map((o) => ({
     kind: (o.kind === 'external' ? 'external' : o.kind === 'change' ? 'change' : 'own') as 'external' | 'change' | 'own',
     truncatedAddress: truncate(o.address),
+    fullAddress: o.address,
     ada: o.ada,
     assets: o.assets.map((a) => ({ unit: a.unit, label: a.label, formattedQuantity: a.formattedQuantity })),
     // Always +N regardless of count; names live in the tooltip.

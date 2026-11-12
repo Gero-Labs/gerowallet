@@ -759,6 +759,7 @@ const isSelfSend = computed(() => ownAddresses.value.includes(recipient.value.tr
 const reviewOutputs = computed<TxDetailsOutput[]>(() => [{
   kind: isSelfSend.value ? 'own' : 'external',
   truncatedAddress: truncate(recipient.value.trim()),
+  fullAddress: recipient.value.trim(),
   ada: amount.value || '0',
 }]);
 
