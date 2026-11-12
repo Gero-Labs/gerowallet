@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
@@ -48,6 +49,8 @@ const extensionOrigin = new URL('chrome-extension://test-extension/').origin;
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
+  // Mainnet and preprod run ledger 9, whose DUST fee this device proves.
+  useMidnightChains({ mainnet: [L9, L8], preprod: [L9, L8] });
   mocks.send.mockReset().mockResolvedValue(result);
   mocks.consent.mockReturnValue(false);
   walletStore.loggedWallet = { id: 1, name: 'Sender', type: WalletType.Normal, chain: 'Midnight', network: Network.MAINNET,
