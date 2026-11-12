@@ -168,7 +168,8 @@ export async function buildConnectorIntent9(
 
   const signed = signLedger9Intents(proven, keystore);
   const sealed = signed.bind().serialize();
-  // The chain-ledger agreement: never hand out ledger 9 bytes for a chain that has moved on.
+  // The chain-ledger agreement: re-reads the chain's ledger (cached for up to a
+  // minute) and never hands out ledger 9 bytes for a chain reported on another.
   if (await resolveMidnightLedger(network) !== 9) throw new MidnightLedgerChangedError(network, midnightLedgerVersion(network));
   debugLog('🌙 dapp intent (ledger 9): sealed', { bytes: sealed.length, proveDurationMs });
   return { txHex: Buffer.from(sealed).toString('hex'), segmentId, proveDurationMs };

@@ -113,10 +113,10 @@ beforeEach(() => {
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function render() {
+function render($t: (key: string, params?: Record<string, unknown>) => string = (key: string) => key) {
   return mount(DAppOverlay, { global: {
     stubs: { ...dialogControls(async () => ({ valid: true, errors: [] })), 'v-tooltip': true, 'v-progress-linear': true },
-    config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) },
+    config: { globalProperties: mockGlobalProperties({ $t }) },
   } });
 }
 type View = ReturnType<typeof render>;
@@ -456,6 +456,18 @@ describe('Midnight makeIntent: the approval shows what the wallet gives and asks
     req.payload.data.desiredOutputs = req.payload.data.desiredOutputs.map(({ toSelf: _toSelf, ...want }) => want) as never;
     overlay.currentRequest.value = req as never;
     expect(render().findAll('[data-testid="midnight-intent-want-other"]')).toHaveLength(2);
+  });
+
+  it('says the intent expires after the minutes the worker sent, 55 when it sent none', () => {
+    const withParams = (key: string, params?: Record<string, unknown>) => (params ? `${key} ${JSON.stringify(params)}` : key);
+    overlay.currentRequest.value = intentRequest(true) as never;
+    expect(render(withParams).find('[data-testid="midnight-intent-expiry"]').text())
+      .toBe('midnight.connector.intentExpiry {"minutes":55}');
+    const req = intentRequest(true);
+    delete (req.payload.data as { ttlMinutes?: number }).ttlMinutes;
+    overlay.currentRequest.value = req as never;
+    expect(render(withParams).find('[data-testid="midnight-intent-expiry"]').text())
+      .toBe('midnight.connector.intentExpiry {"minutes":55}');
   });
 
   it('says the wallet does not pay the fee when the dapp asks it not to', () => {

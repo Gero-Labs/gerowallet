@@ -890,7 +890,7 @@
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.connector.transferProvedBy', { prover: transferProverLabel }) }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
+          <p class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-expiry">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
         </div>
 
         <!-- Same pause as makeTransfer above. -->
