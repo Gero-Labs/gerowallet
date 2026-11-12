@@ -5742,7 +5742,7 @@ export default {
   'midnight.sponsor.otherNetwork': 'Different network',
   'midnight.sponsor.offNote': 'No DUST. A send will ask which wallet pays.',
   'midnight.sponsor.noteNotChecked': '{name}\'s DUST hasn\'t been read on this device.',
-  'midnight.sponsor.noteCharging': 'Not enough DUST for a fee yet. It can\'t pay for a send until more DUST generates.',
+  'midnight.sponsor.noteCharging': 'Less than 1 DUST, so it may not cover a fee. Sends won\'t use it until more DUST generates.',
   'midnight.sponsor.noteOtherNetwork': '{name} is on {sponsorNetwork}. DUST doesn\'t cross networks.',
   'midnight.send.rawUnitsNote': 'This token\'s decimals aren\'t known, so amounts are in base units.',
   'midnight.send.publicTxNote': 'Public transaction: the amount and addresses will be visible on the Midnight indexer.',

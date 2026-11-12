@@ -5545,7 +5545,7 @@ export default {
   'midnight.sponsor.otherNetwork': 'Otra red',
   'midnight.sponsor.offNote': 'Sin DUST. Cada envío preguntará qué billetera paga.',
   'midnight.sponsor.noteNotChecked': 'El DUST de {name} no se ha leído en este dispositivo.',
-  'midnight.sponsor.noteCharging': 'Aún no hay suficiente DUST para una comisión. No podrá pagar un envío hasta que se genere más DUST.',
+  'midnight.sponsor.noteCharging': 'Menos de 1 DUST, así que podría no cubrir una comisión. Los envíos no la usarán hasta que se genere más DUST.',
   'midnight.sponsor.noteOtherNetwork': '{name} está en {sponsorNetwork}. El DUST no pasa de una red a otra.',
   'midnight.send.rawUnitsNote': 'Se desconocen los decimales de este token, así que los montos están en unidades base.',
   'midnight.send.publicTxNote': 'Transacción pública: el monto y las direcciones serán visibles en el indexador de Midnight.',
