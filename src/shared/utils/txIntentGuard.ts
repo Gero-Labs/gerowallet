@@ -103,11 +103,15 @@ export interface ExpectedWithdrawal {
 /**
  * An output whose exact lovelace the flow cannot know (a script's min-UTxO
  * deposit), so it is bounded instead: it must pay `address`, carry at most
- * `maxLovelace`, and hold exactly the assets `assets` accepts.
+ * `maxLovelace` (and at least `minLovelace`, when given), and hold exactly the
+ * assets `assets` accepts. Unlike an {@link IntendedOutput} it may carry a datum,
+ * so it also serves a script payment of a known amount (min = max).
  */
 export interface BoundedOutput {
   address: string;
   maxLovelace: bigint;
+  /** Omitted: no lower bound. */
+  minLovelace?: bigint;
   /** Accepts the output's assets (unit → quantity). Omitted: no assets. */
   assets?: (assets: ReadonlyMap<string, bigint>) => boolean;
   /** Accepts the output's datum. Omitted: not checked. */
@@ -303,7 +307,9 @@ function matchBoundedOutputs(tx: Cardano.Tx, bounded: readonly BoundedOutput[], 
     const wantAddress = canonicalAddress(want.address);
     const index = outputs.findIndex((o, i) => {
       if (used.has(i) || canonicalAddress(String(o.address)) !== wantAddress) return false;
-      if (lovelaceOf(o.value) > want.maxLovelace) return false;
+      const coins = lovelaceOf(o.value);
+      if (coins > want.maxLovelace) return false;
+      if (want.minLovelace != null && coins < want.minLovelace) return false;
       const assets = assetMapOf(o.value);
       if (want.assets ? !want.assets(assets) : assets.size > 0) return false;
       return want.datum ? want.datum(o) : true;

@@ -14,6 +14,8 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
+import { isStrikeQuoteExpired, verifyStrikeDepositTx } from '@/modules/market/utils/strikeDepositGuard';
+import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
 
 /**
  * Lifecycle states for the deposit flow.
@@ -239,13 +241,21 @@ export function useStrikeDeposit() {
       return false;
     }
 
+    const confirmedQuote = quote.value;
+    if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at)) {
+      error.value = String(i18n.t('perpetuals.deposit.quoteExpired'));
+      status.value = 'error';
+      return false;
+    }
+
     try {
       // ── 1. Ask STRIKE to build the deposit tx (POST /v2/deposit/build-tx). ──
       // Strike constructs the real vault deposit — correct script/datum + the
       // builder fee — and returns an unsigned CBOR. We must NOT build our own
       // transfer to the deposit address: a plain ADA send to the vault script is
       // NOT a creditable Strike deposit (that's why a self-built deposit didn't
-      // credit). The wallet only signs + submits what Strike builds.
+      // credit). The wallet signs + submits what Strike builds only once it
+      // matches the confirmed quote (checked below, before signing).
       status.value = 'building';
       const cip30Utxos = utxos.map(utxoToCip30Hex);
       const buildResp = await strikeUserApi.buildDepositTx({
@@ -260,6 +270,27 @@ export function useStrikeDeposit() {
       const transaction = Serialization.Transaction.fromCbor(HexBlob(buildResp.unsigned_tx));
       const txCore = transaction.toCore();
       const txCbor = serializeCardanoJsSdkTx(txCore);
+
+      // Strike built this transaction from every UTxO the wallet holds: sign it
+      // only if it is the deposit the user confirmed (see strikeDepositGuard.ts).
+      // The bytes checked are the bytes signed and submitted.
+      if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at) || isStrikeQuoteExpired(buildResp.expires_at)) {
+        throw new Error(String(i18n.t('perpetuals.deposit.quoteExpired')));
+      }
+      // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts).
+      const ownAddresses = derivedOwnAddresses(keys, wallet.baseAddress);
+      const ownKeyHashes = [...(keys.payment ?? []), ...(keys.stake ?? [])].map((k) => k.cred).filter(Boolean);
+      const violations = verifyStrikeDepositTx(txCbor, {
+        depositAddress: confirmedQuote.deposit_address,
+        assetSymbol: confirmedQuote.quote.asset_symbol,
+        lovelace: confirmedQuote.quote.asset_amount,
+        ownAddresses,
+        ownKeyHashes,
+      });
+      if (violations.length > 0) {
+        debugLog('[strike-deposit] refused the built transaction:', violations);
+        throw new Error(String(i18n.t('txGuard.builtTxMismatch')));
+      }
 
       // ── 2. Sign via background. Hardware wallets and Keystone require an
       // interactive UI flow that's out of scope for this composable; the Send
