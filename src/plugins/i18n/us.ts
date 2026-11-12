@@ -5609,6 +5609,7 @@ export default {
   'midnight.errors.ledgerMismatch': 'Midnight\'s network changed while this transaction was being prepared. Nothing was sent. Try again.',
   'midnight.errors.updateRequired': 'Update GeroWallet to send on Midnight. This version can\'t build transactions for Midnight\'s new network version. Your funds are safe.',
   'midnight.errors.noAnswer': 'Midnight didn\'t answer. Nothing was sent. Try again.',
+  'midnight.errors.dustInsufficient': 'The wallet paying the fee doesn\'t have enough DUST for it, so nothing was sent. Wait for more DUST to generate from registered NIGHT, or choose another wallet to pay.',
   'midnight.errors.submitUnconfirmed': 'Gero stopped waiting for the network, but this transaction may still go through. Check your activity before you send again.',
   'midnight.busy.retrying': 'Gero Cloud is busy. Trying again in {n}\u00a0s…',
   'midnight.busy.stillBusy': 'Gero Cloud is still busy. Your transaction is signed and ready.',

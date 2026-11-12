@@ -5415,6 +5415,7 @@ export default {
   'midnight.errors.ledgerMismatch': 'La red de Midnight cambió mientras se preparaba esta transacción. No se envió nada. Inténtalo de nuevo.',
   'midnight.errors.updateRequired': 'Actualiza GeroWallet para enviar en Midnight. Esta versión no puede crear transacciones para la nueva versión de la red de Midnight. Tus fondos están seguros.',
   'midnight.errors.noAnswer': 'Midnight no respondió. No se envió nada. Inténtalo de nuevo.',
+  'midnight.errors.dustInsufficient': 'La billetera que paga la comisión no tiene suficiente DUST para cubrirla, así que no se envió nada. Espera a que se genere más DUST a partir del NIGHT registrado o elige otra billetera para pagarla.',
   'midnight.errors.submitUnconfirmed': 'Gero dejó de esperar a la red, pero esta transacción todavía puede completarse. Revisa tu actividad antes de volver a enviar.',
   'midnight.busy.retrying': 'Gero Cloud está ocupado. Se volverá a intentar en {n}\u00a0s…',
   'midnight.busy.stillBusy': 'Gero Cloud sigue ocupado. Tu transacción está firmada y lista.',
