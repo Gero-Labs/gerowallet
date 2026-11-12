@@ -86,6 +86,18 @@
           <v-stepper-window-item :value="1">
             <div class="step-recipients-wrapper">
               <div class="step-recipients-inner">
+                <!-- An unstake started from the entire-wallet prompt is out: its deposit and
+                     rewards reach the wallet only once it confirms. -->
+                <v-alert
+                  v-if="unstakeSubmitted"
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-3 text-left"
+                  data-testid="entire-wallet-unstake-submitted"
+                >
+                  {{ $t('send.entireWalletUnstake.submitted') }}
+                </v-alert>
                 <SendRecipientCard
                   v-for="(recipient, idx) in recipients"
                   :key="recipient.id"
@@ -102,7 +114,7 @@
                   @duplicate="duplicateRecipient(recipient.id)"
                   @remove="removeRecipient(recipient.id)"
                   @setMax="setMax(recipient.id, $event.tokenIndex)"
-                  @sendEntireWallet="sendEntireWallet(recipient.id)"
+                  @sendEntireWallet="requestSendEntireWallet(recipient.id)"
                 />
 
                 <!-- Add another recipient link -->
@@ -276,6 +288,23 @@
       </v-card-actions>
     </template>
   </BaseDialog>
+  <EntireWalletUnstakePrompt
+    v-if="!isMidnight"
+    :is-open="!!entireWalletPrompt"
+    :deposit-lovelace="stakeDepositLovelace"
+    :rewards-left-lovelace="entireWalletRewards.left"
+    :rewards-included-lovelace="entireWalletRewards.included"
+    @unstake="unstakeBeforeEntireWallet()"
+    @continue="continueEntireWallet()"
+    @close="cancelEntireWallet()"
+  />
+  <UnstakeDialog
+    v-if="!isMidnight"
+    :is-open="unstakeDialog"
+    :tx="unstakeTxData ?? undefined"
+    @submitted="unstakeSubmitted = true"
+    @close="closeUnstakeDialog"
+  />
   </div>
 </template>
 <script setup lang="ts">
@@ -295,6 +324,10 @@ import SweepProgressPanel from '../components/sweep/SweepProgressPanel.vue';
 import SweepDone from '../components/sweep/SweepDone.vue';
 import { maxLimitFigures, sweepDoneSummary, sweepFeeBreakdown, type SweepDoneSummary } from '../components/sweep/sweepDialogState';
 import MidnightSendDialog from './MidnightSendDialog.vue';
+import EntireWalletUnstakePrompt from '../components/EntireWalletUnstakePrompt.vue';
+import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
+import { useUnstake } from '@/shared/composables/useUnstake';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import rules from '@/utils/rules';
 import { Blockchain, WalletType } from '@/models/types';
 import { Collectible, SendRecipient, Token } from '@/models/send-flow.types';
@@ -636,6 +669,9 @@ const resetData = () => {
   sweepDone.value = null;
   maxRecipientIds.value = new Set();
   amountSweepFrom.value = null;
+  entireWalletPrompt.value = null;
+  entireWalletUnstakeDeclined.value = false;
+  unstakeSubmitted.value = false;
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
 };
@@ -1326,6 +1362,79 @@ async function setMax(recipientId: string, tokenIndex: number) {
   if (!txValid.value) {
     debouncedBuild();
   }
+}
+
+/**
+ * "Send Entire Wallet" while the stake key is registered: its deposit sits in no
+ * UTxO, so the send cannot carry it and it would stay behind on a wallet that
+ * looks empty. Ask first, once per dialog session, whether to unstake instead.
+ */
+const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
+const entireWalletPrompt = ref<{ recipientId: string } | null>(null);
+/** The user chose to send without unstaking: don't ask again until the dialog resets. */
+const entireWalletUnstakeDeclined = ref(false);
+/** An unstake started from the prompt went out. */
+const unstakeSubmitted = ref(false);
+const stakeDepositLovelace = computed(() => Number(epochParams.value?.stakeKeyDeposit ?? 0));
+/** Pending rewards: withdrawn by the send only when auto-withdraw attaches them, otherwise left behind. */
+const entireWalletRewards = computed(() => {
+  const pending = Number(walletStore.account?.withdrawable_amount ?? 0);
+  if (!(pending > 0)) return { left: 0, included: 0 };
+  return currentRewardWithdrawals() ? { left: 0, included: pending } : { left: pending, included: 0 };
+});
+
+function shouldOfferUnstake(): boolean {
+  return loggedWallet.value?.chain === Blockchain.CARDANO
+    && !!loggedWallet.value?.stakeAddress
+    && loggedWallet.value?.type !== WalletType.Watch
+    && !entireWalletUnstakeDeclined.value
+    && isStakeKeyRegistered(walletStore.account)
+    && stakeDepositLovelace.value > 0;
+}
+
+/** Entry from the recipient card: ask about the deposit first when it would stay behind. */
+async function requestSendEntireWallet(recipientId: string) {
+  if (isCalculatingMax.value) return;
+  if (shouldOfferUnstake()) {
+    entireWalletPrompt.value = { recipientId };
+    return;
+  }
+  await sendEntireWallet(recipientId);
+}
+
+async function continueEntireWallet() {
+  const pending = entireWalletPrompt.value;
+  entireWalletPrompt.value = null;
+  entireWalletUnstakeDeclined.value = true;
+  if (pending) await sendEntireWallet(pending.recipientId);
+}
+
+/** The card already filled every token and NFT before asking: take them off again. */
+function clearRecipientAssets(recipientId: string) {
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
+  if (idx === -1) return;
+  const empty = createEmptyRecipient();
+  recipients.value.splice(idx, 1, {
+    ...recipients.value[idx],
+    selectedTokens: empty.selectedTokens,
+    selectedCollectibles: {},
+    minAda: 0,
+    adaShortage: 0,
+  });
+}
+
+function cancelEntireWallet() {
+  const pending = entireWalletPrompt.value;
+  entireWalletPrompt.value = null;
+  if (pending) clearRecipientAssets(pending.recipientId);
+}
+
+async function unstakeBeforeEntireWallet() {
+  const pending = entireWalletPrompt.value;
+  entireWalletPrompt.value = null;
+  if (pending) clearRecipientAssets(pending.recipientId);
+  // Builds the deregistration (with any rewards) and opens UnstakeDialog over this one.
+  await unstake();
 }
 
 /** Send entire wallet: all tokens + NFTs are already added by the child, just trigger MAX ADA */
