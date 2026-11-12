@@ -46,10 +46,11 @@ import { dustShortForFee } from './midnightFeeEstimate';
  * DUST outputs.
  *
  * Without any check the send runs a long way before failing: it authorizes,
- * builds the transaction server-side, syncs the whole DUST ledger, and only
- * then stalls inside `dust.balanceTransactions`, which does not throw. Observed
- * on mainnet 2026-09-07 as a send that span on "Sign transaction" forever. That
- * is why the user is warned up front rather than told nothing.
+ * builds the transaction server-side and syncs the whole DUST ledger. On ledger 8
+ * it then stalled inside `dust.balanceTransactions`, which did not throw (observed
+ * on mainnet 2026-09-07 as a send that span on "Sign transaction" forever). On
+ * ledger 9 `balanceLightDust9` throws the SDK's InsufficientFundsError at that
+ * point. Either way the user is warned up front rather than told late.
  *
  * "We haven't computed DUST state yet" is NOT the same as "there is none", and
  * warning on the former would flash the notice on every send made before the

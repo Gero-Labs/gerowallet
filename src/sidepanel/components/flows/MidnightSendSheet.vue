@@ -668,7 +668,9 @@ const recipientError = computed(() => {
 
 /**
   * Whether this wallet may be unable to pay the DUST fee. Surfaced on the amount step so
-  * the user learns it before authorizing, not after the SDK stalls.
+  * the user learns it before authorizing, not after the DUST sync and fee balancing:
+  * on ledger 9 `balanceLightDust9` then throws the SDK's InsufficientFundsError (said
+  * as `midnight.errors.dustInsufficient`).
   *
   * Judged on the MERGED live balance (Path A + Path B) — the figure the
   * battery shows — not the store's Path-A `dustState`, which reads zero for a
