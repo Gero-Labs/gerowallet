@@ -1,5 +1,5 @@
 {
-  "source": "Gero-Labs/nexus sidecar/scripts/generate-wallet-signing-fixtures.mjs at fe62816 with preprod raised to ledger 9 (MIDNIGHT_LEDGER_FLOORS=midnight-preprod=9) and preprod added to the registration loop; ledger-v9 1.0.1; wallet SDK 2.0.0 (dust-wallet 5.0.0)",
+  "source": "Nexus sidecar fixture generator, preprod on ledger 9; ledger-v9 1.0.1; wallet SDK 2.0.0 (dust-wallet 5.0.0)",
   "warning": "Public synthetic key and nonexistent UTxOs. Never fund. No proof or chain acceptance asserted.",
   "ledgers": {
     "mainnet": 9,
@@ -306,7 +306,7 @@
     }
   ],
   "ledger8Transfers": {
-    "source": "The ledger 8 vectors of the previous fixture (Gero-Labs/nexus sidecar/scripts/generate-wallet-signing-fixtures.mjs; ledger-v9 1.0.0-rc.3; wallet SDK beta.2), kept for the ledger 8 path a chain below protocol version 2000000 still takes.",
+    "source": "The ledger 8 vectors of the previous fixture (Nexus sidecar fixture generator; ledger-v9 1.0.0-rc.3; wallet SDK beta.2), kept for the ledger 8 path a chain below protocol version 2000000 still takes.",
     "transfers": [
       {
         "network": "mainnet",
