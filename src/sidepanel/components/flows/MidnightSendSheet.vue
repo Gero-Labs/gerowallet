@@ -744,7 +744,7 @@ const isDustLow = computed(() => !!dustBattery.value && (dustBattery.value.perce
 
 // ── Review model (fed to the shared TransactionDetailsCard, same as the
 //    dashboard dialog) ──
-// Ledger 9's fee floor: see midnightFeeEstimate.ts (#1452 M14).
+// Ledger 9's fee floor: see midnightFeeEstimate.ts (issue 1452, M14).
 const feeEstimateDisplay = MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY;
 
 function truncate(addr: string): string {
