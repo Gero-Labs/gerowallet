@@ -466,6 +466,7 @@
 </template>
 
 <script setup lang="ts">
+import { MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY } from '@/chains/midnight/midnightFeeEstimate';
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, nextTick, onBeforeUnmount, ref, toRefs, watch } from 'vue';
@@ -737,12 +738,12 @@ const formattedAvailable = computed(() => {
   return formatTokenAmount(available.value, selectedDecimals.value);
 });
 
-// Network fees on Midnight are paid in DUST and are negligible (~1 Speck
-// observed on-chain). We can't cheaply get the exact pre-build value (it's
-// computed during the BG dust-balance step, post-auth), so the review shows a
-// conservative "< 0.000001" estimate in DUST — enough to convey the fee is
-// paid in DUST and is tiny, matching the Cardano flow's fee row.
-const feeEstimateDisplay = '< 0.000001';
+// Network fees on Midnight are paid in DUST. We can't cheaply get the exact
+// pre-build value (it's computed during the BG dust-balance step, post-auth),
+// so the review shows a conservative estimate in DUST, matching the Cardano
+// flow's fee row.
+// Ledger 9's fee floor: see midnightFeeEstimate.ts (#1452 M14).
+const feeEstimateDisplay = MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY;
 
 const step1FormRef = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null);
 const step1Valid = ref(false);

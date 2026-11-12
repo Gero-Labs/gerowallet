@@ -10,7 +10,9 @@ import type { MidnightNetworkEndpoints } from './midnightConfig';
 import type { MidnightTransaction } from './midnightTypes';
 import { readVerifiedMidnightChainIdentity, midnightCheckpointNamespace, type MidnightChainIdentity } from './midnightChainIdentity';
 import { saveWalletState } from './midnightWalletStatePersistence';
-import { ledger9ShieldedWallet, type Ledger9ShieldedWallet } from './midnightShieldedWallet9';
+import {
+  forkingShieldedWallet, ledger9ShieldedWallet, shieldedKeysByEpoch, type ForkingShieldedWallet, type Ledger9ShieldedWallet,
+} from './midnightShieldedWallet9';
 import { midnightLedgerKey } from './midnightLedger';
 
 export interface MidnightPrivateSyncArgs {
@@ -18,6 +20,13 @@ export interface MidnightPrivateSyncArgs {
   network: string;
   endpoints: MidnightNetworkEndpoints;
   seed: Uint8Array;
+  /**
+   * The chain crossed the ledger 9 upgrade (mainnet, preprod): run wallet SDK
+   * 2's fork-aware wallet, which reads the ledger 8 history first and hands
+   * over to ledger 9 at the crossing (#1452 M9). Otherwise the ledger 9
+   * variant alone, for a chain born on ledger 9.
+   */
+  forking?: boolean;
 }
 
 const customColor = (value: string) => /^[0-9a-fA-F]{64}$/.test(value) && !/^0+$/.test(value);
@@ -55,7 +64,7 @@ async function bounded<T>(work: Promise<T>): Promise<T> {
   } finally { if (timer) clearTimeout(timer); }
 }
 
-type Wallet = Ledger9ShieldedWallet;
+type Wallet = Ledger9ShieldedWallet | ForkingShieldedWallet;
 let current: PrivateSync | undefined;
 
 /** The unshielded address prefix of `network`'s wallets: `mn_addr1` on mainnet, `mn_addr_<network>1` elsewhere. */
@@ -74,6 +83,8 @@ class PrivateSync {
   private timer?: ReturnType<typeof setInterval>;
   private wallet?: Wallet;
   private keys?: ledger.ZswapSecretKeys;
+  /** The fork-aware wallet's ledger 8 keys (same seed); cleared with `keys`. */
+  private keys8?: { clear(): void };
   private subscription?: { unsubscribe(): void };
   private identity?: MidnightChainIdentity;
   private latest?: ShieldedWalletState;
@@ -100,11 +111,11 @@ class PrivateSync {
 
   private async releaseWallet() {
     this.subscription?.unsubscribe(); this.subscription = undefined;
-    const wallet = this.wallet; const keys = this.keys;
-    this.wallet = undefined; this.keys = undefined; this.latest = undefined;
+    const wallet = this.wallet; const keys = this.keys; const keys8 = this.keys8;
+    this.wallet = undefined; this.keys = undefined; this.keys8 = undefined; this.latest = undefined;
     this.hasPublished = false; this.pendingImmediatePublication = false;
     try { if (wallet) await bounded(wallet.stop()); }
-    finally { keys?.clear(); }
+    finally { keys?.clear(); keys8?.clear(); }
   }
 
   async stop() {
@@ -131,7 +142,20 @@ class PrivateSync {
           || expected.encryptionPublicKey.toHexString() !== this.keys.encryptionPublicKey)
           throw new Error('Private key does not belong to the active wallet');
         this.history = new InMemoryTransactionHistoryStorage(TransactionHistory.ShieldedTransactionHistoryEntrySchema);
-        this.wallet = ledger9ShieldedWallet(this.network, this.args.endpoints, this.history).startWithSecretKeys(this.keys);
+        let start: { v9: ledger.ZswapSecretKeys; v8?: unknown };
+        if (this.args.forking) {
+          const both = await shieldedKeysByEpoch(this.seed);
+          this.keys8 = both.v8;
+          start = { v8: both.v8, v9: this.keys };
+          both.v9.clear();
+          // Asynchronous: it asks the indexer which side of the fork the chain is on first.
+          this.wallet = await bounded(forkingShieldedWallet(this.network, this.args.endpoints, this.history)
+            .startWithKeys(start as Parameters<ReturnType<typeof forkingShieldedWallet>['startWithKeys']>[0]));
+          if (!this.isCurrent()) { await this.releaseWallet(); return; }
+        } else {
+          start = { v9: this.keys };
+          this.wallet = ledger9ShieldedWallet(this.network, this.args.endpoints, this.history).startWithSecretKeys(this.keys);
+        }
         // Cold replay reconstructs private history too. A state-only checkpoint
         // cannot recover historical spends for a newly restored wallet.
         midnightActions.setPrivateSyncStatus('syncing');
@@ -160,7 +184,8 @@ class PrivateSync {
             }
           },
         });
-        await bounded(wallet.start({ v9: this.keys }));
+        // Called as a method, so the SDK's `this` is intact.
+        await bounded((wallet as unknown as { start(keys: typeof start): Promise<void> }).start(start));
         // A complete event can arrive while start() is pending. The finally
         // below queues a fresh verified cycle without losing that first event.
         return;

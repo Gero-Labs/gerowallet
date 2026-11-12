@@ -13,20 +13,21 @@ export function midnightPrivateSessionEpoch(): number { return epoch; }
 
 /**
  * Which private-sync loop serves `network`, from what its chain reports: a
- * chain on ledger 8 has `midnightPrivateSync8.ts`; a chain on ledger 9 from
- * its first block has `midnightPrivateSync.ts`. A chain that crossed the
- * upgrade (mainnet, preprod) needs both ledgers' history, which only wallet
- * SDK 2's fork-aware shielded wallet reads (#1452 M9): no loop yet. A network
- * whose chain can't be read has none either.
+ * chain on ledger 8 has `midnightPrivateSync8.ts`; a chain on ledger 9 has
+ * `midnightPrivateSync.ts`, with wallet SDK 2's fork-aware wallet when the
+ * chain crossed the upgrade (mainnet, preprod: ledger 8 history first,
+ * #1452 M9). A network whose chain can't be read has none.
  */
-async function privateSyncLedger(network: string): Promise<8 | 9 | undefined> {
+async function privateSyncLedger(network: string): Promise<{ ledger: 8 | 9; forking: boolean } | undefined> {
   try {
     const chain = await resolveMidnightChain(network);
-    if (chain.ledger === 8) return 8;
-    if (chain.bornOnLedger9) return 9;
-    debugLog('Midnight private sync: this chain crossed the ledger 9 upgrade; its history needs the fork-aware wallet');
+    if (chain.ledger === 8) return { ledger: 8, forking: false };
+    // A chain that crossed the upgrade has ledger 8 history: the fork-aware wallet reads both.
+    return { ledger: 9, forking: !chain.bornOnLedger9 };
+  } catch (error) {
+    debugLog('Midnight private sync: the chain\'s ledger could not be read', error);
     return undefined;
-  } catch { return undefined; }
+  }
 }
 
 export function prepareMidnightPrivateSession(walletId: number, network: string, seed: Uint8Array, expectedEpoch: number): void {
@@ -45,13 +46,13 @@ export async function activateMidnightPrivateSession(walletId: number, network: 
     const endpoints = getMidnightEndpoints(network);
     if (!endpoints) return;
     const args = { walletId: String(walletId), network, endpoints, seed: prepared.seed };
-    const ledger = await privateSyncLedger(network);
+    const route = await privateSyncLedger(network);
     // A lock or wallet switch while the chain was read clears the session.
     if (pending !== undefined || epoch !== sessionEpoch) return;
-    if (ledger === undefined) return;
-    if (ledger === 9) {
+    if (route === undefined) return;
+    if (route.ledger === 9) {
       activeLedger = 9;
-      await startMidnightPrivateSync(args);
+      await startMidnightPrivateSync({ ...args, forking: route.forking });
     } else {
       // Lazy: the ledger-8 loop pulls in the stores, which the ledger-9 path
       // and its callers never need at import time.

@@ -424,6 +424,7 @@
 </template>
 
 <script setup lang="ts">
+import { MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY } from '@/chains/midnight/midnightFeeEstimate';
 import { ref, computed, watch, nextTick, toRefs, onBeforeUnmount } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
@@ -742,7 +743,8 @@ const isDustEmpty = computed(() => dustLive.settled.value && dustLive.dustBalanc
 
 // ── Review model (fed to the shared TransactionDetailsCard, same as the
 //    dashboard dialog) ──
-const feeEstimateDisplay = '< 0.000001';
+// Ledger 9's fee floor: see midnightFeeEstimate.ts (#1452 M14).
+const feeEstimateDisplay = MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY;
 
 function truncate(addr: string): string {
   if (!addr) return '';
