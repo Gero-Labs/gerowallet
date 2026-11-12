@@ -137,6 +137,17 @@ describe('funded ledger-9 DUST projection', () => {
     } finally { f.key.clear(); }
   });
 
+  it('a spend page with a malformed protocol version is refused, not taken for another ledger', async () => {
+    const f = fundedFixture();
+    try {
+      const page = await f.transport.spends(f.snapshot.block, [''], 0, f.snapshot.block.height);
+      const malformed = page.transactions.map(tx => ({ ...tx, protocolVersion: undefined as unknown as number }));
+      const bad: DustLightTransport = { ...f.transport, spends: vi.fn(async (_b, prefixes) => ({ nextBlock: null,
+        transactions: malformed.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })) };
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', bad)).rejects.toThrow('Invalid DUST spend protocol version');
+    } finally { f.key.clear(); }
+  });
+
   it('a ledger 8 event inside a ledger 9 owned spend is skipped, not fatal; an unreadable ledger 9 one still is', async () => {
     const f = fundedFixture();
     try {
