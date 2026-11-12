@@ -15,7 +15,7 @@ interface BuildRequest {
 }
 
 const mocks = vi.hoisted(() => ({
-  build: vi.fn(), maxAda: vi.fn(), scan: vi.fn(),
+  build: vi.fn(), maxAda: vi.fn(), scan: vi.fn(), unstake: vi.fn(),
   signingOptions: undefined as TransactionSigningOptions | undefined,
 }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({
@@ -85,8 +85,14 @@ vi.mock('../components/SendRecipientCard.vue', () => ({ default: {
   </div>`,
 } }));
 
+vi.mock('@/modules/staking/dialogs/UnstakeDialog.vue', () => ({ default: { props: ['isOpen', 'tx'], emits: ['close', 'submitted'], template: '<div data-unstake-dialog :data-open="isOpen" />' } }));
+vi.mock('@/shared/composables/useUnstake', async () => {
+  const { ref } = await import('vue');
+  return { useUnstake: () => ({ txData: ref(null), unstakeDialog: ref(false), unstake: mocks.unstake, closeUnstakeDialog: vi.fn() }) };
+});
 import SendDialog from './SendDialog.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 const txId = (n: number) => n.toString(16).padStart(64, '0');
 const utxo = (n: number, coins: number) => [{ txId: txId(n), index: 0 }, { address: 'own-address', value: { coins } }];
@@ -706,5 +712,71 @@ describe('Quick Send Max over the request limit', () => {
     expect(mocks.signingOptions?.prerequisites?.value?.cbors).toHaveLength(1);
     expect(requests().filter((request) => !isMerge(request)).at(-1)!.utxos.some((input) => input.txHash === gone)).toBe(false);
     expect(dialog().find('.global-total__error').exists()).toBe(false);
+  });
+});
+
+describe('Send entire wallet while staked', () => {
+  const store = walletStore as unknown as { account: unknown; loggedWallet: Record<string, unknown> };
+  const network = networkStore as unknown as { epochParams: unknown };
+  beforeEach(() => {
+    walletStore.utxos = [utxo(1, 50_000_000)] as never;
+    store.loggedWallet = { ...store.loggedWallet, stakeAddress: 'stake1own' };
+    store.account = { pool_id: 'pool1abc', withdrawable_amount: '0' };
+    network.epochParams = { stakeKeyDeposit: 2_000_000, coinsPerUtxoByte: 4310 };
+  });
+  afterEach(() => {
+    store.account = undefined;
+    network.epochParams = null;
+  });
+
+  const prompt = () => dialog().find('[data-testid="entire-wallet-unstake-first"]');
+
+  it('asks about unstaking before it sends anything, and sends on "without unstaking"', async () => {
+    await openSend();
+    await dialog().get('[data-entire]').trigger('click');
+    await flushPromises();
+    expect(prompt().exists()).toBe(true);
+    expect(dialog().text()).toContain('send.entireWalletUnstake.intro');
+    expect(dialog().get('[data-testid="entire-wallet-unstake-deposit"]').text()).toBe('2');
+    expect(dialog().find('[data-testid="entire-wallet-unstake-rewards"]').exists()).toBe(false);
+    expect(mocks.maxAda).not.toHaveBeenCalled();
+
+    await dialog().get('[data-testid="entire-wallet-send-anyway"]').trigger('click');
+    await flushPromises();
+    expect(mocks.maxAda).toHaveBeenCalledTimes(1);
+
+    // Declined once: the next press goes straight through.
+    await dialog().get('[data-entire]').trigger('click');
+    await flushPromises();
+    expect(mocks.maxAda).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts the unstake instead of the send on "Unstake first"', async () => {
+    await openSend();
+    await dialog().get('[data-entire]').trigger('click');
+    await flushPromises();
+    await prompt().trigger('click');
+    await flushPromises();
+    expect(mocks.unstake).toHaveBeenCalledTimes(1);
+    expect(mocks.maxAda).not.toHaveBeenCalled();
+    expect(dialog().get('[data-collectibles]').text()).toBe('0');
+  });
+
+  it('lists rewards the send would leave behind', async () => {
+    // No DRep: auto-withdraw cannot attach them, so they stay with the stake key too.
+    store.account = { pool_id: 'pool1abc', withdrawable_amount: '3500000' };
+    await openSend();
+    await dialog().get('[data-entire]').trigger('click');
+    await flushPromises();
+    expect(dialog().get('[data-testid="entire-wallet-unstake-rewards"]').text()).toBe('3.5');
+  });
+
+  it('does not ask when the stake key is not registered', async () => {
+    store.account = { withdrawable_amount: '0' };
+    await openSend();
+    await dialog().get('[data-entire]').trigger('click');
+    await flushPromises();
+    expect(prompt().exists()).toBe(false);
+    expect(mocks.maxAda).toHaveBeenCalledTimes(1);
   });
 });

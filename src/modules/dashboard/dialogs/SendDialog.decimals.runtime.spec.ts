@@ -68,6 +68,11 @@ vi.mock('../components/SendRecipientCard.vue', () => ({ default: {
     selectedTokens: [{ ...recipient.selectedTokens[0], quantity: '2' }, { ...token, quantity: '1.5' }] })">Amounts</button>`,
 } }));
 
+vi.mock('@/modules/staking/dialogs/UnstakeDialog.vue', () => ({ default: { props: ['isOpen', 'tx'], emits: ['close', 'submitted'], template: '<div data-unstake-dialog :data-open="isOpen" />' } }));
+vi.mock('@/shared/composables/useUnstake', async () => {
+  const { ref } = await import('vue');
+  return { useUnstake: () => ({ txData: ref(null), unstakeDialog: ref(false), unstake: vi.fn(), closeUnstakeDialog: vi.fn() }) };
+});
 import SendDialog from './SendDialog.vue';
 import i18n from '@/plugins/i18n';
 import { clearConfirmedDecimals } from '@/shared/utils/verifiedDecimals';
