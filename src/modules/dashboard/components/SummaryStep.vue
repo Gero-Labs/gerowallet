@@ -122,6 +122,7 @@ const outputRows = computed<TxDetailsOutput[]>(() => {
     return {
       kind: classifyAddress(addr),
       truncatedAddress: truncateAddr(addr),
+      fullAddress: addr,
       ada: formatAda(coins),
       assetCount,
     };
