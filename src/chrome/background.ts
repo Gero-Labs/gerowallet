@@ -133,8 +133,15 @@ import {
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
-import { uncoveredIntentInput, validateConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
-import { CONNECTOR_INTENT_TTL_MS, IntentInsufficientFundsError } from '@/chains/midnight/midnightIntentBuilder';
+import {
+  CONNECTOR_INTENT_TTL_MS,
+  CONNECTOR_NOT_SYNCED_REASON,
+  IntentInsufficientFundsError,
+  connectorIntentSyncReady,
+  uncoveredIntentInput,
+  validateConnectorIntentRequest,
+} from '@/chains/midnight/midnightConnectorIntent';
+import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
 import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
 import * as provingParkModule from '@/chrome/midnightProvingPark';
@@ -7845,9 +7852,10 @@ app.add(MIDNIGHT_METHOD.provingProve, (request, sendResponse) => handleMidnightD
  * imbalanced, SEALED swap intent — what the wallet gives (`desiredInputs`)
  * against what it wants (`desiredOutputs`), for a counterparty to fill.
  *
- * Public (unshielded) legs on ledger-8 networks only. Shielded legs, Stagenet,
- * give-only intents and malformed options reject with InvalidRequest, and a
- * give the synced UTxOs cannot cover with InsufficientFunds, all BEFORE the
+ * Public (unshielded) legs, on a chain running ledger 8 or 9. Shielded legs,
+ * an unread chain, give-only intents and malformed options reject with
+ * InvalidRequest, a give the synced UTxOs cannot cover with InsufficientFunds,
+ * and on ledger 9 a wallet not yet synced with InternalError, all BEFORE the
  * user is prompted. Validation is synchronous so the request is handed to the
  * panel while the dapp's click still counts as a gesture; without one it is
  * parked like balanceUnsealedTransaction.
@@ -7883,6 +7891,11 @@ app.add(MIDNIGHT_METHOD.makeIntent, (request, sendResponse) => {
   const validation = validateConnectorIntentRequest(data, currentWallet.network);
   if (validation.ok === false) {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+    return true;
+  }
+  // Ledger 9 builds from the wallet's synced UTxOs (review S1): no prompt before that sync.
+  if (knownMidnightLedger(currentWallet.network) === 9 && !connectorIntentSyncReady(midnightStoreSync)) {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, CONNECTOR_NOT_SYNCED_REASON) });
     return true;
   }
   if (uncoveredIntentInput(validation.inputs, midnightStoreSync)) {

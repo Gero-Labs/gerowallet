@@ -123,8 +123,9 @@ function utxoTime(ctime: number | undefined): Date {
  * The wallet's spendable UTxOs, as the SDK's coin selection reads them. Only
  * rows the indexer reports as owned by this key's address: a stale or foreign
  * row would be claimed and signed as the wallet's own, and the node rejects it.
+ * Also makeIntent's (midnightIntentBuilder9.ts).
  */
-function walletState(
+export function ledger9WalletState(
   network: string,
   keystore: ReturnType<typeof ledger9Keystore>,
   utxos: readonly MidnightUnshieldedUtxo[],
@@ -148,7 +149,7 @@ function walletState(
 }
 
 /** Smallest coin of the colour first, as the SDK's default selection does. */
-const chooseCoin = (coins: readonly ledger.Utxo[], tokenType: string) => coins
+export const chooseCoin9 = (coins: readonly ledger.Utxo[], tokenType: string) => coins
   .filter(coin => coin.type === tokenType)
   .toSorted((a, b) => (a.value < b.value ? -1 : a.value > b.value ? 1 : 0))
   .at(0);
@@ -175,11 +176,11 @@ export async function balanceDappTransaction9(
 
   const keysCapability = Keys.makeDefaultKeysCapability();
   const capability = Transacting.makeDefaultTransactingCapability({ networkId: network }, () => ({
-    coinSelection: chooseCoin,
+    coinSelection: chooseCoin9,
     coinsAndBalancesCapability: CoinsAndBalances.makeDefaultCoinsAndBalancesCapability(),
     keysCapability,
   }));
-  const result = capability.balanceUnboundTransaction(walletState(network, keystore, args.utxos), tx);
+  const result = capability.balanceUnboundTransaction(ledger9WalletState(network, keystore, args.utxos), tx);
   if (result._tag === 'Left') throw result.left;
   // `undefined` = nothing to balance (the dapp already covered every colour).
   const balanced: UnboundTransaction9 = result.right[0] ?? tx;

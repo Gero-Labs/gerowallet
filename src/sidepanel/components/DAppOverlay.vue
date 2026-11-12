@@ -890,7 +890,7 @@
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.connector.transferProvedBy', { prover: transferProverLabel }) }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
+          <p class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-expiry">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
         </div>
 
         <!-- Same pause as makeTransfer above. -->
@@ -3522,7 +3522,8 @@ const intentWants = computed<IntentWant[]>(() => {
 });
 const intentGivesNight = computed(() => intentGives.value.some((o) => !o.type || /^0+$/.test(o.type)));
 const intentPaysFees = computed(() => intentPayload.value.options?.payFees === true);
-const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 60);
+// The worker sends CONNECTOR_INTENT_TTL_MS in minutes; 55 is its value, for a payload without it.
+const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 55);
 // Set when a build fails because the wallet cannot cover the give, so a
 // decline after that tells the dapp why instead of a plain Rejected.
 const intentFailureCode = ref<string | null>(null);

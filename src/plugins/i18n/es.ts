@@ -5413,6 +5413,7 @@ export default {
   'midnight.errors.networkUpgrading': 'Midnight actualizó su red. Los envíos y el registro de DUST en {network} están en pausa mientras GeroWallet pasa a la nueva versión. Tus NIGHT y DUST están seguros.',
   'midnight.errors.ledgerUnknown': 'GeroWallet no pudo comprobar qué versión de la red de Midnight está activa, así que no se envió nada. Revisa tu conexión e inténtalo de nuevo.',
   'midnight.errors.ledgerMismatch': 'La red de Midnight cambió mientras se preparaba esta transacción. No se envió nada. Inténtalo de nuevo.',
+  'midnight.errors.walletNotSynced': 'Tu billetera todavía se está sincronizando con la red de Midnight, así que no se firmó nada. Inténtalo de nuevo en un momento.',
   'midnight.errors.updateRequired': 'Actualiza GeroWallet para enviar en Midnight. Esta versión no puede crear transacciones para la nueva versión de la red de Midnight. Tus fondos están seguros.',
   'midnight.errors.noAnswer': 'Midnight no respondió. No se envió nada. Inténtalo de nuevo.',
   'midnight.errors.submitUnconfirmed': 'Gero dejó de esperar a la red, pero esta transacción todavía puede completarse. Revisa tu actividad antes de volver a enviar.',

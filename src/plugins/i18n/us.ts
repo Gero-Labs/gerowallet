@@ -5607,6 +5607,7 @@ export default {
   'midnight.errors.networkUpgrading': 'Midnight upgraded its network. Sending and DUST registration on {network} are paused while GeroWallet moves to the new version. Your NIGHT and DUST are safe.',
   'midnight.errors.ledgerUnknown': 'GeroWallet couldn\'t check which version of Midnight\'s network is running, so nothing was sent. Check your connection and try again.',
   'midnight.errors.ledgerMismatch': 'Midnight\'s network changed while this transaction was being prepared. Nothing was sent. Try again.',
+  'midnight.errors.walletNotSynced': 'Your wallet is still syncing with Midnight\'s network, so nothing was signed. Try again in a moment.',
   'midnight.errors.updateRequired': 'Update GeroWallet to send on Midnight. This version can\'t build transactions for Midnight\'s new network version. Your funds are safe.',
   'midnight.errors.noAnswer': 'Midnight didn\'t answer. Nothing was sent. Try again.',
   'midnight.errors.submitUnconfirmed': 'Gero stopped waiting for the network, but this transaction may still go through. Check your activity before you send again.',
