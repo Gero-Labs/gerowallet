@@ -121,6 +121,8 @@ import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
+import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
+import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
@@ -2848,7 +2850,9 @@ export class WalletBg {
    * return it SEALED. `request` must come from `validateConnectorIntentRequest`.
    * Same credential handling, key hygiene and fee proving as
    * balanceMidnightConnectorTransaction; nothing is proved when the dapp asks
-   * the wallet not to pay fees.
+   * the wallet not to pay fees. The chain's ledger picks the builder; on
+   * ledger 9 the coins come from the wallet's own sync, so nothing is
+   * unlocked before that sync has run (review S1).
    */
   async buildMidnightConnectorIntent(
     request: ConnectorIntentRequest,
@@ -2861,6 +2865,12 @@ export class WalletBg {
 
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
+    {
+      const { midnightStore } = await import('@/stores/midnightStore');
+      if (await resolveMidnightLedger(network) === 9 && !connectorIntentSyncReady(midnightStore)) {
+        throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);
+      }
+    }
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
@@ -2897,6 +2907,21 @@ export class WalletBg {
         } else {
           const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
           proving = { url: target.url, headers: target.headers };
+        }
+        // The chain's ledger decides the path, never the network's name.
+        if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
+          const result9 = await buildConnectorIntent9({
+            sdkNetworkId: endpoints.sdkNetworkId,
+            endpoints,
+            request,
+            unshieldedSecretKey: derived.unshieldedSecretKey,
+            dustSecretSeed: derived.dustSecretKey,
+            utxos: midnightStore.utxos,
+            sync: midnightStore,
+            proving,
+          });
+          assertSession();
+          return { tx: result9.txHex, segmentId: result9.segmentId };
         }
         const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
         const result = await buildConnectorIntent({

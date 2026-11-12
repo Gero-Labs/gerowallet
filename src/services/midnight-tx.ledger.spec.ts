@@ -129,6 +129,10 @@ describe('Midnight ledger-specific orchestration', () => {
     await expect(balanceConnectorTransaction('Preprod', 'aa', {})).rejects.toThrow('midnight.errors.ledgerUnknown');
     await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
       .rejects.toThrow('midnight.errors.ledgerUnknown');
+    // A ledger 9 intent asked for before the wallet's sync (review S1).
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'MIDNIGHT_WALLET_NOT_SYNCED' } });
+    await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+      .rejects.toThrow('midnight.errors.walletNotSynced');
     // Other refusals pass through, with the connector code kept.
     mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough NIGHT', code: 'InsufficientFunds' } });
     await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))

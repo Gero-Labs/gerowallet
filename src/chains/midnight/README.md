@@ -68,10 +68,16 @@ Keep these boundaries when changing transaction code.
   (ledger 8) or `midnightDappBalancer9.ts` (ledger 9, wallet SDK 2's pure `/v2`
   capabilities over the wallet's synced UTxOs); `submitTransaction` judges
   "sealed" with the chain's ledger and names a transaction of the other ledger
-  instead of sending it to be proven. `makeIntent` is ledger 8 only for now.
-- Connector fees on ledger 9 are paid with two DUST spends when the wallet has
-  two coins: ledger 9 can reject a contract call paid with exactly one
-  (`OutsideTimeToDismiss`, midnight-ledger#838). `balanceLightDust9(…,
+  instead of sending it to be proven. `makeIntent` builds with
+  `midnightIntentBuilder.ts` (ledger 8) or `midnightIntentBuilder9.ts`
+  (ledger 9, SDK 2's `/v2` `Transacting.initSwap` over the synced UTxOs the
+  signing key's address owns, refused until the wallet has synced); the checks
+  both share are in `midnightConnectorIntent.ts`.
+- Connector fees on ledger 9 (`balanceUnsealedTransaction`, and `makeIntent`
+  with `payFees`, since a counterparty may fill it with a contract call) are
+  paid with two DUST spends when the wallet has two coins: ledger 9 can reject
+  a contract call paid with exactly one (`OutsideTimeToDismiss`,
+  midnight-ledger#838). `balanceLightDust9(…,
   { minimumSpends: 2 })` re-pays the SDK's one-spend fee from two coins, priced
   with the SDK's own `dryRunFee`.
 

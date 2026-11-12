@@ -1,13 +1,19 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
 import {
   NIGHT_RAW_TOKEN_TYPE,
+  connectorIntentSyncReady,
+  connectorSegmentSpecifier,
   expectedIntentImbalances,
   uncoveredIntentInput,
   validateConnectorIntentRequest,
 } from './midnightConnectorIntent';
 import type { MidnightUnshieldedUtxo } from './midnightTypes';
+import { forgetMidnightLedgersForTests } from './midnightLedger';
+import {
+  LEDGER8_PROTOCOL_VERSION, LEDGER9_PROTOCOL_VERSION_SAMPLE, useDefaultMidnightChainsForTests, useMidnightChains,
+} from '@test/helpers/midnightChains';
 
 const FOO = 'aB'.repeat(32);
 
@@ -40,9 +46,23 @@ describe('validateConnectorIntentRequest', () => {
     });
   });
 
-  it('refuses Stagenet (ledger 9) and unknown networks before anything else', () => {
-    expect(validateConnectorIntentRequest(request({}, 'stagenet'), 'Stagenet')).toMatchObject({ ok: false, reason: expect.stringContaining('Stagenet') });
-    expect(validateConnectorIntentRequest(request(), 'testnet').ok).toBe(false);
+  describe('the chain\'s ledger', () => {
+    afterEach(() => useDefaultMidnightChainsForTests());
+
+    it('accepts a public swap on a ledger 9 chain: born on it (Stagenet) or crossed to it (Preprod)', () => {
+      expect(validateConnectorIntentRequest(request({}, 'stagenet'), 'Stagenet')).toMatchObject({ ok: true, intentId: 'random' });
+      useMidnightChains({ preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION] });
+      expect(validateConnectorIntentRequest(request(), 'Preprod')).toMatchObject({ ok: true });
+    });
+
+    it('refuses a chain whose ledger has not been read, before anything else, and never guesses from the name', () => {
+      forgetMidnightLedgersForTests();
+      for (const network of ['Preprod', 'Mainnet', 'Stagenet']) {
+        expect(validateConnectorIntentRequest(request({}, network.toLowerCase()), network))
+          .toMatchObject({ ok: false, reason: expect.stringContaining(`Could not read which ledger Midnight ${network} runs`) });
+      }
+      expect(validateConnectorIntentRequest(request(), 'testnet').ok).toBe(false);
+    });
   });
 
   it('refuses shielded legs on either side', () => {
@@ -150,5 +170,29 @@ describe('uncoveredIntentInput', () => {
     expect(uncoveredIntentInput([{ type: NIGHT_RAW_TOKEN_TYPE, value: '1' }], { lastSync: null, utxos: [] })).toBeUndefined();
     expect(uncoveredIntentInput([{ type: NIGHT_RAW_TOKEN_TYPE, value: '1' }], { lastSync: 1, utxos: [] }))
       .toEqual({ type: NIGHT_RAW_TOKEN_TYPE, value: '1' });
+  });
+});
+
+describe('connectorIntentSyncReady (review S1: a ledger 9 intent is funded from the wallet\'s own sync)', () => {
+  const own = recipient('preprod', 1);
+  it('needs a validated sync for an address', () => {
+    expect(connectorIntentSyncReady({ lastSync: null, addresses: { unshielded: own } })).toBe(false);
+    expect(connectorIntentSyncReady({ lastSync: 1, addresses: {} })).toBe(false);
+    expect(connectorIntentSyncReady({ lastSync: 1, addresses: { unshielded: '' } })).toBe(false);
+    expect(connectorIntentSyncReady({ lastSync: 1, addresses: { unshielded: own } })).toBe(true);
+  });
+
+  it('with the signing key\'s address, needs the sync to follow that address (any case)', () => {
+    expect(connectorIntentSyncReady({ lastSync: 1, addresses: { unshielded: own } }, own.toUpperCase())).toBe(true);
+    expect(connectorIntentSyncReady({ lastSync: 1, addresses: { unshielded: own } }, recipient('preprod', 2))).toBe(false);
+    // The same key on another network is another address.
+    expect(connectorIntentSyncReady({ lastSync: 1, addresses: { unshielded: own } }, recipient('mainnet', 1))).toBe(false);
+  });
+});
+
+describe('connectorSegmentSpecifier', () => {
+  it('maps the dapp\'s intentId to the ledger\'s segment specifier', () => {
+    expect(connectorSegmentSpecifier('random')).toEqual({ tag: 'random' });
+    expect(connectorSegmentSpecifier(4242)).toEqual({ tag: 'specific', value: 4242 });
   });
 });

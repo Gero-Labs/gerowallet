@@ -5500,6 +5500,7 @@ export default {
   'midnight.errors.networkUpgrading': 'Midnight hat sein Netzwerk aktualisiert. Senden und DUST-Registrierung auf {network} sind pausiert, während GeroWallet auf die neue Version umstellt. Deine NIGHT und DUST sind sicher.',
   'midnight.errors.ledgerUnknown': 'GeroWallet konnte nicht prüfen, welche Version des Midnight-Netzwerks läuft, daher wurde nichts gesendet. Prüfe deine Verbindung und versuche es erneut.',
   'midnight.errors.ledgerMismatch': 'Das Midnight-Netzwerk hat sich geändert, während diese Transaktion vorbereitet wurde. Es wurde nichts gesendet. Versuche es erneut.',
+  'midnight.errors.walletNotSynced': 'Deine Wallet synchronisiert sich noch mit dem Midnight-Netzwerk, daher wurde nichts signiert. Versuche es gleich noch einmal.',
   'midnight.errors.updateRequired': 'Aktualisiere GeroWallet, um auf Midnight zu senden. Diese Version kann keine Transaktionen für die neue Netzwerkversion von Midnight erstellen. Dein Guthaben ist sicher.',
   'midnight.errors.noAnswer': 'Midnight hat nicht geantwortet. Es wurde nichts gesendet. Versuche es erneut.',
   'midnight.errors.submitUnconfirmed': 'Gero hat aufgehört, auf das Netzwerk zu warten, aber diese Transaktion kann trotzdem noch durchgehen. Prüfe deine Aktivität, bevor du erneut sendest.',

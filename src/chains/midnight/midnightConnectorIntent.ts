@@ -7,10 +7,15 @@
  * shortage of the `desiredOutputs` (what the wallet wants), for another party
  * to mirror or balance (a swap).
  *
- * This version supports public (unshielded) legs on ledger-8 networks only.
- * Shielded legs, Stagenet and give-only intents reject with InvalidRequest
- * before the user is prompted. The worker re-runs this validation; the page's
- * copy is never trusted.
+ * This version supports public (unshielded) legs, on a chain running ledger 8
+ * (midnightIntentBuilder.ts) or ledger 9 (midnightIntentBuilder9.ts), read from
+ * the chain. Shielded legs, give-only intents and an unread chain reject with
+ * InvalidRequest before the user is prompted. The worker re-runs this
+ * validation; the page's copy is never trusted.
+ *
+ * Also the parts both ledgers' builders share: the check of the built intent
+ * against the request, the segment choice, the TTL and the refusals. This
+ * module imports no ledger: the background loads it statically.
  */
 
 import { knownMidnightLedger, midnightNetworkName } from './midnightLedger';
@@ -83,7 +88,9 @@ export function validateConnectorIntentRequest(data: unknown, network: string): 
   // The caller reads the chain's ledger first (resolveMidnightLedger).
   const version = knownMidnightLedger(network);
   if (version === undefined) return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs` };
-  if (version !== 8) return { ok: false, reason: `makeIntent is not supported on Midnight ${midnightNetworkName(network)} (ledger ${version}) in this version` };
+  if (version !== 8 && version !== 9) {
+    return { ok: false, reason: `makeIntent is not supported on Midnight ${midnightNetworkName(network)} (ledger ${version}) in this version` };
+  }
 
   const { desiredInputs, desiredOutputs } = data as { desiredInputs?: unknown; desiredOutputs?: unknown };
   const rawOptions = (data as { options?: unknown }).options;
@@ -181,4 +188,154 @@ export function uncoveredIntentInput(
     if (held < BigInt(input.value)) return input;
   }
   return undefined;
+}
+
+/**
+ * How long a counterparty has to fill the intent. Below the ledger's DUST
+ * grace period (3 h on ledgers 8 and 9), so the fee spend stays valid for the
+ * intent's whole life.
+ */
+export const CONNECTOR_INTENT_TTL_MS = 60 * 60_000;
+
+/** Raised when the wallet cannot cover what the intent gives; the worker answers `InsufficientFunds`. */
+export class IntentInsufficientFundsError extends Error {
+  constructor(message = 'Not enough funds to give what this intent offers') {
+    super(message);
+    this.name = 'IntentInsufficientFundsError';
+  }
+}
+
+/** The SDK's coin selection fails with `Wallet.InsufficientFunds` (or a message saying so). */
+export function isSdkInsufficientFunds(error: unknown): boolean {
+  const tag = (error as { _tag?: unknown } | null)?._tag;
+  if (typeof tag === 'string' && /insufficient/i.test(tag)) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /insufficient/i.test(message);
+}
+
+/** The ledger's `SegmentSpecifier` for the dapp's `intentId` (the same shape on ledgers 8 and 9). */
+export function connectorSegmentSpecifier(intentId: ConnectorIntentId): { tag: 'random' } | { tag: 'specific'; value: number } {
+  return intentId === 'random' ? { tag: 'random' } : { tag: 'specific', value: intentId };
+}
+
+/**
+ * The message of a ledger 9 intent refused because the wallet's UTxO view is
+ * not synced for the signing key. A code, like MIDNIGHT_LEDGER_UNKNOWN: the
+ * extension pages say it in the user's language (midnight-tx.service.ts).
+ */
+export const MIDNIGHT_WALLET_NOT_SYNCED = 'MIDNIGHT_WALLET_NOT_SYNCED';
+
+/** What the dapp is told when a ledger 9 intent is asked for before the wallet has synced. */
+export const CONNECTOR_NOT_SYNCED_REASON = 'The wallet is still syncing. Try again in a moment.';
+
+/**
+ * Whether the worker's UTxO view can fund a ledger 9 intent (review S1). The
+ * ledger 9 builder selects coins from the UTxOs the wallet synced, not from an
+ * SDK wallet it syncs itself, so it needs a validated sync for the logged
+ * wallet (`lastSync`, reset on every worker restart and wallet switch) and, when
+ * `ownAddress` is given, the store following that address (its bech32 names
+ * the network too). The builder checks against the signing key's own address.
+ */
+export function connectorIntentSyncReady(
+  view: { readonly lastSync: number | null; readonly addresses: { readonly unshielded?: string | null } },
+  ownAddress?: string,
+): boolean {
+  if (view.lastSync === null) return false;
+  const synced = view.addresses.unshielded;
+  if (typeof synced !== 'string' || !synced) return false;
+  return ownAddress === undefined || synced.toLowerCase() === ownAddress.toLowerCase();
+}
+
+type IntentOfferView<Key> = {
+  readonly inputs: ReadonlyArray<{ readonly owner: Key }>;
+  readonly outputs: ReadonlyArray<{ readonly owner: string; readonly value: bigint; readonly type: string }>;
+};
+type IntentView<Key> = {
+  readonly guaranteedUnshieldedOffer?: IntentOfferView<Key>;
+  readonly fallibleUnshieldedOffer?: IntentOfferView<Key>;
+  readonly actions?: ReadonlyArray<unknown>;
+  readonly dustActions?: unknown;
+};
+/** The parts of a ledger 8 or ledger 9 transaction the check reads. */
+export type IntentTxView = {
+  readonly intents?: Map<number, unknown>;
+  readonly guaranteedOffer?: unknown;
+  readonly fallibleOffer?: Map<number, unknown>;
+  imbalances(segment: number): Map<{ readonly tag: string; readonly raw?: string }, bigint>;
+};
+
+/** A requested output, with its recipient as `UserAddress` hex. */
+export interface ExpectedIntentOutput {
+  readonly owner: string;
+  readonly type: string;
+  readonly value: bigint;
+}
+
+/**
+ * Refuse a built intent that is not exactly what the user approved: one
+ * intent at `segmentId`, a guaranteed unshielded offer only (no contract
+ * or DUST actions, no shielded offers, even balanced ones), inputs spent
+ * only from the wallet, every requested output present, every other output
+ * change to the wallet, and a guaranteed-section imbalance of exactly
+ * `+given - wanted` per colour with nothing shielded. The SDK built it from
+ * the request, so this is the same "check the bytes, not the builder"
+ * stance as midnightBuiltTxGuard. `addressOfKey` is the ledger's own
+ * `addressFromKey` (ledger 9 keys are tagged).
+ */
+export function assertIntentMatchesRequest<Key>(
+  tx: IntentTxView,
+  args: {
+    segmentId: number;
+    request: Pick<ConnectorIntentRequest, 'inputs' | 'outputs'>;
+    expectedOutputs: ReadonlyArray<ExpectedIntentOutput>;
+    ownAddress: string;
+    addressOfKey: (key: Key) => string;
+  },
+): void {
+  const own = args.ownAddress.toLowerCase();
+  const intents = tx.intents;
+  if (!intents || intents.size !== 1 || !intents.has(args.segmentId)) {
+    throw new Error('The built intent is not a single intent at the requested segment');
+  }
+  if (tx.guaranteedOffer || (tx.fallibleOffer && tx.fallibleOffer.size > 0)) {
+    throw new Error('The built intent has an unexpected shielded offer');
+  }
+  const intent = intents.get(args.segmentId) as IntentView<Key>;
+  if (intent.fallibleUnshieldedOffer) throw new Error('The built intent has an unexpected fallible offer');
+  if ((intent.actions?.length ?? 0) > 0 || intent.dustActions) {
+    throw new Error('The built intent has unexpected contract or DUST actions');
+  }
+  const offer = intent.guaranteedUnshieldedOffer;
+  if (!offer) throw new Error('The built intent has no unshielded offer');
+
+  for (const input of offer.inputs) {
+    if (args.addressOfKey(input.owner).toLowerCase() !== own) throw new Error('The built intent spends coins that are not this wallet\'s');
+  }
+
+  // Each requested output must appear once; whatever remains must be change.
+  const remaining = [...offer.outputs];
+  for (const want of args.expectedOutputs) {
+    const at = remaining.findIndex((out) => out.owner.toLowerCase() === want.owner.toLowerCase()
+      && out.type.toLowerCase() === want.type.toLowerCase() && out.value === want.value);
+    if (at < 0) throw new Error('The built intent is missing a requested output');
+    remaining.splice(at, 1);
+  }
+  if (remaining.some((out) => out.owner.toLowerCase() !== own)) {
+    throw new Error('The built intent pays an address that was not requested');
+  }
+
+  const expected = expectedIntentImbalances(args.request);
+  const actual = new Map<string, bigint>();
+  for (const segment of [0, args.segmentId]) {
+    for (const [token, value] of tx.imbalances(segment)) {
+      if (value === 0n) continue;
+      if (token.tag !== 'unshielded' || typeof token.raw !== 'string') {
+        throw new Error('The built intent has an unexpected shielded or DUST imbalance');
+      }
+      const key = token.raw.toLowerCase();
+      actual.set(key, (actual.get(key) ?? 0n) + value);
+    }
+  }
+  const same = actual.size === expected.size && [...expected].every(([type, value]) => actual.get(type) === value);
+  if (!same) throw new Error('The built intent does not give and ask for exactly the approved amounts');
 }

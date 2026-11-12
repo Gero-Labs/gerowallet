@@ -54,6 +54,7 @@ import {
   type MidnightBuiltTxRefusal,
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN } from '@/chains/midnight/midnightLedger';
+import { MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
 import { submitWithBusyRetry, type BusyRetryOptions, type MidnightBusyHandlers } from './midnightBusyRetry';
@@ -93,10 +94,14 @@ export class MidnightBuiltTxRefusedError extends Error {
   }
 }
 
-/** The chain's ledger couldn't be read, or changed while the transaction was prepared. */
+/**
+ * The chain's ledger couldn't be read, or changed while the transaction was
+ * prepared; or a ledger 9 makeIntent came before the wallet's sync.
+ */
 const LEDGER_REFUSAL_COPY: Record<string, string> = {
   [MIDNIGHT_LEDGER_UNKNOWN]: 'midnight.errors.ledgerUnknown',
   [MIDNIGHT_LEDGER_CHANGED]: 'midnight.errors.ledgerMismatch',
+  [MIDNIGHT_WALLET_NOT_SYNCED]: 'midnight.errors.walletNotSynced',
 };
 
 /** Say a background refusal in the user's language. Other errors pass through. */

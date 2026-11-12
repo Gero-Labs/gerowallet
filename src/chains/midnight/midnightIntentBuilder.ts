@@ -1,4 +1,5 @@
-// Build a DApp Connector `makeIntent` swap intent on ledger 8:
+// Build a DApp Connector `makeIntent` swap intent on ledger 8 (ledger 9:
+// midnightIntentBuilder9.ts; the shared checks are in midnightConnectorIntent.ts):
 //
 //   start + sync the SDK unshielded wallet → `initSwap` (the wallet's inputs
 //   for what it gives, change back to itself, and the outputs it wants, in
@@ -19,19 +20,19 @@ import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-ad
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import { unreachableProver } from './midnightConnectorBalance';
 import type { UnboundTransaction } from './midnightConnectorBalance';
-import { expectedIntentImbalances } from './midnightConnectorIntent';
-import type { ConnectorIntentId, ConnectorIntentRequest } from './midnightConnectorIntent';
+import {
+  assertIntentMatchesRequest as assertIntentMatchesRequestFor, connectorSegmentSpecifier, IntentInsufficientFundsError,
+  isSdkInsufficientFunds, CONNECTOR_INTENT_TTL_MS,
+} from './midnightConnectorIntent';
+import type { ConnectorIntentRequest, ExpectedIntentOutput, IntentTxView } from './midnightConnectorIntent';
 import { requireChainLedger8 } from './midnightChainLedger';
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 import { debugLog } from '@/utils/debug';
 
-/**
- * How long a counterparty has to fill the intent. Below the ledger's DUST
- * grace period (3 h on ledger 8), so the fee spend stays valid for the
- * intent's whole life.
- */
-export const CONNECTOR_INTENT_TTL_MS = 60 * 60_000;
+// Kept importable from here for existing callers.
+export { CONNECTOR_INTENT_TTL_MS, IntentInsufficientFundsError };
+export type { ExpectedIntentOutput, IntentTxView };
 
 /** Coin selection reads UTxO state; an unshielded sync is an indexer query, not a chain walk. */
 const UNSHIELDED_SYNC_TIMEOUT_MS = 90_000;
@@ -102,115 +103,14 @@ async function defaultDeps(): Promise<BuildConnectorIntentDeps> {
   };
 }
 
-/** Raised when the wallet cannot cover what the intent gives; the worker answers `InsufficientFunds`. */
-export class IntentInsufficientFundsError extends Error {
-  constructor(message = 'Not enough funds to give what this intent offers') {
-    super(message);
-    this.name = 'IntentInsufficientFundsError';
-  }
-}
-
-/** The SDK's coin selection fails with `Wallet.InsufficientFunds` (or a message saying so). */
-function isSdkInsufficientFunds(error: unknown): boolean {
-  const tag = (error as { _tag?: unknown } | null)?._tag;
-  if (typeof tag === 'string' && /insufficient/i.test(tag)) return true;
-  const message = error instanceof Error ? error.message : String(error);
-  return /insufficient/i.test(message);
-}
-
-function segmentSpecifier(intentId: ConnectorIntentId): ledger.SegmentSpecifier {
-  return intentId === 'random' ? { tag: 'random' } : { tag: 'specific', value: intentId };
-}
-
-type IntentOfferView = {
-  readonly inputs: ReadonlyArray<{ readonly owner: ledger.SignatureVerifyingKey }>;
-  readonly outputs: ReadonlyArray<{ readonly owner: ledger.UserAddress; readonly value: bigint; readonly type: ledger.RawTokenType }>;
-};
-type IntentView = {
-  readonly guaranteedUnshieldedOffer?: IntentOfferView;
-  readonly fallibleUnshieldedOffer?: IntentOfferView;
-  readonly actions?: ReadonlyArray<unknown>;
-  readonly dustActions?: unknown;
-};
-export type IntentTxView = {
-  readonly intents?: Map<number, unknown>;
-  readonly guaranteedOffer?: unknown;
-  readonly fallibleOffer?: Map<number, unknown>;
-  imbalances(segment: number): Map<ledger.TokenType, bigint>;
-};
-
-/** A requested output, with its recipient as `UserAddress` hex. */
-export interface ExpectedIntentOutput {
-  readonly owner: string;
-  readonly type: string;
-  readonly value: bigint;
-}
-
-/**
- * Refuse a built intent that is not exactly what the user approved: one
- * intent at `segmentId`, a guaranteed unshielded offer only (no contract
- * or DUST actions, no shielded offers, even balanced ones), inputs spent
- * only from the wallet, every requested output present, every other output
- * change to the wallet, and a guaranteed-section imbalance of exactly
- * `+given - wanted` per colour with nothing shielded. The SDK built it from
- * the request, so this is the same "check the bytes, not the builder"
- * stance as midnightBuiltTxGuard.
- */
+/** {@link assertIntentMatchesRequestFor} with ledger 8's `addressFromKey` unless one is given. */
 export function assertIntentMatchesRequest(
   tx: IntentTxView,
-  args: {
-    segmentId: number;
-    request: Pick<ConnectorIntentRequest, 'inputs' | 'outputs'>;
-    expectedOutputs: ReadonlyArray<ExpectedIntentOutput>;
-    ownAddress: string;
+  args: Omit<Parameters<typeof assertIntentMatchesRequestFor<ledger.SignatureVerifyingKey>>[1], 'addressOfKey'> & {
     addressOfKey?: (key: ledger.SignatureVerifyingKey) => ledger.UserAddress;
   },
 ): void {
-  const addressOfKey = args.addressOfKey ?? ledger.addressFromKey;
-  const own = args.ownAddress.toLowerCase();
-  const intents = tx.intents;
-  if (!intents || intents.size !== 1 || !intents.has(args.segmentId)) {
-    throw new Error('The built intent is not a single intent at the requested segment');
-  }
-  if (tx.guaranteedOffer || (tx.fallibleOffer && tx.fallibleOffer.size > 0)) {
-    throw new Error('The built intent has an unexpected shielded offer');
-  }
-  const intent = intents.get(args.segmentId) as IntentView;
-  if (intent.fallibleUnshieldedOffer) throw new Error('The built intent has an unexpected fallible offer');
-  if ((intent.actions?.length ?? 0) > 0 || intent.dustActions) {
-    throw new Error('The built intent has unexpected contract or DUST actions');
-  }
-  const offer = intent.guaranteedUnshieldedOffer;
-  if (!offer) throw new Error('The built intent has no unshielded offer');
-
-  for (const input of offer.inputs) {
-    if (addressOfKey(input.owner).toLowerCase() !== own) throw new Error('The built intent spends coins that are not this wallet\'s');
-  }
-
-  // Each requested output must appear once; whatever remains must be change.
-  const remaining = [...offer.outputs];
-  for (const want of args.expectedOutputs) {
-    const at = remaining.findIndex((out) => out.owner.toLowerCase() === want.owner.toLowerCase()
-      && out.type.toLowerCase() === want.type.toLowerCase() && out.value === want.value);
-    if (at < 0) throw new Error('The built intent is missing a requested output');
-    remaining.splice(at, 1);
-  }
-  if (remaining.some((out) => out.owner.toLowerCase() !== own)) {
-    throw new Error('The built intent pays an address that was not requested');
-  }
-
-  const expected = expectedIntentImbalances(args.request);
-  const actual = new Map<string, bigint>();
-  for (const segment of [0, args.segmentId]) {
-    for (const [token, value] of tx.imbalances(segment)) {
-      if (value === 0n) continue;
-      if (token.tag !== 'unshielded') throw new Error('The built intent has an unexpected shielded or DUST imbalance');
-      const key = token.raw.toLowerCase();
-      actual.set(key, (actual.get(key) ?? 0n) + value);
-    }
-  }
-  const same = actual.size === expected.size && [...expected].every(([type, value]) => actual.get(type) === value);
-  if (!same) throw new Error('The built intent does not give and ask for exactly the approved amounts');
+  assertIntentMatchesRequestFor<ledger.SignatureVerifyingKey>(tx, { ...args, addressOfKey: args.addressOfKey ?? ledger.addressFromKey });
 }
 
 export async function buildConnectorIntent(
@@ -257,7 +157,7 @@ export async function buildConnectorIntent(
 
     // initSwap always uses segment 1; move the intent where the dapp asked.
     const homed = ledger.Transaction.fromParts(args.sdkNetworkId)
-      .addIntent(segmentSpecifier(request.intentId), built[0] as ledger.UnprovenIntent);
+      .addIntent(connectorSegmentSpecifier(request.intentId), built[0] as ledger.UnprovenIntent);
     const segmentId = [...(homed.intents?.keys() ?? [])][0];
     if (segmentId === undefined) throw new Error('The intent could not be placed in a segment');
     assertIntentMatchesRequest(homed, {
