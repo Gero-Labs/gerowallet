@@ -119,7 +119,7 @@ describe('resolveDappProvingTarget', () => {
 
   it('explains a missing ledger-9 URL in terms of the setting to add', () => {
     expect(() => resolveDappProvingTarget(Network.STAGENET, { ...base, mode: 'local', localUrlLedger9: '' }, CONSENT))
-      .toThrow(/no local proof server URL for the ledger-9.*proof-server settings/);
+      .toThrow(/no local proof server URL for Midnight Stagenet \(ledger 9\).*proof-server settings/);
   });
 });
 

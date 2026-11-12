@@ -30,7 +30,7 @@
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import * as ledger9 from '@midnightntwrk/ledger-v9';
-import { midnightLedgerVersion } from './midnightLedger';
+import { midnightLedgerOrNewest, type MidnightLedger } from './midnightLedger';
 import { debugLog } from '@/utils/debug';
 
 /** Transient proof-server states worth retrying (matches the SDK client). */
@@ -64,6 +64,12 @@ function delay(ms: number): Promise<void> {
 export interface ProverRequestOptions {
   headers?: Record<string, string>;
   sdkNetworkId?: string;
+  /**
+   * The ledger whose proving payloads to build: the chain's, read by the
+   * caller (`walletProvingProvider`). Defaults to the network's last-read
+   * ledger, else the newest; never a network name.
+   */
+  ledger?: MidnightLedger;
   /** Covers response headers and the complete binary response body. */
   timeoutMs?: number;
   resolveKeyMaterial?: (keyLocation: string) => Promise<Partial<ledger.ProvingKeyMaterial> | undefined>;
@@ -185,7 +191,7 @@ export function makeLocalProvingProvider(
   baseUrl: string,
   options?: ProverRequestOptions,
 ): ledger.ProvingProvider & ledger9.ProvingProvider {
-  const runtime = midnightLedgerVersion(options?.sdkNetworkId ?? 'mainnet') === 9 ? ledger9 : ledger;
+  const runtime = (options?.ledger ?? midnightLedgerOrNewest(options?.sdkNetworkId)) === 9 ? ledger9 : ledger;
   const resolveKeyMaterial = options?.resolveKeyMaterial ?? (async () => undefined);
   return {
     // Built-in transfer and DUST circuits are supplied by the native server.

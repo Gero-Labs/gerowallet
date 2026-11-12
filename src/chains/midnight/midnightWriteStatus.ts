@@ -10,15 +10,16 @@ import {
   noteMidnightWritesOpen,
 } from './midnightWriteGate';
 import { extensionVersion, isVersionBelow } from './midnightClientVersion';
-import { midnightLedgerVersion } from './midnightLedger';
+import { NEWEST_MIDNIGHT_LEDGER } from './midnightLedger';
+import { midnightEndpointsFor } from './midnightChainLedger';
 
-/** The ledger this build signs with on `network`, or null for a network it doesn't know. */
+/**
+ * The newest ledger this build signs with on `network`, or null for a network
+ * it doesn't know. The build follows the chain to any ledger up to this one,
+ * so only a ledger above it needs an update.
+ */
 function buildLedger(network: string): number | null {
-  try {
-    return midnightLedgerVersion(network);
-  } catch {
-    return null;
-  }
+  return midnightEndpointsFor(network) ? NEWEST_MIDNIGHT_LEDGER : null;
 }
 
 /**

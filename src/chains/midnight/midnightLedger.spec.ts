@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import * as legacy from '@midnight-ntwrk/ledger-v8';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import {
-  midnightKeystore, midnightLedgerVersion, requireMidnightLedger8,
+  MidnightLedgerUnknownError, midnightKeystore, midnightLedgerVersion, noteMidnightProtocolVersion, requireMidnightLedger8,
   schnorrHex, validateMidnightSigningSegments,
 } from './midnightLedger';
 import { deserializeLedger9Transaction, signLedger9Transaction } from './midnightLedger9';
@@ -29,15 +29,17 @@ function fixture(registration = false) {
 }
 
 describe('Midnight ledger isolation with real WASM', () => {
-  it.each([['Mainnet', 8], ['Preprod', 8], ['Stagenet', 9]])('selects %s explicitly', (network, version) => {
+  it.each([['Mainnet', 8], ['Preprod', 8], ['Stagenet', 9]])('follows %s\'s chain (test chains: mainnet/preprod pre-upgrade)', (network, version) => {
     expect(midnightLedgerVersion(network as string)).toBe(version);
   });
 
-  it('rejects unknown networks and ledger-8-only operations on Stagenet', () => {
-    expect(() => midnightLedgerVersion('preview')).toThrow('Unsupported');
-    expect(() => requireMidnightLedger8('stagenet', 'Shielding')).toThrow('ledger 9');
+  it('fails closed before a read and names the wallet\'s own network and ledger in guards', () => {
+    expect(() => midnightLedgerVersion('preview')).toThrow(MidnightLedgerUnknownError);
+    expect(() => requireMidnightLedger8('stagenet', 'Shielding')).toThrow('Shielding is not supported on Midnight Stagenet (ledger 9) in this version');
     expect(() => requireMidnightLedger8('preprod', 'Shielding')).not.toThrow();
-    expect(() => deserializeLedger9Transaction('mainnet', fixture())).toThrow('Stagenet');
+    expect(() => deserializeLedger9Transaction('mainnet', fixture())).toThrow('Midnight Mainnet runs ledger 8');
+    noteMidnightProtocolVersion('Preprod', 2_001_100);
+    expect(() => requireMidnightLedger8('preprod', 'Shielding')).toThrow('Midnight Preprod (ledger 9)');
   });
 
   it('preserves legacy Schnorr public key/address identity with tagged v9 keys', async () => {

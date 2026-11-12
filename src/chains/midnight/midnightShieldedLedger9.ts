@@ -3,7 +3,8 @@ import type { ShieldedWalletState } from 'midnight-v9-shielded';
 import { InMemoryTransactionHistoryStorage, TransactionHistoryStorage } from 'midnight-v9-abstractions';
 import { ledger9ShieldedWallet, unprovenTransactionFromHandle, type Ledger9ShieldedWallet } from './midnightShieldedWallet9';
 import type { BuildAndSignShieldedTransferArgs, BuildAndSignShieldedTransferResult } from './midnightShieldedBuilder';
-import { midnightLedgerVersion } from './midnightLedger';
+import { midnightLedgerKey, midnightNetworkName } from './midnightLedger';
+import { resolveMidnightChain } from './midnightChainLedger';
 import { decodeShieldedAddress9 } from './midnightAddress9';
 import { validateShieldedTokenType } from './midnightTokenCapabilities';
 import { loadWalletState, saveWalletState, clearWalletState } from './midnightWalletStatePersistence';
@@ -31,8 +32,17 @@ async function bounded<T>(work: Promise<T>, milliseconds: number, operation: str
 export async function buildAndSignShieldedLedger9Transfer(
   args: BuildAndSignShieldedTransferArgs,
 ): Promise<BuildAndSignShieldedTransferResult> {
-  if (midnightLedgerVersion(args.sdkNetworkId) !== 9 || args.endpoints.sdkNetworkId !== 'stagenet') {
-    throw new Error('Ledger 9 shielded transfers require Stagenet endpoints');
+  const network = midnightLedgerKey(args.sdkNetworkId);
+  if (args.endpoints.sdkNetworkId !== network) throw new Error('Midnight endpoint network mismatch');
+  const chain = await resolveMidnightChain(network);
+  if (chain.ledger !== 9) {
+    throw new Error(`Midnight ${midnightNetworkName(network)} runs ledger ${chain.ledger}; this is a ledger 9 shielded transfer`);
+  }
+  // The ledger 9 shielded wallet alone cannot read the ledger 8 history of a
+  // chain that crossed the upgrade, so it would miss notes from before it.
+  // That needs wallet SDK 2's fork-aware shielded wallet (#1452 M9).
+  if (!chain.bornOnLedger9) {
+    throw new Error(`Private sends on Midnight ${midnightNetworkName(network)} need its history from before the ledger 9 upgrade, which this version can't read yet`);
   }
   if (!args.dustSecretSeed || args.dustSecretSeed.length !== 32) throw new Error('Shielded transfers require a DUST fee key');
   if (!args.outputs.length) throw new Error('At least one shielded output is required');
@@ -41,7 +51,7 @@ export async function buildAndSignShieldedLedger9Transfer(
     return {
       amount: output.amount,
       type: validateShieldedTokenType(output.tokenType),
-      receiverAddress: decodeShieldedAddress9('stagenet', output.receiverAddress),
+      receiverAddress: decodeShieldedAddress9(network, output.receiverAddress),
     };
   });
   const ttl = args.ttl ?? new Date(Date.now() + 30 * 60_000);
@@ -53,7 +63,7 @@ export async function buildAndSignShieldedLedger9Transfer(
   let subscription: { unsubscribe(): void } | undefined;
   try {
     const history = new InMemoryTransactionHistoryStorage(TransactionHistoryStorage.TransactionHistoryEntryCommonSchema);
-    const builder = ledger9ShieldedWallet('stagenet', args.endpoints, history);
+    const builder = ledger9ShieldedWallet(network, args.endpoints, history);
     const saved = await loadWalletState(stateNetwork, 'shielded', args.zswapSecretKeySeed);
     if (saved) {
       try { wallet = builder.restore(saved); } catch {
@@ -75,7 +85,7 @@ export async function buildAndSignShieldedLedger9Transfer(
     await saveWalletState(stateNetwork, 'shielded', args.zswapSecretKeySeed, snapshot).catch(() => {});
     const transfer = unprovenTransactionFromHandle(
       await bounded(wallet.transferTransaction(outputs), 60_000, 'shielded transaction construction'));
-    ledger.Transaction.fromParts('stagenet').merge(transfer);
+    ledger.Transaction.fromParts(network).merge(transfer);
     const fees = await balanceLedger9Fees({
       sdkNetworkId: args.sdkNetworkId,
       endpoints: args.endpoints,
@@ -89,7 +99,7 @@ export async function buildAndSignShieldedLedger9Transfer(
     const txHex = Buffer.from(combined.serialize()).toString('hex');
     if (args.proving) {
       const { provenTxHex, proveDurationMs } = await proveUnshieldedTransfer({
-        sdkNetworkId: 'stagenet', signedTxHex: txHex, proving: args.proving,
+        sdkNetworkId: network, signedTxHex: txHex, proving: args.proving,
       });
       await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
       return { txHex: provenTxHex, proven: true, proveDurationMs };

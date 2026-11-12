@@ -116,7 +116,7 @@
               <!-- No profile to choose: the active wallet's network picks the
                    server. Say which one so the steps below make sense. -->
               <p class="t-caption mb-4">
-                {{ activeLedger9 ? t('midnight.proofServer.activeServerLedger9') : t('midnight.proofServer.activeServerLedger8') }}
+                {{ t(activeLedger9 ? 'midnight.proofServer.activeServerLedger9' : 'midnight.proofServer.activeServerLedger8', activeServer) }}
               </p>
 
               <div class="ps-step">
@@ -449,6 +449,7 @@ const {
   localUrlLedger9Error,
   onLocalUrlLedger9Blur,
   activeLedger9,
+  activeServer,
   zkpaasUrlDraft,
   zkpaasUrlError,
   onZkpaasUrlBlur,

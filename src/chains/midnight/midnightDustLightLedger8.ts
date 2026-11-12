@@ -5,6 +5,7 @@ import { dustHexBytes, type DustLightLedger, type DustSpendEvent } from './midni
 import type { DustBalanceableTransaction } from './midnightTxBuilder';
 
 export const dustLedger8: DustLightLedger<ledger.DustLocalState, ledger.DustSecretKey> = {
+  ledger: 8,
   createState: raw => new ledger.DustLocalState(ledger.LedgerParameters.deserialize(dustHexBytes(raw)).dust),
   publicKey: key => key.publicKey,
   address: (key, network) => DustAddress.encodePublicKey(network, key.publicKey),

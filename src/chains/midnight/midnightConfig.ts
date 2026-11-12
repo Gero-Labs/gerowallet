@@ -21,6 +21,7 @@
  */
 
 import { Network } from '@/models/types';
+import { midnightLedgerOrNewest, type MidnightLedger } from './midnightLedger';
 
 export interface MidnightNetworkEndpoints {
   /** Network identifier (matches `Network` enum). */
@@ -243,25 +244,38 @@ export function nexusMidnightPathFor(network: string, subpath: string): string {
  */
 export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
 
-/** True for the ledger-9 network. Accepts the wallet `Network` value or a `midnight-<id>` slug. */
+/**
+ * True when `network`'s chain runs ledger 9: what the chain last reported,
+ * else the newest ledger (see `midnightLedgerOrNewest`). Never the network
+ * name. Accepts the wallet `Network` value or a `midnight-<id>` slug.
+ */
 export function isLedger9Network(network?: string): boolean {
-  return network?.toLowerCase().replace(/^midnight-/, '') === 'stagenet';
+  return midnightLedgerOrNewest(network) === 9;
 }
 
-/** The Stagenet ledger has different proof circuits from Mainnet/Preprod. */
+/** The proof-server release whose circuits match `ledger`. */
+export function midnightProofServerTagForLedger(ledger: MidnightLedger): string {
+  return ledger === 9 ? '9.0.0-rc.6' : PROOF_SERVER_DOCKER_TAG;
+}
+
+/** The proof-server release for `network`'s chain ledger. */
 export function midnightProofServerTag(network?: string): string {
-  return isLedger9Network(network) ? '9.0.0-rc.6' : PROOF_SERVER_DOCKER_TAG;
+  return midnightProofServerTagForLedger(midnightLedgerOrNewest(network));
 }
 
 /**
  * Host port each ledger's local proof server binds by default. Deliberately
  * different so a user can run both at once — the ledger-8 and ledger-9
  * servers are different circuit families and one server cannot serve both.
- * The wallet picks the URL by the active wallet's network, so there is no
- * profile to switch when moving between networks.
+ * The wallet picks the URL by the ledger of the active wallet's chain, so
+ * there is no profile to switch when moving between networks.
  */
+export function midnightProofServerPortForLedger(ledger: MidnightLedger): number {
+  return ledger === 9 ? 6301 : 6300;
+}
+
 export function midnightProofServerPort(network?: string): number {
-  return isLedger9Network(network) ? 6301 : 6300;
+  return midnightProofServerPortForLedger(midnightLedgerOrNewest(network));
 }
 
 export const DEFAULT_LOCAL_PROOF_SERVER_URL = 'http://localhost:6300';
@@ -278,9 +292,13 @@ export const DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 = 'http://localhost:6301';
  * output. `--rm` removes the container (and its log) when it stops, and the
  * port is bound to loopback so the server is not reachable from the network.
  */
+export function midnightProofServerCommandForLedger(ledger: MidnightLedger): string {
+  const port = midnightProofServerPortForLedger(ledger);
+  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTagForLedger(ledger)} midnight-proof-server`;
+}
+
 export function midnightProofServerCommand(network?: string): string {
-  const port = midnightProofServerPort(network);
-  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server`;
+  return midnightProofServerCommandForLedger(midnightLedgerOrNewest(network));
 }
 
 /**
@@ -288,4 +306,4 @@ export function midnightProofServerCommand(network?: string): string {
  * (it always advertises the ledger-8 profile, see localProverProfile.ts).
  * The same string Settings → Proof server shows for Mainnet and Preprod.
  */
-export const PROOF_SERVER_DOCKER_COMMAND = midnightProofServerCommand();
+export const PROOF_SERVER_DOCKER_COMMAND = midnightProofServerCommandForLedger(8);

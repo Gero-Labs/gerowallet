@@ -2,7 +2,10 @@
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { createKeystore } from 'midnight-v9-unshielded-wallet/v2';
 import type { BalanceAndSignUnshieldedTransferArgs, SyncDustAndBalanceFeesArgs } from './midnightTxBuilder';
-import { midnightLedgerVersion, strictMidnightHex } from './midnightLedger';
+import {
+  MidnightLedgerChangedError, midnightLedgerKey, midnightLedgerVersion, midnightNetworkName, strictMidnightHex,
+} from './midnightLedger';
+import { resolveMidnightLedger } from './midnightChainLedger';
 import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } from './midnightChainIdentity';
 import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
@@ -21,7 +24,7 @@ export function readLedger9UnprovenTransaction(bytes: Uint8Array): ledger.Unprov
 
 /** Throws unless `tx` was built for `network`: the generation tag alone does not validate the embedded network ID. */
 export function assertLedger9TransactionNetwork(network: string, tx: ledger.UnprovenTransaction): void {
-  ledger.Transaction.fromParts(network.toLowerCase()).merge(tx);
+  ledger.Transaction.fromParts(midnightLedgerKey(network)).merge(tx);
 }
 
 /**
@@ -38,10 +41,18 @@ export function isLedger9TransactionFor(network: string, bytes: Uint8Array): boo
   }
 }
 
+/** Throws unless `network`'s chain was last read on ledger 9 (the caller resolves it first). */
+export function requireLedger9Chain(network: string): void {
+  const current = midnightLedgerVersion(network);
+  if (current !== 9) {
+    throw new Error(`Midnight ${midnightNetworkName(network)} runs ledger ${current}; this is a ledger 9 transaction path`);
+  }
+}
+
 export function deserializeLedger9Transaction(network: string, hex: string): ledger.UnprovenTransaction {
-  if (midnightLedgerVersion(network) !== 9) throw new Error('Ledger 9 requires Midnight Stagenet');
+  requireLedger9Chain(network);
   const tx = readLedger9UnprovenTransaction(strictMidnightHex(hex));
-  assertLedger9TransactionNetwork('stagenet', tx);
+  assertLedger9TransactionNetwork(network, tx);
   return tx;
 }
 
@@ -52,7 +63,7 @@ export function signLedger9Transaction(
   secret: Uint8Array,
 ): string {
   const tx = deserializeLedger9Transaction(network, hex);
-  const keystore = createKeystore({ kind: 'schnorr', secret }, 'stagenet');
+  const keystore = ledger9Keystore(secret, midnightLedgerKey(network));
   const key = keystore.getPublicKey();
   for (const [segment, intent] of tx.intents ?? []) {
     const signature = keystore.signData(intent.signatureData(segment));
@@ -76,10 +87,11 @@ export function signLedger9Transaction(
 }
 
 export async function balanceAndSignLedger9Transfer(args: BalanceAndSignUnshieldedTransferArgs): Promise<string> {
+  await resolveMidnightLedger(args.sdkNetworkId);
   const tx = deserializeLedger9Transaction(args.sdkNetworkId, args.unprovenTxHex);
   const fee = await balanceLedger9Fees(args, [tx]);
   const merged = tx.merge(fee);
-  return signLedger9Transaction('stagenet', Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
+  return signLedger9Transaction(args.sdkNetworkId, Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
 }
 
 /** Fee ownership follows the supplied DUST seed, independently of the transaction signer. */
@@ -87,12 +99,12 @@ export async function balanceLedger9Fees(
   args: SyncDustAndBalanceFeesArgs,
   transactions: ledger.UnprovenTransaction[],
 ): Promise<ledger.UnprovenTransaction> {
-  if (midnightLedgerVersion(args.sdkNetworkId) !== 9 || args.endpoints.sdkNetworkId !== 'stagenet') {
-    throw new Error('Midnight endpoint network mismatch');
-  }
+  const network = midnightLedgerKey(args.sdkNetworkId);
+  if (args.endpoints.sdkNetworkId !== network) throw new Error('Midnight endpoint network mismatch');
+  if (await resolveMidnightLedger(network) !== 9) throw new MidnightLedgerChangedError(network, midnightLedgerVersion(network));
   if (!transactions.length) throw new Error('At least one Midnight transaction is required');
   if (!Number.isFinite(args.ttl.getTime()) || args.ttl.getTime() <= Date.now()) throw new Error('Midnight transaction expiry must be in the future');
-  for (const tx of transactions) ledger.Transaction.fromParts('stagenet').merge(tx);
+  for (const tx of transactions) ledger.Transaction.fromParts(network).merge(tx);
   const dustKey = ledger.DustSecretKey.fromSeed(args.dustSecretSeed);
   const controller = new AbortController();
   // The same silence and TTL bounds as the ledger 8 builder (gero-ios#241), not a flat time.
@@ -101,10 +113,10 @@ export async function balanceLedger9Fees(
   try {
     const identity = await readVerifiedMidnightChainIdentity(args.endpoints, controller.signal);
     watchdog.activity();
-    const { state, block } = await reconstructDustState(dustLedger9, dustKey, 'stagenet',
+    const { state, block } = await reconstructDustState(dustLedger9, dustKey, network,
       createDustLightTransport(args.endpoints, controller.signal, reply), progress);
     controller.signal.throwIfAborted();
-    const fee = balanceLightDust9(state, dustKey, transactions, args.ttl, new Date(block.timestamp), block.ledgerParameters);
+    const fee = balanceLightDust9(state, dustKey, network, transactions, args.ttl, new Date(block.timestamp), block.ledgerParameters);
     watchdog.activity();
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal);
     return fee;

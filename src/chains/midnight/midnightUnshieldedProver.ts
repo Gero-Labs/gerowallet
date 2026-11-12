@@ -55,7 +55,8 @@ import { debugLog } from '@/utils/debug';
 import { LocalProvingError } from '@/chains/midnight/midnightShieldedBuilder';
 import { hexToBytes } from '@/chains/midnight/midnightTxBuilder';
 import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
-import { midnightLedgerVersion } from './midnightLedger';
+import type { MidnightLedger } from './midnightLedger';
+import { resolveMidnightLedger } from './midnightChainLedger';
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 
@@ -157,20 +158,29 @@ export async function proveUnshieldedTransfer(
   // Cross-device payloads are already authenticated envelopes and carry their
   // network in the ledger serialization. Do not infer Midnight from the paired
   // Cardano wallet's network (which has no Stagenet counterpart).
+  // Cross-device payloads name neither: the bytes carry both the ledger (the
+  // envelope's version tag) and the network (checked by merging).
   let network = args.sdkNetworkId;
+  let txLedger: MidnightLedger | undefined;
   if (!network) {
-    for (const candidate of ['stagenet', 'mainnet', 'preprod', 'testnet']) {
-      try {
-        const runtime = candidate === 'stagenet' ? await import('@midnightntwrk/ledger-v9') : await import('@midnight-ntwrk/ledger-v8');
-        const decoded = deserializeSignedUnproven(runtime.Transaction, signedBytes);
-        (runtime.Transaction.fromParts(candidate) as unknown as { merge(tx: ledger.UnprovenTransaction): unknown }).merge(decoded);
-        network = candidate;
-        break;
-      } catch { /* Try the next supported network without logging payloads. */ }
+    search: for (const candidateLedger of [9, 8] as const) {
+      const runtime = candidateLedger === 9 ? await import('@midnightntwrk/ledger-v9') : await import('@midnight-ntwrk/ledger-v8');
+      for (const candidate of ['mainnet', 'preprod', 'preview', 'stagenet', 'testnet']) {
+        try {
+          const decoded = deserializeSignedUnproven(runtime.Transaction, signedBytes);
+          (runtime.Transaction.fromParts(candidate) as unknown as { merge(tx: ledger.UnprovenTransaction): unknown }).merge(decoded);
+          network = candidate;
+          txLedger = candidateLedger;
+          break search;
+        } catch { /* Try the next supported network without logging payloads. */ }
+      }
     }
     if (!network) throw new Error('Unsupported Midnight transaction network or ledger format');
+  } else {
+    // The wallet's own send: prove with the ledger its chain runs.
+    txLedger = await resolveMidnightLedger(network);
   }
-  const ledgerMod = midnightLedgerVersion(network) === 9
+  const ledgerMod = txLedger === 9
     ? await import('@midnightntwrk/ledger-v9')
     : await import('@midnight-ntwrk/ledger-v8');
   const signedTx = deserializeSignedUnproven(ledgerMod.Transaction, signedBytes);
@@ -187,7 +197,7 @@ export async function proveUnshieldedTransfer(
   let ledgerTxHash: string | undefined;
   try {
     // An unshielded transfer's only proof is its DUST fee spend.
-    const provider = await walletProvingProvider(args.proving, { sdkNetworkId: network, shielded: false });
+    const provider = await walletProvingProvider(args.proving, { sdkNetworkId: network, shielded: false, ledger: txLedger });
     const proven = await (signedTx as unknown as ProvableTx).prove(
       provider, ledgerMod.CostModel.initialCostModel(),
     );

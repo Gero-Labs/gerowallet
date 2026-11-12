@@ -11,10 +11,11 @@ building/signing; sync and orchestration live in `src/services/midnight-*.ts`.
 | `midnightConfig.ts` | Per-network endpoints (Nexus REST base, gero-sync WS, public indexer/RPC) + Nexus path composition. Networks: stagenet / preprod / mainnet. |
 | `midnightTypes.ts` | Types + decimals (NIGHT=6, DUST=15), addresses, UTxOs, dust state, tx model. |
 | `midnightKeyManager.ts` | HD derivation from BIP39 mnemonic: `m/44'/2400'/account'/role/index`. Roles (wallet-sdk-hd 3.x): NightExternal=0, Dust=2, Zswap=3, Metadata=4. Also derives the Cardano CIP-1852 material (same mnemonic) for DUST registration, and the indexer viewing key (`mn_shield-esk_…` — the encryption SECRET key). |
+| `midnightLedger.ts` / `midnightChainLedger.ts` | Which ledger a chain runs, from the protocol version its indexer reports (`>= 2000000` is ledger 9), never from the network's name. Fails closed (`MIDNIGHT_LEDGER_UNKNOWN`) until read. |
 | `midnightTxBuilder.ts` | Selects the ledger-specific DUST balancing and public-input signing path for a Nexus-built transaction. `midnightLedger9.ts` also exports fee balancing for private-token sends. |
-| `midnightShieldedBuilder.ts` | Selects the ledger-specific private-token builder. Stagenet synchronizes notes, builds a custom-token transfer, and balances DUST through `midnightShieldedLedger9.ts`. |
+| `midnightShieldedBuilder.ts` | Selects the ledger-specific private-token builder. On ledger 9 it synchronizes notes, builds a custom-token transfer, and balances DUST through `midnightShieldedLedger9.ts`. |
 | `midnightShieldSwapBuilder.ts` | Compatibility entry point that refuses invalid native NIGHT privacy conversion before using credentials or a prover. |
-| `midnightPrivateSync.ts` | Local Stagenet note sync with transient unlocked keys, private-token balances, and history. |
+| `midnightPrivateSync.ts` | Local ledger 9 note sync for a chain on ledger 9 from its first block, with transient unlocked keys, private-token balances, and history. A chain that crossed the upgrade (mainnet, preprod) needs the fork-aware wallet (#1452 M9). |
 | `midnightChainIdentity.ts` | Verifies Nexus generation against indexer genesis and isolates checkpoints across resets. |
 | `midnightDustLightSync.ts` | Rebuilds verified DUST state from compact Nexus projections, following only owned spend chains. Ledger-specific adapters handle SDK fee balancing. |
 | `midnightWalletStatePersistence.ts` | Legacy SDK checkpoint storage. Compact DUST sends do not restore these checkpoints. |
@@ -59,7 +60,7 @@ Keep these boundaries when changing transaction code.
 ## Compact DUST synchronization
 
 Deploy Nexus with `POST /api/midnight/{network}/dust/light-sync` before releasing
-this wallet. Mainnet and Preprod use ledger 8; Stagenet uses ledger 9. The endpoint
+this wallet. Each network uses the ledger its chain reports (see "Ledger selection"). The endpoint
 accepts three operations: `snapshot` with a public DUST address, `spends` with a
 pinned block hash and nullifier prefixes, and `commitments` with a pinned block
 hash and inclusive tree ranges. These synchronization requests contain only
@@ -94,6 +95,33 @@ entire original anonymity set; it never narrows to the wallet's next byte. The
 cover excludes nullifiers beginning with four `ff` bytes. Such a nullifier fails
 explicitly until the provider supports it, rather than being treated as unspent.
 
+## Ledger selection
+
+A network can change ledger without changing its name: preprod moved to ledger 9
+in place. So no code path picks a ledger, a proof-server tag or a proving
+profile from the network name.
+
+- `resolveMidnightChain(network)` asks the indexer the wallet syncs from for the
+  protocol version of its tip and of its first block, in one query, and keeps the
+  answer for a minute. `>= 2000000` (wallet SDK 2's `V9NativeForkVersion`) is
+  ledger 9. The sync session reads it at start and every five minutes.
+- Every path that builds, signs, balances or proves resolves it first. Before a
+  read, `midnightLedgerVersion` throws `MidnightLedgerUnknownError`
+  (`MIDNIGHT_LEDGER_UNKNOWN`): nothing is prepared on a guess.
+- The DUST light-sync snapshot carries the block's protocol version too. A
+  snapshot on the other ledger stops the send with `MIDNIGHT_LEDGER_CHANGED`
+  and records what the chain said, so the retry takes the right path.
+- Keys, addresses and Schnorr signatures are the same on both ledgers; key
+  derivation and message signing use ledger 9 for every network and read nothing.
+- The extension pages show the ledger the background last read (mirrored in
+  `midnightStore.chainLedgers`), else the newest one, for the proof-server
+  command and port. That is display only.
+- Guards name the wallet's own network and ledger ("not supported on Midnight
+  Preprod (ledger 9)").
+- Private notes on a chain that crossed the upgrade need ledger 8 history and
+  ledger 9 events: wallet SDK 2's fork-aware shielded wallet (#1452 M9). Until
+  then the ledger 9 note sync runs only on a chain born on ledger 9.
+
 ## Proving
 
 A proof preimage carries the circuit's private inputs. Verified against
@@ -111,7 +139,8 @@ proves a transaction can therefore spend what it reveals.
 
 - **This device** (`midnightDeviceProver.ts`): zkir-v2 2.1.0 (the prover the Nexus
   sidecar uses) in a Worker inside an offscreen document, reached over one
-  dedicated port. Ledger-8 networks only; Stagenet keeps Gero Cloud. Keys are
+  dedicated port. Chains on ledger 8 only; a ledger 9 chain keeps Gero Cloud until
+  the generation 10 keys ship (#1452 M7). Keys are
   pinned to the ledger source's SHA-256 (`midnightZkKeys.ts`): the DUST set ships
   in the package (`src/assets/midnight-zk`, 3.75 MB), the Zswap set (~29 MB) is
   fetched from `VITE_MIDNIGHT_ZK_KEYS_URL` and is needed only by the shielded flag.

@@ -11,6 +11,7 @@ import type { MidnightTransaction } from './midnightTypes';
 import { readVerifiedMidnightChainIdentity, midnightCheckpointNamespace, type MidnightChainIdentity } from './midnightChainIdentity';
 import { saveWalletState } from './midnightWalletStatePersistence';
 import { ledger9ShieldedWallet, type Ledger9ShieldedWallet } from './midnightShieldedWallet9';
+import { midnightLedgerKey } from './midnightLedger';
 
 export interface MidnightPrivateSyncArgs {
   walletId: string;
@@ -57,8 +58,14 @@ async function bounded<T>(work: Promise<T>): Promise<T> {
 type Wallet = Ledger9ShieldedWallet;
 let current: PrivateSync | undefined;
 
+/** The unshielded address prefix of `network`'s wallets: `mn_addr1` on mainnet, `mn_addr_<network>1` elsewhere. */
+function addressPrefix(network: string): string {
+  return network === 'mainnet' ? 'mn_addr1' : `mn_addr_${network}1`;
+}
+
 class PrivateSync {
   readonly seed: Uint8Array;
+  private readonly network: string;
   private readonly owner: string | null;
   private active = true;
   private busy = false;
@@ -74,15 +81,16 @@ class PrivateSync {
 
   constructor(readonly args: MidnightPrivateSyncArgs) {
     this.seed = args.seed.slice();
+    this.network = midnightLedgerKey(args.network);
     this.owner = midnightStore.activeWalletKey;
   }
 
   private isCurrent() {
     const logged = walletStore.loggedWallet;
-    return this.active && current === this && !!this.owner && this.owner.startsWith('mn_addr_stagenet1')
+    return this.active && current === this && !!this.owner && this.owner.startsWith(addressPrefix(this.network))
       && midnightStore.activeWalletKey === this.owner && !walletStore.isLocked
       && String(logged?.id) === this.args.walletId && logged?.chain === 'Midnight'
-      && String(logged?.network).toLowerCase() === 'stagenet';
+      && midnightLedgerKey(String(logged?.network)) === this.network;
   }
 
   async start() {
@@ -118,12 +126,12 @@ class PrivateSync {
         if (!this.isCurrent()) return;
         this.identity = identity;
         this.keys = ledger.ZswapSecretKeys.fromSeed(this.seed);
-        const expected = decodeShieldedAddress9('stagenet', midnightStore.addresses.shielded);
+        const expected = decodeShieldedAddress9(this.network, midnightStore.addresses.shielded);
         if (expected.coinPublicKey.toHexString() !== this.keys.coinPublicKey
           || expected.encryptionPublicKey.toHexString() !== this.keys.encryptionPublicKey)
           throw new Error('Private key does not belong to the active wallet');
         this.history = new InMemoryTransactionHistoryStorage(TransactionHistory.ShieldedTransactionHistoryEntrySchema);
-        this.wallet = ledger9ShieldedWallet('stagenet', this.args.endpoints, this.history).startWithSecretKeys(this.keys);
+        this.wallet = ledger9ShieldedWallet(this.network, this.args.endpoints, this.history).startWithSecretKeys(this.keys);
         // Cold replay reconstructs private history too. A state-only checkpoint
         // cannot recover historical spends for a newly restored wallet.
         midnightActions.setPrivateSyncStatus('syncing');
@@ -188,11 +196,14 @@ class PrivateSync {
   }
 }
 
-/** Copies the ephemeral seed immediately; callers retain ownership of their input. */
+/**
+ * The ledger 9 private-note sync, for a chain that was on ledger 9 from its
+ * first block (the session checks that). Copies the ephemeral seed
+ * immediately; callers retain ownership of their input.
+ */
 export async function startMidnightPrivateSync(args: MidnightPrivateSyncArgs): Promise<void> {
   if (args.seed.length !== 32) throw new Error('Invalid private wallet seed');
-  if (args.endpoints.sdkNetworkId !== 'stagenet'
-    || !['stagenet', 'Stagenet', 'midnight-stagenet'].includes(args.network)) return;
+  if (args.endpoints.sdkNetworkId !== midnightLedgerKey(args.network)) return;
   const next = new PrivateSync(args);
   const previous = current;
   current = next;

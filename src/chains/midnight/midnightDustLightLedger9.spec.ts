@@ -42,9 +42,9 @@ function fundedFixture() {
     const nullifiers = result.events.flatMap(event => event.content.tag === 'dustSpendProcessed'
       ? [littleEndianHex((event.content as { nullifier: bigint }).nullifier)] : []);
     if (nullifiers.length) transactions.push({ hash: height.toString(16).padStart(64, '0'), matchedNullifiers: nullifiers,
-      protocolVersion: 2, block: { hash: height.toString(16).padStart(64, '0'), height,
+      protocolVersion: 2_001_100, block: { hash: height.toString(16).padStart(64, '0'), height,
         ledgerParameters: hex(chain.parameters.serialize()) },
-      dustLedgerEvents: result.events.map(event => ({ raw: hex(event.serialize()), protocolVersion: 2 })) });
+      dustLedgerEvents: result.events.map(event => ({ raw: hex(event.serialize()), protocolVersion: 2_001_100 })) });
     time = new Date(time.getTime() + 1000);
   };
   const registration = ledger.Intent.new(new Date(time.getTime() + 300000));
@@ -62,10 +62,10 @@ function fundedFixture() {
     apply(ledger.Transaction.fromParts('stagenet', undefined, undefined, intent));
   }
   const update = (from: number, to: number): CollapsedDustTree => ({ startIndex: from, endIndex: to,
-    protocolVersion: 2, update: hex(ledger.DustStateMerkleTreeCollapsedUpdate.newFromCommitmentTree(
+    protocolVersion: 2_001_100, update: hex(ledger.DustStateMerkleTreeCollapsedUpdate.newFromCommitmentTree(
       chain.dust.utxo, BigInt(from), BigInt(to)).serialize()) });
   const snapshot: DustSnapshot = { version: 1, network: 'midnight-stagenet', block: {
-    hash: 'cd'.repeat(32), height, timestamp: time.getTime(), protocolVersion: 2,
+    hash: 'cd'.repeat(32), height, timestamp: time.getTime(), protocolVersion: 2_001_100,
     ledgerParameters: hex(chain.parameters.serialize()), dustGenerationEndIndex: 1, dustCommitmentEndIndex: 4,
     dustGenerationMerkleTreeRoot: root(local.generatingTreeRoot()), dustCommitmentMerkleTreeRoot: root(local.commitmentTreeRoot()),
   }, generations: initial.map(({ coin, generation, index }) => ({ __typename: 'DustGenerationsItem',
@@ -102,7 +102,7 @@ describe('funded ledger-9 DUST projection', () => {
     const f = fundedFixture();
     try {
       const { state, block } = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport);
-      const fee = balanceLightDust9(state, f.key, [ledger.Transaction.fromParts('stagenet')],
+      const fee = balanceLightDust9(state, f.key, 'stagenet', [ledger.Transaction.fromParts('stagenet')],
         new Date(Date.now() + 300000), new Date(block.timestamp), block.ledgerParameters);
       const spends = [...fee.intents!.values()].flatMap(intent => intent.dustActions?.spends ?? []);
       expect(spends.length).toBeGreaterThan(0);

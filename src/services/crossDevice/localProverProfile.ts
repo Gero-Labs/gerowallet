@@ -1,4 +1,4 @@
-import { midnightProofServerTag } from '@/chains/midnight/midnightConfig';
+import { midnightProofServerTagForLedger } from '@/chains/midnight/midnightConfig';
 import type { UnprovenTransaction as Ledger8UnprovenTransaction } from '@midnight-ntwrk/ledger-v8';
 import type { UnprovenTransaction as Ledger9UnprovenTransaction } from '@midnightntwrk/ledger-v9';
 
@@ -10,7 +10,7 @@ export function localProverProfile(value: unknown): LocalProverProfile {
 
 /** One explicitly configured server; Cardano pairing does not choose its ledger. */
 export function localProverTag(profile: LocalProverProfile): string {
-  return midnightProofServerTag(profile === 'stagenet' ? 'stagenet' : 'mainnet');
+  return midnightProofServerTagForLedger(profile === 'stagenet' ? 9 : 8);
 }
 
 /** Validate actual serialized bytes, not the peer's advertised version string. */

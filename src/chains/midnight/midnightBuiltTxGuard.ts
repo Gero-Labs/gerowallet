@@ -20,11 +20,12 @@
  * structural view (ledger 9 wraps a verifying key as `{ tag, value }`).
  */
 
-// Ledger-8 codecs are static: WalletBg imports this module, and in the background's
-// single iife an inlined `await import()` of this package reads a namespace const
-// declared after it (scripts/check-bundle-tdz.mjs). Ledger 9's stays lazy.
-import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
+// Address codecs come from wallet SDK 2 (`midnight-v9-address-format`), loaded
+// lazily as before; the SDK 1.x package's dynamic import was a bundle TDZ hazard
+// (scripts/check-bundle-tdz.mjs), so it is not imported here at all.
 import { debugLog } from '@/utils/debug';
+// Static: a dynamic import of it is a bundle TDZ hazard in the background's single iife.
+import { resolveMidnightLedger } from './midnightChainLedger';
 
 type KeyLike = string | { value?: unknown };
 
@@ -282,8 +283,9 @@ export async function assertMidnightDustRegistrationMatches(
 export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, hex: string): Promise<MidnightTxView> {
   const ledgerHelpers = await loadModule(() => import('./midnightLedger'));
   if (!ledgerHelpers) throw new MidnightBuiltTxUnreadableError(false);
-  const { midnightLedgerVersion, strictMidnightHex } = ledgerHelpers;
-  const version = midnightLedgerVersion(sdkNetworkId);
+  const { strictMidnightHex } = ledgerHelpers;
+  // The ledger the chain runs, read from the chain: Nexus must have built for it.
+  const version = await resolveMidnightLedger(sdkNetworkId);
   let bytes: Uint8Array;
   try {
     bytes = strictMidnightHex(hex);
@@ -314,7 +316,7 @@ export async function decodeUnprovenMidnightTransaction(sdkNetworkId: string, he
     throw new MidnightBuiltTxUnreadableError(!!ledger9 && ledger9.isLedger9TransactionFor(sdkNetworkId, bytes));
   }
   // The ledger refuses to merge transactions of different networks.
-  ledger.Transaction.fromParts(sdkNetworkId.toLowerCase()).merge(tx);
+  ledger.Transaction.fromParts(ledgerHelpers.midnightLedgerKey(sdkNetworkId)).merge(tx);
   return tx as unknown as MidnightTxView;
 }
 
@@ -329,23 +331,19 @@ async function loadModule<M>(load: () => Promise<M>): Promise<M | null> {
 
 const loadLedger9 = () => loadModule(() => import('./midnightLedger9'));
 
-/** Bech32m → ledger values for `sdkNetworkId`, with the address format of its ledger. */
+/**
+ * Bech32m → ledger values for `sdkNetworkId`. Addresses are encoded the same
+ * on both ledgers, so this needs no chain read.
+ */
 export async function midnightAddressDecoder(sdkNetworkId: string): Promise<{
   unshieldedHex(bech32: string): string;
   dustPublicKey(bech32: string): bigint;
 }> {
-  const { midnightLedgerVersion } = await import('./midnightLedger');
-  const id = sdkNetworkId.toLowerCase();
-  if (midnightLedgerVersion(sdkNetworkId) === 9) {
-    const f = await import('midnight-v9-address-format');
-    return {
-      unshieldedHex: (bech32) => lower(f.UnshieldedAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).hexString),
-      dustPublicKey: (bech32) => f.DustAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).data,
-    };
-  }
+  const id = sdkNetworkId.trim().toLowerCase().replace(/^midnight-/, '');
+  const f = await import('midnight-v9-address-format');
   return {
-    unshieldedHex: (bech32) => lower(UnshieldedAddress.codec.decode(id, MidnightBech32m.parse(bech32)).hexString),
-    dustPublicKey: (bech32) => DustAddress.codec.decode(id, MidnightBech32m.parse(bech32)).data,
+    unshieldedHex: (bech32) => lower(f.UnshieldedAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).hexString),
+    dustPublicKey: (bech32) => f.DustAddress.codec.decode(id, f.MidnightBech32m.parse(bech32)).data,
   };
 }
 

@@ -11,6 +11,7 @@
  */
 
 import { getMidnightEndpoints, isLedger9Network } from '@/chains/midnight/midnightConfig';
+import { midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
 import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
 import type { ZkpaasSettings } from '@/chains/midnight/midnightZkpaas';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
@@ -46,8 +47,9 @@ export interface ProofServerPreference extends ZkpaasSettings {
 }
 
 /**
- * The local proof-server URL for a network's circuit family. Ledger 8
- * (mainnet, preprod) → `localUrl`; ledger 9 (stagenet) → `localUrlLedger9`.
+ * The local proof-server URL for the circuit family of `network`'s chain
+ * ledger: ledger 8 → `localUrl`, ledger 9 → `localUrlLedger9`. The ledger is
+ * what the chain last reported (else the newest), never the network name.
  * Accepts both the wallet `Network` value and a `midnight-<id>` slug.
  */
 export function localUrlForNetwork(network: string, ps: Pick<ProofServerPreference, 'localUrl' | 'localUrlLedger9'>): string {
@@ -109,8 +111,10 @@ export type WalletProver = 'device' | 'local' | 'zkpaas' | 'cloud';
 
 /**
  * Networks whose built-in circuits this device can prove: the ledger-8 key
- * set is pinned in midnightZkKeys.ts. Stagenet (ledger 9) has other keys and
- * keeps the proof-server paths.
+ * set is pinned in midnightZkKeys.ts, so only a chain on ledger 8 (as last
+ * read). A ledger 9 chain has other keys and keeps the proof-server paths.
+ * Before any read the chain is presumed on ledger 9: a preselection only, as
+ * the background reads the chain again before it builds or proves.
  */
 export function canProveOnDevice(network: string): boolean {
   try {
@@ -229,8 +233,8 @@ export function resolveDappProvingTarget(network: string, ps: ProofServerPrefere
     }
     if (target.reason === 'local-url-missing') {
       throw new DappProvingUnavailableError(
-        `GeroWallet has no local proof server URL for the ${isLedger9Network(network) ? 'ledger-9 (Stagenet)' : 'ledger-8'} `
-        + "circuit family. Set one in GeroWallet's Midnight proof-server settings.",
+        `GeroWallet has no local proof server URL for Midnight ${midnightNetworkName(network)} `
+        + `(ledger ${midnightLedgerOrNewest(network)}). Set one in GeroWallet's Midnight proof-server settings.`,
       );
     }
     throw new DappProvingUnavailableError(
