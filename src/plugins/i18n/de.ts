@@ -5633,7 +5633,7 @@ export default {
   'midnight.sponsor.otherNetwork': 'Anderes Netzwerk',
   'midnight.sponsor.offNote': 'Kein DUST. Ein Sendevorgang fragt, wer zahlt.',
   'midnight.sponsor.noteNotChecked': 'Das DUST-Guthaben von {name} wurde auf diesem Gerät noch nicht gelesen.',
-  'midnight.sponsor.noteCharging': 'Noch nicht genug DUST. Ein Sendevorgang wartet darauf.',
+  'midnight.sponsor.noteCharging': 'Noch nicht genug DUST für eine Gebühr. Sie kann erst für eine Transaktion zahlen, wenn mehr DUST entstanden ist.',
   'midnight.sponsor.noteOtherNetwork': '{name} ist in {sponsorNetwork}. DUST wechselt nicht das Netzwerk.',
   'midnight.send.rawUnitsNote': 'Die Dezimalstellen dieses Tokens sind nicht bekannt, daher werden Beträge in Basiseinheiten angegeben.',
   'midnight.send.shieldedBalanceNote': 'Privates Guthaben. Wird mit dem Shielded-Sync aktualisiert.',
