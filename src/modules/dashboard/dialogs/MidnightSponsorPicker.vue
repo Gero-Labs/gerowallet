@@ -142,16 +142,27 @@ function select(candidate: SponsorCandidate): void {
   emit('update:modelValue', props.modelValue === candidate.walletId ? null : candidate.walletId);
 }
 
+/** True once a lookup has answered, so `candidates` says who can pay. */
+const loaded = ref(false);
+
+/**
+ * Drop a selection that can't pay now (not ready, or not a candidate), so a
+ * stale pick can't be carried into the send.
+ */
+function dropUnpayableSelection(): void {
+  if (props.modelValue == null) return;
+  const chosen = candidates.value.find((c) => c.walletId === props.modelValue);
+  if (!chosen || chosen.state !== 'ready') emit('update:modelValue', null);
+}
+
 async function refresh(): Promise<void> {
   loading.value = true;
   try {
     const result = await loadSponsorCandidates(props.senderWalletId, props.network);
     candidates.value = result.candidates;
     lookupIncomplete.value = result.lookupIncomplete;
-    // Drop a selection that is no longer payable, so a stale pick can't be
-    // carried into the send.
-    const chosen = result.candidates.find((c) => c.walletId === props.modelValue);
-    if (props.modelValue != null && (!chosen || chosen.state !== 'ready')) emit('update:modelValue', null);
+    loaded.value = true;
+    dropUnpayableSelection();
   } finally {
     loading.value = false;
   }
@@ -161,6 +172,12 @@ onMounted(refresh);
 // Scalar key: a getter returning a new array would re-fire every tick and
 // turn this into a polling loop against Nexus.
 watch(() => `${props.senderWalletId}|${props.network}`, refresh);
+// The parent can write a selection after the lookup answered (a saved sponsor
+// restored by the send screen): check it against the candidates already read.
+// While a lookup is in flight, refresh() checks it when that lookup answers.
+watch(() => props.modelValue, () => {
+  if (loaded.value && !loading.value) dropUnpayableSelection();
+});
 </script>
 
 <style lang="scss" scoped>

@@ -22,7 +22,7 @@ const pending = sponsorStateFromDestination(ref(4, 'Pending'), {
 
 const lookup = vi.hoisted(() => ({ candidates: [] as SponsorCandidate[] }));
 vi.mock('@/chains/midnight/midnightSponsorLookup', () => ({
-  loadSponsorCandidates: async () => ({ candidates: lookup.candidates, incomplete: false }),
+  loadSponsorCandidates: async () => ({ candidates: lookup.candidates, lookupIncomplete: false }),
 }));
 vi.mock('@/chains/midnight/midnightSponsorLinks', () => ({
   loadSponsorLinks: async () => ({ 1: { walletId: 1, sponsorWalletId: 2, sponsorName: 'Low', network: 'Mainnet', at: 0 } }),
@@ -60,6 +60,23 @@ describe('a sponsor short of a fee', () => {
     expect(rows[1].text()).not.toContain('midnight.sponsor.relaying');
     // A registration still on Cardano keeps "Registering, not ready yet".
     expect(rows[2].text()).toContain('midnight.sponsor.relaying');
+    expect(wrapper.emitted('update:modelValue')).toEqual([[null]]);
+  });
+
+  // The send screen restores a saved sponsor after the picker's lookup may already
+  // have answered: the picker must still drop it when it can't pay.
+  it('clears a saved charging sponsor written after the lookup answered', async () => {
+    lookup.candidates = [ready, charging, pending];
+    const wrapper = mount(Picker, { props: { modelValue: null, senderWalletId: 1, network: 'Mainnet' }, global: { stubs } });
+    views.push(wrapper);
+    await settle();
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    await wrapper.setProps({ modelValue: 2 });
+    await settle();
+    expect(wrapper.emitted('update:modelValue')).toEqual([[null]]);
+    // A ready sponsor written the same way stays.
+    await wrapper.setProps({ modelValue: 3 });
+    await settle();
     expect(wrapper.emitted('update:modelValue')).toEqual([[null]]);
   });
 
