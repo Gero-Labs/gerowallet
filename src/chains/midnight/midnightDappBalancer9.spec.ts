@@ -80,6 +80,18 @@ describe('balanceUnsealedTransaction on a ledger 9 chain', () => {
     await expect(balanceDappTransaction9(await args(), deps)).rejects.toThrow('Midnight Preprod runs ledger 8');
   });
 
+  it('selects only UTxO rows the wallet\'s own address owns', async () => {
+    const foreign = { ...utxo(50n, 1), owner: MidnightBech32m.encode('preprod', new UnshieldedAddress(Buffer.from(shop, 'hex'))).asString() };
+    const result = await balanceDappTransaction9(await args({ utxos: [foreign, utxo(100n)] }), deps);
+    const sealed = ledger.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(result.txHex, 'hex'));
+    const intent = sealed.intents!.get(1)!;
+    const offer = intent.fallibleUnshieldedOffer ?? intent.guaranteedUnshieldedOffer!;
+    expect(offer.inputs.map(input => input.value)).toEqual([100n]);
+    // A foreign row alone funds nothing.
+    await expect(balanceDappTransaction9(await args({ utxos: [{ ...foreign, value: 1_000n }] }), deps)).rejects.toThrow();
+    expect(balanceFees).toHaveBeenCalledTimes(1);
+  });
+
   it('fails cleanly when the wallet cannot cover the transaction', async () => {
     await expect(balanceDappTransaction9(await args({ utxos: [utxo(3n)] }), deps)).rejects.toThrow();
     expect(balanceFees).not.toHaveBeenCalled();

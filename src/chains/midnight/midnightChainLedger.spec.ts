@@ -72,6 +72,23 @@ describe('reading the chain', () => {
     await expect(readMidnightChainLedger(endpoints)).resolves.toMatchObject({ bornOnLedger9: true });
   });
 
+  it('an answer without a first block is a fresh read with the birth unknown, not re-fetched on every call', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => indexerAnswer({ data: { tip: { protocolVersion: 2_001_100 }, genesis: null } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const chain = await resolveMidnightChain('Preprod');
+    expect(chain).toMatchObject({ ledger: 9, bornOnLedger9: null });
+    // Unknown birth is never taken for a chain born on ledger 9.
+    expect(chain.bornOnLedger9).not.toBe(true);
+    await resolveMidnightChain('preprod');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // A later tip-only report keeps it a read; a known birth is not erased by an answer without one.
+    noteMidnightProtocolVersion('preprod', 2_001_100, 1_000_000);
+    noteMidnightProtocolVersion('preprod', 2_001_100, null);
+    expect(knownMidnightLedger('preprod')).toBe(9);
+    await expect(resolveMidnightChain('preprod')).resolves.toMatchObject({ bornOnLedger9: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['an HTTP error', indexerAnswer({}, 503)],
     ['GraphQL errors', indexerAnswer({ errors: [{ message: 'nope' }], data: null })],
