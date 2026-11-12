@@ -249,14 +249,19 @@ async function reconstructDustStateOnce<State, Key>(
           // DUST state resets once, at the ledger 9 crossing: every coin the
           // snapshot lists was created on the snapshot's ledger, so a spend
           // from before the crossing (another ledger's events) cannot be one
-          // of them. Skip that history rather than fail on it.
+          // of them. Skip that history, but only while it touches no owned
+          // nullifier: a match means the reset assumption does not hold, and
+          // the reconstructed state would be wrong, so fail loudly.
           // A malformed version is a bad page, not another ledger's history.
           if (!Number.isSafeInteger(tx.protocolVersion) || tx.protocolVersion < 0) throw new Error('Invalid DUST spend protocol version');
-          if (!onLedger(tx.protocolVersion, ledger.ledger)) continue;
+          const sameLedger = onLedger(tx.protocolVersion, ledger.ledger);
           for (const encoded of tx.matchedNullifiers) {
             if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
             const nullifier = BigInt(`0x${Buffer.from(encoded, 'hex').reverse().toString('hex')}`);
             if (!live.has(nullifier)) continue;
+            if (!sameLedger) {
+              throw new Error(`An owned DUST coin was spent by a transaction from another ledger (protocol version ${tx.protocolVersion}); the DUST reset at the ledger crossing does not hold`);
+            }
             const prior = matches.get(nullifier);
             if (prior && prior.hash !== tx.hash) throw new Error('Conflicting DUST spends');
             matches.set(nullifier, tx);

@@ -119,21 +119,28 @@ function utxoTime(ctime: number | undefined): Date {
   return new Date(ctime < 1e12 ? ctime * 1000 : ctime);
 }
 
-/** The wallet's spendable UTxOs, as the SDK's coin selection reads them. */
+/**
+ * The wallet's spendable UTxOs, as the SDK's coin selection reads them. Only
+ * rows the indexer reports as owned by this key's address: a stale or foreign
+ * row would be claimed and signed as the wallet's own, and the node rejects it.
+ */
 function walletState(
   network: string,
   keystore: ReturnType<typeof ledger9Keystore>,
   utxos: readonly MidnightUnshieldedUtxo[],
 ) {
   const address = keystore.getAddress();
+  const bech32 = keystore.getBech32Address().toString();
+  const ownBech32 = bech32.toLowerCase();
   const created = utxos
+    .filter(u => typeof u.owner === 'string' && u.owner.toLowerCase() === ownBech32)
     .filter(u => /^[0-9a-fA-F]{64}$/.test(u.tokenType) && /^[0-9a-fA-F]{64}$/.test(u.intentHash) && u.value > 0n)
     .map(u => new UnshieldedState.UtxoWithMeta({
       utxo: { value: u.value, owner: address, type: u.tokenType.toLowerCase(), intentHash: u.intentHash.toLowerCase(), outputNo: u.outputIndex },
       meta: { ctime: utxoTime(u.ctime), registeredForDustGeneration: u.registeredForDustGeneration },
     }));
   const publicKey = {
-    publicKey: keystore.getPublicKey(), addressHex: address, address: keystore.getBech32Address().toString(),
+    publicKey: keystore.getPublicKey(), addressHex: address, address: bech32,
   };
   const applied = CoreWallet.applyUpdate(CoreWallet.init(publicKey, network), { createdUtxos: created, spentUtxos: [], status: 'SUCCESS' });
   if (applied._tag === 'Left') throw applied.left;
