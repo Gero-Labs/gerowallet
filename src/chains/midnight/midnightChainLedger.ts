@@ -44,7 +44,8 @@ export async function readMidnightChainLedger(
   try {
     if (body?.errors?.length) throw new Error('indexer error');
     const tip = protocolVersionOf(body?.data?.tip?.protocolVersion);
-    const genesis = body?.data?.genesis ? protocolVersionOf(body.data.genesis.protocolVersion) : undefined;
+    // No first block in the answer: the read still counts, with the birth unknown.
+    const genesis = body?.data?.genesis ? protocolVersionOf(body.data.genesis.protocolVersion) : null;
     return noteMidnightProtocolVersion(endpoints.sdkNetworkId, tip, genesis);
   } catch {
     throw new MidnightLedgerUnknownError(endpoints.sdkNetworkId);

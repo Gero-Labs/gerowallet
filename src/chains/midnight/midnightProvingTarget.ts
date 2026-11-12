@@ -113,6 +113,8 @@ export type WalletProver = 'device' | 'local' | 'zkpaas' | 'cloud';
  * Networks whose built-in circuits this device can prove: the ledger-8 key
  * set is pinned in midnightZkKeys.ts, so only a chain on ledger 8 (as last
  * read). A ledger 9 chain has other keys and keeps the proof-server paths.
+ * Before any read the chain is presumed on ledger 9: a preselection only, as
+ * the background reads the chain again before it builds or proves.
  */
 export function canProveOnDevice(network: string): boolean {
   try {

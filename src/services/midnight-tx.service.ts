@@ -433,7 +433,7 @@ export async function balanceConnectorTransaction(
   }) as { data: { success: boolean; tx?: string; error?: string } };
   assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
-    throw new Error(response?.data?.error || 'Midnight balancing failed');
+    throw backgroundError(response?.data?.error, 'Midnight balancing failed');
   }
   return { tx: response.data.tx };
 }
@@ -464,7 +464,8 @@ export async function buildConnectorIntent(
   assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
     // `code` is a connector error code (InsufficientFunds) the panel relays on decline.
-    throw Object.assign(new Error(response?.data?.error || 'Building the intent failed'), { code: response?.data?.code });
+    // A ledger refusal (MIDNIGHT_LEDGER_UNKNOWN) is said in the user's language, as on a send.
+    throw Object.assign(backgroundError(response?.data?.error, 'Building the intent failed'), { code: response?.data?.code });
   }
   return { tx: response.data.tx };
 }
