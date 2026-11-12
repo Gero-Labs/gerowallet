@@ -243,16 +243,16 @@
                 <span>{{ $t('midnight.send.publicTxNote') }}</span>
               </div>
 
-              <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
+              <!-- DUST fee note (under 1 DUST; sending does NOT reset DUST —
                    verified on preprod, the old "reset" was an estimator bug).
                    None while sends are paused: nothing is sent, so no fee. -->
               <template v-if="!writesPaused">
                 <GNote v-if="!isDustLow" icon="mdi-information-outline" class="mt-3">
                   {{ $t('midnight.send.dustResetWarning') }}
                 </GNote>
-                <!-- Low-DUST hint: informational while any DUST remains (the tiny
-                     fee still clears); red only when DUST is genuinely empty. -->
-                <GNote v-else-if="isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+                <!-- Low-DUST hint: informational while there is more DUST than a
+                     fee needs; red below 1 DUST, where a send may not clear. -->
+                <GNote v-else-if="isDustShort" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
                   {{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
                 </GNote>
                 <div v-else class="midnight-info-note mt-3">
@@ -424,6 +424,7 @@
 </template>
 
 <script setup lang="ts">
+import { MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY, dustShortForFee } from '@/chains/midnight/midnightFeeEstimate';
 import { ref, computed, watch, nextTick, toRefs, onBeforeUnmount } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
@@ -734,15 +735,17 @@ const isAmountValid = computed(() =>
 //    store's Path-A `dustState` hid it for a cNIGHT-backed wallet, issue 1118) ──
 const dustBattery = computed<{ percent: number } | null>(() =>
   dustBatteryPercent(dustLive.dustBalance.value, dustLive.dustCap.value));
-const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
-
-// Truly empty DUST: the (~1 Speck) fee can't be paid, so the hint escalates to
-// the error tone. Any nonzero DUST covers the fee and stays informational.
-const isDustEmpty = computed(() => dustLive.settled.value && dustLive.dustBalance.value <= 0n);
+// Too little DUST for a send's fee (under 1 DUST: ledger 9 fees are around
+// 0.6 DUST), so the hint escalates to the error tone. More than that stays
+// informational.
+const isDustShort = computed(() => dustLive.settled.value && dustShortForFee(dustLive.dustBalance.value));
+// The hint names the battery level, so it needs a battery to show.
+const isDustLow = computed(() => !!dustBattery.value && (dustBattery.value.percent < 20 || isDustShort.value));
 
 // ── Review model (fed to the shared TransactionDetailsCard, same as the
 //    dashboard dialog) ──
-const feeEstimateDisplay = '< 0.000001';
+// Ledger 9's fee floor: see midnightFeeEstimate.ts (#1452 M14).
+const feeEstimateDisplay = MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY;
 
 function truncate(addr: string): string {
   if (!addr) return '';

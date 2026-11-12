@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn() }));
 vi.mock('./midnightPrivateSync', () => ({ startMidnightPrivateSync: mocks.start, stopMidnightPrivateSync: mocks.stop }));
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 import { prepareMidnightPrivateSession, activateMidnightPrivateSession, clearMidnightPrivateSession, midnightPrivateSessionEpoch } from './midnightPrivateSyncSession';
 
 beforeEach(async () => { await clearMidnightPrivateSession(); vi.clearAllMocks(); });
@@ -48,5 +49,17 @@ describe('private key unlock lifetime', () => {
     await clearMidnightPrivateSession(1);
     await activateMidnightPrivateSession(2, 'Stagenet');
     expect(mocks.start).toHaveBeenCalledOnce();
+  });
+});
+
+describe('which private sync a chain gets (#1452 M9)', () => {
+  it('a chain that crossed the ledger 9 upgrade gets the fork-aware wallet; one born on ledger 9 does not', async () => {
+    useMidnightChains({ preprod: [L9, L8], stagenet: [L9, L9] });
+    prepareMidnightPrivateSession(1, 'Preprod', new Uint8Array(32).fill(7), midnightPrivateSessionEpoch());
+    await activateMidnightPrivateSession(1, 'Preprod');
+    expect(mocks.start).toHaveBeenLastCalledWith(expect.objectContaining({ network: 'Preprod', forking: true }));
+    prepareMidnightPrivateSession(1, 'Stagenet', new Uint8Array(32).fill(7), midnightPrivateSessionEpoch());
+    await activateMidnightPrivateSession(1, 'Stagenet');
+    expect(mocks.start).toHaveBeenLastCalledWith(expect.objectContaining({ network: 'Stagenet', forking: false }));
   });
 });

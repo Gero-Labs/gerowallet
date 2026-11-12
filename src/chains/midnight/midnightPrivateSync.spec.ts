@@ -7,12 +7,12 @@ import type { ShieldedWalletState, ShieldedTransactionHistoryEntry } from 'midni
 import type { MidnightPrivateSyncArgs } from './midnightPrivateSync';
 
 const h = vi.hoisted(() => ({
-  factory: vi.fn(), identity: vi.fn(), save: vi.fn(), history: vi.fn(), publish: vi.fn(), status: vi.fn(),
+  factory: vi.fn(), forking: vi.fn(), identity: vi.fn(), save: vi.fn(), history: vi.fn(), publish: vi.fn(), status: vi.fn(),
   store: { activeWalletKey: 'mn_addr_stagenet1owner', privateSyncStatus: 'idle', addresses: { shielded: '' },
     chainIdentity: { network: 'midnight-stagenet', generation: 1, genesisHash: `0x${'ab'.repeat(32)}` } },
   wallet: { loggedWallet: { id: 7, network: 'Stagenet', chain: 'Midnight' }, isLocked: false },
 }));
-vi.mock('midnight-v9-shielded', () => ({ CustomShieldedWallet: h.factory }));
+vi.mock('midnight-v9-shielded', () => ({ CustomShieldedWallet: h.factory, ShieldedWallet: h.forking }));
 vi.mock('midnight-v9-abstractions', () => ({
   InMemoryTransactionHistoryStorage: class { getAll() { return h.history(); } },
 }));
@@ -212,3 +212,52 @@ describe('private sync ownership and generation', () => {
       timestamp: 123000, fee: 4n, status: 'confirmed', counterparty: '', isShielded: true }]);
   });
 });
+
+// #1452 M9: mainnet and preprod crossed the ledger 9 upgrade, so their notes
+// start on ledger 8. The fork-aware wallet reads both sides.
+describe('private sync on a chain that crossed the upgrade', () => {
+  beforeEach(() => {
+    vi.resetAllMocks(); vi.useFakeTimers();
+    const keys = ledger.ZswapSecretKeys.fromSeed(seed);
+    publicKey = keys.coinPublicKey; encryptionKey = keys.encryptionPublicKey;
+    h.store.addresses.shielded = ShieldedAddress.codec.encode('preprod', new ShieldedAddress(
+      ShieldedCoinPublicKey.fromHexString(publicKey), ShieldedEncryptionPublicKey.fromHexString(encryptionKey))).toString();
+    keys.clear();
+    h.wallet.isLocked = false; h.wallet.loggedWallet.id = 7; h.wallet.loggedWallet.network = 'Preprod';
+    h.store.activeWalletKey = 'mn_addr_preprod1owner';
+    h.store.chainIdentity = { network: 'midnight-preprod', generation: 1, genesisHash: identity.genesis_hash };
+    h.identity.mockResolvedValue({ ...identity, network: 'midnight-preprod' });
+    h.history.mockResolvedValue([]); h.save.mockResolvedValue(undefined);
+    h.status.mockImplementation(status => { h.store.privateSyncStatus = status; });
+    h.publish.mockImplementation(() => { h.store.privateSyncStatus = 'synced'; });
+  });
+  afterEach(async () => {
+    await stopMidnightPrivateSync(); vi.useRealTimers();
+    h.wallet.loggedWallet.network = 'Stagenet';
+  });
+
+  it('starts wallet SDK 2\'s fork-aware wallet with both ledgers\' keys, as methods', async () => {
+    const forkEvents = new Subject<ShieldedWalletState>();
+    // A class, so a call that loses `this` fails here as it would in the SDK.
+    class ForkingWallet {
+      state = forkEvents;
+      started: unknown;
+      async start(this: ForkingWallet, keys: unknown) { this.started = keys; }
+      async stop(this: ForkingWallet) { /* stopped */ }
+    }
+    const forking = new ForkingWallet();
+    const startWithKeys = vi.fn(async () => forking);
+    h.forking.mockReturnValue({ startWithKeys });
+    await startMidnightPrivateSync({ ...args(), network: 'Preprod', forking: true,
+      endpoints: { ...args().endpoints, sdkNetworkId: 'preprod' } });
+    expect(h.factory).not.toHaveBeenCalled();
+    expect(h.forking).toHaveBeenCalledWith(expect.objectContaining({ networkId: 'preprod', forks: { v9: 2_000_000n } }));
+    const keys = (startWithKeys.mock.calls[0] as unknown as [{ v8: { coinPublicKey: string }; v9: { coinPublicKey: string } }])[0];
+    expect(keys.v8.coinPublicKey).toBe(publicKey);
+    expect(keys.v9.coinPublicKey).toBe(publicKey);
+    expect(forking.started).toBe(keys);
+    forkEvents.next(state()); await vi.advanceTimersByTimeAsync(1001);
+    expect(h.publish).toHaveBeenCalledWith({ [token]: 12n }, []);
+  });
+});
+

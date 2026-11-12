@@ -15,7 +15,7 @@ building/signing; sync and orchestration live in `src/services/midnight-*.ts`.
 | `midnightTxBuilder.ts` | Selects the ledger-specific DUST balancing and public-input signing path for a Nexus-built transaction. `midnightLedger9.ts` also exports fee balancing for private-token sends. |
 | `midnightShieldedBuilder.ts` | Selects the ledger-specific private-token builder. On ledger 9 it synchronizes notes, builds a custom-token transfer, and balances DUST through `midnightShieldedLedger9.ts`. |
 | `midnightShieldSwapBuilder.ts` | Compatibility entry point that refuses invalid native NIGHT privacy conversion before using credentials or a prover. |
-| `midnightPrivateSync.ts` | Local ledger 9 note sync for a chain on ledger 9 from its first block, with transient unlocked keys, private-token balances, and history. A chain that crossed the upgrade (mainnet, preprod) needs the fork-aware wallet (#1452 M9). |
+| `midnightPrivateSync.ts` | Local note sync on a ledger 9 chain, with transient unlocked keys, private-token balances, and history: wallet SDK 2's fork-aware wallet on a chain that crossed the upgrade (mainnet, preprod), the ledger 9 variant alone on one born on ledger 9. |
 | `midnightChainIdentity.ts` | Verifies Nexus generation against indexer genesis and isolates checkpoints across resets. |
 | `midnightDustLightSync.ts` | Rebuilds verified DUST state from compact Nexus projections, following only owned spend chains. Ledger-specific adapters handle SDK fee balancing. |
 | `midnightWalletStatePersistence.ts` | Legacy SDK checkpoint storage. Compact DUST sends do not restore these checkpoints. |
@@ -125,6 +125,19 @@ entire original anonymity set; it never narrows to the wallet's next byte. The
 cover excludes nullifiers beginning with four `ff` bytes. Such a nullifier fails
 explicitly until the provider supports it, rather than being treated as unspent.
 
+## Private notes across the upgrade
+
+Mainnet and preprod crossed the ledger 9 upgrade, so a wallet's notes and
+history start on ledger 8. Wallet SDK 2's fork-aware `ShieldedWallet` reads
+them: ledger 8 (`@midnightntwrk/ledger-v8`, pinned) below protocol version
+2000000, ledger 9 from it, handing over at the crossing. The private sync and
+the private send use it on a chain that crossed (`forkingShieldedWallet`,
+started with both ledgers' keys from one seed), and the ledger 9 variant alone
+on a chain born on ledger 9 (Stagenet, the relaunched Preview). A send refuses
+while the fork-aware wallet is still on the ledger 8 side (its transaction
+handle carries the version that built it). `privateSyncStatus` stays the gate
+for what the views trust.
+
 ## Ledger selection
 
 A network can change ledger without changing its name: preprod moved to ledger 9
@@ -149,8 +162,8 @@ profile from the network name.
 - Guards name the wallet's own network and ledger ("not supported on Midnight
   Preprod (ledger 9)").
 - Private notes on a chain that crossed the upgrade need ledger 8 history and
-  ledger 9 events: wallet SDK 2's fork-aware shielded wallet (#1452 M9). Until
-  then the ledger 9 note sync runs only on a chain born on ledger 9.
+  ledger 9 events: wallet SDK 2's fork-aware shielded wallet (see "Private
+  notes across the upgrade").
 
 ## Proving
 

@@ -5638,9 +5638,9 @@ export default {
   'midnight.send.shieldedBalanceNote': 'Privates Guthaben. Wird mit dem Shielded-Sync aktualisiert.',
   'midnight.send.publicTxNote': 'Öffentliche Transaktion: Betrag und Adressen sind im Midnight-Indexer sichtbar.',
   'midnight.send.estimatedNetworkFee': 'Geschätzte Netzwerkgebühr',
-  'midnight.send.dustResetWarning': 'Die Netzwerkgebühr wird in DUST bezahlt und ist vernachlässigbar. DUST regeneriert sich mit der Zeit aus deinem registrierten NIGHT.',
+  'midnight.send.dustResetWarning': 'Die Netzwerkgebühr wird in DUST bezahlt. DUST regeneriert sich mit der Zeit aus deinem registrierten NIGHT.',
   'midnight.send.dustResetShort': 'Die Netzwerkgebühr wird in DUST bezahlt; es regeneriert sich mit der Zeit.',
-  'midnight.send.dustLowHint': 'Dein DUST ist niedrig ({percent}%). Die Netzwerkgebühr ist winzig und DUST füllt sich mit der Zeit aus deinem registrierten NIGHT wieder auf.',
+  'midnight.send.dustLowHint': 'Dein DUST ist niedrig ({percent}%). Eine Transaktion braucht genug DUST für ihre Gebühr (unter 1 DUST). Schlägt sie fehl, warte, bis aus deinem registrierten NIGHT mehr DUST entstanden ist.',
   // Fortschrittsanzeige beim Senden
   'midnight.send.stageAuthorize': 'Autorisieren',
   'midnight.send.stageBuild': 'Transaktion erstellen',

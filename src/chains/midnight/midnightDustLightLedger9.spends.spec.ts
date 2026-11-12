@@ -4,6 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { balanceLightDust9 } from './midnightDustLightLedger9';
+import signing from './fixtures/nexus-ledger-signing.json';
+import preview from './fixtures/preview-ledger9-parameters.json';
+import { MIDNIGHT_DUST_FEE_CEILING, dustShortForFee } from './midnightFeeEstimate';
 
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 
@@ -85,3 +88,24 @@ describe('connector fees paid with two or more DUST spends', () => {
     } finally { w.key.clear(); }
   });
 });
+
+// #1452 M14: the review's fee estimate (midnightFeeEstimate.ts) against real
+// ledger 9 parameters (Preview's) and real Nexus builds.
+describe('ledger 9 fees for an unshielded send', () => {
+  it.each([1, 2])('a %i-input NIGHT transfer costs well over the old "< 0.000001" and under 1 DUST', (count) => {
+    const w = dustWallet([1_000_000_000_000_000n]);
+    try {
+      const vector = signing.transfers.find(t => t.network === 'stagenet' && t.count === count && t.token === '00'.repeat(32))!;
+      const tx: ledger.UnprovenTransaction = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(vector.unprovenTxHex, 'hex'));
+      const paid = spends(balanceLightDust9(w.local, w.key, 'stagenet', [tx], new Date(w.now.getTime() + 300_000), w.now, preview.ledgerParameters))
+        .reduce((sum, spend) => sum + spend.vFee, 0n);
+      const DUST = 10n ** 15n;
+      expect(paid).toBeGreaterThan(DUST / 1_000_000n);
+      expect(paid).toBeLessThan(DUST);
+      // The review's low-DUST warning starts at the bound the measured fee stays under.
+      expect(MIDNIGHT_DUST_FEE_CEILING).toBe(DUST);
+      expect([dustShortForFee(DUST - 1n), dustShortForFee(DUST)]).toEqual([true, false]);
+    } finally { w.key.clear(); }
+  });
+});
+
