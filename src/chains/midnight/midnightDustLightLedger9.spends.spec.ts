@@ -6,6 +6,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { balanceLightDust9 } from './midnightDustLightLedger9';
 import signing from './fixtures/nexus-ledger-signing.json';
 import preview from './fixtures/preview-ledger9-parameters.json';
+import { MIDNIGHT_DUST_FEE_CEILING, dustShortForFee } from './midnightFeeEstimate';
 
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 
@@ -101,6 +102,9 @@ describe('ledger 9 fees for an unshielded send', () => {
       const DUST = 10n ** 15n;
       expect(paid).toBeGreaterThan(DUST / 1_000_000n);
       expect(paid).toBeLessThan(DUST);
+      // The review's low-DUST warning starts at the bound the measured fee stays under.
+      expect(MIDNIGHT_DUST_FEE_CEILING).toBe(DUST);
+      expect([dustShortForFee(DUST - 1n), dustShortForFee(DUST)]).toEqual([true, false]);
     } finally { w.key.clear(); }
   });
 });

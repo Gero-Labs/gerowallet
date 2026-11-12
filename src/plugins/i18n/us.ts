@@ -5745,9 +5745,9 @@ export default {
   'midnight.send.rawUnitsNote': 'This token\'s decimals aren\'t known, so amounts are in base units.',
   'midnight.send.publicTxNote': 'Public transaction: the amount and addresses will be visible on the Midnight indexer.',
   'midnight.send.estimatedNetworkFee': 'Estimated network fee',
-  'midnight.send.dustResetWarning': 'The network fee is paid in DUST and is negligible. DUST regenerates over time from your registered NIGHT.',
+  'midnight.send.dustResetWarning': 'The network fee is paid in DUST. DUST regenerates over time from your registered NIGHT.',
   'midnight.send.dustResetShort': 'Network fee is paid in DUST; it regenerates over time.',
-  'midnight.send.dustLowHint': 'Your DUST is low ({percent}%). The network fee is tiny, and DUST refills over time from your registered NIGHT.',
+  'midnight.send.dustLowHint': 'Your DUST is low ({percent}%). A send needs enough DUST for its fee (under 1 DUST). If it fails, wait for more DUST to generate from your registered NIGHT.',
   // Send progress timeline stage labels
   'midnight.send.stageAuthorize': 'Authorize',
   'midnight.send.stageBuild': 'Build transaction',

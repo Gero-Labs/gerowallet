@@ -331,17 +331,17 @@
                   {{ t('midnight.sponsor.change') }}
                 </button>
               </div>
-              <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
+              <!-- DUST fee note (under 1 DUST; sending does NOT reset DUST —
                    verified on preprod, the old "reset" was an estimator bug).
                    Suppressed when the low-DUST hint below is showing, so only
                    one DUST note renders at a time. -->
               <GNote v-if="!isShielded && !isDustLow" icon="mdi-information-outline" class="mt-3">
                 {{ t('midnight.send.dustResetWarning') }}
               </GNote>
-              <!-- Low-DUST hint: informational (neutral) while any DUST remains —
-                   the fee is tiny so the send still goes through. Red only when
-                   DUST is genuinely empty and the fee can't be paid. -->
-              <GNote v-if="!isShielded && isDustLow && isDustEmpty" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+              <!-- Low-DUST hint: informational (neutral) while there is more
+                   DUST than a fee needs. Red below 1 DUST, where the fee may
+                   not be paid. -->
+              <GNote v-if="!isShielded && isDustLow && isDustShort" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
                 {{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
               </GNote>
               <div v-else-if="!isShielded && isDustLow" class="midnight-info-note mt-3">
@@ -466,7 +466,7 @@
 </template>
 
 <script setup lang="ts">
-import { MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY } from '@/chains/midnight/midnightFeeEstimate';
+import { MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY, dustShortForFee } from '@/chains/midnight/midnightFeeEstimate';
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, nextTick, onBeforeUnmount, ref, toRefs, watch } from 'vue';
@@ -890,13 +890,21 @@ const dustBattery = computed<{ percent: number } | null>(() => {
   return dustBatteryPercent(dustLive.dustBalance.value, dustLive.dustCap.value);
 });
 
-// Below this the review step swaps the general fee note for the low-DUST hint
-// (they overlap, so only one shows at a time).
-const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
+// Too little DUST for a send's fee (under 1 DUST: ledger 9 fees are around
+// 0.6 DUST), so the hint escalates to the error tone. The DUST that pays is
+// the sponsor's on a sponsored send (unknown capacity: no escalation).
+const isDustShort = computed(() => {
+  if (sponsorWalletId.value != null) {
+    const capacity = sponsorCandidate.value?.capacity;
+    return capacity != null && dustShortForFee(capacity);
+  }
+  return dustLive.settled.value && dustShortForFee(dustLive.dustBalance.value);
+});
 
-// Truly empty DUST: the (~1 Speck) fee can't be paid, so the hint escalates to
-// the error tone. Any nonzero DUST covers the fee and stays informational.
-const isDustEmpty = computed(() => dustLive.settled.value && dustLive.dustBalance.value <= 0n);
+// Below 20% (or short of a fee) the review step swaps the general fee note for
+// the low-DUST hint (they overlap, so only one shows at a time). The hint
+// names the battery level, so it needs a battery to show.
+const isDustLow = computed(() => !!dustBattery.value && (dustBattery.value.percent < 20 || isDustShort.value));
 
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);

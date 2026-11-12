@@ -10,4 +10,18 @@
  * So the review says "< 1". A per-send estimate from the chain's current
  * parameters would be better and is left for later.
  */
+import { MIDNIGHT_DECIMALS } from './midnightTypes';
+
 export const MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY = '< 1';
+
+/** What a send can need for its fee, in Specks: 1 DUST, the bound the review shows. */
+export const MIDNIGHT_DUST_FEE_CEILING = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
+
+/**
+ * Whether `balance` (Specks) may not cover a send's fee. Ledger 8 fees were a
+ * few Specks; ledger 9's are around 0.6 DUST, so the review warns below 1 DUST,
+ * not only at zero.
+ */
+export function dustShortForFee(balance: bigint): boolean {
+  return balance < MIDNIGHT_DUST_FEE_CEILING;
+}

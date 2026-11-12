@@ -17,7 +17,8 @@ interface SetupState {
   sponsorWalletId: unknown;
   blockedByFee: unknown;
   dustBattery: { percent: number } | null;
-  isDustEmpty: boolean;
+  isDustLow: boolean;
+  isDustShort: boolean;
 }
 
 const review = vi.hoisted(() => ({ live: {} as LiveDust, sponsorId: null as number | null }));
@@ -150,23 +151,41 @@ describe.each([['dashboard', Dialog], ['side panel', Sheet]] as const)('%s send 
   // Issue 1118: the store's Path-A dustState (null in this mock) has no capacity
   // for a wallet whose DUST comes from a Cardano cNIGHT registration, which hid the bar.
   it('shows the DUST battery from the merged live balance, not the store\'s Path-A figure', async () => {
-    review.live.dustBalance.value = 3_381n;
-    review.live.dustCap.value = 5_000n;
+    review.live.dustBalance.value = 3_381n * 10n ** 12n;
+    review.live.dustCap.value = 5_000n * 10n ** 12n;
     const wrapper = mountScreen(component);
     await settle();
     expect(state(wrapper).dustBattery).toEqual({ percent: 68 });
-    expect(state(wrapper).isDustEmpty).toBe(false);
+    expect(state(wrapper).isDustShort).toBe(false);
+    expect(state(wrapper).isDustLow).toBe(false);
   });
 
-  it('calls DUST empty only once both paths have reported a zero', async () => {
+  it('calls DUST short only once both paths have reported a zero', async () => {
     review.live.dustCap.value = 5_000n;
     review.live.settled.value = false;
     const wrapper = mountScreen(component);
     await settle();
-    expect(state(wrapper).isDustEmpty).toBe(false);
+    expect(state(wrapper).isDustShort).toBe(false);
     review.live.settled.value = true;
     await settle();
-    expect(state(wrapper).isDustEmpty).toBe(true);
+    expect(state(wrapper).isDustShort).toBe(true);
     expect(state(wrapper).dustBattery).toEqual({ percent: 0 });
+  });
+
+  // Ledger 9 fees are around 0.6 DUST: a nonzero balance under 1 DUST may not
+  // pay one, whatever share of the cap it is.
+  it('calls DUST short below 1 DUST even when the battery is not low', async () => {
+    review.live.dustBalance.value = 5n * 10n ** 14n;
+    review.live.dustCap.value = 6n * 10n ** 14n;
+    const wrapper = mountScreen(component);
+    await settle();
+    expect(state(wrapper).dustBattery).toEqual({ percent: 83 });
+    expect(state(wrapper).isDustShort).toBe(true);
+    expect(state(wrapper).isDustLow).toBe(true);
+    review.live.dustBalance.value = 10n ** 15n;
+    review.live.dustCap.value = 2n * 10n ** 15n;
+    await settle();
+    expect(state(wrapper).isDustShort).toBe(false);
+    expect(state(wrapper).isDustLow).toBe(false);
   });
 });
