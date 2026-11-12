@@ -47,7 +47,15 @@ Pinned versions live in `package.json` — don't trust docs' version tables, the
 Keep these boundaries when changing transaction code.
 
 - Unshielded signing: BIP-340 via `keystore.signData` per segment; segments may be
-  0x-prefixed (walletBg strips before decoding).
+  0x-prefixed (walletBg strips before decoding). On ledger 9 keys and signatures
+  are tagged `{ tag: 'schnorr', value }` inside the transaction
+  (`signLedger9Transaction` adds `SignatureEnabled` per input it owns); what
+  crosses to Nexus stays plain hex (`schnorrHex`). Wallet SDK 2's signer
+  callbacks are async (`signDataAsync`); the wallet's own signer walks the
+  intents itself and uses the synchronous `signData`.
+- `fixtures/nexus-ledger-signing.json` is the contract with Nexus's builder:
+  ledger 9 transfers and DUST registrations for mainnet, preprod, Preview and
+  Stagenet, plus the earlier ledger 8 transfers for a chain below the fork.
 - The dust fee tx returned by `dust.balanceTransactions` MUST be `.merge()`d into
   the transfer or the ledger rejects with "Invalid signature value".
 - DUST preparation uses compact projections with a two-minute request deadline.

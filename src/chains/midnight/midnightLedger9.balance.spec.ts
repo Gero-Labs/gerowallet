@@ -4,6 +4,9 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { balanceAndSignLedger9Transfer } from './midnightLedger9';
 import { getMidnightEndpoints } from './midnightConfig';
 import { DUST_SYNC_INACTIVITY_MS } from './midnightDustSyncWatch';
+import { balanceAndSignUnshieldedTransfer } from './midnightTxBuilder';
+import fixture from './fixtures/nexus-ledger-signing.json';
+import { LEDGER8_PROTOCOL_VERSION, LEDGER9_PROTOCOL_VERSION_SAMPLE, useMidnightChains } from '@test/helpers/midnightChains';
 
 const mocks = vi.hoisted(() => ({ reconstruct: vi.fn(), balance: vi.fn(), transport: vi.fn(), identity: vi.fn(), recheck: vi.fn() }));
 vi.mock('./midnightDustLightSync', () => ({ reconstructDustState: mocks.reconstruct }));
@@ -113,5 +116,50 @@ describe('Stagenet compact DUST balancing', () => {
       await balanceAndSignLedger9Transfer({ ...args(), onDustSyncProgress });
       expect(onDustSyncProgress).toHaveBeenCalledWith(30, '');
     });
+  });
+});
+
+// M4: mainnet and preprod take the ledger 9 signer once their chains report ledger 9.
+describe('unshielded send on a ledger 9 mainnet or preprod', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    useMidnightChains({
+      mainnet: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION],
+      preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION],
+    });
+    mocks.recheck.mockResolvedValue(undefined);
+    mocks.transport.mockReturnValue({});
+    mocks.reconstruct.mockResolvedValue({ state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params' } });
+  });
+
+  it.each([['mainnet', 'Mainnet'], ['preprod', 'Preprod']])('%s: balances and signs a real Nexus build on ledger 9', async (network, name) => {
+    mocks.identity.mockResolvedValue({ network: `midnight-${network}`, chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
+    mocks.balance.mockReturnValue(ledger.Transaction.fromParts(network));
+    const vector = fixture.transfers.find(candidate => candidate.network === network && candidate.count === 2 && candidate.token === '00'.repeat(32))!;
+    const signed = await balanceAndSignUnshieldedTransfer({
+      sdkNetworkId: network, endpoints: getMidnightEndpoints(name)!, unshieldedSecretKey: Uint8Array.from(Buffer.from(fixture.secret, 'hex')),
+      dustSecretSeed: new Uint8Array(32).fill(2), ttl: new Date(Date.now() + 300000), unprovenTxHex: vector.unprovenTxHex,
+    });
+    const tx: ledger.UnprovenTransaction = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(signed, 'hex'));
+    ledger.Transaction.fromParts(network).merge(tx);
+    const intent = tx.intents!.get(1)!;
+    const offer = intent.fallibleUnshieldedOffer ?? intent.guaranteedUnshieldedOffer!;
+    expect(offer.signatures).toHaveLength(2);
+    for (const signature of offer.signatures) {
+      expect(ledger.verifySignature({ tag: 'schnorr', value: fixture.publicKey }, intent.signatureData(1), signature.value)).toBe(true);
+    }
+    // The DUST state is rebuilt and balanced for the wallet's own network, never 'stagenet'.
+    expect(mocks.reconstruct.mock.calls[0][2]).toBe(network);
+    expect(mocks.balance.mock.calls[0][2]).toBe(network);
+  });
+
+  it('a mainnet chain still below the fork keeps the ledger 8 path', async () => {
+    useMidnightChains({ mainnet: [LEDGER8_PROTOCOL_VERSION, LEDGER8_PROTOCOL_VERSION] });
+    const vector = fixture.transfers.find(candidate => candidate.network === 'mainnet')!;
+    await expect(balanceAndSignUnshieldedTransfer({
+      sdkNetworkId: 'mainnet', endpoints: getMidnightEndpoints('Mainnet')!, unshieldedSecretKey: new Uint8Array(32).fill(1),
+      dustSecretSeed: new Uint8Array(32).fill(2), ttl: new Date(Date.now() + 300000), unprovenTxHex: vector.unprovenTxHex,
+    })).rejects.toThrow();
+    expect(mocks.balance).not.toHaveBeenCalled();
   });
 });
