@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-shielded/v1';
+import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-shielded/v2';
 import { ShieldedAddress, ShieldedCoinPublicKey, ShieldedEncryptionPublicKey } from 'midnight-v9-address-format';
 import { buildAndSignShieldedLedger9Transfer } from './midnightShieldedLedger9';
 import { buildAndSignShield } from './midnightShieldSwapBuilder';
@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   factory: vi.fn(), fees: vi.fn(), prove: vi.fn(), load: vi.fn(), save: vi.fn(), clear: vi.fn(),
   identity: vi.fn(), unchanged: vi.fn(),
 }));
-vi.mock('midnight-v9-shielded', () => ({ ShieldedWallet: mocks.factory }));
+vi.mock('midnight-v9-shielded', () => ({ CustomShieldedWallet: mocks.factory }));
 vi.mock('./midnightLedger9', () => ({ balanceLedger9Fees: mocks.fees }));
 vi.mock('./midnightUnshieldedProver', () => ({ proveUnshieldedTransfer: mocks.prove }));
 vi.mock('./midnightWalletStatePersistence', () => ({
@@ -60,10 +60,15 @@ function realWallet() {
     state: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
     waitForSyncedState: vi.fn().mockResolvedValue(publicAddress),
     serializeState: vi.fn().mockResolvedValue('real-sdk-checkpoint-boundary'),
-    transferTransaction: vi.fn(async (secrets, outputs) => {
-      const result = capability.makeTransfer(secrets, core, outputs);
-      if (result._tag === 'Left') throw result.left;
-      return result.right[0];
+    // SDK 2 keeps the keys the wallet was started with and returns a handle.
+    transferTransaction: vi.fn(async (outputs) => {
+      const secrets = ledger.ZswapSecretKeys.fromSeed(seed);
+      try {
+        const result = capability.makeTransfer(secrets, core, outputs);
+        if (result._tag === 'Left') throw result.left;
+        const tx = result.right[0];
+        return { serialize: () => tx.serialize() };
+      } finally { secrets.clear(); }
     }),
   };
 }
@@ -95,6 +100,8 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
       expect([...received.state.coins].map(coin => coin.value)).toEqual([60n]);
     } finally { recipient.clear(); }
     expect(wallet.waitForSyncedState).toHaveBeenCalledWith();
+    // SDK 2 starts with one ledger's keys per variant; this wallet runs the ledger 9 one only.
+    expect(wallet.start).toHaveBeenCalledWith({ v9: expect.anything() });
     expect(mocks.load).toHaveBeenCalledWith('verified-stagenet-7', 'shielded', seed);
     expect(mocks.fees).toHaveBeenCalledOnce();
     expect(mocks.unchanged).toHaveBeenCalledTimes(2);

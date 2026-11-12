@@ -1,6 +1,7 @@
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { ShieldedWallet, type ShieldedWalletState } from 'midnight-v9-shielded';
+import type { ShieldedWalletState } from 'midnight-v9-shielded';
 import { InMemoryTransactionHistoryStorage, TransactionHistoryStorage } from 'midnight-v9-abstractions';
+import { ledger9ShieldedWallet, unprovenTransactionFromHandle, type Ledger9ShieldedWallet } from './midnightShieldedWallet9';
 import type { BuildAndSignShieldedTransferArgs, BuildAndSignShieldedTransferResult } from './midnightShieldedBuilder';
 import { midnightLedgerVersion } from './midnightLedger';
 import { decodeShieldedAddress9 } from './midnightAddress9';
@@ -48,18 +49,11 @@ export async function buildAndSignShieldedLedger9Transfer(
   const identity = await readVerifiedMidnightChainIdentity(args.endpoints);
   const stateNetwork = midnightCheckpointNamespace(identity);
   const keys = ledger.ZswapSecretKeys.fromSeed(args.zswapSecretKeySeed);
-  let wallet: ReturnType<ReturnType<typeof ShieldedWallet>['startWithSecretKeys']> | undefined;
+  let wallet: Ledger9ShieldedWallet | undefined;
   let subscription: { unsubscribe(): void } | undefined;
   try {
     const history = new InMemoryTransactionHistoryStorage(TransactionHistoryStorage.TransactionHistoryEntryCommonSchema);
-    const builder = ShieldedWallet({
-      networkId: 'stagenet',
-      indexerClientConnection: {
-        indexerHttpUrl: args.endpoints.publicIndexerUrl,
-        indexerWsUrl: args.endpoints.publicIndexerWsUrl,
-      },
-      txHistoryStorage: history,
-    });
+    const builder = ledger9ShieldedWallet('stagenet', args.endpoints, history);
     const saved = await loadWalletState(stateNetwork, 'shielded', args.zswapSecretKeySeed);
     if (saved) {
       try { wallet = builder.restore(saved); } catch {
@@ -67,7 +61,7 @@ export async function buildAndSignShieldedLedger9Transfer(
       }
     }
     wallet ??= builder.startWithSecretKeys(keys);
-    await bounded(wallet.start(keys), 30_000, 'shielded wallet startup');
+    await bounded(wallet.start({ v9: keys }), 30_000, 'shielded wallet startup');
     subscription = wallet.state.subscribe({ error: () => {} });
     // A timeout is not a synced wallet: never sign against a deliberately stale gap.
     const state = await bounded<ShieldedWalletState>(wallet.waitForSyncedState(), 3 * 60_000, 'shielded synchronization');
@@ -79,7 +73,8 @@ export async function buildAndSignShieldedLedger9Transfer(
     const snapshot = await bounded<string>(wallet.serializeState(), 10_000, 'shielded checkpoint');
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
     await saveWalletState(stateNetwork, 'shielded', args.zswapSecretKeySeed, snapshot).catch(() => {});
-    const transfer = await bounded<ledger.UnprovenTransaction>(wallet.transferTransaction(keys, outputs), 60_000, 'shielded transaction construction');
+    const transfer = unprovenTransactionFromHandle(
+      await bounded(wallet.transferTransaction(outputs), 60_000, 'shielded transaction construction'));
     ledger.Transaction.fromParts('stagenet').merge(transfer);
     const fees = await balanceLedger9Fees({
       sdkNetworkId: args.sdkNetworkId,

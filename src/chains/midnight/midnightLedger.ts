@@ -24,8 +24,10 @@ export function schnorrHex(value: unknown): string {
 
 export async function midnightKeystore(secret: Uint8Array, network: string) {
   if (midnightLedgerVersion(network) === 9) {
-    const { createKeystore } = await import('midnight-v9-unshielded-wallet');
-    return createKeystore({ kind: 'schnorr', secret }, 'stagenet');
+    // Through midnightLedger9, which imports the SDK statically: a dynamic
+    // import of the SDK itself is a new bundle TDZ hazard (check-bundle-tdz).
+    const { ledger9Keystore } = await import('./midnightLedger9');
+    return ledger9Keystore(secret, 'stagenet');
   }
   const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
   return createKeystore(secret, network.toLowerCase());

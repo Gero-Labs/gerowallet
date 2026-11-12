@@ -37,7 +37,7 @@ describe('Nexus to wallet ledger signing contract', () => {
     });
   }
 
-  it('validates and signs the actual beta.2 native DUST registration payload', async () => {
+  it('validates and signs the actual native DUST registration payload', async () => {
     const vector = fixture.registration;
     const segments = vector.segmentsToSign.map(segment => ({ ...segment, role: 'NightExternal' as const }));
     await expect(validateMidnightSigningSegments(vector.network, vector.unprovenTxHex, segments)).resolves.toBeUndefined();

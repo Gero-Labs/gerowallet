@@ -53,8 +53,13 @@ export async function readVerifiedMidnightChainIdentity(
   return { ...identity, genesis_hash: identity.genesis_hash.toLowerCase() };
 }
 
+/**
+ * Checkpoints written by one wallet SDK cannot be restored by another, so the
+ * SDK line is part of the key: wallet SDK 2.0.0 (`sdk2`) never sees a beta
+ * checkpoint. `clearMidnightNetworkCheckpoints` removes every `-ledger9-` key.
+ */
 export function midnightCheckpointNamespace(identity: MidnightChainIdentity): string {
-  return `${identity.network}-ledger9-rc3-${identity.genesis_hash}-${identity.chain_generation}`;
+  return `${identity.network}-ledger9-sdk2-${identity.genesis_hash}-${identity.chain_generation}`;
 }
 
 export async function assertMidnightChainIdentityUnchanged(
@@ -67,24 +72,4 @@ export async function assertMidnightChainIdentityUnchanged(
     || current.genesis_hash !== expected.genesis_hash) {
     throw new Error('Midnight chain changed during transaction preparation; retry after synchronization');
   }
-}
-
-/** Snapshots are optional accelerators; unverified or incompatible state is never restored. */
-export async function fetchLedger9DustSnapshot(
-  endpoints: MidnightNetworkEndpoints,
-  identity: MidnightChainIdentity,
-  registeredAt: Date,
-): Promise<string | null> {
-  if (!Number.isFinite(registeredAt.getTime())) return null;
-  try {
-    const response = await authenticatedGet(`${endpoints.nexusBaseUrl}/api/midnight/${identity.network}`
-      + `/dust/state-snapshot?registeredAt=${encodeURIComponent(registeredAt.toISOString())}`);
-    if (!response.ok) return null;
-    const body = await response.json();
-    if (body.chain_generation !== identity.chain_generation || body.genesis_hash?.toLowerCase() !== identity.genesis_hash
-      || body.sdk_version !== 'dust-wallet@5.0.0-beta.2/ledger-v9@1.0.0-rc.3'
-      || typeof body.serialized_state !== 'string' || !body.serialized_state
-      || !Number.isFinite(body.chain_time_ms) || body.chain_time_ms < 0 || body.chain_time_ms > registeredAt.getTime()) return null;
-    return body.serialized_state;
-  } catch { return null; }
 }
