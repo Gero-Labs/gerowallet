@@ -127,7 +127,6 @@
     "qrcode": "^1.5.4",
     "rxjs": "7.8.2",
     "shamir-secret-sharing": "0.0.4",
-    "showdown": "^2.1.0",
     "sockjs-client": "^1.6.1",
     "tiny-fifo-cache": "^1.0.1",
     "tiny-secp256k1": "^2.2.4",

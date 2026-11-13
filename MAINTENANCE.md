@@ -87,7 +87,8 @@ Retain these coupled-update constraints until their upstream contracts change:
 - Vitest/UI, Vite, plugins, and the Node runtime must be reviewed together.
 
 For #1314, start with runtime input/rendering and wallet/device SDK paths,
-including DOMPurify and showdown. Review build/install paths separately:
+including DOMPurify (showdown was replaced by the in-house `renderMarkdown`).
+Review build/install paths separately:
 TypeScript ESLint/globby and Rollup copy/unplugin also need disposition (yorkie
 was replaced by simple-git-hooks).
 Do not treat a development dependency as automatically harmless. npm's
