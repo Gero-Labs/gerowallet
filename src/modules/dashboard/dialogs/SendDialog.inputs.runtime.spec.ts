@@ -422,14 +422,14 @@ describe('Quick Send Max over the request limit', () => {
     const track = dialog().get('.sweep-plan__track');
     expect(track.attributes('aria-valuemax')).toBe('2');
     expect(track.attributes('aria-valuenow')).toBe('1');
-    expect(dialog().text()).toContain('send.sweepPreparing');
-    expect(dialog().text()).not.toContain('send.sweepPlanTitle');
+    // Both titles sit in one cell (the hidden one sizing it, #1442), so read the card's name.
+    expect(dialog().get('.sweep-plan').attributes('aria-label')).toContain('send.sweepPreparing');
     expect(dialog().find('.max-limit-note').exists()).toBe(false);
 
     held.resolve(buildResponse(heldRequest));
     await settle();
     expect(dialog().find('.sweep-plan__track').exists()).toBe(false);
-    expect(dialog().text()).toContain('send.sweepPlanTitle');
+    expect(dialog().get('.sweep-plan').attributes('aria-label')).toContain('send.sweepPlanTitle');
     expect(dialog().text()).toContain('send.sweepPlanNote');
     expect(dialog().text()).toContain('send.sweepFeeBreakdown');
     expect(dialog().get('.global-total__fee').text()).toBe('- 0.6');
