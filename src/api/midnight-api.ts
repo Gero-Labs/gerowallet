@@ -1036,7 +1036,7 @@ export class MidnightApi {
       cardanoAddress: request.cardanoAddress,
       dustAddressHex: request.dustAddressHex,
       ownUtxoRefs: context.ownUtxoRefs,
-    });
+    }, this.dustProofSources(context));
   }
 
   /**
