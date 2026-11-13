@@ -57,6 +57,8 @@ export interface BuildAndSignShieldedTransferArgs {
   readonly ttl?: Date;
   readonly dustRegisteredAt?: Date;
   readonly onDustSyncProgress?: (percent: number, detail: string) => void;
+  /** Called once, just before the wallet-side proof starts (only with {@link proving}). */
+  readonly onProving?: () => void;
   /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
@@ -223,6 +225,7 @@ export async function buildAndSignShieldedTransfer(
       };
       // URL only — never the auth header values (file-header privacy note).
       debugLog('🌙 shielded tx: proving wallet-side', { prover: describeWalletProving(args.proving) });
+      args.onProving?.();
       const proveStartMs = Date.now();
       let proven: { bind: () => { serialize: () => Uint8Array } };
       try {

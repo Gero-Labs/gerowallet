@@ -17,22 +17,23 @@ import { computed, getCurrentScope, onScopeDispose, ref, watch, type ComputedRef
 
 /** Which timeline node is proving, and with what. */
 export type ProvingStep =
-  | { node: 'sync'; prover: 'device' | 'local' | 'zkpaas' }
-  | { node: 'sign'; prover: 'device' }
+  | { node: 'sign'; prover: 'device' | 'local' | 'zkpaas' }
   | { node: 'submit'; prover: 'cloud' };
 
 /** After this long, Gero Cloud proving gets the "taking longer" hint. */
 export const CLOUD_SLOW_AFTER_S = 20;
 
 /**
- * The proving step for a send stage. `feeProving` is the DUST-fee proof a
- * public send makes on this device inside the `working` stage.
+ * The proving step for a send stage. A wallet-side proof comes after the DUST
+ * sync and signing, so it is on the sign node. `feeProving` is the background's
+ * own report that it is proving while the send is still `working`, read as
+ * this device.
  */
 export function provingStepOf(stage: string, feeProving: boolean): ProvingStep | null {
   switch (stage) {
-    case 'provingDevice': return { node: 'sync', prover: 'device' };
-    case 'provingLocal': return { node: 'sync', prover: 'local' };
-    case 'provingZkpaas': return { node: 'sync', prover: 'zkpaas' };
+    case 'provingDevice': return { node: 'sign', prover: 'device' };
+    case 'provingLocal': return { node: 'sign', prover: 'local' };
+    case 'provingZkpaas': return { node: 'sign', prover: 'zkpaas' };
     case 'provingCloud': return { node: 'submit', prover: 'cloud' };
     case 'working': return feeProving ? { node: 'sign', prover: 'device' } : null;
     default: return null;

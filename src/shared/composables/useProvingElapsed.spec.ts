@@ -6,9 +6,9 @@ const t = (key: string, params?: Record<string, unknown>) => (params ? `${key}:$
 
 describe('which node is proving', () => {
   it('maps each proving stage to its node and prover', () => {
-    expect(provingStepOf('provingDevice', false)).toEqual({ node: 'sync', prover: 'device' });
-    expect(provingStepOf('provingLocal', false)).toEqual({ node: 'sync', prover: 'local' });
-    expect(provingStepOf('provingZkpaas', false)).toEqual({ node: 'sync', prover: 'zkpaas' });
+    expect(provingStepOf('provingDevice', false)).toEqual({ node: 'sign', prover: 'device' });
+    expect(provingStepOf('provingLocal', false)).toEqual({ node: 'sign', prover: 'local' });
+    expect(provingStepOf('provingZkpaas', false)).toEqual({ node: 'sign', prover: 'zkpaas' });
     expect(provingStepOf('provingCloud', false)).toEqual({ node: 'submit', prover: 'cloud' });
     expect(provingStepOf('working', true)).toEqual({ node: 'sign', prover: 'device' });
     expect(provingStepOf('working', false)).toBeNull();
@@ -19,13 +19,13 @@ describe('which node is proving', () => {
 
 describe('the counter and the hint', () => {
   it('device proving: the counter and how long it can take', () => {
-    expect(provingDetail({ node: 'sync', prover: 'device' }, 6, t))
+    expect(provingDetail({ node: 'sign', prover: 'device' }, 6, t))
       .toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":6}', hint: 'midnight.send.provingDeviceHint' });
   });
 
   it('a local proof server and Arkhia: the counter only', () => {
-    expect(provingDetail({ node: 'sync', prover: 'local' }, 6, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":6}' });
-    expect(provingDetail({ node: 'sync', prover: 'zkpaas' }, 40, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":40}' });
+    expect(provingDetail({ node: 'sign', prover: 'local' }, 6, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":6}' });
+    expect(provingDetail({ node: 'sign', prover: 'zkpaas' }, 40, t)).toEqual({ elapsed: 'midnight.send.provingElapsed:{"n":40}' });
   });
 
   it('Gero Cloud: the counter, then the "taking longer" hint from 20 s', () => {
