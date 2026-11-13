@@ -35,8 +35,9 @@ export interface TimelineNode {
 
 /**
  * Ordering used to decide which nodes are already behind the current stage.
- * The wallet-side proving stages share `working`'s rank: a send emits one of
- * them in place of `working`, never both.
+ * The wallet-side proving stages share `working`'s rank: they end the same
+ * background call, once it reports that it is proving (after the DUST sync
+ * and signing).
  */
 export const STAGE_RANK: Record<string, number> = {
   idle: 0,
@@ -109,19 +110,21 @@ export function useMidnightSendTimeline(
     const submitCloud = s === 'provingCloud' || (s === 'waiting' && lastAttempt === 'provingCloud');
     const prog = midnightStore.sendProgress;
     const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
-    // A public send proving its DUST fee on this device: after signing, inside
-    // the same BG call. The sign node carries it, with an indeterminate bar.
+    // The BG reports it is proving while the send is still `working`: read as
+    // this device (the send names another prover through its stage).
     const feeProving = s === 'working' && prog?.phase === 'proving';
     // Within the single BG `working` stage: sync is active until the ledger
     // replay hits 100%, then signing takes over until the call resolves.
     const syncDone = feeProving || (pct != null && pct >= 100);
     const syncActive = s === 'working' && !syncDone;
     const signActive = s === 'working' && syncDone;
-    // Wallet-side shielded sends are one opaque proving call with no percent
-    // signal, so that node gets an indeterminate bar rather than a fake number.
+    // A wallet-side proof ends the same BG call, after the DUST sync and the
+    // signing, so the sign node carries it. It has no percent signal, so the
+    // node gets an indeterminate bar rather than a fake number.
     const provingActive = s === 'provingDevice' || s === 'provingLocal' || s === 'provingZkpaas';
-    const provingLabel = s === 'provingZkpaas' ? labels.value.provingZkpaas
-      : s === 'provingDevice' ? labels.value.provingDevice : labels.value.provingLocal;
+    const signProving = feeProving || provingActive;
+    const signProvingLabel = s === 'provingZkpaas' ? labels.value.provingZkpaas
+      : s === 'provingLocal' ? labels.value.provingLocal : labels.value.provingDevice;
 
     return [
       {
@@ -136,19 +139,18 @@ export function useMidnightSendTimeline(
       },
       {
         key: 'sync',
-        label: provingActive ? provingLabel : labels.value.sync,
-        state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
+        label: labels.value.sync,
+        state: rank > 3 || signActive || provingActive ? 'done' : syncActive ? 'active' : 'pending',
         showBar: true,
-        percent: provingActive ? null : (syncActive ? pct : undefined),
+        percent: syncActive ? pct : undefined,
         detail: syncActive ? prog?.detail : undefined,
-        ...provingDetailOf('sync'),
       },
       {
         key: 'sign',
-        label: feeProving ? labels.value.provingDevice : labels.value.sign,
-        state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
-        showBar: feeProving || undefined,
-        percent: feeProving ? null : undefined,
+        label: signProving ? signProvingLabel : labels.value.sign,
+        state: rank > 3 ? 'done' : signActive || provingActive ? 'active' : 'pending',
+        showBar: signProving || undefined,
+        percent: signProving ? null : undefined,
         ...provingDetailOf('sign'),
       },
       {

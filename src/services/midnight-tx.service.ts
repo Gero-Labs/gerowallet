@@ -25,6 +25,7 @@
  *
  */
 
+import { watch } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
@@ -136,8 +137,10 @@ export function backgroundError(error: string | undefined, fallback: string): Er
  * `provingDevice` / `provingLocal` / `provingZkpaas` follow `working` when
  * the wallet proves the tx itself: on this device (Gero Cloud mode), on the
  * local proof server (WP-P2) or via Arkhia zkPaaS. The single BG round-trip
- * then includes the ZK-proving step (6-25 s for a DUST fee, a minute or more
- * for a private send) rather than only the comparatively fast build+sign.
+ * then ends with the ZK-proving step (6-25 s for a DUST fee, a minute or more
+ * for a private send), after the DUST sync and signing. The stage is emitted
+ * only when the BG reports `sendProgress.phase === 'proving'`
+ * ({@link whenBackgroundProves}), so the sync is never shown as proving.
  * Distinct stages so the timeline can honestly say WHERE the proof is made.
  */
 export type MidnightSendStage =
@@ -362,13 +365,17 @@ export async function sendUnshieldedNight(
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   assertCurrentApproval(current);
   onStage?.('working');
-  // On this device the fee proof follows the DUST sync and signing inside the
-  // same BG call, which reports it through `sendProgress` (phase 'proving'),
-  // so the timeline keeps its sync and sign steps.
-  if (target && target.prover !== 'device') onStage?.(target.stage);
-  const signed = await balanceAndSignInBg(
-    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, sponsor, target?.request,
-  );
+  // The fee proof follows the DUST sync and signing inside the same BG call:
+  // the timeline shows those first, and proving from the BG's own report.
+  const stopProving = target ? whenBackgroundProves(() => onStage?.(target.stage)) : undefined;
+  let signed: Awaited<ReturnType<typeof balanceAndSignInBg>>;
+  try {
+    signed = await balanceAndSignInBg(
+      built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, sponsor, target?.request,
+    );
+  } finally {
+    stopProving?.();
+  }
   assertCurrentApproval(current);
   // An unproven transaction is proved by Gero Cloud inside the submit request.
   // While Gero Cloud is busy the timeline waits, then proves again on each resubmit.
@@ -679,6 +686,27 @@ function proverOf(target: WalletProvingTarget | null): WalletProver {
 }
 
 /**
+ * Calls `onProving` once, when the background reports that it has started
+ * proving the transaction itself (`midnightStore.sendProgress.phase ===
+ * 'proving'`). The same background call first syncs DUST and signs, which can
+ * take minutes, so a send names its prover only from this report. A report
+ * that never comes leaves the send in `working`. Returns the stop handle; the
+ * caller stops it when the background call ends.
+ */
+function whenBackgroundProves(onProving: () => void): () => void {
+  let fired = false;
+  return watch(
+    () => midnightStore.sendProgress?.phase,
+    (phase) => {
+      if (phase !== 'proving' || fired) return;
+      fired = true;
+      onProving();
+    },
+    { flush: 'sync' },
+  );
+}
+
+/**
  * Health preflight for a proof server; the device needs none. Callers skip
  * the call (not just its body) when there is nothing to check, so a Gero
  * Cloud or device send reaches the background without an extra await.
@@ -822,8 +850,15 @@ export async function sendShieldedNight(
   assertWalletProving(target);
   if (target) {
     await assertProverReachable(target, current);
-    onStage?.(target.stage);
-    const signed = await buildAndSignShieldedInBg(outputs, credentials, target.request, sponsor);
+    // The BG syncs, builds and signs before it proves, in this one call.
+    onStage?.('working');
+    const stopProving = whenBackgroundProves(() => onStage?.(target.stage));
+    let signed: Awaited<ReturnType<typeof buildAndSignShieldedInBg>>;
+    try {
+      signed = await buildAndSignShieldedInBg(outputs, credentials, target.request, sponsor);
+    } finally {
+      stopProving();
+    }
     const { signedTxHex, proven, ledgerTxHash } = signed;
     assertCurrentApproval(current);
     if (!proven) {

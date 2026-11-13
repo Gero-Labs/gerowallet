@@ -87,8 +87,34 @@ describe('send timeline proving feedback', () => {
   ])('%s: the proving node shows a running counter', async (proving, hint) => {
     const node = mountTimeline(Vue.ref(proving));
     await vi.advanceTimersByTimeAsync(3_000);
-    expect(node('sync')).toMatchObject({ state: 'active', percent: null, elapsed: s(3) });
-    expect(node('sync').hint).toBe(hint);
+    expect(node('sign')).toMatchObject({ state: 'active', percent: null, elapsed: s(3) });
+    expect(node('sign').hint).toBe(hint);
+  });
+
+  it.each([
+    ['provingDevice', 'Proving on this device'],
+    ['provingLocal', 'Proving locally'],
+    ['provingZkpaas', 'Proving via Arkhia'],
+  ])('%s: the DUST sync shows its own percentage first, then the sign node proves', async (proving, label) => {
+    const stage = Vue.ref('working');
+    const node = mountTimeline(stage);
+    (midnightStore as { sendProgress: unknown }).sendProgress = { phase: 'syncingDust', percent: 40, detail: '4 / 10 events' };
+    await Vue.nextTick();
+    expect(node('sync')).toMatchObject({ label: 'Sync', state: 'active', percent: 40, detail: '4 / 10 events' });
+    expect(node('sign')).toMatchObject({ label: 'Sign', state: 'pending' });
+    expect(node('sign').elapsed).toBeUndefined();
+
+    (midnightStore as { sendProgress: unknown }).sendProgress = { phase: 'proving', percent: -1 };
+    stage.value = proving;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(node('sync')).toMatchObject({ label: 'Sync', state: 'done' });
+    expect(node('sync').elapsed).toBeUndefined();
+    expect(node('sign')).toMatchObject({ label, state: 'active', showBar: true, percent: null, elapsed: s(2) });
+
+    stage.value = 'submitting';
+    await Vue.nextTick();
+    expect(node('sign')).toMatchObject({ label: 'Sign', state: 'done' });
+    expect(node('sign').elapsed).toBeUndefined();
   });
 
   it('the DUST fee proof on this device counts on the sign node', async () => {

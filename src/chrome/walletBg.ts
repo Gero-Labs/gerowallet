@@ -3538,6 +3538,8 @@ export class WalletBg {
             dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
             ttl: new Date(Date.now() + 30 * 60_000),
             onDustSyncProgress: (percent, detail) => midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail }),
+            // The send timeline names its prover from here, not from the start of this call.
+            onProving: () => midnightActions.setSendProgress({ phase: 'proving', percent: -1 }),
             outputs: outputs.map((o) => ({
               receiverAddress: o.receiverAddress,
               amount: o.amount,
