@@ -88,7 +88,8 @@ Retain these coupled-update constraints until their upstream contracts change:
 
 For #1314, start with runtime input/rendering and wallet/device SDK paths,
 including DOMPurify and showdown. Review build/install paths separately:
-TypeScript ESLint/globby, Rollup copy/unplugin, and yorkie also need disposition.
+TypeScript ESLint/globby and Rollup copy/unplugin also need disposition (yorkie
+was replaced by simple-git-hooks).
 Do not treat a development dependency as automatically harmless. npm's
 `fixAvailable` can propose a major change or downgrade; inspect it before
 editing. Do not use `npm audit fix --force` or bypass peer resolution.

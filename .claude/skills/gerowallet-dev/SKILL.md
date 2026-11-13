@@ -13,7 +13,7 @@ A Manifest V3 Chrome extension: Vue 3.5 + Vuetify 4.2 + TypeScript, four indepen
 `npm run typecheck`, `npm run typecheck:vue`, and repo-wide lint still expose historical diagnostics. The Vue 3 toolchain now supports SFC type checking with vue-tsc; compare diagnostics with the baseline and fix new errors rather than relying on an absolute count. Lint every touched file and run the relevant regression tests. Do not suppress diagnostics or repair unrelated files to make a count look smaller.
 
 **2. What actually blocks you is the pre-commit hook and four required checks.**
-The hook (yorkie, from `package.json` `gitHooks`, not husky) runs on every commit:
+The hook (simple-git-hooks, from `package.json` `simple-git-hooks`, installed by `npm ci` via `prepare`; not husky) runs on every commit:
 `node scripts/precommit-lint.mjs && node scripts/design/audit.mjs && node scripts/design/contrast.mjs`.
 Required on `development`: `Production bundle (SFC parse)`, `npm ci (lock in sync)`, `ESLint flat config loads`, `Ledger tests and extension bundles`. Plus 1 approving review, branch up to date, and all review threads resolved.
 

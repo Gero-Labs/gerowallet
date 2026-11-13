@@ -7,7 +7,7 @@ selection local to this shell when maintaining an older Vue 2 checkout too.
 
 ```bash
 git clone https://github.com/Gero-Labs/gerowallet.git && cd gerowallet
-npm ci               # use the committed lockfile; installs the yorkie hook
+npm ci               # use the committed lockfile; `prepare` installs the simple-git-hooks hook
 touch .env.development
 ```
 
@@ -34,7 +34,7 @@ metadata. Release packaging pins this flag off. See `debugging.md`.
 Verify the hook installed:
 
 ```bash
-head -2 "$(git rev-parse --git-common-dir)/hooks/pre-commit"   # prints "#yorkie 2.0.0"
+tail -1 "$(git rev-parse --git-common-dir)/hooks/pre-commit"   # prints the precommit-lint && design command
 ```
 
 ## Running it
