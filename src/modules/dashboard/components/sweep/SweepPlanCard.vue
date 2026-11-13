@@ -2,8 +2,8 @@
   <!-- Recipients step: how a Max over the request limit goes out. While the merges are
        being built it is a live region with a determinate bar; once built, the plan.
        Both states have the same four rows, and the texts that change share one cell
-       each (the others hidden), so the card, and the centred dialog around it, keeps
-       one height from the first merge built to the plan. -->
+       each (the others hidden), so the card keeps one height from the first merge
+       built to the plan, at the dialog's width and in the 320 px drawer beside it. -->
   <section
     class="glass-tier sweep-plan"
     :aria-label="title"
@@ -12,7 +12,12 @@
     <div class="sweep-plan__head">
       <v-progress-circular v-if="preparing" indeterminate size="18" width="2" color="var(--g-accent)" aria-hidden="true" />
       <v-icon v-else size="18" color="var(--g-accent)" aria-hidden="true">mdi-call-merge</v-icon>
-      <span class="t-body-sm sweep-plan__title">{{ title }}</span>
+      <!-- Both titles share one cell, like the count and pill beside them: at the
+           320 px drawer the preparing title wraps where the plan's does not (issue 1442). -->
+      <span class="t-body-sm sweep-plan__title sweep-plan__stack">
+        <span :class="{ 'sweep-plan__hidden': !preparing }">{{ preparingTitle }}</span>
+        <span :class="{ 'sweep-plan__hidden': !!preparing }">{{ planTitle }}</span>
+      </span>
       <span class="sweep-plan__aside sweep-plan__stack">
         <span class="t-caption g-num sweep-plan__count" :class="{ 'sweep-plan__hidden': !preparing }">{{ preparingCount }}</span>
         <span class="t-caption sweep-plan__pill" :class="{ 'sweep-plan__hidden': !!preparing }">{{ t('send.sweepOneApproval') }}</span>
@@ -79,7 +84,9 @@ const props = defineProps<{
 const { t, tc } = useTranslation();
 
 const steps = computed(() => (props.preparing ? props.preparing.total : props.merges) + 1);
-const title = computed(() => t(props.preparing ? 'send.sweepPreparing' : 'send.sweepPlanTitle', { steps: steps.value }));
+const preparingTitle = computed(() => t('send.sweepPreparing', { steps: steps.value }));
+const planTitle = computed(() => t('send.sweepPlanTitle', { steps: steps.value }));
+const title = computed(() => (props.preparing ? preparingTitle.value : planTitle.value));
 const preparingCount = computed(() => {
   const preparing = props.preparing;
   return preparing ? tc('send.sweepPreparingCount', preparing.total, { built: preparing.built, total: preparing.total }) : '';

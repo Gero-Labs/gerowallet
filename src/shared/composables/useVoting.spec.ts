@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WalletType } from '@/models/types';
-import { votingCapability, useVoting } from '@/shared/composables/useVoting';
+import { votingCapability, useVoting, resetDrepRegistration } from '@/shared/composables/useVoting';
 
 const CRED = '463796d2a39623a5441e9eab1594c2d21f96d2a544f49f82bc023bff';
 const TX_A = '941502b0aa104c850d1979232594459ad5be55bd7b18b6285bbaa32d5566213d';
 
-let { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction } = vi.hoisted(() => {
+let { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction, mockGetDRepById } = vi.hoisted(() => {
   const mockBuildCardanoTransaction = vi.fn();
+  const mockGetDRepById = vi.fn();
   const mockWalletStore: Record<string, unknown> = {};
   const mockNetworkStore: Record<string, unknown> = {};
-  return { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction };
+  return { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction, mockGetDRepById };
 });
 
 vi.mock('@/stores/walletStore', async () => {
@@ -21,10 +22,11 @@ vi.mock('@/stores/networkStore', async () => {
   return { networkStore: (mockNetworkStore = reactive(mockNetworkStore)) };
 });
 vi.mock('@/shared/utils/builder', () => ({ buildCardanoTransaction: mockBuildCardanoTransaction }));
+vi.mock('@/api/blockchain-api', () => ({ default: { getDRepById: mockGetDRepById } }));
 
 function resetStores() {
   Object.assign(mockWalletStore, {
-    loggedWallet: { type: WalletType.Normal, network: 'preprod', stakeAddress: 'stake_test1abc' },
+    loggedWallet: { type: WalletType.Normal, chain: 'cardano', network: 'preprod', stakeAddress: 'stake_test1abc' },
     utxos: [],
     keys: {
       payment: [{ address: 'addr_test1payment', cred: 'cred_payment', path: "m/1852'/1815'/0'/0/0" }],
@@ -103,6 +105,9 @@ describe('useVoting castVotes', () => {
     resetStores();
     mockBuildCardanoTransaction.mockReset();
     mockBuildCardanoTransaction.mockResolvedValue({ id: 'unsigned-tx' });
+    resetDrepRegistration();
+    mockGetDRepById.mockReset();
+    mockGetDRepById.mockResolvedValue({ registered: true });
   });
 
   it('builds the voting procedures from the drep129 key and hands them to the builder', async () => {
@@ -177,5 +182,67 @@ describe('useVoting castVotes', () => {
     const { capability } = useVoting();
     expect(capability.value.canVote).toBe(false);
     expect(capability.value.reasonKey).toBe('governance.ledgerPreprodUnsupported');
+  });
+});
+
+describe('useVoting DRep registration gate (#1091)', () => {
+  beforeEach(() => {
+    resetStores();
+    resetDrepRegistration();
+    mockBuildCardanoTransaction.mockReset();
+    mockBuildCardanoTransaction.mockResolvedValue({ id: 'unsigned-tx' });
+    mockGetDRepById.mockReset();
+  });
+
+  it('a derived DRep key with no on-chain record is not registered, and castVotes rejects', async () => {
+    mockGetDRepById.mockResolvedValue(null);
+    const { castVotes, isRegisteredDrep, loadDrepRegistration } = useVoting();
+    await expect(loadDrepRegistration()).resolves.toBe(false);
+    expect(isRegisteredDrep.value).toBe(false);
+    await expect(castVotes([{ govActionId: `${TX_A}#0`, choice: 'Yes' }])).rejects.toThrow(/not registered/i);
+    expect(mockBuildCardanoTransaction).not.toHaveBeenCalled();
+  });
+
+  it('a retired DRep (registered: false) is not registered', async () => {
+    mockGetDRepById.mockResolvedValue({ registered: false, active: false });
+    const { castVotes, isRegisteredDrep, loadDrepRegistration } = useVoting();
+    await loadDrepRegistration();
+    expect(isRegisteredDrep.value).toBe(false);
+    await expect(castVotes([{ govActionId: `${TX_A}#0`, choice: 'Yes' }])).rejects.toThrow(/not registered/i);
+  });
+
+  it('an inactive but registered DRep may still vote', async () => {
+    mockGetDRepById.mockResolvedValue({ registered: true, active: false });
+    const { castVotes, isRegisteredDrep, loadDrepRegistration } = useVoting();
+    await loadDrepRegistration();
+    expect(isRegisteredDrep.value).toBe(true);
+    await expect(castVotes([{ govActionId: `${TX_A}#0`, choice: 'Yes' }])).resolves.toEqual({ id: 'unsigned-tx' });
+  });
+
+  it('a lookup failure reads as unregistered and is retried on the next call', async () => {
+    mockGetDRepById.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ registered: true });
+    const { isRegisteredDrep, loadDrepRegistration } = useVoting();
+    await expect(loadDrepRegistration()).resolves.toBe(false);
+    expect(isRegisteredDrep.value).toBe(false);
+    await expect(loadDrepRegistration()).resolves.toBe(true);
+    expect(isRegisteredDrep.value).toBe(true);
+  });
+
+  it('shares one answer between callers and never carries it to another wallet', async () => {
+    mockGetDRepById.mockResolvedValue({ registered: true });
+    await useVoting().loadDrepRegistration();
+    expect(useVoting().isRegisteredDrep.value).toBe(true);
+
+    (mockWalletStore as { keys: { drep129: unknown[] } }).keys.drep129 = [
+      { address: 'b'.repeat(56), cred: 'b'.repeat(56), path: "m/1852'/1815'/1'/3/0" },
+    ];
+    expect(useVoting().isRegisteredDrep.value).toBe(false);
+  });
+
+  it('castVotes looks the registration up itself when no caller has', async () => {
+    mockGetDRepById.mockResolvedValue({ registered: true });
+    const { castVotes } = useVoting();
+    await castVotes([{ govActionId: `${TX_A}#0`, choice: 'Yes' }]);
+    expect(mockGetDRepById).toHaveBeenCalledWith(CRED, 'cardano', 'preprod');
   });
 });

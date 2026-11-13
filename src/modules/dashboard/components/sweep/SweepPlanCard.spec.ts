@@ -129,6 +129,25 @@ describe('SweepPlanCard', () => {
     }
   });
 
+  // At the 320 px drawer the preparing title wraps where the plan's does not (#1442), so both
+  // titles share one cell and the head row is as tall as the taller one in every state.
+  it('keeps both titles in one cell of the head and shows the one for the state', () => {
+    const titles = (wrapper: ReturnType<typeof mountCard>) => wrapper.get('.sweep-plan__title').findAll('span');
+    const visible = (wrapper: ReturnType<typeof mountCard>) =>
+      titles(wrapper).filter((span) => !span.classes('sweep-plan__hidden')).map((span) => span.text());
+
+    for (const props of [PREPARING, WAITING, PLANNED]) {
+      expect(titles(mountCard(props)).map((span) => span.text())).toEqual([
+        'send.sweepPreparing{"steps":11}',
+        'send.sweepPlanTitle{"steps":11}',
+      ]);
+    }
+    expect(visible(mountCard(PREPARING))).toEqual(['send.sweepPreparing{"steps":11}']);
+    expect(visible(mountCard(PLANNED))).toEqual(['send.sweepPlanTitle{"steps":11}']);
+    expect(mountCard(PREPARING).get('.sweep-plan').attributes('aria-label')).toBe('send.sweepPreparing{"steps":11}');
+    expect(mountCard(PLANNED).get('.sweep-plan').attributes('aria-label')).toBe('send.sweepPlanTitle{"steps":11}');
+  });
+
   it('keeps the count and the approval pill in one cell of the head', () => {
     const aside = (wrapper: ReturnType<typeof mountCard>) => wrapper.get('.sweep-plan__aside');
 
