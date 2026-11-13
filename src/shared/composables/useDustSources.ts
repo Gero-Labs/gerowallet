@@ -112,11 +112,17 @@ interface SourceCredentials {
   prfOutput?: ArrayBuffer;
 }
 
+/** A register/update tx as Nexus built it, with the pool collateral it lent, if any. */
+interface BuiltMappingTx {
+  txCbor: string;
+  sponsoredCollateralRef: string | null;
+}
+
 const STATUS_BATCH_LIMIT = 50;
 
 /** Conway max tx size. */
 const MAX_TX_BYTES = 16384;
-/** Register/update unsigned CBOR ceiling — leaves headroom for the 2 vkey witnesses (~204 B). */
+/** Register/update unsigned CBOR ceiling — leaves headroom for the 2 vkey witnesses (~204 B), 3 with lent collateral. */
 const REGISTER_SIZE_THRESHOLD = 16000;
 /** Isolation-confirmation poll: rebuild the register tx every 15s, up to ~6 min. */
 const ISOLATION_POLL_MS = 15_000;
@@ -556,11 +562,11 @@ export function useDustSources() {
    */
   async function buildFittingTx(
     source: DustSource, mnemonic: string,
-    buildFn: () => Promise<string>,
+    buildFn: () => Promise<BuiltMappingTx>,
     onStage?: (stage: DustSourceStage) => void,
-  ): Promise<string> {
-    const cbor = await buildFn();
-    if (cborBytes(cbor) <= REGISTER_SIZE_THRESHOLD) return cbor;
+  ): Promise<BuiltMappingTx> {
+    const built = await buildFn();
+    if (cborBytes(built.txCbor) <= REGISTER_SIZE_THRESHOLD) return built;
 
     // Too big → isolate the cNIGHT (plain self-send, payment-only witness).
     onStage?.('isolating');
@@ -575,9 +581,30 @@ export function useDustSources() {
       await sleep(ISOLATION_POLL_MS);
       if (!(await cnightIsIsolated(source))) continue;
       const rebuilt = await buildFn();
-      if (cborBytes(rebuilt) <= REGISTER_SIZE_THRESHOLD) return rebuilt;
+      if (cborBytes(rebuilt.txCbor) <= REGISTER_SIZE_THRESHOLD) return rebuilt;
     }
     throw new Error('ISOLATION_TIMEOUT');
+  }
+
+  /**
+   * Sign a mapping-validator tx with the source's payment and stake keys. When
+   * Nexus lent the collateral from its pool, that UTxO sits at the pool's key, so
+   * the tx also needs the pool's witness: the logged-wallet flows get it from the
+   * worker's SIGN_TX, this one signs in the page and asks Nexus itself. A failed
+   * co-signature throws, since the node would refuse the tx without it.
+   */
+  async function signMappingTx(built: BuiltMappingTx, mnemonic: string, accountIndex: number): Promise<string> {
+    const witnessHex = await signWithMnemonic(built.txCbor, mnemonic, accountIndex);
+    if (!built.sponsoredCollateralRef) return witnessHex;
+    const [{ nexusCollateralApi }, { toNexusNetwork }, { mergeWitnessSets }, { cardanoTwinNetwork }] = await Promise.all([
+      import('@/api/nexus-collateral-api'),
+      import('@/api/nexus-tx-api'),
+      import('@/shared/utils/witnessSets'),
+      import('@/chains/midnight/midnightConfig'),
+    ]);
+    const { witness } = await nexusCollateralApi.cosign(
+      built.txCbor, built.sponsoredCollateralRef, toNexusNetwork(cardanoTwinNetwork(network.value)));
+    return mergeWitnessSets(witnessHex, witness);
   }
 
   /** Register `source`'s NIGHT to generate DUST at THIS Midnight wallet's address. */
@@ -604,7 +631,7 @@ export function useDustSources() {
       const { dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
       const dustAddressHex = dustAddressToHex(ownDustAddress.value);
       const api = getMidnightApi(network.value);
-      const buildRegister = async () => {
+      const buildRegister = async (): Promise<BuiltMappingTx> => {
         const build = await api.buildDustRegistrationTx({
           cardanoAddress: source.baseAddress,
           paymentKeyHashHex: source.paymentKeyHashHex,
@@ -613,13 +640,13 @@ export function useDustSources() {
         if (build.status !== 'complete' || !build.txCbor) {
           throw new Error(build.note || 'Nexus did not return a complete registration transaction');
         }
-        return build.txCbor;
+        return { txCbor: build.txCbor, sponsoredCollateralRef: build.sponsoredCollateralRef ?? null };
       };
 
       onStage?.('registering');
-      const txCbor = await buildFittingTx(source, mnemonic, buildRegister, onStage);
-      const witnessHex = await signWithMnemonic(txCbor, mnemonic, source.accountIndex);
-      const txId = await mergeAndSubmit(txCbor, witnessHex);
+      const built = await buildFittingTx(source, mnemonic, buildRegister, onStage);
+      const witnessHex = await signMappingTx(built, mnemonic, source.accountIndex);
+      const txId = await mergeAndSubmit(built.txCbor, witnessHex);
 
       markDustPending(source.stakeAddress, ownDustAddress.value, txId);
       source.status = {
@@ -668,7 +695,7 @@ export function useDustSources() {
       const { dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
       const dustAddressHex = dustAddressToHex(ownDustAddress.value);
       const api = getMidnightApi(network.value);
-      const buildUpdate = async () => {
+      const buildUpdate = async (): Promise<BuiltMappingTx> => {
         const build = await api.buildDustUpdateTx({
           cardanoAddress: source.baseAddress,
           paymentKeyHashHex: source.paymentKeyHashHex,
@@ -679,13 +706,13 @@ export function useDustSources() {
         if (build.status !== 'complete' || !build.txCbor) {
           throw new Error(build.note || 'Nexus did not return a complete update transaction');
         }
-        return build.txCbor;
+        return { txCbor: build.txCbor, sponsoredCollateralRef: build.sponsoredCollateralRef ?? null };
       };
 
       onStage?.('registering');
-      const finalCbor = await buildFittingTx(source, mnemonic, buildUpdate, onStage);
-      const witnessHex = await signWithMnemonic(finalCbor, mnemonic, source.accountIndex);
-      const txId = await mergeAndSubmit(finalCbor, witnessHex);
+      const built = await buildFittingTx(source, mnemonic, buildUpdate, onStage);
+      const witnessHex = await signMappingTx(built, mnemonic, source.accountIndex);
+      const txId = await mergeAndSubmit(built.txCbor, witnessHex);
 
       markDustPending(source.stakeAddress, ownDustAddress.value, txId);
       source.status = {

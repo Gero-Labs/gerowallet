@@ -63,6 +63,14 @@ export interface DustTxExpectation {
    * the wallet holds is the user's own; without this list it is treated as such.
    */
   ownUtxoRefs?: Iterable<string>;
+  /**
+   * The output `sponsoredCollateralRef` names, proven from the transaction that
+   * created it (provenInputs.ts). Read only without `ownUtxoRefs`, by a caller
+   * that signs with `cardanoAddress`'s two keys alone (the DUST sources dialog):
+   * collateral is spent by a key's witness, so a UTxO locked by any other key is
+   * one those signatures cannot lose. Null or absent: the user's own.
+   */
+  sponsoredCollateralOutput?: Cardano.TxOut | null;
 }
 
 export type DustTxViolation = TxIntentViolation | 'unsupported';
@@ -117,6 +125,20 @@ function keyHashesOf(cardanoAddress: string): { payment: string; stake: string }
   }
 }
 
+/** The output pays a key hash that is not one of `ownKeyHashes`. Anything unreadable is not. */
+function lockedByOtherKey(output: Cardano.TxOut | null | undefined, ownKeyHashes: ReadonlySet<string>): boolean {
+  if (!output) return false;
+  try {
+    const address = Cardano.Address.fromBech32(String(output.address));
+    const props = address.getProps();
+    const payment = props.paymentPart;
+    if (!payment || payment.type !== Cardano.CredentialType.KeyHash) return false;
+    return !ownKeyHashes.has(String(payment.hash).toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 const singleUnit = (assets: ReadonlyMap<string, bigint>, quantity: bigint): string | null => {
   if (assets.size !== 1) return null;
   const [[unit, qty]] = [...assets];
@@ -132,8 +154,12 @@ export function dustMappingTxIntent(tx: Cardano.Tx, exp: DustTxExpectation): TxI
   const ownRefs = exp.ownUtxoRefs ? new Set(Array.from(exp.ownUtxoRefs, (r) => r.toLowerCase())) : null;
   const sponsored = exp.sponsoredCollateralRef?.toLowerCase() ?? null;
   // A ref Nexus calls sponsored counts as the sponsor's only when the wallet can
-  // tell it is not one of its own UTxOs.
-  const isOwnRisk = (ref: string) => !(sponsored && ref === sponsored && ownRefs && !ownRefs.has(ref));
+  // tell it is not one of its own UTxOs: by its UTxO list, or without one, by the
+  // proven output sitting at a key the wallet does not sign with.
+  const sponsorHolds = ownRefs
+    ? sponsored !== null && !ownRefs.has(sponsored)
+    : lockedByOtherKey(exp.sponsoredCollateralOutput, ownKeyHashes);
+  const isOwnRisk = (ref: string) => !(sponsored && ref === sponsored && sponsorHolds);
 
   const mintUnit = (quantity: bigint) => {
     const mint = new Map<string, bigint>();

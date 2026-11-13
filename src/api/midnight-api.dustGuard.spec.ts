@@ -152,3 +152,74 @@ describe('MidnightApi pins the mapping NFT of the registration being spent', () 
     await expect(api.buildDustDeregistrationTx(manage)).resolves.toBeTruthy();
   });
 });
+
+describe('MidnightApi proves collateral Nexus says it lent, for a caller with no UTxO list', () => {
+  /** The real transaction that created the lent UTxO, paying `to`. */
+  const creatingTx = (to: string) => {
+    const tx = Serialization.Transaction.fromCore({
+      id: TX,
+      body: { inputs: [{ txId: '4'.repeat(64), index: 0 }], outputs: [out(to, 5_000_000n)], fee: 200_000n },
+      witness: { signatures: new Map() },
+    } as unknown as Cardano.Tx);
+    return { cbor: tx.toCbor(), ref: `${String(tx.getId())}#0`, hash: String(tx.getId()) };
+  };
+  const sourcesFor = (created: { hash: string; cbor: string }) => [async () => new Map([[created.hash, created.cbor]])];
+  /** A registration whose collateral is `ref`, returned to the pool (ATTACKER stands in for it). */
+  const lentCollateralCbor = (ref: string) => {
+    const [txId, index] = ref.split('#');
+    return Serialization.Transaction.fromCore({
+      id: TX,
+      body: {
+        inputs: [{ txId: TX, index: 0 }],
+        outputs: [mapping(DUST), out(OWN, 97_000_000n)],
+        fee: 300_000n,
+        mint: new Map([[NFT, 1n]]),
+        requiredExtraSignatures: ['a'.repeat(56), 'b'.repeat(56)],
+        collaterals: [{ txId, index: Number(index) }],
+        collateralReturn: out(ATTACKER, 4_500_000n),
+        totalCollateral: 500_000n,
+      },
+      witness: { signatures: new Map() },
+    } as unknown as Cardano.Tx).toCbor();
+  };
+  const nexusLends = (txCbor: string, ref: string) => post.mockResolvedValueOnce({
+    status: 200,
+    data: {
+      status: 'complete', tx_cbor: txCbor, tx_hash: TX, validator_address: VALIDATOR,
+      validator_script_hash: DUST_MAPPING_VALIDATOR[NETWORK].scriptHash, datum_cbor: '', redeemer_cbor: '', mint_asset: null,
+      sponsored_collateral_ref: ref,
+    },
+  });
+  const request = { cardanoAddress: OWN, paymentKeyHashHex: 'a'.repeat(56), dustAddressHex: DUST };
+  const api = new MidnightApi(NETWORK);
+
+  beforeEach(() => {
+    post.mockReset();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+  });
+
+  it('accepts it once its UTxO is proven to sit at another key', async () => {
+    const pool = creatingTx(ATTACKER);
+    nexusLends(lentCollateralCbor(pool.ref), pool.ref);
+    await expect(api.buildDustRegistrationTx(request, { proofSources: sourcesFor(pool) })).resolves.toBeTruthy();
+  });
+
+  it('refuses it when the UTxO cannot be proven, or is proven to be the wallet\'s own', async () => {
+    const pool = creatingTx(ATTACKER);
+    nexusLends(lentCollateralCbor(pool.ref), pool.ref);
+    await expect(api.buildDustRegistrationTx(request))
+      .rejects.toMatchObject({ name: 'TxIntentMismatchError', violations: ['unexpectedCollateral'] });
+
+    const own = creatingTx(OWN);
+    nexusLends(lentCollateralCbor(own.ref), own.ref);
+    await expect(api.buildDustRegistrationTx(request, { proofSources: sourcesFor(own) }))
+      .rejects.toMatchObject({ violations: ['unexpectedCollateral'] });
+  });
+
+  it('lets a UTxO list, when the caller has one, decide over the proof', async () => {
+    const pool = creatingTx(ATTACKER);
+    nexusLends(lentCollateralCbor(pool.ref), pool.ref);
+    await expect(api.buildDustRegistrationTx(request, { proofSources: sourcesFor(pool), ownUtxoRefs: [pool.ref] }))
+      .rejects.toMatchObject({ violations: ['unexpectedCollateral'] });
+  });
+});
