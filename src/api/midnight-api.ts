@@ -16,7 +16,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
-import { Serialization } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import i18n from '@/plugins/i18n';
 import { parseHttpError } from '@/shared/utils/parser';
@@ -426,18 +426,11 @@ export interface DustBuildContext {
   proofSources?: TxCborSource[];
 }
 
-/**
- * The mapping NFT the registration UTxO being spent holds, proven from the
- * transaction that created it; null when it cannot be proven.
- */
-async function provenRegistrationNft(
-  registrationRef: string,
-  network: string,
-  sources: TxCborSource[],
-): Promise<string | null> {
+/** The output `ref` names, proven from the transaction that created it; null when it cannot be proven. */
+async function provenOutputOf(ref: string, sources: TxCborSource[]): Promise<Cardano.TxOut | null> {
   try {
-    const { proven } = await proveOutputs([registrationRef], sources);
-    return registrationNftOf(proven.get(registrationRef.toLowerCase()), network);
+    const { proven } = await proveOutputs([ref], sources);
+    return proven.get(ref.toLowerCase()) ?? null;
   } catch {
     return null;
   }
@@ -448,16 +441,23 @@ async function provenRegistrationNft(
  * `dustTxGuard.ts`). Runs on every complete build, before any caller can sign it.
  * On deregister and update the mapping NFT is pinned to the one the registration
  * UTxO provably holds; when that proof is unavailable, the guard's one-unit rule applies.
+ * A caller without the wallet's UTxO list (the DUST sources dialog) gets a lent
+ * collateral ref proven the same way, so the guard can tell the pool's UTxO from the user's.
  */
 async function verifyDustBuild(
   build: BuildDustRegistrationTxResponse,
-  expectation: Omit<DustTxExpectation, 'sponsoredCollateralRef'>,
+  expectation: Omit<DustTxExpectation, 'sponsoredCollateralRef' | 'sponsoredCollateralOutput'>,
   proofSources: TxCborSource[] = [],
 ): Promise<BuildDustRegistrationTxResponse> {
   if (build.status !== 'complete' || !build.txCbor) return build;
-  const registrationNftUnit = expectation.kind !== 'register' && expectation.registrationRef
-    ? await provenRegistrationNft(expectation.registrationRef, expectation.network, proofSources)
-    : null;
+  const sponsoredRef = build.sponsoredCollateralRef;
+  const [registrationOutput, sponsoredCollateralOutput] = await Promise.all([
+    expectation.kind !== 'register' && expectation.registrationRef
+      ? provenOutputOf(expectation.registrationRef, proofSources)
+      : null,
+    sponsoredRef && !expectation.ownUtxoRefs ? provenOutputOf(sponsoredRef, proofSources) : null,
+  ]);
+  const registrationNftUnit = registrationNftOf(registrationOutput ?? undefined, expectation.network);
   if (expectation.kind !== 'register' && !registrationNftUnit) {
     debugLog('DUST build: registration UTxO not proven; the mapping NFT is checked by count only');
   }
@@ -467,14 +467,15 @@ async function verifyDustBuild(
     violations = verifyDustMappingTx(tx, {
       ...expectation,
       registrationNftUnit,
-      sponsoredCollateralRef: build.sponsoredCollateralRef,
+      sponsoredCollateralRef: sponsoredRef,
+      sponsoredCollateralOutput,
     });
   } catch (e) {
     debugLog('DUST build: could not verify the built transaction', e);
     throw new TxIntentMismatchError(String(i18n.t('txGuard.builtTxMismatch')), []);
   }
   if (violations.length > 0) {
-    debugLog('DUST build: refused a transaction that differs from the request', violations);
+    debugLog(`DUST build: refused a transaction that differs from the request: ${violations.join(', ')}`);
     throw new TxIntentMismatchError(
       String(i18n.t('txGuard.builtTxMismatch')),
       violations.filter((v): v is TxIntentViolation => v !== 'unsupported'),

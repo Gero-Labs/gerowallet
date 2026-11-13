@@ -6,10 +6,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { bech32 } from 'bech32';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 
-const { api, decryptPhrase } = vi.hoisted(() => ({
+const { api, decryptPhrase, cosign } = vi.hoisted(() => ({
   api: { buildDustRegistrationTx: vi.fn(), submitCardanoTx: vi.fn() },
   decryptPhrase: vi.fn(),
+  cosign: vi.fn(),
 }));
+vi.mock('@/api/nexus-collateral-api', () => ({ nexusCollateralApi: { cosign } }));
 vi.mock('@/stores/geroStore', async () => ({ geroStore: (await import('vue')).reactive({ wallets: {} as Record<number, unknown> }) }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: { loggedWallet: { id: 50, name: 'Night', chain: 'Midnight', network: 'Preprod' } } }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: { addresses: { dust: 'dust-address' } } }));
@@ -130,5 +132,56 @@ describe('the Cardano twin of an added Midnight account (issue 1330)', () => {
       for (const key of Object.keys(logged)) delete logged[key];
       Object.assign(logged, before);
     }
+  });
+});
+
+describe('collateral Nexus lent from its pool', () => {
+  // The twin test above leaves its Cardano twin in the store; these rows are the added account's.
+  beforeEach(() => {
+    midnightStore.addresses = { dust: 'dust-address' } as typeof midnightStore.addresses;
+  });
+
+  const POOL_VKEY = '11'.repeat(32);
+  const poolWitness = () => Serialization.TransactionWitnessSet.fromCore({
+    signatures: new Map([[POOL_VKEY, '22'.repeat(64)]]),
+  } as unknown as Parameters<typeof Serialization.TransactionWitnessSet.fromCore>[0]).toCbor();
+
+  it('adds the pool’s co-signature next to the source’s own two', async () => {
+    const child = await sourceFor(2);
+    const txCbor = spendFrom(child.baseAddress);
+    const lent = `${'cc'.repeat(32)}#3`;
+    api.buildDustRegistrationTx.mockResolvedValue({ status: 'complete', txCbor, sponsoredCollateralRef: lent });
+    cosign.mockResolvedValue({ witness: poolWitness() });
+
+    const result = await useDustSources().registerSource(child, { password: PASSWORD });
+
+    expect(result).toEqual({ status: 'submitted', txHash: 'tx-id' });
+    expect(cosign).toHaveBeenCalledWith(txCbor, lent, 'cardano-preprod');
+    const submitted = Serialization.Transaction.fromCbor(Serialization.TxCBOR(api.submitCardanoTx.mock.calls[0][0]));
+    const signers = (submitted.witnessSet().vkeys()?.values() ?? []).map((witness) => witness.vkey());
+    expect(signers.sort()).toEqual(
+      [getPaymentKeyExternal(accountXpub(1), 0).hex(), getStakeKey(accountXpub(1), 0).hex(), POOL_VKEY].sort());
+  });
+
+  it('submits nothing when the pool will not co-sign', async () => {
+    const child = await sourceFor(2);
+    api.buildDustRegistrationTx.mockResolvedValue({
+      status: 'complete', txCbor: spendFrom(child.baseAddress), sponsoredCollateralRef: `${'cc'.repeat(32)}#3`,
+    });
+    cosign.mockRejectedValue(new Error('cosign 503'));
+
+    const result = await useDustSources().registerSource(child, { password: PASSWORD });
+
+    expect(result).toEqual({ status: 'error', message: 'cosign 503' });
+    expect(api.submitCardanoTx).not.toHaveBeenCalled();
+  });
+
+  it('asks the pool for nothing when the collateral is the source’s own', async () => {
+    const child = await sourceFor(2);
+    api.buildDustRegistrationTx.mockResolvedValue({ status: 'complete', txCbor: spendFrom(child.baseAddress) });
+
+    await useDustSources().registerSource(child, { password: PASSWORD });
+
+    expect(cosign).not.toHaveBeenCalled();
   });
 });
