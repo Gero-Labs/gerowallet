@@ -35,7 +35,7 @@ node scripts/precommit-lint.mjs && node scripts/design/audit.mjs && node scripts
 | ESLint errors in a file you barely touched | Fix them. The repo rule is that any file you edit leaves lint clean. That is the price of touching a legacy file. |
 | `OVER <metric>` from the ratchet | `node scripts/design/audit.mjs 2>&1 \| grep OVER` to see which. Tokenize the value. If it is a `#1122`-style reference in a comment, rewrite it as `PR 1122`. See `design-system.md`. |
 | Contrast failure | You changed a token or a chain accent. Fix the colour, do not raise a budget. |
-| `Cannot find module .../yorkie/src/runner.js` | Repair the checkout's dependency installation and generated hook, then rerun the normal commit. Do not bypass its gates. |
+| `Cannot find module .../yorkie/src/runner.js` | A pre-commit hook left from before yorkie was replaced. Run `npm ci` (or `npx simple-git-hooks`) to rewrite it, then rerun the normal commit. Do not bypass its gates. |
 
 **Never use `--no-verify`.** The single hook entry chains all three gates, so skipping lint also skips the ratchet and the WCAG check. That exact habit is why `precommit-lint.mjs` was written.
 

@@ -1,6 +1,6 @@
 // Pre-commit ESLint gate — STAGED INDEX CONTENT ONLY.
 //
-// Why not `eslint .` (the old gitHooks command): the flat config's
+// Why not `eslint .` (the old hook command): the flat config's
 // @typescript-eslint/no-explicit-any is an error and src/ carries ~730 legacy
 // `any` violations across 163 files. Linting the whole repo on every commit can
 // never go green, so the hook was permanently bypassed with --no-verify (which
@@ -23,7 +23,7 @@
 // partially-staged file without the same re-staging footgun anyway.
 //
 // Pure Node + git, no extra dependency (matches scripts/design/*.mjs), so it
-// runs identically in the yorkie pre-commit hook and anywhere else.
+// runs identically in the simple-git-hooks pre-commit hook and anywhere else.
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
