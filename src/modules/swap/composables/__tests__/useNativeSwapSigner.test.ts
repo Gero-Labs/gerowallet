@@ -47,9 +47,8 @@ vi.mock('@/shared/utils/provenInputs', async () => {
 });
 // isTrezorWebUsbEnabled defaults OFF — the Trezor test below asserts THIS (flag-off)
 // path explicitly. dispatchTrezor is mocked out too: it transitively imports
-// trezorWeb.ts, which reads `chrome.runtime.id` at module scope (no `chrome` global
-// in this happy-dom test env — see src/shared/utils/trezorWeb.spec.ts), and the
-// flag-off branch below never calls it anyway.
+// trezor.ts, which reads `chrome.runtime.id` at module scope (no `chrome` global
+// in this happy-dom test env), and the flag-off branch below never calls it anyway.
 vi.mock('@/stores/featureFlagsStore', () => ({
   featureFlagsStore: { state: { flags: { isTrezorWebUsbEnabled: false } } },
 }));

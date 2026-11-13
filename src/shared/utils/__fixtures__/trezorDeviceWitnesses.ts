@@ -1,11 +1,11 @@
 // The keys a Trezor is asked to witness, as trezor-connect works them out from a sign request:
 // its own transforms and `gatherWitnessPaths`, so a test checks the device's witness set rather
 // than restating connect's rules (which element paths it witnesses, in which signing mode).
-import type * as Trezor from '@trezor/connect';
-import { gatherWitnessPaths } from '@trezor/connect/lib/api/cardano/cardanoWitnesses';
-import { transformCertificate } from '@trezor/connect/lib/api/cardano/cardanoCertificate';
-import { transformCollateralInput, transformInput } from '@trezor/connect/lib/api/cardano/cardanoInputs';
-import { getSerializedPath, validatePath } from '@trezor/connect/lib/utils/pathUtils';
+import type * as Trezor from '@trezor/connect-webextension';
+import { gatherWitnessPaths } from '@trezor/connect-core/lib/api/cardano/cardanoWitnesses';
+import { transformCertificate } from '@trezor/connect-core/lib/api/cardano/cardanoCertificate';
+import { transformCollateralInput, transformInput } from '@trezor/connect-core/lib/api/cardano/cardanoInputs';
+import { getSerializedPath, validatePath } from '@trezor/connect-core/lib/utils/pathUtils';
 
 /** Every key path the device witnesses for `request`, as m/… strings in the order connect asks. */
 export const deviceWitnessPaths = (request: Trezor.CardanoSignTransaction): string[] =>

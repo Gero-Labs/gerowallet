@@ -2,7 +2,9 @@ import { coin_type, Key, Keys, purpose } from '@/models/types';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { hdPathToArray, toStakeAddress, getPublicKey } from '@/chrome/serialization';
 import TrezorConnect from '@trezor/connect-webextension';
-import * as Trezor from '@trezor/connect';
+import type * as Trezor from '@trezor/connect-webextension';
+// The protobuf enums only: the package root also builds a ProtobufManager.
+import * as PROTO from '@trezor/protobuf/lib/definitions';
 import {
   AccountKeyDerivationPath,
   AddressType,
@@ -50,18 +52,31 @@ interface TrezorTxTransformerContext {
   knownAddresses: GroupedAddress[];
   /** The key set and UTxOs that decide which keys sign (trezorWitnesses.ts). */
   keyContext: TrezorKeyContext;
-  outputsFormat?: Trezor.PROTO.CardanoTxOutputSerializationFormat[];
-  collateralReturnFormat?: Trezor.PROTO.CardanoTxOutputSerializationFormat;
+  outputsFormat?: PROTO.CardanoTxOutputSerializationFormat[];
+  collateralReturnFormat?: PROTO.CardanoTxOutputSerializationFormat;
   tagCborSets?: boolean;
 }
 
 /**
  * Trezor Connect Wrapper
- * Clean wrapper around @trezor/connect-webextension for Cardano operations
- * Works in Chrome extension service worker context
+ * Clean wrapper around @trezor/connect-webextension (Connect 10) for Cardano and Bitcoin.
+ * Connect 10 is a thin client: Trezor Suite runs the core and shows every prompt.
+ * It reaches Suite desktop over ws://127.0.0.1:21335 when it is running, otherwise
+ * it opens Suite Web (https://suite.trezor.io/web/connect-popup) in a tab or window
+ * and talks to it through `externally_connectable` (scripts/manifest.ts). Both work
+ * from the service worker and from an extension page, so this one module serves both.
  */
 
-// Trezor Connect manifest configuration
+/**
+ * The error of a failed Connect call. Connect 10 answers `{ success: false, error: { message, code } }`
+ * (Connect 9 put a string in `payload.error`). Read through this, because the union does not narrow
+ * on `success` under this project's compiler settings.
+ */
+const connectError = (result: { success: boolean; error?: { message?: string; code?: string } }): { message: string; code?: string } =>
+  ({ message: result.error?.message ?? '', code: result.error?.code });
+
+// Trezor Connect manifest. Connect 10 requires appName; Suite shows it, the icon
+// and the origin in its permission prompt.
 const TREZOR_MANIFEST = {
   appName: 'Gero Dashboard',
   appIcon: 'https://raw.githubusercontent.com/Gero-Labs/staking-pool/refs/heads/main/logo-64.png',
@@ -74,10 +89,10 @@ const multiSigWitnessPaths = (accountIndex: number): BIP32Path[] => [
   util.accountKeyDerivationPathToBip32Path(accountIndex, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG)
 ];
 
-const stakeCredentialCert = (certificateType: Trezor.PROTO.CardanoCertificateType): boolean =>
-  certificateType === Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION ||
-  certificateType === Trezor.PROTO.CardanoCertificateType.STAKE_DEREGISTRATION ||
-  certificateType === Trezor.PROTO.CardanoCertificateType.STAKE_DELEGATION;
+const stakeCredentialCert = (certificateType: PROTO.CardanoCertificateType): boolean =>
+  certificateType === PROTO.CardanoCertificateType.STAKE_REGISTRATION ||
+  certificateType === PROTO.CardanoCertificateType.STAKE_DEREGISTRATION ||
+  certificateType === PROTO.CardanoCertificateType.STAKE_DELEGATION;
 
 const containsOnlyScriptHashCredentials = (tx: Omit<Trezor.CardanoSignTransaction, 'signingMode'>): boolean => {
   if (tx['certificates']) {
@@ -248,7 +263,7 @@ const toTxOut = (output: { index: number; txOut: Serialization.TransactionOutput
   const knownAddress = knownAddresses.find((addr: GroupedAddress) => addr.address === txOut.address);
 
   const format = output.isCollateral ? collateralReturnFormat : outputsFormat?.[output.index];
-  const isBabbage = format === Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE;
+  const isBabbage = format === PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE;
 
   const baseOutput: MutableCardanoOutput = {
     amount: txOut.value.coins.toString(),
@@ -284,7 +299,7 @@ const toTxOut = (output: { index: number; txOut: Serialization.TransactionOutput
     );
 
     baseOutput.addressParameters = {
-      addressType: Trezor.PROTO.CardanoAddressType.BASE,
+      addressType: PROTO.CardanoAddressType.BASE,
       path: bip32PathToString(paymentKeyPathArray),
       stakingPath: stakeKeyPathArray ? bip32PathToString(stakeKeyPathArray) : undefined,
     };
@@ -341,7 +356,7 @@ const txToTrezor = async (
 export default {
   initialized: false,
   trezorConfig: {
-    derivationType: Trezor.PROTO.CardanoDerivationType.ICARUS_TREZOR
+    derivationType: PROTO.CardanoDerivationType.ICARUS_TREZOR
   },
 
   /**
@@ -354,17 +369,12 @@ export default {
     }
 
     try {
-      // Service-worker path (flag OFF). The SW has no window.open, so it cannot run
-      // the connect core / WebUSB itself and cannot inject the connect content-script
-      // the tab path needs — every daemon-free coreMode fails here (suite-web
-      // 302-redirects, popup can't inject the content-script). So the SW stays on the
-      // Bridge transport (needs trezord). The daemon-free WebUSB path lives in the
-      // document context (trezorWeb.ts, flag ON). See project_trezor_webusb_daemon_free.
+      // coreMode 'auto' (the default): Suite desktop when it is running, Suite Web
+      // otherwise, and back to desktop as soon as it appears. No transports or
+      // connectSrc: Suite owns the device connection (Connect 10 dropped Bridge).
       await TrezorConnect.init({
         manifest: TREZOR_MANIFEST,
-        transports: ['WebUsbTransport', 'BridgeTransport', 'BluetoothTransport', 'NativeBluetoothTransport'],
-        connectSrc: 'https://connect.trezor.io/9/',
-        _extendWebextensionLifetime: true,
+        coreMode: 'auto',
       });
       this.initialized = true;
     } catch (error) {
@@ -381,7 +391,7 @@ export default {
 
     const result = await TrezorConnect.getFeatures();
     if (!result.success) {
-      throw new Error(result.payload.error || 'Failed to get device features');
+      throw new Error(connectError(result).message || 'Failed to get device features');
     }
 
     return result.payload;
@@ -416,13 +426,17 @@ export default {
       } as Trezor.CardanoGetPublicKey);
 
       if (!res.success) {
-        const errorMessage = 'error' in res.payload ? res.payload.error : 'Failed to get Trezor public key';
+        const errorMessage = connectError(res).message || 'Failed to get Trezor public key';
         throw new Error(errorMessage);
       }
 
+      if (!res.payload?.node || !/^[0-9a-f]{128}$/i.test(res.payload.xpub)) {
+        throw new Error('Trezor returned an incomplete public key. Please try again.');
+      }
       const chainCode = res.payload.node.chain_code;
       const publicKey = res.payload.node.public_key;
-      const bip32PublicKeyHex = res.payload.publicKey;
+      // Connect 10: `publicKey` is the raw 32-byte key; the extended key is `xpub`.
+      const bip32PublicKeyHex = res.payload.xpub;
       const bip32PublicKeyBytes = Buffer.from(bip32PublicKeyHex, 'hex');
       const words = bech32.toWords(bip32PublicKeyBytes);
       const hwPublicKey = bech32.encode('xpub', words, 1023);
@@ -455,13 +469,11 @@ export default {
     await this.init();
     const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
     const features: Trezor.Features = await this.getDeviceInfo();
-    // No retry: the incomplete first answer is a connect-web popup quirk
-    // (see trezorWeb.ts), and the Bridge path has never needed one.
     const res = await TrezorConnect.cardanoGetPublicKey({
       bundle: paths.map((path) => ({ path, showOnTrezor: false })),
     } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>);
     if (!res.success) {
-      throw new Error('error' in res.payload ? res.payload.error : 'Failed to get Trezor public keys');
+      throw new Error(connectError(res).message || 'Failed to get Trezor public keys');
     }
     if (res.payload.length !== paths.length || !res.payload.every((key) => key?.node)) {
       throw new Error('Trezor returned an incomplete public key. Please try again.');
@@ -478,31 +490,31 @@ export default {
    * This function will always return the first matching type depending on the provided data
    * Data is further checked on the Trezor side
    */
-  matchSigningMode(tx: Omit<Trezor.CardanoSignTransaction, 'signingMode'>): Trezor.PROTO.CardanoTxSigningMode {
+  matchSigningMode(tx: Omit<Trezor.CardanoSignTransaction, 'signingMode'>): PROTO.CardanoTxSigningMode {
     if (tx['certificates']) {
       for (const cert of tx['certificates']) {
         // Represents pool registration from the perspective of a pool owner.
         if (
-          cert.type === Trezor.PROTO.CardanoCertificateType.STAKE_POOL_REGISTRATION &&
+          cert.type === PROTO.CardanoCertificateType.STAKE_POOL_REGISTRATION &&
           cert.poolParameters?.owners.some((owner) => owner.stakingKeyPath)
         )
-          return Trezor.PROTO.CardanoTxSigningMode.POOL_REGISTRATION_AS_OWNER;
+          return PROTO.CardanoTxSigningMode.POOL_REGISTRATION_AS_OWNER;
       }
     }
 
     /** Plutus signing mode has a broader usage e.g. multisig tx that contains referenceInputs is marked as plutus */
     if (tx['collateralInputs'] || tx['collateralReturn'] || tx['totalCollateral'] || tx['referenceInputs']) {
-      return Trezor.PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION;
+      return PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION;
     }
 
     // Represents a transaction controlled by native scripts.
     // Like an ordinary transaction, but stake credentials and all similar elements are given as script hashes
     if (isMultiSig(tx)) {
-      return Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION;
+      return PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION;
     }
 
     // Represents an ordinary user transaction transferring funds.
-    return Trezor.PROTO.CardanoTxSigningMode.ORDINARY_TRANSACTION;
+    return PROTO.CardanoTxSigningMode.ORDINARY_TRANSACTION;
   },
 
   async signTransaction(
@@ -544,12 +556,12 @@ export default {
         .outputs()
         .map((out) =>
           out.isBabbageOutput()
-            ? Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
-            : Trezor.PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY
+            ? PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
+            : PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY
         );
       const collateralReturnFormat = txBody.collateralReturn()?.isBabbageOutput()
-        ? Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
-        : Trezor.PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY;
+        ? PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
+        : PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY;
 
       const trezorTxData: Omit<Trezor.CardanoSignTransaction, 'signingMode'> = await txToTrezor(txBody, {
         accountIndex,
@@ -566,7 +578,7 @@ export default {
 
       const signingMode = this.matchSigningMode(trezorTxData);
 
-      const isMultiSigMode = signingMode === Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION;
+      const isMultiSigMode = signingMode === PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION;
       // The device witnesses each path the request carries; ask only for the plan's others.
       const additionalWitnessRequests = isMultiSigMode
         ? multiSigWitnessPaths(accountIndex).map(path => bip32PathToString(path))
@@ -587,12 +599,12 @@ export default {
 
       // The keys the plan signs with, derived from the account xpub (a Plutus transaction keeps
       // every witness, a multisig one its multisig key, below).
-      const expectedPublicKeys = isMultiSigMode || signingMode === Trezor.PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION
+      const expectedPublicKeys = isMultiSigMode || signingMode === PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION
         ? []
         : walletPaths.map((path) => this.derivePublicKeyFromXpub(xPub, accountKeyIndices(path) as AccountKeyDerivationPath));
 
       if (!result.success) {
-        throw new errors.TransportError('Failed to export extended account public key', result.payload);
+        throw new errors.TransportError('Failed to export extended account public key', connectError(result));
       }
 
       const signedData = result.payload;
@@ -614,12 +626,13 @@ export default {
           derivationType: fullTrezorParams.derivationType,
         });
         if (!exported.success) {
-          throw new errors.TransportError('Failed to export multisig account public key', exported.payload);
+          throw new errors.TransportError('Failed to export multisig account public key', connectError(exported));
         }
-        if (!/^[0-9a-f]{128}$/i.test(exported.payload.publicKey)) {
+        // Connect 10: the 64-byte extended key is `xpub` (`publicKey` is the raw key).
+        if (!/^[0-9a-f]{128}$/i.test(exported.payload.xpub)) {
           throw new errors.HwMappingError('Trezor returned an invalid multisig account public key');
         }
-        const multisigXpub = bech32.encode('xpub', bech32.toWords(Buffer.from(exported.payload.publicKey, 'hex')), 1023);
+        const multisigXpub = bech32.encode('xpub', bech32.toWords(Buffer.from(exported.payload.xpub, 'hex')), 1023);
         expectedPublicKeys.splice(0, expectedPublicKeys.length,
           this.derivePublicKeyFromXpub(multisigXpub, { role: KeyRole.External, index: 0 }));
       }
@@ -632,7 +645,7 @@ export default {
         // For Plutus transactions, trust ALL signatures from Trezor
         // Trezor analyzes the transaction structure and signs with the correct keys
         // This includes script inputs, collateral, and other Plutus-specific signing requirements
-        if (signingMode === Trezor.PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION) {
+        if (signingMode === PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION) {
           signatures.set(publicKey, signature);
         } else if (expectedPublicKeys.includes(publicKey)) {
           // For non-Plutus transactions, only include expected signatures (security measure)
@@ -728,7 +741,7 @@ export default {
       } as Trezor.CardanoSignMessage);
 
       if (!result.success) {
-        const errorMessage = 'error' in result.payload ? result.payload.error : 'Failed to sign data';
+        const errorMessage = connectError(result).message || 'Failed to sign data';
         throw new Error(errorMessage);
       }
 
@@ -889,7 +902,7 @@ export default {
     });
 
     if (!result.success) {
-      throw new Error(result.payload.error || 'Failed to get Bitcoin public key from Trezor');
+      throw new Error(connectError(result).message || 'Failed to get Bitcoin public key from Trezor');
     }
 
     // Get device features for device info
@@ -951,7 +964,7 @@ export default {
     });
 
     if (!result.success) {
-      throw new Error(result.payload.error || 'Failed to get Bitcoin address from Trezor');
+      throw new Error(connectError(result).message || 'Failed to get Bitcoin address from Trezor');
     }
 
     return result.payload.address;
@@ -970,7 +983,7 @@ export default {
     const result = await TrezorConnect.signTransaction(trezorSignTransactionParams(unsigned, account));
 
     if (!result.success) {
-      throw new Error(result.payload.error || 'Failed to sign Bitcoin transaction with Trezor');
+      throw new Error(connectError(result).message || 'Failed to sign Bitcoin transaction with Trezor');
     }
 
     return mergeTrezorSignatures(unsigned, result.payload.serializedTx).toHex();
