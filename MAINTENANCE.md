@@ -87,7 +87,8 @@ Retain these coupled-update constraints until their upstream contracts change:
 - Vitest/UI, Vite, plugins, and the Node runtime must be reviewed together.
 
 For #1314, start with runtime input/rendering and wallet/device SDK paths,
-including DOMPurify (showdown was replaced by the in-house `renderMarkdown`).
+including DOMPurify (showdown was replaced by the in-house `renderMarkdown`, and
+Trezor Connect moved to 10, which routes through Trezor Suite).
 Review build/install paths separately (yorkie was replaced by simple-git-hooks,
 `archiver` removed and `unplugin-vue-components` moved to 32; what is left is in
 the November 13 triage record).

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi, type Mock } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import type * as Trezor from '@trezor/connect';
+import type * as Trezor from '@trezor/connect-webextension';
 import { Blockchain, Keys, Network } from '@/models/types';
 import networks from '@/utils/networks';
 import { INLINE_DATUM_UTXOS } from '@/shared/utils/__fixtures__/mainnetDatumUtxos';
@@ -24,25 +24,18 @@ vi.hoisted(() => {
 });
 
 // The device, one per Connect flavour: records what it is asked to sign.
-const { connectWebextension, connectWeb } = vi.hoisted(() => {
+const { connectWebextension } = vi.hoisted(() => {
   const connect = () => ({ init: vi.fn(async () => undefined), cardanoSignTransaction: vi.fn() });
-  return { connectWebextension: connect(), connectWeb: connect() };
+  return { connectWebextension: connect() };
 });
 vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension }));
-vi.mock('@trezor/connect-web', () => ({ default: connectWeb }));
-// @trezor/connect's entry loads its device-authenticity API, which require()s an ESM-only
-// @noble/curves: Node before 22.12 (CI pins 22.11.0) cannot load it. At runtime both modules
-// only read PROTO from it, so they get the real one, from the constants module that defines it.
-vi.mock('@trezor/connect', async () => ({ PROTO: (await import('@trezor/connect/lib/constants')).PROTO }));
 
 import trezor from './trezor';
-import trezorWeb from './trezorWeb';
 
 type SignTransaction = typeof trezor.signTransaction;
 
 const SIGNERS: [string, { cardanoSignTransaction: Mock }, SignTransaction][] = [
   ['trezor (service worker)', connectWebextension, (...args) => trezor.signTransaction(...args)],
-  ['trezorWeb (document)', connectWeb, (...args) => trezorWeb.cardanoSignTransaction(...args)],
 ];
 
 /** A wallet that owns none of the inputs: it signs a transaction a dApp built. */

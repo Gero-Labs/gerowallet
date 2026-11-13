@@ -16,7 +16,7 @@ import {
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { CardanoSignRequest, CardanoSignTxHashRequest, CryptoKeypath } from '@keystonehq/bc-ur-registry-cardano';
 import type Transport from '@ledgerhq/hw-transport';
-import type * as Trezor from '@trezor/connect';
+import type * as Trezor from '@trezor/connect-webextension';
 import { Blockchain, Keys, Network } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
@@ -35,21 +35,18 @@ import {
 vi.hoisted(() => {
   (globalThis as unknown as { chrome: unknown }).chrome = { runtime: { id: 'test-extension-id' } };
 });
-const { connectWebextension, connectWeb, send } = vi.hoisted(() => {
+const { connectWebextension, send } = vi.hoisted(() => {
   const connect = () => ({ init: vi.fn(async () => undefined), cardanoSignTransaction: vi.fn(), cardanoGetPublicKey: vi.fn() });
-  return { connectWebextension: connect(), connectWeb: connect(), send: vi.fn() };
+  return { connectWebextension: connect(), send: vi.fn() };
 });
 vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension }));
-vi.mock('@trezor/connect-web', () => ({ default: connectWeb }));
 // See trezor.datum.spec.ts: the package entry cannot load under the Node CI pins.
-vi.mock('@trezor/connect', async () => ({ PROTO: (await import('@trezor/connect/lib/constants')).PROTO }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: send } }));
 
 import { assertCip113SignAllowed } from './cip113SignPreflight';
 import { createKeystoneSignRequest } from './keystone';
 import ledgerUtils from './ledger';
 import trezor from './trezor';
-import trezorWeb from './trezorWeb';
 
 const PAYMENT_PATH = "m/1852'/1815'/0'/0/0";
 const STAKE_PATH = "m/1852'/1815'/0'/2/0";
@@ -174,7 +171,6 @@ describe('Ledger', () => {
 
 const TREZOR_SIGNERS: [string, { cardanoSignTransaction: Mock }, typeof trezor.signTransaction][] = [
   ['trezor (service worker)', connectWebextension, (...args) => trezor.signTransaction(...args)],
-  ['trezorWeb (document)', connectWeb, (...args) => trezorWeb.cardanoSignTransaction(...args)],
 ];
 
 describe.each(TREZOR_SIGNERS)('%s', (_, connect, signTransaction) => {

@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi, type Mock } from 'vitest
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { bech32 } from 'bech32';
-import type * as Trezor from '@trezor/connect';
+import type * as Trezor from '@trezor/connect-webextension';
 import { Blockchain, Keys, Network } from '@/models/types';
 import networks from '@/utils/networks';
 import { WALLET_ACCOUNT_XPUB, WALLET_ADDRESS } from '@/shared/utils/__fixtures__/handAssembledTxs';
@@ -19,23 +19,18 @@ vi.hoisted(() => {
 });
 
 // The device, one per Connect flavour: records what it is asked to sign.
-const { connectWebextension, connectWeb } = vi.hoisted(() => {
+const { connectWebextension } = vi.hoisted(() => {
   const connect = () => ({ init: vi.fn(async () => undefined), cardanoSignTransaction: vi.fn() });
-  return { connectWebextension: connect(), connectWeb: connect() };
+  return { connectWebextension: connect() };
 });
 vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension }));
-vi.mock('@trezor/connect-web', () => ({ default: connectWeb }));
-// As in trezor.datum.spec.ts: the modules only read PROTO from @trezor/connect.
-vi.mock('@trezor/connect', async () => ({ PROTO: (await import('@trezor/connect/lib/constants')).PROTO }));
 
 import trezor from './trezor';
-import trezorWeb from './trezorWeb';
 
 type SignTransaction = typeof trezor.signTransaction;
 
 const SIGNERS: [string, { cardanoSignTransaction: Mock }, SignTransaction][] = [
   ['trezor (service worker)', connectWebextension, (...args) => trezor.signTransaction(...args)],
-  ['trezorWeb (document)', connectWeb, (...args) => trezorWeb.cardanoSignTransaction(...args)],
 ];
 
 const MAINNET = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);

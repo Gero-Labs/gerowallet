@@ -1784,11 +1784,8 @@ export class WalletManager {
   private async proveForPeer(payload: Uint8Array, localUrl: string): Promise<Uint8Array> {
     const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
     const { hexToBytes } = await import('@/chains/midnight/midnightTxBuilder');
-    // Buffer, not proveSession's bytesToHex: importing that module here drags
-    // @noble/curves into walletManager's graph, which perturbs module
-    // resolution for @trezor/device-authenticity's CJS entry and breaks
-    // trezorWeb.spec. This is also the idiom the surrounding Midnight code
-    // already uses (midnightUnshieldedProver, midnightShieldedBuilder).
+    // Buffer, not proveSession's bytesToHex: this is the idiom the surrounding
+    // Midnight code already uses (midnightUnshieldedProver, midnightShieldedBuilder).
     const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
     if (!isLoopbackProverUrl(localUrl)) throw new Error('Cross-device proving needs a proof server on this computer');
     const signedTxHex = Buffer.from(payload).toString('hex');

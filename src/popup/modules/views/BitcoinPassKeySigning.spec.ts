@@ -22,7 +22,6 @@ vi.mock('@/plugins/snackbar', () => ({ default: { setError: mocks.error } }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: vi.fn(), end: vi.fn() } }));
 vi.mock('@/shared/utils/ledger', () => ({ default: {} }));
 vi.mock('@/shared/utils/trezor', () => ({ default: {} }));
-vi.mock('@/shared/utils/trezorWeb', () => ({ default: {} }));
 // bitcoinjs-lib is externalized to Node by Vitest and checks buffers against Node's
 // Buffer, while the sources get the polyfill (see bitcoinSigner.spec.ts).
 vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {

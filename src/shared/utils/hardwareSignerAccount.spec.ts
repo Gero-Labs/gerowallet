@@ -12,7 +12,7 @@ import { LedgerKeyAgent } from '@cardano-sdk/hardware-ledger';
 import { CommunicationType, KeyPurpose } from '@cardano-sdk/key-management';
 import type { MessageData, SignTransactionRequest } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import type Transport from '@ledgerhq/hw-transport';
-import type * as Trezor from '@trezor/connect';
+import type * as Trezor from '@trezor/connect-webextension';
 import { Blockchain, Keys, Network } from '@/models/types';
 import networks from '@/utils/networks';
 import {
@@ -29,20 +29,17 @@ import { Ada } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 vi.hoisted(() => {
   (globalThis as unknown as { chrome: unknown }).chrome = { runtime: { id: 'test-extension-id' } };
 });
-const { connectWebextension, connectWeb } = vi.hoisted(() => {
+const { connectWebextension } = vi.hoisted(() => {
   const connect = () => ({ init: vi.fn(async () => undefined), cardanoSignTransaction: vi.fn(), cardanoGetPublicKey: vi.fn() });
-  return { connectWebextension: connect(), connectWeb: connect() };
+  return { connectWebextension: connect() };
 });
 vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension }));
-vi.mock('@trezor/connect-web', () => ({ default: connectWeb }));
 // See trezor.datum.spec.ts: the package entry cannot load under the Node CI pins.
-vi.mock('@trezor/connect', async () => ({ PROTO: (await import('@trezor/connect/lib/constants')).PROTO }));
 // The worker's CIP-113 answer (cip113SignPreflight.spec.ts): nothing here is refused.
 vi.mock('@/shared/utils/cip113SignPreflight', () => ({ assertCip113SignAllowed: vi.fn(async () => undefined) }));
 
 import ledgerUtils from './ledger';
 import trezor from './trezor';
-import trezorWeb from './trezorWeb';
 
 const STAKE_ADDRESS = 'stake1uy3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsflrjnr';
 
@@ -122,7 +119,6 @@ beforeAll(() => {
 type SignTransaction = typeof trezor.signTransaction;
 const TREZOR_SIGNERS: [string, { cardanoSignTransaction: Mock; cardanoGetPublicKey: Mock }, SignTransaction][] = [
   ['trezor (service worker)', connectWebextension, (...args) => trezor.signTransaction(...args)],
-  ['trezorWeb (document)', connectWeb, (...args) => trezorWeb.cardanoSignTransaction(...args)],
 ];
 
 describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) => {
@@ -140,7 +136,8 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
     const publicKey = crypto.getRawPublicKey(crypto.getBip32PublicKey(witnessKey));
     const signature = crypto.sign(crypto.getRawPrivateKey(witnessKey), HexBlob(NO_COLLATERAL_TX_ID));
     const unrelatedKey = crypto.getRawPublicKey(crypto.getBip32PublicKey(crypto.derivePrivateKey(root, [HARDENED + 1852, HARDENED + 1815, HARDENED + account, 0, 0])));
-    connect.cardanoGetPublicKey.mockResolvedValueOnce({ success: true, payload: { publicKey: crypto.getBip32PublicKey(accountKey) } });
+    // Connect 10: the extended key is `xpub`; `publicKey` is the raw 32-byte key.
+    connect.cardanoGetPublicKey.mockResolvedValueOnce({ success: true, payload: { xpub: crypto.getBip32PublicKey(accountKey) } });
     connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: {
       hash: NO_COLLATERAL_TX_ID,
       witnesses: [{ pubKey: publicKey, signature }, { pubKey: unrelatedKey, signature }],
@@ -153,8 +150,8 @@ describe.each(TREZOR_SIGNERS)('%s on account #1', (_, connect, signTransaction) 
   });
 
   it.each([
-    { success: false, payload: { error: 'Export declined' } },
-    { success: true, payload: { publicKey: 'invalid' } },
+    { success: false, error: { message: 'Export declined', code: 'Failure_ActionCancelled' } },
+    { success: true, payload: { xpub: 'invalid' } },
   ])('refuses a failed or malformed multisig key export: %j', async (response) => {
     connect.cardanoGetPublicKey.mockResolvedValueOnce(response);
     connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: {
@@ -307,7 +304,6 @@ const deviceKey = (index: number) => ({ publicKeyHex: (index + 10).toString(16).
 
 describe.each([
   ['trezor (service worker)', connectWebextension, () => trezor, 'getDeviceInfo'],
-  ['trezorWeb (document)', connectWeb, () => trezorWeb, 'getFeatures'],
 ] as const)('%s exports several accounts', (_, connect, signer, featuresMethod) => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -320,7 +316,7 @@ describe.each([
       payload: [0, 1, 4].map((index) => ({ node: { public_key: deviceKey(index).publicKeyHex, chain_code: deviceKey(index).chainCodeHex } })),
     });
 
-    const { productName, accounts } = await (signer() as typeof trezorWeb).getAccountXpubs([0, 1, 4]);
+    const { productName, accounts } = await (signer() as typeof trezor).getAccountXpubs([0, 1, 4]);
 
     expect(connect.cardanoGetPublicKey.mock.lastCall![0]).toEqual({ bundle: [
       { path: "m/1852'/1815'/0'", showOnTrezor: false },
@@ -332,16 +328,41 @@ describe.each([
       .toEqual([[0, deviceKey(0).publicKeyHex], [1, deviceKey(1).publicKeyHex], [4, deviceKey(4).publicKeyHex]]);
   });
 
+  it('pairs one account from the extended key Connect 10 returns in `xpub`', async () => {
+    vi.spyOn(signer() as unknown as Record<string, () => Promise<unknown>>, featuresMethod).mockResolvedValue({ label: 'My Trezor', model: 'T3T1' });
+    const { publicKeyHex, chainCodeHex } = deviceKey(0);
+    const xpub = publicKeyHex + chainCodeHex;
+    connect.cardanoGetPublicKey.mockResolvedValueOnce({ success: true, payload: {
+      publicKey: publicKeyHex, xpub, node: { public_key: publicKeyHex, chain_code: chainCodeHex },
+    } });
+
+    const { hwPublicKey, keys } = await trezor.getXpub("m/1852'/1815'/0'");
+
+    expect(hwPublicKey).toBe(bech32.encode('xpub', bech32.toWords(Buffer.from(xpub, 'hex')), 1023));
+    expect(keys).toEqual([{ chainCode: chainCodeHex, path: "m/1852'/1815'/0'", publicKey: publicKeyHex }]);
+  });
+
+  it('refuses a single-account answer without the extended key', async () => {
+    vi.spyOn(signer() as unknown as Record<string, () => Promise<unknown>>, featuresMethod).mockResolvedValue({ label: 'My Trezor', model: 'T3T1' });
+    const { publicKeyHex, chainCodeHex } = deviceKey(0);
+    // The Connect 9 shape: the 64-byte key in `publicKey` and no `xpub`.
+    connect.cardanoGetPublicKey.mockResolvedValueOnce({ success: true, payload: {
+      publicKey: publicKeyHex + chainCodeHex, node: { public_key: publicKeyHex, chain_code: chainCodeHex },
+    } });
+
+    await expect(trezor.getXpub("m/1852'/1815'/0'")).rejects.toThrow(/incomplete public key/);
+  });
+
   it('refuses an answer missing an account', async () => {
     vi.spyOn(signer() as unknown as Record<string, () => Promise<unknown>>, featuresMethod).mockResolvedValue({ label: 'T', model: 'T3T1' });
     connect.cardanoGetPublicKey.mockResolvedValue({ success: true, payload: [{ node: { public_key: deviceKey(0).publicKeyHex, chain_code: deviceKey(0).chainCodeHex } }] });
 
-    await expect((signer() as typeof trezorWeb).getAccountXpubs([0, 1])).rejects.toThrow();
+    await expect((signer() as typeof trezor).getAccountXpubs([0, 1])).rejects.toThrow();
   });
 
   it('refuses invalid indices before asking the device', async () => {
     const asked = connect.cardanoGetPublicKey.mock.calls.length;
-    await expect((signer() as typeof trezorWeb).getAccountXpubs([1, 1])).rejects.toThrow(InvalidAccountIndexError);
+    await expect((signer() as typeof trezor).getAccountXpubs([1, 1])).rejects.toThrow(InvalidAccountIndexError);
     expect(connect.cardanoGetPublicKey.mock.calls.length).toBe(asked);
   });
 });

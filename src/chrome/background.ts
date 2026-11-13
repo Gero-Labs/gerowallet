@@ -756,8 +756,8 @@ const processedDomains: Set<string> = new Set<string>();
 
 // Own/trusted domains — registrable domain (tldts getDomain), covers all subdomains.
 // Always approved: skip the urlScan blacklist check.
-// 'trezor.io' covers suite.trezor.io / connect.trezor.io — the Trezor-hosted
-// connect-popup tab that connect-webextension opens for daemon-free WebUSB.
+// 'trezor.io' covers suite.trezor.io — the Suite Web connect-popup tab that
+// Trezor Connect 10 opens when Suite desktop is not running.
 // Skips the phishing url-scan/overlay so it can't disrupt the Trezor handshake.
 const TRUSTED_DOMAINS: Set<string> = new Set<string>(['gerowallet.io', 'trezor.io']);
 

@@ -3,15 +3,16 @@
  * signer and the Keystone follow (`walletWitnessPlan` and its helpers in keyCreds.ts). Trezor's
  * request is per element, so each input, certificate, withdrawal and required signer carries the
  * wallet's key by its path, or another party's credential by its hash; the device witnesses
- * every path the request carries. Shared by the service-worker signer (trezor.ts) and the
- * document one (trezorWeb.ts).
+ * every path the request carries.
  *
  * The firmware has no DRep or committee certificates and no governance votes, so those keys sign
  * only as required signers (any CIP-1852 path is a valid required signer there).
  */
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import type { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
-import * as Trezor from '@trezor/connect';
+import type * as Trezor from '@trezor/connect-webextension';
+// The protobuf enums only: the package root also builds a ProtobufManager.
+import * as PROTO from '@trezor/protobuf/lib/definitions';
 import type { Key, Keys } from '@/models/types';
 import { MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, TREZOR_GOVERNANCE_REFUSAL_MESSAGE } from '@/chrome/config';
 import { debugLog } from '@/utils/debug';
@@ -77,17 +78,17 @@ const mapDRep = (dRep: Cardano.DelegateRepresentative | undefined): Trezor.Carda
   if ('__typename' in dRep) {
     switch (dRep.__typename) {
       case 'AlwaysAbstain':
-        return { type: Trezor.PROTO.CardanoDRepType.ABSTAIN };
+        return { type: PROTO.CardanoDRepType.ABSTAIN };
       case 'AlwaysNoConfidence':
-        return { type: Trezor.PROTO.CardanoDRepType.NO_CONFIDENCE };
+        return { type: PROTO.CardanoDRepType.NO_CONFIDENCE };
     }
   }
 
   if ('type' in dRep && 'hash' in dRep) {
     return {
       type: dRep.type === Cardano.CredentialType.KeyHash
-        ? Trezor.PROTO.CardanoDRepType.KEY_HASH
-        : Trezor.PROTO.CardanoDRepType.SCRIPT_HASH,
+        ? PROTO.CardanoDRepType.KEY_HASH
+        : PROTO.CardanoDRepType.SCRIPT_HASH,
       keyHash: dRep.type === Cardano.CredentialType.KeyHash ? dRep.hash : undefined,
       scriptHash: dRep.type === Cardano.CredentialType.ScriptHash ? dRep.hash : undefined,
     };
@@ -118,17 +119,17 @@ export const trezorCertificates = (certificates: Cardano.Certificate[] | undefin
 
     switch (cert.__typename) {
       case Cardano.CertificateType.VoteDelegation:
-        return { type: Trezor.PROTO.CardanoCertificateType.VOTE_DELEGATION, ...stake(cert.stakeCredential), dRep: mapDRep(cert.dRep) };
+        return { type: PROTO.CardanoCertificateType.VOTE_DELEGATION, ...stake(cert.stakeCredential), dRep: mapDRep(cert.dRep) };
       case Cardano.CertificateType.StakeDelegation:
-        return { type: Trezor.PROTO.CardanoCertificateType.STAKE_DELEGATION, ...stake(cert.stakeCredential), pool: Cardano.PoolId.toKeyHash(cert.poolId) };
+        return { type: PROTO.CardanoCertificateType.STAKE_DELEGATION, ...stake(cert.stakeCredential), pool: Cardano.PoolId.toKeyHash(cert.poolId) };
       case Cardano.CertificateType.Registration:
-        return { type: Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION_CONWAY, ...stake(cert.stakeCredential), deposit: cert.deposit?.toString() };
+        return { type: PROTO.CardanoCertificateType.STAKE_REGISTRATION_CONWAY, ...stake(cert.stakeCredential), deposit: cert.deposit?.toString() };
       case Cardano.CertificateType.StakeRegistration:
-        return { type: Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION, ...stake(cert.stakeCredential) };
+        return { type: PROTO.CardanoCertificateType.STAKE_REGISTRATION, ...stake(cert.stakeCredential) };
       case Cardano.CertificateType.Unregistration:
-        return { type: Trezor.PROTO.CardanoCertificateType.STAKE_DEREGISTRATION_CONWAY, ...stake(cert.stakeCredential), deposit: cert.deposit?.toString() };
+        return { type: PROTO.CardanoCertificateType.STAKE_DEREGISTRATION_CONWAY, ...stake(cert.stakeCredential), deposit: cert.deposit?.toString() };
       case Cardano.CertificateType.StakeDeregistration:
-        return { type: Trezor.PROTO.CardanoCertificateType.STAKE_DEREGISTRATION, ...stake(cert.stakeCredential) };
+        return { type: PROTO.CardanoCertificateType.STAKE_DEREGISTRATION, ...stake(cert.stakeCredential) };
       // Trezor firmware has no combined certificates: they must be split into their parts.
       case Cardano.CertificateType.StakeVoteRegistrationDelegation:
       case Cardano.CertificateType.StakeRegistrationDelegation:
@@ -184,7 +185,7 @@ export const extraWitnessRequests = (request: TrezorRequest, walletPaths: string
   request.withdrawals?.forEach(({ path }) => carry(path));
   request.requiredSigners?.forEach(({ keyPath }) => carry(keyPath));
   request.certificates?.forEach(({ type, path }) => {
-    if (type !== Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION) carry(path);
+    if (type !== PROTO.CardanoCertificateType.STAKE_REGISTRATION) carry(path);
   });
   const extra = walletPaths.filter((path) => !carried.has(path));
   return extra.length > 0 ? extra : undefined;
