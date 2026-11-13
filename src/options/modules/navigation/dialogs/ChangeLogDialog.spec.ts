@@ -36,7 +36,7 @@ async function mountWith(body: string) {
 }
 
 describe('ChangeLogDialog release notes', () => {
-  it('renders the markdown release notes use', async () => {
+  it('renders the markdown constructs that release notes use', async () => {
     const wrapper = await mountWith(
       '## 🔒 Security Hardening\n\n- **Critical fix**: unlock in `TransactionAuthSection`\n- See [the guide](https://gerowallet.io/guide)',
     );
