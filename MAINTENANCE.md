@@ -79,7 +79,9 @@ minor/patch proposals still need normal installation, tests, and build checks.
 Retain these coupled-update constraints until their upstream contracts change:
 
 - ZXing browser/library must have mutually compatible peer ranges.
-- Babylon currently pins `bitcoinjs-lib` to 6.1.7.
+- Babylon pins its `bitcoinjs-lib` peer to exactly 6.1.7. The root pins 6.1.10
+  with a matching `overrides` entry for the critical Merkle advisory; keep the
+  two equal, and drop the override once Babylon widens its peer range.
 - The Midnight v9 ledger and its four aliased wallet consumers must share the
   same WASM instance/version; a successful install alone does not prove this.
 - Vitest/UI, Vite, plugins, and the Node runtime must be reviewed together.
