@@ -103,7 +103,7 @@
     "dexie": "^4.4.6",
     "dompurify": "^3.4.17",
     "flag-icons": "6.15.0",
-    "highcharts": "^11.4.9",
+    "highcharts": "^13.1.1",
     "howler": "^2.2.4",
     "javascript-time-ago": "^2.6.4",
     "json-bigint": "^1.0.0",
