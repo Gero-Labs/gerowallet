@@ -23,7 +23,7 @@ vi.mock('@/chains/midnight/useProofServerSettings', () => ({
     zkpaasEffectiveUrl: ref(''), zkpaasConfigured: ref(true), arkhiaDashboardUrl: '',
     dockerRunCommand: ref(''), healthStatus: ref('idle'), healthStatusLabel: ref(''),
     testingConnection: ref(false), testConnection: vi.fn(),
-    lastCheckedAt: ref(null), lastCheckLatencyMs: ref(null), provingHistory: ref([]),
+    lastCheckedAt: ref(null), lastCheckLatencyMs: ref(null), serverVersion: ref(null), requiredVersion: ref("9.0.x"), provingHistory: ref([]),
   }),
 }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: { chain: 'Midnight' } }) }));
@@ -31,6 +31,8 @@ vi.mock('@/stores/midnightStore', () => ({ midnightStore: (store = Vue.reactive(
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string, args?: Record<string, string>) => (args?.['provider'] ? `${key}:${args['provider']}` : key) }),
 }));
+// The ledger 9 update notice has its own spec (proofServerLedger9Notice.spec.ts).
+vi.mock('@/modules/midnight/ProofServerLedger9Notice.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', async () => {
   const { defineComponent: define } = await import('vue');
   return {

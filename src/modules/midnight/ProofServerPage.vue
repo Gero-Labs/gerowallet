@@ -118,6 +118,7 @@
               <p class="t-caption mb-4">
                 {{ t(activeLedger9 ? 'midnight.proofServer.activeServerLedger9' : 'midnight.proofServer.activeServerLedger8', activeServer) }}
               </p>
+              <ProofServerLedger9Notice :network="loggedWallet?.network" class="mb-4" />
 
               <div class="ps-step">
                 <div class="ps-step-badge">1</div>
@@ -180,6 +181,10 @@
                       · {{ t('midnight.proofServerPage.latencyMs', { ms: lastCheckLatencyMs }) }}
                     </template>
                   </p>
+                  <!-- Answers, but runs the other ledger's release: it would fail at proving. -->
+                  <GNote v-if="healthStatus === 'wrongVersion'" tone="error" icon="mdi-alert-circle-outline" role="status" class="ps-check-detail" data-test="proof-server-wrong-version">
+                    {{ t('midnight.proofServer.wrongVersion', { version: serverVersion ?? '', required: requiredVersion }) }}
+                  </GNote>
                 </div>
               </div>
 
@@ -430,6 +435,8 @@ import { Blockchain } from '@/models/types';
 import { useMidnightProofServer, formatRelativeTime } from '@/chains/midnight/useProofServerSettings';
 import CommandBlock from '@/shared/components/CommandBlock.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
+import ProofServerLedger9Notice from '@/modules/midnight/ProofServerLedger9Notice.vue';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
@@ -467,6 +474,8 @@ const {
   testConnection,
   lastCheckedAt,
   lastCheckLatencyMs,
+  serverVersion,
+  requiredVersion,
   provingHistory,
 } = useMidnightProofServer();
 
@@ -720,8 +729,10 @@ const faqs = computed(() => ([
 .status-dot--detected { background: var(--g-success); }
 .status-dot--notDetected { background: var(--g-text-3); }
 .status-dot--notConfigured { background: var(--g-text-3); }
+.status-dot--wrongVersion { background: var(--g-error); }
 
 .status-pill--detected .status-pill-label { color: var(--g-success); }
+.status-pill--wrongVersion .status-pill-label { color: var(--g-error); }
 
 .ps-check-detail {
   margin-top: var(--g-s-2);

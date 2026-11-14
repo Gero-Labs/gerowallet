@@ -33,10 +33,10 @@ export function isLoopbackProverUrl(url: string): boolean {
 /** The slice of `midnightStore.proofServer` target resolution needs. */
 export interface ProofServerPreference extends ZkpaasSettings {
   mode: 'remote' | 'local' | 'zkpaas';
-  /** Local proof server for the ledger-8 networks (mainnet, preprod). */
+  /** Local proof server for a chain on ledger 8. */
   localUrl: string;
   /**
-   * Local proof server for the ledger-9 network (stagenet). A separate URL
+   * Local proof server for a chain on ledger 9 (mainnet, preprod, Preview). A separate URL
    * rather than a "which ledger is my server" toggle: the two circuit
    * families need two different servers, and keying the choice off the
    * active wallet's network means there is nothing to switch when the user
