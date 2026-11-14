@@ -88,7 +88,9 @@ Retain these coupled-update constraints until their upstream contracts change:
 
 For #1314, start with runtime input/rendering and wallet/device SDK paths,
 including DOMPurify (showdown was replaced by the in-house `renderMarkdown`, and
-Trezor Connect moved to 10, which routes through Trezor Suite).
+Trezor Connect moved to 10, which routes through Trezor Suite;
+the ledger 8 Midnight SDK takes `@effect/platform` 0.97 through an `overrides`
+entry until the ledger 9 port removes it).
 Review build/install paths separately (yorkie was replaced by simple-git-hooks,
 `archiver` removed and `unplugin-vue-components` moved to 32; what is left is in
 the November 13 triage record).
