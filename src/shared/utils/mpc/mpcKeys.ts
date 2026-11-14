@@ -4,7 +4,10 @@ import { MpcValidationError } from './types';
 import { derivePublicKeyFromMnemonic } from '@/db/gero-db';
 
 export function entropyToMnemonic(entropy: Uint8Array): string {
-  return bip39.entropyToMnemonic(Buffer.from(entropy));
+  // Hex, which every bip39 release accepts. bip39 3.1.2 takes a Buffer only
+  // when its own `Buffer.isBuffer` says so; a Buffer from another copy of the
+  // `buffer` package fails that and is then refused as malformed hex.
+  return bip39.entropyToMnemonic(Buffer.from(entropy).toString('hex'));
 }
 
 export function mnemonicToEntropyBytes(mnemonic: string): Uint8Array {

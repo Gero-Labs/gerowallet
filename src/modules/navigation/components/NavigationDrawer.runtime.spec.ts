@@ -24,6 +24,21 @@ beforeEach(() => {
   vi.stubGlobal('APP_VERSION', '0.0.0-test');
   vi.stubGlobal('innerWidth', 1440);
   vi.stubGlobal('innerHeight', 900);
+  // Vuetify 4.3 decides `mobile` with matchMedia('(min-width: …px)'), which
+  // the test DOM never matches; answer it from the stubbed width, as a browser would.
+  vi.stubGlobal('matchMedia', (query: string) => {
+    const min = /\(min-width:\s*(\d+(?:\.\d+)?)px\)/.exec(query);
+    return {
+      matches: min ? globalThis.innerWidth >= Number(min[1]) : false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    };
+  });
   walletStore.loggedWallet = {
     chain: 'Cardano', network: 'Mainnet', baseAddress: null,
     name: 'Runtime test wallet', icon: 'gero',
