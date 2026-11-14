@@ -207,6 +207,7 @@
   },
   "overrides": {
     "protobufjs": "^7.6.5",
+    "@effect/platform": "^0.97.1",
     "websocket-driver": "^0.7.5",
     "vuedraggable": {
       "sortablejs": "1.15.7"
