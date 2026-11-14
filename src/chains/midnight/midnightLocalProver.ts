@@ -254,3 +254,61 @@ export async function checkProofServerHealth(
     return false;
   }
 }
+
+/** A proof-server release as `GET /version` reports it: `9.0.1`, `9.0.2-rc.1`. */
+const PROOF_SERVER_VERSION_RE = /^(\d{1,4})\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.-]{1,32})?$/;
+
+/** The release in a `GET /version` body, or undefined when it isn't one. */
+export function parseProofServerVersion(body: string): string | undefined {
+  const text = body.trim();
+  return text.length <= 64 && PROOF_SERVER_VERSION_RE.test(text) ? text : undefined;
+}
+
+/**
+ * `GET {baseUrl}/version`: the native proof server answers with its release
+ * as plain text (`9.0.1`; the route is in every 8.x and 9.x server). Undefined
+ * when the route is missing, the answer isn't a release, or the request fails.
+ * Never throws.
+ */
+export async function readProofServerVersion(
+  baseUrl: string,
+  options?: ProverRequestOptions,
+): Promise<string | undefined> {
+  try {
+    const res = await fetch(joinProverUrl(baseUrl, '/version'), {
+      headers: options?.headers,
+      signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+    });
+    if (res.status !== 200) return undefined;
+    return parseProofServerVersion(await res.text());
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether a local proof server can prove for `ledger`. A server's major
+ * release is the ledger whose circuits it carries (8.1.0 proves ledger 8,
+ * 9.0.x ledger 9), and one family can't prove for the other: it answers its
+ * health check and then fails at proving or at submit. `unknown` when the
+ * server didn't say which release it is.
+ */
+export type ProofServerVersionCheck =
+  | { status: 'match'; version: string }
+  | { status: 'mismatch'; version: string }
+  | { status: 'unknown' };
+
+export function judgeProofServerVersion(version: string | undefined, ledger: MidnightLedger): ProofServerVersionCheck {
+  const major = version ? PROOF_SERVER_VERSION_RE.exec(version)?.[1] : undefined;
+  if (!version || major === undefined) return { status: 'unknown' };
+  return Number(major) === ledger ? { status: 'match', version } : { status: 'mismatch', version };
+}
+
+/** {@link readProofServerVersion} judged against `ledger`. Never throws. */
+export async function checkProofServerVersion(
+  baseUrl: string,
+  ledger: MidnightLedger,
+  options?: ProverRequestOptions,
+): Promise<ProofServerVersionCheck> {
+  return judgeProofServerVersion(await readProofServerVersion(baseUrl, options), ledger);
+}

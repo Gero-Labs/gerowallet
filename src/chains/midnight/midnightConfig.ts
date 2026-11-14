@@ -269,6 +269,15 @@ export function midnightProofServerTag(network?: string): string {
 }
 
 /**
+ * The releases a message asks for: `9.0.x` for ledger 9. Patch releases of a
+ * line serve the same circuits, so naming the line, not the pinned tag, keeps
+ * a user on 9.0.1 from being told to change anything.
+ */
+export function midnightProofServerVersionLine(ledger: MidnightLedger): string {
+  return midnightProofServerTagForLedger(ledger).replace(/\.\d+$/, '.x');
+}
+
+/**
  * Host port each ledger's local proof server binds by default. Deliberately
  * different so a user can run both at once — the ledger-8 and ledger-9
  * servers are different circuit families and one server cannot serve both.

@@ -99,6 +99,7 @@ const statusValue = computed(() => {
   if (healthStatus.value === 'detected') return t('midnight.proofServerPage.statusDetectedShort');
   if (healthStatus.value === 'notDetected') return t('midnight.proofServer.statusNotDetected');
   if (healthStatus.value === 'notConfigured') return t('midnight.proofServerPage.statusNotConfiguredShort');
+  if (healthStatus.value === 'wrongVersion') return t('midnight.proofServerPage.statusWrongVersionShort');
   return t('midnight.proofServer.statusChecking');
 });
 const statusClass = computed(() => (

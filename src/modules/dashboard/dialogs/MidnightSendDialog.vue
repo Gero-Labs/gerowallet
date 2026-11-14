@@ -376,6 +376,9 @@
           />
         </div>
 
+        <!-- Local mode after the ledger 9 upgrade: the server to update to (issue 1475). -->
+        <ProofServerLedger9Notice v-if="!localProverUnavailable" :network="loggedWallet?.network" class="mb-2" />
+
         <!-- Local proof server didn't answer its health check (WP-P5): offer
              the two-action fallback instead of a generic error string. The
              auth section above stays visible/usable so re-submitting after
@@ -473,6 +476,7 @@ import { computed, nextTick, onBeforeUnmount, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
+import ProofServerLedger9Notice from '@/modules/midnight/ProofServerLedger9Notice.vue';
 import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
@@ -497,11 +501,13 @@ import {
   midnightStore,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
-import { walletProverFor, type ProvingUnconfiguredTarget, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
+import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
+import type { ProofServerFallbackReason } from '@/services/midnight-tx.service';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
-import { isLedger9Network } from '@/chains/midnight/midnightConfig';
+import { isLedger9Network, midnightProofServerVersionLine } from '@/chains/midnight/midnightConfig';
+import { midnightLedgerOrNewest } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
@@ -937,12 +943,19 @@ const proverFallbackText = computed(() => {
   if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
   if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
   if (proverFallbackReason.value === 'local-url-not-loopback') return t('midnight.proofServer.localUrlNotLoopbackSend');
+  // The release this network's chain needs, named in both remaining cases.
+  const required = midnightProofServerVersionLine(midnightLedgerOrNewest(loggedWallet.value?.network));
+  if (proverFallbackReason.value === 'local-wrong-version') {
+    return t('midnight.proofServer.wrongVersion', { version: proverFallbackVersion.value ?? '', required });
+  }
   return isLedger9Network(loggedWallet.value?.network)
-    ? t('midnight.proofServer.notDetectedSendLedger9')
-    : t('midnight.proofServer.notDetectedSend');
+    ? t('midnight.proofServer.notDetectedSendLedger9', { required })
+    : t('midnight.proofServer.notDetectedSend', { required });
 });
 // Reason carried by the ProofServerUnreachableError that tripped the fallback.
-const proverFallbackReason = ref<ProvingUnconfiguredTarget['reason'] | undefined>(undefined);
+const proverFallbackReason = ref<ProofServerFallbackReason | undefined>(undefined);
+// The release a wrong-version local server reported (`8.1.0`).
+const proverFallbackVersion = ref<string | undefined>(undefined);
 // True once a local-mode shielded send's preflight (or, on the rare race
 // where the server drops between preflight and build, the BG call itself)
 // finds the local proof server unreachable. Renders the two-action fallback
@@ -1232,17 +1245,14 @@ async function routeWalletProvedShielded(credentials: { password?: string; prfSe
   localProverUnavailable.value = false;
   checkingLocalProver.value = true;
   try {
-    const { checkWalletProvingPreflight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
+    const { walletProvingPreflight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
     const network = loggedWallet.value?.network ?? '';
-    const ok = await awaitFreshApproval(() => checkWalletProvingPreflight(network, isShielded.value ? 'shielded' : 'unshielded'), current);
-    if (!ok) {
-      // The preflight collapses "unconfigured" and "unreachable" into one
-      // boolean; recover the reason so the fallback can name the actual
-      // problem (a local server on the wrong ledger profile is running and
-      // answering — "start it" is the wrong instruction).
-      const { resolveProvingTarget } = await awaitFreshApproval(() => import('@/chains/midnight/midnightProvingTarget'), current);
-      const target = resolveProvingTarget(network, midnightStore.proofServer);
-      proverFallbackReason.value = target.kind === 'unconfigured' ? target.reason : undefined;
+    const preflight = await awaitFreshApproval(() => walletProvingPreflight(network, isShielded.value ? 'shielded' : 'unshielded'), current);
+    if (!preflight.ok) {
+      // Name the actual problem: a missing or non-local URL, or a server that
+      // answers but runs the other ledger's release ("start it" is wrong).
+      proverFallbackReason.value = preflight.reason;
+      proverFallbackVersion.value = preflight.serverVersion;
       rememberCredentials(credentials, current);
       localProverUnavailable.value = true;
       return;
@@ -1505,7 +1515,8 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     // that preflight and this call. Same fallback either way.
     if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
       rememberCredentials(credentials, current);
-      proverFallbackReason.value = (e as { reason?: ProvingUnconfiguredTarget['reason'] }).reason;
+      proverFallbackReason.value = (e as { reason?: ProofServerFallbackReason }).reason;
+      proverFallbackVersion.value = (e as { serverVersion?: string }).serverVersion;
       localProverUnavailable.value = true;
     } else {
       showSendError(e);

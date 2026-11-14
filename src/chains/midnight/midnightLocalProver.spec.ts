@@ -9,7 +9,7 @@ vi.mock('@midnight-ntwrk/ledger-v8', async original => ({
 vi.mock('@midnightntwrk/ledger-v9', async original => ({
   ...await original<object>(), createCheckPayload: codecs.check9, createProvingPayload: codecs.prove9, parseCheckResult: codecs.parse9,
 }));
-import { makeLocalProvingProvider } from './midnightLocalProver';
+import { checkProofServerVersion, judgeProofServerVersion, makeLocalProvingProvider, parseProofServerVersion, readProofServerVersion } from './midnightLocalProver';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,5 +56,38 @@ describe('native proof HTTP adapter', () => {
       server.closeAllConnections();
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
+  });
+});
+
+describe('proof server version (GET /version)', () => {
+  it.each([['9.0.1', '9.0.1'], ['  9.0.0\n', '9.0.0'], ['9.0.2-rc.1', '9.0.2-rc.1'], ['8.1.0', '8.1.0']])('reads %j as a release', (body, version) => {
+    expect(parseProofServerVersion(body)).toBe(version);
+  });
+
+  it.each(['', 'ok', '{"version":"9.0.1"}', '9.0', 'v9.0.1', '9.0.1 extra', `9.0.1-${'x'.repeat(60)}`])('rejects %j', body => {
+    expect(parseProofServerVersion(body)).toBeUndefined();
+  });
+
+  it('matches a server to the ledger its major release proves for', () => {
+    expect(judgeProofServerVersion('9.0.1', 9)).toEqual({ status: 'match', version: '9.0.1' });
+    expect(judgeProofServerVersion('8.1.0', 9)).toEqual({ status: 'mismatch', version: '8.1.0' });
+    expect(judgeProofServerVersion('9.0.0', 8)).toEqual({ status: 'mismatch', version: '9.0.0' });
+    expect(judgeProofServerVersion(undefined, 9)).toEqual({ status: 'unknown' });
+  });
+
+  it('asks GET /version and reads its plain-text answer', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('8.1.0', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    expect(await checkProofServerVersion('http://localhost:6301/', 9)).toEqual({ status: 'mismatch', version: '8.1.0' });
+    expect(fetch.mock.calls[0][0].toString()).toBe('http://localhost:6301/version');
+  });
+
+  it.each([
+    ['a 404', () => Promise.resolve(new Response('', { status: 404 }))],
+    ['a network error', () => Promise.reject(new TypeError('Failed to fetch'))],
+  ])('says nothing on %s', async (_case, answer) => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(answer));
+    expect(await readProofServerVersion('http://localhost:6301')).toBeUndefined();
+    expect(await checkProofServerVersion('http://localhost:6301', 9)).toEqual({ status: 'unknown' });
   });
 });

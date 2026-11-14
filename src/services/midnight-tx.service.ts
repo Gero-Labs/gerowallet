@@ -54,7 +54,7 @@ import {
   MIDNIGHT_BUILT_TX_UNREADABLE,
   type MidnightBuiltTxRefusal,
 } from '@/chains/midnight/midnightBuiltTxGuard';
-import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN } from '@/chains/midnight/midnightLedger';
+import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
@@ -589,6 +589,13 @@ async function buildAndSignShieldedInBg(
  * dialog (WP-P5) can render the two-action fallback ("Open settings" /
  * "Use Gero Cloud for this transaction") instead of a generic failure toast.
  */
+/**
+ * Why a send fell back from the user's proof server: an `unconfigured`
+ * resolver outcome, or `local-wrong-version` (a local server that answers
+ * but carries the other ledger's circuits, such as 8.1.0 on a ledger 9 chain).
+ */
+export type ProofServerFallbackReason = ProvingUnconfiguredTarget['reason'] | 'local-wrong-version';
+
 export class ProofServerUnreachableError extends Error {
   /**
    * @param reason Why the configured prover was refused before any health
@@ -596,7 +603,9 @@ export class ProofServerUnreachableError extends Error {
    *   resolver outcomes: `zkpaas-unconfigured` (no API key and no override
    *   URL) and `local-profile-mismatch` (a local server started for the other
    *   ledger line — running and answering, just not for this network). Omitted
-   *   when a server was actually contacted and failed its health check. The
+   *   when a server was actually contacted and failed its health check;
+   *   `local-wrong-version` when it answered but reported another ledger's
+   *   release (`serverVersion`). The
    *   send dialog keys its fallback copy off this so a profile mismatch says
    *   "switch the profile" rather than "start the server". Never set for Gero
    *   Cloud: `remote` mode resolves to `{ kind: 'cloud' }` and does not reach
@@ -604,7 +613,9 @@ export class ProofServerUnreachableError extends Error {
    */
   constructor(
     public readonly url: string,
-    public readonly reason?: ProvingUnconfiguredTarget['reason'],
+    public readonly reason?: ProofServerFallbackReason,
+    /** The release a `local-wrong-version` server reported (`8.1.0`). */
+    public readonly serverVersion?: string,
   ) {
     super('Proof server not reachable or incompatible with the selected network');
     this.name = 'ProofServerUnreachableError';
@@ -619,6 +630,8 @@ type WalletProvingTarget =
     request: { url: string; headers?: Record<string, string> };
     stage: 'provingLocal' | 'provingZkpaas';
     lenientHealth: boolean;
+    /** The chain's ledger, which a local server's release must match. */
+    ledger: MidnightLedger;
   };
 
 /**
@@ -676,6 +689,7 @@ function resolveWalletProvingTarget(
     request: { url: target.url, headers: target.headers },
     stage: target.mode === 'zkpaas' ? 'provingZkpaas' : 'provingLocal',
     lenientHealth: target.lenientHealth,
+    ledger: midnightLedgerOrNewest(network),
   };
 }
 
@@ -713,14 +727,34 @@ function whenBackgroundProves(onProving: () => void): () => void {
  */
 async function assertProverReachable(target: WalletProvingTarget | null, current: () => boolean): Promise<void> {
   if (!target || target.prover === 'device') return;
-  const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+  const failure = await proverPreflightFailure(target, current);
+  if (failure) throw new ProofServerUnreachableError(target.request.url, failure.reason, failure.serverVersion);
+}
+
+/**
+ * The health check, then, for a local server, its release: a server for the
+ * other ledger answers `/health` and only fails at proving or at submit, so
+ * it is refused here, before the build. A server that doesn't say which
+ * release it is passes (`unknown`). zkPaaS isn't asked: Arkhia runs the
+ * servers and relays only the proving routes. Undefined when the server can
+ * take the send.
+ */
+async function proverPreflightFailure(
+  target: Extract<WalletProvingTarget, { prover: 'local' | 'zkpaas' }>,
+  current: () => boolean = () => true,
+): Promise<{ reason?: ProofServerFallbackReason; serverVersion?: string } | undefined> {
+  const { checkProofServerHealth, checkProofServerVersion } = await import('@/chains/midnight/midnightLocalProver');
   assertCurrentApproval(current);
   const healthy = await checkProofServerHealth(target.request.url, {
     headers: target.request.headers,
     acceptNotFound: target.lenientHealth,
   });
   assertCurrentApproval(current);
-  if (!healthy) throw new ProofServerUnreachableError(target.request.url);
+  if (!healthy) return {};
+  if (target.prover !== 'local') return undefined;
+  const version = await checkProofServerVersion(target.request.url, target.ledger);
+  assertCurrentApproval(current);
+  return version.status === 'mismatch' ? { reason: 'local-wrong-version', serverVersion: version.version } : undefined;
 }
 
 /** A remote prover would receive proof inputs the user has not agreed to send it. */
@@ -767,19 +801,37 @@ function assertWalletProving(target: WalletProvingTarget | null, expected?: Wall
  * flashing the full progress timeline for a doomed send.
  */
 export async function checkWalletProvingPreflight(network: string, kind: 'unshielded' | 'shielded'): Promise<boolean> {
+  return (await walletProvingPreflight(network, kind)).ok;
+}
+
+/** What {@link walletProvingPreflight} found. `reason` is unset for a server that didn't answer. */
+export interface WalletProvingPreflight {
+  ok: boolean;
+  reason?: ProofServerFallbackReason;
+  serverVersion?: string;
+}
+
+/**
+ * {@link checkWalletProvingPreflight} with the reason a send can't go: the
+ * dialog names a missing URL, a non-local URL, or a local server on the wrong
+ * release (`serverVersion`) instead of "not detected". Never throws.
+ */
+export async function walletProvingPreflight(network: string, kind: 'unshielded' | 'shielded'): Promise<WalletProvingPreflight> {
   let target: WalletProvingTarget | null;
   try {
     target = resolveWalletProvingTarget(network, kind);
-  } catch {
-    // zkPaaS selected but not configured (no key, no override URL).
-    return false;
+  } catch (e) {
+    // An unusable preference: zkPaaS without a key, or a local URL that is
+    // missing or not on this machine.
+    return { ok: false, reason: e instanceof ProofServerUnreachableError ? e.reason : undefined };
   }
-  if (!target || target.prover === 'device') return true;
-  const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-  return checkProofServerHealth(target.request.url, {
-    headers: target.request.headers,
-    acceptNotFound: target.lenientHealth,
-  });
+  if (!target || target.prover === 'device') return { ok: true };
+  try {
+    const failure = await proverPreflightFailure(target);
+    return failure ? { ok: false, ...failure } : { ok: true };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /**

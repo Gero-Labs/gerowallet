@@ -248,10 +248,10 @@ export interface MidnightStore {
    */
   proofServer: {
     mode: 'remote' | 'local' | 'zkpaas';
-    /** Local proof server for the ledger-8 networks (mainnet, preprod). */
+    /** Local proof server for a chain on ledger 8. */
     localUrl: string;
     /**
-     * Local proof server for the ledger-9 network (stagenet). One URL per
+     * Local proof server for a chain on ledger 9 (mainnet, preprod, Preview). One URL per
      * circuit family, chosen by the active wallet's network — replaces the
      * old device-global `localProfile` toggle, which had to be flipped by
      * hand on every network switch and, left on the wrong setting, made a

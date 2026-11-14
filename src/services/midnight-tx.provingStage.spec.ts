@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   api: vi.fn(),
   health: vi.fn(),
+  version: vi.fn(),
   proofServer: { mode: 'local', localUrl: 'http://localhost:6300', localUrlLedger9: 'http://localhost:6301' },
 }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
@@ -24,7 +25,7 @@ vi.mock('@/stores/midnightStore', async () => {
     }),
   };
 });
-vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health }));
+vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health, checkProofServerVersion: mocks.version }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@/chains/midnight/midnightZkpaas', () => ({
   resolveZkpaasUrl: () => 'https://prover.example',
@@ -67,6 +68,7 @@ describe('a wallet-side send says it is proving only once the background proves'
     vi.resetAllMocks();
     progress(null);
     mocks.health.mockResolvedValue(true);
+    mocks.version.mockResolvedValue({ status: 'unknown' });
     useMidnightChains({ preprod: [L9, L9], stagenet: [L9, L9], mainnet: [L8, L8] });
     mocks.api.mockReturnValue({
       buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),

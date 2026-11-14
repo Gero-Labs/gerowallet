@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   api: vi.fn(),
   health: vi.fn(),
+  version: vi.fn(),
   proofServer: { mode: 'remote', localUrl: 'http://localhost:6300', localUrlLedger9: 'http://localhost:6301' },
   /** When true, the user has accepted the notice of the remote prover the current mode uses. */
   consented: true,
@@ -20,7 +21,7 @@ vi.mock('@/stores/midnightStore', () => ({
     },
   },
 }));
-vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health }));
+vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health, checkProofServerVersion: mocks.version }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@/chains/midnight/midnightZkpaas', () => ({
   resolveZkpaasUrl: () => 'https://prover.example',
@@ -32,7 +33,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { MidnightApiError } from '@/api/midnightApiError';
 import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
 import { resetMidnightWriteStatusForTests } from '@/chains/midnight/midnightWriteStatus';
-import { backgroundError, balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { backgroundError, balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, ProofServerUnreachableError, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight, walletProvingPreflight } from './midnight-tx.service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -47,6 +48,7 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.proofServer.mode = 'remote';
     mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
+    mocks.version.mockResolvedValue({ status: 'unknown' });
     // Preprod and Stagenet on ledger 9 (device-provable); Mainnet stands in for a chain still on ledger 8.
     useMidnightChains({ preprod: [L9, L8], stagenet: [L9, L9], mainnet: [L8, L8] });
   });
@@ -330,6 +332,37 @@ describe('Midnight ledger-specific orchestration', () => {
       .rejects.toThrow('Proof server not reachable');
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.api).not.toHaveBeenCalled();
+  });
+
+  it('refuses a local server on the other ledger release before authorization, naming its version', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.version.mockResolvedValue({ status: 'mismatch', version: '8.1.0' });
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: false, reason: 'local-wrong-version', serverVersion: '8.1.0' });
+    expect(mocks.version).toHaveBeenCalledWith('http://localhost:6301', 9);
+    const sent = sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    await expect(sent).rejects.toBeInstanceOf(ProofServerUnreachableError);
+    await expect(sent).rejects.toMatchObject({ reason: 'local-wrong-version', serverVersion: '8.1.0' });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.api).not.toHaveBeenCalled();
+  });
+
+  it('lets a local server through when it is on the right release or does not say', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.version.mockResolvedValue({ status: 'match', version: '9.0.1' });
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: true });
+    mocks.version.mockResolvedValue({ status: 'unknown' });
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: true });
+  });
+
+  it('never asks zkPaaS for a version: Arkhia relays only the proving routes', async () => {
+    mocks.proofServer.mode = 'zkpaas';
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: true });
+    expect(mocks.version).not.toHaveBeenCalled();
+  });
+
+  it('reports why an unusable local preference cannot prove', async () => {
+    mocks.proofServer.mode = 'local'; mocks.proofServer.localUrlLedger9 = '';
+    expect(await walletProvingPreflight('Stagenet', 'unshielded')).toEqual({ ok: false, reason: 'local-url-missing' });
   });
 
   it('fails before authorization when no ledger-9 URL is set for Stagenet, without touching the ledger-8 server', async () => {
