@@ -13,7 +13,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import type { Params, SignTransaction } from '@trezor/connect';
+import type { Params, SignTransaction } from '@trezor/connect-webextension';
 import {
   bitcoinAccountPath,
   deriveBitcoinAddressSetFromXpubs,

@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-// Mock trezorWeb so dispatchTrezor's routing can be verified without touching
-// @trezor/connect-web / WebUSB.
-vi.mock('@/shared/utils/trezorWeb', () => ({
+// Mock the Trezor module so dispatchTrezor's routing can be verified without
+// touching Trezor Connect.
+vi.mock('@/shared/utils/trezor', () => ({
   default: {
     init: vi.fn(),
-    getFeatures: vi.fn(),
+    getDeviceInfo: vi.fn(),
     getXpub: vi.fn(),
     getAccountXpubs: vi.fn(),
-    cardanoSignTransaction: vi.fn(),
-    cardanoSignMessage: vi.fn(),
-    getAddress: vi.fn(),
-    initBitcoinTrezor: vi.fn(),
     signTransaction: vi.fn(),
+    signData: vi.fn(),
+    getBitcoinAddress: vi.fn(),
+    initBitcoinTrezor: vi.fn(),
+    signBitcoinTransaction: vi.fn(),
     verifyBitcoinAddress: vi.fn(),
   },
 }));
@@ -41,7 +41,7 @@ vi.mock('@/chrome/messaging', () => ({
   Messaging: { sendToBackgroundFromOptions: vi.fn() },
 }));
 
-import trezorWeb from '@/shared/utils/trezorWeb';
+import trezor from '@/shared/utils/trezor';
 import networks from '@/utils/networks';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
@@ -49,7 +49,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 
-const mockedTrezorWeb = vi.mocked(trezorWeb);
+const mockedTrezor = vi.mocked(trezor);
 const mockedNetworks = vi.mocked(networks);
 const mockedDeserialize = vi.mocked(deserializeCardanoJsSdkTx);
 const mockedSendToBackground = vi.mocked(Messaging.sendToBackgroundFromOptions);
@@ -64,16 +64,16 @@ describe('dispatchTrezor', () => {
   });
 
   describe('initTrezor', () => {
-    test('Cardano: calls trezorWeb.getXpub and returns the handler-shaped response', async () => {
+    test('Cardano: calls trezor.getXpub and returns the handler-shaped response', async () => {
       mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Cardano' } as never);
       const coldWalletProps = { productName: 'Trezor', btSupported: false, hwPublicKey: 'xpub1abc', keys: [] };
-      mockedTrezorWeb.getXpub.mockResolvedValue(coldWalletProps);
+      mockedTrezor.getXpub.mockResolvedValue(coldWalletProps);
 
       const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Cardano', network: 'Mainnet' });
 
       expect(mockedNetworks.resolveNetwork).toHaveBeenCalledWith('Cardano', 'Mainnet');
-      expect(mockedTrezorWeb.getXpub).toHaveBeenCalledWith("m/1852'/1815'/0'");
-      expect(mockedTrezorWeb.initBitcoinTrezor).not.toHaveBeenCalled();
+      expect(mockedTrezor.getXpub).toHaveBeenCalledWith("m/1852'/1815'/0'");
+      expect(mockedTrezor.initBitcoinTrezor).not.toHaveBeenCalled();
       expect(resp).toEqual({
         data: { success: true, coldWalletProps },
         target: 'gerowallet',
@@ -84,12 +84,12 @@ describe('dispatchTrezor', () => {
     test('Cardano with account indices: exports those accounts in one request', async () => {
       mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Cardano' } as never);
       const coldWalletProps = { productName: 'Trezor', btSupported: false, accounts: [] };
-      mockedTrezorWeb.getAccountXpubs.mockResolvedValue(coldWalletProps);
+      mockedTrezor.getAccountXpubs.mockResolvedValue(coldWalletProps);
 
       const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Cardano', network: 'Mainnet', accountIndices: [0, 1, 2] });
 
-      expect(mockedTrezorWeb.getAccountXpubs).toHaveBeenCalledWith([0, 1, 2]);
-      expect(mockedTrezorWeb.getXpub).not.toHaveBeenCalled();
+      expect(mockedTrezor.getAccountXpubs).toHaveBeenCalledWith([0, 1, 2]);
+      expect(mockedTrezor.getXpub).not.toHaveBeenCalled();
       expect(resp.data).toEqual({ success: true, coldWalletProps });
     });
 
@@ -98,13 +98,13 @@ describe('dispatchTrezor', () => {
 
       const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Cardano', network: 'Mainnet', accountIndices });
 
-      expect(mockedTrezorWeb.getAccountXpubs).not.toHaveBeenCalled();
+      expect(mockedTrezor.getAccountXpubs).not.toHaveBeenCalled();
       expect(resp.data.success).toBe(false);
     });
 
-    test('Bitcoin: calls trezorWeb.initBitcoinTrezor and reformats the response', async () => {
+    test('Bitcoin: calls trezor.initBitcoinTrezor and reformats the response', async () => {
       mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Bitcoin', network: 'Mainnet' } as never);
-      mockedTrezorWeb.initBitcoinTrezor.mockResolvedValue({
+      mockedTrezor.initBitcoinTrezor.mockResolvedValue({
         xpub: 'xpub1btc',
         deviceLabel: 'My Trezor',
         firmwareVersion: '2.6.0',
@@ -112,8 +112,8 @@ describe('dispatchTrezor', () => {
 
       const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Bitcoin', network: 'Mainnet' });
 
-      expect(mockedTrezorWeb.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0, 'Mainnet');
-      expect(mockedTrezorWeb.getXpub).not.toHaveBeenCalled();
+      expect(mockedTrezor.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0, 'Mainnet');
+      expect(mockedTrezor.getXpub).not.toHaveBeenCalled();
       expect(resp.data.success).toBe(true);
       expect(resp.data.coldWalletProps).toEqual({
         productName: 'My Trezor',
@@ -127,16 +127,16 @@ describe('dispatchTrezor', () => {
     // Issue 1327: a testnet account sits at coin type 1', where the device is asked for it.
     test('Bitcoin testnet: pairs the account at coin type 1\'', async () => {
       mockedNetworks.resolveNetwork.mockReturnValue({ blockchain: 'Bitcoin', network: 'Testnet' } as never);
-      mockedTrezorWeb.initBitcoinTrezor.mockResolvedValue({ xpub: 'xpub1test', deviceLabel: 'My Trezor', firmwareVersion: '2.6.0' });
+      mockedTrezor.initBitcoinTrezor.mockResolvedValue({ xpub: 'xpub1test', deviceLabel: 'My Trezor', firmwareVersion: '2.6.0' });
 
       const resp = await dispatchTrezor({ method: 'initTrezor', chain: 'Bitcoin', network: 'Testnet' });
 
-      expect(mockedTrezorWeb.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0, 'Testnet');
+      expect(mockedTrezor.initBitcoinTrezor).toHaveBeenCalledWith('segwit', 0, 'Testnet');
       expect(resp.data.coldWalletProps.keys).toEqual([{ publicKey: 'xpub1test', chainCode: '', path: "m/84'/1'/0'" }]);
     });
   });
 
-  test('signTx: calls trezorWeb.cardanoSignTransaction (renamed from signTransaction) and returns a signatures array', async () => {
+  test('signTx: calls trezor.signTransaction and returns a signatures array', async () => {
     mockedDeserialize.mockReturnValue({
       body: {},
       witness: {},
@@ -144,7 +144,7 @@ describe('dispatchTrezor', () => {
     mockedNetworks.resolveNetwork.mockReturnValue({ networkId: 1 } as never);
     mockedSendToBackground.mockResolvedValue({ data: { success: true, refused: false } });
     const signatures = new Map([['pubkey1', 'sig1']]);
-    mockedTrezorWeb.cardanoSignTransaction.mockResolvedValue(signatures as never);
+    mockedTrezor.signTransaction.mockResolvedValue(signatures as never);
 
     const resp = await dispatchTrezor({ method: 'signTx', txCbor: 'deadbeef' });
 
@@ -153,7 +153,7 @@ describe('dispatchTrezor', () => {
       method: MessageTypes.CIP113_SIGN_PREFLIGHT,
       data: { txCbor: 'deadbeef' },
     });
-    expect(mockedTrezorWeb.cardanoSignTransaction).toHaveBeenCalled();
+    expect(mockedTrezor.signTransaction).toHaveBeenCalled();
     expect(resp).toEqual({
       data: { success: true, signatures: [['pubkey1', 'sig1']] },
       target: 'gerowallet',
@@ -166,7 +166,7 @@ describe('dispatchTrezor', () => {
 
     const resp = await dispatchTrezor({ method: 'signTx', txCbor: 'deadbeef' });
 
-    expect(mockedTrezorWeb.cardanoSignTransaction).not.toHaveBeenCalled();
+    expect(mockedTrezor.signTransaction).not.toHaveBeenCalled();
     expect(resp).toEqual({
       data: { success: false, error: CIP113_SIGN_REFUSAL_MESSAGE },
       target: 'gerowallet',
@@ -180,18 +180,18 @@ describe('dispatchTrezor', () => {
 
     const resp = await dispatchTrezor({ method: 'signTx', txCbor: 'deadbeef' });
 
-    expect(mockedTrezorWeb.cardanoSignTransaction).not.toHaveBeenCalled();
+    expect(mockedTrezor.signTransaction).not.toHaveBeenCalled();
     expect(resp.data.success).toBe(false);
   });
 
-  test('signData: calls trezorWeb.cardanoSignMessage (renamed from signData)', async () => {
+  test('signData: calls trezor.signData', async () => {
     mockedNetworks.resolveNetwork.mockReturnValue({ networkId: 1 } as never);
     const signatureData = { signatureHex: 'sig', signingPublicKeyHex: 'key', addressFieldHex: 'addr' };
-    mockedTrezorWeb.cardanoSignMessage.mockResolvedValue(signatureData);
+    mockedTrezor.signData.mockResolvedValue(signatureData);
 
     const resp = await dispatchTrezor({ method: 'signData', address: 'addr1', payload: 'deadbeef' });
 
-    expect(mockedTrezorWeb.cardanoSignMessage).toHaveBeenCalledWith('addr1', 'deadbeef', 1, expect.anything());
+    expect(mockedTrezor.signData).toHaveBeenCalledWith('addr1', 'deadbeef', 1, expect.anything());
     expect(resp).toEqual({
       data: { success: true, signatureData },
       target: 'gerowallet',
@@ -200,19 +200,19 @@ describe('dispatchTrezor', () => {
   });
 
   test('verifyBitcoinAddress: verifies on the wallet\'s network', async () => {
-    mockedTrezorWeb.verifyBitcoinAddress.mockResolvedValue('tb1qaddress');
+    mockedTrezor.verifyBitcoinAddress.mockResolvedValue('tb1qaddress');
 
     await dispatchTrezor({ method: 'verifyBitcoinAddress', addressType: 'taproot', network: 'Testnet' });
 
-    expect(mockedTrezorWeb.verifyBitcoinAddress).toHaveBeenCalledWith('taproot', 0, 0, false, 'Testnet');
+    expect(mockedTrezor.verifyBitcoinAddress).toHaveBeenCalledWith('taproot', 0, 0, false, 'Testnet');
   });
 
-  test('verifyBitcoinAddress: calls trezorWeb.verifyBitcoinAddress with defaults applied', async () => {
-    mockedTrezorWeb.verifyBitcoinAddress.mockResolvedValue('bc1qaddress');
+  test('verifyBitcoinAddress: calls trezor.verifyBitcoinAddress with defaults applied', async () => {
+    mockedTrezor.verifyBitcoinAddress.mockResolvedValue('bc1qaddress');
 
     const resp = await dispatchTrezor({ method: 'verifyBitcoinAddress' });
 
-    expect(mockedTrezorWeb.verifyBitcoinAddress).toHaveBeenCalledWith('segwit', 0, 0, false, 'Mainnet');
+    expect(mockedTrezor.verifyBitcoinAddress).toHaveBeenCalledWith('segwit', 0, 0, false, 'Mainnet');
     expect(resp).toEqual({
       data: { success: true, address: 'bc1qaddress' },
       target: 'gerowallet',

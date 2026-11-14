@@ -9,7 +9,6 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import { WalletType } from '@/models/types';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { getBitcoinNetwork, finalizePsbt } from './bitcoinPsbtBuilder';
 import type { BitcoinHardwareAccount } from './bitcoinKeyManager';
 
@@ -79,16 +78,10 @@ export async function signPsbtWithTrezor(
   account: BitcoinHardwareAccount
 ): Promise<HardwareSigningResult> {
   try {
-    // This function is called from a document context (popup), not the background,
-    // so it can use trezorWeb (connect-web WebUSB) when the flag is enabled.
-    let signedPsbtHex: string;
-    if (featureFlagsStore.state.flags.isTrezorWebUsbEnabled) {
-      const trezorWeb = (await import('@/shared/utils/trezorWeb')).default;
-      signedPsbtHex = await trezorWeb.signTransaction(psbt, account);
-    } else {
-      const trezor = (await import('@/shared/utils/trezor')).default;
-      signedPsbtHex = await trezor.signBitcoinTransaction(psbt, account);
-    }
+    // Called from a document context (popup). Connect 10 routes the call to
+    // Trezor Suite from here as it would from the service worker.
+    const trezor = (await import('@/shared/utils/trezor')).default;
+    const signedPsbtHex = await trezor.signBitcoinTransaction(psbt, account);
 
     // Parse signed PSBT
     const bitcoinNetwork = getBitcoinNetwork(account.network);

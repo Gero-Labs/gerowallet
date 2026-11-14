@@ -15,16 +15,15 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
   return { default: Buffer, Buffer };
 });
 
-import { getBitcoinNetwork as trezorNetwork, parseCoinsJson } from '@trezor/connect/lib/data/coinInfo';
-import { validateTrezorInputs, validateTrezorOutputs } from '@trezor/connect/lib/api/bitcoin';
-import coins from '@trezor/connect-common/files/coins.json';
+// connect-core loads its coin table when coinInfo is imported.
+import { getBitcoinNetwork as trezorNetwork } from '@trezor/connect-core/lib/data/coinInfo';
+import { validateTrezorInputs } from '@trezor/connect-core/lib/api/bitcoin/inputs.js';
+import { validateTrezorOutputs } from '@trezor/connect-core/lib/api/bitcoin/outputs.js';
 import { mergeTrezorSignatures, parseBitcoinPsbt, trezorSignTransactionParams } from './trezorPsbt';
 import { deriveBitcoinAccountXpub, deriveBitcoinAddress, deriveBitcoinRootKey } from './bitcoinKeyManager';
 import { signPsbtWithMnemonic } from './bitcoinSigner';
 
 const { Buffer: NodeBuffer } = createRequire(import.meta.url)('node:buffer') as typeof import('node:buffer');
-
-parseCoinsJson(coins);
 
 // Fixed test vectors — never used to hold funds.
 const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';

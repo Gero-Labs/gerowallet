@@ -147,7 +147,6 @@ import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
@@ -365,15 +364,9 @@ const signWithTrezor = async () => {
   // call — connecting through the confirmation it is waiting on.
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
-    let signedPsbtHex: string;
     const account = hardwareAccount();
-    if (featureFlagsStore.state.flags.isTrezorWebUsbEnabled) {
-      const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezorWeb'), approvalCurrent);
-      signedPsbtHex = await awaitFreshApproval(() => trezor.signTransaction(request.value.data.psbtHex, account), approvalCurrent);
-    } else {
-      const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezor'), approvalCurrent);
-      signedPsbtHex = await awaitFreshApproval(() => trezor.signBitcoinTransaction(request.value.data.psbtHex, account), approvalCurrent);
-    }
+    const { default: trezor } = await awaitFreshApproval(() => import('@/shared/utils/trezor'), approvalCurrent);
+    const signedPsbtHex = await awaitFreshApproval(() => trezor.signBitcoinTransaction(request.value.data.psbtHex, account), approvalCurrent);
 
     assertApprovedPsbt(request.value.data.psbtHex, signedPsbtHex);
     let returnHex = signedPsbtHex;

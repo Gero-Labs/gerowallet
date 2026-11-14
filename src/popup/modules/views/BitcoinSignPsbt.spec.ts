@@ -4,16 +4,14 @@ import { Psbt } from 'bitcoinjs-lib';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 
-const mocks = vi.hoisted(() => ({ request: vi.fn(), returnData: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), trezorWeb: vi.fn(), error: vi.fn(), begin: vi.fn(), end: vi.fn() }));
+const mocks = vi.hoisted(() => ({ request: vi.fn(), returnData: vi.fn(), ledger: vi.fn(), trezor: vi.fn(), error: vi.fn(), begin: vi.fn(), end: vi.fn() }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { createInternalController: () => ({ requestData: mocks.request, returnData: mocks.returnData }) } }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, isLocked: false }) }));
-vi.mock('@/stores/featureFlagsStore', async () => ({ featureFlagsStore: (await import('vue')).reactive({ state: { flags: { isTrezorWebUsbEnabled: false } } }) }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/plugins/snackbar', () => ({ default: { setError: mocks.error } }));
 vi.mock('@/plugins/hardwareLoading', () => ({ default: { begin: mocks.begin, end: mocks.end } }));
 vi.mock('@/shared/utils/ledger', () => ({ default: { signBitcoinTransaction: mocks.ledger } }));
 vi.mock('@/shared/utils/trezor', () => ({ default: { signBitcoinTransaction: mocks.trezor } }));
-vi.mock('@/shared/utils/trezorWeb', () => ({ default: { signTransaction: mocks.trezorWeb } }));
 vi.mock('@/chains/bitcoin/bitcoinPsbtBuilder', () => ({ getBitcoinNetwork: () => undefined }));
 vi.mock('@/utils/rules', () => ({ default: { required: () => () => true } }));
 vi.mock('@/popup/modules/components/PopupHeader.vue', () => ({ default: { template: '<main><slot /></main>' } }));
@@ -34,7 +32,6 @@ vi.mock('@/shared/composables/useBitcoinPsbtReview', async () => {
 import BitcoinSignPsbt from './BitcoinSignPsbt.vue';
 import * as psbtReviewModule from '@/shared/composables/useBitcoinPsbtReview';
 import { walletStore } from '@/stores/walletStore';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { WalletType } from '@/models/types';
 
 function transaction(value = 1000) {
@@ -43,7 +40,7 @@ function transaction(value = 1000) {
 }
 const unsigned = transaction().toHex();
 const returned = transaction().updateInput(0, { witnessUtxo: { script: transaction().txOutputs[0].script, value: 2000 } }).toHex();
-const devices = ['ledger', 'trezor', 'trezorWeb'] as const;
+const devices = ['ledger', 'trezor'] as const;
 type Device = typeof devices[number];
 const reviewBlocked = (psbtReviewModule as unknown as { reviewBlocked: { value: boolean } }).reviewBlocked;
 enableAutoUnmount(afterEach);
@@ -55,13 +52,11 @@ beforeEach(() => {
   for (const device of devices) mocks[device].mockReset().mockResolvedValue(returned);
   walletStore.loggedWallet = { id: 1, type: WalletType.Ledger, chain: 'Bitcoin', network: 'Mainnet', addressType: 'native-segwit', publicKey: 'xpub-account' } as never;
   walletStore.isLocked = false;
-  featureFlagsStore.state.flags.isTrezorWebUsbEnabled = false;
   vi.spyOn(window, 'close').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
 async function render(device: Device) {
   walletStore.loggedWallet.type = device === 'ledger' ? WalletType.Ledger : WalletType.Trezor;
-  featureFlagsStore.state.flags.isTrezorWebUsbEnabled = device === 'trezorWeb';
   const wrapper = mount(BitcoinSignPsbt, { global: {
     stubs: { ...dialogControls(async () => ({ valid: true, errors: [] })), 'v-card-subtitle': true, 'v-layout': true },
     config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key, $route: { query: { website: 'https://dapp.example' } } }) },
