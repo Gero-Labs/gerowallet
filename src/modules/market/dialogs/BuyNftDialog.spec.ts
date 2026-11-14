@@ -361,7 +361,9 @@ describe('BuyNftDialog', () => {
     it('can break inside the 56-character policy ID it names', async () => {
       const wrapper = render({ lookalike });
       await flushPromises();
-      expect(byId(wrapper, 'lookalike').classes()).toContain('buy-nft__lookalike');
+      // Vuetify 4.3 renders the alert inside a transition, which tests stub:
+      // the test id lands on the stub and the class on the alert itself.
+      expect(wrapper.get('.v-alert.buy-nft__lookalike').text()).toContain(REAL_POLICY);
     });
 
     it('is shown on the review as well as while the worker builds', async () => {

@@ -60,6 +60,20 @@ updates:
       # ERESOLVE. The required Ledger tests and extension bundles job exercises it.
       # Bump all five together once the betas repin, then drop this entry.
       - dependency-name: "@midnightntwrk/ledger-v9"
+      # Reviewed and patched at build time. The Bring cashback SDK runs in our
+      # content script on every page, so scripts/bring-sdk-patch.mjs rewrites
+      # its trust decisions over the exact 1.8.0 build and FAILS the build on
+      # any other one ("does not match the reviewed Bring SDK"). A bump here
+      # always breaks the whole grouped PR (1.9.0 did, PR 1529). Upgrade it by
+      # hand: diff the new build, re-review the patch and
+      # src/chrome/bringAddressSharing.ts, then move the pin.
+      - dependency-name: "@bringweb3/chrome-extension-kit"
+      # vue-tsc 3.3.14 reports `.value` on plain imported objects used in
+      # templates (19 false errors across StakingCard, ChangeLogDialog and
+      # WelcomeDialog); 3.3.13 type-checks the same code at the baseline.
+      # Drop this once a later release fixes it.
+      - dependency-name: "vue-tsc"
+        versions: ["3.3.14"]
       # Keep Vitest and @vitest/ui majors coordinated with Vue 3, Vite 7,
       # plugins and Node 24. Review as a manual coupled upgrade.
       - dependency-name: "vitest"
