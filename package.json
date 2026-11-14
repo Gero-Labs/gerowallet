@@ -84,7 +84,7 @@
     "@trezor/connect-webextension": "^10.0.1",
     "@trezor/protobuf": "^10.0.1",
     "@vueuse/core": "15.0.0",
-    "@walletconnect/core": "^2.24.0",
+    "@walletconnect/core": "^2.26.0",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "array-chunk-by-size": "^2.1.1",
@@ -143,7 +143,7 @@
   "devDependencies": {
     "@babel/core": "^7.29.13",
     "@babel/eslint-parser": "^7.29.13",
-    "@babel/preset-env": "^7.29.7",
+    "@babel/preset-env": "^7.29.14",
     "@ffflorian/jszip-cli": "^3.16.6",
     "@intlify/message-compiler": "11.4.18",
     "@rollup/plugin-commonjs": "28.0.9",
