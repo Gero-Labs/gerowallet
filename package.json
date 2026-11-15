@@ -36,6 +36,8 @@
     "design:audit": "node scripts/design/audit.mjs",
     "design:check": "node scripts/design/audit.mjs && node scripts/design/contrast.mjs",
     "typecheck:vue": "vue-tsc --noEmit",
+    "midnight:connector-dapp": "vite --config test/midnight-connector-dapp/vite.config.mts",
+    "midnight:connector-dapp:build": "vite build --config test/midnight-connector-dapp/vite.config.mts",
     "prepare": "simple-git-hooks"
   },
   "dependencies": {

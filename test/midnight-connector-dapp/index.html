@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Midnight connector test dApp</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Midnight connector test dApp</h1>
+        <p class="sub">DApp Connector API 4.1 · ledger 9 · every wallet call is timed and logged on the right</p>
+      </div>
+      <span id="status" class="chip">Not connected</span>
+    </header>
+
+    <main class="layout">
+      <div class="steps">
+        <section class="card" id="s-wallets">
+          <h2><span class="n">1</span> Wallets on this page</h2>
+          <p class="hint">Every entry under <code>window.midnight</code>, as the spec says to discover them. Wallets inject at page load; rescan if one arrives late.</p>
+          <div class="row"><button id="scan" class="secondary">Rescan</button></div>
+          <div id="wallets" class="wallets"></div>
+        </section>
+
+        <section class="card" id="s-connect">
+          <h2><span class="n">2</span> Connect</h2>
+          <div class="row">
+            <label>Network
+              <select id="network">
+                <option value="preprod">preprod</option>
+                <option value="mainnet">mainnet</option>
+                <option value="preview">preview</option>
+                <option value="stagenet">stagenet</option>
+              </select>
+            </label>
+            <button id="connect">connect()</button>
+          </div>
+          <p class="hint">After connecting, the page calls <code>getConnectionStatus</code>, <code>getConfiguration</code> and <code>hintUsage</code> with every method.</p>
+          <pre id="connect-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-read">
+          <h2><span class="n">3</span> Read</h2>
+          <div class="row wrap">
+            <button class="secondary" data-read="getUnshieldedAddress">getUnshieldedAddress</button>
+            <button class="secondary" data-read="getShieldedAddresses">getShieldedAddresses</button>
+            <button class="secondary" data-read="getDustAddress">getDustAddress</button>
+            <button class="secondary" data-read="getUnshieldedBalances">getUnshieldedBalances</button>
+            <button class="secondary" data-read="getShieldedBalances">getShieldedBalances</button>
+            <button class="secondary" data-read="getDustBalance">getDustBalance</button>
+            <button class="secondary" data-read="getConfiguration">getConfiguration</button>
+            <button class="secondary" data-read="getConnectionStatus">getConnectionStatus</button>
+          </div>
+          <div class="row">
+            <label>Page <input id="history-page" type="number" min="0" value="0" class="short" /></label>
+            <label>Size <input id="history-size" type="number" min="1" value="10" class="short" /></label>
+            <button class="secondary" id="history">getTxHistory</button>
+            <button id="read-all">Run all reads</button>
+          </div>
+          <pre id="read-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-sign">
+          <h2><span class="n">4</span> Sign data</h2>
+          <div class="row">
+            <label>Encoding
+              <select id="sign-encoding">
+                <option value="text">text</option>
+                <option value="hex">hex</option>
+                <option value="base64">base64</option>
+              </select>
+            </label>
+          </div>
+          <textarea id="sign-data" rows="2">Sign in to the Gero connector test dApp</textarea>
+          <div class="row"><button id="sign">signData()</button></div>
+          <p class="hint">Checked here: the signed bytes are <code>midnight_signed_message:&lt;len&gt;:</code> plus your payload, and the BIP-340 signature verifies against the returned key.</p>
+          <pre id="sign-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-transfer">
+          <h2><span class="n">5</span> Transfer (wallet-built)</h2>
+          <div class="grid">
+            <label>Token <select id="tr-token" data-token></select></label>
+            <label class="custom">Custom colour <input id="tr-token-custom" placeholder="64 hex" /></label>
+            <label>Amount <input id="tr-amount" value="1" /></label>
+            <label class="wide">Recipient <input id="tr-recipient" placeholder="mn_addr… (empty = this wallet)" /></label>
+            <label class="check"><input id="tr-fees" type="checkbox" checked /> payFees</label>
+          </div>
+          <div class="row">
+            <button id="tr-make">makeTransfer()</button>
+            <button id="tr-submit" class="secondary" disabled>submitTransaction()</button>
+          </div>
+          <pre id="tr-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-intent">
+          <h2><span class="n">6</span> Swap intent</h2>
+          <div class="grid">
+            <label>Give <select id="in-give-token" data-token></select></label>
+            <label class="custom">Custom colour <input id="in-give-token-custom" placeholder="64 hex" /></label>
+            <label>Give amount <input id="in-give-amount" value="1" /></label>
+            <label>Want <select id="in-want-token" data-token></select></label>
+            <label class="custom">Custom colour <input id="in-want-token-custom" placeholder="64 hex" /></label>
+            <label>Want amount <input id="in-want-amount" value="1" /></label>
+            <label>intentId <input id="in-id" value="random" class="short" /></label>
+            <label class="check"><input id="in-fees" type="checkbox" checked /> payFees</label>
+          </div>
+          <div class="row"><button id="in-make">makeIntent()</button></div>
+          <p class="hint">An intent is deliberately imbalanced: it waits for a counterparty, so it is decoded here, not submitted. Paste it into step 8 on a second wallet to fill it.</p>
+          <pre id="in-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-dapp-tx">
+          <h2><span class="n">7</span> dApp-built transaction</h2>
+          <p class="hint">The page builds a ledger 9 transaction that pays an output and spends nothing, proves it with the wallet's <code>getProvingProvider</code>, then asks the wallet to fund, fee-pay, sign and seal it.</p>
+          <div class="grid">
+            <label>Token <select id="bu-token" data-token></select></label>
+            <label class="custom">Custom colour <input id="bu-token-custom" placeholder="64 hex" /></label>
+            <label>Amount <input id="bu-amount" value="1" /></label>
+            <label class="wide">Recipient <input id="bu-recipient" placeholder="mn_addr… (empty = this wallet)" /></label>
+            <label>TTL (min) <input id="bu-ttl" type="number" min="1" value="10" class="short" /></label>
+            <label class="check"><input id="bu-fees" type="checkbox" checked /> payFees</label>
+          </div>
+          <div class="row">
+            <button id="bu-build">Build and prove</button>
+            <button id="bu-balance" disabled>balanceUnsealedTransaction()</button>
+            <button id="bu-submit" class="secondary" disabled>submitTransaction()</button>
+          </div>
+          <pre id="bu-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-sealed">
+          <h2><span class="n">8</span> Balance a sealed transaction</h2>
+          <textarea id="bs-tx" rows="3" placeholder="Sealed transaction hex, for example another wallet's makeIntent()"></textarea>
+          <div class="row">
+            <label class="check"><input id="bs-fees" type="checkbox" checked /> payFees</label>
+            <button id="bs-balance">balanceSealedTransaction()</button>
+            <button id="bs-submit" class="secondary" disabled>submitTransaction()</button>
+          </div>
+          <pre id="bs-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-proving">
+          <h2><span class="n">9</span> Proving provider</h2>
+          <p class="hint">Gets the provider, then calls <code>check()</code> on an empty preimage: a wallet that cannot prove should say so quickly, not hang. The log marks any call over 60 s, the limit some dApps enforce.</p>
+          <div class="row">
+            <button id="pp-get">getProvingProvider()</button>
+            <button id="pp-check" class="secondary" disabled>provider.check()</button>
+          </div>
+          <pre id="pp-out" class="out"></pre>
+        </section>
+
+        <section class="card" id="s-decode">
+          <h2><span class="n">10</span> Decode or submit any transaction</h2>
+          <textarea id="dec-tx" rows="3" placeholder="Transaction hex"></textarea>
+          <div class="row">
+            <button id="dec-decode" class="secondary">Decode</button>
+            <button id="dec-submit" class="secondary">submitTransaction()</button>
+          </div>
+          <pre id="dec-out" class="out"></pre>
+        </section>
+      </div>
+
+      <aside class="card log-card">
+        <div class="log-head">
+          <h2>Call log</h2>
+          <div class="row">
+            <button id="log-copy" class="secondary">Copy JSON</button>
+            <button id="log-clear" class="secondary">Clear</button>
+          </div>
+        </div>
+        <ol id="log" class="log"></ol>
+      </aside>
+    </main>
+  </body>
+</html>
