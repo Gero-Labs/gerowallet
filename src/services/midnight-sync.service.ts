@@ -356,7 +356,7 @@ class MidnightSyncService {
       const block = await getMidnightApi(network).getLatestBlock();
       // Neither an old session nor a request spanning a reset may overwrite the
       // current display (the next poll retries after a reset); a newer pushed
-      // tip is kept by applyBlockTip's 'latest' rule.
+      // tip is kept by applyBlockTip, which never moves the tip back.
       if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch
         || midnightStore.chainIdentity !== identity) return;
       this.applyBlockTip(block, 'latest');
@@ -373,13 +373,19 @@ class MidnightSyncService {
    * Where a block comes from decides what it may say about the tip:
    * - `sync`: gero-sync's cached chain tip on a frame without transactions
    *   (SYNC_CHECK_OK keep-alives, the SUBSCRIBE answer). The tip, seen now.
-   * - `latest`: Nexus `/api/blocks/latest`. The tip, seen now, unless a newer
-   *   pushed tip landed while the request was out.
+   * - `latest`: Nexus `/api/blocks/latest`. The tip, seen now.
    * - `transaction`: the block a transaction on the frame is in, NOT the tip.
    *   When the wallet opens, gero-sync replays its history, so this can be
    *   days old: stamped as seen now, it read as "Paused at block N (2d ago)"
    *   until the next real tip. It only moves the tip forward, and unstamped,
    *   so its age is unknown (never paused) until a tip read confirms it.
+   *
+   * No source moves the tip back within a chain identity (a reset clears the
+   * tip first). A lower block is older news: a Nexus answer that lost a race
+   * to a pushed tip, or gero-sync's tip cache while it replays the blocks it
+   * missed during an indexer outage (MidnightBlockSubscriber resumes at the
+   * last height + 1 and caches each replayed block as the tip). An equal
+   * height re-stamps it, so a chain that really stopped still reads as paused.
    */
   private applyBlockTip(
     block: { height?: number; hash?: string | null; time?: number },
@@ -389,8 +395,8 @@ class MidnightSyncService {
     if (!Number.isSafeInteger(block.height) || block.height! < 0
       || typeof block.hash !== 'string' || !block.hash) return;
     const height = block.height!;
-    if (source === 'latest' && height < midnightStore.tip.height) return;
-    if (source === 'transaction' && height <= midnightStore.tip.height) return;
+    const known = midnightStore.tip.height;
+    if (height < known || (source === 'transaction' && height === known)) return;
     midnightActions.applyTipUpdate({
       hash: block.hash,
       height,
