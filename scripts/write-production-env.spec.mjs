@@ -8,9 +8,15 @@ const names = text => lines(text).map(line => line.slice(0, line.indexOf('=')));
 
 /** The `env:` block of each "Write production env" step in a workflow file. */
 function envBlocks(workflow) {
+  // Line by line, not one regex over the file: a nested repetition there backtracks
+  // exponentially on whitespace-heavy input (CodeQL js/redos).
   const blocks = [];
-  const pattern = /- name: Write production env\n((?:[ \t]+.*\n)+?)[ \t]+run: /g;
-  for (const match of workflow.replace(/\r\n/g, '\n').matchAll(pattern)) blocks.push(match[1]);
+  let block = null;
+  for (const line of workflow.split(/\r?\n/)) {
+    if (line.trim() === '- name: Write production env') block = [];
+    else if (block && line.trimStart().startsWith('run: ')) { blocks.push(block.join('\n')); block = null; }
+    else if (block) block.push(line);
+  }
   return blocks;
 }
 
