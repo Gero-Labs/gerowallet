@@ -212,7 +212,16 @@
     "vuedraggable": {
       "sortablejs": "1.15.7"
     },
-    "bitcoinjs-lib": "6.1.10"
+    "bitcoinjs-lib": "6.1.10",
+    "@stellar/stellar-sdk": {
+      "axios": "$axios"
+    },
+    "glob@^13": {
+      "minimatch": "^11.0.8"
+    },
+    "editorconfig@^3": {
+      "minimatch": "^11.0.8"
+    }
   },
   "engines": {
     "node": ">=24.19.0 <25",
