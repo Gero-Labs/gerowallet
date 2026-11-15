@@ -72,7 +72,10 @@ export interface MidnightChainTip {
    * normalises through `blockTimeToMs` (midnightDataFreshness.ts).
    */
   timestamp: number;
-  /** Local clock (epoch ms) when the sync session last saw this tip; absent after a restore. */
+  /**
+   * Local clock (epoch ms) when the sync session last saw this as the chain tip;
+   * absent after a restore and on a block taken from a (possibly replayed) transaction.
+   */
   observedAt?: number;
 }
 

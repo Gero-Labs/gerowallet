@@ -352,14 +352,14 @@ class MidnightSyncService {
     if (this.tipRequest) return this.tipRequest;
     const sessionEpoch = this.sessionEpoch;
     const identity = midnightStore.chainIdentity;
-    const previousTip = midnightStore.tip;
     const request = Promise.resolve().then(async () => {
       const block = await getMidnightApi(network).getLatestBlock();
-      // Neither an old session nor a request spanning a reset/new WS tip may
-      // overwrite the current display. The next poll retries after a reset.
+      // Neither an old session nor a request spanning a reset may overwrite the
+      // current display (the next poll retries after a reset); a newer pushed
+      // tip is kept by applyBlockTip, which never moves the tip back.
       if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch
-        || midnightStore.chainIdentity !== identity || midnightStore.tip !== previousTip) return;
-      this.applyBlockTip(block);
+        || midnightStore.chainIdentity !== identity) return;
+      this.applyBlockTip(block, 'latest');
     }).catch((error) => {
       debugLog('Midnight tip refresh from Nexus failed; will retry:', error);
     }).finally(() => {
@@ -369,18 +369,43 @@ class MidnightSyncService {
     return request;
   }
 
-  private applyBlockTip(block: { height?: number; hash?: string | null; time?: number }): void {
+  /**
+   * Where a block comes from decides what it may say about the tip:
+   * - `sync`: gero-sync's cached chain tip on a frame without transactions
+   *   (SYNC_CHECK_OK keep-alives, the SUBSCRIBE answer). The tip, seen now.
+   * - `latest`: Nexus `/api/blocks/latest`. The tip, seen now.
+   * - `transaction`: the block a transaction on the frame is in, NOT the tip.
+   *   When the wallet opens, gero-sync replays its history, so this can be
+   *   days old: stamped as seen now, it read as "Paused at block N (2d ago)"
+   *   until the next real tip. It only moves the tip forward, and unstamped,
+   *   so its age is unknown (never paused) until a tip read confirms it.
+   *
+   * No source moves the tip back within a chain identity (a reset clears the
+   * tip first). A lower block is older news: a Nexus answer that lost a race
+   * to a pushed tip, or gero-sync's tip cache while it replays the blocks it
+   * missed during an indexer outage (MidnightBlockSubscriber resumes at the
+   * last height + 1 and caches each replayed block as the tip). An equal
+   * height re-stamps it, so a chain that really stopped still reads as paused.
+   */
+  private applyBlockTip(
+    block: { height?: number; hash?: string | null; time?: number },
+    source: 'sync' | 'latest' | 'transaction' = 'sync',
+  ): void {
     // Height-only catch-up markers are cursors, not observed chain tips.
     if (!Number.isSafeInteger(block.height) || block.height! < 0
       || typeof block.hash !== 'string' || !block.hash) return;
+    const height = block.height!;
+    const known = midnightStore.tip.height;
+    if (height < known || (source === 'transaction' && height === known)) return;
     midnightActions.applyTipUpdate({
       hash: block.hash,
-      height: block.height!,
+      height,
       // `/api/blocks/latest` sends epoch seconds, sync frames may send milliseconds.
       timestamp: blockTimeToMs(block.time),
-      // When this session saw it: a tip restored from storage has an old stamp
-      // and reads as unknown, not paused (midnightDataFreshness.ts).
-      observedAt: Date.now(),
+      // When this session saw it as the tip: a tip restored from storage has an
+      // old stamp, and a transaction's block none; both read as unknown, not
+      // paused (midnightDataFreshness.ts).
+      ...(source === 'transaction' ? {} : { observedAt: Date.now() }),
     });
   }
 
@@ -605,8 +630,12 @@ class MidnightSyncService {
   }
 
   private async applySync(data: WsSyncMessage): Promise<void> {
-    // 1) Tip update
-    if (data.block) this.applyBlockTip(data.block);
+    // 1) Tip update. A frame with transactions names THEIR block (gero-sync
+    // MidnightUnshieldedTxSubscriber), which in a replay is not the tip.
+    if (data.block) {
+      const carriesTransactions = Array.isArray(data.transactions) && data.transactions.length > 0;
+      this.applyBlockTip(data.block, carriesTransactions ? 'transaction' : 'sync');
+    }
 
     // 2) Transactions — UTxO-set model: add created outputs owned by us,
     // remove spent outputs owned by us, idempotently keyed by
