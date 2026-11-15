@@ -12,6 +12,7 @@
 import * as bridge from './midnightWebpage';
 import { GERO_CARDANO_ICON } from './injectIcon';
 import { MidnightErrorCode } from './config';
+import { midnightConnectorError } from './midnightConnectorError';
 import type {
   ConnectedAPI,
   InitialAPI,
@@ -30,14 +31,6 @@ declare global {
   }
 }
 
-function apiError(code: string, reason: string): Error & { type: string; code: string; reason: string } {
-  const err = new Error(reason) as Error & { type: string; code: string; reason: string };
-  err.type = 'DAppConnectorAPIError';
-  err.code = code;
-  err.reason = reason;
-  return err;
-}
-
 function isKeyMaterialProvider(value: unknown): value is KeyMaterialProvider {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -48,7 +41,7 @@ function isKeyMaterialProvider(value: unknown): value is KeyMaterialProvider {
 
 /** Methods whose server-side implementation is still Phase 3 (see build plan §4). */
 function notYetImplemented(methodName: string): () => Promise<never> {
-  return () => Promise.reject(apiError(
+  return () => Promise.reject(midnightConnectorError(
     MidnightErrorCode.InternalError,
     `${methodName} is not yet implemented by GeroWallet's connector (planned)`,
   ));
@@ -78,7 +71,7 @@ function buildConnectedAPI(): ConnectedAPI {
     // background against the user's proof server. See midnightProvingBridge.
     getProvingProvider: (keyMaterialProvider) => {
       if (!isKeyMaterialProvider(keyMaterialProvider)) {
-        return Promise.reject(apiError(
+        return Promise.reject(midnightConnectorError(
           MidnightErrorCode.InvalidRequest,
           'keyMaterialProvider must implement getZKIR, getProverKey and getVerifierKey',
         ));
@@ -90,7 +83,7 @@ function buildConnectedAPI(): ConnectedAPI {
     // InvalidRequest before any prompt). Returns the sealed tx.
     balanceUnsealedTransaction: (tx, options) => {
       if (typeof tx !== 'string' || tx.length === 0) {
-        return Promise.reject(apiError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
+        return Promise.reject(midnightConnectorError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
       }
       return bridge.midnightBalanceUnsealedTransaction(tx, options);
     },
@@ -100,7 +93,7 @@ function buildConnectedAPI(): ConnectedAPI {
     // prompt, and a give the wallet cannot cover with InsufficientFunds.
     makeIntent: (desiredInputs, desiredOutputs, options) => {
       if (!Array.isArray(desiredInputs) || !Array.isArray(desiredOutputs)) {
-        return Promise.reject(apiError(MidnightErrorCode.InvalidRequest, 'desiredInputs and desiredOutputs must be arrays'));
+        return Promise.reject(midnightConnectorError(MidnightErrorCode.InvalidRequest, 'desiredInputs and desiredOutputs must be arrays'));
       }
       return bridge.midnightMakeIntent(desiredInputs, desiredOutputs, options);
     },
@@ -132,7 +125,7 @@ const initialAPI: InitialAPI = Object.freeze({
     // ConnectedAPI for a connection that was never actually approved.
     const approved = await bridge.midnightConnect(networkId);
     if (!approved) {
-      throw apiError(MidnightErrorCode.Rejected, 'User declined the connection request');
+      throw midnightConnectorError(MidnightErrorCode.Rejected, 'User declined the connection request');
     }
     return buildConnectedAPI();
   },
