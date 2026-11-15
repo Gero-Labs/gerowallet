@@ -6,6 +6,7 @@ vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getLatestBlock: 
 import service from '@/services/midnight-sync.service';
 import { midnightStore, midnightActions } from '@/stores/midnightStore';
 import { Network } from '@/models/types';
+import { isMidnightDataPaused } from '@/chains/midnight/midnightDataFreshness';
 
 const block = { height: 392767, hash: 'ab'.repeat(32), time: 1788996846001 };
 const identity = { midnight_network: 'midnight-stagenet', midnight_chain_generation: 1,
@@ -118,6 +119,47 @@ describe('Midnight network status recovery', () => {
     expect(midnightStore.tip.height).toBe(block.height + 2);
     expect(midnightStore.tip.timestamp).toBe(ms);
     expect(midnightStore.tip.observedAt).toBe(Date.now());
+  });
+
+  describe('a transaction frame names its own block, not the tip', () => {
+    const twoDaysAgo = () => Date.now() - 2 * 24 * 3600_000;
+    const replayed = (height: number) => sync({
+      block: { hash: 'ee'.repeat(32), height, time: twoDaysAgo() },
+      transactions: [{ tx_hash: 'ff'.repeat(32), midnight_tx_id: 7 }],
+    });
+
+    const fresh = () => ({ ...block, time: Math.floor(Date.now() / 1000) - 6 });
+
+    it('a replayed old transaction never moves the tip back or reads as paused', async () => {
+      h.latest.mockResolvedValue(fresh());
+      start(); await flush(); await sync(); await flush();
+      expect(midnightStore.tip.observedAt).toBe(Date.now());
+      const tip = { ...midnightStore.tip };
+      await replayed(block.height - 40_000); await flush();
+      expect(midnightStore.tip).toEqual(tip);
+      expect(isMidnightDataPaused(midnightStore.tip, Date.now())).toBe(false);
+    });
+
+    it('with no tip known yet, its block is shown unstamped: unknown age, never paused', async () => {
+      start(); await flush();
+      // The identity frame clears the tip and asks Nexus again; that read is out while the replay lands.
+      const pending = deferred(); h.latest.mockReturnValue(pending.promise);
+      await sync(); await flush();
+      expect(midnightStore.tip.hash).toBeNull();
+      await replayed(block.height - 40_000); await flush();
+      expect(midnightStore.tip.height).toBe(block.height - 40_000);
+      expect(midnightStore.tip.observedAt).toBeUndefined();
+      expect(isMidnightDataPaused(midnightStore.tip, Date.now())).toBe(false);
+      pending.resolve(fresh()); await flush();
+      expect(midnightStore.tip.height).toBe(block.height);
+      expect(midnightStore.tip.observedAt).toBe(Date.now());
+    });
+
+    it('a keep-alive with the same old block still reads as paused (the chain really stopped)', async () => {
+      start(); await flush(); await sync(); await flush();
+      await sync({ block: { ...block, height: block.height + 1, time: twoDaysAgo() } }); await flush();
+      expect(isMidnightDataPaused(midnightStore.tip, Date.now())).toBe(true);
+    });
   });
 
   it('keeps the last known block when a later Nexus refresh fails', async () => {
