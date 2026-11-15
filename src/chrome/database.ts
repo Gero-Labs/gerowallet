@@ -23,7 +23,7 @@ function openDatabase(dbName: string, version: number): Promise<IDBDatabase> {
 }
 
 // Add a record
-function addRecord(storeName: string, record: any): Promise<IDBValidKey> {
+function addRecord(storeName: string, record: unknown): Promise<IDBValidKey> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readwrite");
     const objectStore = transaction.objectStore(storeName);
@@ -40,7 +40,7 @@ function addRecord(storeName: string, record: any): Promise<IDBValidKey> {
 }
 
 // Get a record
-function getRecord(storeName: string, id: IDBValidKey): Promise<any> {
+function getRecord(storeName: string, id: IDBValidKey): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readonly");
     const objectStore = transaction.objectStore(storeName);
@@ -57,7 +57,7 @@ function getRecord(storeName: string, id: IDBValidKey): Promise<any> {
 }
 
 // Update a record
-function updateRecord(storeName: string, id: IDBValidKey, updatedRecord: any): Promise<IDBValidKey> {
+function updateRecord(storeName: string, id: IDBValidKey, updatedRecord: unknown): Promise<IDBValidKey> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readwrite");
     const objectStore = transaction.objectStore(storeName);
@@ -101,7 +101,7 @@ function deleteRecord(storeName: string, id: IDBValidKey): Promise<void> {
 }
 
 // Get all records
-function getAllRecords(storeName: string): Promise<any[]> {
+function getAllRecords(storeName: string): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readonly");
     const objectStore = transaction.objectStore(storeName);
@@ -118,8 +118,8 @@ function getAllRecords(storeName: string): Promise<any[]> {
 }
 
 // Live query with basic polling (simplified)
-function liveQuery(storeName: string, callback: (records: any[]) => void, interval = 1000) {
-  let lastRecords: any[] = [];
+function liveQuery(storeName: string, callback: (records: unknown[]) => void, interval = 1000) {
+  let lastRecords: unknown[] = [];
 
   async function poll() {
     const records = await getAllRecords(storeName);
@@ -134,13 +134,13 @@ function liveQuery(storeName: string, callback: (records: any[]) => void, interv
 }
 
 // Get provider
-function getProvider(chain: string, network: string): Promise<any[]> {
+function getProvider(chain: string, network: string): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['provider'], 'readonly');
     const providerStore = transaction.objectStore("provider");
     const index = providerStore.index("chain");
     const request = index.openCursor();
-    const results: any[] = [];
+    const results: unknown[] = [];
 
     request.onsuccess = function(event) {
       const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;

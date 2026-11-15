@@ -8,7 +8,7 @@ export interface ILoader {
    * Load data and set up subscription
    * @returns Promise that resolves with the loaded data
    */
-  load(): Promise<any>;
+  load(): Promise<unknown>;
 
   /**
    * Unsubscribe from the data loader
@@ -32,7 +32,7 @@ export abstract class BaseLoader implements ILoader {
     this.subscriptionKey = subscriptionKey;
   }
 
-  abstract load(): Promise<any>;
+  abstract load(): Promise<unknown>;
 
   unsubscribe(): void {
     if (this.subscription) {
@@ -54,7 +54,7 @@ export abstract class BaseLoader implements ILoader {
   protected createSubscription<T>(
     queryFn: () => Promise<T> | T,
     onNext: (data: T) => void,
-    onError?: (error: any) => void
+    onError?: (error: unknown) => void
   ): Promise<T> {
     return new Promise((resolve, reject) => {
       this.subscription = liveQuery(queryFn).subscribe({
@@ -62,7 +62,7 @@ export abstract class BaseLoader implements ILoader {
           onNext(data);
           resolve(data);
         },
-        error: (error: any) => {
+        error: (error: unknown) => {
           console.error(`Loader ${this.subscriptionKey} failed:`, error);
           if (onError) {
             onError(error);

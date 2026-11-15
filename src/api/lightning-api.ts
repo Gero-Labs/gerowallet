@@ -214,8 +214,8 @@ class LightningApi {
         return { type, bolt11: decoded as Bolt11Decoded };
       }
       return { type: 'unknown', error: 'Unrecognized Lightning format' };
-    } catch (e: any) {
-      return { type, error: e.message || 'Failed to resolve Lightning input' };
+    } catch (e: unknown) {
+      return { type, error: (e instanceof Error && e.message) || 'Failed to resolve Lightning input' };
     }
   }
 }

@@ -98,6 +98,40 @@ function mapDelegationState(v2State: string): BabylonDelegation['state'] {
   return 'pending';
 }
 
+// ── Raw v2 response shapes (only the fields we read) ─────────────────────────
+
+interface RawBbnParams {
+  version?: number;
+  btc_activation_height?: number;
+  covenant_pks?: string[];
+  covenant_quorum?: number;
+  unbonding_time_blocks?: number;
+  unbonding_fee_sat?: number;
+  max_staking_value_sat?: number;
+  min_staking_value_sat?: number;
+  max_staking_time_blocks?: number;
+  min_staking_time_blocks?: number;
+}
+
+interface RawBtcParams {
+  version?: number;
+  btc_confirmation_depth?: number;
+}
+
+interface RawDelegation {
+  staker_btc_pk_hex?: string;
+  finality_provider_btc_pks_hex?: string[];
+  state?: string;
+  delegation_staking?: {
+    staking_tx_hash_hex?: string;
+    staking_amount?: number;
+    start_height?: number;
+    bbn_inception_time?: string;
+    staking_timelock?: number;
+    staking_output_idx?: number;
+  };
+}
+
 // ── API class ─────────────────────────────────────────────────────────────────
 
 class BabylonApi {
@@ -112,11 +146,11 @@ class BabylonApi {
   async getGlobalParams(isTestnet = false): Promise<BabylonGlobalParams> {
     const { data } = await axios.get(`${this.baseUrl(isTestnet)}/v2/network-info`);
     const payload = data?.data ?? data;
-    const bbnParams: any[] = payload?.params?.bbn ?? [];
-    const btcParams: any[] = payload?.params?.btc ?? [];
+    const bbnParams: RawBbnParams[] = payload?.params?.bbn ?? [];
+    const btcParams: RawBtcParams[] = payload?.params?.btc ?? [];
 
-    const versions: BabylonParamVersion[] = bbnParams.map((p: any) => {
-      const btcP = btcParams.find((b: any) => b.version === p.version) ?? btcParams[0] ?? {};
+    const versions: BabylonParamVersion[] = bbnParams.map((p) => {
+      const btcP: RawBtcParams = btcParams.find((b) => b.version === p.version) ?? btcParams[0] ?? {};
       return {
         version: p.version ?? 0,
         activation_height: p.btc_activation_height ?? 0,
@@ -159,8 +193,8 @@ class BabylonApi {
       params: { staker_pk_hex: stakerBtcPk }
     });
 
-    const raw: any[] = data?.data ?? [];
-    const mapped: BabylonDelegation[] = raw.map((d: any) => ({
+    const raw: RawDelegation[] = data?.data ?? [];
+    const mapped: BabylonDelegation[] = raw.map((d) => ({
       staking_tx_hash_hex: d.delegation_staking?.staking_tx_hash_hex ?? '',
       staker_pk_hex: d.staker_btc_pk_hex ?? '',
       finality_provider_pk_hex: d.finality_provider_btc_pks_hex?.[0] ?? '',

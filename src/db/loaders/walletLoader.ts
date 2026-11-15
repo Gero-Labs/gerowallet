@@ -219,7 +219,7 @@ export class TransactionsLoader extends BaseLoader {
    */
   private readGeneration = 0;
 
-  unsubscribe(): void {
+  override unsubscribe(): void {
     super.unsubscribe();
     // A read in flight now is abandoned and will never reach its pass.
     this.readGeneration += 1;

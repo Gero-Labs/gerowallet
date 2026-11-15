@@ -132,7 +132,7 @@ const geroCardanoProvider = {
 
 try {
   const cardano = window.cardano ?? ({} as Cardano);
-  cardano.gerowallet = geroCardanoProvider;
+  cardano['gerowallet'] = geroCardanoProvider;
   if (window.cardano !== cardano) {
     window.cardano = cardano;
   }
@@ -205,27 +205,6 @@ const _wsEventListeners = new Map<string, Set<Function>>();
 
 function _wsDispatchChange(props: object) {
   _wsEventListeners.get('change')?.forEach(cb => cb(props));
-}
-
-async function _buildWsAccount(knownAddresses?: string[]): Promise<any | null> {
-  const addresses = knownAddresses?.length ? knownAddresses : await btcGetAccounts();
-  if (!addresses.length) return null;
-  const pubKeyHex = await btcGetPublicKey();
-  const network = await btcGetNetwork();
-  const chain = network === 'testnet' ? 'bitcoin:testnet' : 'bitcoin:mainnet';
-  return {
-    address: addresses[0],
-    publicKey: _wsHexToBytes(pubKeyHex),
-    chains: [chain],
-    features: [
-      'bitcoin:connect',
-      'bitcoin:disconnect',
-      'bitcoin:signTransaction',
-      'bitcoin:signAndSendTransaction',
-      'bitcoin:signMessage',
-      'bitcoin:events',
-    ],
-  };
 }
 
 const _geroWalletStandard: any = {

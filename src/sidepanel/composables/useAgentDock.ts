@@ -57,7 +57,7 @@ export function createAgentDock(
     try {
       // Snapshot the connected wallet so the agent answers with real portfolio data
       // instead of asking the user to connect (the dock only opens inside an unlocked wallet).
-      const res = await provider.chat({ message: trimmed, history, context: buildWalletContext() });
+      const res = await provider.chat({ message: trimmed, history, context: { ...buildWalletContext() } });
       const parsed = parseIntent(trimmed);
       // A held token mentioned anywhere in the message lets us chart it (its unit IS the
       // market-api assetId, so no resolver round-trip needed).

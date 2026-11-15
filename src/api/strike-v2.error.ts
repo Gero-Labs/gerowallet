@@ -25,7 +25,7 @@ export function extractStrikeError(e: unknown, fallback: string): string {
     serverMsg = data;
   } else if (data && typeof data === 'object') {
     const d = data as Record<string, unknown>;
-    serverMsg = String(d.error ?? d.message ?? d.detail ?? '');
+    serverMsg = String(d['error'] ?? d['message'] ?? d['detail'] ?? '');
   }
   serverMsg = serverMsg.trim();
 

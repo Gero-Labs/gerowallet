@@ -3634,7 +3634,14 @@ export class WalletBg {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('getMidnightWalletKeys called on non-Midnight wallet');
     }
-    let parsed: Record<string, string> | null = null;
+    let parsed: {
+      publicKeyHex?: string;
+      addressHex?: string;
+      cardanoXpub?: string;
+      cardanoBaseAddress?: string;
+      cardanoStakeAddress?: string;
+      cardanoPaymentKeyHashHex?: string;
+    } | null = null;
     try {
       parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
     } catch {

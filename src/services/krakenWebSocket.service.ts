@@ -26,8 +26,24 @@ interface KrakenMessage {
   };
   channelID?: number;
   channelName?: string;
-  [key: number]: any; // For ticker data arrays
+  [key: number]: unknown; // For ticker data arrays
 }
+
+/** A ticker update in our format (both ADA/USD and XBT/USD). */
+export interface KrakenTicker {
+  lastPrice: number;
+  volume24h: number;
+  high24h: number;
+  low24h: number;
+  open24h: number;
+  priceChange: number;
+  priceChangePercentage: number;
+  timestamp: number;
+  source: string;
+}
+
+/** Ticker frame: [channelID, tickerData, channelName, pair]. */
+type KrakenTickerFrame = [number, KrakenTickerData, string, string, ...unknown[]];
 
 class KrakenWebSocketService {
   private ws: WebSocket | null = null;
@@ -37,8 +53,8 @@ class KrakenWebSocketService {
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private isConnected = false;
   private subscriptions: Set<string> = new Set();
-  private onTickerUpdate: ((ticker: any) => void) | null = null;
-  private onBtcTickerUpdate: ((ticker: any) => void) | null = null;
+  private onTickerUpdate: ((ticker: KrakenTicker) => void) | null = null;
+  private onBtcTickerUpdate: ((ticker: KrakenTicker) => void) | null = null;
   private lastTickerTime = 0;
   private tickerRequestInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -139,14 +155,14 @@ class KrakenWebSocketService {
   /**
    * Set callback for ADA/USD ticker updates
    */
-  onTicker(callback: (ticker: any) => void): void {
+  onTicker(callback: (ticker: KrakenTicker) => void): void {
     this.onTickerUpdate = callback;
   }
 
   /**
    * Set callback for BTC/USD ticker updates
    */
-  onBtcTicker(callback: (ticker: any) => void): void {
+  onBtcTicker(callback: (ticker: KrakenTicker) => void): void {
     this.onBtcTickerUpdate = callback;
   }
 
@@ -155,7 +171,7 @@ class KrakenWebSocketService {
    */
   private handleMessage(data: string): void {
     try {
-      const message: KrakenMessage | any[] = JSON.parse(data);
+      const message: KrakenMessage | unknown[] = JSON.parse(data);
 
 
       // Handle system messages (objects)
@@ -166,7 +182,7 @@ class KrakenWebSocketService {
 
       // Handle ticker data (arrays)
       if (Array.isArray(message) && message.length >= 4) {
-        this.handleTickerData(message);
+        this.handleTickerData(message as KrakenTickerFrame);
         return;
       }
 
@@ -190,7 +206,7 @@ class KrakenWebSocketService {
    * Handle ticker data arrays
    * Format: [channelID, tickerData, channelName, pair]
    */
-  private handleTickerData(data: any[]): void {
+  private handleTickerData(data: KrakenTickerFrame): void {
     if (data.length < 4) return;
 
     const [_channelID, tickerData, channelName, pair] = data;
@@ -214,7 +230,7 @@ class KrakenWebSocketService {
   /**
    * Parse Kraken ticker data into our format
    */
-  private parseTickerData(data: KrakenTickerData): any {
+  private parseTickerData(data: KrakenTickerData): KrakenTicker {
     const lastPrice = parseFloat(data.c[0]); // Last trade price
     const volume24h = parseFloat(data.v[1]); // 24h volume
     const high24h = parseFloat(data.h[1]); // 24h high

@@ -1,6 +1,6 @@
 /** Public content survives session changes; signing popups keep their own guards. */
 export function isPublicRoute(route: { meta?: Record<string, unknown>; matched?: Array<{ meta?: Record<string, unknown> }> }): boolean {
-  return route.meta?.public === true || !!route.matched?.some(record => record.meta?.public === true);
+  return route.meta?.['public'] === true || !!route.matched?.some(record => record.meta?.['public'] === true);
 }
 
 export function isHelpReady(session: { loggedWallet?: unknown; isLocked: boolean; isSyncing: boolean }): boolean {

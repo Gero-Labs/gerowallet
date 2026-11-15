@@ -139,12 +139,12 @@ export default {
 
   // ── Governance Actions / Snapshots ──
   async getSnapshots(type?: 'polls' | 'openPolls' | 'snapshotProposals' | 'forums', restrictToActive?: boolean) {
-    const params: any = {};
+    const params: { type?: string; restrictToActive?: boolean } = {};
     if (type) params.type = type;
     if (restrictToActive !== undefined) params.restrictToActive = restrictToActive;
     return axiosInstance.get(`/api/clarity/govActions/snapshots`, { params });
   },
-  async createSnapshotProposal(snapshotProposalMetadata: any) {
+  async createSnapshotProposal(snapshotProposalMetadata: unknown) {
     return axiosInstance.post<string>(`/api/clarity/govActions/snapshots/createSnapshotProposal`, { snapshotProposalMetadata });
   },
 
@@ -155,7 +155,7 @@ export default {
   async getProposalMetadata(proposalId: string) {
     return axiosInstance.get<ProposalMetadata>(`/api/clarity/agora/proposalMetadata/${proposalId}`);
   },
-  async saveProposalMetadata(proposalMetadata: any) {
+  async saveProposalMetadata(proposalMetadata: unknown) {
     return axiosInstance.post<string>(`/api/clarity/agora/saveProposalMetadata`, { proposalMetadata });
   },
   async getProposalVotes(proposalId: string) {

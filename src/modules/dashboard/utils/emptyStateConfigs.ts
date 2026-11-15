@@ -1,5 +1,5 @@
 import networks from '@/utils/networks';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { isStakeKeyRegistered, type StakeRegistrationSignals } from '@/shared/utils/stakeRegistration';
 import i18n from '@/plugins/i18n';
 
 export interface EmptyStateConfig {
@@ -162,14 +162,14 @@ export const getEmptyStateConfig = (
 };
 
 // Helper to determine if wallet has any activity
-export const isWalletEmpty = (account: any, tokens: any): boolean => {
-  const hasNativeTokens = account?.controlled_amount > 0;
+export const isWalletEmpty = (account: { controlled_amount?: number | string | null } | null | undefined, tokens: object | null | undefined): boolean => {
+  const hasNativeTokens = Number(account?.controlled_amount ?? 0) > 0;
   const hasOtherTokens = tokens && Object.keys(tokens).length > 1; // More than just native token
   return !hasNativeTokens && !hasOtherTokens;
 };
 
 // Helper to determine if user is completely new
-export const isNewUser = (transactions: any[], account: any): boolean => {
+export const isNewUser = (transactions: unknown[] | null | undefined, account: StakeRegistrationSignals | null | undefined): boolean => {
   return (!transactions || transactions.length === 0) &&
          !isStakeKeyRegistered(account);
 };
