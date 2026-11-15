@@ -68,6 +68,14 @@ updates:
       # hand: diff the new build, re-review the patch and
       # src/chrome/bringAddressSharing.ts, then move the pin.
       - dependency-name: "@bringweb3/chrome-extension-kit"
+      # Coupled pin. walletConnect.service.ts builds a `Core` from
+      # @walletconnect/core and hands it to WalletKit.init(), and every
+      # @reown/walletkit release pins core and sign-client EXACTLY (1.6.0 pins
+      # 2.25.0). Bumping core alone (PR 1538 tried 2.26.0) passes CI, but npm
+      # nests a second core for WalletKit and Gero then passes a newer Core into
+      # an older WalletKit, on the dApp session and signing path. Move core by
+      # hand to the version the new WalletKit release pins, in the same PR.
+      - dependency-name: "@walletconnect/core"
       # vue-tsc 3.3.14 reports `.value` on plain imported objects used in
       # templates (19 false errors across StakingCard, ChangeLogDialog and
       # WelcomeDialog); 3.3.13 type-checks the same code at the baseline.
