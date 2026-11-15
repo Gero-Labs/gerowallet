@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { extensionIdForKey, inspectReleaseArtifact } from './check-release-artifact.mjs';
 import {
-  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, compareVersions,
+  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, checkUpgradeRehearsal, compareVersions,
   extensionIdForPublicKey, releaseToStore, storeClient, verifyStoreCandidate,
 } from './chrome-web-store.mjs';
 
@@ -308,5 +308,68 @@ describe('checkE2eQualification', () => {
     ['an unfinished run', { status: 'interrupted', counts: { passed: 2 } }, 'ended as "interrupted"'],
   ])('blocks %s', (_name, changes, reason) => {
     expect(check(changes)).toContain(reason);
+  });
+});
+
+describe('checkUpgradeRehearsal', () => {
+  const walletSha = 'a'.repeat(40);
+  const id = ITEM;
+  const options = { walletSha, extensionId: id, version: '2.8.0', recoveryVersion: '2.8.1' };
+  const evidence = (changes = {}) => ({
+    identityVerified: true,
+    artifacts: [
+      { version: '2.7.2', id },
+      { version: '2.8.0', id, provenance: { sourceSha: walletSha } },
+      { version: '2.8.1', id, provenance: { sourceSha: walletSha } },
+    ],
+    stages: [{}, {}, {}],
+    ...changes,
+  });
+  const test = (method, { status = 'expected', body = evidence() } = {}) => ({
+    title: `v2.7.2 profile with Midnight ${method} survives upgrade, encrypted-secret migration and forward recovery without uninstalling`,
+    tests: [{ status, results: [{ status: 'passed', attachments: body === null ? [] : [
+      { name: 'worker-2.8.0', contentType: 'application/json', body: Buffer.from('{}').toString('base64') },
+      { name: 'upgrade-evidence', contentType: 'application/json', body: Buffer.from(JSON.stringify(body)).toString('base64') },
+    ] }] }],
+  });
+  const report = ({ password = {}, passkey = {}, stats = {}, errors = [] } = {}) => ({
+    errors,
+    stats: { expected: 2, unexpected: 0, flaky: 0, skipped: 0, ...stats },
+    suites: [{ title: 'upgrade-recovery.spec.ts', specs: [], suites: [{ title: 'nested', specs: [test('Password', password), test('PassKey', passkey)] }] }],
+  });
+  const check = changes => checkUpgradeRehearsal(report(changes), options).join('\n');
+
+  it('clears both security methods through all three packages on this commit and ID', () => {
+    expect(check()).toBe('');
+  });
+
+  it.each([
+    ['a failure', { stats: { unexpected: 1 }, passkey: { status: 'unexpected' } }, '1 rehearsal test(s) failed'],
+    ['a pass on retry', { stats: { flaky: 1 }, password: { status: 'flaky' } }, 'passed only on retry'],
+    ['a skip', { stats: { skipped: 1 }, passkey: { status: 'skipped' } }, '1 rehearsal test(s) skipped'],
+    ['an error outside the tests', { errors: [{ message: 'config' }] }, '1 error(s) outside its tests'],
+    ['missing evidence', { password: { body: null } }, 'Password rehearsal kept no upgrade evidence'],
+    ['an unchecked store ID', { passkey: { body: evidence({ identityVerified: false }) } }, 'did not check the store extension ID'],
+    ['another commit', { password: { body: evidence({ artifacts: [
+      { version: '2.7.2', id }, { version: '2.8.0', id, provenance: { sourceSha: 'c'.repeat(40) } }, { version: '2.8.1', id, provenance: { sourceSha: walletSha } },
+    ] }) } }, 'tested another wallet commit'],
+    ['another recovery commit', { password: { body: evidence({ artifacts: [
+      { version: '2.7.2', id }, { version: '2.8.0', id, provenance: { sourceSha: walletSha } }, { version: '2.8.1', id, provenance: { sourceSha: 'c'.repeat(40) } },
+    ] }) } }, 'recovery package is from another commit'],
+    ['another ID', { passkey: { body: evidence({ artifacts: [
+      { version: '2.7.2', id: 'b'.repeat(32) }, { version: '2.8.0', id, provenance: { sourceSha: walletSha } }, { version: '2.8.1', id, provenance: { sourceSha: walletSha } },
+    ] }) } }, 'ran under another extension ID'],
+    ['other versions', { passkey: { body: evidence({ artifacts: [
+      { version: '2.7.1', id }, { version: '2.8.0', id, provenance: { sourceSha: walletSha } }, { version: '2.8.1', id, provenance: { sourceSha: walletSha } },
+    ] }) } }, 'installed 2.7.1 → 2.8.0 → 2.8.1'],
+    ['an unfinished stage', { password: { body: evidence({ stages: [{}, {}] }) } }, 'finished 2 of 3 stages'],
+  ])('blocks %s', (_name, changes, reason) => {
+    expect(check(changes)).toContain(reason);
+  });
+
+  it('blocks a report missing one of the security methods', () => {
+    const only = report();
+    only.suites[0].suites[0].specs.pop();
+    expect(checkUpgradeRehearsal(only, options).join('\n')).toContain('Expected one PassKey rehearsal, found 0');
   });
 });
