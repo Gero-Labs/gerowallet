@@ -7,8 +7,9 @@
 # 3. The full isolated browser suites of Gero-Labs/gerowallet-e2e-tests (post-v2.7 in three
 #    shards, plus legacy) run against that ZIP, extracted. Any failure, or a test that
 #    passed only on retry, stops the release.
-#    Beside them, the upgrade rehearsal updates one 2.7.2 profile in place to that ZIP and
-#    then to a forward recovery package (this commit, next patch version); see below.
+#    Beside them, the upgrade rehearsal updates one profile of the release users have now
+#    (OLD_RELEASE_*) in place to that ZIP, then to a forward recovery package (this
+#    commit, next version); see below.
 # 4. With dry_run=false, the upload job runs in the chrome-web-store-<channel> environment.
 #    Its required reviewers are the release authorization, only the people in its
 #    CWS_RELEASERS variable may start a release, and its store credentials exist only
@@ -47,6 +48,17 @@ on:
 
 permissions:
   contents: read
+
+# The release users have now, which the upgrade rehearsal updates from (see
+# upgrade-fixtures). Move all four together when a newer version reaches users, and keep
+# gerowallet-e2e-tests' tests/release/upgrade-recovery.spec.ts on the same version.
+env:
+  OLD_RELEASE_VERSION: '2.7.2'
+  OLD_RELEASE_SHA: b17ac752c38a0a59b370feedf60af80cd6e95e77
+  OLD_RELEASE_NODE: '22.11.0'
+  # SHA-256 of the store's own Gero-v<version>.zip attached to release v<version>.
+  # Empty: no store package is retained, so the old package is rebuilt (with a warning).
+  OLD_RELEASE_ZIP_SHA256: ''
 
 # One store operation per listing at a time; never cancel one halfway through.
 concurrency:
@@ -204,16 +216,8 @@ jobs:
           persist-credentials: false
 
       # No npm cache either: this job saves nothing that a later run restores.
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24.19.0'
-          package-manager-cache: false
-
       - name: Install the harness
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
+        uses: ./.release-scripts/.github/actions/e2e-harness
 
       - name: Download the tested package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -228,7 +232,6 @@ jobs:
           # unzip -d creates only the last directory of the path.
           mkdir -p .wallet-under-test/extension
           unzip -q "$zip" -d .wallet-under-test/extension
-          echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Run the post-v2.7 suite
         if: matrix.suite == 'post-v27'
@@ -276,26 +279,31 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-  # The two other packages of the in-place upgrade rehearsal (#1296), built with the
-  # store's extension key so all three share one extension ID:
-  #   old       the 2.7.2 release, from its tagged commit (pinned by SHA, not the movable
-  #             tag) with the Node it was released with. The rehearsal's profile is made
-  #             by this package's own UI.
-  #   recovery  the forward recovery package: this commit at the next patch version,
-  #             i.e. what would be shipped if the candidate had to be replaced in place
-  #             (Chrome never installs a lower version). It must still read every secret
-  #             format the candidate writes.
+  # The two other packages of the in-place upgrade rehearsal (#1296), under the store's
+  # extension ID so all three are one extension to Chrome:
+  #   old       the release users have now (OLD_RELEASE_* at the top of this file). The
+  #             store's own package when it is retained as a release asset with its
+  #             SHA-256 pinned (OLD_RELEASE_ZIP_SHA256); otherwise rebuilt from its
+  #             released commit with the Node it was released with, which is close but
+  #             not the same bytes, so the run warns and the evidence says "rebuilt".
+  #   recovery  the forward recovery package: this commit at the next version
+  #             (chrome-web-store.mjs recovery-version), i.e. what would replace the
+  #             candidate in place (Chrome never installs a lower version). It must still
+  #             read every secret format the candidate writes.
+  # They wait for "build", so a candidate that fails its build or unit suite costs no
+  # extra builds; the e2e suites, which they run beside, are the longer wait anyway.
   # Nothing is cached, so the code these builds run can poison nothing (see e2e above).
   upgrade-fixtures:
     name: Upgrade rehearsal package (${{ matrix.fixture }})
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read # reads the retained old package from its release
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - { fixture: old, ref: b17ac752c38a0a59b370feedf60af80cd6e95e77, version: '2.7.2', node: '22.11.0' }
-          - { fixture: recovery, ref: '', version: '', node: '24.19.0' }
+        fixture: [old, recovery]
     env:
       NODE_OPTIONS: "--max-old-space-size=4096 --max-semi-space-size=128"
       MANIFEST_KEY: ${{ vars.MANIFEST_KEY || secrets.MANIFEST_KEY }}
@@ -310,73 +318,124 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout the package source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ matrix.ref || github.sha }}
-          path: source
-          persist-credentials: false
-
       - name: Checkout this workflow's scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: .release-scripts
           persist-credentials: false
 
+      # The release asset is trusted only by the hash pinned in this file.
+      - name: Use the retained store package
+        if: matrix.fixture == 'old' && env.OLD_RELEASE_ZIP_SHA256 != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "v${OLD_RELEASE_VERSION}" --repo "$GITHUB_REPOSITORY" --pattern "Gero-v${OLD_RELEASE_VERSION}.zip" --dir retained
+          echo "${OLD_RELEASE_ZIP_SHA256}  retained/Gero-v${OLD_RELEASE_VERSION}.zip" | sha256sum -c -
+          mkdir -p source/extension
+          unzip -q "retained/Gero-v${OLD_RELEASE_VERSION}.zip" -d source/extension
+          {
+            echo "PACKAGE_VERSION=${OLD_RELEASE_VERSION}"
+            echo "PACKAGE_SHA=${OLD_RELEASE_SHA}"
+            echo "PACKAGE_ORIGIN=store package, SHA-256 ${OLD_RELEASE_ZIP_SHA256}"
+            echo "RETAINED=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Say the old package is rebuilt
+        if: matrix.fixture == 'old' && env.OLD_RELEASE_ZIP_SHA256 == ''
+        run: |
+          message="The ${OLD_RELEASE_VERSION} package is rebuilt from ${OLD_RELEASE_SHA}, not the store's own bytes: attach the store ZIP to release v${OLD_RELEASE_VERSION} as Gero-v${OLD_RELEASE_VERSION}.zip and pin its SHA-256 in OLD_RELEASE_ZIP_SHA256 (runbook: The upgrade rehearsal)"
+          echo "::warning::${message}"
+          echo "> ${message}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout the package source
+        if: env.RETAINED != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ matrix.fixture == 'old' && env.OLD_RELEASE_SHA || github.sha }}
+          path: source
+          persist-credentials: false
+
       - name: Set up Node.js
+        if: env.RETAINED != 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.fixture == 'old' && env.OLD_RELEASE_NODE || '24.19.0' }}
           package-manager-cache: false
 
       - name: Upgrade npm
+        if: env.RETAINED != 'true'
         run: npm install --global npm@11.1.0
 
       # Same as ci-cd.yml: lets node-hid build from source if its prebuilt download fails.
       - name: Install node-hid build dependencies
+        if: env.RETAINED != 'true'
         continue-on-error: true
         run: |
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 libusb-1.0-0-dev libudev-dev
 
       - name: Set the package version
+        if: env.RETAINED != 'true'
         working-directory: source
-        env:
-          PINNED_VERSION: ${{ matrix.version }}
         run: |
+          committed="$(node -p "require('./package.json').version")"
           if [ "$FIXTURE" = old ]; then
-            version="$(node -p "require('./package.json').version")"
-            [ "$version" = "$PINNED_VERSION" ] || { echo "::error::The pinned commit is ${version}, not ${PINNED_VERSION}" >&2; exit 1; }
+            [ "$committed" = "$OLD_RELEASE_VERSION" ] || { echo "::error::${OLD_RELEASE_SHA} is ${committed}, not ${OLD_RELEASE_VERSION}" >&2; exit 1; }
+            version="$committed"
+            origin="rebuilt from ${OLD_RELEASE_SHA}"
           else
-            committed="$(node -p "require('./package.json').version")"
             [ "$committed" = "$RELEASE_VERSION" ] || { echo "::error::This commit is ${committed}, not ${RELEASE_VERSION}" >&2; exit 1; }
-            # The next patch: 2.8.0 -> 2.8.1, and 2.8.0.4 -> 2.8.0.5.
-            version="$(node -p "const p = process.argv[1].split('.'); p[p.length - 1] = String(Number(p.at(-1)) + 1); p.join('.')" "$RELEASE_VERSION")"
+            version="$(node ../.release-scripts/scripts/chrome-web-store.mjs recovery-version --version "$RELEASE_VERSION")"
             npm version "$version" --no-git-tag-version
+            origin="this commit at ${version}"
           fi
-          echo "PACKAGE_VERSION=${version}" >> "$GITHUB_ENV"
-          echo "PACKAGE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          {
+            echo "PACKAGE_VERSION=${version}"
+            echo "PACKAGE_SHA=$(git rev-parse HEAD)"
+            echo "PACKAGE_ORIGIN=${origin}"
+          } >> "$GITHUB_ENV"
 
       - name: Install dependencies
+        if: env.RETAINED != 'true'
         working-directory: source
         run: npm ci
 
       - name: Write production env
+        if: env.RETAINED != 'true'
         working-directory: source
         env:
-          PRODUCTION_VARS: ${{ toJSON(vars) }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          VITE_NEXUS_URL: ${{ vars.VITE_NEXUS_URL }}
+          VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL }}
+          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
+          VITE_ADA_HANDLE_BASE_URL: ${{ vars.VITE_ADA_HANDLE_BASE_URL }}
+          VITE_FLAGS_BASE_URL: ${{ vars.VITE_FLAGS_BASE_URL }}
+          VITE_SYNC_WS_URL: ${{ vars.VITE_SYNC_WS_URL }}
+          VITE_KAISEREX_OAUTH_URL: ${{ vars.VITE_KAISEREX_OAUTH_URL }}
+          VITE_KRAKEN_API_URL: ${{ vars.VITE_KRAKEN_API_URL }}
+          VITE_KRAKEN_WS_URL: ${{ vars.VITE_KRAKEN_WS_URL }}
+          VITE_ZKFOLD_API_URL: ${{ vars.VITE_ZKFOLD_API_URL }}
+          VITE_ZKFOLD_PROVER_URL: ${{ vars.VITE_ZKFOLD_PROVER_URL }}
+          VITE_CASHBACK_ENVIRONMENT: ${{ vars.VITE_CASHBACK_ENVIRONMENT }}
+          VITE_CASHBACK_IDENTIFIER: ${{ vars.VITE_CASHBACK_IDENTIFIER }}
+          VITE_IS_BETA: ${{ vars.VITE_IS_BETA }}
+          VITE_CIP45_DEFAULT_ENABLED: ${{ vars.VITE_CIP45_DEFAULT_ENABLED }}
+          VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
           VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
           VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
         run: node ../.release-scripts/scripts/write-production-env.mjs .env.production
 
       # A recovery that cannot open the gpw2 envelope would lock out every migrated
-      # wallet. 2.7.2 predates gpw2, which is exactly what the rehearsal upgrades from.
+      # wallet. The old release predates gpw2, which is exactly what the rehearsal
+      # upgrades from.
       - name: Secret envelope readers present
         if: matrix.fixture == 'recovery'
         working-directory: source
         run: node scripts/check-secret-envelope-readers.mjs
 
       - name: Build
+        if: env.RETAINED != 'true'
         working-directory: source
         run: npm run build
 
@@ -402,7 +461,10 @@ jobs:
           import fs from 'node:fs';
           const file = 'fixture/release-evidence/artifact.json';
           const report = JSON.parse(fs.readFileSync(file, 'utf8'));
-          Object.assign(report, { sourceSha: process.env.PACKAGE_SHA, workflowRun: process.env.GITHUB_RUN_ID, fixture: process.env.FIXTURE });
+          Object.assign(report, {
+            sourceSha: process.env.PACKAGE_SHA, origin: process.env.PACKAGE_ORIGIN,
+            workflowRun: process.env.GITHUB_RUN_ID, fixture: process.env.FIXTURE,
+          });
           fs.writeFileSync(file, JSON.stringify(report, null, 2) + '\n');
           NODE
           mv source/extension fixture/extension
@@ -416,14 +478,14 @@ jobs:
           if-no-files-found: error
 
   # gerowallet-e2e-tests' release rehearsal (tests/release/upgrade-recovery.spec.ts), on
-  # one disposable profile and without uninstalling: 2.7.2 creates a Midnight wallet
-  # (password, then PassKey) and two Cardano wallets through its own UI, the candidate
-  # (this run's tested package, the exact bytes) is installed over it with the gpw2
-  # migration on, then the recovery package with it off; each stage restarts the browser
-  # and checks wallets, addresses, recovery phrase, signing key and backup state. Offline:
-  # every request is answered locally, no network or funds are used.
+  # one disposable profile and without uninstalling: the old release creates a Midnight
+  # wallet (password, then PassKey) and two Cardano wallets through its own UI, the
+  # candidate (this run's tested package, the exact bytes) is installed over it with the
+  # gpw2 migration on, then the recovery package with it off; each stage restarts the
+  # browser and checks wallets, addresses, recovery phrase, signing key and backup
+  # state. Offline: every request is answered locally, no network or funds are used.
   upgrade-rehearsal:
-    name: Upgrade rehearsal (2.7.2 → candidate → recovery)
+    name: Upgrade rehearsal (old release → candidate → recovery)
     needs: [verify, upgrade-fixtures]
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -455,16 +517,8 @@ jobs:
           path: .release-scripts
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24.19.0'
-          package-manager-cache: false
-
       - name: Install the harness
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
+        uses: ./.release-scripts/.github/actions/e2e-harness
 
       - name: Download the tested package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -484,18 +538,16 @@ jobs:
         run: |
           zip=".candidate-artifact/release-evidence/Gero-v${RELEASE_VERSION}.zip"
           echo "${ZIP_SHA256}  ${zip}" | sha256sum -c -
-          mkdir -p .candidate/extension .candidate/release-evidence
+          mkdir -p .candidate/extension .candidate/release-evidence upgrade-evidence
           unzip -q "$zip" -d .candidate/extension
           cp .candidate-artifact/release-evidence/artifact.json .candidate/release-evidence/
-          # The next patch, as the recovery build computed it; the rehearsal checks that
-          # the recovery package's manifest says exactly this.
-          echo "RECOVERY_VERSION=$(node -p "const p = process.argv[1].split('.'); p[p.length - 1] = String(Number(p.at(-1)) + 1); p.join('.')" "$RELEASE_VERSION")" >> "$GITHUB_ENV"
-          echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "RECOVERY_VERSION=$(node .release-scripts/scripts/chrome-web-store.mjs recovery-version --version "$RELEASE_VERSION")" >> "$GITHUB_ENV"
 
       - name: Run the rehearsal
         run: npm run test:release
         env:
           RELEASE_OLD_EXTENSION_PATH: ${{ github.workspace }}/.upgrade/upgrade-old-${{ github.run_id }}/extension
+          RELEASE_OLD_VERSION: ${{ env.OLD_RELEASE_VERSION }}
           RELEASE_EXTENSION_PATH: ${{ github.workspace }}/.candidate/extension
           RELEASE_SOURCE_SHA: ${{ github.sha }}
           RELEASE_RECOVERY_EXTENSION_PATH: ${{ github.workspace }}/.upgrade/upgrade-recovery-${{ github.run_id }}/extension
@@ -503,32 +555,22 @@ jobs:
           RELEASE_RECOVERY_SOURCE_SHA: ${{ github.sha }}
           RELEASE_EXPECTED_EXTENSION_ID: ${{ needs.verify.outputs.extension_id }}
 
+      # Runs after a failed rehearsal too: it writes the evidence the run keeps, then
+      # fails for any problem. Only the evidence is kept, never the Playwright traces:
+      # they hold the public test vector's phrase, and this repository is public.
       - name: Check the rehearsal result
+        if: ${{ !cancelled() }}
         run: |
+          [ -e test-results/release/results.json ] || { echo "::error::The rehearsal wrote no report" >&2; exit 1; }
           node .release-scripts/scripts/chrome-web-store.mjs upgrade-gate --results test-results/release/results.json \
-            --wallet-sha "$GITHUB_SHA" --expected-id "$EXTENSION_ID" --version "$RELEASE_VERSION" --recovery-version "$RECOVERY_VERSION"
+            --summary upgrade-evidence/upgrade-evidence.json --wallet-sha "$GITHUB_SHA" --expected-id "$EXTENSION_ID" \
+            --old-version "$OLD_RELEASE_VERSION" --version "$RELEASE_VERSION"
 
-      # The evidence only: the Playwright traces hold the public test vector's phrase
-      # and screenshots, and this repository is public (see the e2e job).
       - name: Keep the rehearsal summary
         if: ${{ !cancelled() }}
         run: |
           mkdir -p upgrade-evidence
-          [ -e test-results/release/results.json ] && node --input-type=module - test-results/release/results.json > upgrade-evidence/upgrade-evidence.json <<'NODE' || true
-          import fs from 'node:fs';
-          const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          const tests = [];
-          const visit = suite => {
-            for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) {
-              const result = test.results?.at(-1);
-              const evidence = result?.attachments?.find(item => item.name === 'upgrade-evidence');
-              tests.push({ title: spec.title, status: test.status, evidence: evidence?.body ? JSON.parse(Buffer.from(evidence.body, 'base64').toString('utf8')) : null });
-            }
-            (suite.suites ?? []).forEach(visit);
-          };
-          (report.suites ?? []).forEach(visit);
-          console.log(JSON.stringify({ stats: report.stats, tests }, null, 2));
-          NODE
+          cp .upgrade/upgrade-old-*/release-evidence/artifact.json upgrade-evidence/old-package.json 2>/dev/null || true
           printf '{"harnessRepository":"Gero-Labs/gerowallet-e2e-tests","harnessSha":"%s","walletSha":"%s","releaseArchiveSha256":"%s"}\n' \
             "${harness_sha:-}" "$GITHUB_SHA" "$ZIP_SHA256" > upgrade-evidence/e2e-run.json
       - name: Upload the rehearsal summary

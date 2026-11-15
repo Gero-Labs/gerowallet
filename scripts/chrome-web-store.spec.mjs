@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { extensionIdForKey, inspectReleaseArtifact } from './check-release-artifact.mjs';
 import {
-  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, checkUpgradeRehearsal, compareVersions,
+  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, checkUpgradeRehearsal, compareVersions, recoveryVersion, upgradeRehearsalTests,
   extensionIdForPublicKey, releaseToStore, storeClient, verifyStoreCandidate,
 } from './chrome-web-store.mjs';
 
@@ -314,7 +314,7 @@ describe('checkE2eQualification', () => {
 describe('checkUpgradeRehearsal', () => {
   const walletSha = 'a'.repeat(40);
   const id = ITEM;
-  const options = { walletSha, extensionId: id, version: '2.8.0', recoveryVersion: '2.8.1' };
+  const options = { walletSha, extensionId: id, oldVersion: '2.7.2', version: '2.8.0', recoveryVersion: '2.8.1' };
   const evidence = (changes = {}) => ({
     identityVerified: true,
     artifacts: [
@@ -367,9 +367,35 @@ describe('checkUpgradeRehearsal', () => {
     expect(check(changes)).toContain(reason);
   });
 
+  it('takes the old release version from the caller', () => {
+    expect(checkUpgradeRehearsal(report(), { ...options, oldVersion: '2.8.0' })).toContain(
+      'The Password rehearsal installed 2.7.2 → 2.8.0 → 2.8.1, not 2.8.0 → 2.8.0 → 2.8.1');
+    expect(checkUpgradeRehearsal(report(), { ...options, oldVersion: undefined })).toContain('The old release version is not set');
+  });
+
+  it('lists each test with its outcome and decoded evidence for the kept summary', () => {
+    const tests = upgradeRehearsalTests(report({ passkey: { body: null } }));
+    expect(tests.map(({ status }) => status)).toEqual(['expected', 'expected']);
+    expect(tests[0].evidence.artifacts[1].version).toBe('2.8.0');
+    expect(tests[1].evidence).toBeNull();
+  });
+
   it('blocks a report missing one of the security methods', () => {
     const only = report();
     only.suites[0].suites[0].specs.pop();
     expect(checkUpgradeRehearsal(only, options).join('\n')).toContain('Expected one PassKey rehearsal, found 0');
+  });
+});
+
+describe('recoveryVersion', () => {
+  it('adds one to the last part', () => {
+    expect(recoveryVersion('2.8.0')).toBe('2.8.1');
+    expect(recoveryVersion('2.8.9')).toBe('2.8.10');
+    expect(recoveryVersion('2.8.0.4')).toBe('2.8.0.5');
+  });
+
+  it('refuses anything that is not a Chrome version', () => {
+    expect(() => recoveryVersion('v2.8.0')).toThrow('Chrome extension version');
+    expect(() => recoveryVersion(undefined)).toThrow('Chrome extension version');
   });
 });

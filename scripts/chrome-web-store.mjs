@@ -4,8 +4,9 @@
  *   verify   re-checks the package that "Chrome Extension CI/CD" built and tested earlier
  *            in the same run, and that its ZIP holds exactly the files that were tested.
  *   e2e-gate checks a gerowallet-e2e-tests qualification report for that ZIP.
- *   upgrade-gate checks the release rehearsal's report: v2.7.2 → this package → the
- *            forward recovery package, updated in place in one browser profile.
+ *   upgrade-gate checks the release rehearsal's report: the old release → this package →
+ *            the forward recovery package, updated in place in one browser profile.
+ *   recovery-version prints that recovery package's version for --version.
  *   release  uploads that ZIP through the Chrome Web Store API v2 and, if asked, submits
  *            it for review. (v1.1 stopped being supported on October 15, 2026.)
  *
@@ -105,6 +106,18 @@ export function checkE2eQualification(report, { walletSha, archiveSha256 }) {
 /** Security methods the rehearsal must cover; one test each. */
 export const UPGRADE_REHEARSAL_METHODS = ['Password', 'PassKey'];
 
+/**
+ * The forward recovery package's version: the release's last part plus one (2.8.0 →
+ * 2.8.1, 2.8.0.4 → 2.8.0.5). The recovery build and the rehearsal both ask this one
+ * function, so the version built is the version tested.
+ */
+export function recoveryVersion(version) {
+  if (!VERSION.test(version ?? '')) throw new Error('--version must be a Chrome extension version such as 2.8.0');
+  const parts = version.split('.');
+  parts[parts.length - 1] = String(Number(parts.at(-1)) + 1);
+  return parts.join('.');
+}
+
 function playwrightTests(suite, out = []) {
   for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) out.push({ title: spec.title, test });
   for (const child of suite.suites ?? []) playwrightTests(child, out);
@@ -118,32 +131,38 @@ function upgradeEvidence(test) {
   try { return JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8')); } catch { return null; }
 }
 
+/** Each rehearsal test of a Playwright JSON report: its title, outcome and decoded evidence. */
+export function upgradeRehearsalTests(report) {
+  return (report.suites ?? []).flatMap(suite => playwrightTests(suite))
+    .map(({ title, test }) => ({ title, status: test.status, evidence: upgradeEvidence(test) }));
+}
+
 /**
  * Checks the Playwright JSON report of gerowallet-e2e-tests' release rehearsal
- * (tests/release/upgrade-recovery.spec.ts): a v2.7.2 profile, made by the old package
+ * (tests/release/upgrade-recovery.spec.ts): a profile of the old release, made by the old package
  * itself, updated in place to this candidate and then to the forward recovery package.
  * Unlike the e2e suites nothing may be skipped, and each security method must have
  * passed on THIS candidate, under the store's extension ID, through all three stages.
  */
-export function checkUpgradeRehearsal(report, { walletSha, extensionId, version, recoveryVersion }) {
+export function checkUpgradeRehearsal(report, { walletSha, extensionId, oldVersion, version, recoveryVersion }) {
   const problems = [];
   const stats = report.stats ?? {};
+  if (!VERSION.test(oldVersion ?? '')) problems.push('The old release version is not set');
   if (report.errors?.length) problems.push(`The rehearsal reported ${report.errors.length} error(s) outside its tests`);
   if (stats.unexpected) problems.push(`${stats.unexpected} rehearsal test(s) failed`);
   if (stats.flaky) problems.push(`${stats.flaky} rehearsal test(s) passed only on retry`);
   if (stats.skipped) problems.push(`${stats.skipped} rehearsal test(s) skipped`);
-  const tests = (report.suites ?? []).flatMap(suite => playwrightTests(suite));
+  const tests = upgradeRehearsalTests(report);
   for (const method of UPGRADE_REHEARSAL_METHODS) {
     const matching = tests.filter(({ title }) => title.includes(`Midnight ${method} `));
     if (matching.length !== 1) { problems.push(`Expected one ${method} rehearsal, found ${matching.length}`); continue; }
-    const [{ test }] = matching;
-    if (test.status !== 'expected') { problems.push(`The ${method} rehearsal ended as "${test.status}"`); continue; }
-    const evidence = upgradeEvidence(test);
+    const [{ status, evidence }] = matching;
+    if (status !== 'expected') { problems.push(`The ${method} rehearsal ended as "${status}"`); continue; }
     if (!evidence) { problems.push(`The ${method} rehearsal kept no upgrade evidence`); continue; }
     const [old, candidate, recovery] = evidence.artifacts ?? [];
     if (evidence.identityVerified !== true) problems.push(`The ${method} rehearsal did not check the store extension ID`);
-    if (old?.version !== '2.7.2' || candidate?.version !== version || recovery?.version !== recoveryVersion) {
-      problems.push(`The ${method} rehearsal installed ${[old, candidate, recovery].map(item => item?.version ?? '?').join(' → ')}, not 2.7.2 → ${version} → ${recoveryVersion}`);
+    if (old?.version !== oldVersion || candidate?.version !== version || recovery?.version !== recoveryVersion) {
+      problems.push(`The ${method} rehearsal installed ${[old, candidate, recovery].map(item => item?.version ?? '?').join(' → ')}, not ${oldVersion} → ${version} → ${recoveryVersion}`);
     }
     if ([old, candidate, recovery].some(item => item?.id !== extensionId)) problems.push(`The ${method} rehearsal ran under another extension ID`);
     if (candidate?.provenance?.sourceSha !== walletSha) problems.push(`The ${method} rehearsal tested another wallet commit`);
@@ -319,14 +338,19 @@ async function main({ command, options }, env) {
   }
   if (command === 'upgrade-gate') {
     const report = JSON.parse(readFileSync(options.results, 'utf8'));
+    const expected = recoveryVersion(options.version);
     const problems = checkUpgradeRehearsal(report, {
       walletSha: options['wallet-sha'], extensionId: options['expected-id'],
-      version: options.version, recoveryVersion: options['recovery-version'],
+      oldVersion: options['old-version'], version: options.version, recoveryVersion: expected,
     });
+    // The evidence the run keeps, written whether or not the gate passes.
+    if (options.summary) {
+      writeFileSync(options.summary, `${JSON.stringify({ stats: report.stats ?? null, problems, tests: upgradeRehearsalTests(report) }, null, 2)}\n`);
+    }
     if (problems.length) throw new Error(problems.join('\n'));
-    return `2.7.2 → ${options.version} → ${options['recovery-version']} passed in place for ${UPGRADE_REHEARSAL_METHODS.join(' and ')}`;
+    return `${options['old-version']} → ${options.version} → ${expected} passed in place for ${UPGRADE_REHEARSAL_METHODS.join(' and ')}`;
   }
-  if (command !== 'verify' && command !== 'release') throw new Error('Usage: chrome-web-store.mjs verify|e2e-gate|upgrade-gate|release …');
+  if (command !== 'verify' && command !== 'release') throw new Error('Usage: chrome-web-store.mjs verify|e2e-gate|upgrade-gate|recovery-version|release …');
   if (!VERSION.test(options.version ?? '')) throw new Error('--version must be a Chrome extension version such as 2.8.0');
   if (command === 'verify') {
     const result = verifyStoreCandidate({
@@ -365,7 +389,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   let parsed = { command: argv[0], options: {} };
   try {
     parsed = parseArgs(argv);
-    console.log(`chrome-web-store ${parsed.command}: OK — ${await main(parsed, process.env)}`);
+    // Prints the bare version, for `$(…)` in the workflow.
+    if (parsed.command === 'recovery-version') console.log(recoveryVersion(parsed.options.version));
+    else console.log(`chrome-web-store ${parsed.command}: OK — ${await main(parsed, process.env)}`);
   } catch (error) {
     if (parsed.command === 'release' && parsed.options.report) {
       writeFileSync(parsed.options.report, `${JSON.stringify({ ok: false, error: error.message, failedAt: new Date().toISOString() }, null, 2)}\n`);

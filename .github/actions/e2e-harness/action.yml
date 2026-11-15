@@ -1,0 +1,25 @@
+# Installs the gerowallet-e2e-tests harness already checked out at the workspace root,
+# for the release workflow's e2e and upgrade-rehearsal jobs (chrome-web-store.yml).
+# Those jobs check out the harness first and this repository's scripts second, into
+# .release-scripts, then use this action from there: a checkout to the workspace root
+# would delete anything placed before it.
+#
+# No npm cache: those jobs save nothing that a later run restores, so the code they run
+# can poison no cache. Sets harness_sha (the harness commit) in the job's environment.
+name: Install the e2e harness
+description: Node.js, the harness's npm packages and Playwright's Chromium, with no cache
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+
+    - name: Install the harness
+      shell: bash
+      run: |
+        npm ci
+        npx playwright install --with-deps chromium
+        echo "harness_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"

@@ -2,14 +2,16 @@
  * Writes .env.production for a release build from the repository's Actions variables
  * and secrets, so every build a release run makes (the candidate in ci-cd.yml, and the
  * old-release and recovery builds of the upgrade rehearsal in chrome-web-store.yml)
- * gets its configuration from ONE controlled source and ONE list of names.
+ * writes the same names the same way.
  *
- *   PRODUCTION_VARS   `${{ toJSON(vars) }}`: every repository variable. Only the names
- *                     in VARIABLES are read; anything else in it is ignored.
- *   <secret name>     each name in SECRETS, passed one by one as its own env entry.
+ * Each name in NAMES arrives as its own env entry of the step (`NAME: ${{ vars.NAME }}`,
+ * or `secrets.NAME` for SECRETS). Only those are passed, never `toJSON(vars)`, so a build
+ * step sees and logs no repository variable it does not use. write-production-env.spec.mjs
+ * holds both workflows to this list.
  *
- * A value is written as it is, never through a shell. A value holding a line break is
- * refused: it would add a line of its own to the file.
+ * A value is written as it is, never through a shell. Trailing line breaks (a pasted
+ * secret often ends in one) are dropped; a line break inside a value is refused: it
+ * would add a line of its own to the file.
  */
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -42,19 +44,13 @@ export const SECRETS = ['VITE_MOONPAY_API_KEY', 'VITE_GUARDARIAN_API_KEY'];
  */
 export const PINNED = { VITE_DEBUG_STORES: 'false' };
 
-export function productionEnv(variablesJson, env) {
-  let variables = {};
-  if (variablesJson) {
-    variables = JSON.parse(variablesJson);
-    if (!variables || typeof variables !== 'object' || Array.isArray(variables)) throw new Error('PRODUCTION_VARS must be a JSON object');
-  }
+export function productionEnv(env) {
   const entries = [
-    ...VARIABLES.map(name => [name, variables[name]]),
-    ...SECRETS.map(name => [name, env[name]]),
+    ...[...VARIABLES, ...SECRETS].map(name => [name, env[name]]),
     ...Object.entries(PINNED),
   ];
   return entries.map(([name, value]) => {
-    const text = value === undefined || value === null ? '' : String(value);
+    const text = (value ?? '').replace(/[\r\n]+$/, '');
     if (/[\r\n]/.test(text)) throw new Error(`${name} holds a line break`);
     return `${name}=${text}`;
   }).join('\n') + '\n';
@@ -62,7 +58,7 @@ export function productionEnv(variablesJson, env) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const file = process.argv[2] ?? '.env.production';
-  const text = productionEnv(process.env.PRODUCTION_VARS, process.env);
+  const text = productionEnv(process.env);
   writeFileSync(file, text);
   console.log(`Wrote ${file} (${text.split('\n').filter(line => line.startsWith('VITE_')).length} vars)`);
 }

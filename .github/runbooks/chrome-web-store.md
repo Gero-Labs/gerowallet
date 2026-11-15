@@ -23,7 +23,7 @@ The upload job uses the package built at the start of the same run, so approve i
 | Files | The extension directory or the extracted ZIP fails the release gate (`check-release-artifact.mjs`), or differs by even one file hash from what was tested |
 | ZIP | Its SHA-256 differs from `SHA256SUMS`, or from the hash the verify job recorded |
 | E2E suites | Any test in the full isolated suites of [gerowallet-e2e-tests](https://github.com/Gero-Labs/gerowallet-e2e-tests) fails, times out or passes only on retry, or a suite runs no tests. They are post-v2.7 in three shards, plus legacy, run against the extracted ZIP (see below) |
-| Upgrade rehearsal | A 2.7.2 profile does not survive the in-place update to this ZIP and then to its forward recovery package, for a password or a PassKey wallet; anything in the rehearsal is skipped or passes only on retry; or its evidence names another commit, version or extension ID (see below) |
+| Upgrade rehearsal | A profile of the release users have now does not survive the in-place update to this ZIP and then to its forward recovery package, for a password or a PassKey wallet; anything in the rehearsal is skipped or passes only on retry; or its evidence names another commit, version or extension ID (see below) |
 | Releaser | The person who started or re-ran the run is not in the environment's `CWS_RELEASERS` |
 | Store credentials | "Get a store access token" cannot get a token from Google, or the store refuses the token at its first status read |
 | Store item | `CWS_ITEM_ID` is not the package's extension ID, or the item's public key belongs to another extension |
@@ -131,15 +131,22 @@ Each shard keeps its `qualification.json` and an `e2e-run.json` naming the harne
 
 Users update in place: Chrome installs the new version over the old one and keeps the profile. The `upgrade-rehearsal` job proves that on one disposable profile, never uninstalling, with the e2e repository's `tests/release/upgrade-recovery.spec.ts` (`npm run test:release`):
 
-1. **2.7.2**, rebuilt by `upgrade-fixtures` from its released commit (pinned by SHA in the workflow, not the movable tag) with Node 22.11.0 as it was released. Its own UI creates a Midnight wallet (once with a password, once with a PassKey on a virtual authenticator) and two Cardano wallets from a public test vector.
+1. **The release users have now**, named by `OLD_RELEASE_VERSION`, `OLD_RELEASE_SHA` and `OLD_RELEASE_NODE` at the top of the workflow (today 2.7.2). Its own UI creates a Midnight wallet (once with a password, once with a PassKey on a virtual authenticator) and two Cardano wallets from a public test vector.
 2. **This release**, the extracted ZIP the e2e suites tested, with the gpw2 secret migration switched on.
-3. **The forward recovery package**: this commit rebuilt at the next patch version (2.8.0 → 2.8.1), with the migration switched off. It is what would replace this release in place if it had to be pulled, since Chrome never installs a lower version. It must still read every secret the release wrote.
+3. **The forward recovery package**: this commit rebuilt at the next version (`chrome-web-store.mjs recovery-version`, 2.8.0 → 2.8.1), with the migration switched off. It is what would replace this release in place if it had to be pulled, since Chrome never installs a lower version. It must still read every secret the release wrote.
 
-After each update and again after a browser restart, the rehearsal checks the wallet records, the address, the recovery phrase, the signing key of a public probe message and the backup reminder. It is offline: every request is answered locally, so no network, funds or credentials are involved. All three packages are built with `MANIFEST_KEY`, so they share the store's extension ID; an update keeps a profile only under the same ID.
+After each update and again after a browser restart, the rehearsal checks the wallet records, the address, the recovery phrase, the signing key of a public probe message and the backup reminder. It is offline: every request is answered locally, so no network, funds or credentials are involved. Every package is under `MANIFEST_KEY`'s extension ID; an update keeps a profile only under the same ID.
 
-The gate (`chrome-web-store.mjs upgrade-gate`) needs both security methods to pass with nothing skipped or retried, the release from this commit, the recovery from this commit at the next patch, and all three under `CHROME_EXTENSION_ID`. The run keeps the evidence as `upgrade-rehearsal-<channel>-<version>-<run>`, never the traces (they show the test vector's phrase). The two rebuilt packages are kept for 30 days as `upgrade-old-<run>` and `upgrade-recovery-<run>`. The recovery package is a rehearsal package: to actually ship a recovery, release that version through this workflow like any other.
+`upgrade-fixtures` makes packages 1 and 3 once `build` has passed, beside the e2e suites. For package 1 it prefers the **store's own bytes**: when `OLD_RELEASE_ZIP_SHA256` is set, it downloads `Gero-v<version>.zip` from release `v<version>` and refuses it unless it has that SHA-256. Otherwise it rebuilds the old release from its commit with today's repository settings. That is close to what users have but not the same bytes, so the run warns and the kept evidence says `rebuilt`. To retain the store package once: download the published package from the Chrome Web Store developer dashboard (Package → the published version), attach it to the GitHub release as `Gero-v<version>.zip`, and put `sha256sum` of it in `OLD_RELEASE_ZIP_SHA256`.
 
-When the next release follows one that users have, move `upgrade-fixtures`' `old` entry (commit, version and Node) and the harness spec's expected old version to it together.
+The gate (`chrome-web-store.mjs upgrade-gate`) needs:
+- both security methods to pass, with nothing skipped or retried;
+- the old release, this release from this commit, and the recovery from this commit at the next version;
+- all three under `CHROME_EXTENSION_ID`.
+
+It runs after a failed rehearsal too, and writes the evidence the run keeps as `upgrade-rehearsal-<channel>-<version>-<run>`: each test's outcome and stages, the gate's problems, and how the old package was made. The Playwright traces are never kept (they show the test vector's phrase). The two packages are kept for 30 days as `upgrade-old-<run>` and `upgrade-recovery-<run>`. The recovery package is a rehearsal package: to actually ship a recovery, release that version through this workflow like any other.
+
+When a newer version reaches users, move the four `OLD_RELEASE_*` values together, and the harness spec's expected old version with them (it names it in `upgrade-recovery.spec.ts`, and receives `RELEASE_OLD_VERSION`).
 
 Each run writes a summary. The upload job keeps the store's answer as the artifact `chrome-web-store-<channel>-<version>-<run>`. That answer holds states and versions only, never a token or credential.
 
@@ -151,7 +158,7 @@ Each run writes a summary. The upload job keeps the store's answer as the artifa
 | `v<version> already marks <commit>` | That version was already released from another commit. Bump the version and release again. |
 | `The E2E_HARNESS_TOKEN secret is not set`, or `repository 'https://github.com/Gero-Labs/gerowallet-e2e-tests/' not found` | The harness token is missing, expired or lacks read access to that repository (see [GitHub](#github) setup). Replace the secret, then run again. |
 | An e2e shard fails | Open that shard's job summary and log. A wallet bug means fixing it and releasing a new version. A harness problem means fixing it on the e2e repository's `development` branch, then rerunning. Don't release around a red gate. |
-| The upgrade rehearsal fails | Open its job log and the `upgrade-rehearsal-…` summary: it names the stage (2.7.2, this version or the recovery) and the check. A failure after the update is a migration bug in this release: fix it and release a new version. A failure in the 2.7.2 stage is the harness (its selectors drive the old UI): fix it on the e2e repository's `development` branch. |
+| The upgrade rehearsal fails | Open its job log and the `upgrade-rehearsal-…` summary: it names the stage (the old release, this version or the recovery) and the check. A failure after the update is a migration bug in this release: fix it and release a new version. A failure in the old release's stage is the harness (its selectors drive the old UI): fix it on the e2e repository's `development` branch. |
 | `passed only on retry` | The legacy suite retries a failed test once on CI. A flaky release test still needs a look. Rerun the workflow; if the same test keeps flaking, fix the test or the wallet first. |
 | The package can no longer be downloaded | It expired before the upload was approved (see [Artifact retention](#artifact-retention)). Nothing was tagged or uploaded, so run the release again; it builds a fresh package. |
 | `Another version is already in review` / `waiting to be published` | Publish or cancel that submission in the Developer Dashboard, then run again. The workflow never cancels a submission itself. |
