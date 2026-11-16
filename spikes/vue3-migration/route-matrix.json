@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "purpose": "V02 (#1284): map every shipped route to its V07-V11 owner and to the checks that exercise it. route-matrix.mjs joins this file with the routes read from the current routers and fails when a route is missing here, a key names no route, or a unit or help-browser reference is not a tracked file.",
+  "purpose": "V02 (#1284): map every shipped route to its V07-V11 owner and to the checks that exercise it. route-matrix.mjs joins this file with the routes read from the current routers and refuses: a route with no entry, an entry that names no route, a unit, guards or help-browser ref that is not a tracked file, an e2e ref that is not a tests/specs path, a route with a view and no unit, help-browser or unfunded e2e check and no manual step, a redirect with no guards check and no manual step, and a manual or note that is not a non-empty string. With --e2e <checkout> it also checks that each e2e spec exists at harnessSha and names its route (a side-panel route must also open the side panel) or says how it gets there with via.",
   "e2e": {
     "repository": "Gero-Labs/gerowallet-e2e-tests",
     "harnessSha": "b5a00dc3927d67e077db7386a29f506e68232db2",

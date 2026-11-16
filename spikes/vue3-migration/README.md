@@ -177,6 +177,15 @@ node spikes/vue3-migration/route-matrix.mjs          # regenerate ROUTE-MATRIX.m
 node spikes/vue3-migration/route-matrix.mjs --check  # what CI runs
 ~~~
 
+After changing an E2E reference, also run it against a gerowallet-e2e-tests
+checkout at the pinned `harnessSha`. It confirms each cited spec exists and
+names its route (a side-panel route must also open the side panel), or says
+how it gets there with `via`:
+
+~~~sh
+node spikes/vue3-migration/route-matrix.mjs --check --e2e ../gerowallet-e2e-tests
+~~~
+
 ## Integration and acceptance
 
 The local branch names above are not remote branches and do not have a CI

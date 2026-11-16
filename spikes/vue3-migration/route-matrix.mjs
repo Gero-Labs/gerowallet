@@ -66,6 +66,9 @@ for (const [key, entry] of Object.entries(matrix.routes)) {
     if (item.via !== undefined && (item.kind !== 'e2e' || typeof item.via !== 'string' || !item.via)) problems.push(`${key}: via is a non-empty string, only on e2e checks`);
   }
   if (entry.via !== undefined) problems.push(`${key}: via belongs on an e2e check, not the route`);
+  for (const field of ['manual', 'note']) {
+    if (entry[field] !== undefined && (typeof entry[field] !== 'string' || !entry[field].trim())) problems.push(`${key}: ${field} must be a non-empty string`);
+  }
 }
 // A route that renders a view needs a check that renders it (unit, Help browser
 // or unfunded E2E) or a manual step; the guard spec only proves where the router
@@ -102,8 +105,12 @@ function verifyE2e() {
       // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
       const file = path.resolve(specs, item.ref);
       if (!file.startsWith(specs + path.sep) || !existsSync(file)) { found.push(`${routeKey(route)}: ${item.ref} does not exist in the e2e checkout`); continue; }
-      if (item.via || !needle) continue;
-      if (!readFileSync(file, 'utf8').includes(needle)) found.push(`${routeKey(route)}: ${item.ref} never names ${needle}; fix the reference or say how it gets there with via`);
+      if (item.via) continue;
+      const text = readFileSync(file, 'utf8');
+      // Both apps share paths such as /staking and /market, so a side-panel
+      // reference must also open the side panel.
+      if (route.app === 'sidepanel' && !text.includes('sidepanel')) found.push(`${routeKey(route)}: ${item.ref} never opens the side panel; fix the reference or say how it gets there with via`);
+      else if (needle && !text.includes(needle)) found.push(`${routeKey(route)}: ${item.ref} never names ${needle}; fix the reference or say how it gets there with via`);
     }
   }
   return found;
@@ -167,7 +174,7 @@ const lines = [
   `- ${views.length} routes render a view; ${redirects.length} are redirects or catch-alls, covered by the guard spec or a manual step.`,
   `- ${viewCovered.length} of the ${views.length} views have a check that renders them without a funded wallet (unit, Help browser or E2E).`,
   `- ${manualOnly.length} views rely on the manual step: ${manualOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
-  `- Of those, ${guardOnly.length} have only the guard spec, which proves where the router lands but not that the view renders: ${guardOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
+  `- Of those, ${guardOnly.length} have the guard spec, which proves where the router lands but not that the view renders, and no check that renders them: ${guardOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
   `- ${fundedOnly.length} routes have browser coverage only in specs that skip without a funded wallet: ${fundedOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
   `- ${withManual.length} routes list a manual step (device, live provider, mainnet or funds) for the V13 signoff.`,
   '',

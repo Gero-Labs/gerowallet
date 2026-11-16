@@ -23,7 +23,7 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 - 50 routes render a view; 4 are redirects or catch-alls, covered by the guard spec or a manual step.
 - 36 of the 50 views have a check that renders them without a funded wallet (unit, Help browser or E2E).
 - 14 views rely on the manual step: `options:/nexus`, `options:/governance/dreps/:drepId`, `options:/copilot-feed`, `options:/dev-tools`, `options:/wc-session-proposal`, `options:/warning`, `options:/ledger-ble-sign`, `options:/ordinals`, `options:/mempool`, `options:/lightning`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/feed`.
-- Of those, 4 have only the guard spec, which proves where the router lands but not that the view renders: `options:/ledger-ble-sign`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/feed`.
+- Of those, 4 have the guard spec, which proves where the router lands but not that the view renders, and no check that renders them: `options:/ledger-ble-sign`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/feed`.
 - 4 routes have browser coverage only in specs that skip without a funded wallet: `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/vaults`.
 - 36 routes list a manual step (device, live provider, mainnet or funds) for the V13 signoff.
 
