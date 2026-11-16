@@ -184,7 +184,12 @@ function bytesToHex(b: Uint8Array): string {
  */
 function storageKey(network: string, kind: MidnightWalletKind, identitySeed: Uint8Array): string {
   const idHash = bytesToHex(sha256(identitySeed)).slice(0, 32);
-  return `${KEY_PREFIX}_${network}_${kind}_${idHash}`;
+  return `${walletStateKindPrefix(network, kind)}${idHash}`;
+}
+
+/** The key prefix of every wallet's `kind` state on `network`, for clearing them without a seed. */
+export function walletStateKindPrefix(network: string, kind: MidnightWalletKind): string {
+  return `${KEY_PREFIX}_${network}_${kind}_`;
 }
 
 /**

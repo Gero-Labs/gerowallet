@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
+import { clearDustSpendCheckpoints, loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
 import { setMidnightWalletStateStore, type StoredWalletState } from './midnightWalletStatePersistence';
 import type { DustSpendCheckpoint } from './midnightDustLightSync';
 
@@ -54,6 +54,20 @@ describe('DUST spend checkpoint store', () => {
     wiped.fill(0);
     await saving;
     expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(checkpoint);
+  });
+
+  it('clears the checkpoint of every wallet on one network, and nothing else', async () => {
+    const rows = memoryStore();
+    const other = new Uint8Array(32).fill(9);
+    await saveDustSpendCheckpoint('mainnet', seed, identity, checkpoint);
+    await saveDustSpendCheckpoint('mainnet', other, identity, checkpoint);
+    await saveDustSpendCheckpoint('preprod', seed, identity, checkpoint);
+    rows.set('midnight_wallet_state_mainnet_dust_x', { ...rows.values().next().value!, key: 'midnight_wallet_state_mainnet_dust_x', kind: 'dust' as never });
+    await clearDustSpendCheckpoints('mainnet');
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toBeNull();
+    expect(await loadDustSpendCheckpoint('mainnet', other, identity)).toBeNull();
+    expect(await loadDustSpendCheckpoint('preprod', seed, identity)).toEqual(checkpoint);
+    expect(rows.has('midnight_wallet_state_mainnet_dust_x')).toBe(true);
   });
 
   it('treats an unreadable row as no checkpoint', async () => {

@@ -12,11 +12,12 @@
 // CORRECTNESS: a checkpoint is a hint, never trusted for a security decision.
 // One from another chain (genesis or generation) or of another shape is
 // ignored; a head that does not fit its chain is rescanned from the start
-// (reconstructDustState). A load or save failure only costs a full scan.
+// (reconstructDustState). A load or save failure only costs a full scan. A
+// submit the network refuses clears the checkpoints (clearDustSpendCheckpoints).
 
 import type { MidnightChainIdentity } from './midnightChainIdentity';
 import type { DustSpendCheckpoint } from './midnightDustLightSync';
-import { loadWalletState, saveWalletState } from './midnightWalletStatePersistence';
+import { clearWalletStatesByPrefix, loadWalletState, saveWalletState, walletStateKindPrefix } from './midnightWalletStatePersistence';
 
 const KIND = 'dust-light9';
 const VERSION = 1;
@@ -54,5 +55,22 @@ export async function saveDustSpendCheckpoint(
     await saveWalletState(network, KIND, dustSecretSeed, JSON.stringify(stored));
   } catch {
     // Best-effort: the next build scans from the start.
+  }
+}
+
+/**
+ * Drop every wallet's checkpoint on `network` (a ledger key: `mainnet`), so
+ * the next fee build scans each spend chain from the start. Called when the
+ * network refuses a submitted transaction: a DUST coin the wallet still holds
+ * as unspent may have been spent in a block an earlier sync missed, and the
+ * checkpoint would otherwise keep it hidden. The submit path has no seed to
+ * find one wallet's row, so it clears them all; another wallet on the network
+ * pays one cold scan. Best-effort.
+ */
+export async function clearDustSpendCheckpoints(network: string): Promise<void> {
+  try {
+    await clearWalletStatesByPrefix([walletStateKindPrefix(network, KIND)]);
+  } catch {
+    // The checkpoint stays; the next refusal tries again.
   }
 }

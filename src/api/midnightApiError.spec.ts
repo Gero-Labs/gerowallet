@@ -5,6 +5,7 @@ import {
   MidnightApiError,
   isMidnightApiError,
   isMidnightServerSideFailure,
+  isMidnightSubmitRefusal,
   midnightApiErrorFromResponse,
   midnightApiErrorKind,
   midnightNetworkDisplayName,
@@ -207,5 +208,25 @@ describe('Midnight API error helpers', () => {
     expect(isMidnightServerSideFailure(fromStatus(400, { message: 'Invalid transaction hex' }))).toBe(false);
     expect(isMidnightServerSideFailure(fromStatus(404, { message: 'Not found' }))).toBe(false);
     expect(isMidnightServerSideFailure(new Error('This transaction is not proven'))).toBe(false);
+  });
+});
+
+describe('isMidnightSubmitRefusal', () => {
+  const submit = (status: number, fields: Record<string, unknown>) => toMidnightApiError(answered(status, envelope(status, fields)), 'Mainnet', 'submit');
+  it('is a refusal when the server or the node answered no to a submitted transaction', () => {
+    expect(isMidnightSubmitRefusal(submit(500, { message: 'substrate submission error' }))).toBe(true);
+    expect(isMidnightSubmitRefusal(submit(400, { message: 'Invalid transaction' }))).toBe(true);
+    expect(isMidnightSubmitRefusal(submit(409, { message: 'conflict' }))).toBe(true);
+    expect(isMidnightSubmitRefusal(submit(409, { errorCode: 'LEDGER_MISMATCH', message: 'm' }))).toBe(true);
+  });
+
+  it('is not one when the transaction never reached the node, or for a build', () => {
+    expect(isMidnightSubmitRefusal(submit(501, { errorCode: 'MIDNIGHT_NETWORK_UPGRADING', message: 'm' }))).toBe(false);
+    expect(isMidnightSubmitRefusal(submit(501, { message: 'Not implemented' }))).toBe(false);
+    expect(isMidnightSubmitRefusal(submit(503, { errorCode: 'MIDNIGHT_PROVER_BUSY', message: 'm' }))).toBe(false);
+    for (const status of [401, 403, 408, 429]) expect(isMidnightSubmitRefusal(submit(status, { message: 'm' }))).toBe(false);
+    expect(isMidnightSubmitRefusal(toMidnightApiError(new AxiosError('down', 'ERR_NETWORK'), 'Mainnet', 'submit'))).toBe(false);
+    expect(isMidnightSubmitRefusal(toMidnightApiError(answered(500, envelope(500, { message: 'boom' })), 'Mainnet', 'build'))).toBe(false);
+    expect(isMidnightSubmitRefusal(Object.assign(new Error('unconfirmed'), { name: 'MidnightSubmitUnconfirmedError' }))).toBe(false);
   });
 });

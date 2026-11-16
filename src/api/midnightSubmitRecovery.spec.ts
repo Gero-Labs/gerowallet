@@ -18,6 +18,8 @@ vi.mock('axios', async (importOriginal) => {
 });
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@/services/nexusDevice.service', () => ({ getNexusAccessToken: vi.fn(), reauthenticateNexus: vi.fn() }));
+const { clearDustSpendCheckpoints } = vi.hoisted(() => ({ clearDustSpendCheckpoints: vi.fn(async () => {}) }));
+vi.mock('@/chains/midnight/midnightDustSpendCheckpoint', () => ({ clearDustSpendCheckpoints }));
 
 const { MidnightApi } = await import('./midnight-api');
 
@@ -254,7 +256,7 @@ describe('MidnightApi submit routes', () => {
     ['submitProvenMidnightTx', 'tx/submit-proven', (watch?: { identifiers?: readonly string[] }) => api.submitProvenMidnightTx(request, watch)],
   ] as const;
 
-  beforeEach(() => post.mockReset());
+  beforeEach(() => { post.mockReset(); clearDustSpendCheckpoints.mockClear(); });
 
   describe.each(routes)('%s', (_name, subpath, call) => {
     it('allows the submit 110 s instead of the instance default', async () => {
@@ -271,6 +273,24 @@ describe('MidnightApi submit routes', () => {
       post.mockRejectedValueOnce(withStatus(409));
       await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ name: 'MidnightApiError', kind: 'server', status: 409, message: 'x' });
       expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the DUST spend checkpoints of the network when the submit is refused', async () => {
+      post.mockRejectedValueOnce(withStatus(500, { message: 'substrate submission error' }));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ kind: 'server', status: 500 });
+      expect(clearDustSpendCheckpoints).toHaveBeenCalledExactlyOnceWith('preprod');
+    });
+
+    it('keeps them when the submit never reached the node or its reply was lost', async () => {
+      post.mockRejectedValueOnce(withStatus(501, { status: 501, errorCode: 'MIDNIGHT_NETWORK_UPGRADING', message: 'paused' }));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      post.mockRejectedValueOnce(withStatus(429));
+      await expect(call({ identifiers: [ID] })).rejects.toMatchObject({ status: 429 });
+      post.mockRejectedValueOnce(withCode('ECONNABORTED'));
+      await expect(call()).rejects.toMatchObject({ name: 'MidnightSubmitUnconfirmedError' });
+      post.mockResolvedValueOnce({ status: 200, data: ok });
+      await expect(call()).resolves.toEqual(ok);
+      expect(clearDustSpendCheckpoints).not.toHaveBeenCalled();
     });
 
     it('turns a 501 MIDNIGHT_NETWORK_UPGRADING into the network upgrade error, without polling', async () => {
