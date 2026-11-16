@@ -7,6 +7,20 @@ export type MidnightLedger = 8 | 9;
  */
 export const LEDGER9_PROTOCOL_VERSION = 2_000_000;
 
+/**
+ * A chain's first ledger 9 block, where DUST was reset: no DUST coin of a
+ * ledger 9 wallet can be spent before it, so its DUST light sync looks for
+ * spends from here on (midnightDustLightSync.ts). Read from the indexer,
+ * `block(offset: { height })`: the block before it reports protocol version
+ * 1000300, this one 2001100. A reviewed protocol fact, not configuration: too
+ * high a height hides a spend and the node refuses the transaction. A network
+ * not listed is scanned from its first block.
+ */
+export const MIDNIGHT_LEDGER9_FIRST_BLOCK: Readonly<Record<string, { readonly height: number; readonly timestamp: number }>> = Object.freeze({
+  // 2026-11-06T20:51:24Z, block 952f999bbc3ea4d9a5271bdadb210205b926a5444545a0fe6fc7ab8333b18581
+  mainnet: Object.freeze({ height: 3_346_139, timestamp: 1_793_998_284_000 }),
+});
+
 /** The newest ledger this build can sign, balance and prove for. */
 export const NEWEST_MIDNIGHT_LEDGER: MidnightLedger = 9;
 

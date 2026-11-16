@@ -2164,7 +2164,10 @@ export class WalletBg {
    */
   private async deriveMidnightAccountKeys(mnemonic: string, network: string): Promise<MidnightDerivedKeys> {
     const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-    const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+    const { midnightTimer } = await import('@/chains/midnight/midnightTiming');
+    const timer = midnightTimer('derive account keys');
+    const derived = await timer.time('derive', () => deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true }));
+    timer.done();
     if (this.accountIndex > 0 && !isSameWalletKey(Blockchain.MIDNIGHT, JSON.stringify(derived.addresses), this.publicKey)) {
       derived.unshieldedSecretKey.fill(0);
       derived.dustSecretKey.fill(0);
@@ -2551,7 +2554,12 @@ export class WalletBg {
   private async openMnemonicWithPassword(password: string): Promise<string> {
     const encryptedMnemonic = this.encryptedMnemonic;
     if (!encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-    return withUnlockThrottle(this.secretsWalletId, async () => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic), { rejected: () => false });
+    const startedAt = Date.now();
+    try {
+      return await withUnlockThrottle(this.secretsWalletId, async () => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic), { rejected: () => false });
+    } finally {
+      if (this.chain === Blockchain.MIDNIGHT) console.debug('[midnight-timing] open mnemonic', { totalMs: Date.now() - startedAt });
+    }
   }
 
   /**

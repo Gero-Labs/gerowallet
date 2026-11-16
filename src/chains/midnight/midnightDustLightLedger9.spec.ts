@@ -201,3 +201,123 @@ describe('funded ledger-9 DUST projection', () => {
     } finally { key.clear(); }
   });
 });
+
+// A full scan of one nullifier prefix took ~150 s on mainnet (2026-11-16):
+// each build resumes the spend chains from the last one's checkpoint.
+describe('DUST spend checkpoint', () => {
+  /** The fixture's transport, answering only spends inside the requested block range, with the ranges recorded. */
+  function ranged(f: ReturnType<typeof fundedFixture>) {
+    const ranges: [number, number][] = [];
+    const transport: DustLightTransport = {
+      ...f.transport,
+      spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+        ranges.push([fromBlock, toBlock]);
+        const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+        return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
+      }),
+    };
+    return { transport, ranges };
+  }
+
+  it('a cold build scans every chain from the first block, successors included, and checkpoints below the margin', async () => {
+    const f = fundedFixture();
+    try {
+      const { transport, ranges } = ranged(f);
+      // The fixture's spends are at heights 3, 4 and 5 (the snapshot block).
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpointMarginBlocks: 1 });
+      expect(state.utxos).toEqual(f.local.utxos);
+      // Never the successor's own creation block: that would name the wallet's spend to the server.
+      expect(ranges.every(([from]) => from === 0)).toBe(true);
+      expect(checkpoint?.checkedThrough).toBe(f.snapshot.block.height - 1);
+      // The head as of height 4: the spend at height 5 is inside the margin.
+      expect(Object.values(checkpoint!.heads).map(head => head.seq)).toEqual([2]);
+    } finally { f.key.clear(); }
+  });
+
+  it('a warm build scans only after the checkpoint and reaches the same state', async () => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
+      const { transport, ranges } = ranged(f);
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: JSON.parse(JSON.stringify(cold.checkpoint)), checkpointMarginBlocks: 1 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
+      expect(ranges.length).toBeGreaterThan(0);
+      expect(ranges.every(([from]) => from === cold.checkpoint!.checkedThrough + 1)).toBe(true);
+      expect(warm.checkpoint).toEqual(cold.checkpoint);
+    } finally { f.key.clear(); }
+  });
+
+  it('a checkpoint with every spend applied needs no rescan of older blocks', async () => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 0 });
+      expect(Object.values(cold.checkpoint!.heads).map(head => head.seq)).toEqual([3]);
+      // The chain moved on one block: the checkpoint is now behind the snapshot.
+      const later = { ...f.snapshot, block: { ...f.snapshot.block, height: f.snapshot.block.height + 1 } };
+      const { transport, ranges } = ranged(f);
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', { ...transport, snapshot: vi.fn(async () => later) },
+        undefined, { checkpoint: cold.checkpoint, checkpointMarginBlocks: 0 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(ranges).toEqual([[later.block.height, later.block.height]]);
+    } finally { f.key.clear(); }
+  });
+
+  it.each([
+    ['another chain\'s head', (head: Record<string, unknown>) => ({ ...head, backingNight: 'ff'.repeat(32) })],
+    ['a head past the snapshot', (head: Record<string, unknown>) => ({ ...head, mtIndex: '99' })],
+    ['a head of another key', (head: Record<string, unknown>) => ({ ...head, owner: '1' })],
+    ['a malformed head', () => ({ seq: 'x' })],
+  ])('ignores %s and scans that chain from the first block', async (_name, corrupt) => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
+      const heads = Object.fromEntries(Object.entries(cold.checkpoint!.heads)
+        .map(([chain, head]) => [chain, corrupt(head as unknown as Record<string, unknown>)]));
+      const { transport, ranges } = ranged(f);
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: { checkedThrough: cold.checkpoint!.checkedThrough, heads } as never, checkpointMarginBlocks: 1 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(ranges.every(([from]) => from === 0)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+
+  it('scans a cold chain from the ledger first block when its coin was created on that ledger', async () => {
+    const f = fundedFixture();
+    try {
+      const { transport, ranges } = ranged(f);
+      const created = Math.min(...f.snapshot.generations.map(g => (g as { ctime: number }).ctime)) * 1000;
+      // The fixture's spends are at heights 3, 4 and 5; its coin was created before them.
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { ledgerFirstBlock: { height: 3, timestamp: created } });
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(ranges.length).toBeGreaterThan(1);
+      expect(ranges.every(([from]) => from === 3)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+
+  it('scans a coin older than the ledger first block from block 0, where a spend from another ledger is still refused', async () => {
+    const f = fundedFixture();
+    try {
+      const { transport, ranges } = ranged(f);
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { ledgerFirstBlock: { height: 3, timestamp: Date.now() + 60_000 } });
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(ranges.every(([from]) => from === 0)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+
+  it('ignores a checkpoint at or past the snapshot (a lagging server)', async () => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 0 });
+      const { transport, ranges } = ranged(f);
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: { ...cold.checkpoint!, checkedThrough: f.snapshot.block.height }, checkpointMarginBlocks: 0 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(ranges.every(([from]) => from === 0)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+});
