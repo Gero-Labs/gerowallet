@@ -108,9 +108,7 @@ const chartOptions = computed((): Highcharts.Options => {
     xAxis: {
       crosshair: true,
       allowDecimals: false,
-      title: {
-        text: 'Time',
-      },
+      title: { text: null },
       labels: {
         style: {
           fontFamily: 'Inter Variable, Inter, sans-serif',
@@ -121,6 +119,7 @@ const chartOptions = computed((): Highcharts.Options => {
       categories: Object.keys(props.chartData)
     },
     yAxis: {
+      title: { text: null },
       labels: {
         style: {
           color: '#fff'

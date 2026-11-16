@@ -1,4 +1,5 @@
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import i18n from '@/plugins/i18n';
 import { ref, computed } from 'vue';
 import { strikeVaultApi } from '@/api/strike-v2.vaults';
 import type {
@@ -20,6 +21,9 @@ const totalCount = ref(0);
 const userPositions = ref<UserVaultPosition[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
+
+/** Error text for the UI: the thrown message, or a translated fallback. */
+const vaultError = (e: unknown): string => getErrorMessage(e, String(i18n.t('common.somethingWentWrong')));
 
 // ---------------------------------------------------------------------------
 // Computed
@@ -65,7 +69,7 @@ async function loadVaults(params: Parameters<typeof strikeVaultApi.listVaults>[0
     vaults.value = result.vaults ?? [];
     totalCount.value = result.count ?? 0;
   } catch (e: unknown) {
-    error.value = getErrorMessage(e);
+    error.value = vaultError(e);
   } finally {
     loading.value = false;
   }
@@ -88,7 +92,7 @@ async function loadUserPositions(): Promise<void> {
       ? (result as UserVaultPosition[])
       : ((result as { positions?: UserVaultPosition[] } | null)?.positions ?? []);
   } catch (e: unknown) {
-    error.value = getErrorMessage(e);
+    error.value = vaultError(e);
   } finally {
     loading.value = false;
   }
@@ -106,7 +110,7 @@ async function getVaultDetail(id: string): Promise<VaultInfo | null> {
   try {
     return await strikeVaultApi.getVault(id);
   } catch (e: unknown) {
-    error.value = getErrorMessage(e);
+    error.value = vaultError(e);
     return null;
   }
 }
@@ -124,7 +128,7 @@ async function getVaultPortfolio(id: string, period: VaultPeriod = '30d'): Promi
   try {
     return await strikeVaultApi.getVaultPortfolio(id, period);
   } catch (e: unknown) {
-    error.value = getErrorMessage(e);
+    error.value = vaultError(e);
     return null;
   }
 }
@@ -145,7 +149,7 @@ async function getVaultDepositors(id: string, params: { limit?: number; offset?:
       ? (result as VaultDepositor[])
       : ((result as { depositors?: VaultDepositor[] } | null)?.depositors ?? []);
   } catch (e: unknown) {
-    error.value = getErrorMessage(e);
+    error.value = vaultError(e);
     return [];
   }
 }
@@ -162,7 +166,7 @@ async function getUserPosition(vaultId: string): Promise<UserVaultPosition | nul
   try {
     return await strikeVaultApi.getUserVaultPosition(vaultId);
   } catch (e: unknown) {
-    error.value = getErrorMessage(e);
+    error.value = vaultError(e);
     return null;
   }
 }

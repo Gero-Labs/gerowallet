@@ -85,7 +85,7 @@ const computedColors = computed(() => {
 
 const theme = useTheme();
 
-const chartOptions = computed((): Highcharts.Options => {
+const chartOptions = computed((): Highcharts.Options | null => {
   // Don't render chart while wallet is loading to prevent flickering
   if (loading.value) {
     return null

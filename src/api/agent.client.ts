@@ -46,7 +46,7 @@ export interface AgentTurn {
 
 export interface AgentChatInput {
   message: string;
-  context?: Record<string, unknown>;
+  context?: object;
   history?: AgentTurn[];
   maxTokens?: number;
 }

@@ -142,11 +142,6 @@ const epochBlocks = ref<PoolBlock[]>([]);
 const blocksLoading = ref(false);
 
 /**
- * Minimal Highcharts callback contexts — just what the formatters below read,
- * without pulling in the full Highcharts type surface.
- */
-
-/**
  * Raw pool-history row from the backend: Koios snake_case, with legacy
  * camelCase fallbacks for older proxy deployments.
  */

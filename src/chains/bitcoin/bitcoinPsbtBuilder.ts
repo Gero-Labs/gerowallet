@@ -10,6 +10,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { HDKey } from '@scure/bip32';
 import type { IUnifiedUtxo, IOutput, IBuildTxParams, IUnsignedTx } from '@/chains/common/interfaces';
+import { selectCoins, CoinSelectionStrategy, calculateTxSize } from './bitcoinCoinSelection';
 
 /** The unsigned PSBT in the three forms callers use. */
 export interface BitcoinPsbtRaw {
@@ -19,7 +20,6 @@ export interface BitcoinPsbtRaw {
 }
 
 export type BitcoinUnsignedTx = IUnsignedTx<BitcoinPsbtRaw>;
-import { selectCoins, CoinSelectionStrategy, calculateTxSize } from './bitcoinCoinSelection';
 
 /**
  * PSBT build options
