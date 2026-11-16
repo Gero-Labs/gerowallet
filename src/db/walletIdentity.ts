@@ -81,7 +81,7 @@ export function toWalletIdentity(source: WalletIdentitySource): WalletIdentity {
     return { chain, network, key: publicKey };
   }
 
-  // Cardano / Apex Fusion account xpubs are bech32, which is case-insensitive.
+  // Cardano account xpubs are bech32, which is case-insensitive.
   return { chain, network, key: publicKey.toLowerCase() };
 }
 

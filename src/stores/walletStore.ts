@@ -104,7 +104,7 @@ export interface WalletStore {
   isLocked: boolean;
   isSyncing: boolean;
   account: Account | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed Cardano/Apex/BTC tx records with chain-specific shapes; consumers narrow per chain
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed Cardano/BTC tx records with chain-specific shapes; consumers narrow per chain
   transactions: any[];
   utxos: Cardano.Utxo[] | IUnifiedUtxo[];  // Support both Cardano and Bitcoin UTXOs
   collateral: Cardano.Utxo | null;

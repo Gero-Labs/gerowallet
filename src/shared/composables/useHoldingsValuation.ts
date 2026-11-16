@@ -18,9 +18,7 @@ import { computed, toRefs } from 'vue';
 import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { walletStore, totalProgrammableLockedLovelace, totalListedLockedLovelace } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
-import { Blockchain } from '@/models/types';
 import { getBalance } from '@/chrome/serialization';
 import type { Cardano } from '@cardano-sdk/core';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
@@ -30,16 +28,11 @@ import { isRealFiAsset } from '@/modules/realfi/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 export function useHoldingsValuation() {
-  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
+  const { utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
   const { t } = useTranslation();
-
-  const isApex = computed(() =>
-    loggedWallet.value?.chain === Blockchain.APEX_PRIME
-    || loggedWallet.value?.chain === Blockchain.APEX_VECTOR,
-  );
 
   /** ADA (or native) balance from the UTxO set, in whole coins. */
   const adaBalance = computed(() => {
@@ -53,9 +46,6 @@ export function useHoldingsValuation() {
    * (market-API lovelace price first — same source as holdings rows).
    */
   const nativePriceUsd = computed(() => {
-    if (isApex.value) {
-      return coinGeckoStore.cache['apex-4']?.usd ?? 0;
-    }
     const marketAdaPrice = allTokens.value.find(t => t.unit === 'lovelace')?.price;
     return marketAdaPrice || 0;
   });
@@ -66,9 +56,7 @@ export function useHoldingsValuation() {
    */
   const holdings = computed<MarketToken[]>(() => {
     const tokens = walletTokens.value || {};
-    const adaPriceUsd = isApex.value
-      ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
-      : (priceStore.adaUsd?.lastPrice || 0);
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
     const dhTokens = tokenMetadataStore.tokens || {};
     const rows: MarketToken[] = [];
 
@@ -245,5 +233,5 @@ export function useHoldingsValuation() {
     return { ada: totalAda, usd: totalUsd, eur: totalEur };
   });
 
-  return { holdings, totals, nativePriceUsd, adaBalance, isApex };
+  return { holdings, totals, nativePriceUsd, adaBalance };
 }

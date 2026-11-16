@@ -364,14 +364,10 @@ const isMidnight = computed(() => {
   return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
 });
 
-// Nav-bar Gero mark, tinted per chain. Apex Prime (teal), Vector (orange) and
-// Bitcoin (Bitcoin orange) use their own variants so the logo matches the chain's accent.
+// Nav-bar Gero mark, tinted per chain. Midnight and Bitcoin use their own
+// variants so the logo matches the chain's accent.
 const navLogo = computed(() => {
   switch (loggedWallet.value?.chain) {
-    case Blockchain.APEX_PRIME:
-      return assets.geroNoTextPrime;
-    case Blockchain.APEX_VECTOR:
-      return assets.geroNoTextVector;
     case Blockchain.MIDNIGHT:
       return assets.geroNoTextMidnight;
     case Blockchain.BITCOIN:
@@ -401,15 +397,12 @@ const governanceEnabled = computed(
 
 const items = computed((): NavigationItemUnion[] => {
   let isStakingEnabled = false;
-  // Only parse address for Cardano-based chains
-  if (loggedWallet.value?.baseAddress &&
-      (loggedWallet.value?.chain === Blockchain.CARDANO ||
-       loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-       loggedWallet.value?.chain === Blockchain.APEX_VECTOR)) {
+  // Only parse the address on Cardano
+  if (loggedWallet.value?.baseAddress && loggedWallet.value?.chain === Blockchain.CARDANO) {
     isStakingEnabled = Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !==
       Cardano.AddressType.EnterpriseScript
   }
-  // Chains without delegated staking (e.g. Apex Vector) never show the page.
+  // Chains without delegated staking never show the page.
   isStakingEnabled = isStakingEnabled &&
     networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
 
@@ -518,10 +511,10 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
-    { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
+    { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN },
     // Only show the player when the wallet actually holds playable media —
     // an empty player is dead weight (and the Media header auto-hides with it).
-    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR && (musicPlaylist.value?.length ?? 0) > 0 },
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && (musicPlaylist.value?.length ?? 0) > 0 },
     { header: t('navigation.developers'), enabled: true },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
     // Nexus infra product spotlight: colored brand logo + animated gradient border.
@@ -888,8 +881,7 @@ onUnmounted(() => {
 }
 
 /* Per-chain active-item colors are handled entirely by the base rule above via
-   --g-accent (set per chain by useChainAccent). No hardcoded per-chain overrides:
-   they broke Apex Prime (teal art) by forcing the shared Apex orange. */
+   --g-accent (set per chain by useChainAccent). No hardcoded per-chain overrides. */
 
 .theme--dark.v-list-item {
   &:not(.v-list-item--active):not(.v-list-item--disabled) {

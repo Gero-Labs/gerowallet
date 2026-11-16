@@ -7,7 +7,7 @@
         <div class="metrics-header-row">
           <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
-          <v-tooltip location="bottom" v-if="!isApex && !adaOnly"  content-class="custom-tooltip">
+          <v-tooltip location="bottom" v-if="!adaOnly"  content-class="custom-tooltip">
             <template v-slot:activator="{ props: activatorProps }">
               <div class="mode-segmented-toggle" v-bind="activatorProps" >
                 <button
@@ -192,7 +192,6 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain } from '@/models/types';
 import { chainAccents, chainKeyFor } from '@/config/themes';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import OdometerCounter from '@/shared/components/OdometerCounter.vue';
@@ -245,13 +244,8 @@ const priceFormatter = (price: number) => {
   return price.toFixed(4);
 };
 
-const isApex = computed(() => {
-  const chain = loggedWallet.value?.chain;
-  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
-});
-
-// Follows the chain accent for EVERY chain. The old branching was
-// Apex-vs-Cardano only, so Bitcoin and Midnight drew a Cardano cyan line.
+// Follows the chain accent for EVERY chain, so Bitcoin and Midnight do not
+// draw a Cardano cyan line.
 const chartTheme = computed(() => {
   const hex = chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent;
   const r = parseInt(hex.slice(1, 3), 16);

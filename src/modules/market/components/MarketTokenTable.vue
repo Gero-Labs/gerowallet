@@ -536,14 +536,6 @@ const { isColumnVisible } = useColumnPreferences();
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const { currencySymbol: nativeSymbol } = useNativeCurrency();
 
-const isApex = computed(() => {
-  const chain = walletStore.loggedWallet?.chain;
-  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
-});
-
-// Apex wallets: fixed columns from CoinGecko (no column picker, no per-token market API)
-const APEX_ALLOWED_COLUMNS = ['rank', 'name', 'price', 'change24h', 'volume24h', 'mcap', 'balance', 'value', 'watchlist'];
-
 const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);
 const tableSort = computed<DataTableSortItem[]>({
@@ -609,8 +601,6 @@ const HOLDINGS_COLUMNS = ['balance', 'value'];
 
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
-    // Apex wallets: fixed set of columns from CoinGecko, no column preferences
-    if (isApex.value) return APEX_ALLOWED_COLUMNS.includes(header.key);
     if (LOCKED_COLUMNS.includes(header.key)) return true;
     if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.key)) return true;
     return isColumnVisible(header.key);

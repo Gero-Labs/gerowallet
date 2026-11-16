@@ -369,7 +369,7 @@ export function useGlobalSearch() {
 
     // 5. Stake pools — the staking page's in-memory page, only while it was
     //    loaded for this wallet's chain and network: nothing clears it on a
-    //    wallet switch, and Cardano and Apex Prime both stake. The async phase
+    //    wallet switch, and Cardano stakes. The async phase
     //    below searches the right chain whatever this holds.
     if (gates.value.staking && stakingStore.poolsFor === walletKey.value) {
       try {

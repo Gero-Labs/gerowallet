@@ -8,7 +8,6 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 interface CoinQuote { usd?: number; usd_24h_change?: number; usd_market_cap?: number; usd_24h_vol?: number }
 interface CoinCache {
   [key: string]: CoinQuote | number;
-  'apex-4'?: CoinQuote;
   cardano?: CoinQuote;
   _timestamp?: number;
 }

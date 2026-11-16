@@ -80,9 +80,9 @@ export interface CardanoTx extends TxDisplayFields {
 }
 
 // ---------------------------------------------------------------------------
-// ApexTx – no CBOR, no body, several fields nullable
+// ThinTx – stored without CBOR, so no body; several fields nullable
 // ---------------------------------------------------------------------------
-export interface ApexTx extends TxDisplayFields {
+export interface ThinTx extends TxDisplayFields {
   id: string;
   tx_hash: string;
   block_hash: null;
@@ -100,7 +100,7 @@ export interface ApexTx extends TxDisplayFields {
 // Union + type guard
 // ---------------------------------------------------------------------------
 
-export type StoredTransaction = CardanoTx | ApexTx;
+export type StoredTransaction = CardanoTx | ThinTx;
 
 export function isCardanoTx(tx: StoredTransaction): tx is CardanoTx {
   return 'body' in tx;

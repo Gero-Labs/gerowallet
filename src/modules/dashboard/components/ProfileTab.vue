@@ -256,7 +256,7 @@ const selectedCurrency = computed({
 
 const walletName = ref('');
 // Per-wallet: the choices depend on the wallet's chain and network. Hidden
-// when the chain has a single explorer (Apex) or none (Bitcoin, Midnight).
+// when the chain has no explorer choice (Bitcoin, Midnight).
 const { explorerOptions, explorerId, setExplorer } = useExplorer();
 
 const selectedExplorer = computed({

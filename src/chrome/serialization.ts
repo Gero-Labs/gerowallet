@@ -1090,7 +1090,7 @@ export function convertTransactionsForStorage(txs: LegacyTxRecord[], utxos: Card
     if (tx.body?.outputs) {
       outputs = tx.body.outputs;
     } else if (tx.cbor && !tx.body) {
-      // Skip non-array CBOR (e.g. bare TxBody from Apex chain)
+      // Skip non-array CBOR (e.g. a bare TxBody)
       const firstByte = typeof tx.cbor === 'string' ? parseInt(tx.cbor.slice(0, 2), 16) : 0;
       if ((firstByte >> 5) === 4) {
         try {
@@ -1190,8 +1190,8 @@ export function convertTransactionsForStorage(txs: LegacyTxRecord[], utxos: Card
 
     // Check if this is a raw transaction with CBOR that needs full conversion
     if (tx.cbor && !tx.body) {
-      // Cardano Tx CBOR is a top-level array (major type 4). Apex/non-Cardano
-      // chains may send a bare TxBody (map, major type 5). Skip those silently —
+      // Cardano Tx CBOR is a top-level array (major type 4). A bare TxBody is
+      // a map (major type 5). Skip those silently —
       // they will be stored as-is and the UI guards via isCardanoTx.
       const firstByte = typeof tx.cbor === 'string' ? parseInt(tx.cbor.slice(0, 2), 16) : 0;
       const majorType = firstByte >> 5;

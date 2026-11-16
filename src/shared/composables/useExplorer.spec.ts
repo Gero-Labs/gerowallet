@@ -38,10 +38,10 @@ describe('useExplorer', () => {
   });
 
   it('lets a Cardano-only flow override the wallet chain', () => {
-    logIn(Blockchain.APEX_VECTOR, Network.MAINNET);
+    logIn(Blockchain.BITCOIN, Network.MAINNET);
     const { explorerUrl, explorerOptions } = useExplorer();
     expect(explorerOptions.value).toEqual([]);
-    expect(explorerUrl('tx', TX)).toBe(`https://vector.apexscan.org/en/transaction/${TX}`);
+    expect(explorerUrl('tx', TX)).toBe(`https://mempool.space/tx/${TX}`);
     expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO })).toBe(`https://cexplorer.io/tx/${TX}`);
   });
 
@@ -73,7 +73,7 @@ describe('useExplorer', () => {
   it('refuses an explorer the wallet is not offered', async () => {
     logIn(Blockchain.CARDANO, Network.MAINNET);
     await useExplorer().setExplorer('etherscan');
-    logIn(Blockchain.APEX_PRIME, Network.MAINNET);
+    logIn(Blockchain.BITCOIN, Network.MAINNET);
     await useExplorer().setExplorer('cardanoscan');
     expect(mockSetWalletConfiguration).not.toHaveBeenCalled();
   });

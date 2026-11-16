@@ -1,7 +1,7 @@
 <template>
   <!-- Sits beside a CopyButton: same size, and nothing at all when the wallet's
-       chain or chosen explorer has no page for this id (Midnight, Bitcoin, an
-       Apex DRep, ...). -->
+       chain or chosen explorer has no page for this id (Midnight, a Bitcoin
+       stake key, ...). -->
   <v-btn
     v-if="url"
     class="px-1"

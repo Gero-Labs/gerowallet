@@ -40,7 +40,7 @@ Run cheap to expensive, and stop lying to yourself about what each one proves.
 | Command | Time | What it actually proves |
 |---|---|---|
 | `npx eslint <files you changed>` | ~2s | Touched files satisfy the lint rule; global debt is tracked separately. |
-| `npm run design:check` | ~2s | The design ratchet and 56 WCAG checks pass. Also a required-check step. |
+| `npm run design:check` | ~2s | The design ratchet and 50 WCAG checks pass. Also a required-check step. |
 | `npx vitest run <paths>` | seconds | Only what you point it at. Re-run a failing file alone before calling it a regression. |
 | `npm run build:web -- --mode production` | ~90s | Every SFC parses and the bundle resolves. This is the real buildability gate, and what CI runs. |
 | `npm run dev` + load `extension/` in Chrome | minutes | Interactive runtime checks; real packaged-browser harnesses also provide scoped runtime evidence. |

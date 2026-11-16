@@ -57,7 +57,7 @@ interface ExplorerDef {
 
 const seg = encodeURIComponent;
 
-/** `pool1…` as is; a 56-hex pool key hash bech32-encoded. pool.pm and apexscan reject hex. */
+/** `pool1…` as is; a 56-hex pool key hash bech32-encoded. pool.pm rejects hex. */
 function toPoolBech32(id: string): string | null {
   if (id.startsWith('pool1')) return id;
   if (!/^[0-9a-fA-F]{56}$/.test(id)) return null;
@@ -177,26 +177,6 @@ const ALL_ENTITIES: ExplorerEntity[] = [
   'tx', 'block', 'epoch', 'address', 'stake', 'pool', 'asset', 'policy', 'drep', 'govAction',
 ];
 
-/** Apex Prime and Vector are separate apexscan hosts; both chains are mainnet-only. */
-const APEX_PATHS: Partial<Record<ExplorerEntity, PathBuilder>> = {
-  tx: id => `/en/transaction/${seg(id)}`,
-  block: id => `/en/block/${seg(id)}`,
-  epoch: id => `/en/epoch/${seg(id)}`,
-  address: id => `/en/address/${seg(id)}`,
-  stake: id => `/en/stake-address/${seg(id)}`,
-  pool: (id) => {
-    const pool = toPoolBech32(id);
-    return pool ? `/en/pool/${pool}` : null;
-  },
-  asset: id => `/en/token/${seg(id)}`,
-  policy: id => `/en/policy/${seg(id)}`,
-};
-
-const APEX_HOSTS: Record<string, string> = {
-  [Blockchain.APEX_PRIME]: 'https://apexscan.org',
-  [Blockchain.APEX_VECTOR]: 'https://vector.apexscan.org',
-};
-
 function isCardanoExplorerId(value: unknown): value is CardanoExplorerId {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(CARDANO_EXPLORERS, value);
 }
@@ -262,11 +242,6 @@ export function getExplorerUrl(
       return cardanoUrl(chosen, net, type, id)
         ?? cardanoUrl(DEFAULT_CARDANO_EXPLORER, net, type, id)
         ?? '';
-    }
-    case Blockchain.APEX_PRIME:
-    case Blockchain.APEX_VECTOR: {
-      const path = APEX_PATHS[type]?.(id);
-      return path ? APEX_HOSTS[chain] + path : '';
     }
     case Blockchain.BITCOIN: {
       // Bitcoin's testnet is testnet4 (the wallet's Esplora backend is mempool.space/testnet4).

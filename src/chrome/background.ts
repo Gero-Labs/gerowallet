@@ -248,6 +248,11 @@ loadWallets().then(async () => {
   if (walletStore.loggedWallet && !(await isStoredWallet(walletStore.loggedWallet.id))) {
     WalletStore.logout();
   }
+  // Nor a wallet on a network this build no longer has: the wallet lists hide it
+  // (useAvailableWallets), so a session left open on one ends here.
+  if (isOnRemovedNetwork(walletStore.loggedWallet)) {
+    WalletStore.logout();
+  }
 
   if (walletStore.loggedWallet) {
     // Safety: clear stale isLocked if no unlock method is configured
@@ -861,9 +866,9 @@ chrome.alarms.create('auto-lock-check', {
 });
 
 // Populate the CoinGecko price cache. Nothing else calls updatePrices(), so
-// without this the cache stays {} and every consumer that reads it — notably
-// Apex fiat valuation (coinGeckoStore.cache['apex-4']) — values at $0. Fetch
-// once on startup, then refresh on an alarm (cache is considered stale >5min).
+// without this the cache stays {} and every consumer that reads it (the ADA
+// market cap in the tokens table) shows 0. Fetch once on startup, then
+// refresh on an alarm (cache is considered stale >5min).
 coinGeckoStore.updatePrices().catch(() => {});
 chrome.alarms.create('refreshCoinGeckoPrices', {
   delayInMinutes: 5,
@@ -1226,10 +1231,8 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
     });
     return;
   }
-  // Only support Cardano-based chains for dApp API
-  if (loggedWallet.chain !== Blockchain.CARDANO &&
-      loggedWallet.chain !== Blockchain.APEX_PRIME &&
-      loggedWallet.chain !== Blockchain.APEX_VECTOR) {
+  // The dApp API supports Cardano wallets only
+  if (loggedWallet.chain !== Blockchain.CARDANO) {
     sendResponse({
       id: request.id,
       error: APIError.Refused,
@@ -4312,7 +4315,13 @@ async function loginRequiresUnlock(requested: { id?: unknown } | null | undefine
   }
 }
 
+/** A wallet whose chain and network name no entry of `networks.ts`: one this build no longer supports. */
+function isOnRemovedNetwork(wallet: { chain?: string; network?: string } | null | undefined): boolean {
+  return !!wallet?.chain && !!wallet.network && !networks.resolveNetwork(wallet.chain, wallet.network);
+}
+
 async function loginWallet(wallet: Parameters<typeof walletManager.login>[0]) {
+  if (isOnRemovedNetwork(wallet)) return null;
   const requireUnlock = await loginRequiresUnlock(wallet);
   const walletBg = await walletManager.login(wallet, { requireUnlock });
   if (walletBg) {
@@ -5355,7 +5364,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
         }
 
         const accounts: { cardano?: string[]; bitcoin?: string[] } = {};
-        if (loggedWallet.chain === Blockchain.CARDANO || loggedWallet.chain === 'Apex Prime' || loggedWallet.chain === 'Apex Vector') {
+        if (loggedWallet.chain === Blockchain.CARDANO) {
           accounts.cardano = [loggedWallet.baseAddress];
         } else if (loggedWallet.chain === Blockchain.BITCOIN) {
           accounts.bitcoin = loggedWallet.bitcoinAddress ? [loggedWallet.bitcoinAddress] : [];
@@ -5815,10 +5824,8 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
       fail(APIError.Refused.code, 'No wallet logged in');
       return true;
     }
-    // CIP-45 is a Cardano dApp bridge — allow Cardano-family chains only.
-    if (loggedWallet.chain !== Blockchain.CARDANO
-      && loggedWallet.chain !== 'Apex Prime'
-      && loggedWallet.chain !== 'Apex Vector') {
+    // CIP-45 is a Cardano dApp bridge — Cardano wallets only.
+    if (loggedWallet.chain !== Blockchain.CARDANO) {
       fail(APIError.Refused.code, 'CIP-45 supports Cardano wallets only');
       return true;
     }

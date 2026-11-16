@@ -594,11 +594,7 @@ export class SyncService {
    * Sync genesis block information
    */
   async syncGenesis(): Promise<void> {
-    if (
-      this.walletBg.chain == Blockchain.CARDANO
-      || this.walletBg.chain == Blockchain.APEX_PRIME
-      || this.walletBg.chain == Blockchain.APEX_VECTOR
-    ) {
+    if (this.walletBg.chain == Blockchain.CARDANO) {
       const blockchainDB: Dexie = await this.walletBg.getBlockchainDb();
       const genesisTable = blockchainDB.table('genesis_info');
       const genesisArray = await genesisTable.toArray();
@@ -683,7 +679,7 @@ export class SyncService {
    */
   private async refreshAccountRewards(epoch?: number, rewardsSum?: string): Promise<void> {
     if (
-      ![Blockchain.CARDANO, Blockchain.APEX_PRIME, Blockchain.APEX_VECTOR].includes(this.walletBg.chain)
+      this.walletBg.chain !== Blockchain.CARDANO
       || !this.walletBg.stakeAddress
       || this.walletBg.isEnterpriseAddress()
     ) return;

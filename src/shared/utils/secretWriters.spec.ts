@@ -52,10 +52,9 @@ describe('secretWriters', () => {
 });
 
 describe('rootKeyFromMnemonic (mirrors createWallet)', () => {
-  it('Cardano and Apex: the Icarus root key the SDK derives', () => {
+  it('Cardano: the Icarus root key the SDK derives', () => {
     const sdk = Buffer.from(resolvePrivateKey(F.mnemonic).bytes()).toString('hex');
     expect(Buffer.from(rootKeyFromMnemonic(Blockchain.CARDANO, F.mnemonic)).toString('hex')).toBe(sdk);
-    expect(Buffer.from(rootKeyFromMnemonic(Blockchain.APEX_PRIME, F.mnemonic)).toString('hex')).toBe(sdk);
     expect(sdk).toBe(F.cardanoRootKeyHex);
   });
 

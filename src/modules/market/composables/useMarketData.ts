@@ -2,7 +2,6 @@ import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type C
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { walletStore } from '@/stores/walletStore';
-import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
@@ -110,8 +109,8 @@ let refreshInterval: ReturnType<typeof setInterval> | null = null;
 // fetch has already started ("last requested wins", not "last resolved wins").
 let fetchSeq = 0;
 
-// Module-level EUR rate for Apex price conversion
-const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = useCurrencyConverter();
+// Load the shared USD→EUR rate as soon as the market module is in use.
+const { loadExchangeRate: _loadExchangeRate } = useCurrencyConverter();
 _loadExchangeRate();
 let consumerCount = 0;
 
@@ -215,76 +214,59 @@ async function fetchAllTokens(silent = false): Promise<void> {
 
   try {
     const chain = walletStore.loggedWallet?.chain;
-    const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
 
-    // For Apex wallets, use CoinGecko apex-4 data; for Cardano, use market API
     let nativePrice: { priceUsd: number; priceEur: number; priceChange24h: number; marketCap: number; volume24h: number };
 
-    if (isApex) {
-      const apexData = coinGeckoStore.cache['apex-4'];
+    // Native ADA price. The backend Nexus market upstream intermittently
+    // returns a transient 502/503/504 — a single blip must NOT blank the whole
+    // market view for a poll cycle. Degrade to the last-known native price
+    // (kept in adaData) and let the next poll refill. Only surface a hard error
+    // when we have no cached native price at all (genuine first-load failure).
+    try {
+      const adaPrice = await marketApi.getAdaPrice();
       nativePrice = {
-        priceUsd: apexData?.usd ?? 0,
-        priceEur: (apexData?.usd ?? 0) * (_usdToEurRate.value || 1),
-        priceChange24h: apexData?.usd_24h_change ?? 0,
-        marketCap: apexData?.usd_market_cap ?? 0,
-        volume24h: apexData?.usd_24h_vol ?? 0,
+        priceUsd: adaPrice.priceUsd,
+        priceEur: adaPrice.priceEur ?? 0,
+        priceChange24h: adaPrice.priceChange24h ?? 0,
+        marketCap: adaPrice.marketCap ?? 0,
+        volume24h: adaPrice.volume24h ?? 0,
       };
-    } else {
-      // Native ADA price. The backend Nexus market upstream intermittently
-      // returns a transient 502/503/504 — a single blip must NOT blank the whole
-      // market view for a poll cycle. Degrade to the last-known native price
-      // (kept in adaData) and let the next poll refill. Only surface a hard error
-      // when we have no cached native price at all (genuine first-load failure).
-      try {
-        const adaPrice = await marketApi.getAdaPrice();
-        nativePrice = {
-          priceUsd: adaPrice.priceUsd,
-          priceEur: adaPrice.priceEur ?? 0,
-          priceChange24h: adaPrice.priceChange24h ?? 0,
-          marketCap: adaPrice.marketCap ?? 0,
-          volume24h: adaPrice.volume24h ?? 0,
-        };
-      } catch (e) {
-        if (!adaData.value) throw e; // no cached price to fall back on — surface it
-        console.debug('Market: ADA price unavailable, reusing last-known native price', e);
-        nativePrice = {
-          priceUsd: adaData.value.priceUsd,
-          priceEur: adaData.value.priceEur,
-          priceChange24h: adaData.value.priceChange24h,
-          marketCap: adaData.value.marketCap ?? 0,
-          volume24h: adaData.value.volume24h ?? 0,
-        };
-      }
+    } catch (e) {
+      if (!adaData.value) throw e; // no cached price to fall back on — surface it
+      console.debug('Market: ADA price unavailable, reusing last-known native price', e);
+      nativePrice = {
+        priceUsd: adaData.value.priceUsd,
+        priceEur: adaData.value.priceEur,
+        priceChange24h: adaData.value.priceChange24h,
+        marketCap: adaData.value.marketCap ?? 0,
+        volume24h: adaData.value.volume24h ?? 0,
+      };
     }
 
-    // Full token list is best-effort. Apex has no listing; for Cardano the
+    // Full token list is best-effort: the
     // /api/market/prices aggregate is large and slow (7-15s) — a timeout or error
     // here must NOT blank the native token or trip the whole fetch. Degrade to
     // native-only; the next poll refills the list. (Native price is fetched above.)
     let allPrices: Awaited<ReturnType<typeof marketApi.getAllPrices>> = [];
-    if (!isApex) {
-      try {
-        allPrices = await marketApi.getAllPrices();
-      } catch (e) {
-        console.debug('Market: token list unavailable (prices endpoint slow/unreachable)', e);
-      }
+    try {
+      allPrices = await marketApi.getAllPrices();
+    } catch (e) {
+      console.debug('Market: token list unavailable (prices endpoint slow/unreachable)', e);
     }
 
     // 7D sparklines (best-effort — failure must not block the table)
     let sparklineMap: Record<string, number[]> = {};
-    if (!isApex) {
-      try {
-        const resp = await marketApi.getSparklines('7d');
-        sparklineMap = resp?.data ?? {};
-      } catch (e) {
-        console.debug('Market: sparklines unavailable', e);
-      }
+    try {
+      const resp = await marketApi.getSparklines('7d');
+      sparklineMap = resp?.data ?? {};
+    } catch (e) {
+      console.debug('Market: sparklines unavailable', e);
     }
 
     // Map API tokens through enrichment (backend already aggregates per token)
     const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp, sparklineMap));
 
-    // Build native token (ADA / AP3X) at position 0
+    // Build the native token at position 0
     const nativeName = networks.resolveCurrencyName(chain, walletStore.loggedWallet?.network) || 'Cardano';
     const nativeTicker = networks.resolveCurrencyTicker(chain, walletStore.loggedWallet?.network) || 'ADA';
     const nativeImg = networks.resolveCurrencyImage(chain, walletStore.loggedWallet?.network) || '';
@@ -329,33 +311,31 @@ async function fetchAllTokens(silent = false): Promise<void> {
 
     // snek.fun and Solada bonding-curve tokens (separate lists, shown under their
     // launchpad filters). Fire-and-forget so they never block the main table.
-    if (!isApex) {
-      marketApi.getSnekFunTokens()
-        .then(snekRaw => {
-          // Graduated snek tokens (source SNEKFUN_GRADUATE) already appear in the
-          // bulk /prices feed above with RICHER data (real price, changes, volume,
-          // txns). Keep only the snek-feed tokens NOT already in the bulk feed
-          // (pre-graduation bonding-curve tokens) so we never surface the partial
-          // snek snapshot in place of the rich one. Pass sparklineMap so these get
-          // mini-charts too.
-          const existing = new Set(allTokens.value.map(t => t.unit));
-          snekTokens.value = (snekRaw || [])
-            .map(tp => enrichWithStores(tp, sparklineMap))
-            .filter(t => !existing.has(t.unit));
-        })
-        .catch(() => { /* snek feed is optional — ignore failures */ });
+    marketApi.getSnekFunTokens()
+      .then(snekRaw => {
+        // Graduated snek tokens (source SNEKFUN_GRADUATE) already appear in the
+        // bulk /prices feed above with RICHER data (real price, changes, volume,
+        // txns). Keep only the snek-feed tokens NOT already in the bulk feed
+        // (pre-graduation bonding-curve tokens) so we never surface the partial
+        // snek snapshot in place of the rich one. Pass sparklineMap so these get
+        // mini-charts too.
+        const existing = new Set(allTokens.value.map(t => t.unit));
+        snekTokens.value = (snekRaw || [])
+          .map(tp => enrichWithStores(tp, sparklineMap))
+          .filter(t => !existing.has(t.unit));
+      })
+      .catch(() => { /* snek feed is optional — ignore failures */ });
 
-      // Solada bonding-curve tokens: same contract as the snek feed above (its
-      // graduates, source SOLADA_GRADUATE, are already in the bulk list).
-      marketApi.getSoladaTokens()
-        .then(soladaRaw => {
-          const existing = new Set(allTokens.value.map(t => t.unit));
-          soladaTokens.value = (soladaRaw || [])
-            .map(tp => enrichWithStores(tp, sparklineMap))
-            .filter(t => !existing.has(t.unit));
-        })
-        .catch(() => { /* Solada feed is optional — ignore failures */ });
-    }
+    // Solada bonding-curve tokens: same contract as the snek feed above (its
+    // graduates, source SOLADA_GRADUATE, are already in the bulk list).
+    marketApi.getSoladaTokens()
+      .then(soladaRaw => {
+        const existing = new Set(allTokens.value.map(t => t.unit));
+        soladaTokens.value = (soladaRaw || [])
+          .map(tp => enrichWithStores(tp, sparklineMap))
+          .filter(t => !existing.has(t.unit));
+      })
+      .catch(() => { /* Solada feed is optional — ignore failures */ });
 
     // Set adaData ref (used for native currency price display)
     adaData.value = {
@@ -552,7 +532,7 @@ export function getTokenImage(token: { unit?: string; ticker?: string; name?: st
   const override = applyTokenImageOverride(name, '');
   if (override) return override;
   const unit = token?.unit;
-  // Native token (ADA / AP3X) always uses the bundled chain logo.
+  // The native token always uses the bundled chain logo.
   if (!unit || unit === 'lovelace') return chainLogo;
   // Prefer market-data logo; then any image the token already carries
   // (e.g. on-chain metadata resolved for wallet assets in the Send flow); then chain logo.
@@ -576,7 +556,6 @@ function pollPrices(silent: boolean): void {
 // --- Cleanup ---
 
 let chainWatcherStop: WatchStopHandle | null = null;
-let coinGeckoWatcherStop: WatchStopHandle | null = null;
 
 function cleanup(): void {
   if (refreshInterval) {
@@ -586,10 +565,6 @@ function cleanup(): void {
   if (chainWatcherStop) {
     chainWatcherStop();
     chainWatcherStop = null;
-  }
-  if (coinGeckoWatcherStop) {
-    coinGeckoWatcherStop();
-    coinGeckoWatcherStop = null;
   }
   initialized = false;
 }
@@ -612,15 +587,6 @@ export function useMarketData() {
     chainWatcherStop = watch(() => walletStore.loggedWallet?.chain, () => {
       pollPrices(false);
     });
-  }
-
-  // Watch for CoinGecko cache updates — Apex wallets depend on this data arriving async
-  if (!coinGeckoWatcherStop) {
-    coinGeckoWatcherStop = watch(() => coinGeckoStore.cache, () => {
-      const chain = walletStore.loggedWallet?.chain;
-      const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
-      if (isApex) fetchAllTokens(true); // Silent — just updating prices
-    }, { deep: true });
   }
 
   // Track consumers to cleanup interval when no components are using it

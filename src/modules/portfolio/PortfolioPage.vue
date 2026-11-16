@@ -273,7 +273,7 @@
               >
                 <template v-slot:activator="{ props: activatorProps }">
                   <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || !showSolada || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || !showSolada || hasCustomColumns" dot color="primary" overlap>
                       <v-icon size="small">mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
@@ -312,30 +312,28 @@
                       </v-list-item-title>
                     </v-list-item>
 
-                    <!-- Column preferences (Cardano only) -->
-                    <template v-if="!isApex">
-                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
-                      <v-list-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-list-subheader>
-                      <v-list-item
-                        v-for="col in columnOptions"
-                        :key="col.key"
-                        @click="toggleColumn(col.key)"
-                        density="compact"
-                      >
-                        <div class="mr-2 g-list-action">
-                          <v-icon size="small" :color="columnPrefs[col.key] ? 'primary' : ''">
-                            {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                          </v-icon>
-                        </div>
-                        <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
-                      </v-list-item>
-                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
-                      <v-list-item density="compact" @click="resetToDefaults">
-                        <v-list-item-title style="font-size: 12px; color: var(--g-info);">
-                          {{ $t('market.resetColumns') }}
-                        </v-list-item-title>
-                      </v-list-item>
-                    </template>
+                    <!-- Column preferences -->
+                    <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                    <v-list-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-list-subheader>
+                    <v-list-item
+                      v-for="col in columnOptions"
+                      :key="col.key"
+                      @click="toggleColumn(col.key)"
+                      density="compact"
+                    >
+                      <div class="mr-2 g-list-action">
+                        <v-icon size="small" :color="columnPrefs[col.key] ? 'primary' : ''">
+                          {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </div>
+                      <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                    </v-list-item>
+                    <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                    <v-list-item density="compact" @click="resetToDefaults">
+                      <v-list-item-title style="font-size: 12px; color: var(--g-info);">
+                        {{ $t('market.resetColumns') }}
+                      </v-list-item-title>
+                    </v-list-item>
                   </v-list>
                 </v-card>
               </v-menu>
@@ -640,7 +638,7 @@ const searchQuery = ref('');
 const filterMenuOpen = ref(false);
 const verifiedOnly = ref(true);
 // The verified filter only means anything on Cardano mainnet — off-mainnet
-// chains (Apex, preprod, etc.) have no token registry to verify against, so
+// chains (preprod, etc.) have no token registry to verify against, so
 // gating on isMainnetCardano stops the filter from silently hiding real
 // holdings there (issue 1003).
 const verifiedFilterActive = computed(() => verifiedOnly.value && isMainnetCardano.value);
@@ -714,8 +712,8 @@ const adaOnlyChartData = computed(() => {
     // No synced tx history yet (common right after funding a preprod wallet):
     // seed a flat line at the current balance so the ADA value + chart still
     // render instead of collapsing to the "no-data" empty state. Scoped to
-    // non-mainnet Cardano only: on other chains (e.g. Apex) an empty tx list
-    // must stay an honest "no data" state so a real sync stall isn't masked.
+    // non-mainnet Cardano only: elsewhere an empty tx list must stay an
+    // honest "no data" state so a real sync stall isn't masked.
     const bal = adaBalance.value;
     if (isCardanoNonMainnet.value && bal > 0) {
       const now = currentTimestamp.value;
@@ -944,16 +942,12 @@ const hiddenByFilterCount = computed(() => {
 let skipNextOutsideClose = false;
 
 function openToken(token: MarketToken) {
-  // No detail panel for Apex wallets — no Cardano DEX data available
-  if (isApex.value) return;
   selectedToken.value = token;
   panelOpen.value = true;
   skipNextOutsideClose = true;
 }
 
 function openTokenByUnit(unit: string) {
-  // Same rule as openToken: the panel is Cardano DEX data, which an Apex token has none of.
-  if (isApex.value) return;
   // Holdings first: a held token the market feed does not list has no row in
   // allTokens, and global search links to it all the same.
   const token = myHoldings.value.find(t => t.unit === unit) ?? allTokens.value.find(t => t.unit === unit);
@@ -1041,13 +1035,9 @@ function handleBackupWallet() {
   instance?.proxy?.$emit('open-backup-dialog');
 }
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
 async function refreshPortfolioChart() {
   const address = loggedWallet.value?.baseAddress;
-  if (address && !isApex.value) {
+  if (address) {
     await refreshPortfolioData(address);
   }
 }
@@ -1067,7 +1057,7 @@ let currentAdaOnly = false;
 
 async function handleChartTimeframeChange(timeframe: string) {
   const address = loggedWallet.value?.baseAddress;
-  if (!address || isApex.value) return;
+  if (!address) return;
 
   currentTimeframe = timeframe;
   await loadForTimeframe(address, timeframe, currentAdaOnly);
@@ -1075,7 +1065,7 @@ async function handleChartTimeframeChange(timeframe: string) {
 
 async function handleChartModeChange(adaOnly: boolean) {
   const address = loggedWallet.value?.baseAddress;
-  if (!address || isApex.value) return;
+  if (!address) return;
 
   currentAdaOnly = adaOnly;
   await loadForTimeframe(address, currentTimeframe, adaOnly);
@@ -1137,7 +1127,7 @@ watch(
       // persists across wallet switches — same reason lastChartAddress exists).
       viewTouched = false;
     }
-    if (newAddress === lastChartAddress || isApex.value) return;
+    if (newAddress === lastChartAddress) return;
     if (!(Number(account.value?.controlled_amount) > 0) ||
       loggedWallet.value?.chain !== Blockchain.CARDANO ||
       loggedWallet.value?.network !== Network.MAINNET) {

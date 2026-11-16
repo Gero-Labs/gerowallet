@@ -27,7 +27,7 @@ import type { SearchResult } from '@/shared/composables/useGlobalSearch';
  */
 export type SearchGate =
   // Pages and actions
-  | 'cardanoFamily' // Cardano and its Apex forks: their assets, NFTs, collateral and portfolio views
+  | 'cardanoFamily' // Cardano wallets: their assets, NFTs, collateral and portfolio views
   | 'market' // market + watchlist views: Cardano mainnet only
   | 'transactions'
   | 'utxos'
@@ -112,7 +112,7 @@ export interface GateInputs {
 export function searchGates({ wallet, flags, hasBackupState, playlistLength, holdsCnight = false }: GateInputs): SearchGates {
   const chain = wallet?.chain ?? '';
   const network = wallet?.network ?? '';
-  const isCardanoFamily = chain === Blockchain.CARDANO || chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+  const isCardanoFamily = chain === Blockchain.CARDANO;
   const bitcoin = flags.isBitcoinEnabled();
   const governance = !!networks.resolveGovernanceSupport(chain, network) && flags.isGovernanceEnabled();
   const transactions = !!networks.resolveTransactionsSupport(chain, network);
@@ -139,9 +139,9 @@ export function searchGates({ wallet, flags, hasBackupState, playlistLength, hol
     mempool: !!networks.resolveMempoolSupport(chain, network) && bitcoin,
     lightning: !!networks.resolveLightningSupport(chain, network) && bitcoin,
     cashback: !!networks.resolveCashbackSupport(chain, network),
-    // The drawer only excludes Bitcoin and Apex Vector; the playlist is built
-    // from Cardano NFTs, so search names the chains it can come from.
-    mediaPlayer: isCardanoFamily && chain !== Blockchain.APEX_VECTOR && playlistLength > 0,
+    // The drawer only excludes Bitcoin; the playlist is built from Cardano
+    // NFTs, so search names the chain it can come from.
+    mediaPlayer: isCardanoFamily && playlistLength > 0,
     // Not chain features: the drawer shows these on every chain.
     blog: flags.isBlogEnabled() && !flags.isHelpCenterEnabled?.(),
     help: !!flags.isHelpCenterEnabled?.(),

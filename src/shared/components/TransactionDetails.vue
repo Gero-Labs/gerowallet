@@ -971,7 +971,7 @@ const metadataJson = computed((): string | null => {
   if (!cbor) {
     return null;
   }
-  // Cardano Tx CBOR is array (major type 4). Skip non-array (e.g. Apex bare TxBody).
+  // Cardano Tx CBOR is array (major type 4). Skip non-array (e.g. a bare TxBody).
   const firstByte = parseInt(cbor.slice(0, 2), 16);
   if ((firstByte >> 5) !== 4) {
     return null;
@@ -1047,9 +1047,9 @@ function toggleSection(key: SectionKey) {
 // ---------------------------------------------------------------------------
 // Explorer links
 // ---------------------------------------------------------------------------
-// The wallet's chosen explorer (Cardano) or its chain's only one (Apex Prime /
-// Vector → their apexscan hosts). Inline branches here once sent Vector wallets
-// to Cardano cexplorer (bug 954); keep every link on the shared helper.
+// The wallet's chosen explorer (Cardano) or its chain's only one. Inline
+// branches here once sent a wallet to another chain's explorer (bug 954);
+// keep every link on the shared helper.
 const { explorerUrl } = useExplorer();
 
 const transactionUrl = computed(() => explorerUrl('tx', liveTx.value['id']) || null);
