@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { extensionIdForKey, inspectReleaseArtifact } from './check-release-artifact.mjs';
 import {
-  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, checkUpgradeRehearsal, compareVersions, recoveryVersion, upgradeRehearsalTests,
+  API_ROOT, SCOPE, TOKEN_URI, accessToken, checkBeforeUpload, checkE2eQualification, checkOldPackage, checkUpgradeRehearsal, compareVersions, recoveryVersion, upgradeRehearsalTests,
   extensionIdForPublicKey, releaseToStore, storeClient, verifyStoreCandidate,
 } from './chrome-web-store.mjs';
 
@@ -314,7 +314,8 @@ describe('checkE2eQualification', () => {
 describe('checkUpgradeRehearsal', () => {
   const walletSha = 'a'.repeat(40);
   const id = ITEM;
-  const options = { walletSha, extensionId: id, oldVersion: '2.7.2', version: '2.8.0', recoveryVersion: '2.8.1' };
+  const oldSha = 'b'.repeat(40);
+  const options = { walletSha, extensionId: id, oldVersion: '2.7.2', oldSha, version: '2.8.0', recoveryVersion: '2.8.1' };
   const evidence = (changes = {}) => ({
     identityVerified: true,
     artifacts: [
@@ -362,6 +363,9 @@ describe('checkUpgradeRehearsal', () => {
     ['other versions', { passkey: { body: evidence({ artifacts: [
       { version: '2.7.1', id }, { version: '2.8.0', id, provenance: { sourceSha: walletSha } }, { version: '2.8.1', id, provenance: { sourceSha: walletSha } },
     ] }) } }, 'installed 2.7.1 → 2.8.0 → 2.8.1'],
+    ['another old commit, when the harness names one', { password: { body: evidence({ artifacts: [
+      { version: '2.7.2', id, provenance: { sourceSha: 'c'.repeat(40) } }, { version: '2.8.0', id, provenance: { sourceSha: walletSha } }, { version: '2.8.1', id, provenance: { sourceSha: walletSha } },
+    ] }) } }, 'started from another old release commit'],
     ['an unfinished stage', { password: { body: evidence({ stages: [{}, {}] }) } }, 'finished 2 of 3 stages'],
   ])('blocks %s', (_name, changes, reason) => {
     expect(check(changes)).toContain(reason);
@@ -387,6 +391,29 @@ describe('checkUpgradeRehearsal', () => {
   });
 });
 
+describe('checkOldPackage', () => {
+  const oldSha = 'b'.repeat(40);
+  const scope = { oldSha, oldVersion: '2.7.2', extensionId: ITEM };
+  const record = { ok: true, version: '2.7.2', extensionId: ITEM, sourceSha: oldSha, origin: 'rebuilt from ' + oldSha };
+
+  it('accepts the release named in the workflow, from its commit, under the store ID', () => {
+    expect(checkOldPackage(record, scope)).toEqual([]);
+  });
+
+  it.each([
+    ['another commit', { sourceSha: 'c'.repeat(40) }, `not ${oldSha}`],
+    ['another version', { version: '2.7.1' }, 'is 2.7.1, not 2.7.2'],
+    ['another ID', { extensionId: 'b'.repeat(32) }, 'under another extension ID'],
+  ])('blocks %s', (_name, changes, reason) => {
+    expect(checkOldPackage({ ...record, ...changes }, scope).join('\n')).toContain(reason);
+  });
+
+  it('blocks a missing record or an unset commit', () => {
+    expect(checkOldPackage(null, scope)).toEqual(['The old package kept no record of where it came from']);
+    expect(checkOldPackage(record, { ...scope, oldSha: '' })).toEqual(['The old release commit is not set']);
+  });
+});
+
 describe('recoveryVersion', () => {
   it('adds one to the last part', () => {
     expect(recoveryVersion('2.8.0')).toBe('2.8.1');
@@ -397,5 +424,10 @@ describe('recoveryVersion', () => {
   it('refuses anything that is not a Chrome version', () => {
     expect(() => recoveryVersion('v2.8.0')).toThrow('Chrome extension version');
     expect(() => recoveryVersion(undefined)).toThrow('Chrome extension version');
+  });
+
+  it('refuses a release whose last part has no successor', () => {
+    expect(recoveryVersion('2.8.65534')).toBe('2.8.65535');
+    expect(() => recoveryVersion('2.8.65535')).toThrow('at most 65535');
   });
 });

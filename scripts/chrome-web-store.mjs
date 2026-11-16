@@ -114,8 +114,29 @@ export const UPGRADE_REHEARSAL_METHODS = ['Password', 'PassKey'];
 export function recoveryVersion(version) {
   if (!VERSION.test(version ?? '')) throw new Error('--version must be a Chrome extension version such as 2.8.0');
   const parts = version.split('.');
-  parts[parts.length - 1] = String(Number(parts.at(-1)) + 1);
+  const last = Number(parts.at(-1)) + 1;
+  // Chrome refuses a version part above 65535.
+  if (last > 65535) throw new Error(`${version} has no next version: a Chrome version part is at most 65535`);
+  parts[parts.length - 1] = String(last);
   return parts.join('.');
+}
+
+const COMMIT = /^[0-9a-f]{40}$/;
+
+/**
+ * The record upgrade-fixtures kept beside the old package (release-evidence/artifact.json):
+ * it must be the release named at the top of the workflow, from its released commit,
+ * under the store's extension ID. The rehearsal's own evidence names the old version and
+ * ID, not its commit, so this is what ties the old stage to OLD_RELEASE_SHA.
+ */
+export function checkOldPackage(record, { oldSha, oldVersion, extensionId }) {
+  if (!COMMIT.test(oldSha ?? '')) return ['The old release commit is not set'];
+  if (!record) return ['The old package kept no record of where it came from'];
+  const problems = [];
+  if (record.sourceSha !== oldSha) problems.push(`The old package is from ${record.sourceSha ?? 'an unknown commit'}, not ${oldSha}`);
+  if (record.version !== oldVersion) problems.push(`The old package is ${record.version ?? 'of an unknown version'}, not ${oldVersion}`);
+  if (record.extensionId !== extensionId) problems.push('The old package is under another extension ID');
+  return problems;
 }
 
 function playwrightTests(suite, out = []) {
@@ -144,7 +165,7 @@ export function upgradeRehearsalTests(report) {
  * Unlike the e2e suites nothing may be skipped, and each security method must have
  * passed on THIS candidate, under the store's extension ID, through all three stages.
  */
-export function checkUpgradeRehearsal(report, { walletSha, extensionId, oldVersion, version, recoveryVersion }) {
+export function checkUpgradeRehearsal(report, { walletSha, extensionId, oldVersion, oldSha, version, recoveryVersion }) {
   const problems = [];
   const stats = report.stats ?? {};
   if (!VERSION.test(oldVersion ?? '')) problems.push('The old release version is not set');
@@ -165,6 +186,8 @@ export function checkUpgradeRehearsal(report, { walletSha, extensionId, oldVersi
       problems.push(`The ${method} rehearsal installed ${[old, candidate, recovery].map(item => item?.version ?? '?').join(' → ')}, not ${oldVersion} → ${version} → ${recoveryVersion}`);
     }
     if ([old, candidate, recovery].some(item => item?.id !== extensionId)) problems.push(`The ${method} rehearsal ran under another extension ID`);
+    // The harness may not record the old package's commit; when it does, it must agree.
+    if (old?.provenance?.sourceSha && old.provenance.sourceSha !== oldSha) problems.push(`The ${method} rehearsal started from another old release commit`);
     if (candidate?.provenance?.sourceSha !== walletSha) problems.push(`The ${method} rehearsal tested another wallet commit`);
     if (recovery?.provenance?.sourceSha !== walletSha) problems.push(`The ${method} rehearsal's recovery package is from another commit`);
     if ((evidence.stages ?? []).length !== 3) problems.push(`The ${method} rehearsal finished ${(evidence.stages ?? []).length} of 3 stages`);
@@ -339,10 +362,13 @@ async function main({ command, options }, env) {
   if (command === 'upgrade-gate') {
     const report = JSON.parse(readFileSync(options.results, 'utf8'));
     const expected = recoveryVersion(options.version);
-    const problems = checkUpgradeRehearsal(report, {
-      walletSha: options['wallet-sha'], extensionId: options['expected-id'],
-      oldVersion: options['old-version'], version: options.version, recoveryVersion: expected,
-    });
+    const scope = {
+      walletSha: options['wallet-sha'], extensionId: options['expected-id'], oldVersion: options['old-version'],
+      oldSha: options['old-sha'], version: options.version, recoveryVersion: expected,
+    };
+    let oldPackage = null;
+    try { oldPackage = JSON.parse(readFileSync(options['old-package'], 'utf8')); } catch { /* reported as missing */ }
+    const problems = [...checkOldPackage(oldPackage, scope), ...checkUpgradeRehearsal(report, scope)];
     // The evidence the run keeps, written whether or not the gate passes.
     if (options.summary) {
       writeFileSync(options.summary, `${JSON.stringify({ stats: report.stats ?? null, problems, tests: upgradeRehearsalTests(report) }, null, 2)}\n`);
