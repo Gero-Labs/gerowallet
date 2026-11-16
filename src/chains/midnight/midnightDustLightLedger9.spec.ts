@@ -12,8 +12,12 @@ import {
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 const root = (value: bigint | undefined) => value === undefined ? null : hex(ScaleBigInt.encode(value));
 
-/** Real ledger-9 transitions supply an independent event-replay oracle. */
-function fundedFixture() {
+/**
+ * Real ledger-9 transitions supply an independent event-replay oracle. One
+ * DUST chain spent three times; with `chains: 2`, a second chain backed by
+ * another NIGHT UTxO that is never spent.
+ */
+function fundedFixture({ chains = 1 }: { chains?: 1 | 2 } = {}) {
   const key = ledger.DustSecretKey.fromSeed(new Uint8Array(32).fill(73));
   const nightKey = ledger.signatureVerifyingKey(ledger.sampleSigningKey());
   let time = new Date((Math.floor(Date.now() / 1000) - 120) * 1000);
@@ -58,8 +62,15 @@ function fundedFixture() {
   chain = chain.testingDistributeNight(ledger.addressFromKey(nightKey), amount, time);
   apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'stagenet', amount,
     nightKey, 'ab'.repeat(32), new ledger.SignatureErased())));
-  for (let i = 0; i < 3; i++) {
-    const [, spend] = local.spend(key, local.utxos[0], 1n, time);
+  const spentBacking = local.utxos[0].backingNight;
+  if (chains === 2) {
+    chain = chain.testingDistributeNight(ledger.addressFromKey(nightKey), amount, time);
+    apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'stagenet', amount,
+      nightKey, 'cd'.repeat(32), new ledger.SignatureErased())));
+  }
+  const spends = 3;
+  for (let i = 0; i < spends; i++) {
+    const [, spend] = local.spend(key, local.utxos.find(coin => coin.backingNight === spentBacking)!, 1n, time);
     const intent = ledger.Intent.new(new Date(time.getTime() + 300000));
     intent.dustActions = new ledger.DustActions('signature', 'pre-proof', time, [spend], []);
     apply(ledger.Transaction.fromParts('stagenet', undefined, undefined, intent));
@@ -69,7 +80,8 @@ function fundedFixture() {
       chain.dust.utxo, BigInt(from), BigInt(to)).serialize()) });
   const snapshot: DustSnapshot = { version: 1, network: 'midnight-stagenet', block: {
     hash: 'cd'.repeat(32), height, timestamp: time.getTime(), protocolVersion: 2_001_100,
-    ledgerParameters: hex(chain.parameters.serialize()), dustGenerationEndIndex: 1, dustCommitmentEndIndex: 4,
+    ledgerParameters: hex(chain.parameters.serialize()), dustGenerationEndIndex: initial.length,
+    dustCommitmentEndIndex: initial.length + spends,
     dustGenerationMerkleTreeRoot: root(local.generatingTreeRoot()), dustCommitmentMerkleTreeRoot: root(local.commitmentTreeRoot()),
   }, generations: initial.map(({ coin, generation, index }) => ({ __typename: 'DustGenerationsItem',
     generationMtIndex: index, commitmentMtIndex: Number(coin.mtIndex), owner: hex(ScaleBigInt.encode(key.publicKey)),
@@ -82,7 +94,7 @@ function fundedFixture() {
       transactions: transactions.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })),
     commitments: vi.fn(async (_block, ranges) => ranges.map(r => update(r.startIndex, r.endIndex))),
   };
-  return { key, local, snapshot, transport };
+  return { key, local, snapshot, transport, spentBacking };
 }
 
 describe('funded ledger-9 DUST projection', () => {
@@ -355,6 +367,32 @@ describe('DUST checkpoint review fixes', () => {
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
       expect(new Set(ranges)).toEqual(new Set([dustWarmScanStart(cold.checkpoint!.checkedThrough, 2, 0)]));
+    } finally { f.key.clear(); }
+  });
+
+  it('resumes one chain from the checkpoint and scans another, absent from it, from the start in the same build', async () => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      expect(f.snapshot.generations).toHaveLength(2);
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      expect(cold.state.utxos).toEqual(f.local.utxos);
+      const heads = cold.checkpoint!.heads;
+      const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
+      expect(Object.keys(heads)).toHaveLength(2);
+      // Only the spent chain is in the checkpoint: the other one is new to it.
+      const partial = { checkedThrough: cold.checkpoint!.checkedThrough, heads: { [spent]: heads[spent] } };
+      const starts = new Set<number>();
+      const transport: DustLightTransport = { ...f.transport, spends: async (block, prefixes, fromBlock, toBlock) => {
+        starts.add(fromBlock);
+        const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+        return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
+      } };
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: partial, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
+      expect(starts).toEqual(new Set([0, cold.checkpoint!.checkedThrough + 1]));
+      expect(warm.checkpoint).toEqual(cold.checkpoint);
     } finally { f.key.clear(); }
   });
 
