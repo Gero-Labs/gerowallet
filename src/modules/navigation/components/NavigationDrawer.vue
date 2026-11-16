@@ -275,6 +275,7 @@ import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotificatio
 import { GOVERNANCE_ITEMS } from '@/modules/navigation/components/governanceNav';
 import { prefetchPage } from '@/modules/navigation/lazyPage';
 import { accountGroup, canAddAccounts, conflictingWalletNames, secretsWalletId, walletDisplayName } from '@/shared/utils/walletAccount';
+import { supportedWallets } from '@/shared/utils/supportedWallet';
 
 interface NavigationItem {
   title?: string;
@@ -588,7 +589,7 @@ const isNameValid = computed(() => {
   if (!v || v.length < 3 || v.length > 40) return false
   if (v === account.value?.name) return false
   // An added account is named within its wallet; any other wallet among the top-level ones.
-  return !!loggedRecord.value && !conflictingWalletNames(loggedRecord.value, wallets.value).includes(v)
+  return !!loggedRecord.value && !conflictingWalletNames(loggedRecord.value, supportedWallets(wallets.value)).includes(v)
 })
 
 // Accounts of the logged wallet's device (multi-account). The record from the wallet

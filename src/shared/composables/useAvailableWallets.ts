@@ -1,6 +1,6 @@
 import { computed, ComputedRef, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
-import networks from '@/utils/networks';
+import { isOnSupportedNetwork } from '@/shared/utils/supportedWallet';
 import { Wallet, WalletType } from '@/models/types';
 
 /**
@@ -24,7 +24,7 @@ export function useAvailableWallets(): {
   const availableWallets = computed<Wallet[]>(() =>
     (Object.values(wallets.value) as Wallet[]).filter(
       (wallet: Wallet) =>
-        !!networks.resolveNetwork(wallet?.chain, wallet?.network)
+        isOnSupportedNetwork(wallet)
         && (wallet.type !== WalletType.Google || wallet.encryptionMethod === 'mpc'),
     ));
 

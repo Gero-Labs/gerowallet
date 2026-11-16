@@ -55,6 +55,7 @@ import {
 import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
 import { canReplaceWalletKey } from '@/db/walletIdentity';
 import networks from '@/utils/networks';
+import { isOnRemovedNetwork } from '@/shared/utils/supportedWallet';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -250,7 +251,7 @@ loadWallets().then(async () => {
   }
   // Nor a wallet on a network this build no longer has: the wallet lists hide it
   // (useAvailableWallets), so a session left open on one ends here.
-  if (isOnRemovedNetwork(walletStore.loggedWallet)) {
+  if (walletStore.loggedWallet && (await recordIsOnRemovedNetwork(walletStore.loggedWallet))) {
     WalletStore.logout();
   }
 
@@ -4315,13 +4316,27 @@ async function loginRequiresUnlock(requested: { id?: unknown } | null | undefine
   }
 }
 
-/** A wallet whose chain and network name no entry of `networks.ts`: one this build no longer supports. */
-function isOnRemovedNetwork(wallet: { chain?: string; network?: string } | null | undefined): boolean {
-  return !!wallet?.chain && !!wallet.network && !networks.resolveNetwork(wallet.chain, wallet.network);
+/**
+ * Whether the wallet is on a network this build no longer has. The stored record
+ * decides, as it does at login (walletManager takes chain and network from it,
+ * never from the object passed in): a request naming another chain, or none,
+ * cannot open such a record, and a stale copy in walletStore cannot close a
+ * record a migration has since moved. With no record, or none readable, the
+ * object given is judged.
+ */
+async function recordIsOnRemovedNetwork(wallet: { id?: unknown; chain?: string; network?: string } | null | undefined): Promise<boolean> {
+  let stored: { chain?: string; network?: string } | undefined;
+  if (typeof wallet?.id === 'number') {
+    try {
+      const { getDb } = await import('@/db/gero-db');
+      stored = await (await getDb())['wallets'].get(wallet.id);
+    } catch { /* unreadable: judge what was given */ }
+  }
+  return isOnRemovedNetwork(stored ?? wallet);
 }
 
 async function loginWallet(wallet: Parameters<typeof walletManager.login>[0]) {
-  if (isOnRemovedNetwork(wallet)) return null;
+  if (await recordIsOnRemovedNetwork(wallet)) return null;
   const requireUnlock = await loginRequiresUnlock(wallet);
   const walletBg = await walletManager.login(wallet, { requireUnlock });
   if (walletBg) {

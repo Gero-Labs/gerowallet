@@ -202,6 +202,7 @@ import { DEFAULT_CARDANO_EXPLORER } from '@/shared/utils/explorer';
 import { EXPLORER_LOGOS } from '@/shared/utils/explorerLogos';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { accountGroup, cardanoAccountPath, conflictingWalletNames } from '@/shared/utils/walletAccount';
+import { supportedWallets } from '@/shared/utils/supportedWallet';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinKeyManager';
 import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
@@ -294,7 +295,8 @@ const profilePicDialog = ref<InstanceType<typeof ProfilePictureDialog>>();
 // The stored record, so its account fields are current; loggedWallet is the login-time copy.
 const loggedRecord = computed(() => (loggedWallet.value ? wallets.value[loggedWallet.value.id] ?? loggedWallet.value : null));
 // An added account is named within its wallet; any other wallet among the top-level ones.
-const otherWalletNames = computed(() => (loggedRecord.value ? conflictingWalletNames(loggedRecord.value, wallets.value) : []));
+// A wallet the lists hide (its network left the build) holds no name.
+const otherWalletNames = computed(() => (loggedRecord.value ? conflictingWalletNames(loggedRecord.value, supportedWallets(wallets.value)) : []));
 // Shown once a wallet has more than one account, so it is clear which one this is.
 const accountPath = computed(() => {
   const record = loggedRecord.value;

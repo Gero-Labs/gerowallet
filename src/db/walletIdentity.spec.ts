@@ -86,6 +86,15 @@ describe('findDuplicateWallet', () => {
     expect(findDuplicateWallet(cardano({ network: Network.PREPROD }), stored)).toBeNull();
   });
 
+  it('allows the same key on a different chain', () => {
+    // A record left behind by a chain this build no longer has (the Cardano forks
+    // shared the CIP-1852 xpub) must not turn a Cardano restore of the same
+    // phrase into a duplicate: the chain is the only thing keeping them apart.
+    const stored = [cardano({ chain: 'Apex Fusion Prime' })];
+    expect(findDuplicateWallet(cardano(), stored)).toBeNull();
+    expect(findDuplicateWallet(cardano({ chain: 'Apex Fusion Prime' }), [cardano()])).toBeNull();
+  });
+
   it('allows a Bitcoin restore of a seed already restored on Cardano', () => {
     const stored = [cardano()];
     const btc = { chain: Blockchain.BITCOIN, network: Network.MAINNET, publicKey: BITCOIN_XPUB };
