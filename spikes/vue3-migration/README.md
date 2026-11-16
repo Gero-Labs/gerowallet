@@ -28,7 +28,10 @@ from the pilot's independently locked packages. Review these deliverables:
   its primary work package, routes, feature guards, and audit drift.
 - [Route validation matrix](ROUTE-MATRIX.md): every route in the current
   routers, its V07–V11 owner and the unit, guard, Help browser, E2E or manual
-  check that covers it. Generated from [route-matrix.json](route-matrix.json).
+  check that covers it, plus the V02 behaviours (async validation, answering a
+  request exactly once, worker restart, lock/unlock, two UIs, wallet and network
+  switch, persistence) with their owners, tests and stated gaps. Generated from
+  [route-matrix.json](route-matrix.json).
 - [Capacity and ownership](capacity.json): the user-confirmed execution model
   and the remaining scheduling decisions.
 - [Vue 2 baseline results](evidence/baseline.json): exact commands, outcomes,
