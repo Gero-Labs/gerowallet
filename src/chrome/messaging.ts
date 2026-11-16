@@ -3,6 +3,7 @@ import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
 import { claimedOriginMatchesSender } from './originBinding';
 import { BITCOIN_DAPP_ENABLED, isDappMethodAvailable } from './bitcoinDappGate';
+import { toMidnightConnectorError } from './midnightConnectorError';
 
 interface Message {
   method?: string;
@@ -71,6 +72,8 @@ const MIDNIGHT_METHOD_VALUES: Set<string> = new Set(Object.values(MIDNIGHT_METHO
  * (`{type:'DAppConnectorAPIError', code:'Rejected', reason, message}`) —
  * without this, a dapp doing spec-correct `error.code === 'Rejected'`
  * checking would fail to recognize a plain window-close as a normal decline.
+ * It stays a plain object here because chrome messaging cannot carry an
+ * Error; the page's `sendToContent` turns it into one (`toPageError`).
  */
 function popupDisconnectedError(request: Message): unknown {
   if (request.method && MIDNIGHT_METHOD_VALUES.has(request.method)) {
@@ -82,6 +85,17 @@ function popupDisconnectedError(request: Message): unknown {
     };
   }
   return APIError.Refused;
+}
+
+/**
+ * The rejection `sendToContent` hands the page for an error reply. Midnight
+ * connector methods get a spec `APIError` (an Error carrying type, code and
+ * reason; see midnightConnectorError.ts), since the reply crossed
+ * `window.postMessage` as a plain object. CIP-30, Bitcoin and WalletConnect
+ * callers keep the `{code, info}` object they expect.
+ */
+export function toPageError(method: string, error: unknown): unknown {
+  return MIDNIGHT_METHOD_VALUES.has(method) ? toMidnightConnectorError(error) : error;
 }
 
 /**
@@ -403,7 +417,7 @@ export const Messaging = {
         )
           return;
         window.removeEventListener('message', responseHandler);
-        if (response.error) reject(response.error);
+        if (response.error) reject(toPageError(method, response.error));
         else resolve(response);
       }
       window.addEventListener('message', responseHandler);
