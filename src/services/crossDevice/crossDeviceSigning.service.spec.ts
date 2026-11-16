@@ -392,6 +392,14 @@ describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
     };
   }
 
+  // requestSignature() signs its SIGN_REQUEST (async ed25519) before sending it,
+  // and a re-issue waits for the poll and the registry lookup. A fixed sleep
+  // raced both on a loaded CI runner (sent[0] still empty), so wait for the send
+  // itself. The 1 ms interval keeps the gap between the send (which starts the
+  // ttl) and the next step short.
+  const waitForSent = (bus: { sent: SignRequest[] }, count: number) =>
+    vi.waitFor(() => { if (bus.sent.length < count) throw new Error(`waiting for SIGN_REQUEST ${count}`); }, { timeout: 5000, interval: 1 });
+
   it('pauses the ttl on WAKE_PENDING, re-issues a fresh request when the target reconnects', async () => {
     const bus = makeManualBus();
     let approverOnline = false;
@@ -406,23 +414,23 @@ describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
     });
 
     let settled: SignDecision | null = null;
-    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 200 });
     void resultP.then((d) => { settled = d; });
 
-    await new Promise((r) => setTimeout(r, 15));
+    await waitForSent(bus, 1);
     expect(bus.sent.length).toBe(1);
     expect(bus.sent[0].to).toBe(approverId);
     const firstReqId = bus.sent[0].reqId;
 
-    // Relay: target offline -> WAKE_PENDING must PAUSE the 60ms ttl.
+    // Relay: target offline -> WAKE_PENDING must PAUSE the 200ms ttl.
     bus.publish({ type: 'WAKE_PENDING', reqId: firstReqId, to: approverId });
-    await new Promise((r) => setTimeout(r, 90)); // past the original ttl
+    await new Promise((r) => setTimeout(r, 300)); // past the original ttl
     expect(settled).toBeNull();            // not rejected: ttl was paused
     expect(bus.sent.length).toBe(1);       // not re-issued: still offline
 
     // Target reconnects -> poll re-issues a FRESH request.
     approverOnline = true;
-    await new Promise((r) => setTimeout(r, 30));
+    await waitForSent(bus, 2);
     expect(bus.sent.length).toBe(2);
     const secondReqId = bus.sent[1].reqId;
     expect(secondReqId).not.toBe(firstReqId);
@@ -451,8 +459,9 @@ describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
       wakeWindowMs: 40,
     });
 
-    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
-    await new Promise((r) => setTimeout(r, 10));
+    // The ttl is not under test here: long enough that only the wake path can settle.
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 10_000 });
+    await waitForSent(bus, 1);
     bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
 
     const result = await resultP;
@@ -473,8 +482,9 @@ describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
       wakePollMs: 5,
       wakeWindowMs: 1000,
     });
-    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
-    await new Promise((r) => setTimeout(r, 10));
+    // The ttl is not under test here: long enough that only the wake path can settle.
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 10_000 });
+    await waitForSent(bus, 1);
     bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
     await new Promise((r) => setTimeout(r, 10)); // now in the wake-wait, polling
     const before = bus.sent.length;
@@ -501,10 +511,13 @@ describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
       wakePollMs: 5,
       wakeWindowMs: 1000,
     });
-    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 500 });
-    await new Promise((r) => setTimeout(r, 10));
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 10_000 });
+    await waitForSent(bus, 1);
     bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
-    await new Promise((r) => setTimeout(r, 90)); // several poll ticks overlap the slow resolve
+    await waitForSent(bus, 2);
+    // Let more poll ticks and slow lookups overlap: a missing in-flight guard
+    // would re-issue again during this window.
+    await new Promise((r) => setTimeout(r, 90));
 
     expect(bus.sent.length).toBe(2); // exactly one re-issue, not several
 
