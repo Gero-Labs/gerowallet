@@ -302,6 +302,9 @@ function getDefaultAddressType(chain: string): string {
       // unshielded, Dust). The wallet manages all three; the addressType field
       // stores 'unshielded' as the default receive address category.
       return 'unshielded';
+    case Blockchain.SOLANA:
+      // One ed25519 key per account (m/44'/501'/n'/0'); its base58 public key is the address.
+      return 'ed25519';
     default:
       return 'unknown';
   }
@@ -362,6 +365,12 @@ export async function deriveWalletPublicKey(
   if (chain === Blockchain.BITCOIN) {
     const { deriveBitcoinAccountXpub } = await import('@/chains/bitcoin/bitcoinKeyManager');
     return deriveBitcoinAccountXpub(mnemonic, network, addressType);
+  }
+
+  if (chain === Blockchain.SOLANA) {
+    // Solana: account #0's address (base58 ed25519 public key at m/44'/501'/0'/0').
+    const { deriveSolanaAddressFromMnemonic } = await import('@/chains/solana/solanaKeyManager');
+    return deriveSolanaAddressFromMnemonic(mnemonic, 0);
   }
 
   if (chain === Blockchain.MIDNIGHT) {
@@ -473,6 +482,11 @@ export async function createNewWallet(
     // wallet record under `publicKey`.
     const seed: Uint8Array = bip39.mnemonicToSeedSync(mnemonic);
     rootKey = { privateKey: seed };
+  } else if (chain === Blockchain.SOLANA) {
+    // Solana stores the 64-byte BIP-39 seed, like Midnight: every account's ed25519 key
+    // (SLIP-0010, all levels hardened) derives from it, so added accounts need no phrase.
+    const { solanaSeedFromMnemonic } = await import('@/chains/solana/solanaKeyManager');
+    rootKey = { privateKey: solanaSeedFromMnemonic(mnemonic) };
   } else {
     // Cardano key derivation (existing logic)
     rootKey = resolvePrivateKey(mnemonic);
@@ -546,8 +560,8 @@ export async function createNewWallet(
     try {
       // Step 3: Encrypt private key using PRF output (no additional prompt)
       // Extract key bytes based on chain
-      const keyBytes = (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT)
-        ? rootKey.privateKey  // Bitcoin/Midnight: { privateKey: Uint8Array }
+      const keyBytes = (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA)
+        ? rootKey.privateKey  // Bitcoin/Midnight/Solana: { privateKey: Uint8Array }
         : rootKey.bytes();    // Cardano: Bip32PrivateKey has bytes() method
 
       const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
@@ -624,7 +638,7 @@ export async function createNewWallet(
     // Root key bytes per chain: Bitcoin/Midnight store the raw key bytes, Cardano
     // the 96-byte Bip32 key. One strong layer either way (the old crypto-ts outer
     // wrap is gone, see decryptPrivateKey), and gpw2 once the envelope flag is on.
-    const keyBytes: Uint8Array = chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT
+    const keyBytes: Uint8Array = chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA
       ? rootKey.privateKey
       : rootKey.bytes();
     const encryptedPrivateKey: string = await sealKeySecret(keyBytes, password, SecretPurpose.RootKey);

@@ -47,7 +47,7 @@ export async function deriveAccountXpubFlow(
   if (!canAddAccounts(wallet) || isHardwareWallet(wallet)) throw new AddAccountError('not-supported');
   const [accountIndex] = assertAccountIndices([input.accountIndex]);
   if (accountIndex === 0) throw new AddAccountError('not-supported');
-  if (wallet.chain === Blockchain.BITCOIN || wallet.chain === Blockchain.MIDNIGHT) {
+  if (wallet.chain === Blockchain.BITCOIN || wallet.chain === Blockchain.MIDNIGHT || wallet.chain === Blockchain.SOLANA) {
     return phraseAccountKey(wallet, accountIndex, input.password, deps);
   }
 
@@ -80,9 +80,10 @@ export async function deriveAccountXpubFlow(
 }
 
 /**
- * A Bitcoin account's xpub, or a Midnight account's addresses JSON, from the
- * wallet's recovery phrase. The phrase must derive the wallet's own account #0:
- * a Bitcoin xpub exactly (base58), a Midnight one by its unshielded address.
+ * A Bitcoin account's xpub, a Midnight account's addresses JSON, or a Solana
+ * account's address, from the wallet's recovery phrase. The phrase must derive the
+ * wallet's own account #0: a Bitcoin xpub or Solana address exactly (base58), a
+ * Midnight one by its unshielded address.
  */
 async function phraseAccountKey(wallet: Wallet, accountIndex: number, password: unknown, deps: DeriveAccountXpubDeps): Promise<string> {
   if (wallet.encryptionMethod === 'prf' || !wallet.encryptedMnemonic) throw new AddAccountError('not-supported');

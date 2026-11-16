@@ -25,6 +25,58 @@ import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
+import solanaLogo from '@/assets/svg/solana.svg';
+
+/** Solana entries share everything but their network, title and ticker. Every feature is off until it's built. */
+function solanaNetwork(network: string, title: string, networkId: number, ticker: string): NetworkInfo {
+  return {
+    icon: solanaLogo,
+    iconColor: 'purple',
+    title,
+    blockchain: Blockchain.SOLANA,
+    network,
+    supportedHardware: false,
+    networkId,
+    currencySymbol: ticker,
+    currencyTicker: ticker,
+    currencyName: network === Network.MAINNET ? 'Solana' : 'Solana Devnet',
+    currencyDescription: 'Solana Native Currency',
+    currencyImage: solanaLogo,
+    protocolParams: {
+      min_fee_a: 0,
+      min_fee_b: 0,
+      max_tx_size: 1232,
+      min_utxo_value: '0',
+      key_deposit: '0',
+      pool_deposit: '0',
+      max_val_size: 0,
+      price_mem: 0,
+      price_step: 0,
+      coins_per_utxo_size: '0',
+    },
+    geroPool: '',
+    defaultProvider: Provider.UNDEFINED,
+    cashbackSupport: false,
+    stakingSupport: false,
+    governanceSupport: false,
+    daoSupport: false,
+    // Off until the Solana send flow exists: every other send path is Cardano/Bitcoin-shaped.
+    transactionSupport: false,
+    swapSupport: false,
+    buySupport: false,
+    perpetualsSupport: false,
+    geroCardSupport: false,
+    goMiningSupport: false,
+    babylonSupport: false,
+    ordinalsSupport: false,
+    thorchainSupport: false,
+    mempoolSupport: false,
+    lightningSupport: false,
+    networkParams: {
+      networkMagic: 0,
+    },
+  };
+}
 
 export interface NetworkInfo {
   icon: string;
@@ -580,6 +632,12 @@ export default {
         networkMagic: 0
       }
     },
+    // Solana: behind isSolanaEnabled. While it is off, NetworkSelector leaves the family
+    // out entirely (no "Soon" tile). Nexus and Gero Sync serve mainnet and devnet only.
+    // Mainnet stays comingSoon until sync and send ship; Devnet is pickable in dev mode only
+    // (NetworkSelector needs a live mainnet for regular users).
+    { ...solanaNetwork(Network.MAINNET, 'Solana Mainnet', 0, 'SOL'), comingSoon: true },
+    solanaNetwork(Network.DEVNET, 'Solana Devnet', 1, 'SOL'),
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);

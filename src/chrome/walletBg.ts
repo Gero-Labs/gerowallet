@@ -269,6 +269,11 @@ export class WalletBg {
         this.baseAddress = '';
       }
       this.stakeAddress = '';
+    } else if (this.chain === Blockchain.SOLANA) {
+      // Solana: the record's publicKey is the account's base58 address (m/44'/501'/n'/0').
+      // No staking address; Gero Sync subscribes by this address.
+      this.baseAddress = this.publicKey ?? '';
+      this.stakeAddress = '';
     } else if (wallet.type === WalletType.Watch) {
       // Dev-only watch wallet: read-only, no keys. The watched base address is
       // stored on the record; the stake address is derived from it, and
