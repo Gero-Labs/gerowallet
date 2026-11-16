@@ -90,6 +90,15 @@ const ESPLORA_PROVIDERS = {
   ],
 };
 
+/**
+ * The HTTP status when an Esplora error should fall through to the next
+ * provider (429 rate-limited or 5xx), otherwise undefined.
+ */
+function retryableStatus(err: unknown): number | undefined {
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  return status !== undefined && (status === 429 || (status >= 500 && status < 600)) ? status : undefined;
+}
+
 export class BitcoinApi extends Api {
   constructor(wallet: { chain?: string; network?: string } | null | undefined, provider: Provider) {
     super(wallet, provider);
@@ -112,8 +121,8 @@ export class BitcoinApi extends Api {
         const api = axios.create({ baseURL, timeout: 30000, headers: { 'Content-Type': 'application/json' } });
         return await request(api);
       } catch (err: unknown) {
-        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-        if (status !== undefined && (status === 429 || (status >= 500 && status < 600))) {
+        const status = retryableStatus(err);
+        if (status !== undefined) {
           console.warn(`⛓ Bitcoin API: ${baseURL} returned ${status}, trying next provider…`);
           lastError = err;
           continue;
@@ -141,9 +150,8 @@ export class BitcoinApi extends Api {
         const { data } = await api.get<BitcoinUtxo[]>(`/address/${address}/utxo`);
         if (data.length > 0) return data;
       } catch (err: unknown) {
-        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         // Only skip to next provider for rate-limit / server errors
-        if (status !== undefined && (status === 429 || (status >= 500 && status < 600))) continue;
+        if (retryableStatus(err) !== undefined) continue;
         throw err;
       }
     }
@@ -247,8 +255,7 @@ export class BitcoinApi extends Api {
           break;
         }
       } catch (err: unknown) {
-        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-        if (status !== undefined && (status === 429 || (status >= 500 && status < 600))) continue;
+        if (retryableStatus(err) !== undefined) continue;
         throw err;
       }
     }

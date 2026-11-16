@@ -23,7 +23,7 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 
 /** Error text for the UI: the thrown message, or a translated fallback. */
-const vaultError = (e: unknown): string => getErrorMessage(e, String(i18n.t('common.somethingWentWrong')));
+const vaultError = (e: unknown): string => getErrorMessage(e, i18n.t('common.somethingWentWrong'));
 
 // ---------------------------------------------------------------------------
 // Computed
