@@ -143,7 +143,9 @@ function verifyE2e() {
   return found;
 }
 
-const cell = text => String(text).replace(/\|/g, '\\|');
+// Escape backslashes before pipes, so a trailing backslash cannot unescape the
+// pipe that follows it and split the table cell.
+const cell = text => String(text).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 const code = text => '`' + text + '`';
 function gates(route) {
   const items = [];
