@@ -6,11 +6,14 @@
 //   node spikes/vue3-migration/route-matrix.mjs           regenerate the document
 //   node spikes/vue3-migration/route-matrix.mjs --check   fail if the routers, the
 //                                                          JSON or the document disagree
+//   ... --e2e <gerowallet-e2e-tests checkout>             also check each E2E reference:
+//                                                          the spec exists at harnessSha
+//                                                          and names the route's path
 //
 // Reads the working tree (tracked files only), so it runs in a shallow CI checkout.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -19,8 +22,12 @@ import { localResolver, routeInventory } from './routes.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const here = 'spikes/vue3-migration';
 const args = process.argv.slice(2);
-assert(args.every(arg => arg === '--check'), 'Usage: node spikes/vue3-migration/route-matrix.mjs [--check]');
+const usage = 'Usage: node spikes/vue3-migration/route-matrix.mjs [--check] [--e2e <gerowallet-e2e-tests checkout>]';
+assert(args.every((arg, index) => ['--check', '--e2e'].includes(arg) || args[index - 1] === '--e2e'), usage);
 const check = args.includes('--check');
+const e2eIndex = args.indexOf('--e2e');
+assert(e2eIndex < 0 || args[e2eIndex + 1], usage);
+const e2eRoot = e2eIndex < 0 ? null : path.resolve(args[e2eIndex + 1]);
 
 const ROUTERS = [['src/modules/navigation/router.ts', 'options'], ['src/sidepanel/router.ts', 'sidepanel']];
 const KINDS = ['unit', 'guards', 'help-browser', 'e2e', 'manual'];
@@ -56,14 +63,50 @@ for (const [key, entry] of Object.entries(matrix.routes)) {
     else if (item.kind === 'guards' && item.ref !== 'src/modules/navigation/router.guards.spec.ts') problems.push(`${key}: guards must reference router.guards.spec.ts`);
     else if (item.kind === 'e2e' && !E2E_REF.test(item.ref)) problems.push(`${key}: ${item.ref} is not a tests/specs path`);
     if (item.funded !== undefined && (item.kind !== 'e2e' || item.funded !== true)) problems.push(`${key}: funded is only for e2e checks`);
+    if (item.via !== undefined && (item.kind !== 'e2e' || typeof item.via !== 'string' || !item.via)) problems.push(`${key}: via is a non-empty string, only on e2e checks`);
   }
-  if (!automatedChecks(entry).length && !entry.manual) problems.push(`${key}: no automated check that runs unfunded, so a manual step is required`);
+  if (entry.via !== undefined) problems.push(`${key}: via belongs on an e2e check, not the route`);
 }
+// A route that renders a view needs a check that renders it (unit, Help browser
+// or unfunded E2E) or a manual step; the guard spec only proves where the router
+// lands. A redirect or catch-all has no view, so a guard check covers it.
+for (const route of routes) {
+  const entry = matrix.routes[routeKey(route)];
+  if (!entry) continue;
+  if (route.component ? !viewChecks(entry).length && !entry.manual : !entry.checks.some(item => item.kind === 'guards') && !entry.manual) {
+    problems.push(`${routeKey(route)}: ${route.component ? 'no check renders this view' : 'no guard check covers this redirect'}, so a manual step is required`);
+  }
+}
+if (e2eRoot) problems.push(...verifyE2e());
 assert.equal(problems.length, 0, `route-matrix.json does not match the routers:\n  ${problems.join('\n  ')}`);
 
-/** Checks that run without a funded wallet, a device or a live provider. */
-function automatedChecks(entry) {
-  return entry.checks.filter(item => !item.funded);
+/** Checks that render the route's view without a funded wallet, a device or a live provider. */
+function viewChecks(entry) {
+  return entry.checks.filter(item => !item.funded && item.kind !== 'guards');
+}
+
+/**
+ * Optional check against a local gerowallet-e2e-tests checkout: the checkout is
+ * at harnessSha, each referenced spec exists, and it names the route's static
+ * path prefix (or the check says `via` how it reaches the route).
+ */
+function verifyE2e() {
+  const found = [];
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: e2eRoot, encoding: 'utf8', timeout: 10000 }).trim();
+  if (head !== matrix.e2e.harnessSha) found.push(`e2e checkout is at ${head}, not harnessSha ${matrix.e2e.harnessSha}`);
+  const specs = path.join(e2eRoot, 'tests', 'specs');
+  for (const route of routes) {
+    const entry = matrix.routes[routeKey(route)];
+    const needle = route.path.split(/[:(]/)[0].replace(/\/+$/, '');
+    for (const item of entry?.checks.filter(check => check.kind === 'e2e') ?? []) {
+      // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
+      const file = path.resolve(specs, item.ref);
+      if (!file.startsWith(specs + path.sep) || !existsSync(file)) { found.push(`${routeKey(route)}: ${item.ref} does not exist in the e2e checkout`); continue; }
+      if (item.via || !needle) continue;
+      if (!readFileSync(file, 'utf8').includes(needle)) found.push(`${routeKey(route)}: ${item.ref} never names ${needle}; fix the reference or say how it gets there with via`);
+    }
+  }
+  return found;
 }
 
 const cell = text => String(text).replace(/\|/g, '\\|');
@@ -82,18 +125,23 @@ function gates(route) {
   if (route.redirect) items.push(typeof route.redirect === 'string' ? `redirect ${code(route.redirect)}` : 'redirect (computed)');
   return [...new Set(items)].join(', ') || '-';
 }
+const label = item => `${item.kind}: ${code(item.ref.replace(/^src\//, ''))}${item.funded ? ' (funded)' : ''}${item.via ? ` (via ${item.via})` : ''}`;
 function checks(entry) {
-  const lines = entry.checks.map(item => `${item.kind}: ${code(item.ref.replace(/^src\//, ''))}${item.funded ? ' (funded)' : ''}`);
+  const lines = entry.checks.map(label);
   if (entry.note) lines.push(`_${entry.note}_`);
   return lines.join('<br>') || '-';
 }
 
 const owners = ['V04', 'V07', 'V08', 'V09', 'V10', 'V11'];
 const byOwner = Object.fromEntries(owners.map(owner => [owner, routes.filter(route => route.primary === owner).length]).filter(([, count]) => count));
-const manualOnly = routes.filter(route => !automatedChecks(matrix.routes[routeKey(route)]).length);
-const fundedOnly = routes.filter(route => {
+const views = routes.filter(route => route.component);
+const redirects = routes.filter(route => !route.component);
+const viewCovered = views.filter(route => viewChecks(matrix.routes[routeKey(route)]).length);
+const manualOnly = views.filter(route => !viewChecks(matrix.routes[routeKey(route)]).length);
+const guardOnly = manualOnly.filter(route => matrix.routes[routeKey(route)].checks.some(item => item.kind === 'guards'));
+const fundedOnly = views.filter(route => {
   const entry = matrix.routes[routeKey(route)];
-  return entry.checks.some(item => item.funded) && !automatedChecks(entry).some(item => item.kind === 'e2e');
+  return entry.checks.some(item => item.funded) && !viewChecks(entry).some(item => item.kind === 'e2e');
 });
 const withManual = routes.filter(route => matrix.routes[routeKey(route)].manual);
 
@@ -102,9 +150,9 @@ const lines = [
   '',
   '<!-- Generated by `node spikes/vue3-migration/route-matrix.mjs` from the two routers and `route-matrix.json`. Edit the JSON, not this file. -->',
   '',
-  `V02 ([#1284](https://github.com/Gero-Labs/gerowallet/issues/1284)) asks for a documented matrix that maps every shipped route to its V07–V11 work package and a validation method, including manual hardware checks. This is that matrix for the routes in \`${ROUTERS[0][0]}\` and \`${ROUTERS[1][0]}\` as committed. The owner is the route component's primary work package from \`routes.mjs\`, the same rule as the V01 inventory; V04 owns redirects and catch-alls.`,
+  `V02 ([#1284](https://github.com/Gero-Labs/gerowallet/issues/1284)) asks for a documented matrix that maps every shipped route to its V07–V11 work package and a validation method, including manual hardware checks. This is that matrix for the routes in \`${ROUTERS[0][0]}\` and \`${ROUTERS[1][0]}\` in the working tree. The owner is the route component's primary work package from \`routes.mjs\`, the same rule as the V01 inventory; V04 owns redirects and catch-alls.`,
   '',
-  'The ESLint Config Gate workflow runs `route-matrix.mjs --check`, so a route added or renamed without an entry in `route-matrix.json` fails the PR.',
+  'The ESLint Config Gate workflow runs `route-matrix.mjs --check`, so a route added or renamed without an entry in `route-matrix.json` fails the PR. Add `--e2e <checkout>` locally to confirm each E2E spec exists at the pinned harness and names its route.',
   '',
   '## How each route is checked',
   '',
@@ -116,8 +164,10 @@ const lines = [
   '',
   `- ${routes.length} routes: ${ROUTERS.map(([, app]) => `${routes.filter(route => route.app === app).length} ${app}`).join(', ')}.`,
   `- By owner: ${Object.entries(byOwner).map(([owner, count]) => `${owner} ${count}`).join(', ')}.`,
-  `- ${routes.length - manualOnly.length} routes have at least one automated check that runs without a funded wallet.`,
-  `- ${manualOnly.length} routes have no such check and rely on the manual step: ${manualOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
+  `- ${views.length} routes render a view; ${redirects.length} are redirects or catch-alls, covered by the guard spec or a manual step.`,
+  `- ${viewCovered.length} of the ${views.length} views have a check that renders them without a funded wallet (unit, Help browser or E2E).`,
+  `- ${manualOnly.length} views rely on the manual step: ${manualOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
+  `- Of those, ${guardOnly.length} have only the guard spec, which proves where the router lands but not that the view renders: ${guardOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
   `- ${fundedOnly.length} routes have browser coverage only in specs that skip without a funded wallet: ${fundedOnly.map(route => code(`${route.app}:${route.path}`)).join(', ') || 'none'}.`,
   `- ${withManual.length} routes list a manual step (device, live provider, mainnet or funds) for the V13 signoff.`,
   '',
@@ -134,4 +184,4 @@ const document = lines.join('\n');
 const output = path.join(root, here, 'ROUTE-MATRIX.md');
 if (check) assert.equal(read(`${here}/ROUTE-MATRIX.md`), document, 'ROUTE-MATRIX.md is stale: run node spikes/vue3-migration/route-matrix.mjs and commit the result.');
 else writeFileSync(output, document);
-console.log(`${check ? 'verified' : 'wrote'} ${here}/ROUTE-MATRIX.md: ${routes.length} routes, ${manualOnly.length} manual-only`);
+console.log(`${check ? 'verified' : 'wrote'} ${here}/ROUTE-MATRIX.md: ${routes.length} routes, ${manualOnly.length} views manual-only${e2eRoot ? ', e2e references verified' : ''}`);

@@ -9,8 +9,8 @@
   },
   "kinds": {
     "unit": "Vitest spec in this repository (npm test) that mounts the route's view or drives the logic behind it. Source-text tripwires are not listed.",
-    "guards": "src/modules/navigation/router.guards.spec.ts drives the production router with this route's auth, network or feature-flag guard.",
-    "help-browser": "scripts/help-browser scenario run by the Help browser evidence workflow on every PR.",
+    "guards": "src/modules/navigation/router.guards.spec.ts drives the production router: it proves where the route lands (auth, network, feature flag, redirect), not that its view renders.",
+    "help-browser": "scripts/help-browser scenario run by the optional Help browser evidence workflow when Help, shared UI or build files change (not a required check).",
     "e2e": "Playwright spec in the external harness, run against an exact wallet SHA.",
     "manual": "Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff."
   },
@@ -60,11 +60,13 @@
         },
         {
           "kind": "e2e",
-          "ref": "07-v270-features/onboarding.spec.ts"
+          "ref": "07-v270-features/onboarding.spec.ts",
+          "via": "a fresh profile opens on Welcome"
         },
         {
           "kind": "e2e",
-          "ref": "07-v270-features/wallet-create-flow.spec.ts"
+          "ref": "07-v270-features/wallet-create-flow.spec.ts",
+          "via": "a fresh profile opens on Welcome"
         },
         {
           "kind": "e2e",
@@ -80,8 +82,8 @@
     "options:/market": {
       "checks": [
         {
-          "kind": "e2e",
-          "ref": "08-post-v27/solada-launchpad.spec.ts"
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
         }
       ],
       "note": "Redirect to the dashboard's market view (/?view=all)."
@@ -99,11 +101,6 @@
         {
           "kind": "guards",
           "ref": "src/modules/navigation/router.guards.spec.ts"
-        },
-        {
-          "kind": "e2e",
-          "ref": "04-transactions/swap.spec.ts",
-          "funded": true
         },
         {
           "kind": "e2e",
@@ -416,7 +413,7 @@
       "checks": [
         {
           "kind": "help-browser",
-          "ref": "scripts/help-browser/updates-smoke.cjs"
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
         },
         {
           "kind": "e2e",
@@ -432,7 +429,7 @@
       "checks": [
         {
           "kind": "help-browser",
-          "ref": "scripts/help-browser/updates-smoke.cjs"
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
         },
         {
           "kind": "e2e",
@@ -465,10 +462,6 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts"
-        },
-        {
-          "kind": "e2e",
-          "ref": "08-post-v27/security-hardening-280.spec.ts"
         }
       ],
       "manual": "signData from a live dApp with Ledger and Keystone."
@@ -582,7 +575,8 @@
         },
         {
           "kind": "e2e",
-          "ref": "08-post-v27/passkeys.spec.ts"
+          "ref": "08-post-v27/passkeys.spec.ts",
+          "via": "the page object authenticatePasskey()"
         }
       ],
       "manual": "Real authenticator (Touch ID, a security key and a phone) in Chrome and Brave."
@@ -636,16 +630,8 @@
       "manual": "Quote a BTC to ADA swap on mainnet (no submit)."
     },
     "options:/mempool": {
-      "checks": [
-        {
-          "kind": "e2e",
-          "ref": "08-post-v27/bitcoin-design.spec.ts"
-        },
-        {
-          "kind": "e2e",
-          "ref": "08-post-v27/bitcoin-utxos.spec.ts"
-        }
-      ]
+      "checks": [],
+      "manual": "Bitcoin wallet: open the Mempool explorer and confirm fee rates, recent blocks and a transaction lookup render."
     },
     "options:/lightning": {
       "checks": [],
@@ -723,7 +709,8 @@
           "ref": "07-v270-features/sidepanel.spec.ts",
           "funded": true
         }
-      ]
+      ],
+      "manual": "Open the side-panel market and confirm the token list and category tabs render."
     },
     "sidepanel:/perps": {
       "checks": [
