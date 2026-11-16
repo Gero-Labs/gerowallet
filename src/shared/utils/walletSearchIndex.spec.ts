@@ -170,7 +170,6 @@ describe('chain isolation', () => {
     }
   });
   const cardanoPreprod = gatesFor('Cardano', 'Preprod', { stakeAddress: 'stake_test1uqxyz0abc' });
-  const apexVector = gatesFor('Apex Fusion Vector', 'Mainnet', {}, 3);
   const bitcoinMainnet = gatesFor('Bitcoin', 'Mainnet');
   const bitcoinLedger = gatesFor('Bitcoin', 'Mainnet', { type: 'Ledger' });
   const midnightMainnet = gatesFor('Midnight', 'Mainnet', {}, 3);
@@ -207,14 +206,14 @@ describe('chain isolation', () => {
   ];
 
   it('never offers a Midnight page outside Midnight', () => {
-    for (const gates of [cardanoMainnet, cardanoPreprod, apexVector, bitcoinMainnet]) {
+    for (const gates of [cardanoMainnet, cardanoPreprod, bitcoinMainnet]) {
       expect(offeredPages(gates).filter(route => MIDNIGHT_ONLY.includes(route))).toEqual([]);
     }
     expect(pageResults('proof server', { t, can: canFor(cardanoMainnet) })).toEqual([]);
   });
 
   it('never offers a Bitcoin page outside Bitcoin', () => {
-    for (const gates of [cardanoMainnet, cardanoPreprod, apexVector, midnightMainnet]) {
+    for (const gates of [cardanoMainnet, cardanoPreprod, midnightMainnet]) {
       expect(offeredPages(gates).filter(route => BITCOIN_ONLY.includes(route))).toEqual([]);
     }
   });
@@ -255,7 +254,6 @@ describe('chain isolation', () => {
 
   it('keeps the media player to the chains whose NFTs fill it', () => {
     expect(midnightMainnet.mediaPlayer).toBe(false);
-    expect(apexVector.mediaPlayer).toBe(false);
     expect(gatesFor('Cardano', 'Mainnet', {}, 3).mediaPlayer).toBe(true);
   });
 
@@ -288,13 +286,11 @@ describe('chain isolation', () => {
       expect(gates.market).toBe(false);
     }
     expect(cardanoPreprod.market).toBe(false);
-    expect(apexVector.market).toBe(false);
-    expect(apexVector.cardanoFamily).toBe(true);
   });
 
   it('closes governance outside the Cardano networks that serve it', () => {
     expect(cardanoMainnet.governance).toBe(true);
-    for (const gates of [apexVector, bitcoinMainnet, midnightMainnet]) {
+    for (const gates of [bitcoinMainnet, midnightMainnet]) {
       expect(gates.governance).toBe(false);
     }
   });
@@ -337,6 +333,5 @@ describe('Midnight and DUST', () => {
     // holdsCnight cannot open the Cardano entry on another chain.
     expect(dustActions(gates('Midnight', 'Mainnet', true))).toEqual(['action-dustRegistration']);
     expect(dustActions(gates('Bitcoin', 'Mainnet', true))).toEqual([]);
-    expect(dustActions(gates('Apex Fusion Prime', 'Mainnet', true))).toEqual([]);
   });
 });

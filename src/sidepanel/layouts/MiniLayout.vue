@@ -46,13 +46,9 @@ function onNavAction(id: string) {
 
 const { isMidnight } = useChainContext();
 // Backdrop matches the logged wallet's chain, same assets the full dashboard
-// (ContentLayout) and onboarding use — Apex Prime teal, Vector orange, etc.
+// (ContentLayout) and onboarding use.
 const bgImage = computed(() => {
   switch (walletStore.loggedWallet?.chain) {
-    case Blockchain.APEX_PRIME:
-      return assets.apexPrimeBg;
-    case Blockchain.APEX_VECTOR:
-      return assets.apexVectorBg;
     case Blockchain.BITCOIN:
       return assets.bitcoinBg;
     case Blockchain.MIDNIGHT:

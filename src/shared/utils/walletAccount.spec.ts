@@ -65,11 +65,6 @@ describe('resolveAccountIndex', () => {
     expect(resolveAccountIndex({ chain: Blockchain.CARDANO, accountIndex: 3, ...fields })).toBe(3);
   });
 
-  it('accepts accounts on the Apex Fusion chains, which share the CIP-1852 derivation', () => {
-    expect(resolveAccountIndex({ ...cardano, chain: Blockchain.APEX_PRIME, accountIndex: 1 })).toBe(1);
-    expect(resolveAccountIndex({ ...cardano, chain: Blockchain.APEX_VECTOR, accountIndex: 1 })).toBe(1);
-  });
-
   it('allows another account on a Bitcoin recovery-phrase or PassKey wallet', () => {
     expect(resolveAccountIndex({ chain: Blockchain.BITCOIN, type: WalletType.Normal, accountIndex: 3 })).toBe(3);
     expect(resolveAccountIndex({ chain: Blockchain.BITCOIN, type: WalletType.Normal, encryptionMethod: 'prf', accountIndex: 1 })).toBe(1);

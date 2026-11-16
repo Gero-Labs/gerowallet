@@ -10,7 +10,4 @@ export default {
 };
 
 export { default as geroDashboard } from '@/assets/svg/gero_dashboard.svg';
-export { default as geroDashboardApex } from '@/assets/svg/gero_dashboard_apex.svg';
-export { default as geroDashboardPrime } from '@/assets/svg/gero_dashboard_prime.svg';
-export { default as geroDashboardVector } from '@/assets/svg/gero_dashboard_vector.svg';
 export { default as geroDashboardBitcoin } from '@/assets/svg/gero_dashboard_bitcoin.svg';

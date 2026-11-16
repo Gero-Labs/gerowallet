@@ -32,22 +32,16 @@ const MIDNIGHT_TABS: NavTab[] = [
   { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
 ];
 
-const APEX_TABS: NavTab[] = [
-  { name: 'home', icon: 'mdi-home-outline', activeIcon: 'mdi-home', route: '/' },
-  { name: 'staking', icon: 'mdi-finance', activeIcon: 'mdi-finance', route: '/staking' },
-  { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
-];
-
 export function useMiniNavigation() {
   const route = useRoute();
-  const { isApex, isMidnight, networkInfo } = useChainContext();
+  const { isMidnight, networkInfo } = useChainContext();
 
   const navTabs = computed<NavTab[]>(() => {
-    const base = isMidnight.value ? MIDNIGHT_TABS : isApex.value ? APEX_TABS : CARDANO_TABS;
+    const base = isMidnight.value ? MIDNIGHT_TABS : CARDANO_TABS;
     return base.filter((tab) => {
       // Gero Copilot feed tab gated by the master flag (ships dark)
       if (tab.name === 'feed') return featureFlagsStore.isCopilotEnabled();
-      // Hide Staking on chains without delegated staking (e.g. Apex Vector).
+      // Hide Staking on chains without delegated staking.
       if (tab.name === 'staking') return !!networkInfo.value?.stakingSupport;
       // Same gate Quick Actions uses — a chain without swap support (e.g. BTC)
       // gets no swap button rather than a dead one. The isSwapEnabled

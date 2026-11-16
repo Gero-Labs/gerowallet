@@ -34,7 +34,7 @@ describe('currentRewardWithdrawals — DRep gate (#939)', () => {
   });
 
   it('leaves non-Cardano chains ungated — the DRep rule is Conway-only', () => {
-    store.loggedWallet = { chain: Blockchain.APEX_PRIME, stakeAddress: 'stake_test1uq' };
+    store.loggedWallet = { chain: Blockchain.MIDNIGHT, stakeAddress: 'stake_test1uq' };
     store.account.drep_id = undefined;
     expect(currentRewardWithdrawals()).toEqual([
       { stakeAddress: 'stake_test1uq', amount: '5000000' },

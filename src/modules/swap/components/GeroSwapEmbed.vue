@@ -7,7 +7,7 @@
     </div>
 
     <!-- ═══════ NETWORK GUARD: never mount the widget with network=undefined (e.g. Bitcoin,
-         Apex, preview wallets — toNexusNetwork only resolves mainnet/preprod) ═══════ -->
+         preview wallets — toNexusNetwork only resolves mainnet/preprod) ═══════ -->
     <div v-else-if="!network" class="gero-swap-embed__maintenance">
       <v-alert type="info" color="primary" variant="text" border="start" density="compact" class="ma-0">
         {{ $t('miniGero.swapNetworkNotSupported') }}

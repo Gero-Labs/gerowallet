@@ -19,7 +19,6 @@ export interface ThemePalette {
 }
 
 export interface ChainContext {
-  isApex: ComputedRef<boolean>;
   isCardano: ComputedRef<boolean>;
   isBitcoin: ComputedRef<boolean>;
   isMidnight: ComputedRef<boolean>;
@@ -30,11 +29,6 @@ export interface ChainContext {
 export function useChainContext(): ChainContext {
   // The CSS custom properties are written by the single accent writer.
   useChainAccent();
-
-  const isApex = computed(() =>
-    walletStore.loggedWallet?.chain === Blockchain.APEX_PRIME ||
-    walletStore.loggedWallet?.chain === Blockchain.APEX_VECTOR
-  );
 
   const isCardano = computed(() =>
     walletStore.loggedWallet?.chain === Blockchain.CARDANO
@@ -57,11 +51,9 @@ export function useChainContext(): ChainContext {
   });
 
   // Kept for the ~28 JS `:color` bindings that read themeColors directly.
-  // Resolved through chainKeyFor so both Apex families get their own accent
-  // (Prime teal / Vector orange) — an if-chain on isApex previously collapsed
-  // them to the old shared orange across the whole sidepanel.
+  // Resolved through chainKeyFor, the same mapping the accent writer uses.
   const themeColors = computed<ThemePalette>(() =>
     themes[chainKeyFor(walletStore.loggedWallet?.chain)]);
 
-  return { isApex, isCardano, isBitcoin, isMidnight, networkInfo, themeColors };
+  return { isCardano, isBitcoin, isMidnight, networkInfo, themeColors };
 }

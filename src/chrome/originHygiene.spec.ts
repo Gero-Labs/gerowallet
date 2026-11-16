@@ -42,7 +42,7 @@ describe('WalletConnect session binding', () => {
     expect(walletCaip10Account(mainnetWallet)).toBe(`${MAINNET}:${ADDR}`);
     expect(walletCaip10Account({ chain: 'Bitcoin', network: 'Mainnet', baseAddress: 'x', bitcoinAddress: 'bc1q' }))
       .toBe('bip122:000000000019d6689c085ae165831e93:bc1q');
-    expect(walletCaip10Account({ chain: 'Apex Prime', network: 'Mainnet', baseAddress: ADDR })).toBeNull();
+    expect(walletCaip10Account({ chain: 'UnknownChain', network: 'Mainnet', baseAddress: ADDR })).toBeNull();
   });
 
   it('authorises only the wallet that approved the session', () => {

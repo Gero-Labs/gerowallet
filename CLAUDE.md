@@ -302,7 +302,7 @@ One token layer, four surfaces, scarce chain accent, motion as feedback, enforce
 ```bash
 node scripts/design/audit.mjs            # ratchet: 15 metrics vs scripts/design/budgets.json
 node scripts/design/audit.mjs --write    # ratchet the budgets DOWN to current (after a net reduction)
-node scripts/design/contrast.mjs         # 56 WCAG checks against the real token files
+node scripts/design/contrast.mjs         # 50 WCAG checks against the real token files
 ```
 - The ratchet only moves down. To RAISE a budget (a token's legitimate first use, a merge): `node scripts/design/audit.mjs --rebaseline --reason="..."` and justify it in the commit message. Metrics include hex/radius/font-size/z-index distinctness, backdropFilters, uppercase, infiniteAnimations, importantCount, lowAlphaText, transitionAll, clickableDivs + outlineNone (a11y floor), and trust-surface tripwires (corruptedMdiNames, formatFnForks).
 - **Working rule**: any file you touch leaves the ratchet at or below where you found it. Tokenize the values you pass; if a change is a real token first-use, rebaseline with a reason.

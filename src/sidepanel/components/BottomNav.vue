@@ -21,9 +21,8 @@ import { useMiniNavigation, NavTab } from '../composables/useMiniNavigation';
 
 const router = useRouter();
 const { navTabs, activeTab } = useMiniNavigation();
-// Active icon uses the single per-chain accent (teal for Apex Prime, orange for
-// Vector, …) — the same --g-accent the active tab background already uses.
-// themeColors.primary collapsed both Apex families to one shared orange.
+// Active icon uses the single per-chain accent — the same --g-accent the
+// active tab background already uses.
 const activeColor = 'var(--g-accent)';
 
 const emit = defineEmits<{

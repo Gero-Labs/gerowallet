@@ -95,7 +95,7 @@ export async function getDb() {
         let addressType: string;
 
         // Determine addressType based on chain
-        if (wallet.chain === 'Cardano' || wallet.chain === 'Apex Fusion Prime' || wallet.chain === 'Apex Fusion Vector') {
+        if (wallet.chain === 'Cardano') {
           addressType = 'shelley';  // Cardano base addresses
         } else if (wallet.chain === 'Bitcoin') {
           addressType = 'segwit';   // Default Bitcoin address type (P2WPKH)
@@ -296,8 +296,6 @@ function getDefaultAddressType(chain: string): string {
     case Blockchain.BITCOIN:
       return 'segwit';  // P2WPKH (bc1q...)
     case Blockchain.CARDANO:
-    case Blockchain.APEX_PRIME:
-    case Blockchain.APEX_VECTOR:
       return 'shelley';
     case Blockchain.MIDNIGHT:
       // Midnight derives 3 role-specific addresses (Zswap shielded, NightExternal
@@ -372,7 +370,7 @@ export async function deriveWalletPublicKey(
     return JSON.stringify(midnightAddresses ? withoutViewingKey(midnightAddresses) : { unshielded: '', shielded: '', dust: '' });
   }
 
-  // Cardano and the Apex Fusion chains share the CIP-1852 derivation.
+  // Cardano: the CIP-1852 account key.
   return derivePublicKeyFromMnemonic(mnemonic);
 }
 

@@ -110,6 +110,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
@@ -142,7 +143,9 @@ watch(showNotifications, (isOpen) => { if (isOpen) void refreshLegacyListings();
 // current wallet stays active until the switch actually completes.
 const pendingSwitchWallet = ref<Wallet | null>(null);
 
-const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
+// The same rule as the wallet list this screen then shows (WalletSelector): a
+// stored wallet the list hides must not count as "a wallet exists".
+const { hasWallets } = useAvailableWallets();
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
 /** A DApp request is waiting for approval: the restart notice never opens over it. */
 const dappRequestPending = computed(() => !!hub.currentRequest.value || hub.requestQueue.value.length > 0);

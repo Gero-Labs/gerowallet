@@ -566,8 +566,8 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
       governanceDRep: (c, n) => networks.resolveGovernanceSupport(c, n),
       staking: (c, n) => networks.resolveStakingSupport(c, n),
       // The swap page's route is named 'swap' (‘/market’ is only a redirect, no
-      // named route). Keying this guard 'market' left #/swap ungated, so an Apex
-      // wallet (swapSupport=false) could reach it by direct URL. Key it 'swap'.
+      // named route). Keying this guard 'market' left #/swap ungated, so a
+      // wallet without swapSupport could reach it by direct URL. Key it 'swap'.
       swap: (c, n) => networks.resolveSwapSupport(c, n),
       transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
       card: (c, n) => networks.resolveGeroCardSupport(c, n),

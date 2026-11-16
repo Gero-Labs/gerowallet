@@ -12,6 +12,7 @@
 
 import { debugLog } from '@/utils/debug';
 import { geroStore } from '@/stores/geroStore';
+import { supportedWallets } from '@/shared/utils/supportedWallet';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { walletManager } from '@/services/walletManager.service';
@@ -160,7 +161,7 @@ export async function getNotifyState(opts: { refreshConfig?: boolean; syncServer
     device: await notifyStore.getDevice(),
     wallets: await notifyStore.getWallets(),
     logged: logged ? { walletId: logged.id, eligible: isEligibleWallet(logged), network: `cardano-${logged.network.toLowerCase()}` } : null,
-    installed: Object.values(geroStore.wallets ?? {}).map((w) => ({ id: w.id, name: w.name, chain: w.chain, network: w.network, type: w.type, eligible: installedEligible(w) })),
+    installed: supportedWallets(geroStore.wallets).map((w) => ({ id: w.id, name: w.name, chain: w.chain, network: w.network, type: w.type, eligible: installedEligible(w) })),
     config,
     pushSupported: !!self.registration?.pushManager,
   };

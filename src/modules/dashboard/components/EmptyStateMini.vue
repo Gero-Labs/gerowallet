@@ -92,8 +92,8 @@ withDefaults(defineProps<Props>(), {
 
 defineEmits(['primary-action', 'secondary-action']);
 
-// Chain accent (teal for Apex Prime, orange for Vector, cyan for Cardano, …)
-// comes from the single --g-accent source, set per chain by useChainAccent.
+// Chain accent (cyan for Cardano, orange for Bitcoin, …) comes from the
+// single --g-accent source, set per chain by useChainAccent.
 const primaryColor = computed(() => 'var(--g-accent)');
 </script>
 

@@ -74,7 +74,7 @@
             <!-- Default content for standard items -->
             <div v-else class="carousel-centered-layout">
               <slot name="default" :item="item">
-                <div class="carousel-text-overlay" :class="{ 'apex-text': isApexItem(item) }">
+                <div class="carousel-text-overlay">
                   <v-card-title class="pt-0 white--text text-center carousel-title-large">{{ item.title }}</v-card-title>
                   <v-card-subtitle class="pb-0 white--text text-center">{{ item.subtitle }}</v-card-subtitle>
                 </div>
@@ -83,7 +83,6 @@
                   :src="item.logo"
                   :alt="item.logoAlt"
                   class="carousel-logo"
-                  :class="{ 'apex-logo': isApexItem(item) }"
                 />
               </slot>
             </div>
@@ -179,26 +178,19 @@ const handleItemClick = (item: CarouselItem) => {
   emit('item-click', item);
 };
 
-const getItemClass = (item: CarouselItem) => {
-  const classes: string[] = [];
-  if (item.id === 'apex-welcome') classes.push('apex-welcome-background');
-  return classes;
+const getItemClass = (_item: CarouselItem) => {
+  return [];
 };
 
 const getOverlayClass = (item: CarouselItem) => {
   const classes: string[] = [];
   if (item.type === 'debit-card') classes.push('carousel-overlay-transparent');
   if (item.type === 'ada-cashback') classes.push('carousel-overlay-darkened');
-  if (isApexItem(item)) classes.push('apex-carousel-overlay');
   return classes;
 };
 
 const getContentClass = (_item: CarouselItem) => {
   return [];
-};
-
-const isApexItem = (item: CarouselItem) => {
-  return item.id?.startsWith('apex-');
 };
 
 // 3D Card tilt effect for debit card
@@ -396,20 +388,6 @@ onUnmounted(() => {
 
 .carousel-progress-bar {
   border-radius: 0;
-}
-
-/* Apex specific styles */
-.apex-welcome-background {
-  background: var(--g-surface);
-}
-
-.apex-carousel-overlay {
-  background: none;
-}
-
-.apex-logo {
-  max-width: 100px;
-  max-height: 100px;
 }
 
 /* Debit card styles */

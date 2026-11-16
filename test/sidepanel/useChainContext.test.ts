@@ -21,30 +21,15 @@ describe('useChainContext', () => {
     mockWalletStore.loggedWallet = null;
   });
 
-  it('returns isApex=false when no wallet is logged in', () => {
-    const { isApex, isCardano, isBitcoin } = useChainContext();
-    expect(isApex.value).toBe(false);
+  it('matches no chain when no wallet is logged in', () => {
+    const { isCardano, isBitcoin } = useChainContext();
     expect(isCardano.value).toBe(false);
     expect(isBitcoin.value).toBe(false);
   });
 
-  it('returns isApex=true for Apex Prime wallet', () => {
-    mockWalletStore.loggedWallet = { chain: Blockchain.APEX_PRIME };
-    const { isApex, isCardano } = useChainContext();
-    expect(isApex.value).toBe(true);
-    expect(isCardano.value).toBe(false);
-  });
-
-  it('returns isApex=true for Apex Vector wallet', () => {
-    mockWalletStore.loggedWallet = { chain: Blockchain.APEX_VECTOR };
-    const { isApex } = useChainContext();
-    expect(isApex.value).toBe(true);
-  });
-
   it('returns isCardano=true for Cardano wallet', () => {
     mockWalletStore.loggedWallet = { chain: Blockchain.CARDANO };
-    const { isApex, isCardano, isBitcoin } = useChainContext();
-    expect(isApex.value).toBe(false);
+    const { isCardano, isBitcoin } = useChainContext();
     expect(isCardano.value).toBe(true);
     expect(isBitcoin.value).toBe(false);
   });
@@ -58,14 +43,6 @@ describe('useChainContext', () => {
 
   // themeColors.primary maps to chainAccents[chain].accent (see src/config/themes.ts).
   // These assert the current accent-system palette, not the pre-migration hexes.
-  it('returns the Apex Prime theme palette when an Apex Prime wallet is active', () => {
-    mockWalletStore.loggedWallet = { chain: Blockchain.APEX_PRIME };
-    const { themeColors } = useChainContext();
-    // Prime is teal, NOT the legacy shared-Apex orange (#E06030) — chainKeyFor
-    // routes Prime and Vector to their own accents.
-    expect(themeColors.value.primary).toBe('#16B89E');
-  });
-
   it('returns the Cardano theme palette when Cardano wallet is active', () => {
     mockWalletStore.loggedWallet = { chain: Blockchain.CARDANO };
     const { themeColors } = useChainContext();
@@ -73,12 +50,12 @@ describe('useChainContext', () => {
   });
 
   it('exposes networkInfo from networks.ts for the active wallet', () => {
-    mockWalletStore.loggedWallet = { chain: Blockchain.APEX_PRIME, network: 'Mainnet' };
+    mockWalletStore.loggedWallet = { chain: Blockchain.CARDANO, network: 'Mainnet' };
     const { networkInfo } = useChainContext();
     expect(networkInfo.value).toBeTruthy();
-    expect(networkInfo.value?.currencyTicker).toBe('AP3X');
-    expect(networkInfo.value?.buySupport).toBe(false);
+    expect(networkInfo.value?.currencyTicker).toBe('ADA');
+    expect(networkInfo.value?.buySupport).toBe(true);
     expect(networkInfo.value?.stakingSupport).toBe(true);
-    expect(networkInfo.value?.geroCardSupport).toBe(false);
+    expect(networkInfo.value?.geroCardSupport).toBe(true);
   });
 });

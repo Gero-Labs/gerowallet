@@ -55,6 +55,7 @@ import {
 import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
 import { canReplaceWalletKey } from '@/db/walletIdentity';
 import networks from '@/utils/networks';
+import { isOnRemovedNetwork } from '@/shared/utils/supportedWallet';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -246,6 +247,11 @@ loadWallets().then(async () => {
   // The logged wallet comes back from storage; only a wallet the database still holds
   // is logged in again (login then takes its keys and secrets from that record).
   if (walletStore.loggedWallet && !(await isStoredWallet(walletStore.loggedWallet.id))) {
+    WalletStore.logout();
+  }
+  // Nor a wallet on a network this build no longer has: the wallet lists hide it
+  // (useAvailableWallets), so a session left open on one ends here.
+  if (walletStore.loggedWallet && (await recordIsOnRemovedNetwork(walletStore.loggedWallet))) {
     WalletStore.logout();
   }
 
@@ -861,9 +867,9 @@ chrome.alarms.create('auto-lock-check', {
 });
 
 // Populate the CoinGecko price cache. Nothing else calls updatePrices(), so
-// without this the cache stays {} and every consumer that reads it — notably
-// Apex fiat valuation (coinGeckoStore.cache['apex-4']) — values at $0. Fetch
-// once on startup, then refresh on an alarm (cache is considered stale >5min).
+// without this the cache stays {} and every consumer that reads it (the ADA
+// market cap in the tokens table) shows 0. Fetch once on startup, then
+// refresh on an alarm (cache is considered stale >5min).
 coinGeckoStore.updatePrices().catch(() => {});
 chrome.alarms.create('refreshCoinGeckoPrices', {
   delayInMinutes: 5,
@@ -1226,10 +1232,8 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
     });
     return;
   }
-  // Only support Cardano-based chains for dApp API
-  if (loggedWallet.chain !== Blockchain.CARDANO &&
-      loggedWallet.chain !== Blockchain.APEX_PRIME &&
-      loggedWallet.chain !== Blockchain.APEX_VECTOR) {
+  // The dApp API supports Cardano wallets only
+  if (loggedWallet.chain !== Blockchain.CARDANO) {
     sendResponse({
       id: request.id,
       error: APIError.Refused,
@@ -4312,7 +4316,27 @@ async function loginRequiresUnlock(requested: { id?: unknown } | null | undefine
   }
 }
 
+/**
+ * Whether the wallet is on a network this build no longer has. The stored record
+ * decides, as it does at login (walletManager takes chain and network from it,
+ * never from the object passed in): a request naming another chain, or none,
+ * cannot open such a record, and a stale copy in walletStore cannot close a
+ * record a migration has since moved. With no record, or none readable, the
+ * object given is judged.
+ */
+async function recordIsOnRemovedNetwork(wallet: { id?: unknown; chain?: string; network?: string } | null | undefined): Promise<boolean> {
+  let stored: { chain?: string; network?: string } | undefined;
+  if (typeof wallet?.id === 'number') {
+    try {
+      const { getDb } = await import('@/db/gero-db');
+      stored = await (await getDb())['wallets'].get(wallet.id);
+    } catch { /* unreadable: judge what was given */ }
+  }
+  return isOnRemovedNetwork(stored ?? wallet);
+}
+
 async function loginWallet(wallet: Parameters<typeof walletManager.login>[0]) {
+  if (await recordIsOnRemovedNetwork(wallet)) return null;
   const requireUnlock = await loginRequiresUnlock(wallet);
   const walletBg = await walletManager.login(wallet, { requireUnlock });
   if (walletBg) {
@@ -5355,7 +5379,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
         }
 
         const accounts: { cardano?: string[]; bitcoin?: string[] } = {};
-        if (loggedWallet.chain === Blockchain.CARDANO || loggedWallet.chain === 'Apex Prime' || loggedWallet.chain === 'Apex Vector') {
+        if (loggedWallet.chain === Blockchain.CARDANO) {
           accounts.cardano = [loggedWallet.baseAddress];
         } else if (loggedWallet.chain === Blockchain.BITCOIN) {
           accounts.bitcoin = loggedWallet.bitcoinAddress ? [loggedWallet.bitcoinAddress] : [];
@@ -5815,10 +5839,8 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
       fail(APIError.Refused.code, 'No wallet logged in');
       return true;
     }
-    // CIP-45 is a Cardano dApp bridge — allow Cardano-family chains only.
-    if (loggedWallet.chain !== Blockchain.CARDANO
-      && loggedWallet.chain !== 'Apex Prime'
-      && loggedWallet.chain !== 'Apex Vector') {
+    // CIP-45 is a Cardano dApp bridge — Cardano wallets only.
+    if (loggedWallet.chain !== Blockchain.CARDANO) {
       fail(APIError.Refused.code, 'CIP-45 supports Cardano wallets only');
       return true;
     }

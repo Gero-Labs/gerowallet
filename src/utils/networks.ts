@@ -23,7 +23,6 @@ import {
 } from '@/utils/nftMarketDeployments';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
-import apexSvg from '@/assets/svg/ap3x.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
@@ -325,100 +324,6 @@ export default {
       cip113TransferScriptHashes: CIP113_TRANSFER_PREVIEW,
       networkParams: {
         networkMagic: 2
-      }
-    },
-    {
-      icon: apexSvg,
-      iconColor: 'orange',
-      title: 'Apex Prime Mainnet',
-      blockchain: Blockchain.APEX_PRIME,
-      network: Network.MAINNET,
-      supportedHardware: false,
-      networkId: 1,
-      currencySymbol: 'Â',
-      currencyTicker: 'AP3X',
-      currencyName: 'Apex Fusion',
-      currencyDescription: 'Apex Fusion Native Token',
-      currencyImage: apexSvg,
-      protocolParams: {
-        min_fee_a: 47,
-        min_fee_b: 158298,
-        max_tx_size: 16384,
-        min_utxo_value: "0",
-        key_deposit: "2000000",
-        pool_deposit: "300000000",
-        max_val_size: 5000,
-        price_mem: 0.0577,
-        price_step: 0.0000721,
-        coins_per_utxo_size: "4310"
-      },
-      geroPool: 'pool13k76f7tt46psnhp75cwnfg5dtkjvwq64fg53tp2zthnzqyge58k',
-      defaultProvider: Provider.KOIOS,
-      cashbackSupport: false,
-      stakingSupport: true,
-      governanceSupport: false,
-      daoSupport: false,
-      transactionSupport:true,
-      swapSupport: false,
-      buySupport: false,
-      perpetualsSupport: false,
-      geroCardSupport: false,
-      goMiningSupport: false,
-      babylonSupport: false,
-      ordinalsSupport: false,
-      thorchainSupport: false,
-      mempoolSupport: false,
-      lightningSupport: false,
-      networkParams: {
-        networkMagic: 764824073
-      }
-    },
-    {
-      icon: apexSvg,
-      iconColor: 'orange',
-      title: 'Apex Vector Mainnet',
-      blockchain: Blockchain.APEX_VECTOR,
-      network: Network.MAINNET,
-      supportedHardware: false,
-      networkId: 1,
-      currencySymbol: 'Â',
-      currencyTicker: 'AP3X',
-      currencyName: 'Apex Fusion',
-      currencyDescription: 'Apex Fusion Native Token',
-      currencyImage: apexSvg,
-      // Live values from yaci-apex-vector-mainnet /api/v1/epochs/latest/parameters (epoch 233)
-      protocolParams: {
-        min_fee_a: 45,
-        min_fee_b: 156253,
-        max_tx_size: 16384,
-        min_utxo_value: "0",
-        key_deposit: "500000000",
-        pool_deposit: "5000000000000",
-        max_val_size: 5000,
-        price_mem: 0.0577,
-        price_step: 0.0000721,
-        coins_per_utxo_size: "4310"
-      },
-      geroPool: '',
-      defaultProvider: Provider.KOIOS,
-      cashbackSupport: false,
-      // Apex Vector has no delegated staking — hide the Staking page/nav on it.
-      stakingSupport: false,
-      governanceSupport: false,
-      daoSupport: false,
-      transactionSupport:true,
-      swapSupport: false,
-      buySupport: false,
-      perpetualsSupport: false,
-      geroCardSupport: false,
-      goMiningSupport: false,
-      babylonSupport: false,
-      ordinalsSupport: false,
-      thorchainSupport: false,
-      mempoolSupport: false,
-      lightningSupport: false,
-      networkParams: {
-        networkMagic: 764824073  // Apex Vector cardano-node shelley/byron genesis (RequiresNoMagic)
       }
     },
     // Bitcoin visibility is gated by the isBitcoinEnabled feature flag (gero-sync),

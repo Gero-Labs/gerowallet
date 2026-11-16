@@ -172,7 +172,7 @@ watch(() => props.modelValue, (open) => {
 }
 
 /* Justified solid (readability): the white label + description sit over the
-   side panel's chain backdrop, which is bright on Bitcoin/Apex. A translucent
+   side panel's chain backdrop, which is bright on Bitcoin. A translucent
    tint here previously washed the text out, so this card stays opaque while
    the rest of the sheet is glass. */
 .choice-card {

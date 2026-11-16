@@ -18,21 +18,6 @@ describe('getExplorerUrl', () => {
     expect(url).toBe('https://cexplorer.io/block/block123');
   });
 
-  it('returns apexscan tx URL for Apex Prime', () => {
-    const url = getExplorerUrl(Blockchain.APEX_PRIME, 'tx456', 'tx', Network.MAINNET);
-    expect(url).toBe('https://apexscan.org/en/transaction/tx456');
-  });
-
-  it('returns apexscan block URL for Apex Prime', () => {
-    const url = getExplorerUrl(Blockchain.APEX_PRIME, 'blk456', 'block', Network.MAINNET);
-    expect(url).toBe('https://apexscan.org/en/block/blk456');
-  });
-
-  it('returns the separate Apex Vector explorer transaction URL', () => {
-    const url = getExplorerUrl(Blockchain.APEX_VECTOR, 'tx789', 'tx', Network.TESTNET);
-    expect(url).toBe('https://vector.apexscan.org/en/transaction/tx789');
-  });
-
   it('returns mempool.space tx URL for Bitcoin', () => {
     const url = getExplorerUrl(Blockchain.BITCOIN, 'btx123', 'tx', Network.MAINNET);
     expect(url).toBe('https://mempool.space/tx/btx123');

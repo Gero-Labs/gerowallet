@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue.js-3.5-green.svg)](https://vuejs.org/)
 
-A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for Cardano, Bitcoin, Midnight, and Apex Fusion.
+A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for Cardano, Bitcoin, and Midnight.
 
 [Features](#key-features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Contributing](#contributing)
 
@@ -17,7 +17,7 @@ A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for C
 
 ## Overview
 
-**Gero Wallet** is a feature-rich, non-custodial multi-chain wallet browser extension. It supports Cardano, Bitcoin, Midnight, and Apex Fusion (Prime and Vector), and ships two interfaces: a full dashboard and Mini-Gero, a compact side-panel wallet.
+**Gero Wallet** is a feature-rich, non-custodial multi-chain wallet browser extension. It supports Cardano, Bitcoin, and Midnight, and ships two interfaces: a full dashboard and Mini-Gero, a compact side-panel wallet.
 
 Cardano data and DeFi routing primarily use **Nexus**, through the Gero
 backend. Bitcoin also uses Esplora directly, and the SPO client calls Koios.
@@ -50,7 +50,6 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 **⛓️ Multi-Chain Support**
 - **Cardano** — staking, CIP-1694 governance, native assets, NFTs, dApp connector
 - **Midnight** — shielded transfers, NIGHT/DUST management, proof server, and a shielded proving consent flow
-- **Apex Fusion** — Prime and Vector chains
 - **Bitcoin** — wallet and transaction flows behind the Bitcoin feature flag
 
 **⛓️ Cardano Native Features**
