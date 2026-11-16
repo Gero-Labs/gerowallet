@@ -16,8 +16,10 @@ name: ESLint Config Gate
 # and typechecks it with vue-tsc. Both were red with legacy debt until #1313
 # cleared it (2026-11); from then on any new ESLint error or type error fails
 # the PR. The pre-commit hook (scripts/precommit-lint.mjs) still lints staged
-# files locally. The job keeps its original name because branch protection
-# requires it by that name.
+# files locally. Its last step checks the V02 route validation matrix
+# (spikes/vue3-migration/route-matrix.mjs --check): a PR that adds or renames
+# a route fails here until route-matrix.json has an entry for it. The job keeps
+# its original name because branch protection requires it by that name.
 #
 # Secret-free by design (contents: read, --ignore-scripts), like
 # lockfile-check.yml, so it runs on every PR including Dependabot's.
@@ -79,3 +81,9 @@ jobs:
 
       - name: Typecheck (vue-tsc)
         run: npm run typecheck
+
+      # Every shipped route must have an entry in the V02 route validation
+      # matrix (#1284); a new or renamed route fails here until
+      # spikes/vue3-migration/route-matrix.json and ROUTE-MATRIX.md are updated.
+      - name: Route validation matrix is current
+        run: node spikes/vue3-migration/route-matrix.mjs --check
