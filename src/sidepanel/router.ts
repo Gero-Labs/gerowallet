@@ -1,6 +1,5 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import networks from '@/utils/networks';
 
@@ -15,19 +14,12 @@ const routes: RouteRecordRaw[] = [
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
-const APEX_ALLOWED_ROUTE_NAMES = new Set(['home', 'staking', 'activity']);
-
 const router = createRouter({ history: createWebHashHistory(), routes });
 
 router.beforeEach((to, _from, next) => {
   const chain = walletStore.loggedWallet?.chain;
-  const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
 
-  if (isApex && to.name && !APEX_ALLOWED_ROUTE_NAMES.has(String(to.name))) {
-    next({ name: 'home' });
-    return;
-  }
-  // Staking page only on chains that support delegated staking (Apex Vector doesn't).
+  // Staking page only on chains that support delegated staking.
   if (to.name === 'staking' &&
       !networks.resolveStakingSupport(chain ?? '', walletStore.loggedWallet?.network ?? '')) {
     next({ name: 'home' });

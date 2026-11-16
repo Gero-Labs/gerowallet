@@ -26,7 +26,7 @@ describe('canUseNftMarketWallet', () => {
   });
 
   it('refuses any chain other than Cardano, even for a software wallet', () => {
-    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.APEX_PRIME, '', undefined]) {
+    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT, '', undefined]) {
       expect(canUseNftMarketWallet(chain, 'Normal'), String(chain)).toBe(false);
     }
   });

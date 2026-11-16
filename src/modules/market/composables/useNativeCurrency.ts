@@ -4,7 +4,7 @@ import networks from '@/utils/networks';
 
 /**
  * Returns the native currency symbol and ticker for the active wallet's chain.
- * Cardano → ₳ / ADA, Apex → Â / AP3X
+ * Cardano → ₳ / ADA
  */
 export function useNativeCurrency() {
   const currencySymbol = computed(() =>

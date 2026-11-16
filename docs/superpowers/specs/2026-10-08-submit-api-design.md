@@ -230,7 +230,7 @@ Shown only for `Blockchain.CARDANO` wallets, after "Re-sync wallet". Visible whe
 - Title **Submit API**. Helper: "Send this wallet's transactions through your own endpoint."
 - Right side: status text **Default** or **Custom**, plus a **Configure** button.
 - With a custom endpoint, a caption shows the last result: "Last submit: sent via your endpoint, 10:32" or "Fell back to Gero, 10:35 (503)".
-- A "new" dot through `FEATURE_DEFINITIONS`: `{ id: 'settings.advanced.submitApi', version: '2.7.3', path: ['settings', 'advanced', 'submitApi'] }`, marked seen when the dialog opens, and also when the Advanced tab was visited before Settings closed (Bitcoin, Midnight and Apex wallets never show the row, so the dot would otherwise stay). Same pattern as auto-withdraw.
+- A "new" dot through `FEATURE_DEFINITIONS`: `{ id: 'settings.advanced.submitApi', version: '2.7.3', path: ['settings', 'advanced', 'submitApi'] }`, marked seen when the dialog opens, and also when the Advanced tab was visited before Settings closed (Bitcoin and Midnight wallets never show the row, so the dot would otherwise stay). Same pattern as auto-withdraw.
 
 ### 9.2 `SubmitApiDialog.vue` (on `BaseDialog`)
 

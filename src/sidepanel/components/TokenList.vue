@@ -193,9 +193,8 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 const adaLogo = assetsUtil.cardanoBlueLogo;
 
-// Native currency of the logged wallet's chain. Apex Fusion runs on an
-// ADA-denominated (lovelace) ledger but brands its unit AP3X, so the pinned
-// native row must show the chain's ticker + mark, not a hardcoded ADA.
+// Native currency of the logged wallet's chain: the pinned native row shows
+// the chain's ticker + mark, not a hardcoded ADA.
 const nativeTicker = computed(() =>
   networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain ?? '', walletStore.loggedWallet?.network ?? '') || 'ADA');
 const nativeLogo = computed(() =>

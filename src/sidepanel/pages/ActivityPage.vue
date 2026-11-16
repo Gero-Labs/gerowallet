@@ -190,7 +190,7 @@ const groupedTransactions = computed<TxGroup[]>(() => {
   }));
 });
 
-// Only a Cardano row carries a body; an Apex row never has certificates.
+// Only a row stored with its body can carry certificates.
 function hasCertificates(tx: StoredTransaction): boolean {
   return isCardanoTx(tx) && (tx.body.certificates?.length ?? 0) > 0;
 }

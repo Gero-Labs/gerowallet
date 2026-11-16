@@ -1,7 +1,7 @@
 <template>
   <!-- The multichain hero scene, on the Nexus home-hero grammar
        (nexus/docs/marketing/ISOMETRIC-ICONS.md + hero-scene-geometry.md):
-       four chain nodes (plate, LED row, two brand blocks, lifted tip wearing
+       three chain nodes (plate, LED row, two brand blocks, lifted tip wearing
        the official chain mark sheared onto its top face) feed chain-tinted
        beams with packet cubes into a three-plate Gero core. Motion is
        loop-law compliant (3.2s master loop, 1.6s divisors, negative staggers
@@ -14,8 +14,6 @@
       <linearGradient id="gwo-btcTip" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd694" /><stop offset="1" stop-color="#ff9f2e" /></linearGradient>
       <linearGradient id="gwo-adaBlock" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6f9cff" /><stop offset="1" stop-color="#2f5fd0" /></linearGradient>
       <linearGradient id="gwo-adaTip" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9dbcff" /><stop offset="1" stop-color="#3f6de0" /></linearGradient>
-      <linearGradient id="gwo-apxBlock" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59a70" /><stop offset="1" stop-color="#E06030" /></linearGradient>
-      <linearGradient id="gwo-apxTip" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f8b28f" /><stop offset="1" stop-color="#ec7040" /></linearGradient>
       <!-- Midnight runs lighter than the site hero's brand-dark faces: that
            board sits on white, ours on near-black where they vanish. -->
       <linearGradient id="gwo-mdnBlock" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#565e6b" /><stop offset="1" stop-color="#262b35" /></linearGradient>
@@ -26,7 +24,6 @@
            collapses on a near-horizontal path (handoff trap). -->
       <linearGradient id="gwo-beamBtc" gradientUnits="userSpaceOnUse" x1="110" y1="80" x2="508" y2="152"><stop offset="0" stop-color="#F7931A" stop-opacity="0.92" /><stop offset="1" stop-color="#00A8C8" stop-opacity="0.95" /></linearGradient>
       <linearGradient id="gwo-beamAda" gradientUnits="userSpaceOnUse" x1="184" y1="132" x2="508" y2="156"><stop offset="0" stop-color="#2f5fd0" stop-opacity="0.92" /><stop offset="1" stop-color="#00A8C8" stop-opacity="0.95" /></linearGradient>
-      <linearGradient id="gwo-beamApx" gradientUnits="userSpaceOnUse" x1="52" y1="134" x2="508" y2="162"><stop offset="0" stop-color="#E06030" stop-opacity="0.92" /><stop offset="1" stop-color="#00A8C8" stop-opacity="0.95" /></linearGradient>
       <linearGradient id="gwo-beamMdn" gradientUnits="userSpaceOnUse" x1="110" y1="192" x2="508" y2="164"><stop offset="0" stop-color="#3b4250" stop-opacity="0.92" /><stop offset="1" stop-color="#00A8C8" stop-opacity="0.95" /></linearGradient>
       <radialGradient id="gwo-bloom"><stop offset="0" stop-color="#00CCBB" stop-opacity="0.14" /><stop offset="1" stop-color="#00CCBB" stop-opacity="0" /></radialGradient>
     </defs>
@@ -34,7 +31,6 @@
     <!-- Bloom + ground shadows -->
     <ellipse cx="520" cy="170" rx="120" ry="72" fill="url(#gwo-bloom)" />
     <ellipse cx="100" cy="134" rx="42" ry="7" fill="#0e2a3d" opacity="0.14" />
-    <ellipse cx="40" cy="192" rx="42" ry="7" fill="#0e2a3d" opacity="0.14" />
     <ellipse cx="172" cy="192" rx="42" ry="7" fill="#0e2a3d" opacity="0.14" />
     <ellipse cx="100" cy="250" rx="42" ry="7" fill="#0e2a3d" opacity="0.14" />
     <ellipse cx="524" cy="228" rx="66" ry="10" fill="#0e2a3d" opacity="0.16" />
@@ -45,8 +41,6 @@
     <path d="M110,80 C260,95 390,135 508,152" class="iso-beam" stroke="url(#gwo-beamBtc)" stroke-width="2.6" fill="none" stroke-dasharray="3 9" stroke-linecap="round" />
     <path d="M184,132 C300,140 410,150 508,156" stroke="#2f5fd0" stroke-width="1.4" fill="none" opacity="0.2" />
     <path d="M184,132 C300,140 410,150 508,156" class="iso-beam" stroke="url(#gwo-beamAda)" stroke-width="2.6" fill="none" stroke-dasharray="3 9" stroke-linecap="round" />
-    <path d="M52,134 C230,185 390,175 508,162" stroke="#E06030" stroke-width="1.4" fill="none" opacity="0.2" />
-    <path d="M52,134 C230,185 390,175 508,162" class="iso-beam" stroke="url(#gwo-beamApx)" stroke-width="2.6" fill="none" stroke-dasharray="3 9" stroke-linecap="round" />
     <path d="M110,192 C280,205 400,175 508,164" stroke="#4b5563" stroke-width="1.4" fill="none" opacity="0.2" />
     <path d="M110,192 C280,205 400,175 508,164" class="iso-beam" stroke="url(#gwo-beamMdn)" stroke-width="2.6" fill="none" stroke-dasharray="3 9" stroke-linecap="round" />
 
@@ -59,11 +53,6 @@
       <polygon points="-5,-2.2 0,-4.6 5,-2.2 0,0.4" fill="#7ba4ff" />
       <polygon points="-5,-2.2 0,0.4 0,4.6 -5,2.2" fill="#2f5fd0" />
       <polygon points="5,-2.2 0,0.4 0,4.6 5,2.2" fill="#24499f" />
-    </g>
-    <g class="iso-pkt" style="offset-path: path('M52,134 C230,185 390,175 508,162'); offset-distance: 65%; animation-delay: -1.6s">
-      <polygon points="-5,-2.2 0,-4.6 5,-2.2 0,0.4" fill="#f5a179" />
-      <polygon points="-5,-2.2 0,0.4 0,4.6 -5,2.2" fill="#d05a28" />
-      <polygon points="5,-2.2 0,0.4 0,4.6 5,2.2" fill="#a8441f" />
     </g>
     <g class="iso-pkt" style="offset-path: path('M110,192 C280,205 400,175 508,164'); offset-distance: 85%; animation-delay: -2.4s">
       <polygon points="-5,-2.2 0,-4.6 5,-2.2 0,0.4" fill="#9aa3ae" />
@@ -97,32 +86,6 @@
           <rect x="17.8" y="0.8" width="3.6" height="5.6" fill="#ffffff" />
           <rect x="11.4" y="25.6" width="3.6" height="5.6" fill="#ffffff" />
           <rect x="17.8" y="25.6" width="3.6" height="5.6" fill="#ffffff" />
-        </g>
-      </g>
-    </g>
-
-    <!-- Apex Fusion node -->
-    <g>
-      <polygon points="2,158 40,177 40,185 2,166" fill="#7c8a9c" />
-      <polygon points="78,158 40,177 40,185 78,166" fill="#5b6878" />
-      <polygon points="40,139 78,158 40,177 2,158" fill="url(#gwo-plate)" />
-      <circle cx="18" cy="169" r="2.6" fill="#E06030" />
-      <circle cx="30" cy="175" r="2.6" fill="#94a3b8" />
-      <circle cx="42" cy="181" r="2.6" fill="#64748b" />
-      <polygon points="14,146 40,159 40,170 14,157" fill="#c04d24" />
-      <polygon points="66,146 40,159 40,170 66,157" fill="#9c3c1a" />
-      <polygon points="40,133 66,146 40,159 14,146" fill="url(#gwo-apxBlock)" />
-      <polygon points="14,132 40,145 40,156 14,143" fill="#c04d24" />
-      <polygon points="66,132 40,145 40,156 66,143" fill="#9c3c1a" />
-      <polygon points="40,119 66,132 40,145 14,132" fill="url(#gwo-apxBlock)" />
-      <path d="M14,132 L40,119 L66,132" stroke="#ffd2ba" stroke-width="1" fill="none" opacity="0.4" />
-      <g class="iso-lift" style="animation-delay: -0.4s">
-        <polygon points="14,118 40,131 40,142 14,129" fill="#cc5628" />
-        <polygon points="66,118 40,131 40,142 66,129" fill="#a8441f" />
-        <polygon points="40,105 66,118 40,131 14,118" fill="url(#gwo-apxTip)" />
-        <path d="M14,118 L40,105 L66,118" stroke="#ffe6d8" stroke-width="1.2" fill="none" opacity="0.65" />
-        <g transform="translate(40 118) matrix(0.56 0.28 -0.56 0.28 0 0) translate(-16 -16)" opacity="0.97">
-          <g transform="translate(16 16) scale(0.3164) translate(-50.57 -49.86)"><path d="M46.4589 88.3853L33.7111 75.6374L46.4589 71.3881V88.3853ZM52.1247 13.0312L65.1558 26.0623L52.1247 30.3116V13.0312ZM99.1501 49.5751C98.5836 47.5921 96.6006 46.7422 94.6176 47.3088L54.1077 61.1898V37.6771L74.5043 30.8782L75.9207 30.5949L76.204 30.0283V25.779L75.9207 25.4958L50.9915 0.566572L50.4249 0.283286H45.3258L44.7592 0.283286L44.4759 0.849858V32.5779L2.2663 47.3088C0.283293 47.8754 -0.566566 49.8584 0 51.8414C0.566579 53.8244 2.54958 54.6742 4.53258 54.1076L46.4589 40.2266V63.7394L25.779 70.5382L24.9292 70.8215L24.6459 71.3881V74.7875L24.9292 75.3541L25.4958 75.9207L48.7252 99.1501L49.2918 99.4334L49.8584 99.7167H55.2408L55.8074 99.4334L56.0907 98.8669V67.4221L98.8669 52.6912C100.283 52.1246 101.133 50.9915 101.133 49.5751C99.4334 50.4249 99.1501 50.1416 99.1501 49.5751Z" fill="#ffffff" /></g>
         </g>
       </g>
     </g>

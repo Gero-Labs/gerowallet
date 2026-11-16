@@ -413,7 +413,7 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/midnight-zk/*', dest: 'extension/midnight-zk', flatten: true },
               // Skip large images for faster build
               {
-                src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
+                src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|bg-dapp).*',
                 dest: 'extension/assets'
               },
               // Only the JS loader (+ README) belongs in the runtime vendor dir — the CSS is

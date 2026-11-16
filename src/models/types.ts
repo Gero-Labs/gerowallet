@@ -163,8 +163,6 @@ enum Provider {
 
 const Blockchain = {
   CARDANO: 'Cardano',
-  APEX_PRIME: 'Apex Fusion Prime',
-  APEX_VECTOR: 'Apex Fusion Vector',
   BITCOIN: 'Bitcoin',
   MIDNIGHT: 'Midnight',
 };

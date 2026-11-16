@@ -38,9 +38,9 @@ const T = {
 // EVERY chain's flat accent and gradient stops are used as text/focus/CTA-text
 // backing across all surfaces, so all get checked. Read from themes.ts, so a
 // new or edited chain palette is covered automatically.
-const cardano = chain('cardano'), bitcoin = chain('bitcoin'), apex = chain('apex'), midnight = chain('midnight');
+const cardano = chain('cardano'), bitcoin = chain('bitcoin'), midnight = chain('midnight');
 const CHAIN = {
-  cardanoAccent: cardano.accent, bitcoinAccent: bitcoin.accent, apexAccent: apex.accent, midnightAccent: midnight.accent,
+  cardanoAccent: cardano.accent, bitcoinAccent: bitcoin.accent, midnightAccent: midnight.accent,
 };
 const lin = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
 const lum = (hex) => {
@@ -68,7 +68,7 @@ for (const s of ['canvas', 'surface', 'raised', 'overlay']) {
 }
 // CTA text must survive every chain's gradient stops — using THAT chain's
 // own on-grad color (Midnight uses pure black on its purple gradient).
-for (const [ck, c] of [['bitcoin', bitcoin], ['apex', apex], ['midnight', midnight]]) {
+for (const [ck, c] of [['bitcoin', bitcoin], ['midnight', midnight]]) {
   checks.push([`onGrad on ${ck}Grad1`, c.onGrad, c.gradient1, 4.5]);
   checks.push([`onGrad on ${ck}Grad2`, c.onGrad, c.gradient2, 4.5]);
 }

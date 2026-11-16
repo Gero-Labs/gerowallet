@@ -140,7 +140,6 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
-import { Blockchain } from '@/models/types';
 
 // Use the unstake and withdrawal composables
 const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
@@ -151,11 +150,6 @@ const { loadingTxs } = toRefs(loadingState);
 const { currentPool, poolLoading } = toRefs(stakingStoreActions.state);
 
 const hideZero = ref<boolean>(false);
-
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
 
 const pool = computed(() => {
   if (currentPool.value) {
@@ -232,10 +226,6 @@ onMounted(async () => {
     await loadPoolData(account.value.pool_id);
   }
 });
-
-// isApex is consumed by the parent Staking.vue layout via the shared store; kept
-// referenced so the computed is not tree-shaken as unused.
-void isApex;
 </script>
 <style scoped>
 .stk-root {

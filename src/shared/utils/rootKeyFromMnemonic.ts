@@ -10,7 +10,7 @@ import { Blockchain } from '@/models/types';
  * its mnemonic. Mirrors `createWallet()` in gero-db.ts exactly:
  *  - Bitcoin: BIP-32 master private key (32 bytes) from the BIP-39 seed.
  *  - Midnight: the 64-byte BIP-39 seed itself.
- *  - Everything else (Cardano, Apex): the 96-byte Icarus / CIP-3 root key,
+ *  - Everything else (Cardano): the 96-byte Icarus / CIP-3 root key,
  *    `Bip32PrivateKey.fromBip39Entropy(entropy, '')`.
  *
  * Used to prove a decrypted root key and a decrypted mnemonic belong together

@@ -143,19 +143,6 @@ describe('dappRequestHub', () => {
     });
   });
 
-  // Apex shares the same Cardano signTx/signData/enable pipeline (no popup
-  // view special-cases it), so it gets no special hub treatment: it connects
-  // and renders through DAppOverlay exactly like a Cardano wallet instead of
-  // eating a 5s dead wait before falling back to a popup.
-  it('connects normally when the active wallet is Apex', async () => {
-    const { walletStore } = await import('@/stores/walletStore');
-    const { Blockchain } = await import('@/models/types');
-    walletStore.loggedWallet = { chain: Blockchain.APEX_PRIME } as never;
-    const { initDappRequestHub } = await import('./dappRequestHub');
-    await initDappRequestHub();
-    expect(chrome.runtime.connect).toHaveBeenCalledTimes(1);
-  });
-
   it('queues a response while disconnected and flushes it after reconnect', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();

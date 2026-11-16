@@ -63,7 +63,7 @@ function contentFixture(source) {
     ${state}
     const scrollContainer = ref(); const navBarRef = ref(); const onSheetScroll = () => {};
     const loggedWallet = { chain: 'Cardano' };
-    const Blockchain = { APEX_PRIME:'Prime', APEX_VECTOR:'Vector', BITCOIN:'Bitcoin', MIDNIGHT:'Midnight' };
+    const Blockchain = { BITCOIN:'Bitcoin', MIDNIGHT:'Midnight' };
     const assets = { cardanoBg: '/src/assets/svg/gero_dashboard.svg' };
   </script>${styles(descriptor)}`;
 }

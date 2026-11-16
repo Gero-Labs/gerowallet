@@ -599,8 +599,8 @@ function nextBitcoinAddress(): void {
 
 // ---- QR -------------------------------------------------------------------------
 
-// QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
-const qrLogo = computed(() => assets.resolveChainLogo(loggedWallet.value?.chain));
+// QR-center Gero logo.
+const qrLogo = computed(() => assets.geroLogo);
 
 // Bitcoin encodes a BIP21 URI so the optional amount and label travel with it.
 const qrData = computed(() => {

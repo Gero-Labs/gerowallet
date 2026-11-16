@@ -4,7 +4,7 @@ const adjectives = [
   'Thunder', 'Storm', 'Blazing', 'Silent', 'Swift', 'Noble', 'Brave', 'Bold',
   'Phantom', 'Mystic', 'Primal', 'Savage', 'Epic', 'Hyper', 'Turbo', 'Ultra',
   'Dark', 'Bright', 'Wild', 'Rapid', 'Lucky', 'Rogue', 'Alpha', 'Omega',
-  'Vivid', 'Cyber', 'Radiant', 'Titan', 'Apex', 'Nova', 'Zen', 'Pixel',
+  'Vivid', 'Cyber', 'Radiant', 'Titan', 'Nova', 'Zen', 'Pixel',
 ];
 
 const nouns = [

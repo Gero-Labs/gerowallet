@@ -423,7 +423,7 @@ describe('prepareLegacyCancel', () => {
   });
 
   describe('the wallet', () => {
-    it.each([Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.APEX_PRIME, Blockchain.APEX_VECTOR])('refuses a %s wallet', async (chain) => {
+    it.each([Blockchain.BITCOIN, Blockchain.MIDNIGHT])('refuses a %s wallet', async (chain) => {
       const e = env({ chain });
       expect((await refusal(prepareLegacyCancel(REQUEST, e))).code).toBe('WALLET_UNSUPPORTED');
       neverCalled(e);

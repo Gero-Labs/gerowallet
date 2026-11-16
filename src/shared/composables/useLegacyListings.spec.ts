@@ -160,7 +160,6 @@ describe('useLegacyListings', () => {
     ['a Cardano preview wallet', 'Preview', 'Cardano'],
     ['a Bitcoin wallet', 'Mainnet', 'Bitcoin'],
     ['a Midnight wallet', 'Mainnet', 'Midnight'],
-    ['an Apex Fusion Prime wallet', 'Mainnet', 'Apex Fusion Prime'],
   ])('does nothing on %s', async (_label, network, chain) => {
     loginTo(1, { payment: [PAYMENT], change: [CHANGE] }, network, chain);
     const { items, refresh } = useLegacyListings();

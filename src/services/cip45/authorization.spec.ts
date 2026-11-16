@@ -25,7 +25,7 @@ describe('background CIP-45 authorization', () => {
   it.each([
     { ...walletA, walletId: 'B' },
     { ...walletA, network: 'Preprod' },
-    { ...walletA, chain: 'Apex Prime' },
+    { ...walletA, chain: 'Bitcoin' },
     null, // Logout or lock.
   ])('permanently revokes pending and active grants on a context change: %j', context => {
     const active = registry.begin('dashboard-1', walletA, 'peer');

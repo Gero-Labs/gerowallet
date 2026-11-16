@@ -12,7 +12,6 @@
   <!-- Critical performance optimizations -->
   <!-- Asset preloads will be handled by Vite during build -->
   <!-- <link rel="preload" as="image" href="./assets/cardanoBg.png" media="(max-width: 1920px)" fetchpriority="high"> -->
-  <!-- <link rel="preload" as="image" href="./assets/apexBg.png" media="(max-width: 1920px)" fetchpriority="high"> -->
 
   <!-- Fonts are self-hosted and bundled: see the @fontsource imports at the top of main.ts.
        Nothing is fetched from a remote font CDN, so the extension renders identically offline
@@ -36,8 +35,8 @@
   /* This inline block is emitted AFTER the bundled stylesheet, so anything
      declared here beats baseline.css on source order. Keep it to layout only:
      the scrollbar recipe and .geroButton live in src/shared/styles/baseline.css.
-     The old per-chain Apex CTA class is retired: the gradient now follows
-     --g-grad-1/--g-grad-2, which useChainAccent re-points on wallet switch. */
+     The CTA gradient follows --g-grad-1/--g-grad-2, which useChainAccent
+     re-points on wallet switch. */
   html {
     overflow-y: auto;
   }
@@ -99,12 +98,6 @@
 
   .gradient-text {
     background: linear-gradient(to right, #00c7f3, #00fad5);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .apex-gradient-text {
-    background: linear-gradient(to right, #F8A282, #FECB82);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }

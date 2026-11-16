@@ -37,7 +37,6 @@ describe('getExplorerUrl: Cardano default (no saved choice)', () => {
   it('opens the creating transaction for a UTxO reference', () => {
     expect(cardano('tx', `${TX}#3`)).toBe(`https://cexplorer.io/tx/${TX}`);
     expect(cardano('tx', `${TX}#0`, 'cardanoscan')).toBe(`https://cardanoscan.io/transaction/${TX}`);
-    expect(getExplorerUrl(Blockchain.APEX_VECTOR, `${TX}#1`, 'tx')).toBe(`https://vector.apexscan.org/en/transaction/${TX}`);
   });
 });
 
@@ -119,22 +118,6 @@ describe('getExplorerUrl: governance actions', () => {
 });
 
 describe('getExplorerUrl: other chains', () => {
-  it('sends Apex Prime and Vector to their own apexscan hosts', () => {
-    expect(getExplorerUrl(Blockchain.APEX_PRIME, TX, 'tx')).toBe(`https://apexscan.org/en/transaction/${TX}`);
-    expect(getExplorerUrl(Blockchain.APEX_VECTOR, TX, 'tx')).toBe(`https://vector.apexscan.org/en/transaction/${TX}`);
-    expect(getExplorerUrl(Blockchain.APEX_VECTOR, TX, 'block')).toBe(`https://vector.apexscan.org/en/block/${TX}`);
-    expect(getExplorerUrl(Blockchain.APEX_PRIME, POOL_HEX, 'pool')).toBe(`https://apexscan.org/en/pool/${POOL_BECH32}`);
-  });
-
-  it('ignores a Cardano explorer choice on Apex', () => {
-    expect(getExplorerUrl(Blockchain.APEX_PRIME, TX, 'tx', Network.MAINNET, 'cardanoscan'))
-      .toBe(`https://apexscan.org/en/transaction/${TX}`);
-  });
-
-  it('returns nothing for an entity apexscan has no page for', () => {
-    expect(getExplorerUrl(Blockchain.APEX_PRIME, DREP, 'drep')).toBe('');
-  });
-
   it('keeps Bitcoin on mempool.space', () => {
     expect(getExplorerUrl(Blockchain.BITCOIN, TX, 'tx')).toBe(`https://mempool.space/tx/${TX}`);
     expect(getExplorerUrl(Blockchain.BITCOIN, TX, 'block')).toBe(`https://mempool.space/block/${TX}`);
@@ -161,8 +144,6 @@ describe('explorersFor / resolveExplorerId', () => {
   });
 
   it('offers no choice on chains with one explorer or none', () => {
-    expect(explorersFor(Blockchain.APEX_PRIME, Network.MAINNET)).toEqual([]);
-    expect(explorersFor(Blockchain.APEX_VECTOR, Network.MAINNET)).toEqual([]);
     expect(explorersFor(Blockchain.BITCOIN, Network.MAINNET)).toEqual([]);
     expect(explorersFor(Blockchain.MIDNIGHT, Network.MAINNET)).toEqual([]);
   });

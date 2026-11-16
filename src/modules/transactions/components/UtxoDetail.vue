@@ -129,7 +129,7 @@ const props = defineProps<{
 }>();
 
 // No explorer has a page for a single UTxO, so link the transaction that made it.
-// Shared helper: inline logic here once sent Vector UTxOs to cexplorer (bug 954).
+// Shared helper: inline logic here once sent UTxOs to the wrong chain's explorer (bug 954).
 const { explorerUrl } = useExplorer();
 const txUrl = computed(() => explorerUrl('tx', props.utxo.txHash));
 

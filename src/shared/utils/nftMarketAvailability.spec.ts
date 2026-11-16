@@ -95,7 +95,7 @@ describe('nftMarketAvailable', () => {
   });
 
   it('is off for any chain but Cardano', () => {
-    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.APEX_PRIME]) {
+    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT]) {
       walletStore.loggedWallet = wallet({ chain });
       expect(nftMarketAvailable(), chain).toBe(false);
     }
@@ -138,7 +138,7 @@ describe('nftMarketBrowseAvailable', () => {
   });
 
   it('is off for any chain but Cardano', () => {
-    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.APEX_PRIME]) {
+    for (const chain of [Blockchain.BITCOIN, Blockchain.MIDNIGHT]) {
       walletStore.loggedWallet = wallet({ chain });
       expect(nftMarketBrowseAvailable(), chain).toBe(false);
     }

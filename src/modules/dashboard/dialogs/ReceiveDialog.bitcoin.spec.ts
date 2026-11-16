@@ -23,7 +23,7 @@ vi.mock('qr-code-styling', () => ({
 vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: null as unknown, keys: null }) }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.reactive({ addresses: {} }) }));
 vi.mock('@/utils/networks', () => ({ default: { resolveCurrencyTicker: () => 'tBTC', resolveGovernanceSupport: () => false } }));
-vi.mock('@/utils/assets', () => ({ default: { qrCodeSvg: '', resolveChainLogo: () => '' } }));
+vi.mock('@/utils/assets', () => ({ default: { qrCodeSvg: '', geroLogo: '' } }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({ default: { template: '<div><slot /></div>' } }));
 vi.mock('@/shared/components/CopyButton.vue', () => ({ default: { render: () => null } }));

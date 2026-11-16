@@ -143,8 +143,6 @@ const googleGlyph = assets.googleOutlineSvg; // outlined Google "G" — masked/t
 // matching the per-network logo gradients.
 const NET_GRADIENTS: Record<string, string> = {
   'Cardano': 'linear-gradient(160deg, #00eaef, #0ca3fb)',
-  'Apex Fusion Prime': 'linear-gradient(160deg, #16b89e, #057468)',
-  'Apex Fusion Vector': 'linear-gradient(160deg, #ff7a66, #f25140)',
   'Bitcoin': 'linear-gradient(160deg, #ffd279, #f7931a)',
 };
 const methodBg = computed(

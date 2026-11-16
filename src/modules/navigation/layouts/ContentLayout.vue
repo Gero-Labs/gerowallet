@@ -6,25 +6,19 @@
           <!-- Background - Confined to dashboard working area -->
           <div
             :class="
-              loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
-                ? 'apex-background-dashboard'
-                : loggedWallet?.chain === Blockchain.BITCOIN
-                  ? 'bitcoin-background-dashboard'
-                  : loggedWallet?.chain === Blockchain.MIDNIGHT
-                    ? 'midnight-background-dashboard'
-                    : 'cardano-background-dashboard'
+              loggedWallet?.chain === Blockchain.BITCOIN
+                ? 'bitcoin-background-dashboard'
+                : loggedWallet?.chain === Blockchain.MIDNIGHT
+                  ? 'midnight-background-dashboard'
+                  : 'cardano-background-dashboard'
             "
             :style="{
               backgroundImage: `url(${
-                loggedWallet?.chain === Blockchain.APEX_PRIME
-                  ? assets.apexPrimeBg
-                  : loggedWallet?.chain === Blockchain.APEX_VECTOR
-                    ? assets.apexVectorBg
-                    : loggedWallet?.chain === Blockchain.BITCOIN
-                      ? assets.bitcoinBg
-                      : loggedWallet?.chain === Blockchain.MIDNIGHT
-                        ? assets.midnightBg
-                        : assets.cardanoBg
+                loggedWallet?.chain === Blockchain.BITCOIN
+                  ? assets.bitcoinBg
+                  : loggedWallet?.chain === Blockchain.MIDNIGHT
+                    ? assets.midnightBg
+                    : assets.cardanoBg
               })`,
             }"
           ></div>
@@ -661,12 +655,6 @@ const preloadBackgroundImage = () => {
   const currentChain = loggedWallet.value?.chain;
   let imageUrl: string;
   switch (currentChain) {
-    case Blockchain.APEX_PRIME:
-      imageUrl = assets.apexPrimeBg;
-      break;
-    case Blockchain.APEX_VECTOR:
-      imageUrl = assets.apexVectorBg;
-      break;
     case Blockchain.BITCOIN:
       imageUrl = assets.bitcoinBg;
       break;
@@ -814,28 +802,6 @@ onBeforeUnmount(() => {
   /* Half the previous 0.85: the backdrop sits behind the portfolio, it shouldn't compete with it. */
   &[style*='url('] {
     opacity: 0.425;
-  }
-}
-
-/* Apex background with same styling as Cardano */
-.apex-background-dashboard {
-  position: absolute;
-  top: calc(-50% + 20px);
-  left: 50%;
-  width: 100vw;
-  height: 100vh;
-  z-index: -1; /* Behind dashboard content */
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
-  pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.7);
-  opacity: 0;
-  transition: opacity var(--g-dur-slow) ease-in-out;
-
-  &[style*='url('] {
-    opacity: 1;
   }
 }
 
