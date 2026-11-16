@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { ScaleBigInt } from 'midnight-v9-address-format';
 import { balanceLightDust9, dustLedger9 } from './midnightDustLightLedger9';
-import { reconstructDustState, littleEndianHex, type CollapsedDustTree, type DustLightTransport,
-  type DustSnapshot, type DustSpendTransaction } from './midnightDustLightSync';
+import {
+  DUST_SCAN_MAX_SLICES, DUST_SCAN_MIN_SLICE_BLOCKS, DUST_SPEND_CONCURRENCY, dustScanSlices, reconstructDustState,
+  littleEndianHex, type CollapsedDustTree, type DustLightTransport, type DustSnapshot, type DustSpendTransaction,
+} from './midnightDustLightSync';
 
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 const root = (value: bigint | undefined) => value === undefined ? null : hex(ScaleBigInt.encode(value));
@@ -318,6 +320,72 @@ describe('DUST spend checkpoint', () => {
         { checkpoint: { ...cold.checkpoint!, checkedThrough: f.snapshot.block.height }, checkpointMarginBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(ranges.every(([from]) => from === 0)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+});
+
+describe('sliced DUST spend scans', () => {
+  it('splits a range into contiguous slices that depend on the range alone', () => {
+    expect(dustScanSlices(0, 5)).toEqual([[0, 5]]);
+    expect(dustScanSlices(10, 10 + 2 * DUST_SCAN_MIN_SLICE_BLOCKS - 1)).toEqual([
+      [10, 10 + DUST_SCAN_MIN_SLICE_BLOCKS - 1], [10 + DUST_SCAN_MIN_SLICE_BLOCKS, 10 + 2 * DUST_SCAN_MIN_SLICE_BLOCKS - 1]]);
+    for (const [from, to] of [[0, 4_000], [3_346_139, 3_480_255], [7, 7 + DUST_SCAN_MIN_SLICE_BLOCKS - 2], [0, 10_000_000]]) {
+      const slices = dustScanSlices(from, to);
+      expect(slices.length).toBeLessThanOrEqual(DUST_SCAN_MAX_SLICES);
+      expect(slices[0][0]).toBe(from);
+      expect(slices.at(-1)![1]).toBe(to);
+      slices.forEach(([a, b], i) => {
+        expect(b).toBeGreaterThanOrEqual(a);
+        if (i > 0) expect(a).toBe(slices[i - 1][1] + 1);
+        if (slices.length > 1) expect(b - a + 1).toBeGreaterThanOrEqual(DUST_SCAN_MIN_SLICE_BLOCKS);
+      });
+    }
+    expect(dustScanSlices(3_346_139, 3_480_255)).toHaveLength(DUST_SCAN_MAX_SLICES);
+    expect(() => dustScanSlices(10, 9)).toThrow('Invalid DUST scan range');
+  });
+
+  it('scans a long range in parallel slices, under the request limit, and reaches the same state', async () => {
+    const f = fundedFixture();
+    try {
+      // A tall snapshot: the fixture's spends (heights 3 to 5) sit in the first slice.
+      const height = 40_000;
+      const snapshot = { ...f.snapshot, block: { ...f.snapshot.block, height } };
+      const ranges: [number, number][] = [];
+      let inFlight = 0;
+      let peak = 0;
+      const transport: DustLightTransport = {
+        ...f.transport,
+        snapshot: vi.fn(async () => snapshot),
+        // Answers as the sidecar does: the block after the page while below the tip, null at it.
+        spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+          ranges.push([fromBlock, toBlock]);
+          peak = Math.max(peak, ++inFlight);
+          await new Promise(resolve => setTimeout(resolve, 2));
+          inFlight--;
+          const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+          return { transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock),
+            nextBlock: toBlock < height ? toBlock + 1 : null };
+        }),
+      };
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined, { checkpointMarginBlocks: 1 });
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
+      // Every round asks for the whole range, slice by slice, and never more at once than the limit.
+      expect(ranges).toEqual(expect.arrayContaining(dustScanSlices(0, height)));
+      expect(new Set(ranges.map(([from]) => from))).toEqual(new Set(dustScanSlices(0, height).map(([from]) => from)));
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(DUST_SPEND_CONCURRENCY);
+    } finally { f.key.clear(); }
+  });
+
+  it('refuses a slice the server ends early without a next block', async () => {
+    const f = fundedFixture();
+    try {
+      const height = 40_000;
+      const snapshot = { ...f.snapshot, block: { ...f.snapshot.block, height } };
+      const transport: DustLightTransport = { ...f.transport, snapshot: vi.fn(async () => snapshot),
+        spends: vi.fn(async () => ({ transactions: [], nextBlock: null })) };
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', transport)).rejects.toThrow('Invalid DUST spend page cursor');
     } finally { f.key.clear(); }
   });
 });

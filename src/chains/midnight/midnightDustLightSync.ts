@@ -172,6 +172,50 @@ export interface ReconstructDustOptions {
 /** About half an hour of Midnight blocks: a spend this deep is final. */
 export const DUST_CHECKPOINT_MARGIN_BLOCKS = 300;
 
+// The indexer streams a spend scan at ~11 ms per matching record, one page
+// after another: a fork-to-tip scan of one prefix took 56 s on mainnet
+// (2026-11-16), the same scan in 8 block slices 12-13 s with 4 requests in
+// flight. 6 in flight was no faster and drew 429s from Nexus, whose sidecar
+// serves 16 DUST requests at once for every wallet.
+/** At most this many fixed block slices per scan. */
+export const DUST_SCAN_MAX_SLICES = 8;
+/** No slice shorter than this: a short warm scan stays one request. */
+export const DUST_SCAN_MIN_SLICE_BLOCKS = 2_000;
+/** One reconstruction's spend requests in flight. */
+export const DUST_SPEND_CONCURRENCY = 4;
+
+/**
+ * Splits the inclusive block range of a scan into contiguous slices. They
+ * depend on the range alone, never on an owned nullifier, so asking for the
+ * slices tells the server nothing the whole range would not.
+ */
+export function dustScanSlices(from: number, to: number): [number, number][] {
+  const span = to - from + 1;
+  if (!Number.isSafeInteger(span) || span < 1) throw new Error('Invalid DUST scan range');
+  const count = Math.max(1, Math.min(DUST_SCAN_MAX_SLICES, Math.floor(span / DUST_SCAN_MIN_SLICE_BLOCKS)));
+  const size = Math.ceil(span / count);
+  const slices: [number, number][] = [];
+  for (let start = from; start <= to; start += size) slices.push([start, Math.min(to, start + size - 1)]);
+  return slices;
+}
+
+/** Runs at most `max` tasks at once; a finished task hands its slot to the next waiting one. */
+function concurrencyLimit(max: number) {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active < max) active++;
+    else await new Promise<void>(resolve => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+
 function generationKey(generationMtIndex: number, backingNight: string): string {
   return `${generationMtIndex}:${backingNight.toLowerCase()}`;
 }
@@ -335,9 +379,11 @@ async function reconstructDustStateOnce<State, Key>(
   const matches = new Map<bigint, DustSpendTransaction>();
   const seen = new Set<bigint>();
   let discovered = 0;
+  const limit = concurrencyLimit(DUST_SPEND_CONCURRENCY);
   for (;;) {
     const pending = [...live.keys()].filter(n => !checked.has(n));
-    // One scan per prefix and start block; a round's scans run side by side.
+    // One scan per prefix and start block, each in fixed block slices; a
+    // round's scans and slices run side by side, under one request limit.
     const scans = new Map<string, { prefix: string; from: number; nullifiers: bigint[] }>();
     for (const n of pending) {
       const prefix = dustNullifierPrefix(n, commitmentEnd);
@@ -348,46 +394,50 @@ async function reconstructDustStateOnce<State, Key>(
       scans.set(id, scan);
     }
     await Promise.all([...scans.values()].map(async ({ prefix, from, nullifiers }) => {
-      let fromBlock = from;
-      let window = 250_000;
-      for (;;) {
-        const toBlock = Math.min(block.height, fromBlock + window - 1);
-        const { transactions, nextBlock } = await transport.spends(block, [prefix], fromBlock, toBlock);
-        if (!Array.isArray(transactions) || (nextBlock !== null
-          && (!Number.isSafeInteger(nextBlock) || nextBlock <= fromBlock || nextBlock > toBlock + 1 || nextBlock > block.height))
-          || (nextBlock === null && toBlock !== block.height)) {
-          throw new Error('Invalid DUST spend page cursor');
-        }
-        for (const tx of transactions) {
-          const height = index(tx.block.height);
-          if (height < fromBlock || height > toBlock || (nextBlock !== null && height >= nextBlock)) {
-            throw new Error('DUST spend is outside its snapshot page');
+      await Promise.all(dustScanSlices(from, block.height).map(async ([sliceFrom, sliceTo]) => {
+        let fromBlock = sliceFrom;
+        let window = 250_000;
+        for (;;) {
+          const toBlock = Math.min(sliceTo, fromBlock + window - 1);
+          const { transactions, nextBlock } = await limit(() => transport.spends(block, [prefix], fromBlock, toBlock));
+          if (!Array.isArray(transactions) || (nextBlock !== null
+            && (!Number.isSafeInteger(nextBlock) || nextBlock <= fromBlock || nextBlock > toBlock + 1 || nextBlock > block.height))
+            || (nextBlock === null && toBlock !== block.height)) {
+            throw new Error('Invalid DUST spend page cursor');
           }
-          // DUST state resets once, at the ledger 9 crossing: every coin the
-          // snapshot lists was created on the snapshot's ledger, so a spend
-          // from before the crossing (another ledger's events) cannot be one
-          // of them. Skip that history, but only while it touches no owned
-          // nullifier: a match means the reset assumption does not hold, and
-          // the reconstructed state would be wrong, so fail loudly.
-          // A malformed version is a bad page, not another ledger's history.
-          if (!Number.isSafeInteger(tx.protocolVersion) || tx.protocolVersion < 0) throw new Error('Invalid DUST spend protocol version');
-          const sameLedger = onLedger(tx.protocolVersion, ledger.ledger);
-          for (const encoded of tx.matchedNullifiers) {
-            if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
-            const nullifier = BigInt(`0x${Buffer.from(encoded, 'hex').reverse().toString('hex')}`);
-            if (!live.has(nullifier)) continue;
-            if (!sameLedger) {
-              throw new Error(`An owned DUST coin was spent by a transaction from another ledger (protocol version ${tx.protocolVersion}); the DUST reset at the ledger crossing does not hold`);
+          for (const tx of transactions) {
+            const height = index(tx.block.height);
+            if (height < fromBlock || height > toBlock || (nextBlock !== null && height >= nextBlock)) {
+              throw new Error('DUST spend is outside its snapshot page');
             }
-            const prior = matches.get(nullifier);
-            if (prior && prior.hash !== tx.hash) throw new Error('Conflicting DUST spends');
-            matches.set(nullifier, tx);
+            // DUST state resets once, at the ledger 9 crossing: every coin the
+            // snapshot lists was created on the snapshot's ledger, so a spend
+            // from before the crossing (another ledger's events) cannot be one
+            // of them. Skip that history, but only while it touches no owned
+            // nullifier: a match means the reset assumption does not hold, and
+            // the reconstructed state would be wrong, so fail loudly.
+            // A malformed version is a bad page, not another ledger's history.
+            if (!Number.isSafeInteger(tx.protocolVersion) || tx.protocolVersion < 0) throw new Error('Invalid DUST spend protocol version');
+            const sameLedger = onLedger(tx.protocolVersion, ledger.ledger);
+            for (const encoded of tx.matchedNullifiers) {
+              if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
+              const nullifier = BigInt(`0x${Buffer.from(encoded, 'hex').reverse().toString('hex')}`);
+              if (!live.has(nullifier)) continue;
+              if (!sameLedger) {
+                throw new Error(`An owned DUST coin was spent by a transaction from another ledger (protocol version ${tx.protocolVersion}); the DUST reset at the ledger crossing does not hold`);
+              }
+              const prior = matches.get(nullifier);
+              if (prior && prior.hash !== tx.hash) throw new Error('Conflicting DUST spends');
+              matches.set(nullifier, tx);
+            }
           }
+          // Below the tip the server answers the block after the page, so a
+          // slice ends when that block is past it.
+          if (nextBlock === null || nextBlock > sliceTo) break;
+          window = nextBlock - fromBlock;
+          fromBlock = nextBlock;
         }
-        if (nextBlock === null) break;
-        window = nextBlock - fromBlock;
-        fromBlock = nextBlock;
-      }
+      }));
       nullifiers.forEach(n => checked.add(n));
     }));
     let advanced = false;
