@@ -121,7 +121,10 @@ export function routeInventory(file, app, { parsed, sources, resolveLocal }) {
     if (prop(node, 'beforeEnter')) guards.push({ kind: 'beforeEnter', ...located(prop(node, 'beforeEnter')) });
     if (app === 'sidepanel') {
       guards.push(...conditions.filter(condition => name && condition.expression.includes(`to.name === '${name}'`)).map(condition => ({ kind: 'route guard', ...condition })));
-      if (name && !['home', 'staking', 'activity'].includes(name)) guards.push({ kind: 'Apex route allowlist', ...conditions.find(condition => condition.expression.includes('APEX_ALLOWED_ROUTE_NAMES.has')) });
+      // Apex Fusion support (and with it this allowlist) was removed in #1552;
+      // the frozen V01 revision still has it.
+      const apexAllowlist = conditions.find(condition => condition.expression.includes('APEX_ALLOWED_ROUTE_NAMES.has'));
+      if (apexAllowlist && name && !['home', 'staking', 'activity'].includes(name)) guards.push({ kind: 'Apex route allowlist', ...apexAllowlist });
     }
     const flagNames = [...new Set(guards.flatMap(guard => [...guard.expression.matchAll(/featureFlagsStore\.(\w+)\(/g)].map(match => match[1])))].sort();
     routes.push({ app, ...located(node), path: routePath, name, component: routeComponent,

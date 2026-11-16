@@ -33,6 +33,7 @@ const ROUTERS = [['src/modules/navigation/router.ts', 'options'], ['src/sidepane
 const KINDS = ['unit', 'guards', 'help-browser', 'e2e', 'manual'];
 const AUTOMATED = ['unit', 'guards', 'help-browser', 'e2e'];
 const LOCAL_KINDS = new Set(['unit', 'guards', 'help-browser']);
+const GUARD_SPEC = 'src/modules/navigation/router.guards.spec.ts';
 const E2E_REF = /^\d{2}-[a-z0-9-]+\/[A-Za-z0-9.-]+\.spec\.ts$/;
 
 const tracked = new Set(execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\0').filter(Boolean));
@@ -60,7 +61,7 @@ for (const [key, entry] of Object.entries(matrix.routes)) {
   for (const item of entry.checks) {
     if (!AUTOMATED.includes(item.kind)) problems.push(`${key}: unknown check kind ${item.kind}`);
     else if (LOCAL_KINDS.has(item.kind) && !tracked.has(item.ref)) problems.push(`${key}: ${item.ref} is not a tracked file`);
-    else if (item.kind === 'guards' && item.ref !== 'src/modules/navigation/router.guards.spec.ts') problems.push(`${key}: guards must reference router.guards.spec.ts`);
+    else if (item.kind === 'guards' && item.ref !== GUARD_SPEC) problems.push(`${key}: guards must reference router.guards.spec.ts`);
     else if (item.kind === 'e2e' && !E2E_REF.test(item.ref)) problems.push(`${key}: ${item.ref} is not a tests/specs path`);
     if (item.funded !== undefined && (item.kind !== 'e2e' || item.funded !== true)) problems.push(`${key}: funded is only for e2e checks`);
     if (item.via !== undefined && (item.kind !== 'e2e' || typeof item.via !== 'string' || !item.via)) problems.push(`${key}: via is a non-empty string, only on e2e checks`);
@@ -80,12 +81,38 @@ for (const route of routes) {
     problems.push(`${routeKey(route)}: ${route.component ? 'no check renders this view' : 'no guard check covers this redirect'}, so a manual step is required`);
   }
 }
+problems.push(...verifyGuards());
 if (e2eRoot) problems.push(...verifyE2e());
 assert.equal(problems.length, 0, `route-matrix.json does not match the routers:\n  ${problems.join('\n  ')}`);
 
 /** Checks that render the route's view without a funded wallet, a device or a live provider. */
 function viewChecks(entry) {
   return entry.checks.filter(item => !item.funded && item.kind !== 'guards');
+}
+
+/**
+ * A guards check counts only if router.guards.spec.ts pushes the route: in the
+ * options block for an options route, in the side-panel block for a side-panel
+ * route. Catch-alls are credited to any push of an unknown path.
+ */
+function verifyGuards() {
+  const found = [];
+  const spec = read(GUARD_SPEC);
+  const marker = spec.indexOf("describe('production sidepanel router");
+  assert(marker > 0, `${GUARD_SPEC}: side-panel describe block not found`);
+  const blocks = { options: spec.slice(0, marker), sidepanel: spec.slice(marker) };
+  const pushed = Object.fromEntries(Object.entries(blocks).map(([app, text]) =>
+    [app, [...text.matchAll(/router\.push\('([^'?]*)/g)].map(match => match[1])]));
+  for (const route of routes) {
+    if (!matrix.routes[routeKey(route)]?.checks.some(item => item.kind === 'guards')) continue;
+    const paths = pushed[route.app];
+    const prefix = route.path.split(/[:(]/)[0];
+    const reached = route.path.includes('pathMatch')
+      ? paths.some(pathname => !routes.some(other => other.app === route.app && other.path === pathname))
+      : paths.some(pathname => route.path.includes(':') ? pathname.startsWith(prefix) : pathname === route.path);
+    if (!reached) found.push(`${routeKey(route)}: ${GUARD_SPEC} never pushes this route; drop the guards check or add a case`);
+  }
+  return found;
 }
 
 /**

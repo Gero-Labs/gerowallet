@@ -9,7 +9,7 @@ The ESLint Config Gate workflow runs `route-matrix.mjs --check`, so a route adde
 ## How each route is checked
 
 - **unit**: Vitest spec in this repository (npm test) that mounts the route's view or drives the logic behind it. Source-text tripwires are not listed.
-- **guards**: src/modules/navigation/router.guards.spec.ts drives the production router: it proves where the route lands (auth, network, feature flag, redirect), not that its view renders.
+- **guards**: src/modules/navigation/router.guards.spec.ts drives the production router: it proves where the route lands (auth, network, feature flag, redirect), not that its view renders. route-matrix.mjs checks the spec pushes the route (in the side-panel block for a side-panel route).
 - **help-browser**: scripts/help-browser scenario run by the optional Help browser evidence workflow when Help, shared UI or build files change (not a required check).
 - **e2e**: Playwright spec in the external harness, run against an exact wallet SHA.
 - **manual**: Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff.
@@ -23,7 +23,7 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 - 50 routes render a view; 4 are redirects or catch-alls, covered by the guard spec or a manual step.
 - 36 of the 50 views have a check that renders them without a funded wallet (unit, Help browser or E2E).
 - 14 views rely on the manual step: `options:/nexus`, `options:/governance/dreps/:drepId`, `options:/copilot-feed`, `options:/dev-tools`, `options:/wc-session-proposal`, `options:/warning`, `options:/ledger-ble-sign`, `options:/ordinals`, `options:/mempool`, `options:/lightning`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/feed`.
-- Of those, 4 have the guard spec, which proves where the router lands but not that the view renders, and no check that renders them: `options:/ledger-ble-sign`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/feed`.
+- Of those, 3 have the guard spec, which proves where the router lands but not that the view renders, and no check that renders them: `options:/ledger-ble-sign`, `sidepanel:/staking`, `sidepanel:/feed`.
 - 4 routes have browser coverage only in specs that skip without a funded wallet: `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/vaults`.
 - 36 routes list a manual step (device, live provider, mainnet or funds) for the V13 signoff.
 
@@ -84,9 +84,9 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 |---|---|---|---|---|---|
 | `/` | `home` | V09 | - | unit: `sidepanel/pages/HomePage.spec.ts`<br>e2e: `08-post-v27/sidepanel-token-list.spec.ts`<br>e2e: `08-post-v27/production-store-sync.spec.ts`<br>e2e: `07-v270-features/sidepanel.spec.ts` (funded) | - |
 | `/staking` | `staking` | V11 | side-panel guard | guards: `modules/navigation/router.guards.spec.ts`<br>e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Delegate from the side panel with Ledger over Bluetooth. |
-| `/market` | `market` | V09 | Apex route allowlist | guards: `modules/navigation/router.guards.spec.ts`<br>e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Open the side-panel market and confirm the token list and category tabs render. |
-| `/perps` | `perps` | V10 | Apex route allowlist | e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Mainnet only: open and close a Strike position (QA #1513). |
-| `/vaults` | `vaults` | V10 | Apex route allowlist | unit: `sidepanel/components/perps/VaultTransfers.spec.ts`<br>e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Mainnet only: deposit to and withdraw from a Strike vault. |
+| `/market` | `market` | V09 | - | e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Open the side-panel market and confirm the token list and category tabs render. |
+| `/perps` | `perps` | V10 | - | e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Mainnet only: open and close a Strike position (QA #1513). |
+| `/vaults` | `vaults` | V10 | - | unit: `sidepanel/components/perps/VaultTransfers.spec.ts`<br>e2e: `07-v270-features/sidepanel.spec.ts` (funded) | Mainnet only: deposit to and withdraw from a Strike vault. |
 | `/activity` | `activity` | V09 | - | unit: `sidepanel/pages/ActivityPage.midnight.spec.ts`<br>guards: `modules/navigation/router.guards.spec.ts`<br>e2e: `08-post-v27/explorer-setting.spec.ts`<br>e2e: `07-v270-features/sidepanel.spec.ts` (funded) | - |
-| `/feed` | `feed` | V11 | `isCopilotEnabled`, side-panel guard, Apex route allowlist | guards: `modules/navigation/router.guards.spec.ts` | With isCopilotEnabled on, open the side-panel feed and confirm cards render. |
+| `/feed` | `feed` | V11 | `isCopilotEnabled`, side-panel guard | guards: `modules/navigation/router.guards.spec.ts` | With isCopilotEnabled on, open the side-panel feed and confirm cards render. |
 | `/:pathMatch(.*)*` | - | V04 | redirect `/` | _Catch-all: unknown side-panel paths land on home._ | Open sidepanel/index.html#/does-not-exist and confirm home renders. |
