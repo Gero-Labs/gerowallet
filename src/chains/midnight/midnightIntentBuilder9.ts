@@ -38,6 +38,7 @@ import { balanceLedger9Fees, ledger9Keystore, signLedger9Intents } from './midni
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 import { debugLog } from '@/utils/debug';
+import { midnightTimer } from './midnightTiming';
 
 export interface BuildConnectorIntent9Args {
   readonly sdkNetworkId: string;
@@ -143,6 +144,8 @@ export async function buildConnectorIntent9(
     segmentId, request, expectedOutputs, ownAddress, addressOfKey: ledger.addressFromKey,
   });
   debugLog('🌙 dapp intent (ledger 9): built', { segmentId });
+  const timer = midnightTimer('connector makeIntent (ledger 9)');
+  timer.note({ payFees: request.payFees });
 
   const costModel = ledger.CostModel.initialCostModel();
   let proven: ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
@@ -151,19 +154,19 @@ export async function buildConnectorIntent9(
     // The counterparty may complete the swap with a contract call, whose fee
     // ledger 9 can reject when paid with exactly one DUST spend: pay as a
     // connector fee, with two when the wallet holds two coins.
-    const fee = await deps.balanceFees({
+    const fee = await timer.time('dustFee', () => deps.balanceFees({
       sdkNetworkId: network, endpoints: args.endpoints, dustSecretSeed: args.dustSecretSeed, ttl,
       minimumDustSpends: CONNECTOR_MINIMUM_DUST_SPENDS,
-    }, [homed]);
+    }, [homed]));
     const merged = homed.merge(fee);
     // URL only — never the auth header values.
     debugLog('🌙 dapp intent (ledger 9): proving the fee', { prover: describeWalletProving(args.proving) });
     const proveStart = Date.now();
-    const provider = await deps.provingProvider(args.proving, network);
-    proven = await merged.prove(provider, costModel);
+    const provider = await timer.time('proverSetup', () => deps.provingProvider(args.proving, network));
+    proven = await timer.time('prove', () => merged.prove(provider, costModel));
     proveDurationMs = Date.now() - proveStart;
   } else {
-    proven = await homed.prove(noCircuitProver, costModel);
+    proven = await timer.time('prove', () => homed.prove(noCircuitProver, costModel));
   }
 
   const signed = signLedger9Intents(proven, keystore);
@@ -171,6 +174,8 @@ export async function buildConnectorIntent9(
   // The chain-ledger agreement: re-reads the chain's ledger (cached for up to a
   // minute) and never hands out ledger 9 bytes for a chain reported on another.
   if (await resolveMidnightLedger(network) !== 9) throw new MidnightLedgerChangedError(network, midnightLedgerVersion(network));
+  timer.lap('signBindLedgerCheck');
+  timer.done();
   debugLog('🌙 dapp intent (ledger 9): sealed', { bytes: sealed.length, proveDurationMs });
   return { txHex: Buffer.from(sealed).toString('hex'), segmentId, proveDurationMs };
 }

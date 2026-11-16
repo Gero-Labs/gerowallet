@@ -25,6 +25,7 @@ import { balanceLedger9Fees, ledger9Keystore, signLedger9Intents } from './midni
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 import { debugLog } from '@/utils/debug';
+import { midnightTimer } from './midnightTiming';
 
 /** A dapp's proven, not yet bound, ledger 9 transaction. */
 export type UnboundTransaction9 = ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
@@ -173,6 +174,9 @@ export async function balanceDappTransaction9(
     throw new Error('This transaction already spends from your wallet; the wallet only adds its own inputs when it balances');
   }
   debugLog('🌙 dapp balance (ledger 9): start', { network, bytes: args.txHex.length / 2, colours: contributions.length });
+  const timer = midnightTimer('connector balanceUnsealedTransaction (ledger 9)');
+  let outcome: 'ok' | 'failed' = 'failed';
+  try {
 
   const keysCapability = Keys.makeDefaultKeysCapability();
   const capability = Transacting.makeDefaultTransactingCapability({ networkId: network }, () => ({
@@ -185,21 +189,27 @@ export async function balanceDappTransaction9(
   // `undefined` = nothing to balance (the dapp already covered every colour).
   const balanced: UnboundTransaction9 = result.right[0] ?? tx;
   debugLog('🌙 dapp balance (ledger 9): inputs selected');
+  timer.lap('decodeAndSelectInputs');
 
-  const feeTx = await deps.balanceFees({
+  const feeTx = await timer.time('dustFee', () => deps.balanceFees({
     sdkNetworkId: network, endpoints: args.endpoints, dustSecretSeed: args.dustSecretSeed, ttl,
     minimumDustSpends: CONNECTOR_MINIMUM_DUST_SPENDS,
-  }, [balanced]);
+  }, [balanced]));
 
   debugLog('🌙 dapp balance (ledger 9): proving fee tx wallet-side', { prover: describeWalletProving(args.proving) });
   const proveStart = Date.now();
-  const provider = await deps.provingProvider(args.proving, network);
-  const provenFee = await feeTx.prove(provider, ledger.CostModel.initialCostModel());
+  const provider = await timer.time('proverSetup', () => deps.provingProvider(args.proving, network));
+  const provenFee = await timer.time('prove', () => feeTx.prove(provider, ledger.CostModel.initialCostModel()));
   const proveDurationMs = Date.now() - proveStart;
 
   const merged = balanced.merge(provenFee);
   const signed = signLedger9Intents(merged, keystore);
   const sealed = signed.bind().serialize();
+  timer.lap('mergeSignBind');
   debugLog('🌙 dapp balance (ledger 9): sealed', { bytes: sealed.length, proveDurationMs });
+  outcome = 'ok';
   return { txHex: Buffer.from(sealed).toString('hex'), contributions, proveDurationMs };
+  } finally {
+    timer.done(outcome);
+  }
 }

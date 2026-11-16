@@ -6,6 +6,7 @@ import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } fro
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
 import { midnightTxIdentifiers } from '@/chains/midnight/midnightTxIdentifiers';
+import { midnightTimer } from '@/chains/midnight/midnightTiming';
 import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
 import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
@@ -6045,6 +6046,8 @@ app.addToOptions(
   MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
   async (request, sendResponse) => {
     const secretBuffers: Uint8Array[] = [];
+    const timer = midnightTimer('worker balance+sign unshielded transfer');
+    let outcome: 'ok' | 'failed' = 'failed';
     try {
       const walletBg = walletManager.getWallet();
       if (!walletBg) throw new Error('No wallet logged in');
@@ -6106,15 +6109,16 @@ app.addToOptions(
       // Ledger 9 sends are checked against the chain identity across signing and proving.
       const endpoints = await resolveMidnightLedger(network) === 9 ? getMidnightEndpoints(network) : undefined;
       const identity = endpoints ? await readVerifiedMidnightChainIdentity(endpoints) : undefined;
+      timer.lap('ledgerAndIdentity');
       assertSession();
-      let signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
+      let signedTxHex = await timer.time('balanceAndSign', () => walletBg.balanceAndSignMidnightUnshieldedTransfer(
         unprovenTxHex,
         ttlMs,
         password,
         prfBytes,
         sponsorArg,
         intendedOutputs,
-      );
+      ));
       assertSession();
       // Only the wallet-proved path can name the ledger hash here: the proven
       // object is in hand. On the remote path the sidecar reports it instead.
@@ -6125,9 +6129,9 @@ app.addToOptions(
         // The send timeline shows the fee proof as its own step (no percentage).
         midnightActions.setSendProgress({ phase: 'proving', percent: -1 });
         try {
-          const result = await proveUnshieldedTransfer({
+          const result = await timer.time('prove', () => proveUnshieldedTransfer({
             sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
-          });
+          }));
           signedTxHex = result.provenTxHex;
           ledgerTxHash = result.ledgerTxHash;
         } finally {
@@ -6137,6 +6141,8 @@ app.addToOptions(
       if (identity && endpoints) await assertMidnightChainIdentityUnchanged(endpoints, identity);
       assertSession();
       const txIdentifiers = await midnightTxIdentifiers(signedTxHex, network, !!provingArg);
+      timer.lap('identityRecheckAndIds');
+      outcome = 'ok';
       sendResponse({
         id: request.id,
         data: { success: true, signedTxHex, proven: !!provingArg, ledgerTxHash, txIdentifiers },
@@ -6150,7 +6156,7 @@ app.addToOptions(
         target: TARGET,
         sender: SENDER.extension,
       });
-    } finally { secretBuffers.forEach(bytes => bytes.fill(0)); }
+    } finally { timer.done(outcome); secretBuffers.forEach(bytes => bytes.fill(0)); }
   },
 );
 

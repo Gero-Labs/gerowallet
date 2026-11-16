@@ -69,7 +69,8 @@ function schemaVersion(network: string): number {
 }
 const KEY_PREFIX = 'midnight_wallet_state';
 
-export type MidnightWalletKind = 'dust' | 'shielded' | 'unshielded';
+/** `dust-light9`: the ledger 9 DUST light sync's spend checkpoint (midnightDustSpendCheckpoint.ts). */
+export type MidnightWalletKind = 'dust' | 'shielded' | 'unshielded' | 'dust-light9';
 
 interface PersistedWalletState {
   schemaVersion: number;
@@ -183,7 +184,12 @@ function bytesToHex(b: Uint8Array): string {
  */
 function storageKey(network: string, kind: MidnightWalletKind, identitySeed: Uint8Array): string {
   const idHash = bytesToHex(sha256(identitySeed)).slice(0, 32);
-  return `${KEY_PREFIX}_${network}_${kind}_${idHash}`;
+  return `${walletStateKindPrefix(network, kind)}${idHash}`;
+}
+
+/** The key prefix of every wallet's `kind` state on `network`, for clearing them without a seed. */
+export function walletStateKindPrefix(network: string, kind: MidnightWalletKind): string {
+  return `${KEY_PREFIX}_${network}_${kind}_`;
 }
 
 /**
