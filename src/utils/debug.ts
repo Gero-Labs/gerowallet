@@ -13,7 +13,7 @@ const isDebugEnabled = import.meta.env.VITE_DEBUG_STORES === 'true';
  * Binds directly to console.log to preserve source location in Chrome DevTools
  * @param args - Arguments to pass to console.log
  */
-export const debugLog: (...args: any[]) => void = isDebugEnabled
+export const debugLog: (...args: unknown[]) => void = isDebugEnabled
   ? console.log.bind(console)
   : () => {};
 
@@ -21,7 +21,7 @@ export const debugLog: (...args: any[]) => void = isDebugEnabled
  * Conditional warning logger for development mode
  * @param args - Arguments to pass to console.warn
  */
-export const debugWarn: (...args: any[]) => void = isDebugEnabled
+export const debugWarn: (...args: unknown[]) => void = isDebugEnabled
   ? console.warn.bind(console)
   : () => {};
 

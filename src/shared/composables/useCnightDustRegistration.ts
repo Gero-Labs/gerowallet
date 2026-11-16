@@ -576,7 +576,16 @@ export function useCnightDustRegistration() {
     const wallet = loggedWallet.value;
     if (!wallet) throw new Error('No wallet logged in');
 
-    const signingData: Record<string, unknown> = {
+    const signingData: {
+      txCbor: string;
+      partialSign: boolean;
+      utxos: unknown;
+      addresses: unknown;
+      mergeWitnesses: boolean;
+      privateKeyBytes?: number[];
+      password?: string;
+      [key: string]: unknown;
+    } = {
       txCbor,
       partialSign: false,
       utxos: utxos.value,

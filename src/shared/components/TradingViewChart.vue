@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { IChartApi, SolidColor, Time } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, MouseEventParams, SolidColor, Time } from 'lightweight-charts';
 import { CandlestickSeries, createChart } from 'lightweight-charts';
 
 interface CandlestickDataPoint {
@@ -42,11 +42,16 @@ interface Props {
   height?: string;
   theme?: 'light' | 'dark';
   enableRealtime?: boolean;
-  realtimeData?: any;
+  realtimeData?: RealtimePrice | null;
   /** Candle interval in seconds for realtime updates (default 300 = 5m) */
   candleInterval?: number;
   pricePrecision?: number;
   priceMinMove?: number;
+}
+
+/** Live price tick fed into the last candle. */
+export interface RealtimePrice {
+  lastPrice?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -71,7 +76,7 @@ const emit = defineEmits<Emits>();
 const chartContainer = ref<HTMLElement>();
 const showFallback = ref(true);
 let chart: IChartApi | null = null;
-let candlestickSeries: any = null;
+let candlestickSeries: ISeriesApi<'Candlestick'> | null = null;
 
 // Internal chart data state
 let chartData: CandlestickDataPoint[] = [];
@@ -284,14 +289,14 @@ const initChart = async () => {
     if (chartData.length > 0) {
       updateLegend(chartData[chartData.length - 1]);
     }
-    chart.subscribeCrosshairMove((param: any) => {
+    chart.subscribeCrosshairMove((param: MouseEventParams) => {
       if (!param || !param.seriesData || param.seriesData.size === 0) {
         // No crosshair — show last candle
         if (chartData.length > 0) updateLegend(chartData[chartData.length - 1]);
         return;
       }
-      const candle = param.seriesData.get(candlestickSeries);
-      if (candle && candle.open != null) {
+      const candle = candlestickSeries ? param.seriesData.get(candlestickSeries) : undefined;
+      if (candle && 'open' in candle && candle.open != null) {
         updateLegend(candle as CandlestickDataPoint);
       }
     });
@@ -304,8 +309,9 @@ const initChart = async () => {
 
 
 // Update chart with real-time data
-const updateLastCandle = (realtimeData: any) => {
-  if (!realtimeData || !realtimeData.lastPrice || chartData.length === 0) {
+const updateLastCandle = (realtimeData: RealtimePrice | null | undefined) => {
+  const lastPrice = realtimeData?.lastPrice;
+  if (!lastPrice || chartData.length === 0) {
     return;
   }
 
@@ -319,10 +325,10 @@ const updateLastCandle = (realtimeData: any) => {
     // Create new candle
     const newCandle: CandlestickDataPoint = {
       time: (Math.floor(now / candleInterval) * candleInterval) as Time,
-      open: realtimeData.lastPrice,
-      high: realtimeData.lastPrice,
-      low: realtimeData.lastPrice,
-      close: realtimeData.lastPrice
+      open: lastPrice,
+      high: lastPrice,
+      low: lastPrice,
+      close: lastPrice
     };
 
     chartData.push(newCandle);
@@ -334,9 +340,9 @@ const updateLastCandle = (realtimeData: any) => {
     // Update the last candle
     const updatedCandle: CandlestickDataPoint = {
       ...lastCandle,
-      close: realtimeData.lastPrice,
-      high: Math.max(lastCandle.high, realtimeData.lastPrice),
-      low: Math.min(lastCandle.low, realtimeData.lastPrice)
+      close: lastPrice,
+      high: Math.max(lastCandle.high, lastPrice),
+      low: Math.min(lastCandle.low, lastPrice)
     };
 
     chartData[chartData.length - 1] = updatedCandle;

@@ -7,14 +7,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
+import { shallowRef, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
 import Highcharts from 'highcharts';
-// Using any for Highcharts types to avoid complex type issues
 
 interface Props {
   classname?: string;
   styles?: Record<string, string | number>;
-  options?: any;
+  options?: Highcharts.Options;
   highcharts?: typeof Highcharts;
 }
 
@@ -23,15 +22,21 @@ const props = withDefaults(defineProps<Props>(), {
   styles: () => ({}),
 });
 
-const chart = ref<any>(null);
+const chart = shallowRef<Highcharts.Chart | null>(null);
 const instance = getCurrentInstance();
 
-const getChart = (): any => {
+const getChart = (): Highcharts.Chart | null => {
   return chart.value;
 };
 
-const addSeries = (options: any): void => {
-  delegateMethod('addSeries', options);
+const warnNotReady = (name: string): void => {
+  console.log(`Cannot call [${name}] before the chart is initialized. Set prop [options] first.`, instance);
+};
+
+const addSeries = (options: Highcharts.SeriesOptionsType): void => {
+  const chartInstance = getChart();
+  if (!chartInstance) return warnNotReady('addSeries');
+  chartInstance.addSeries(options);
 };
 
 const removeSeries = (): void => {
@@ -43,8 +48,10 @@ const removeSeries = (): void => {
   }
 };
 
-const mergeOption = (options: any): void => {
-  delegateMethod('update', options);
+const mergeOption = (options: Highcharts.Options): void => {
+  const chartInstance = getChart();
+  if (!chartInstance) return warnNotReady('update');
+  chartInstance.update(options);
 };
 
 const showLoading = (txt: string): void => {
@@ -61,21 +68,12 @@ const hideLoading = (): void => {
   }
 };
 
-const delegateMethod = (name: string, ...args: unknown[]): unknown => {
-  const chartInstance = getChart();
-  if (!chartInstance) {
-    console.log(`Cannot call [${name}] before the chart is initialized. Set prop [options] first.`, instance);
-    return undefined;
-  }
-  return (chartInstance as any)[name](...args);
-};
-
 const init = (): void => {
   const chartInstance = getChart();
   if (!chartInstance && props.options && instance?.proxy?.$el) {
     const highchartInstance = props.highcharts || Highcharts;
     const element = instance.proxy.$el as HTMLElement;
-    
+
     // Create standard Highcharts chart
     chart.value = new highchartInstance.Chart(element, props.options);
   }
@@ -83,7 +81,7 @@ const init = (): void => {
 
 watch(
   () => props.options,
-  (options: any) => {
+  (options) => {
     const chartInstance = getChart();
     if (!chartInstance && options) {
       init();
@@ -115,7 +113,6 @@ defineExpose({
   mergeOption,
   showLoading,
   hideLoading,
-  delegateMethod,
   init
 });
 </script>

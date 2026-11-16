@@ -11,7 +11,7 @@ const axiosInstance = axios.create({
 });
 
 export default {
-  async moonPaySign(url: string): Promise<any> {
+  async moonPaySign(url: string): Promise<unknown> {
     try {
       const { data, status } = await axiosInstance.post(`/api/moonpay/sign`, url, {
         headers: {

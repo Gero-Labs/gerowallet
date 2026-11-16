@@ -160,6 +160,7 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
           body: rendered.body,
           icon: deps.iconUrl,
           tag: rendered.tag,
+          silent: false,
           renotify: false,
           requireInteraction: rendered.requireInteraction,
           timestamp: rendered.timestamp,

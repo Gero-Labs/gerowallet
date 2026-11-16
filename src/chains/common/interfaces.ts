@@ -20,7 +20,7 @@ export interface IUnifiedUtxo {
   derivationChain?: number;         // 0 = external (receive), 1 = internal (change)
   derivationIndex?: number;         // Address index within the chain
   // Chain-specific raw data stored as any
-  raw?: any;
+  raw?: unknown;
 }
 
 /**
@@ -55,19 +55,19 @@ export interface IBlockTip {
  */
 export interface IBuildTxParams {
   outputs: IOutput[];
-  withdrawals?: any[];             // Cardano-only
-  certificates?: any[];            // Cardano-only
+  withdrawals?: unknown[];             // Cardano-only
+  certificates?: unknown[];            // Cardano-only
   changeAddress: string;
   feeRate?: number;                // Bitcoin-specific (sat/vbyte)
   utxos: IUnifiedUtxo[];
-  metadata?: any;
+  metadata?: unknown;
 }
 
 /**
  * Unsigned transaction (pre-signing)
  */
-export interface IUnsignedTx {
-  raw: any;                        // Chain-specific format (PSBT for Bitcoin, Cardano.Tx)
+export interface IUnsignedTx<TRaw = unknown> {
+  raw: TRaw;                          // Chain-specific format (PSBT for Bitcoin, Cardano.Tx)
   id?: string;
   fee: bigint;
   inputs: IUnifiedUtxo[];
@@ -77,8 +77,8 @@ export interface IUnsignedTx {
 /**
  * Signed transaction (ready for broadcast)
  */
-export interface ISignedTx {
-  raw: any;                        // Chain-specific format
+export interface ISignedTx<TRaw = unknown> {
+  raw: TRaw;                          // Chain-specific format
   id: string;                      // Transaction hash
   hex: string;                     // Serialized hex
 }
@@ -101,13 +101,13 @@ export interface IChainAdapter {
   readonly coinType: number;       // 1815 (Cardano) | 0 (Bitcoin)
 
   // Key Management
-  deriveKeysFromMnemonic(mnemonic: string, network: string, addressType?: string): any;
+  deriveKeysFromMnemonic(mnemonic: string, network: string, addressType?: string): unknown;
   derivePublicKey(mnemonic: string, accountIndex: number): string;
   deriveAddress(publicKey: string, network: string, addressType: string, index: number): string;
   getReceiveAddress(publicKey: string, network: string, addressType: string): string;
 
   // UTXO Management
-  parseUtxos(rawUtxos: any[]): IUnifiedUtxo[];
+  parseUtxos(rawUtxos: unknown[]): IUnifiedUtxo[];
   selectCoins(utxos: IUnifiedUtxo[], outputs: IOutput[], feeRate?: number): ICoinSelection;
 
   // Balance

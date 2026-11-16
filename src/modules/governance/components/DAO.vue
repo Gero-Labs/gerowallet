@@ -366,6 +366,7 @@
 import { computed, onMounted, reactive, ref, toRefs } from 'vue';
 import assets from '@/utils/assets';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue';
+import type Highcharts from 'highcharts';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import clarityApi, { type VotingPowerCalculation, type DaoDetails, type MembershipWorkflow } from '@/api/clarity-api';
@@ -532,7 +533,7 @@ const memberGrowthData = computed(() => {
   return { categories, data };
 });
 
-const chartOptions = computed(() => {
+const chartOptions = computed((): Highcharts.Options => {
   const { categories, data } = memberGrowthData.value;
   const max = data.length > 0 ? Math.max(...data) : 10;
   return {
@@ -567,10 +568,9 @@ const chartOptions = computed(() => {
       borderColor: 'rgba(0, 199, 243, 0.3)',
       borderRadius: 8,
       style: { color: 'white', fontSize: '11px' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      formatter: function (this: any) { return `<b>${this.x}</b><br/>${String(t('governance.members'))}: <b>${this.y}</b>`; },
+      formatter() { return `<b>${this.x}</b><br/>${String(t('governance.members'))}: <b>${this.y}</b>`; },
     },
-    series: [{ name: String(t('governance.members')), data }],
+    series: [{ type: 'area', name: String(t('governance.members')), data }],
     credits: { enabled: false },
   };
 });

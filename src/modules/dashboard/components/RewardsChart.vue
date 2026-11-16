@@ -38,12 +38,11 @@ const isApex = computed(() => {
 const chartAccent = computed(() =>
   isApex.value ? chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent : '#00c7f3');
 
-const chartOptions = computed(() => {
+const chartOptions = computed((): Highcharts.Options => {
   return {
     accessibility: {
       enabled: false,
     },
-    endOnTick: false,
     legend:{ enabled:false },
     title: {
       text: t('staking.rewardsHistory'),
@@ -109,10 +108,7 @@ const chartOptions = computed(() => {
     xAxis: {
       crosshair: true,
       allowDecimals: false,
-      title: {
-        enabled: false,
-        text: 'Time',
-      },
+      title: { text: null },
       labels: {
         style: {
           fontFamily: 'Inter Variable, Inter, sans-serif',
@@ -123,9 +119,7 @@ const chartOptions = computed(() => {
       categories: Object.keys(props.chartData)
     },
     yAxis: {
-      title: {
-        enabled: false,
-      },
+      title: { text: null },
       labels: {
         style: {
           color: '#fff'
@@ -137,8 +131,9 @@ const chartOptions = computed(() => {
     colors: [chartAccent.value, '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
     series: [
       {
+        type: 'line',
         name: 'ADA',
-        data: Object.values(props.chartData),
+        data: Object.values(props.chartData) as number[],
         color: chartAccent.value,
         lineWidth: 2,
         marker: {
@@ -149,7 +144,7 @@ const chartOptions = computed(() => {
         }
       },
     ],
-    useUTC: true,
+    time: { useUTC: true },
   }
 });
 </script>

@@ -5624,10 +5624,10 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
 app.addToOptions(MessageTypes.WC_PAIR, async (request, sendResponse) => {
   try {
     // A `wc:` link clicked on any page lands here (content.ts): no pairing starts behind the lock screen.
-    if (refuseSettingsWhileLocked(request, sendResponse)) return true;
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
     if (!(await isWalletConnectEnabled())) {
       sendResponse({ id: request.id, data: { success: false, error: 'WalletConnect is disabled' }, target: TARGET, sender: SENDER.extension });
-      return true;
+      return;
     }
     const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
     if (!walletConnectService.initialized) {

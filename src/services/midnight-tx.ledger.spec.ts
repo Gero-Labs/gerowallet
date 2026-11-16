@@ -173,13 +173,13 @@ describe('Midnight ledger-specific orchestration', () => {
 
   it.each(['local', 'zkpaas'])('checks the configured wallet-side prover for both ledger stacks (%s)', async mode => {
     mocks.proofServer.mode = mode;
-    expect(await checkWalletProvingPreflight('Stagenet')).toBe(true);
-    expect(await checkWalletProvingPreflight('Preprod')).toBe(true);
+    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(true);
+    expect(await checkWalletProvingPreflight('Preprod', 'unshielded')).toBe(true);
     expect(mocks.health).toHaveBeenCalledTimes(2);
   });
 
   it('retains remote unshielded availability without calling a local prover', async () => {
-    expect(await checkWalletProvingPreflight('Stagenet')).toBe(true);
+    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(true);
     expect(mocks.health).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,4 @@
-import marketApi from '@/api/market-api';
+import marketApi, { type TokenPriceResponse } from '@/api/market-api';
 import type { TokenSnapshot, TokenActivityRow } from './detectors';
 
 export interface TokenRef {
@@ -14,7 +14,7 @@ export interface TokenRef {
  * ascii asset name then a unit prefix.
  */
 export async function fetchMarketActivity(): Promise<TokenActivityRow[]> {
-  let prices;
+  let prices: TokenPriceResponse[];
   try {
     prices = await marketApi.getAllPrices();
   } catch {
@@ -49,7 +49,7 @@ export async function fetchSnapshots(refs: TokenRef[]): Promise<TokenSnapshot[]>
     return [];
   }
 
-  const byAsset = new Map(prices.map((p) => [p.assetId, p]));
+  const byAsset = new Map<string, TokenPriceResponse>(prices.map((p) => [p.assetId, p]));
   const snapshots: TokenSnapshot[] = [];
   for (const ref of refs) {
     const p = byAsset.get(ref.unit);

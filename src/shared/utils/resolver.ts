@@ -56,7 +56,7 @@ function resolveCip68(
   tokenInfo?: { unit?: string; policy_id?: string; asset_name?: string },
 ) {
   const plutusData: Serialization.PlutusData = jsonToPlutusData(JSON.parse(onchain_metadata_extra)[label]);
-  const metadataJson: Asset.NftMetadata | null = fromPlutusData(plutusData.toCore());
+  const metadataJson: Cip68Metadata | null = fromPlutusData(plutusData.toCore());
 
   if (!metadataJson) {
     console.warn('⚠️ CIP68: Failed to parse PlutusData for token:', {
@@ -218,10 +218,19 @@ const mapFile = (file: Cardano.PlutusData): Asset.NftMetadataFile | undefined =>
   };
 };
 
+/** CIP-68 metadata: the SDK's NFT metadata plus the fungible (333) `decimals` field. */
+export type Cip68Metadata = Asset.NftMetadata & {
+  decimals?: number;
+  ticker?: string;
+  url?: string;
+  logo?: string;
+  legal?: string;
+};
+
 export const fromPlutusData = (
   plutusData: Cardano.PlutusData | undefined,
   strict = false
-): Asset.NftMetadata | null => {
+): Cip68Metadata | null => {
   const conditionalValidators = getConditionalValidators(strict);
   if (!conditionalValidators.isValidDatumShape(plutusData)) {
     return null;
@@ -556,9 +565,9 @@ export function findCollectionDescription(collectible) {
   return null
 }
 
-export function longestCommonStartingSubstring(array) {
+export function longestCommonStartingSubstring(array): string | undefined {
   if (array.length == 0) {
-    return
+    return undefined;
   }
 
   const sortedArray: string[] = [...array].sort();
@@ -579,7 +588,7 @@ export function longestCommonStartingSubstring(array) {
     return subString.trim();
   } catch (e) {
     console.log(e)
-    return
+    return undefined;
   }
 }
 

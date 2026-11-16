@@ -103,7 +103,7 @@ export interface WalletTransaction {
   fee: bigint
   inputs: TransactionInput[]
   outputs: TransactionOutput[]
-  metadata?: any
+  metadata?: unknown
   submittedAt: string
   confirmedAt?: string
   blockHeight?: number
@@ -247,7 +247,7 @@ export interface NetworkSettings {
 export interface WalletError {
   code: string
   message: string
-  details?: any
+  details?: unknown
   timestamp: string
   context?: string
   isRetryable: boolean
@@ -317,7 +317,7 @@ export interface WalletState {
 
 export interface WalletAction {
   type: string
-  payload?: any
+  payload?: unknown
   timestamp: string
 }
 
@@ -360,7 +360,7 @@ export enum WalletActionType {
 // UTILITY TYPES
 // ============================================================================
 
-export type WalletEventHandler<T = any> = (data: T) => void | Promise<void>
+export type WalletEventHandler<T = unknown> = (data: T) => void | Promise<void>
 
 export interface WalletEventEmitter {
   on<T>(event: string, handler: WalletEventHandler<T>): void

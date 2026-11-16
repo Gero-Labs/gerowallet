@@ -250,7 +250,7 @@ export function signAndFinalizePsbt(
   network: string,
   addressType: string = 'segwit',
   accountIndex: number = 0
-): ISignedTx {
+): ISignedTx<{ psbt: bitcoin.Psbt; tx: bitcoin.Transaction }> {
   // Sign PSBT
   const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, network, addressType, accountIndex);
 

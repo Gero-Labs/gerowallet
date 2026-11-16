@@ -10,10 +10,10 @@
  */
 class DebouncedStorageWriter {
   private writeTimers = new Map<string, NodeJS.Timeout>();
-  private pendingWrites = new Map<string, any>();
+  private pendingWrites = new Map<string, unknown>();
   private readonly DEBOUNCE_MS = 100;
 
-  write(key: string, value: any): Promise<void> {
+  write(key: string, value: unknown): Promise<void> {
     return new Promise((resolve, reject) => {
       // Cancel existing timer for this key
       const existingTimer = this.writeTimers.get(key);
@@ -51,14 +51,14 @@ export const debouncedWriter = new DebouncedStorageWriter();
 /**
  * Smart storage persist function that uses debounced writing
  */
-export async function smartPersist(key: string, value: any): Promise<void> {
+export async function smartPersist(key: string, value: unknown): Promise<void> {
   return debouncedWriter.write(key, value);
 }
 
 /**
  * Hydrate a store from storage with proper error handling
  */
-export async function hydrateStore(storeName: string, store: Record<string, any>): Promise<void> {
+export async function hydrateStore(storeName: string, store: Record<string, unknown>): Promise<void> {
   try {
     const result = await chrome.storage.local.get(storeName);
     const storedData = result[storeName];

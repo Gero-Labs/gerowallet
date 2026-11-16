@@ -124,6 +124,7 @@ import spoApi, { PoolBlock, PoolEpochHistory } from '@/api/spo-api';
 import blockchainApi from '@/api/blockchain-api';
 import snackbar from '@/plugins/snackbar';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue';
+import type Highcharts from 'highcharts';
 
 const { t } = useTranslation();
 const { poolId } = toRefs(poolOperatorStore);
@@ -139,13 +140,6 @@ const showBlockDetail = ref(false);
 const selectedEpoch = ref<{ epoch: number } | null>(null);
 const epochBlocks = ref<PoolBlock[]>([]);
 const blocksLoading = ref(false);
-
-/**
- * Minimal Highcharts callback contexts — just what the formatters below read,
- * without pulling in the full Highcharts type surface.
- */
-interface AxisLabelCtx { value: number }
-interface PointCtx { color: string; y: number; series: { name: string } }
 
 /**
  * Raw pool-history row from the backend: Koios snake_case, with legacy
@@ -218,7 +212,21 @@ const tableItems = computed(() => {
   });
 });
 
-const chartOptions = computed(() => {
+/**
+ * Tooltip row for a series plotted in ADA. With `decimals` the amount is
+ * rounded to whole lovelace and shown at that precision.
+ */
+function adaPointFormatter(decimals?: number) {
+  return function (this: Highcharts.Point): string {
+    const lovelace = (this.y ?? 0) * 1_000_000;
+    const amount = decimals === undefined
+      ? formatAda(String(lovelace))
+      : formatAda(String(Math.round(lovelace)), decimals);
+    return `<span style="color:${String(this.color)}">\u25CF</span> ${this.series.name}: <b>${amount} ADA</b><br/>`;
+  };
+}
+
+const chartOptions = computed((): Highcharts.Options => {
   const sorted = [...history.value].sort((a, b) => a.epoch_no - b.epoch_no);
   const epochs = sorted.map(e => e.epoch_no);
 
@@ -250,7 +258,7 @@ const chartOptions = computed(() => {
       spacingTop: 10,
       spacingBottom: 5,
     },
-    title: { title: undefined },
+    title: { text: null },
     credits: { enabled: false },
     legend: {
       enabled: true,
@@ -258,34 +266,34 @@ const chartOptions = computed(() => {
       itemHoverStyle: { color: '#fff' },
     },
     xAxis: {
-      categories: epochs,
+      categories: epochs.map(String),
       labels: { style: { color: 'rgba(255,255,255,0.4)', fontSize: '9px' }, step: Math.max(1, Math.floor(epochs.length / 15)) },
       lineColor: 'rgba(255,255,255,0.06)',
       tickColor: 'rgba(255,255,255,0.06)',
     },
     yAxis: [
       { // 0: Blocks
-        title: { title: undefined },
+        title: { text: null },
         labels: { style: { color: 'rgba(45,240,247,0.6)', fontSize: '9px' } },
         gridLineColor: 'rgba(255,255,255,0.04)',
         min: 0,
       },
       { // 1: Stake (ADA)
-        title: { title: undefined },
-        labels: { style: { color: 'rgba(253,176,34,0.6)', fontSize: '9px' }, formatter(this: AxisLabelCtx) { return formatAda(String(this.value * 1_000_000)); } },
+        title: { text: null },
+        labels: { style: { color: 'rgba(253,176,34,0.6)', fontSize: '9px' }, formatter() { return formatAda(String(Number(this.value) * 1_000_000)); } },
         opposite: true,
         gridLineWidth: 0,
         min: 0,
       },
       { // 2: Delegators
-        title: { title: undefined },
+        title: { text: null },
         labels: { enabled: false },
         gridLineWidth: 0,
         min: 0,
         visible: false,
       },
       { // 3: Rewards (ADA)
-        title: { title: undefined },
+        title: { text: null },
         labels: { enabled: false },
         gridLineWidth: 0,
         min: 0,
@@ -332,7 +340,7 @@ const chartOptions = computed(() => {
         fillColor: { linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 }, stops: [[0, 'rgba(253,176,34,0.15)'], [1, 'rgba(253,176,34,0)']] },
         lineWidth: 1.5,
         marker: { enabled: false },
-        tooltip: { pointFormatter(this: PointCtx) { return `<span style="color:${this.color}">BULLET_TMP</span> ${this.series.name}: <b>${formatAda(String(this.y * 1_000_000))} ADA</b><br/>`; } },
+        tooltip: { pointFormatter: adaPointFormatter() },
       },
       {
         name: t('poolOperator.delegators'),
@@ -351,7 +359,7 @@ const chartOptions = computed(() => {
         data: spoRewardsData,
         color: 'rgba(253,176,34,0.5)',
         stack: 'rewards',
-        tooltip: { pointFormatter(this: PointCtx) { return `<span style="color:${this.color}">BULLET_TMP</span> ${this.series.name}: <b>${formatAda(String(Math.round(this.y * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter: adaPointFormatter(6) },
       },
       {
         name: t('poolOperator.delegatorRewards'),
@@ -360,7 +368,7 @@ const chartOptions = computed(() => {
         data: delegRewardsData,
         color: 'rgba(117,224,167,0.35)',
         stack: 'rewards',
-        tooltip: { pointFormatter(this: PointCtx) { return `<span style="color:${this.color}">BULLET_TMP</span> ${this.series.name}: <b>${formatAda(String(Math.round(this.y * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter: adaPointFormatter(6) },
       },
     ],
   };
