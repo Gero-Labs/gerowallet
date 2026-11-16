@@ -568,8 +568,7 @@ const chartOptions = computed((): Highcharts.Options => {
       borderColor: 'rgba(0, 199, 243, 0.3)',
       borderRadius: 8,
       style: { color: 'white', fontSize: '11px' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      formatter: function (this: any) { return `<b>${this.x}</b><br/>${String(t('governance.members'))}: <b>${this.y}</b>`; },
+      formatter() { return `<b>${this.x}</b><br/>${String(t('governance.members'))}: <b>${this.y}</b>`; },
     },
     series: [{ type: 'area', name: String(t('governance.members')), data }],
     credits: { enabled: false },

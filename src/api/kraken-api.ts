@@ -47,7 +47,6 @@ export default {
     // Kraken format: [time, open, high, low, close, vwap, volume, count]; prices are strings.
     const candles: [number, string, string, string, string, ...unknown[]][] = response.data.result['XXBTZUSD'];
     if (!candles) throw new Error('No BTC OHLC data returned by Kraken');
-    // Kraken format: [time, open, high, low, close, vwap, volume, count]
     return candles
       .slice(-count)
       .map((c) => ({

@@ -129,9 +129,9 @@ npm audit --json
 
 Replace `<absolute-checkout-path>` with the actual path, quoted if it contains
 spaces. `npm audit` is expected to report the deferred advisories; retain its
-output. The typecheck and ESLint commands must pass (CI enforces both). For a new PR, repeat against its base and head. A build
-generates auto-import and component declarations needed for a fair typecheck
-comparison. Inspect generated `src/components.d.ts` changes before committing;
+output. The typecheck and ESLint commands must pass (CI enforces both). For a
+new PR, repeat against its base and head. A build generates auto-import and
+component declarations needed for a fair typecheck comparison. Inspect generated `src/components.d.ts` changes before committing;
 do not hand-edit declarations or include unrelated generated noise.
 
 The isolated build supplies synthetic configuration and a public manifest key.

@@ -212,6 +212,20 @@ const tableItems = computed(() => {
   });
 });
 
+/**
+ * Tooltip row for a series plotted in ADA. With `decimals` the amount is
+ * rounded to whole lovelace and shown at that precision.
+ */
+function adaPointFormatter(decimals?: number) {
+  return function (this: Highcharts.Point): string {
+    const lovelace = (this.y ?? 0) * 1_000_000;
+    const amount = decimals === undefined
+      ? formatAda(String(lovelace))
+      : formatAda(String(Math.round(lovelace)), decimals);
+    return `<span style="color:${String(this.color)}">\u25CF</span> ${this.series.name}: <b>${amount} ADA</b><br/>`;
+  };
+}
+
 const chartOptions = computed((): Highcharts.Options => {
   const sorted = [...history.value].sort((a, b) => a.epoch_no - b.epoch_no);
   const epochs = sorted.map(e => e.epoch_no);
@@ -326,7 +340,7 @@ const chartOptions = computed((): Highcharts.Options => {
         fillColor: { linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 }, stops: [[0, 'rgba(253,176,34,0.15)'], [1, 'rgba(253,176,34,0)']] },
         lineWidth: 1.5,
         marker: { enabled: false },
-        tooltip: { pointFormatter() { return `<span style="color:${String(this.color)}">\u25CF</span> ${this.series.name}: <b>${formatAda(String((this.y ?? 0) * 1_000_000))} ADA</b><br/>`; } },
+        tooltip: { pointFormatter: adaPointFormatter() },
       },
       {
         name: t('poolOperator.delegators'),
@@ -345,7 +359,7 @@ const chartOptions = computed((): Highcharts.Options => {
         data: spoRewardsData,
         color: 'rgba(253,176,34,0.5)',
         stack: 'rewards',
-        tooltip: { pointFormatter() { return `<span style="color:${String(this.color)}">\u25CF</span> ${this.series.name}: <b>${formatAda(String(Math.round((this.y ?? 0) * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter: adaPointFormatter(6) },
       },
       {
         name: t('poolOperator.delegatorRewards'),
@@ -354,7 +368,7 @@ const chartOptions = computed((): Highcharts.Options => {
         data: delegRewardsData,
         color: 'rgba(117,224,167,0.35)',
         stack: 'rewards',
-        tooltip: { pointFormatter() { return `<span style="color:${String(this.color)}">\u25CF</span> ${this.series.name}: <b>${formatAda(String(Math.round((this.y ?? 0) * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter: adaPointFormatter(6) },
       },
     ],
   };
