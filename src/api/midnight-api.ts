@@ -27,7 +27,11 @@ import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import { recoverLostSubmit, type MidnightSubmitWatch } from './midnightSubmitRecovery';
-import { CLIENT_UPDATE_REQUIRED, MIDNIGHT_NETWORK_UPGRADING, midnightApiErrorFromResponse, toMidnightApiError } from './midnightApiError';
+import {
+  CLIENT_UPDATE_REQUIRED, MIDNIGHT_NETWORK_UPGRADING, isMidnightSubmitRefusal, midnightApiErrorFromResponse, toMidnightApiError,
+} from './midnightApiError';
+import { clearDustSpendCheckpoints } from '@/chains/midnight/midnightDustSpendCheckpoint';
+import { midnightLedgerKey } from '@/chains/midnight/midnightLedger';
 import { noteMidnightNetworkUpgrading, noteMidnightUpdateRequired, noteMidnightWritesOpen } from '@/chains/midnight/midnightWriteGate';
 import { geroClientHeaders } from '@/chains/midnight/midnightClientVersion';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
@@ -1174,11 +1178,18 @@ export class MidnightApi {
    * A lost reply becomes a lookup of the transaction by `watch.identifiers`; a
    * real failure throws a readable {@link MidnightApiError} (midnightApiError.ts).
    */
-  private resolveSubmitError(error: unknown, watch?: MidnightSubmitWatch): Promise<SubmitMidnightTxResponse> {
-    return recoverLostSubmit(error, watch, {
-      graphql: (query, variables) => this.graphql(query, variables),
-      network: this.network,
-    });
+  private async resolveSubmitError(error: unknown, watch?: MidnightSubmitWatch): Promise<SubmitMidnightTxResponse> {
+    try {
+      return await recoverLostSubmit(error, watch, {
+        graphql: (query, variables) => this.graphql(query, variables),
+        network: this.network,
+      });
+    } catch (failure) {
+      // A refusal may mean a DUST coin the wallet holds as unspent was spent in
+      // a block its DUST sync missed: the next fee build rescans from scratch.
+      if (isMidnightSubmitRefusal(failure)) void clearDustSpendCheckpoints(midnightLedgerKey(this.network));
+      throw failure;
+    }
   }
 
   // ─── Native send: build / submit ──────────────────────────────────────────

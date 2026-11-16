@@ -58,6 +58,7 @@ import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewes
 import { MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
+import { midnightTimer } from '@/chains/midnight/midnightTiming';
 import { submitWithBusyRetry, type BusyRetryOptions, type MidnightBusyHandlers } from './midnightBusyRetry';
 
 export interface SignedSegment {
@@ -413,22 +414,29 @@ export async function buildAndSignUnshieldedTransfer(
   expectedProver?: WalletProver,
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
-  assertCurrentApproval(current);
-  await assertMidnightWritesOpen(network);
-  assertCurrentApproval(current);
-  const target = resolveWalletProvingTarget(network, 'unshielded');
-  assertWalletProving(target, expectedProver);
-  if (target && target.prover !== 'device') await assertProverReachable(target, current);
-  assertCurrentApproval(current);
-  const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
-  assertCurrentApproval(current);
-  const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
-  assertCurrentApproval(current);
-  const { signedTxHex } = await balanceAndSignInBg(
-    built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, undefined, target?.request,
-  );
-  assertCurrentApproval(current);
-  return { tx: signedTxHex };
+  const timer = midnightTimer('page connector makeTransfer');
+  let outcome: 'ok' | 'failed' = 'failed';
+  try {
+    assertCurrentApproval(current);
+    await timer.time('writeGate', () => assertMidnightWritesOpen(network));
+    assertCurrentApproval(current);
+    const target = resolveWalletProvingTarget(network, 'unshielded');
+    assertWalletProving(target, expectedProver);
+    if (target && target.prover !== 'device') await timer.time('proverPreflight', () => assertProverReachable(target, current));
+    assertCurrentApproval(current);
+    const { publicKeyHex, addressHex } = await timer.time('walletKeys', () => getWalletKeys(credentials));
+    assertCurrentApproval(current);
+    const built = await timer.time('nexusBuild', () => buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex }));
+    assertCurrentApproval(current);
+    const { signedTxHex } = await timer.time('worker', () => balanceAndSignInBg(
+      built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, undefined, target?.request,
+    ));
+    assertCurrentApproval(current);
+    outcome = 'ok';
+    return { tx: signedTxHex };
+  } finally {
+    timer.done(outcome);
+  }
 }
 
 /**
@@ -444,17 +452,19 @@ export async function balanceConnectorTransaction(
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
   assertCurrentApproval(current);
+  const timer = midnightTimer('page connector balanceUnsealedTransaction');
   // Paused for a network upgrade (midnightWriteGate.ts): stop before keys, as makeTransfer does.
-  await assertMidnightWritesOpen(network);
+  await timer.time('writeGate', () => assertMidnightWritesOpen(network));
   assertCurrentApproval(current);
-  const response = await Messaging.sendToBackgroundFromOptions({
+  const response = await timer.time('worker', () => Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX,
     data: {
       tx,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
-  }) as { data: { success: boolean; tx?: string; error?: string } };
+  })) as { data: { success: boolean; tx?: string; error?: string } };
+  timer.done(response?.data?.success ? 'ok' : 'failed');
   assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
     throw backgroundError(response?.data?.error, 'Midnight balancing failed');
@@ -474,17 +484,19 @@ export async function buildConnectorIntent(
   current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
   assertCurrentApproval(current);
+  const timer = midnightTimer('page connector makeIntent');
   // Paused for a network upgrade (midnightWriteGate.ts): stop before keys, as makeTransfer does.
-  await assertMidnightWritesOpen(network);
+  await timer.time('writeGate', () => assertMidnightWritesOpen(network));
   assertCurrentApproval(current);
-  const response = await Messaging.sendToBackgroundFromOptions({
+  const response = await timer.time('worker', () => Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BUILD_MIDNIGHT_CONNECTOR_INTENT,
     data: {
       ...request,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
-  }) as { data: { success: boolean; tx?: string; error?: string; code?: string } };
+  })) as { data: { success: boolean; tx?: string; error?: string; code?: string } };
+  timer.done(response?.data?.success ? 'ok' : 'failed');
   assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
     // `code` is a connector error code (InsufficientFunds) the panel relays on decline.

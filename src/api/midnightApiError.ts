@@ -114,6 +114,23 @@ export function isMidnightServerSideFailure(error: unknown): boolean {
 }
 
 /**
+ * A submit the server answered with a refusal after the transaction reached
+ * it: the node (or the server on its behalf) did not take it, or the chain
+ * changed under it. The node names a spent DUST nullifier only by a numeric
+ * custom error that Nexus passes through as text (any failure is a 500 from
+ * the sidecar), so this cannot single that case out. Not a lost reply (which
+ * never becomes a MidnightApiError here), a busy prover, auth, rate limiting,
+ * or a network closed to writes: those never put the transaction to the node.
+ */
+export function isMidnightSubmitRefusal(error: unknown): boolean {
+  if (!isMidnightApiError(error) || error.phase !== 'submit') return false;
+  if (error.kind === 'ledgerMismatch' || error.kind === 'resetPending') return true;
+  if (error.kind !== 'server' || typeof error.status !== 'number') return false;
+  // 500 is how the sidecar answers a refused submission; other 5xx mean the route never got that far.
+  return error.status === 500 || (error.status >= 400 && error.status < 500 && !SERVER_SIDE_4XX.has(error.status));
+}
+
+/**
  * A send refused for a state the user can't fix from the send screen. Not an
  * error: the screen shows it as a note and disables its CTA.
  * - `networkUpgrading`: the server answered MIDNIGHT_NETWORK_UPGRADING.
