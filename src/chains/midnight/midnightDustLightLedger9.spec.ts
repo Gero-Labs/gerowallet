@@ -4,7 +4,8 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { ScaleBigInt } from 'midnight-v9-address-format';
 import { balanceLightDust9, dustLedger9 } from './midnightDustLightLedger9';
 import {
-  DUST_SCAN_MAX_SLICES, DUST_SCAN_MIN_SLICE_BLOCKS, DUST_SPEND_CONCURRENCY, dustScanSlices, reconstructDustState,
+  DUST_SCAN_ALIGN_BLOCKS, DUST_SCAN_MAX_SLICES, DUST_SCAN_MIN_SLICE_BLOCKS, DUST_SPEND_CONCURRENCY, dustScanSlices,
+  dustWarmScanStart, reconstructDustState,
   littleEndianHex, type CollapsedDustTree, type DustLightTransport, type DustSnapshot, type DustSpendTransaction,
 } from './midnightDustLightSync';
 
@@ -243,7 +244,7 @@ describe('DUST spend checkpoint', () => {
       const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
       const { transport, ranges } = ranged(f);
       const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
-        { checkpoint: JSON.parse(JSON.stringify(cold.checkpoint)), checkpointMarginBlocks: 1 });
+        { checkpoint: JSON.parse(JSON.stringify(cold.checkpoint)), checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
       expect(ranges.length).toBeGreaterThan(0);
@@ -261,7 +262,7 @@ describe('DUST spend checkpoint', () => {
       const later = { ...f.snapshot, block: { ...f.snapshot.block, height: f.snapshot.block.height + 1 } };
       const { transport, ranges } = ranged(f);
       const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', { ...transport, snapshot: vi.fn(async () => later) },
-        undefined, { checkpoint: cold.checkpoint, checkpointMarginBlocks: 0 });
+        undefined, { checkpoint: cold.checkpoint, checkpointMarginBlocks: 0, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(ranges).toEqual([[later.block.height, later.block.height]]);
     } finally { f.key.clear(); }
@@ -324,6 +325,66 @@ describe('DUST spend checkpoint', () => {
   });
 });
 
+describe('DUST checkpoint review fixes', () => {
+  it('starts a warm scan on a shared boundary at least one alignment before the first unchecked block', () => {
+    expect(dustWarmScanStart(41, 0, 0)).toBe(42);
+    expect(dustWarmScanStart(4, 2, 0)).toBe(2);
+    const fork = 3_346_139;
+    for (const checkedThrough of [3_474_000, 3_484_799, 3_484_800, 3_499_999]) {
+      const start = dustWarmScanStart(checkedThrough, DUST_SCAN_ALIGN_BLOCKS, fork);
+      expect(start % DUST_SCAN_ALIGN_BLOCKS).toBe(0);
+      expect(checkedThrough + 1 - start).toBeGreaterThanOrEqual(DUST_SCAN_ALIGN_BLOCKS);
+      expect(checkedThrough + 1 - start).toBeLessThan(2 * DUST_SCAN_ALIGN_BLOCKS);
+    }
+    // Never below the ledger's first block.
+    expect(dustWarmScanStart(fork + 10, DUST_SCAN_ALIGN_BLOCKS, fork)).toBe(fork);
+  });
+
+  it('a warm build with alignment scans from the boundary and reaches the same state', async () => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const ranges: number[] = [];
+      const transport: DustLightTransport = { ...f.transport, spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+        ranges.push(fromBlock);
+        const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+        return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
+      }) };
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: cold.checkpoint, checkpointMarginBlocks: 1, scanAlignBlocks: 2 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
+      expect(new Set(ranges)).toEqual(new Set([dustWarmScanStart(cold.checkpoint!.checkedThrough, 2, 0)]));
+    } finally { f.key.clear(); }
+  });
+
+  it('falls back to a cold scan when a well-formed head is not on the chain, and replaces it', async () => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const [[chain, head]] = Object.entries(cold.checkpoint!.heads);
+      expect(head.seq).toBeGreaterThan(0);
+      // Passes every shape check, but no such coin was ever created: the commitment root cannot match.
+      const wrong = { checkedThrough: cold.checkpoint!.checkedThrough, heads: { [chain]: { ...head, nonce: (BigInt(head.nonce) + 1n).toString() } } };
+      // The first block each attempt scans from.
+      const starts: number[] = [];
+      const transport: DustLightTransport = { ...f.transport,
+        snapshot: async address => { starts.push(-1); return f.transport.snapshot(address); },
+        spends: async (block, prefixes, fromBlock, toBlock) => {
+          if (starts.at(-1) === -1) starts[starts.length - 1] = fromBlock;
+          return f.transport.spends(block, prefixes, fromBlock, toBlock);
+        } };
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: wrong, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(checkpoint).toEqual(cold.checkpoint);
+      // Two resumed attempts fail the root check; the third, cold, succeeds.
+      const resumed = cold.checkpoint!.checkedThrough + 1;
+      expect(starts).toEqual([resumed, resumed, 0]);
+    } finally { f.key.clear(); }
+  });
+});
+
 describe('sliced DUST spend scans', () => {
   it('splits a range into contiguous slices that depend on the range alone', () => {
     expect(dustScanSlices(0, 5)).toEqual([[0, 5]]);
@@ -375,6 +436,34 @@ describe('sliced DUST spend scans', () => {
       expect(new Set(ranges.map(([from]) => from))).toEqual(new Set(dustScanSlices(0, height).map(([from]) => from)));
       expect(peak).toBeGreaterThan(1);
       expect(peak).toBeLessThanOrEqual(DUST_SPEND_CONCURRENCY);
+    } finally { f.key.clear(); }
+  });
+
+  it('finds spends in later slices, on slice edges and across pages the server cut short', async () => {
+    const f = fundedFixture();
+    try {
+      const height = 40_000;
+      const slices = dustScanSlices(0, height);
+      // The fixture's spends at heights 3, 4 and 5 move to a slice's last block, a later slice's first block, and the tip.
+      const moved = new Map([[3, slices[0][1]], [4, slices[4][0]], [5, height]]);
+      const snapshot = { ...f.snapshot, block: { ...f.snapshot.block, height } };
+      let cut = 0;
+      const transport: DustLightTransport = { ...f.transport, snapshot: vi.fn(async () => snapshot),
+        // Halves a long page as the sidecar does when one is too large.
+        spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+          const end = toBlock - fromBlock > 1_000 ? fromBlock + Math.floor((toBlock - fromBlock) / 2) : toBlock;
+          if (end < toBlock) cut++;
+          const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+          return { nextBlock: end < height ? end + 1 : null, transactions: page.transactions
+            .map(tx => ({ ...tx, block: { ...tx.block, height: moved.get(tx.block.height) ?? tx.block.height } }))
+            .filter(tx => tx.block.height >= fromBlock && tx.block.height <= end) };
+        }) };
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined, { checkpointMarginBlocks: 1 });
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
+      expect(cut).toBeGreaterThan(0);
+      // The spend at the tip is inside the margin: the head stays at seq 2.
+      expect(Object.values(checkpoint!.heads).map(head => head.seq)).toEqual([2]);
     } finally { f.key.clear(); }
   });
 

@@ -47,6 +47,15 @@ describe('DUST spend checkpoint store', () => {
     expect(row.serializedState).not.toContain('07'.repeat(8));
   });
 
+  it('keys the row before its first await, so wiping the seed right after the call changes nothing', async () => {
+    memoryStore();
+    const wiped = seed.slice();
+    const saving = saveDustSpendCheckpoint('mainnet', wiped, identity, checkpoint);
+    wiped.fill(0);
+    await saving;
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(checkpoint);
+  });
+
   it('treats an unreadable row as no checkpoint', async () => {
     const rows = memoryStore();
     await saveDustSpendCheckpoint('mainnet', seed, identity, checkpoint);

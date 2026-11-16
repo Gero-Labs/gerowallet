@@ -167,6 +167,8 @@ export interface ReconstructDustOptions {
    * reorg never leaves a reverted spend in it. Default `DUST_CHECKPOINT_MARGIN_BLOCKS`.
    */
   checkpointMarginBlocks?: number;
+  /** Warm scans start on a multiple of this many blocks (`dustWarmScanStart`); 0 starts right after the checkpoint. Default `DUST_SCAN_ALIGN_BLOCKS`. */
+  scanAlignBlocks?: number;
 }
 
 /** About half an hour of Midnight blocks: a spend this deep is final. */
@@ -177,6 +179,26 @@ export const DUST_CHECKPOINT_MARGIN_BLOCKS = 300;
 // (2026-11-16), the same scan in 8 block slices 12-13 s with 4 requests in
 // flight. 6 in flight was no faster and drew 429s from Nexus, whose sidecar
 // serves 16 DUST requests at once for every wallet.
+/**
+ * About a day of Midnight blocks. A warm scan starting just after the
+ * checkpoint would cover ~300 blocks, where a prefix matches 2-4 spends on
+ * mainnet (2026-11-16): the next round's prefix would all but name the
+ * wallet's own spend among them. Starting on a shared day boundary keeps a
+ * day or more of spends (~300 per prefix) in every warm scan, and tells the
+ * server only the day the wallet last synced.
+ */
+export const DUST_SCAN_ALIGN_BLOCKS = 14_400;
+
+/**
+ * Where a resumed chain is scanned from: the multiple of `align` that leaves
+ * at least `align` blocks before the first unchecked one, never below `floor`
+ * (the ledger's first block). `align` 0 is the block after the checkpoint.
+ */
+export function dustWarmScanStart(checkedThrough: number, align: number, floor: number): number {
+  if (align === 0) return checkedThrough + 1;
+  return Math.max(floor, 0, Math.floor((checkedThrough + 1 - align) / align) * align);
+}
+
 /** At most this many fixed block slices per scan. */
 export const DUST_SCAN_MAX_SLICES = 8;
 /** No slice shorter than this: a short warm scan stays one request. */
@@ -254,17 +276,22 @@ export async function reconstructDustState<State, Key>(
   progress: (percent: number, detail: string) => void = () => {},
   options: ReconstructDustOptions = {},
 ): Promise<{ state: State; block: DustSyncBlock; checkpoint: DustSpendCheckpoint | null }> {
+  // A head the chain does not have (a deep reorg, a damaged row) fails the
+  // commitment root on every resumed attempt; the cold attempts after it
+  // succeed and their checkpoint replaces the bad one.
+  const attempts = options.checkpoint ? 4 : 3;
   for (let attempt = 0; ; attempt++) {
-    try { return await reconstructDustStateOnce(ledger, key, network, transport, progress, options); }
-    catch (error) { if (!(error instanceof DustRootMismatch) || attempt >= 2) throw error; }
+    const run = options.checkpoint && attempt >= 2 ? { ...options, checkpoint: null } : options;
+    try { return await reconstructDustStateOnce(ledger, key, network, transport, progress, run); }
+    catch (error) { if (!(error instanceof DustRootMismatch) || attempt >= attempts - 1) throw error; }
   }
 }
 
 /** Rebuild from public projections, independent of wallet creation time and event IDs.
  * Only the wallet's own spend chains are followed. Foreign tree ranges are compact hashes.
  *
- * A chain is scanned from the first block, or from just after a checkpoint's
- * `checkedThrough` when the checkpoint has its head. A successor found on the
+ * A chain is scanned from the first block, or from a shared day boundary before
+ * a checkpoint's `checkedThrough` when the checkpoint has its head. A successor found on the
  * way is scanned from where its parent's scan started, never from the block it
  * was created in: that block would name the wallet's own spend to the server. */
 async function reconstructDustStateOnce<State, Key>(
@@ -312,6 +339,8 @@ async function reconstructDustStateOnce<State, Key>(
     && saved.checkedThrough < block.height && saved.heads && typeof saved.heads === 'object' ? saved : null;
   const margin = options.checkpointMarginBlocks ?? DUST_CHECKPOINT_MARGIN_BLOCKS;
   if (!Number.isSafeInteger(margin) || margin < 0) throw new Error('Invalid DUST checkpoint margin');
+  const align = options.scanAlignBlocks ?? DUST_SCAN_ALIGN_BLOCKS;
+  if (!Number.isSafeInteger(align) || align < 0) throw new Error('Invalid DUST scan alignment');
   // What the returned checkpoint covers: never below the one resumed from.
   const checkedThrough = Math.max(block.height - margin, resume ? resume.checkedThrough : -1);
   interface LiveCoin {
@@ -361,7 +390,7 @@ async function reconstructDustStateOnce<State, Key>(
     const fromFirst = first && Number.isSafeInteger(first.height) && first.height >= 0 && first.height <= block.height
       && coin.ctime.getTime() >= first.timestamp ? first.height : 0;
     live.set(nullifier, { coin: start, generation, generationKey: chainKey,
-      scanFrom: head && resume ? resume.checkedThrough + 1 : fromFirst, stable: start });
+      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, stable: start });
     cursor++;
   }
   if (cursor !== generationEnd) throw new Error('Incomplete DUST generation tree');

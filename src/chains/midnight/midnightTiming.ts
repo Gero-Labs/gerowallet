@@ -50,14 +50,15 @@ export function midnightTimer(scope: string): MidnightTimer {
 /** Wrap a DUST light-sync transport to time and count its requests on `timer`. */
 export function timedDustTransport(transport: DustLightTransport, timer: MidnightTimer): DustLightTransport {
   let spendRequests = 0;
-  let prefixScans = 0;
   let commitmentRequests = 0;
+  let lowestFromBlock: number | undefined;
   return {
     snapshot: address => timer.time('dustSnapshot', () => transport.snapshot(address)),
     spends: (block, prefixes, fromBlock, toBlock) => {
       spendRequests++;
-      if (fromBlock === 0) prefixScans++;
-      timer.note({ spendRequests, prefixScans, tipHeight: block.height });
+      // The earliest block asked for: 0, the ledger's first block, or a day boundary (all shared by every wallet).
+      lowestFromBlock = Math.min(lowestFromBlock ?? fromBlock, fromBlock);
+      timer.note({ spendRequests, lowestFromBlock, tipHeight: block.height });
       return timer.time('dustSpends', () => transport.spends(block, prefixes, fromBlock, toBlock));
     },
     commitments: (block, ranges) => {

@@ -15,6 +15,15 @@ import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './mid
 import { midnightTimer, timedDustTransport } from './midnightTiming';
 import { loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
 
+const CHECKPOINT_LOAD_TIMEOUT_MS = 3_000;
+
+/** `promise`, or `fallback` when it has not settled within `ms`. */
+function withinMs<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([promise, new Promise<T>(resolve => { timer = setTimeout(() => resolve(fallback), ms); })])
+    .finally(() => clearTimeout(timer));
+}
+
 /** Wallet SDK 2's Schnorr keystore for the unshielded key on `network`. */
 export function ledger9Keystore(secret: Uint8Array, network: string) {
   return createKeystore({ kind: 'schnorr', secret }, network);
@@ -140,7 +149,9 @@ export async function balanceLedger9Fees(
     const identity = await timer.time('chainIdentity', () => readVerifiedMidnightChainIdentity(args.endpoints, controller.signal));
     watchdog.activity();
     // Resume each DUST spend chain where the last build left it (a full scan is minutes on mainnet).
-    const saved = await timer.time('checkpointLoad', () => loadDustSpendCheckpoint(network, args.dustSecretSeed, identity));
+    // A hint: a store that does not answer in time costs a cold scan, not the build.
+    const saved = await timer.time('checkpointLoad', () => withinMs(loadDustSpendCheckpoint(network, args.dustSecretSeed, identity),
+      CHECKPOINT_LOAD_TIMEOUT_MS, null));
     const reconstructStart = Date.now();
     const { state, block, checkpoint } = await reconstructDustState(dustLedger9, dustKey, network,
       timedDustTransport(createDustLightTransport(args.endpoints, controller.signal, reply), timer), progress,
@@ -153,7 +164,10 @@ export async function balanceLedger9Fees(
     timer.lap('balance');
     watchdog.activity();
     await timer.time('chainIdentityRecheck', () => assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal));
-    if (checkpoint) await timer.time('checkpointSave', () => saveDustSpendCheckpoint(network, args.dustSecretSeed, identity, checkpoint));
+    // Not awaited: the fee is ready, and a stalled store must not hold it back. The
+    // save hashes the seed into its row key before its first await, so wiping the
+    // seed after this returns cannot change the row (midnightDustSpendCheckpoint.spec).
+    if (checkpoint) void saveDustSpendCheckpoint(network, args.dustSecretSeed, identity, checkpoint);
     outcome = 'ok';
     return fee;
   } catch (error) {
