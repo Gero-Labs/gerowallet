@@ -56,6 +56,7 @@ import {
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
+import { markBuildStep, withBuildFailure } from '@/chains/midnight/midnightBuildFailure';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
 import { midnightTimer } from '@/chains/midnight/midnightTiming';
@@ -260,7 +261,8 @@ async function balanceAndSignInBg(
   }) as { data: SignedInBgReply };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
-    throw backgroundError(response?.data?.error, 'Midnight balance/sign failed');
+    // `buildFailure`: the worker's build failed, not the credential (midnightBuildFailure.ts).
+    throw withBuildFailure(backgroundError(response?.data?.error, 'Midnight balance/sign failed'), response?.data?.buildFailure);
   }
   if (proving && !response.data.proven) throw new Error('Wallet-side proving requested but BG returned an unproven tx');
   return signedInBg(response.data);
@@ -275,7 +277,7 @@ interface SignedInBg {
   txIdentifiers?: string[];
 }
 
-type SignedInBgReply = Partial<SignedInBg> & { success: boolean; error?: string };
+type SignedInBgReply = Partial<SignedInBg> & { success: boolean; error?: string; buildFailure?: string };
 
 function signedInBg(data: SignedInBgReply): SignedInBg {
   return {
@@ -426,7 +428,8 @@ export async function buildAndSignUnshieldedTransfer(
     assertCurrentApproval(current);
     const { publicKeyHex, addressHex } = await timer.time('walletKeys', () => getWalletKeys(credentials));
     assertCurrentApproval(current);
-    const built = await timer.time('nexusBuild', () => buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex }));
+    // Nexus's build is the wallet's to fail: a decline after it is not the user's (midnightBuildFailure.ts).
+    const built = await timer.time('nexusBuild', () => markBuildStep(() => buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex })));
     assertCurrentApproval(current);
     const { signedTxHex } = await timer.time('worker', () => balanceAndSignInBg(
       built.unprovenTxHex, baseRequest.ttlMs, baseRequest.outputs, credentials, undefined, target?.request,
@@ -463,11 +466,11 @@ export async function balanceConnectorTransaction(
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
-  })) as { data: { success: boolean; tx?: string; error?: string } };
+  })) as { data: { success: boolean; tx?: string; error?: string; buildFailure?: string } };
   timer.done(response?.data?.success ? 'ok' : 'failed');
   assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
-    throw backgroundError(response?.data?.error, 'Midnight balancing failed');
+    throw withBuildFailure(backgroundError(response?.data?.error, 'Midnight balancing failed'), response?.data?.buildFailure);
   }
   return { tx: response.data.tx };
 }
@@ -495,13 +498,13 @@ export async function buildConnectorIntent(
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
-  })) as { data: { success: boolean; tx?: string; error?: string; code?: string } };
+  })) as { data: { success: boolean; tx?: string; error?: string; buildFailure?: string } };
   timer.done(response?.data?.success ? 'ok' : 'failed');
   assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
-    // `code` is a connector error code (InsufficientFunds) the panel relays on decline.
+    // `buildFailure` is the connector code (InsufficientFunds, InternalError) the panel relays on decline.
     // A ledger refusal (MIDNIGHT_LEDGER_UNKNOWN) is said in the user's language, as on a send.
-    throw Object.assign(backgroundError(response?.data?.error, 'Building the intent failed'), { code: response?.data?.code });
+    throw withBuildFailure(backgroundError(response?.data?.error, 'Building the intent failed'), response?.data?.buildFailure);
   }
   return { tx: response.data.tx };
 }

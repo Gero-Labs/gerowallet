@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { bech32m } from 'bech32';
 import { UnshieldedAddress } from 'midnight-v9-address-format';
-import { syncedMidnightShieldedBalances, validateMidnightConnectorTransfer } from './midnightConnectorTransfer';
+import { syncedMidnightShieldedBalances, transferOutputTotals, validateMidnightConnectorTransfer } from './midnightConnectorTransfer';
+import { NIGHT_RAW_TOKEN_TYPE, uncoveredIntentInput } from './midnightConnectorIntent';
 
 function output(network = 'stagenet') {
   return {
@@ -53,5 +54,29 @@ describe('Midnight connector private balance reads', () => {
     expect(syncedMidnightShieldedBalances('synced', { ['aa'.repeat(32)]: 12345678901234567890n })).toEqual({
       ['aa'.repeat(32)]: '12345678901234567890',
     });
+  });
+});
+
+describe('transferOutputTotals (the makeTransfer balance pre-check)', () => {
+  const usdm = 'ab'.repeat(32);
+  const out = (type: string, value: string) => ({ kind: 'unshielded' as const, type, value, recipient: 'mn_addr1x' });
+
+  it('sums every output of a colour, beyond the safe-integer range', () => {
+    expect(transferOutputTotals([out(usdm, '9007199254740993'), out(NIGHT_RAW_TOKEN_TYPE, '5'), out(usdm, '7')])).toEqual([
+      { type: usdm, value: '9007199254741000' },
+      { type: NIGHT_RAW_TOKEN_TYPE, value: '5' },
+    ]);
+  });
+
+  it('flags a transfer the synced UTxOs cannot cover only in total, not output by output', () => {
+    const view = {
+      lastSync: 1,
+      utxos: [{ tokenType: usdm, value: 10n }] as unknown as Parameters<typeof uncoveredIntentInput>[1]['utxos'],
+    };
+    expect(uncoveredIntentInput(transferOutputTotals([out(usdm, '6')]), view)).toBeUndefined();
+    expect(uncoveredIntentInput(transferOutputTotals([out(usdm, '6'), out(usdm, '6')]), view)).toEqual({ type: usdm, value: '12' });
+    // The live case: a wallet holding only USDM asked for NIGHT.
+    expect(uncoveredIntentInput(transferOutputTotals([out(NIGHT_RAW_TOKEN_TYPE, '1000000')]), view))
+      .toEqual({ type: NIGHT_RAW_TOKEN_TYPE, value: '1000000' });
   });
 });

@@ -124,6 +124,7 @@ import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
 import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
+import { asBuildStep } from '@/chains/midnight/midnightBuildFailure';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import {
@@ -2817,7 +2818,8 @@ export class WalletBg {
         // conservative 90-day lookback.
         // The chain's ledger decides the path, never the network's name.
         if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
-          const result9 = await balanceDappTransaction9({
+          // The build itself: a failure here is the wallet's, not the user's (midnightBuildFailure.ts).
+          const result9 = await asBuildStep(() => balanceDappTransaction9({
             sdkNetworkId: endpoints.sdkNetworkId,
             endpoints,
             txHex,
@@ -2825,12 +2827,12 @@ export class WalletBg {
             dustSecretSeed: derived.dustSecretKey,
             utxos: midnightStore.utxos,
             proving,
-          });
+          }));
           assertSession();
           return { tx: result9.txHex };
         }
         const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
-        const result = await balanceDappTransaction({
+        const result = await asBuildStep(() => balanceDappTransaction({
           sdkNetworkId: endpoints.sdkNetworkId,
           endpoints,
           txHex,
@@ -2840,7 +2842,7 @@ export class WalletBg {
             ? new Date(createdMs)
             : new Date(Date.now() - 90 * 24 * 3_600_000),
           proving,
-        });
+        }));
         assertSession();
         return { tx: result.txHex };
       } finally {
@@ -2918,7 +2920,8 @@ export class WalletBg {
         }
         // The chain's ledger decides the path, never the network's name.
         if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
-          const result9 = await buildConnectorIntent9({
+          // The build itself: a failure here is the wallet's, not the user's (midnightBuildFailure.ts).
+          const result9 = await asBuildStep(() => buildConnectorIntent9({
             sdkNetworkId: endpoints.sdkNetworkId,
             endpoints,
             request,
@@ -2927,12 +2930,12 @@ export class WalletBg {
             utxos: midnightStore.utxos,
             sync: midnightStore,
             proving,
-          });
+          }));
           assertSession();
           return { tx: result9.txHex, segmentId: result9.segmentId };
         }
         const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
-        const result = await buildConnectorIntent({
+        const result = await asBuildStep(() => buildConnectorIntent({
           sdkNetworkId: endpoints.sdkNetworkId,
           endpoints,
           request,
@@ -2942,7 +2945,7 @@ export class WalletBg {
             ? new Date(createdMs)
             : new Date(Date.now() - 90 * 24 * 3_600_000),
           proving,
-        });
+        }));
         assertSession();
         return { tx: result.txHex, segmentId: result.segmentId };
       } finally {
@@ -3332,11 +3335,13 @@ export class WalletBg {
         // Nexus built this transaction. Every unshielded input it spends is this
         // wallet's and the signature below authorizes all of them, so sign only
         // a transaction that is exactly the send the user asked for.
-        await assertMidnightTransferMatches(
+        // A refusal here and the balancing below are build failures (midnightBuildFailure.ts);
+        // the sponsor's credential in between is not.
+        await asBuildStep(() => assertMidnightTransferMatches(
           sdkNetworkId, unprovenTxHex,
           { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
           intendedOutputs,
-        );
+        ));
 
         // Registration lower bound for the dust snapshot bootstrap: the wallet
         // can't have registered for DUST before it was created. For restored
@@ -3377,7 +3382,7 @@ export class WalletBg {
           : new Date(Date.now() - 90 * 24 * 3_600_000);
 
         assertSession();
-        const signedTxHex = await balanceAndSignUnshieldedTransfer({
+        const signedTxHex = await asBuildStep(() => balanceAndSignUnshieldedTransfer({
           sdkNetworkId,
           endpoints,
           // Always THIS wallet's signing key: a sponsor authorises a fee,
@@ -3395,7 +3400,7 @@ export class WalletBg {
           onDustSyncProgress: (percent, detail) => {
             midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
           },
-        });
+        }));
         assertSession();
         return signedTxHex;
       } finally {
