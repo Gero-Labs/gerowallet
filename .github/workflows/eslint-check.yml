@@ -79,3 +79,9 @@ jobs:
 
       - name: Typecheck (vue-tsc)
         run: npm run typecheck
+
+      # Every shipped route must have an entry in the V02 route validation
+      # matrix (#1284); a new or renamed route fails here until
+      # spikes/vue3-migration/route-matrix.json and ROUTE-MATRIX.md are updated.
+      - name: Route validation matrix is current
+        run: node spikes/vue3-migration/route-matrix.mjs --check

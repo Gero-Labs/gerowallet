@@ -1,0 +1,788 @@
+{
+  "schemaVersion": 1,
+  "purpose": "V02 (#1284): map every shipped route to its V07-V11 owner and to the checks that exercise it. route-matrix.mjs joins this file with the routes read from the current routers and fails when a route is missing here, a key names no route, or a unit or help-browser reference is not a tracked file.",
+  "e2e": {
+    "repository": "Gero-Labs/gerowallet-e2e-tests",
+    "harnessSha": "b5a00dc3927d67e077db7386a29f506e68232db2",
+    "walletPin": "e8a3d1391a2a10efd5e719744e7b530eee7a5528",
+    "note": "They are not checked out here, so route-matrix.mjs checks only their shape; rerun the harness against the exact candidate in V13 (#1295). A check marked funded skips without a funded testnet wallet and is not coverage until that run has one."
+  },
+  "kinds": {
+    "unit": "Vitest spec in this repository (npm test) that mounts the route's view or drives the logic behind it. Source-text tripwires are not listed.",
+    "guards": "src/modules/navigation/router.guards.spec.ts drives the production router with this route's auth, network or feature-flag guard.",
+    "help-browser": "scripts/help-browser scenario run by the Help browser evidence workflow on every PR.",
+    "e2e": "Playwright spec in the external harness, run against an exact wallet SHA.",
+    "manual": "Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff."
+  },
+  "routes": {
+    "options:/": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/portfolio/components/LegacyListingsCard.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/dashboard-portfolio.spec.ts",
+          "funded": true
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/portfolio-pending.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cardano-holdings.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/legacy-listing-rescue.spec.ts"
+        }
+      ]
+    },
+    "options:/welcome": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/welcome/views/Welcome.addAccount.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/welcome/views/Welcome.help.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/onboarding.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/wallet-create-flow.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/wallet-library.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/multi-account.spec.ts"
+        }
+      ],
+      "manual": "Pair Ledger, Trezor and Keystone from the hardware step on real devices."
+    },
+    "options:/market": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/solada-launchpad.spec.ts"
+        }
+      ],
+      "note": "Redirect to the dashboard's market view (/?view=all)."
+    },
+    "options:/swap": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/swap/components/__tests__/GeroSwapEmbed.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/swap/components/__tests__/GeroSwapEmbed.spendBound.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "04-transactions/swap.spec.ts",
+          "funded": true
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/notify-swap-orders.spec.ts"
+        }
+      ],
+      "manual": "Swaps are mainnet only: one live swap per release, software and Ledger."
+    },
+    "options:/staking": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/staking-page.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/staking-flow.spec.ts",
+          "funded": true
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/staking-submit.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Delegate and withdraw with a hardware wallet on preprod."
+    },
+    "options:/nexus": {
+      "checks": [],
+      "manual": "Open the page and confirm the hero, the stats and both outbound links (nexus.gerowallet.io and its API docs) render."
+    },
+    "options:/cashback": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/cashback/CashbackPortal.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/cashback/CashbackSignDialog.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cashback-portal.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "06-v263-features/cashback-retailers.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Mainnet only: open the Bring portal and claim once per release."
+    },
+    "options:/governance": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "note": "Redirect to My governance, or to the DRep directory when ?drep= is present (kept by the guard spec)."
+    },
+    "options:/governance/me": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/MyGovernance.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance-persistence.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance-metadata.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/feature-gates.spec.ts"
+        }
+      ]
+    },
+    "options:/governance/register": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/drepRegister.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance-registration.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/feature-gates.spec.ts"
+        }
+      ],
+      "manual": "Register and retire a DRep on preprod with a funded wallet."
+    },
+    "options:/governance/actions": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/ActionList.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/flags-retry.spec.ts"
+        }
+      ]
+    },
+    "options:/governance/actions/:txHash/:index": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/ActionDetail.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/committee-identity.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/global-search.spec.ts"
+        }
+      ],
+      "manual": "Cast a vote on preprod as a registered DRep."
+    },
+    "options:/governance/dreps": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/DRepDirectory.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/drepDirectory.sort.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/drep-directory.spec.ts"
+        }
+      ]
+    },
+    "options:/governance/dreps/:drepId": {
+      "checks": [],
+      "manual": "Delegate voting power to a DRep from its profile on preprod."
+    },
+    "options:/pool-operator": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/pool-operator/components/PoolRegistrationForm.contract.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/pool-operator/composables/useColdKeyImport.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cold-key.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/spo-auth.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/spo-transport.spec.ts"
+        }
+      ],
+      "manual": "Pool update signed with the cold key on Ledger (SPO node)."
+    },
+    "options:/realfi": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/realfi/RealFi.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/realfi/RealFi.staking.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/feature-gates.spec.ts"
+        }
+      ],
+      "manual": "Mainnet only: stake and unstake once with the live widget."
+    },
+    "options:/proof-server": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/midnight/ProofServerPage.consent.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/midnight/ProofServerRestartNotice.spec.ts"
+        }
+      ],
+      "manual": "Midnight wallet: switch between the local and remote prover and prove one shielded send."
+    },
+    "options:/media-player": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/navigation.spec.ts"
+        }
+      ],
+      "manual": "Play an audio and a video NFT from a wallet that holds them."
+    },
+    "options:/help": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/helpHome.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/home/HelpHomeDashboard.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/help-center.spec.ts"
+        }
+      ]
+    },
+    "options:/help/topics/:topic": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/helpNavigation.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpLayout.spec.ts"
+        }
+      ]
+    },
+    "options:/help/articles/:slug": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpReader.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/helpRichText.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/published-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/help-center.spec.ts"
+        }
+      ]
+    },
+    "options:/help/search": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpCenter.search.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpSearchForm.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/published-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/help-center.spec.ts"
+        }
+      ]
+    },
+    "options:/help/updates": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpUpdatesView.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/useHelpUpdates.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/updates-smoke.cjs"
+        }
+      ]
+    },
+    "options:/blog": {
+      "checks": [
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/updates-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/blog.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/blog-page.spec.ts"
+        }
+      ]
+    },
+    "options:/blog/:slug": {
+      "checks": [
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/updates-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/blog.spec.ts"
+        }
+      ]
+    },
+    "options:/copilot-feed": {
+      "checks": [],
+      "manual": "With isCopilotEnabled on, open the feed in the full page and confirm the cards render."
+    },
+    "options:/dev-tools": {
+      "checks": [],
+      "manual": "No navigation entry: open #/dev-tools and convert one transaction CBOR to JSON."
+    },
+    "options:/dapp-connect": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/DappConnect.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/dapp-connect-account.spec.ts"
+        }
+      ]
+    },
+    "options:/dapp-sign": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts"
+        }
+      ],
+      "manual": "signData from a live dApp with Ledger and Keystone."
+    },
+    "options:/sign-tx": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/SignTx.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/shared/components/txApprovalSurfaces.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/popup-sign-refusals.spec.ts"
+        }
+      ],
+      "manual": "signTx from a live dApp with Ledger, Trezor and Keystone (QA #1518)."
+    },
+    "options:/sign-bitcoin-psbt": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/BitcoinSignPsbt.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/BitcoinPassKeySigning.spec.ts"
+        }
+      ],
+      "manual": "Sign a PSBT from a Bitcoin dApp on testnet."
+    },
+    "options:/sign-bitcoin-message": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/BitcoinPassKeySigning.spec.ts"
+        }
+      ],
+      "manual": "Sign a message from a Bitcoin dApp on testnet."
+    },
+    "options:/wc-session-proposal": {
+      "checks": [],
+      "manual": "Pair with a WalletConnect dApp (Minswap) and approve, then reject, a session."
+    },
+    "options:/warning": {
+      "checks": [],
+      "manual": "Open a blacklisted site: both acknowledgements are required, and Continue, Back and Report each answer the request once."
+    },
+    "options:/transactions": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/transactions/Transactions.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/vue-release-regression.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cardano-pending-transactions.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/midnight-transactions-filter.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/bitcoin-utxos.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/transactions-history.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "options:/card": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/wallet/components/dashboard/CardStatusSection.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/wallet/components/dashboard/OrderCardFlowModal.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/gero-card-hardening.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/gero-card-ordering.spec.ts"
+        }
+      ],
+      "manual": "Mainnet only: KYC, order and top-up with the live provider."
+    },
+    "options:/passkey-auth": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/passkeys.spec.ts"
+        }
+      ],
+      "manual": "Real authenticator (Touch ID, a security key and a phone) in Chrome and Brave."
+    },
+    "options:/ledger-ble-sign": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "manual": "Sign from the side panel with a Ledger Nano X over Bluetooth."
+    },
+    "options:/gomining": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/gomining/useGoMiningAccount.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/gomining/dialogs/GoMiningBuyDialog.spec.ts"
+        }
+      ],
+      "manual": "Mainnet Bitcoin wallet: sign in to GoMining and view the account."
+    },
+    "options:/babylon": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/babylon/dialogs/BabylonStakeDialog.spec.ts"
+        }
+      ],
+      "manual": "Stake a small amount on Babylon testnet."
+    },
+    "options:/ordinals": {
+      "checks": [],
+      "manual": "Bitcoin wallet holding inscriptions: the gallery renders them."
+    },
+    "options:/thorchain": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/thorchain/ThorchainSwap.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "manual": "Quote a BTC to ADA swap on mainnet (no submit)."
+    },
+    "options:/mempool": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/bitcoin-design.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/bitcoin-utxos.spec.ts"
+        }
+      ]
+    },
+    "options:/lightning": {
+      "checks": [],
+      "manual": "Resolve a Lightning address and a BOLT11 invoice on mainnet (no payment)."
+    },
+    "options:/signing-ceremony": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/signingCeremony/SigningCeremony.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/signingCeremony/ceremony.spec.ts"
+        }
+      ],
+      "manual": "No navigation entry: on a hardware wallet, sign a delegation statement and check the printed entry verifies."
+    },
+    "options:/:pathMatch(.*)*": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/navigation-dao-retired.spec.ts"
+        }
+      ],
+      "note": "Catch-all: unknown paths land on the dashboard."
+    },
+    "sidepanel:/": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/pages/HomePage.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/sidepanel-token-list.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "sidepanel:/staking": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Delegate from the side panel with Ledger over Bluetooth."
+    },
+    "sidepanel:/market": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "sidepanel:/perps": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Mainnet only: open and close a Strike position (QA #1513)."
+    },
+    "sidepanel:/vaults": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/perps/VaultTransfers.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Mainnet only: deposit to and withdraw from a Strike vault."
+    },
+    "sidepanel:/activity": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/pages/ActivityPage.midnight.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/explorer-setting.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "sidepanel:/feed": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "manual": "With isCopilotEnabled on, open the side-panel feed and confirm cards render."
+    },
+    "sidepanel:/:pathMatch(.*)*": {
+      "checks": [],
+      "note": "Catch-all: unknown side-panel paths land on home.",
+      "manual": "Open sidepanel/index.html#/does-not-exist and confirm home renders."
+    }
+  }
+}
