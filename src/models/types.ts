@@ -140,6 +140,7 @@ const CoinTypes = {
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
   BITCOIN: HARDENED + 0, // HARD_DERIVATION_START + 0 (Bitcoin BIP44 coin type);
   MIDNIGHT: HARDENED + coin_type.midnight, // HARD_DERIVATION_START + 2400 (Midnight BIP44 coin type)
+  SOLANA: HARDENED + 501, // SLIP-44 coin type 501 (src/chains/solana/solanaPaths.ts)
 };
 
 const BIP44_SCAN_SIZE = 20;
@@ -165,6 +166,8 @@ const Blockchain = {
   CARDANO: 'Cardano',
   BITCOIN: 'Bitcoin',
   MIDNIGHT: 'Midnight',
+  // Gated by `isSolanaEnabled` (default off). The key is the Gero Sync wire name ('SOLANA').
+  SOLANA: 'Solana',
 };
 
 const Network = {
@@ -175,6 +178,8 @@ const Network = {
   // Midnight-only. Nexus retired `midnight-preview` on 2026-09-06; stagenet is
   // the network that replaced it. No Cardano network carries this name.
   STAGENET: 'Stagenet',
+  // Solana-only. Solana mainnet uses MAINNET; no Cardano network carries this name.
+  DEVNET: 'Devnet',
 };
 
 const ERROR = {
