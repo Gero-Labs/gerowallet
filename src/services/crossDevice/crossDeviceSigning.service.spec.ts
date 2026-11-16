@@ -107,7 +107,9 @@ describe('PAIR_CONFIRM inbound (QR pairing auth boundary)', () => {
   it('delivers a valid confirm to onPairConfirm — verified via frame.pubKey, UNGATED by trust', async () => {
     const { bus, onPairConfirm, desktop } = makeDesktop();
     bus.publish(await signedConfirm());
-    await flush();
+    // Wait for the async ed25519 verify itself, not a fixed sleep (CI load).
+    await vi.waitFor(() => expect(onPairConfirm).toHaveBeenCalled(), { timeout: 5000, interval: 1 });
+    await flush(); // a duplicate delivery would land here
     expect(onPairConfirm).toHaveBeenCalledTimes(1);
     expect(onPairConfirm.mock.calls[0][0]).toMatchObject({ from: phoneId, to: desktopId, nonce: 'n1' });
     desktop.dispose();
@@ -341,9 +343,10 @@ describe('crossDeviceSigning approver replay + expiry', () => {
       requesterKp.privKeyHex,
     );
     bus.publish(req);
-    await new Promise((r) => setTimeout(r, 10));
+    // Wait for the first copy to be verified and surfaced, not a fixed sleep (CI load).
+    await vi.waitFor(() => expect(handler).toHaveBeenCalled(), { timeout: 5000, interval: 1 });
     bus.publish(req); // exact-bytes replay (relay re-delivery)
-    await new Promise((r) => setTimeout(r, 10));
+    await flush(); // let the replay's verify run; the seen-set must drop it
 
     expect(handler).toHaveBeenCalledTimes(1);
     approver.dispose();
