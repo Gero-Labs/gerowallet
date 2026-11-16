@@ -72,6 +72,17 @@ export function validateMidnightConnectorTransfer(data: unknown, network: string
   return { ok: true, outputs };
 }
 
+/**
+ * What a validated transfer pays, one total per colour, in the shape the
+ * worker's balance pre-check (`uncoveredIntentInput`) reads. The DUST fee is
+ * not included: it is paid in DUST, never from these colours.
+ */
+export function transferOutputTotals(outputs: ReadonlyArray<MidnightConnectorOutput>): Array<{ type: string; value: string }> {
+  const totals = new Map<string, bigint>();
+  for (const output of outputs) totals.set(output.type, (totals.get(output.type) ?? 0n) + BigInt(output.value));
+  return [...totals].map(([type, value]) => ({ type, value: value.toString() }));
+}
+
 /** Unknown private state must never be returned as an authoritative empty map. */
 export function syncedMidnightShieldedBalances(status: string, balances: Record<string, bigint> = {}): Record<string, string> {
   if (status !== 'synced') throw new Error('Private balances are not synchronized; unlock private token synchronization in the wallet before retrying');

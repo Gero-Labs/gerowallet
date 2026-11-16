@@ -2,7 +2,7 @@
 import './backgroundLocales';
 // Next: wraps fetch before anything can call it (signed-response check).
 import '@/api/signedFetchInstall';
-import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
+import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances, transferOutputTotals } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
 import { midnightTxIdentifiers } from '@/chains/midnight/midnightTxIdentifiers';
@@ -7079,8 +7079,10 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   // Names the embedding site for a cross-origin frame, as the Cardano and Bitcoin prompts do.
   const connectPayload = promptSite(origin, send);
 
-  const sendToPanel = () =>
-    sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
+  // Parked until this tab's panel connects (parkMidnightRequest): opened now
+  // when the dapp's gesture allows it, otherwise the badge and a notification
+  // ask the user to open it. No timeout: the panel may sit on the lock screen.
+  parkMidnightRequest(MIDNIGHT_METHOD.connect, connectPayload, tabId)
       .then(async (response: BackgroundResponse) => {
         const approval = readConnectApproval(response);
         // Anything but an approval connects nothing (connect() reads a falsy answer as declined).
@@ -7104,20 +7106,6 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
         }
         reply({ error: midnightErr });
       });
-
-  // Primary: the panel is already open and listening for this tab.
-  if (miniGeroPorts.has(tabId)) {
-    sendToPanel();
-    return true;
-  }
-
-  // Open the panel and wait for it to connect. No popup fallback.
-  openSidebar(tabId, 'sidepanel/index.html')
-    .then(() => waitForMiniGeroPort(5000, tabId))
-    .then(() => sendToPanel())
-    .catch(err => reply({
-      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
-    }));
 
   return true; // async
 });
@@ -7562,27 +7550,15 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   // it's always the same idempotent action; signData isn't.
   const signDataPayload = { data, ...promptSite(origin, send) };
 
-  const sendToPanel = () =>
-    sendToMiniGero(MIDNIGHT_METHOD.signData, signDataPayload, tabId)
-      .then((response: BackgroundResponse) => reply({ data: response.data }))
-      .catch(err => reply({
-        // Same reasoning as connect's catch above: the fallback must not be
-        // Rejected, or a dapp branching on error.code === 'Rejected' would
-        // be told "the user declined" for e.g. a panel-closed/internal
-        // failure that was never an actual decision.
-        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the signing request'),
-      }));
-
-  if (miniGeroPorts.has(tabId)) {
-    sendToPanel();
-    return true;
-  }
-
-  openSidebar(tabId, 'sidepanel/index.html')
-    .then(() => waitForMiniGeroPort(5000, tabId))
-    .then(() => sendToPanel())
+  // Parked until this tab's panel connects, as connect above.
+  parkMidnightRequest(MIDNIGHT_METHOD.signData, signDataPayload, tabId)
+    .then((response: BackgroundResponse) => reply({ data: response.data }))
     .catch(err => reply({
-      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+      // Same reasoning as connect's catch above: the fallback must not be
+      // Rejected, or a dapp branching on error.code === 'Rejected' would
+      // be told "the user declined" for e.g. a panel-closed/internal
+      // failure that was never an actual decision.
+      error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the signing request'),
     }));
   return true;
 });
@@ -7963,27 +7939,22 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
     return true;
   }
-  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, ...promptSite(origin, send) };
-
-  const sendToPanel = () =>
-    sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
-      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
-      .catch(err => reply({
-        // Never Rejected on internal/panel failure (only a real user decline
-        // arrives as the panel's own Rejected) — same reasoning as signData.
-        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to build the transfer'),
-      }));
-
-  if (miniGeroPorts.has(tabId)) {
-    sendToPanel();
+  // Answered before the prompt, as makeIntent does: the build's coin selection
+  // is the authoritative check, but a wallet that plainly cannot pay should not
+  // be asked to approve, and the dapp gets InsufficientFunds, not a server error.
+  if (uncoveredIntentInput(transferOutputTotals(validation.outputs), midnightStoreSync)) {
+    reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this transfer pays') });
     return true;
   }
+  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, ...promptSite(origin, send) };
 
-  openSidebar(tabId, 'sidepanel/index.html')
-    .then(() => waitForMiniGeroPort(5000, tabId))
-    .then(() => sendToPanel())
+  // Parked until this tab's panel connects, as connect and makeIntent.
+  parkMidnightRequest(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
+    .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
     .catch(err => reply({
-      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+      // Never Rejected on internal/panel failure (only a real user decline
+      // arrives as the panel's own Rejected) — same reasoning as signData.
+      error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to build the transfer'),
     }));
   return true;
 });
