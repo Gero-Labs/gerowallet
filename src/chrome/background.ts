@@ -137,11 +137,12 @@ import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import {
   CONNECTOR_INTENT_TTL_MS,
   CONNECTOR_NOT_SYNCED_REASON,
-  IntentInsufficientFundsError,
   connectorIntentSyncReady,
   uncoveredIntentInput,
   validateConnectorIntentRequest,
 } from '@/chains/midnight/midnightConnectorIntent';
+import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
+import { isNewTopDocument, ParkedConnects, takeParkedRequests } from '@/chrome/midnightParkedPrompts';
 import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
 import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
@@ -670,11 +671,14 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
 }
 
 /**
- * Park a Midnight request that may arrive without a user gesture (a balance
- * read on page load, a proof after async work). Unlike the connect/sign
- * handlers, a refused `sidePanel.open()` is not a failure: the entry stays
- * parked, the badge shows it, and `redeliverParkedRequests` delivers it when
- * the user opens the panel.
+ * Park a Midnight connector prompt until this tab's panel connects. Every
+ * Midnight prompt goes through here (connect, signData, makeTransfer,
+ * makeIntent, balanceUnsealedTransaction), since any of them may arrive
+ * without a user gesture or while the panel sits on the lock screen. A refused
+ * `sidePanel.open()` is not a failure: the entry stays parked, the badge shows
+ * it, and `redeliverParkedRequests` delivers it when the user opens the panel.
+ * It leaves the queue on an answer, when the tab closes, or when the tab's top
+ * frame commits a new document (`settleParkedMidnightRequests`).
  */
 function parkMidnightRequest(method: string, payload: unknown, tabId: number): Promise<BackgroundResponse> {
   const pending = sendToMiniGero(method, payload, tabId);
@@ -6152,7 +6156,8 @@ app.addToOptions(
     } catch (error) {
       sendResponse({
         id: request.id,
-        data: { success: false, error: getErrorMessage(error) },
+        // `buildFailure` marks a failed build (midnightBuildFailure.ts), never a credential error.
+        data: { success: false, error: getErrorMessage(error), ...buildFailureReply(error) },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -6190,7 +6195,12 @@ app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sen
     const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes);
     sendResponse({ id: request.id, data: { success: true, tx: result.tx }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
-    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error), ...buildFailureReply(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
   } finally {
     prfBytes?.fill(0);
   }
@@ -6228,7 +6238,8 @@ app.addToOptions(MessageTypes.BUILD_MIDNIGHT_CONNECTOR_INTENT, async (request, s
       data: {
         success: false,
         error: getErrorMessage(error),
-        ...(error instanceof IntentInsufficientFundsError ? { code: MidnightErrorCode.InsufficientFunds } : {}),
+        // InsufficientFunds when the wallet cannot give what the intent offers (midnightBuildFailure.ts).
+        ...buildFailureReply(error),
       },
       target: TARGET,
       sender: SENDER.extension,
@@ -6959,6 +6970,7 @@ chrome.tabs?.onRemoved?.addListener((tabId) => {
   privateBalanceGate?.clearTab(tabId);
   privateBalanceGate?.dropTab(tabId);
   midnightProvingPark?.cancelTab(tabId);
+  parkedMidnightConnects.forgetTab(tabId);
   // A parked prompt for a closed tab can never be answered to anyone.
   let removed = false;
   for (const [requestId, entry] of pendingDAppRequests) {
@@ -6967,6 +6979,44 @@ chrome.tabs?.onRemoved?.addListener((tabId) => {
     removed = true;
   }
   if (removed) syncDappRequestBadge();
+});
+
+/** The connector methods whose prompts park until the tab's panel connects (parkMidnightRequest). */
+const PARKED_MIDNIGHT_METHODS: ReadonlySet<string> = new Set([
+  MIDNIGHT_METHOD.connect,
+  MIDNIGHT_METHOD.signData,
+  MIDNIGHT_METHOD.makeTransfer,
+  MIDNIGHT_METHOD.makeIntent,
+  MIDNIGHT_METHOD.balanceUnsealedTransaction,
+]);
+
+/** One parked connect prompt per tab and requesting site (midnightParkedPrompts.ts). */
+const parkedMidnightConnects = new ParkedConnects<ReplyOpts>();
+
+/**
+ * Settles a tab's parked Midnight prompts that can no longer be answered: the
+ * entry leaves the queue (an answer the panel sends later is ignored) and the
+ * dApp's call returns `error`, a JSON-encoded connector error.
+ */
+function settleParkedMidnightRequests(tabId: number, methods: ReadonlySet<string>, error: { code: string; reason: string }): void {
+  const taken = takeParkedRequests(pendingDAppRequests, tabId, methods);
+  if (!taken.length) return;
+  const encoded = JSON.stringify(midnightApiError(error.code, error.reason));
+  taken.forEach((entry) => entry.resolve({ error: encoded }));
+  syncDappRequestBadge();
+}
+
+// A new document in the tab's top frame (a navigation or a reload) is not the
+// page that asked: its parked Midnight prompts would otherwise survive and be
+// shown, and a connect approved there would whitelist a site no longer on
+// screen. Same-document changes keep their prompts (isNewTopDocument).
+chrome.webNavigation?.onCommitted?.addListener((details) => {
+  if (!isNewTopDocument(details as { frameId: number; documentLifecycle?: string })) return;
+  parkedMidnightConnects.forgetTab(details.tabId);
+  settleParkedMidnightRequests(details.tabId, PARKED_MIDNIGHT_METHODS, {
+    code: MidnightErrorCode.Disconnected,
+    reason: 'The page left before the request was answered',
+  });
 });
 
 function hasMidnightPermissionDenial(tabId: number | undefined, method: string): boolean {
@@ -7018,13 +7068,11 @@ function requireMidnightWallet(): ReturnType<typeof walletManager.getWallet> | n
 
 /**
  * Approve/open a Midnight dapp connection. Routes EXCLUSIVELY through the
- * mini-gero side panel (same `sendToMiniGero`/`miniGeroPorts`/`openSidebar`/
- * `waitForMiniGeroPort` mechanism as CIP-30's `enable`, background.ts:488) —
- * deliberately NO popup fallback: if the side panel can't be opened/
- * connected, the request fails outright rather than degrading to a
- * standalone popup window. One extra guard `enable` doesn't need: verifying
- * the ACTIVE wallet is actually a Midnight wallet, since `window.midnight` is
- * installed regardless of which chain is logged in.
+ * mini-gero side panel (`parkMidnightRequest`), deliberately with NO popup
+ * fallback: the prompt waits, parked, until the user opens the panel rather
+ * than degrading to a standalone popup window. One extra guard `enable`
+ * doesn't need: verifying the ACTIVE wallet is actually a Midnight wallet,
+ * since `window.midnight` is installed regardless of which chain is logged in.
  */
 app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   const { id, origin, send, data } = request;
@@ -7082,16 +7130,17 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   // Parked until this tab's panel connects (parkMidnightRequest): opened now
   // when the dapp's gesture allows it, otherwise the badge and a notification
   // ask the user to open it. No timeout: the panel may sit on the lock screen.
-  parkMidnightRequest(MIDNIGHT_METHOD.connect, connectPayload, tabId)
-      .then(async (response: BackgroundResponse) => {
+  // A second connect() from the same tab and site joins the parked prompt.
+  void parkedMidnightConnects.join(tabId, origin, () => parkMidnightRequest(MIDNIGHT_METHOD.connect, connectPayload, tabId)
+      .then(async (response: BackgroundResponse): Promise<ReplyOpts> => {
         const approval = readConnectApproval(response);
         // Anything but an approval connects nothing (connect() reads a falsy answer as declined).
-        if (!approval) return reply({ data: false });
+        if (!approval) return { data: false };
         // The account the user picked, switched to first when it isn't the logged one.
-        if (await connectApproved(approval, currentWallet.id, origin)) return reply({ data: true });
-        reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'Could not switch to the chosen account') });
+        if (await connectApproved(approval, currentWallet.id, origin)) return { data: true };
+        return { error: midnightApiError(MidnightErrorCode.InternalError, 'Could not switch to the chosen account') };
       })
-      .catch(err => {
+      .catch((err): ReplyOpts => {
         // Fallback code is deliberately NOT Rejected: Rejected must only ever
         // come from a genuinely-parsed JSON round-trip of the panel's own
         // explicit rejectMidnightConnect() (see midnightError() in
@@ -7103,9 +7152,17 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
         const midnightErr = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the connection request');
         if (midnightErr.code === MidnightErrorCode.Rejected) {
           recordMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect);
+          // The denial holds for the tab (hasMidnightPermissionDenial): another
+          // site's connect already parked in it gets the same answer now
+          // instead of a second prompt later.
+          settleParkedMidnightRequests(tabId, new Set([MIDNIGHT_METHOD.connect]), {
+            code: MidnightErrorCode.PermissionRejected,
+            reason: 'User already declined this connection request this session',
+          });
         }
-        reply({ error: midnightErr });
-      });
+        return { error: midnightErr };
+      }))
+    .then(reply);
 
   return true; // async
 });

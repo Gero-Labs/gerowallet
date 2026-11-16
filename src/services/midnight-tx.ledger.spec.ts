@@ -135,10 +135,10 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.send.mockResolvedValue({ data: { success: false, error: 'MIDNIGHT_WALLET_NOT_SYNCED' } });
     await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
       .rejects.toThrow('midnight.errors.walletNotSynced');
-    // Other refusals pass through, with the connector code kept.
-    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough NIGHT', code: 'InsufficientFunds' } });
+    // Other refusals pass through, with the build-failure mark kept (midnightBuildFailure.ts).
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough NIGHT', buildFailure: 'InsufficientFunds' } });
     await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
-      .rejects.toMatchObject({ message: 'Not enough NIGHT', code: 'InsufficientFunds' });
+      .rejects.toMatchObject({ message: 'Not enough NIGHT', buildFailure: 'InsufficientFunds' });
   });
 
   it('refuses stale connector balancing before dispatch and discards stale completions', async () => {

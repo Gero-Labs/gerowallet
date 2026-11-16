@@ -1205,6 +1205,7 @@
 
 <script setup lang="ts">
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
+import { useConnectorBuildFailure } from "@/sidepanel/composables/useConnectorBuildFailure";
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -3211,38 +3212,13 @@ function rejectMidnightMakeTransfer() {
   reject(midnightDecline('this transfer', 'User declined the transfer request'));
 }
 
-// Set when the wallet's own build of the current request failed (not the
-// PassKey prompt, not the prover-consent ask). The panel keeps the request
-// open for a retry; if the user gives up instead, the dapp is told the wallet
-// could not build it (or could not cover it), not that the user declined.
-const buildFailureCode = ref<string | null>(null);
-watch(() => currentRequest.value?.requestId, () => { buildFailureCode.value = null; });
-
-/** Runs a makeTransfer / balanceUnsealedTransaction / makeIntent build, remembering a failure for the decline. */
-async function recordBuildFailure<T>(build: () => Promise<T>): Promise<T> {
-  try {
-    const result = await build();
-    buildFailureCode.value = null;
-    return result;
-  } catch (e) {
-    if (!(e instanceof StaleApprovalError) && (e as Error)?.name !== 'ProvingConsentRequiredError') {
-      buildFailureCode.value = (e as { code?: unknown })?.code === MidnightErrorCode.InsufficientFunds
-        ? MidnightErrorCode.InsufficientFunds
-        : MidnightErrorCode.InternalError;
-    }
-    throw e;
-  }
-}
+// Why closing a prompt after a failed build is not a plain decline: see useConnectorBuildFailure.
+const buildFailure = useConnectorBuildFailure(() => currentRequest.value?.requestId);
 
 /** The answer to a declined build request: why the build failed, or a plain Rejected. */
 function midnightDecline(subject: string, declined: string): string {
-  const failure = buildFailureCode.value;
-  buildFailureCode.value = null;
-  if (failure === MidnightErrorCode.InsufficientFunds) {
-    return midnightError(MidnightErrorCode.InsufficientFunds, `The wallet cannot cover ${subject}`);
-  }
-  if (failure) return midnightError(MidnightErrorCode.InternalError, `The wallet could not build ${subject}`);
-  return midnightError(MidnightErrorCode.Rejected, declined);
+  const { code, reason } = buildFailure.decline(subject, declined);
+  return midnightError(code, reason);
 }
 
 async function buildMidnightTransferTx(
@@ -3264,7 +3240,7 @@ async function buildMidnightTransferTx(
   // The service re-checks that this is still the prover in use, and that it
   // has consent, after authentication: the setting can change while a
   // PassKey prompt is open (PRIV-01 review).
-  return recordBuildFailure(() => buildAndSignUnshieldedTransfer(
+  return buildFailure.record(() => buildAndSignUnshieldedTransfer(
     wallet.network,
     { fromAddress: wallet.baseAddress, outputs, ttlMs: Date.now() + 5 * 60_000 },
     credentials,
@@ -3450,7 +3426,7 @@ async function buildMidnightBalanceTx(
   const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
   if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
   const { balanceConnectorTransaction } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return recordBuildFailure(() => balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent));
+  return buildFailure.record(() => balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent));
 }
 
 async function signMidnightBalanceNormal() {
@@ -3572,12 +3548,12 @@ async function buildMidnightIntentTx(
   if (!approvalCurrent()) throw new StaleApprovalError();
   const { desiredInputs, desiredOutputs, options } = intentPayload.value;
   const { buildConnectorIntent } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return recordBuildFailure(() => buildConnectorIntent(loggedWallet.value?.network ?? '', { desiredInputs, desiredOutputs, options }, credentials, approvalCurrent));
+  return buildFailure.record(() => buildConnectorIntent(loggedWallet.value?.network ?? '', { desiredInputs, desiredOutputs, options }, credentials, approvalCurrent));
 }
 
-/** Shows the failure; the decline after it is decided by recordBuildFailure. */
+/** Shows the failure; the decline after it is decided by useConnectorBuildFailure. */
 function showIntentError(e: unknown, fallback: string) {
-  signError.value = (e as { code?: unknown })?.code === MidnightErrorCode.InsufficientFunds
+  signError.value = (e as { buildFailure?: unknown })?.buildFailure === MidnightErrorCode.InsufficientFunds
     ? t('errors.insufficientBalance')
     : (e as Error)?.message || fallback;
 }

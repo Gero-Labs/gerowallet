@@ -42,20 +42,16 @@ describe('makeTransfer answers InsufficientFunds before prompting', () => {
   });
 });
 
+// The behaviour is in useConnectorBuildFailure.spec.ts, midnightBuildFailure.spec.ts
+// and midnightParkedPrompts.spec.ts; these pin that the panel and worker use it.
 describe('a decline after a failed build says the build failed', () => {
   const panel = read('sidepanel/components/DAppOverlay.vue');
 
-  it('every connector build records its failure', () => {
-    expect(panel).toContain('return recordBuildFailure(() => buildAndSignUnshieldedTransfer(');
-    expect(panel).toContain('return recordBuildFailure(() => balanceConnectorTransaction(');
-    expect(panel).toContain('return recordBuildFailure(() => buildConnectorIntent(');
-  });
-
-  it('the PassKey prompt and the prover-consent ask are not build failures', () => {
-    const start = panel.indexOf('async function recordBuildFailure<T>(');
-    const body = panel.slice(start, panel.indexOf('\n}\n', start));
-    expect(body).toContain('e instanceof StaleApprovalError');
-    expect(body).toContain("'ProvingConsentRequiredError'");
+  it('every connector build goes through the request-bound failure record', () => {
+    expect(panel).toContain('const buildFailure = useConnectorBuildFailure(() => currentRequest.value?.requestId);');
+    expect(panel).toContain('return buildFailure.record(() => buildAndSignUnshieldedTransfer(');
+    expect(panel).toContain('return buildFailure.record(() => balanceConnectorTransaction(');
+    expect(panel).toContain('return buildFailure.record(() => buildConnectorIntent(');
   });
 
   it.each([
@@ -68,7 +64,42 @@ describe('a decline after a failed build says the build failed', () => {
     expect(panel.slice(start, panel.indexOf('\n}\n', start))).toContain(call);
   });
 
-  it('a request switch forgets the failure', () => {
-    expect(panel).toContain('watch(() => currentRequest.value?.requestId, () => { buildFailureCode.value = null; });');
+  it('only the build steps are marked, after the key is opened', () => {
+    const walletBg = read('chrome/walletBg.ts');
+    for (const step of [
+      'asBuildStep(() => balanceDappTransaction9(', 'asBuildStep(() => balanceDappTransaction(',
+      'asBuildStep(() => buildConnectorIntent9(', 'asBuildStep(() => buildConnectorIntent(',
+      'asBuildStep(() => assertMidnightTransferMatches(', 'asBuildStep(() => balanceAndSignUnshieldedTransfer(',
+    ]) expect(walletBg, step).toContain(step);
+    // Nexus's build of a connector transfer, on the page.
+    expect(read('services/midnight-tx.service.ts')).toContain('markBuildStep(() => buildUnshielded(');
+  });
+
+  it('the worker replies carry the mark', () => {
+    expect(read('chrome/background.ts').match(/\.\.\.buildFailureReply\(error\)/g)).toHaveLength(3);
+  });
+});
+
+describe('parked connect prompts are bounded', () => {
+  const bg = read('chrome/background.ts');
+
+  it('a repeated connect joins the parked prompt of its tab and site', () => {
+    expect(handler(bg, 'connect')).toContain('parkedMidnightConnects.join(tabId, origin, () => parkMidnightRequest(MIDNIGHT_METHOD.connect, ');
+  });
+
+  it('a decline settles the tab\'s other parked connects', () => {
+    const body = handler(bg, 'connect');
+    const denial = body.indexOf('recordMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect);');
+    expect(denial).toBeGreaterThan(-1);
+    expect(body.indexOf('settleParkedMidnightRequests(tabId, new Set([MIDNIGHT_METHOD.connect]), {', denial)).toBeGreaterThan(denial);
+  });
+
+  it('a new top-frame document drops the tab\'s parked Midnight prompts', () => {
+    const start = bg.indexOf('chrome.webNavigation?.onCommitted?.addListener((details) => {');
+    expect(start).toBeGreaterThan(-1);
+    const body = bg.slice(start, bg.indexOf('\n});\n', start));
+    expect(body).toContain('if (!isNewTopDocument(');
+    expect(body).toContain('parkedMidnightConnects.forgetTab(details.tabId);');
+    expect(body).toContain('settleParkedMidnightRequests(details.tabId, PARKED_MIDNIGHT_METHODS, {');
   });
 });

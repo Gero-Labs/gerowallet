@@ -31,10 +31,10 @@ describe('makeIntent follows the chain\'s ledger', () => {
     const body = method(read('chrome/walletBg.ts'), 'buildMidnightConnectorIntent');
     const route = body.indexOf('if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {');
     expect(route).toBeGreaterThan(-1);
-    const ledger9 = body.indexOf('await buildConnectorIntent9({', route);
+    const ledger9 = body.indexOf('await asBuildStep(() => buildConnectorIntent9({', route);
     expect(ledger9).toBeGreaterThan(route);
     expect(body.slice(ledger9)).toMatch(/utxos: midnightStore\.utxos,\s+sync: midnightStore,/);
-    expect(body.indexOf('await buildConnectorIntent({')).toBeGreaterThan(ledger9);
+    expect(body.indexOf('await asBuildStep(() => buildConnectorIntent({')).toBeGreaterThan(ledger9);
   });
 
   it('dapp request: a ledger 9 intent before the wallet has synced is answered without opening the prompt', () => {

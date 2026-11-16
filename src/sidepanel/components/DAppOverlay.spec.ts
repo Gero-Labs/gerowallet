@@ -495,7 +495,7 @@ describe('Midnight makeIntent: the approval shows what the wallet gives and asks
   });
 
   it('answers InsufficientFunds, not Rejected, when the user declines after an insufficient-funds build', async () => {
-    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough funds', code: 'InsufficientFunds' } });
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough funds', buildFailure: 'InsufficientFunds' } });
     overlay.currentRequest.value = intentRequest(true) as never;
     const wrapper = render();
     await wrapper.find('[data-label="miniGero.spendingPassword"]').setValue('password');
