@@ -2,7 +2,18 @@
 
 Solana support, gated by the `isSolanaEnabled` feature flag (default off).
 
-This folder is the chain core. It has no UI and no wallet wiring yet. Onboarding, the background worker, Gero Sync and the screens are follow-ups.
+This folder is the chain core. Wallet create/restore and Gero Sync are wired in; the screens (balance, receive, send, history) are the next step.
+
+## Wiring
+
+- **Wallet record** (`gero-db.ts`): `publicKey` is account #0's base58 address and the stored root key is the 64-byte BIP-39 seed, so added accounts (`softwareAccounts`, `addAccountKeys`) derive from it. Wallet identity compares addresses exactly (`walletIdentity.ts`).
+- **Networks** (`utils/networks.ts`): Solana Mainnet (`comingSoon`) and Devnet, every feature off. `NetworkSelector` shows no Solana tile while `isSolanaEnabled` is off.
+- **Gero Sync**:
+  - `walletManager` subscribes `chain: 'SOLANA'` by the record's address, with the slot cursor from the wallet's `sync` table.
+  - `websocket.service` sends the Solana SUBSCRIBE. On a catch-up it keeps the cursor at the newest delivered slot, and carries the `solana_*` snapshot through.
+  - `sync.service.applySolanaSync` merges into `walletStore.solanaTransactions` (IndexedDB bulk field) and `walletStore.solana` (balance, tokens, tip slot), and persists the cursor.
+  - `FORCE_RESYNC` clears both and re-subscribes at 0.
+- Imports of this folder from code in the background bundle are static, never `await import()`: an inlined dynamic-import namespace can be read before it is declared (`scripts/check-bundle-tdz.mjs`).
 
 | File | What it does |
 |---|---|

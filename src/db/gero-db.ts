@@ -13,6 +13,10 @@ import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { debugLog } from '@/utils/debug';
 import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
 import { findDuplicateWallet, WalletIdentitySource } from '@/db/walletIdentity';
+// Static, not `await import()`: the background is one iife bundle, where an inlined
+// dynamic-import namespace can be read before it is declared (scripts/check-bundle-tdz.mjs).
+// The module is small and depends only on @noble.
+import { deriveSolanaAddressFromMnemonic, solanaSeedFromMnemonic } from '@/chains/solana/solanaKeyManager';
 import { assertAccountIndices, canAddAccounts, isHardwareWallet } from '@/shared/utils/walletAccount';
 
 let cachedDb: Dexie | null = null;
@@ -369,7 +373,6 @@ export async function deriveWalletPublicKey(
 
   if (chain === Blockchain.SOLANA) {
     // Solana: account #0's address (base58 ed25519 public key at m/44'/501'/0'/0').
-    const { deriveSolanaAddressFromMnemonic } = await import('@/chains/solana/solanaKeyManager');
     return deriveSolanaAddressFromMnemonic(mnemonic, 0);
   }
 
@@ -485,7 +488,6 @@ export async function createNewWallet(
   } else if (chain === Blockchain.SOLANA) {
     // Solana stores the 64-byte BIP-39 seed, like Midnight: every account's ed25519 key
     // (SLIP-0010, all levels hardened) derives from it, so added accounts need no phrase.
-    const { solanaSeedFromMnemonic } = await import('@/chains/solana/solanaKeyManager');
     rootKey = { privateKey: solanaSeedFromMnemonic(mnemonic) };
   } else {
     // Cardano key derivation (existing logic)

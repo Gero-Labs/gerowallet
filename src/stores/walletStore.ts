@@ -11,6 +11,7 @@ import priceService from '@/stores/priceStore';
 import { Contact, Keys } from '@/models/types';
 import { EXPLORER_CONFIG_KEY } from '@/shared/utils/explorer';
 import type { IUnifiedUtxo, IBalance } from '@/chains/common/interfaces';
+import type { SolanaTransaction } from '@/chains/solana/solanaWireSync';
 import { listedLovelace, reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
 
 interface WhitelistedEntry {
@@ -148,7 +149,26 @@ export interface WalletStore {
   connectedDapps?: any[];
   // Bitcoin-specific state
   bitcoinBalance?: IBalance;  // Bitcoin balance (available, total, locked)
+  // Solana-specific state (Gero Sync SOLANA, docs/solana-wire.md). Kept apart from the
+  // Cardano-shaped `transactions` / `account` so no Cardano consumer ever reads it.
+  solana?: SolanaWalletState;
+  solanaTransactions?: SolanaTransaction[];
 }
+
+/**
+ * What Gero Sync last said about the Solana account. `null` = not known yet (never 0: an
+ * unknown balance must not read as empty). Amounts are raw-unit decimal strings.
+ */
+export interface SolanaWalletState {
+  lamports: string | null;
+  tokens: Array<{ mint: string; amount: string; decimals: number; tokenAccount?: string; programId?: string }> | null;
+  /** Confirmed tip slot when the snapshot was read (display). */
+  tipSlot: number | null;
+  /** Older history above the cursor exists that was not sent (page it from Nexus). */
+  historyTruncated: boolean;
+}
+
+export const emptySolanaState = (): SolanaWalletState => ({ lamports: null, tokens: null, tipSlot: null, historyTruncated: false });
 
 /**
  * `controlled_amount` is reported per stake address, and CIP-113 UTxOs owned by this
@@ -273,7 +293,10 @@ export const walletStore = reactive<WalletStore>({
   contacts: {},
   connectedDapps: [],
   // Bitcoin state
-  bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
+  bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) },
+  // Solana state
+  solana: emptySolanaState(),
+  solanaTransactions: [],
 });
 
 const STORE_NAME = 'walletStore';
@@ -286,6 +309,7 @@ const context = getContextType();
  */
 const BULK_FIELDS: (keyof WalletStore)[] = [
   'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'listedListings', 'rewards', 'keys',
+  'solanaTransactions',
 ];
 
 /**
@@ -498,6 +522,19 @@ export default {
   setTransactions(transactions: WalletStore['transactions']) {
     walletStore.transactions = transactions;
     broadcastFromBackground({ transactions });
+  },
+
+  /** Solana history, deduped and newest first (see mergeSolanaTransactions). */
+  setSolanaTransactions(solanaTransactions: SolanaTransaction[]) {
+    walletStore.solanaTransactions = solanaTransactions;
+    broadcastFromBackground({ solanaTransactions });
+  },
+
+  /** Merges what Gero Sync reported into the Solana snapshot; fields not given keep their value. */
+  setSolanaState(update: Partial<SolanaWalletState>) {
+    const solana = { ...(walletStore.solana ?? emptySolanaState()), ...update };
+    walletStore.solana = solana;
+    broadcastFromBackground({ solana });
   },
 
   async setUtxos(utxos: Cardano.Utxo[] | IUnifiedUtxo[]) {
@@ -740,7 +777,9 @@ export default {
       config: {},
       rewards: [],
       connectedDapps: [],
-      bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
+      bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) },
+      solana: emptySolanaState(),
+      solanaTransactions: [],
     };
 
     // Apply to local state
@@ -777,7 +816,9 @@ export default {
       rewards: [],
       contacts: {},
       connectedDapps: [],
-      bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
+      bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) },
+      solana: emptySolanaState(),
+      solanaTransactions: [],
     };
 
     // Apply to a local state

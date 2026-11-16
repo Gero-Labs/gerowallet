@@ -96,11 +96,10 @@ export function convertSolanaTokens(tokens: SolanaWireToken[] | undefined): Sola
 
 export function parseSolanaSyncMessage(msg: SolanaWireMessage): SolanaSyncUpdate {
   const transactions = convertSolanaTransactions(msg.transactions);
-  // The cursor is the newest slot this message delivered. CATCH_UP_COMPLETE / SYNC_CHECK_OK
-  // carry the tip in `block`, which is for display only (the server's cursor did not move).
-  const cursorSlot = msg.type === 'SYNC' && transactions.length > 0
-    ? Number(msg.block?.slot ?? msg.block?.height ?? Math.max(...transactions.map((t) => t.slot)))
-    : undefined;
+  // The cursor is the newest slot actually delivered, read from the transactions themselves.
+  // `block` is not used: on CATCH_UP_COMPLETE / SYNC_CHECK_OK it is the tip (display only, the
+  // server's cursor did not move), and websocket.service re-tags those as SYNC.
+  const cursorSlot = transactions.length > 0 ? Math.max(...transactions.map((t) => t.slot)) : undefined;
   return {
     transactions,
     lamports: msg.solana_lamports !== undefined ? parseRawAmount(msg.solana_lamports) : undefined,

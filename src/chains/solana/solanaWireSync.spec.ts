@@ -48,9 +48,10 @@ describe('parseSolanaSyncMessage', () => {
     expect(parseSolanaSyncMessage({ type: 'SYNC_CHECK_OK', solana_tokens: [] }).tokens).toEqual([]);
   });
 
-  it('does not move the cursor on CATCH_UP_COMPLETE / SYNC_CHECK_OK (their block is the tip)', () => {
-    const msg = { ...SYNC, type: 'CATCH_UP_COMPLETE' };
-    expect(parseSolanaSyncMessage(msg).cursorSlot).toBeUndefined();
+  it('takes the cursor from the delivered transactions, never from a tip block', () => {
+    // A catch-up re-tagged as SYNC carries the tip in `block`: the cursor stays at the newest delivered slot.
+    const catchUp = { ...SYNC, block: { height: 312345799, slot: 312345799 } };
+    expect(parseSolanaSyncMessage(catchUp).cursorSlot).toBe(312345700);
     expect(parseSolanaSyncMessage({ type: 'SYNC_CHECK_OK', block: { slot: 9, height: 9 } }).cursorSlot).toBeUndefined();
   });
 
