@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PINNED, REQUIRED, SECRETS, VARIABLES, productionEnv } from './write-production-env.mjs';
+import { DERIVED } from './derived-env.mjs';
 
 /** The two a release cannot do without; each case adds what it checks. */
 const BASE = { VITE_BACKEND_URL: 'https://backend.example', VITE_SYNC_WS_URL: 'wss://sync.example' };
@@ -26,7 +27,7 @@ function envBlocks(workflow) {
 describe('productionEnv', () => {
   it('writes every listed variable and secret, plus the pinned debug switch, and nothing else', () => {
     const text = productionEnv({ ...BASE, VITE_BACKEND_URL: 'https://backend.example', VITE_MOONPAY_API_KEY: 'pk_test', MANIFEST_KEY: 'not-for-the-env', PATH: '/usr/bin' });
-    expect(names(text)).toEqual([...VARIABLES, ...SECRETS, ...Object.keys(PINNED)]);
+    expect(names(text)).toEqual([...VARIABLES, ...SECRETS, ...DERIVED, ...Object.keys(PINNED)]);
     expect(lines(text)).toContain('VITE_BACKEND_URL=https://backend.example');
     expect(lines(text)).toContain('VITE_MOONPAY_API_KEY=pk_test');
     expect(lines(text)).toContain('VITE_KAISEREX_OAUTH_URL=');
@@ -56,10 +57,23 @@ describe('productionEnv', () => {
     expect(() => productionEnv({ ...BASE, VITE_SYNC_WS_URL: '  ' })).toThrow('VITE_SYNC_WS_URL must be set');
   });
 
-  it('leaves the derived endpoints to the build (scripts/env-defaults.mjs)', () => {
+  it('writes the derived endpoints, so an older release rebuilt with this script gets them too', () => {
+    // Not asked of the workflow: derived from the backend and Gero Sync URLs.
     expect(VARIABLES).not.toContain('VITE_NEXUS_URL');
     expect(VARIABLES).not.toContain('VITE_FLAGS_BASE_URL');
-    expect(VARIABLES).toEqual(expect.arrayContaining(['VITE_BACKEND_URL', 'VITE_SYNC_WS_URL']));
+    const text = lines(productionEnv({ VITE_BACKEND_URL: 'https://api.gerowallet.io', VITE_SYNC_WS_URL: 'wss://sync.gerowallet.io' }));
+    expect(text).toContain('VITE_NEXUS_URL=https://api.gerowallet.io/api/nexus');
+    expect(text).toContain('VITE_FLAGS_BASE_URL=https://sync.gerowallet.io');
+  });
+
+  it('derives only from the release names, never from a stray value in the step env', () => {
+    const text = lines(productionEnv({ ...BASE, VITE_NEXUS_URL: 'https://evil.example' }));
+    expect(text).toContain('VITE_NEXUS_URL=https://backend.example/api/nexus');
+    expect(text.join('\n')).not.toContain('evil');
+  });
+
+  it('refuses a Gero Sync URL that is not a WebSocket URL: no flag service could be derived', () => {
+    expect(() => productionEnv({ ...BASE, VITE_SYNC_WS_URL: 'https://sync.example' })).toThrow('ws:// or wss://');
   });
 
   it.each([

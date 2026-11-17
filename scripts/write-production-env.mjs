@@ -9,8 +9,10 @@
  * step sees and logs no repository variable it does not use. write-production-env.spec.mjs
  * holds both workflows to this list.
  *
- * VITE_NEXUS_URL and VITE_FLAGS_BASE_URL are not here: the build derives them from
- * VITE_BACKEND_URL and VITE_SYNC_WS_URL (scripts/env-defaults.mjs).
+ * VITE_NEXUS_URL and VITE_FLAGS_BASE_URL are not asked for: they are derived from
+ * VITE_BACKEND_URL and VITE_SYNC_WS_URL (derived-env.mjs) and written here as well. Today's
+ * build would derive them itself, but the upgrade rehearsal also builds an OLD release
+ * (OLD_RELEASE_SHA) with this script, and that code reads them and derives nothing.
  *
  * A value is written as it is, never through a shell. Trailing line breaks (a pasted
  * secret often ends in one) are dropped; a line break inside a value is refused: it
@@ -18,6 +20,7 @@
  */
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { DERIVED, derivedEnv } from './derived-env.mjs';
 
 export const VARIABLES = [
   'GOOGLE_CLIENT_ID',
@@ -48,8 +51,12 @@ export const PINNED = { VITE_DEBUG_STORES: 'false' };
 export function productionEnv(env) {
   const missing = REQUIRED.filter(name => !(env[name] ?? '').trim());
   if (missing.length) throw new Error(`${missing.join(', ')} must be set`);
+  // Only from the release's own names: a stray VITE_NEXUS_URL in the step's env never wins.
+  const derived = derivedEnv(Object.fromEntries(REQUIRED.map(name => [name, env[name]])));
+  if (!derived.VITE_FLAGS_BASE_URL) throw new Error('VITE_SYNC_WS_URL must be a ws:// or wss:// URL');
   const entries = [
     ...[...VARIABLES, ...SECRETS].map(name => [name, env[name]]),
+    ...DERIVED.map(name => [name, derived[name]]),
     ...Object.entries(PINNED),
   ];
   return entries.map(([name, value]) => {
