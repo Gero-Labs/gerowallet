@@ -50,6 +50,7 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { findExistingWallet } from '@/db/gero-db';
 import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { Blockchain } from '@/models/types';
+import { debugLog } from '@/utils/debug';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
@@ -102,8 +103,10 @@ watch(() => props.accounts, async (accounts) => {
     const [found, stored] = await Promise.all([
       // A failed probe must not leave the rows unselectable: the accounts are still
       // offered, as 'unknown', and account #0 still comes along.
-      discover(chain, network, fresh).catch((): DiscoveredAccount[] =>
-        fresh.map((account) => ({ ...account, address: '', stakeAddress: '', activity: 'unknown' }))),
+      discover(chain, network, fresh).catch((error: unknown): DiscoveredAccount[] => {
+        debugLog('StepAccounts: account probe failed', { chain, network, error });
+        return fresh.map((account) => ({ ...account, address: '', stakeAddress: '', activity: 'unknown' }));
+      }),
       Promise.all(fresh.map((account) => findExistingWallet({ chain, network, publicKey: account.publicKey }))),
     ]);
     found.forEach((account, i) => {
