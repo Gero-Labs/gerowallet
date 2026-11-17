@@ -24,12 +24,12 @@
     <div class="mnemonic-grid">
       <v-row no-gutters>
         <v-col cols="6" :md="3" v-for="index in recoverySeedPhraseLength" :key="index">
-            <mnemonic-autocomplete
-              v-model="recoverySeedPhrase[index - 1]"
-              :index="index"
-              :attach="true"
-              @next="focusNextCell"
-            ></mnemonic-autocomplete>
+          <mnemonic-autocomplete
+            v-model="recoverySeedPhrase[index - 1]"
+            :index="index"
+            :attach="true"
+            @next="focusNextCell"
+          ></mnemonic-autocomplete>
         </v-col>
       </v-row>
     </div>
