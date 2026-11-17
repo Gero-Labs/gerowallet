@@ -57,10 +57,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
 import GeroStore, { geroStore } from '@/stores/geroStore';
 import snackbar from '@/plugins/snackbar';
-import { discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, discoveredBalance, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { isSameWalletKey } from '@/db/walletIdentity';
 import { formatBalance } from '@/shared/utils/format';
-import { toLovelace } from '@/shared/utils/lovelace';
 import { nextAccountIndex, type AccountXpub } from '@/shared/utils/walletAccount';
 import type { NetworkInfo } from '@/utils/networks';
 
@@ -167,7 +166,7 @@ async function derivePassKeyAccountFromPhrase(): Promise<string> {
 async function probe(found: AccountXpub): Promise<DiscoveredAccount> {
   const { chain, network } = props.wallet;
   if (isMidnight.value) return discoverMidnightAccounts([found])[0];
-  if (chain === Blockchain.SOLANA) return discoverSolanaAccounts([found])[0];
+  if (chain === Blockchain.SOLANA) return (await discoverSolanaAccounts(network, [found]))[0];
   const [result] = isBitcoin.value
     ? await discoverBitcoinAccounts(network, props.wallet.addressType ?? 'segwit', [found])
     : await discoverAccounts(chain, network, [found]);
@@ -212,7 +211,7 @@ async function add(): Promise<void> {
 }
 
 const balance = computed(() => (preview.value?.activity === 'used' && preview.value.balance != null
-  ? `${formatBalance(Number(toLovelace(preview.value.balance)) / 1_000_000)} ${props.network.currencySymbol}`
+  ? `${formatBalance(discoveredBalance(preview.value) ?? 0)} ${props.network.currencySymbol}`
   : ''));
 const statusLabel = computed(() => {
   if (preview.value?.activity === 'used') return t('accounts.used');

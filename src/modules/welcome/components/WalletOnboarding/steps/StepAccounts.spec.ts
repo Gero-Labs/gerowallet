@@ -6,7 +6,7 @@ import networks from '@/utils/networks';
 import { Blockchain, Network } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 
-const mocks = vi.hoisted(() => ({ discover: vi.fn(), discoverBitcoin: vi.fn(), findExisting: vi.fn() }));
+const mocks = vi.hoisted(() => ({ discover: vi.fn(), discoverBitcoin: vi.fn(), discoverSolana: vi.fn(), findExisting: vi.fn() }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key, tc: (key: string) => key } }));
 vi.mock('@/db/gero-db', () => ({ findExistingWallet: mocks.findExisting }));
 vi.mock('@/shared/utils/accountDiscovery', async (importOriginal) => ({
@@ -15,7 +15,8 @@ vi.mock('@/shared/utils/accountDiscovery', async (importOriginal) => ({
   discoverBitcoinAccounts: mocks.discoverBitcoin,
   // Midnight accounts are never probed: the real one makes no network call.
   discoverMidnightAccounts: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoverMidnightAccounts,
-  discoverSolanaAccounts: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoverSolanaAccounts,
+  discoverSolanaAccounts: mocks.discoverSolana,
+  discoveredBalance: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoveredBalance,
 }));
 
 import StepAccounts from './StepAccounts.vue';
@@ -182,16 +183,23 @@ describe('choosing Midnight accounts', () => {
 describe('choosing Solana accounts', () => {
   const sol = (accountIndex: number): AccountXpub => ({ accountIndex, publicKey: `So1anaAccount${accountIndex}xxxxxxxxxxxxxxxxxxxxxxxxxxxx`, keys: [] });
 
-  it('shows each by its address, never runs the Cardano probe, and pre-selects account #0 so Continue works', async () => {
+  it('probes them on their addresses, pre-selects account #0 and the used ones, and shows SOL balances', async () => {
     mocks.findExisting.mockResolvedValue(null);
+    mocks.discoverSolana.mockImplementation(async (_network: string, accounts: AccountXpub[]) => accounts.map((a) => ({
+      ...a, address: a.publicKey, stakeAddress: '', balanceDecimals: 9,
+      activity: a.accountIndex === 2 ? 'used' : 'unused', balance: a.accountIndex === 2 ? '1500000000' : '0',
+    })));
     const wrapper = render([0, 1, 2].map(sol), networks.resolveNetwork(Blockchain.SOLANA, Network.DEVNET));
     await flushPromises();
 
     expect(mocks.discover).not.toHaveBeenCalled();
-    expect(checked(wrapper)).toEqual(['true', 'false', 'false']);
+    expect(mocks.discoverSolana).toHaveBeenCalledWith(Network.DEVNET, [0, 1, 2].map(sol));
+    expect(checked(wrapper)).toEqual(['true', 'false', 'true']);
     expect(rows(wrapper)[1].find('.account-row__address').attributes('title')).toBe(sol(1).publicKey);
-    expect(wrapper.find('.accounts-summary').text()).toBe('accounts.notChecked');
-    expect(await continueWith(wrapper)).toEqual([0]);
+    // Lamports, not lovelace: 1.5 SOL, never 1,500.
+    expect(rows(wrapper)[2].find('.account-row__balance').text()).toMatch(/^1\.5\d* /);
+    expect(wrapper.find('.accounts-summary').text()).toBe('accounts.found');
+    expect(await continueWith(wrapper)).toEqual([0, 2]);
   });
 });
 

@@ -6,6 +6,8 @@ import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import { Blockchain, type Wallet } from '@/models/types';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
+import { toLovelace } from '@/shared/utils/lovelace';
+import type { SolanaApi } from '@/api/solana-api';
 
 /** 'unknown': the probe failed. 'unchecked': the chain offers no probe (Midnight). */
 export type AccountActivity = 'used' | 'unused' | 'unknown' | 'unchecked';
@@ -17,9 +19,14 @@ export interface DiscoveredAccount extends AccountXpub {
   stakeAddress: string;
   /** 'unknown' when the probe failed: the account is still offered, just not pre-selected. */
   activity: AccountActivity;
-  /** Lovelace controlled by the stake address, when the probe returned it. */
+  /** In the chain's smallest unit (lovelace; lamports on Solana), when the probe returned it. */
   balance?: string;
+  /** Decimals of `balance`; absent = 6 (ADA). */
+  balanceDecimals?: number;
 }
+
+const ADA_DECIMALS = 6;
+const SOL_DECIMALS = 9;
 
 type AccountApi = Pick<Api, 'getAccountInfo' | 'getAccountTransactions'>;
 
@@ -96,13 +103,41 @@ export function discoverMidnightAccounts(accounts: AccountXpub[]): DiscoveredAcc
   return accounts.map((account) => ({ ...account, address: midnightUnshieldedAddress(account.publicKey), stakeAddress: '', activity: 'unchecked' }));
 }
 
+type SolanaAccountApi = Pick<SolanaApi, 'getSignatures' | 'getBalance'>;
+
 /**
- * Solana accounts, shown by their address (a Solana account's "xpub" is its address) and
- * never probed ('unchecked'), as on Midnight: the Cardano probe cannot read them. So only
- * account #0 is chosen by default.
+ * Which Solana accounts have been used, each probed on its address (a Solana account's
+ * "xpub" is its address) through Nexus: any transaction history means used, which an
+ * emptied account still has; a balance alone (an airdrop never moved) counts too. The
+ * balance is in lamports. A failed history read gives 'unknown'; a failed balance read
+ * only leaves the balance out.
  */
-export function discoverSolanaAccounts(accounts: AccountXpub[]): DiscoveredAccount[] {
-  return accounts.map((account) => ({ ...account, address: account.publicKey, stakeAddress: '', activity: 'unchecked' }));
+export async function discoverSolanaAccounts(
+  network: string,
+  accounts: AccountXpub[],
+  api?: SolanaAccountApi,
+): Promise<DiscoveredAccount[]> {
+  const client = api ?? new (await import('@/api/solana-api')).SolanaApi(network);
+  return Promise.all(accounts.map(async (account) => {
+    const address = account.publicKey;
+    const base = { ...account, address, stakeAddress: '', balanceDecimals: SOL_DECIMALS };
+    try {
+      const [signatures, balance] = await Promise.all([
+        client.getSignatures(address, { limit: 1 }),
+        client.getBalance(address).then((b) => b.lamports).catch(() => null),
+      ]);
+      const used = signatures.length > 0 || (balance ?? 0n) > 0n;
+      return { ...base, activity: used ? 'used' : 'unused', ...(balance === null ? {} : { balance: balance.toString() }) };
+    } catch {
+      return { ...base, activity: 'unknown' };
+    }
+  }));
+}
+
+/** An account's balance in whole coins, as the accounts step shows it; undefined when not known. */
+export function discoveredBalance(account: Pick<DiscoveredAccount, 'balance' | 'balanceDecimals'>): number | undefined {
+  if (account.balance == null) return undefined;
+  return Number(toLovelace(account.balance)) / 10 ** (account.balanceDecimals ?? ADA_DECIMALS);
 }
 
 /** The unshielded address of a Midnight account's addresses JSON; '' for an unreadable blob. */
