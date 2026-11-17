@@ -97,10 +97,6 @@ const props = defineProps({
     required: false,
     default: undefined,
   },
-  collateralLovelace: {
-    type: String,
-    default: '5000000',
-  },
 });
 
 const emit = defineEmits(['close', 'success']);
@@ -110,6 +106,14 @@ const { toCurrency } = filters;
 const { loggedWallet } = toRefs(walletStore);
 
 const txRef = computed(() => props.tx);
+
+// The collateral is the output paying the wallet's own base address, read from the
+// transaction being signed rather than assumed.
+const collateralLovelace = computed(() => {
+  const outputs = props.tx?.body?.outputs ?? [];
+  const own = outputs.find((output) => String(output.address) === loggedWallet.value?.baseAddress) ?? outputs[0];
+  return own?.value?.coins?.toString() ?? '0';
+});
 const {
   loading,
   spendingPassword,

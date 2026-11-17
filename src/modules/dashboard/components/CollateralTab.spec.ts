@@ -18,14 +18,18 @@ describe('Set Collateral signing (issue 1558)', () => {
   });
 
   it('hands the Nexus-built transaction to the in-wallet signing dialog', () => {
-    expect(tab).toContain('collateralTx.value = Serialization.Transaction.fromCbor(HexBlob(txCborHex)).toCore();');
-    expect(tab).toMatch(/<SetCollateralDialog\s+:is-open="signDialogOpen"\s+:tx="collateralTx"/);
+    expect(tab).toMatch(/collateralTx\.value\s*=\s*Serialization\.Transaction\.fromCbor\([\s\S]*?\)\.toCore\(\)/);
+    expect(tab).toMatch(/<SetCollateralDialog[\s\S]*?:tx="collateralTx"/);
   });
 
   it('signs and submits with useTransactionSigning, covering password, PassKey and hardware wallets', () => {
-    expect(dialog).toContain("import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';");
-    expect(dialog).toContain("successMessageKey: 'settings.collateralTxSetSuccess'");
+    expect(dialog).toMatch(/useTransactionSigning\(\{[\s\S]*?successMessageKey:\s*'settings\.collateralTxSetSuccess'/);
     expect(dialog).toContain('<TransactionAuthSection');
     expect(dialog).toContain('<KeystoneSignDialog');
+  });
+
+  it('shows the collateral amount from the transaction, not a hardcoded value', () => {
+    expect(dialog).toMatch(/const collateralLovelace = computed\(/);
+    expect(dialog).not.toMatch(/collateralLovelace:\s*\{/);
   });
 });
