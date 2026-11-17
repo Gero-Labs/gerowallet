@@ -41,13 +41,6 @@ interface PortMessage {
 
 
 /**
- * Per-tab registry of side-panel onConnect listeners, so we can clean up
- * stale listeners when the same tab re-requests a side-panel interaction.
- */
-type PortConnectListener = (port: chrome.runtime.Port) => void;
-const sidePanelListeners: Map<number, PortConnectListener> = new Map();
-
-/**
  * Narrow an unknown background response to detect an `error` field without
  * resorting to `as any`.
  */
@@ -223,62 +216,6 @@ class InternalController {
   };
 }
 
-class InternalSidePanelController {
-  port: chrome.runtime.Port;
-  tabId: number;
-
-  constructor(tabId: number) {
-    this.tabId = tabId;
-    if (chrome?.runtime) {
-      try {
-        this.port = chrome.runtime.connect({
-          name: 'internal-background-sidepanel-communication',
-        });
-
-        // Handle port disconnection
-        this.port.onDisconnect.addListener(() => {
-          if (chrome.runtime.lastError) {
-            console.warn('SidePanel port disconnected with error:', chrome.runtime.lastError.message);
-          }
-        });
-
-        if (!Number.isInteger(this.tabId)) {
-          console.error("SidePanelController: invalid or missing tabId in URL!");
-        }
-      } catch (error) {
-        console.warn('Error creating sidepanel runtime port:', error);
-      }
-    }
-  }
-
-  public async requestData(): Promise<PortMessage> {
-    return new Promise((resolve) => {
-      const self = this;
-
-      function messageHandler(response: PortMessage) {
-        self.port.onMessage.removeListener(messageHandler);
-        resolve(response);
-      }
-
-      self.port.onMessage.addListener(messageHandler);
-
-      self.port.postMessage({
-        tabId: this.tabId,
-        method: METHOD.requestData,
-      });
-    });
-  }
-
-  public async returnData({ data, error }: { data: unknown; error: unknown }) {
-    this.port.postMessage({
-      method: METHOD.returnData,
-      tabId: this.tabId,
-      data,
-      error,
-    });
-  }
-}
-
 type MessageSendResponse = (response?: unknown) => void;
 type BackgroundRequest = Message & { send?: chrome.runtime.MessageSender };
 type BackgroundHandler = (request: BackgroundRequest, sendResponse: MessageSendResponse) => void;
@@ -433,123 +370,71 @@ export const Messaging = {
       );
     });
   },
-  sendToPopupInternal: function (tabIdd: number, request: Message) {
-    return new Promise((resolve, _reject) => {
-      chrome.runtime.onConnect.addListener(function connectionHandler(port) {
+  /**
+   * Shows `request` in the approval popup open in tab `popupTabId` and answers
+   * exactly once: with the popup's returnData, or with the declined error when
+   * that popup closes (its tab is removed, or a port it used disconnects). The
+   * tab listener is registered up front, so a popup closed before its page
+   * connects still answers. Only a port that spoke for this popup's tab can
+   * decline it: closing another request's popup never answers this one.
+   */
+  sendToPopupInternal: function (popupTabId: number, request: Message) {
+    return new Promise((resolve) => {
+      let answered = false;
+      const bound = new Map<chrome.runtime.Port, { message: (response: PortMessage) => void; disconnect: () => void }>();
+      const unbind = (port: chrome.runtime.Port) => {
+        const handlers = bound.get(port);
+        if (!handlers) return;
+        port.onMessage.removeListener(handlers.message);
+        port.onDisconnect.removeListener(handlers.disconnect);
+        bound.delete(port);
+      };
+      const answer = (response: unknown) => {
+        if (answered) return;
+        answered = true;
+        chrome.runtime.onConnect.removeListener(connectionHandler);
+        chrome.tabs.onRemoved.removeListener(tabsHandler);
+        for (const port of [...bound.keys()]) unbind(port);
+        resolve(response);
+      };
+      const declined = () => ({ target: TARGET, sender: SENDER.extension, error: popupDisconnectedError(request) });
+
+      function tabsHandler(tabId: number) {
+        if (tabId === popupTabId) answer(declined());
+      }
+
+      function connectionHandler(port: chrome.runtime.Port) {
         // Only handle connections from popup (not side panel)
         if (port.name !== 'internal-background-popup-communication') return;
         // Only our own extension pages may answer an approval: a content script
         // shares our sender.id, so the port name alone is not proof.
         if (!isOwnExtensionPageSender(port.sender, ownExtension())) return;
 
-        let resolved = false;
-        function cleanup() {
-          if (!resolved) {
-            resolved = true;
-            chrome.runtime.onConnect.removeListener(connectionHandler);
-            port.onMessage.removeListener(messageHandler);
-          }
-        }
-
-        function messageHandler(response: PortMessage) {
-          if (response.tabId !== tabIdd) return;
+        let spokeForPopup = false;
+        const message = (response: PortMessage) => {
+          if (response.tabId !== popupTabId) return;
+          spokeForPopup = true;
           if (response.method === METHOD.requestData) {
-            // Create a deep copy of the request to prevent mutations from affecting the original
-            // This is critical for transaction signing to ensure each signing attempt gets fresh data
-            const requestCopy = JSON.parse(JSON.stringify(request));
-            port.postMessage(requestCopy);
+            // Deep copy so a signing attempt never sees a mutated request.
+            port.postMessage(JSON.parse(JSON.stringify(request)));
           }
-          if (response.method === METHOD.returnData) {
-            cleanup();
-            resolve(response);
-          }
-          chrome.tabs.onRemoved.addListener(function tabsHandler(tabId) {
-            if (tabIdd !== tabId) return;
-            cleanup();
-            resolve({
-              target: TARGET,
-              sender: SENDER.extension,
-              error: popupDisconnectedError(request),
-            });
-            chrome.tabs.onRemoved.removeListener(tabsHandler);
-          });
-        }
-
-        // Resolve with a refused/declined error if the popup port disconnects
-        // without returning data (user closed the window).
-        port.onDisconnect.addListener(() => {
-          cleanup();
-          resolve({
-            target: TARGET,
-            sender: SENDER.extension,
-            error: popupDisconnectedError(request),
-          });
-        });
-
-        port.onMessage.addListener(messageHandler);
-      });
-    });
-  },
-  sendToSidePanelInternal: function (tabIdd: number, request: Message) {
-    return new Promise((resolve) => {
-      // Remove any existing listener for this tab before adding a new one
-      // This prevents old listeners from responding with stale request data
-      const staleListener = sidePanelListeners.get(tabIdd);
-      if (staleListener) {
-        chrome.runtime.onConnect.removeListener(staleListener);
+          if (response.method === METHOD.returnData) answer(response);
+        };
+        // The user closed this popup without answering.
+        const disconnect = () => {
+          if (spokeForPopup) answer(declined());
+          else unbind(port);
+        };
+        bound.set(port, { message, disconnect });
+        port.onMessage.addListener(message);
+        port.onDisconnect.addListener(disconnect);
       }
-
-      function connectionHandler(port: chrome.runtime.Port) {
-        // Approval answers must come from our own side panel page, never from a
-        // content-script port (same sender.id, http(s) url).
-        if (!isOwnExtensionPageSender(port.sender, ownExtension())) return;
-        function messageHandler(response: PortMessage) {
-          if (response.tabId !== tabIdd) return;
-          if (response.method === METHOD.requestData) {
-            // Create a deep copy of the request to prevent mutations
-            const requestCopy = JSON.parse(JSON.stringify(request));
-            port.postMessage(requestCopy);
-          }
-          if (response.method === METHOD.returnData) {
-            cleanup();
-            resolve(response);
-          }
-        }
-
-        function disconnectHandler() {
-          cleanup();
-          // Resolve with a refused/declined error when the side panel closes
-          // without a response.
-          resolve({
-            target: TARGET,
-            sender: SENDER.extension,
-            error: popupDisconnectedError(request),
-            data: undefined
-          });
-        }
-
-        function cleanup() {
-          port.onMessage.removeListener(messageHandler);
-          port.onDisconnect.removeListener(disconnectHandler);
-          chrome.runtime.onConnect.removeListener(connectionHandler);
-          // Clean up listener tracking
-          if (sidePanelListeners.get(tabIdd) === connectionHandler) {
-            sidePanelListeners.delete(tabIdd);
-          }
-        }
-
-        port.onMessage.addListener(messageHandler);
-        port.onDisconnect.addListener(disconnectHandler);
-      }
-
-      // Track the listener so we can remove it later
-      sidePanelListeners.set(tabIdd, connectionHandler);
 
       chrome.runtime.onConnect.addListener(connectionHandler);
+      chrome.tabs.onRemoved.addListener(tabsHandler);
     });
   },
   createInternalController: () => new InternalController(),
-  createInternalSidePanelController: (tabid: number) => new InternalSidePanelController(tabid),
   createProxyController: () => {
     // listen to events from background
     if (chrome?.runtime) {

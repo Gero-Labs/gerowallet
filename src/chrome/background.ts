@@ -21,8 +21,9 @@ import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
-import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
-import { approvalNamesActiveAccount, connectApprovedAccount, readConnectApproval, type ConnectApproval } from '@/chrome/connectApproval';
+import { isOwnExtensionPageSender, ownExtension } from '@/chrome/senderTrust';
+import { settlePanelMessage } from '@/chrome/dappPanelSettlement';
+import { connectApprovedAccount, readConnectApproval, type ConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { unlockAfterStartup } from '@/chrome/unlockStartup';
@@ -67,7 +68,7 @@ import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 import { announcementActions, announcementsRefresh, getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
-import { shouldAutoLock } from '@/services/autoLock';
+import { AUTO_LOCK_ALARM, AUTO_LOCK_PERIOD_MINUTES, checkAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { isMidnightServerSideFailure, readableMidnightError } from '@/api/midnightApiError';
@@ -282,7 +283,7 @@ loadWallets().then(async () => {
 
     // CRITICAL: Check auto-lock BEFORE logging in to catch expired sessions
     // This prevents the activity tracker from resetting lastActivityTimestamp
-    await checkAutoLock();
+    await runAutoLockCheck();
 
     await walletManager.login(walletStore.loggedWallet);
 
@@ -523,15 +524,24 @@ function syncDappRequestBadge(): void {
 }
 
 function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
+  const requestIds: string[] = [];
   for (const [requestId, entry] of pendingDAppRequests.entries()) {
     const matchesTab = entry.tabId === tabId || Number.isNaN(entry.tabId);
     if (!matchesTab) continue;
+    requestIds.push(requestId);
     try {
       port.postMessage({ type: 'dapp-request', method: entry.method, requestId, payload: entry.payload });
     } catch {
       // Port died mid-loop; the next connect will retry.
       return;
     }
+  }
+  // Then name what this worker still holds, so the panel drops a prompt that
+  // died with a previous worker (see dappRequestHub.dropRequestsNotLive).
+  try {
+    port.postMessage({ type: 'dapp-live', requestIds });
+  } catch {
+    // Port died; the next connect sends it again.
   }
 }
 
@@ -568,29 +578,10 @@ chrome.runtime.onConnect.addListener((port) => {
   clearDappParkedNotification(tabId);
 
   port.onMessage.addListener((message) => {
-    if (!message?.requestId) return;
-    const entry = pendingDAppRequests.get(message.requestId);
-    if (!entry) return;
-    // A panel may only settle requests delivered to it: its own tab's, or
-    // tabless ones (which go to any panel). Never another tab's prompt.
-    if (!panelMaySettleRequest(entry.tabId, tabId)) return;
-    if (message.type === 'dapp-response') {
-      // Wallet-switch guard: if the active wallet changed since the request
-      // was issued, an approval must not be honored silently.
-      const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
-      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId
-        && !approvalNamesActiveAccount(entry.method, message, activeWalletId)) {
-        entry.resolve({ error: 'wallet_changed_during_request' });
-      } else {
-        entry.resolve(message);
-      }
-      pendingDAppRequests.delete(message.requestId);
-      syncDappRequestBadge();
-    } else if (message.type === 'dapp-nack') {
-      entry.resolve({ error: String(message.error || 'unsupported_method') });
-      pendingDAppRequests.delete(message.requestId);
-      syncDappRequestBadge();
-    }
+    // Answered at most once; see settlePanelMessage. The wallet-switch guard
+    // keeps an approval from being honoured silently for another wallet.
+    const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
+    if (settlePanelMessage(pendingDAppRequests, message, tabId, activeWalletId)) syncDappRequestBadge();
   });
 
   port.onDisconnect.addListener(() => {
@@ -810,45 +801,18 @@ function clearProcessedDomains() {
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
 // const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
 
-/**
- * Check if the wallet should be auto-locked based on inactivity
- */
-async function checkAutoLock(): Promise<void> {
+/** One auto-lock tick (see checkAutoLock in services/autoLock.ts). */
+async function runAutoLockCheck(): Promise<void> {
   try {
-    const wallet = walletStore.loggedWallet;
-
-    // Skip if no wallet is logged in or already locked
-    if (!wallet || walletStore.isLocked) {
-      return;
-    }
-
-    // Get auto-lock configuration. An added account's lock settings are its
-    // account #0's; its activity is tracked on the account itself.
     const { getDb } = await import('@/db/wallet-db');
-    const configTable = (await getDb(secretsWalletId(wallet))).table('config');
-    const activityTable = (await getDb(wallet.id)).table('config');
-
-    const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
-    const autoLockMinutes = autoLockConfig?.value || 0;
-
-    // Lock method: a wallet auto-locks only when one is configured. MPC wallets
-    // set unlockMethod to 'passkey'/'password' when their session lock is enabled
-    // and leave it null for "None" — same rule as Normal wallets, no special case.
-    const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-    const hasUnlockMethod = !!unlockMethodConfig?.value;
-
-    // Last activity: absent means the wallet just logged in and the tracker hasn't
-    // run yet — skip this tick.
-    const lastActivityConfig = await activityTable.where({ key: 'lastActivityTimestamp' }).first();
-    if (!lastActivityConfig || !lastActivityConfig.value) {
-      return;
-    }
-
-    const inactiveMinutes = (Date.now() - lastActivityConfig.value) / (1000 * 60);
-
-    if (shouldAutoLock({ autoLockMinutes, hasUnlockMethod, inactiveMinutes })) {
-      await walletManager.lock();
-    }
+    await checkAutoLock({
+      loggedWallet: () => walletStore.loggedWallet,
+      isLocked: () => walletStore.isLocked,
+      settingsWalletId: (wallet) => secretsWalletId(wallet),
+      readConfig: async (walletId, key) => (await getDb(walletId as number))?.table('config').where({ key }).first(),
+      lock: () => walletManager.lock(),
+      now: () => Date.now(),
+    });
   } catch (error) {
     console.error('❌ Error checking auto-lock:', error);
   }
@@ -861,9 +825,9 @@ chrome.alarms.create('clearProcessedDomains', {
 });
 
 // Create auto-lock alarm to check every minute
-chrome.alarms.create('auto-lock-check', {
-  delayInMinutes: 1,
-  periodInMinutes: 1 // Check every minute
+chrome.alarms.create(AUTO_LOCK_ALARM, {
+  delayInMinutes: AUTO_LOCK_PERIOD_MINUTES,
+  periodInMinutes: AUTO_LOCK_PERIOD_MINUTES
 });
 
 // Populate the CoinGecko price cache. Nothing else calls updatePrices(), so
@@ -879,10 +843,8 @@ chrome.alarms.create('refreshCoinGeckoPrices', {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'clearProcessedDomains') {
     clearProcessedDomains();
-  } else if (alarm.name === 'auto-lock-check') {
-    checkAutoLock().catch(error => {
-      console.error('❌ Error in auto-lock check:', error);
-    });
+  } else if (alarm.name === AUTO_LOCK_ALARM) {
+    void runAutoLockCheck();
   } else if (alarm.name === 'refreshCoinGeckoPrices') {
     coinGeckoStore.updatePrices().catch(error => {
       console.warn('❌ Error refreshing CoinGecko prices:', error);
@@ -4521,7 +4483,7 @@ app.addToOptions(MessageTypes.VERIFY_PRE_LOGIN_UNLOCK, async (request, sendRespo
 app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => {
   try {
     // Trigger immediate auto-lock check
-    await checkAutoLock();
+    await runAutoLockCheck();
     sendResponse({
       id: request.id,
       data: { success: true },

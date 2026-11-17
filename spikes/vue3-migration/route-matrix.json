@@ -870,12 +870,21 @@
           "test": "deduplicates re-delivered requestIds"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a second returnData, a later close or tab removal never changes the first answer"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "a second approval, a later reject or a NACK for an answered request settles nothing"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
           "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
-      ],
-      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer. The browser tests show the answer takes effect, not that it is sent once."
+      ]
     },
     "reject-once": {
       "title": "Reject: a request is answered exactly once",
@@ -894,6 +903,16 @@
           "test": "rejecting a coalesced enable rejects every duplicate"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "a reject is answered once and a later approval cannot overturn it"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "closing the popup of another request never answers this one"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
           "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
@@ -903,8 +922,7 @@
           "ref": "08-post-v27/dapp-connect-account.spec.ts",
           "test": "rejecting the prompt connects nothing and keeps the logged account"
         }
-      ],
-      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer, here a decline after an answer."
+      ]
     },
     "cancel-once": {
       "title": "Cancel, close or dismiss: the pending request is answered exactly once",
@@ -923,12 +941,27 @@
           "test": "cancelTab cancels the prompt parked for that tab"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "closing the popup (its port disconnects) declines the pending request once"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "removing the popup tab declines the pending request once"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a popup closed before its page connects still declines the request"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
           "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
       ],
-      "gap": "No test closes the popup window or side panel with a request pending, so the port.onDisconnect and tabs.onRemoved answers in src/chrome/messaging.ts are untested. The e2e covers navigating away, not closing."
+      "gap": "Closing the side panel parks a request instead of answering it (by design: it is re-delivered when a panel reconnects); that parking, in background.ts, is covered only by the browser tests."
     },
     "worker-restart": {
       "title": "Service-worker restart: state recovers after the MV3 worker stops",
@@ -953,6 +986,21 @@
           "test": "serves subscriptions made before the store registers during worker boot"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "after a worker restart, an answer for a request the worker never issued is dropped"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
+          "test": "after a worker restart, drops prompts the new worker does not hold and answers nothing"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/hygiene.spec.ts",
+          "test": "gives a bare transport error the envelope the page matches on"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
           "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
@@ -963,7 +1011,7 @@
           "test": "rewriting loggedWallet and isLocked in chrome.storage.local neither unlocks nor switches the wallet after a worker restart"
         }
       ],
-      "gap": "No test restarts the worker while a dApp request is pending; dappRequestHub only simulates a dropped port."
+      "gap": "Covered by unit tests only: no browser test stops the worker while a dApp request is pending."
     },
     "lock-unlock": {
       "title": "Lock and unlock: manual and configured lock, credential checks, locked routing",
@@ -993,6 +1041,16 @@
           "test": "locks once inactivity reaches the threshold and a method is set"
         },
         {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "locks once the configured inactivity has passed, and only once"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "reads an added account's lock settings from account #0 and its activity from itself"
+        },
+        {
           "kind": "harness",
           "ref": "scripts/migration-browser/store-sync-smoke.cjs",
           "test": "Background lock broadcasts reach both options pages and side panel"
@@ -1003,7 +1061,7 @@
           "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         }
       ],
-      "gap": "Auto-lock is tested only as the shouldAutoLock predicate; nothing drives the timer or alarm, and no browser test sees auto-lock fire."
+      "gap": "The alarm tick is unit-tested with a clock; its chrome.alarms registration is not, and no browser test sees auto-lock fire."
     },
     "two-uis": {
       "title": "Two open UIs: a change reaches both through the background broadcast",
