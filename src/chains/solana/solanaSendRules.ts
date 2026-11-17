@@ -48,7 +48,7 @@ export interface SolanaSendCheck {
   /** Sender's balance in lamports; null when not known yet. */
   balance: bigint | null;
   priorityMicroLamports: bigint;
-  /** Recipient's balance; null when unknown (then the rent rule for a new account is skipped). */
+  /** Recipient's balance; null skips the rent rule for a new account (the worker passes 0 when unreadable). */
   recipientBalance?: bigint | null;
 }
 

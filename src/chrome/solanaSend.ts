@@ -101,8 +101,9 @@ export async function sendSolana(
   const fees = await api.getFees().catch(() => undefined);
   const priority = priorityPriceFor(feeLevel, fees?.prioritizationFeeMicroLamports);
   // Sending less than the rent-exempt minimum to an empty account fails on chain, so ask.
-  // An unreadable recipient skips that rule rather than blocking the send.
-  const recipientBalance = await api.getBalance(recipientAddress).then((b) => b.lamports).catch(() => null);
+  // An unreadable recipient is treated as empty: only an amount below that minimum can
+  // be refused for it, and such a transfer would only fail after the user signed it.
+  const recipientBalance = await api.getBalance(recipientAddress).then((b) => b.lamports).catch(() => 0n);
   const refusal = checkSolTransfer({
     from: sender.publicKey,
     to: recipientAddress,
@@ -114,19 +115,21 @@ export async function sendSolana(
   if (refusal) throw new SolanaSendError(refusal);
 
   let signed: { signature: string; base64: string };
+  const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes as number[]) : undefined;
   try {
     const tip = await api.getChainTip();
-    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes as number[]) : undefined;
     signed = await sender.signSolanaTransfer(
       { to: recipientAddress, lamports, recentBlockhash: tip.blockhash, computeUnitPriceMicroLamports: priority },
       password as string | undefined,
       prfSecret,
     );
-    prfSecret?.fill(0);
   } catch (error) {
     if (error instanceof SolanaSendError) throw error;
     // A wrong password, a refused PassKey or a mismatched record: the page shows its own text.
     throw Object.assign(new SolanaSendError('BUILD_FAILED'), { cause: error });
+  } finally {
+    prfSecret?.fill(0);
+    if (Array.isArray(privateKeyBytes)) privateKeyBytes.fill(0);
   }
 
   try {

@@ -78,6 +78,37 @@ describe('SOL send in the worker', () => {
     await expect(sendSolana(wallet(), { ...request, lamports: '1000' }, a)).rejects.toMatchObject({ code: 'RECIPIENT_BELOW_RENT' });
   });
 
+  it('treats an unreadable recipient as empty: below rent is refused, rent or more still goes', async () => {
+    const unreadable = () => api({ getBalance: vi.fn(async () => { throw new Error('nexus down'); }) });
+    const w = wallet();
+    await expect(sendSolana(w, { ...request, lamports: '1000' }, unreadable())).rejects.toMatchObject({ code: 'RECIPIENT_BELOW_RENT' });
+    expect(w.signSolanaTransfer).not.toHaveBeenCalled();
+    await expect(sendSolana(wallet(), request, unreadable())).resolves.toEqual({ signature: 'sig-from-nexus' });
+  });
+
+  it('wipes the PassKey secret whether signing succeeds or throws', async () => {
+    const seen: Uint8Array[] = [];
+    const ok = wallet();
+    ok.signSolanaTransfer.mockImplementationOnce(async (_p: unknown, _pw: unknown, secret: Uint8Array) => {
+      seen.push(secret);
+      return { signature: 's', base64: 'AA==' };
+    });
+    const okBytes = [1, 2, 3];
+    await sendSolana(ok, { ...request, password: undefined, privateKeyBytes: okBytes }, api());
+
+    const failing = wallet();
+    failing.signSolanaTransfer.mockImplementationOnce(async (_p: unknown, _pw: unknown, secret: Uint8Array) => {
+      seen.push(secret);
+      throw new Error('PassKey refused');
+    });
+    const failBytes = [4, 5, 6];
+    await expect(sendSolana(failing, { ...request, password: undefined, privateKeyBytes: failBytes }, api()))
+      .rejects.toMatchObject({ code: 'BUILD_FAILED' });
+
+    expect(seen.map((s) => Array.from(s))).toEqual([[0, 0, 0], [0, 0, 0]]);
+    expect([okBytes, failBytes]).toEqual([[0, 0, 0], [0, 0, 0]]);
+  });
+
   it('reports a signing failure and a submit failure apart, never raw text', async () => {
     const w = wallet();
     w.signSolanaTransfer.mockRejectedValueOnce(new Error('wrong password: secret details'));

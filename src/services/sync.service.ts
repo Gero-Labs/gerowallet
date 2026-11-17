@@ -13,7 +13,13 @@ import { notifyHooks } from '@/services/notify/notifyHooks';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { convertNexusUtxos } from '@/services/nexusUtxo';
-import WalletStore, { emptySolanaState, totalListedLockedLovelace, walletStore, type SolanaWalletState } from '@/stores/walletStore';
+import WalletStore, {
+  emptySolanaState,
+  flushWalletStorePersistence,
+  totalListedLockedLovelace,
+  walletStore,
+  type SolanaWalletState,
+} from '@/stores/walletStore';
 import { mergeSolanaTransactions, parseSolanaSyncMessage, type SolanaWireMessage } from '@/chains/solana/solanaWireSync';
 import type { BitcoinTip } from '@/stores/networkStore';
 import {
@@ -585,10 +591,15 @@ export class SyncService {
       }));
     }
     if (update.tipSlot !== undefined) snapshot.tipSlot = update.tipSlot;
+    // Sticky on purpose: once older history was cut off it stays missing here until a
+    // FORCE_RESYNC rebuilds it, whatever later pushes say.
     if (update.historyTruncated) snapshot.historyTruncated = true;
     if (Object.keys(snapshot).length > 0) WalletStore.setSolanaState(snapshot);
 
     if (update.cursorSlot !== undefined) {
+      // The history goes to IndexedDB through the debounced persister; write it before the
+      // cursor so a worker killed in between re-receives those slots instead of losing them.
+      if (update.transactions.length > 0) await flushWalletStorePersistence();
       const syncInfo = await this.walletBg.getLastSyncInfo();
       const current = syncInfo && typeof syncInfo.height === 'number' ? syncInfo.height : 0;
       if (update.cursorSlot > current) {

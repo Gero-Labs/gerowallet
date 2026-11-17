@@ -16,6 +16,7 @@ const store = vi.hoisted(() => {
     state,
     setSolanaTransactions: vi.fn((txs: Array<Record<string, unknown>>) => { state.solanaTransactions = txs; }),
     setSolanaState: vi.fn((update: Record<string, unknown>) => { state.solana = { ...state.solana, ...update }; }),
+    flush: vi.fn(async () => undefined),
   };
 });
 
@@ -29,6 +30,7 @@ vi.mock('@/stores/walletStore', () => ({
   default: { state: {}, setSolanaTransactions: store.setSolanaTransactions, setSolanaState: store.setSolanaState },
   walletStore: store.state,
   emptySolanaState: store.empty,
+  flushWalletStorePersistence: store.flush,
 }));
 vi.mock('@/services/websocket.service', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
@@ -53,11 +55,12 @@ beforeEach(() => {
   store.state.solanaTransactions = [];
   store.setSolanaTransactions.mockClear();
   store.setSolanaState.mockClear();
+  store.flush.mockClear();
 });
 
 describe('applySolanaSync', () => {
   it('stores history, balance and tokens, and moves the cursor to the newest delivered slot', async () => {
-    const { service, syncRow } = setup();
+    const { service, put, syncRow } = setup();
     await service.applySolanaSync({
       type: 'SYNC',
       block: { height: 120, slot: 120, hash: '' },
@@ -76,6 +79,8 @@ describe('applySolanaSync', () => {
       historyTruncated: false,
     });
     expect(syncRow()).toMatchObject({ id: 1, height: 120 });
+    // The history is written before the cursor moves past it.
+    expect(store.flush.mock.invocationCallOrder[0]).toBeLessThan(put.mock.invocationCallOrder[0]);
   });
 
   it('never persists the tip as the cursor (catch-up re-tagged as SYNC)', async () => {
