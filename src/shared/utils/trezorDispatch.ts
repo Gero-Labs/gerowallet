@@ -11,12 +11,12 @@ import { assertAccountIndices } from '@/shared/utils/walletAccount';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 
 /**
- * Document-context dispatcher for Trezor operations (WebUSB + Bridge transport).
+ * Document-context dispatcher for Trezor operations.
  *
  * Mirrors the `MessageTypes.TREZOR` handler in `src/chrome/background.ts`
- * (per-`data.method` branches) FAITHFULLY, but calls `trezorWeb.*`
- * (document-context `@trezor/connect-web`, see `src/shared/utils/trezorWeb.ts`)
- * instead of `trezor.*` (service-worker / bridge-only, `src/shared/utils/trezor.ts`).
+ * (per-`data.method` branches) FAITHFULLY, calling the same `trezor.*` module
+ * (`src/shared/utils/trezor.ts`, Connect 10) from the page instead of the
+ * service worker. Connect 10 runs through Trezor Suite from either context.
  *
  * Resolves to the SAME envelope shape the background handler's `sendResponse`
  * produces for each method (`{ data: {...}, target, sender }`), so senders that
@@ -30,10 +30,10 @@ import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function dispatchTrezor(data: any): Promise<any> {
   try {
-    // Lazy-loaded so `@trezor/connect-web` (pulled in by trezorWeb) is only added
-    // to a document bundle when Trezor WebUSB is actually dispatched, instead of
-    // being statically bundled for every user of the 8 Cardano sender sites.
-    const trezorWeb = (await import('@/shared/utils/trezorWeb')).default;
+    // Lazy-loaded so Trezor Connect is only added to a document bundle when a
+    // Trezor call is actually dispatched, instead of being statically bundled
+    // for every user of the 8 Cardano sender sites.
+    const trezor = (await import('@/shared/utils/trezor')).default;
 
     if (data.method === 'initTrezor') {
       const network = networks.resolveNetwork(data.chain, data.network);
@@ -42,13 +42,13 @@ export async function dispatchTrezor(data: any): Promise<any> {
       let coldWalletProps: any;
       if (network.blockchain === Blockchain.CARDANO && data.accountIndices !== undefined) {
         // Multi-account pairing; mirrors the background handler.
-        coldWalletProps = await trezorWeb.getAccountXpubs(assertAccountIndices(data.accountIndices));
+        coldWalletProps = await trezor.getAccountXpubs(assertAccountIndices(data.accountIndices));
       } else if (network.blockchain === Blockchain.CARDANO) {
         const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`;
-        coldWalletProps = await trezorWeb.getXpub(path);
+        coldWalletProps = await trezor.getXpub(path);
       } else if (network.blockchain === Blockchain.BITCOIN) {
         // Bitcoin wallet - use default SegWit address type
-        coldWalletProps = await trezorWeb.initBitcoinTrezor('segwit', 0, network.network);
+        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0, network.network);
 
         // Format Bitcoin response to match expected structure
         if (coldWalletProps) {
@@ -82,7 +82,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
         signatureHex: string;
         signingPublicKeyHex: string;
         addressFieldHex: string;
-      } = await trezorWeb.cardanoSignMessage(address, payload, network.networkId, WalletStore.state.keys);
+      } = await trezor.signData(address, payload, network.networkId, WalletStore.state.keys);
 
       return {
         data: { success: true, signatureData },
@@ -119,7 +119,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
 
       // Sign transaction with Trezor SDK (includes witness filtering)
       // Pass original CBOR to preserve exact transaction hash computation
-      const signatures: Cardano.Signatures = await trezorWeb.cardanoSignTransaction(
+      const signatures: Cardano.Signatures = await trezor.signTransaction(
         txWithoutWitnesses,
         WalletStore.state.keys,
         utxos,
@@ -143,7 +143,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
       // Verify Bitcoin address on Trezor device
       const { addressType, accountIndex, addressIndex, isChange, network } = data;
 
-      const verifiedAddress = await trezorWeb.verifyBitcoinAddress(
+      const verifiedAddress = await trezor.verifyBitcoinAddress(
         addressType || 'segwit',
         accountIndex || 0,
         addressIndex || 0,

@@ -177,7 +177,7 @@
         </div>
 
         <!-- Buy vs Sell Volume (Cardano DEX data only) -->
-        <div v-if="!isApex" class="pt-2">
+        <div class="pt-2">
           <BuySellVolume
             v-if="tokenPolicyId && tokenAssetName"
             :policy-id="tokenPolicyId"
@@ -186,7 +186,7 @@
         </div>
 
         <!-- Recent Trades (Cardano DEX data only) -->
-        <div v-if="!isApex" class="pt-2">
+        <div class="pt-2">
           <RecentTrades
             v-if="tokenPolicyId && tokenAssetName"
             :policy-id="tokenPolicyId"
@@ -203,7 +203,7 @@
                where the reason the widget is suppressed gets explained. -->
           <v-tab value="swap">{{ $t('market.swap') }}</v-tab>
           <v-tab value="depth">{{ $t('market.depth') }}</v-tab>
-          <v-tab v-if="!isApex && token.unit !== 'lovelace'" value="markets">{{ $t('market.markets') }}</v-tab>
+          <v-tab v-if="token.unit !== 'lovelace'" value="markets">{{ $t('market.markets') }}</v-tab>
         </v-tabs>
 
         <!-- Swap tab -->
@@ -212,7 +212,7 @@
           <!-- GeroSwapEmbed (Cardano DEX only). Never for a CIP-113 token: moving one
                needs the transfer-logic script and directory proofs, which ordinary DEX
                routing cannot supply, so the swap could only fail. -->
-          <div v-if="!isApex && token.unit !== 'lovelace' && !isProgrammableRow(token)" class="swap-shell">
+          <div v-if="token.unit !== 'lovelace' && !isProgrammableRow(token)" class="swap-shell">
             <GeroSwapEmbed
               :token-out="token.unit"
               context="dialog"
@@ -293,7 +293,7 @@
 
         <!-- Depth tab (Cardano DEX data only) -->
         <div v-else-if="rightTab === 'depth'" key="depth">
-          <div v-if="!isApex" style="display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 12px">
             <DepthChart
               v-if="tokenPolicyId && tokenAssetName"
               :policy-id="tokenPolicyId"
@@ -305,9 +305,6 @@
               :policy-id="tokenPolicyId"
               :asset-name="tokenAssetName"
             />
-          </div>
-          <div v-else class="text-center py-6 text--secondary text-caption">
-            {{ $t('market.na') }}
           </div>
         </div>
 
@@ -434,11 +431,6 @@ const { getTokenCandles } = useMarketData();
 const { getTokenPnl } = useWalletPnl();
 const { usdToEurRate } = useCurrencyConverter();
 const { currencySymbol: nativeSymbol, currencyTicker: nativeTicker } = useNativeCurrency();
-
-const isApex = computed(() => {
-  const chain = walletStore.loggedWallet?.chain;
-  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
-});
 
 type Currency = 'NATIVE' | 'USD' | 'EUR';
 const isAda = computed(() => props.token.unit === 'lovelace' || props.token.ticker === 'ADA');
@@ -642,12 +634,10 @@ function formatPnlSigned(adaValue: number): string {
 
 import { formatPriceRaw, formatPrice, formatCompact, formatSignedChange } from '@/modules/market/utils/formatters';
 
-// Market tokens are Cardano-native unless the wallet is on an Apex chain. ADA
-// itself has no fingerprint, so it gets no link.
+// Market tokens are Cardano-native. ADA itself has no fingerprint, so it gets
+// no link.
 const tokenExplorerUrl = computed(() =>
-  explorerUrl('asset', props.token.fingerprint, {
-    chain: isApex.value ? walletStore.loggedWallet?.chain : Blockchain.CARDANO,
-  }),
+  explorerUrl('asset', props.token.fingerprint, { chain: Blockchain.CARDANO }),
 );
 
 function openExplorer() {

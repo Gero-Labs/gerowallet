@@ -18,6 +18,9 @@ export interface FeatureFlags {
   // is hidden (shown as a "Soon" teaser) until flipped ON via gero-sync — this
   // replaces the hardcoded BITCOIN_REMOVED_2_7 comment-out in networks.ts.
   isBitcoinEnabled: boolean;
+  // Master gate for the Solana chain (src/chains/solana, Nexus /api/sol, Gero Sync SOLANA).
+  // Default OFF: nothing Solana is reachable until it is flipped ON via gero-sync.
+  isSolanaEnabled: boolean;
   // Master gate for the daemon-free Trezor WebUSB signing path.
   isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
@@ -85,10 +88,20 @@ export interface FeatureFlags {
   // background router honours a saved endpoint whatever this says, because a remote
   // flip must never reroute a privacy user's transactions to Gero.
   isSubmitApiEnabled: boolean;
+  // Midnight private (shielded) sends proven on this device in Gero Cloud mode.
+  // Default OFF, ships dark: a decision for Adam and the CTO. Off, a private send
+  // proves on Gero Cloud (its consent names the coin secret key); on, it proves
+  // here (Zswap proofs: 30-70 s on a fast laptop) and Gero receives no secret.
+  // Public sends prove their DUST fee on this device either way.
+  isMidnightShieldedDeviceProvingEnabled: boolean;
   // CIP-113 Send (Gero's own transfer of a programmable token). Default OFF, ships dark.
   // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
   // the background's checks stay on the build-time network gates (cip113Deployments.ts).
   isCip113Enabled: boolean;
+  // NFT rescue (cancelling listings and offers stuck at a closed marketplace's contracts,
+  // Cardano mainnet). Default OFF, ships dark. Gates the UI ONLY: the card that finds them
+  // and the cancel action. The background still verifies every transaction it signs.
+  isNftMarketEnabled: boolean;
   // Multi-account (issue 1307). Default OFF, ships dark. Gates the UI ONLY: the
   // Choose accounts step, Add account and the account switchers. A record already
   // holding an account other than #0 keeps signing for it whatever this says.
@@ -97,6 +110,10 @@ export interface FeatureFlags {
   // false skips Zione's cardholder-details endpoints, and an order refused for missing
   // details then points the user to Zione support. Only an explicit false turns it off.
   isCardholderDetailsEnabled: boolean;
+  // Broadcast announcements in the UI (bell section, snackbar, banner, dialog). Default ON and a
+  // remote KILL-SWITCH: only an explicit false hides them. UI-only: the worker keeps fetching and
+  // verifying, and what it shows from a push is the server operator's to stop.
+  isAnnouncementsEnabled: boolean;
   // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
   // and for the on-unlock migration to it. Every release since the reader-only one
   // opens gpw2, so turning this off only stops new gpw2 writes. Read by the
@@ -132,6 +149,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isBitcoinEnabled: false,
+    isSolanaEnabled: false,
     isTrezorWebUsbEnabled: false,
     isPoolOperatorEnabled: false,
     isGovernanceEnabled: false,
@@ -152,9 +170,12 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     isSubmitApiEnabled: false,
+    isMidnightShieldedDeviceProvingEnabled: false,
     isCip113Enabled: false,
+    isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
     isCardholderDetailsEnabled: true,
+    isAnnouncementsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
   },
@@ -215,6 +236,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
+    featureFlagsState.flags.isSolanaEnabled = featureFlagService.getFlag('isSolanaEnabled', false);
     featureFlagsState.flags.isTrezorWebUsbEnabled = featureFlagService.getFlag('isTrezorWebUsbEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isGovernanceEnabled = featureFlagService.getFlag('isGovernanceEnabled', false);
@@ -242,13 +264,20 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
     // Submit API ships DARK (default false); UI-only gate for the Settings dialog.
     featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
+    // Shielded on-device proving ships DARK (default false).
+    featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled = featureFlagService.getFlag('isMidnightShieldedDeviceProvingEnabled', false);
     // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
+    // NFT rescue ships DARK (default false); UI-only gate for the stuck-listings card.
+    featureFlagsState.flags.isNftMarketEnabled = featureFlagService.getFlag('isNftMarketEnabled', false);
     // Multi-account ships DARK (default false); UI-only gate.
     featureFlagsState.flags.isMultiAccountEnabled = featureFlagService.getFlag('isMultiAccountEnabled', false);
     // Cardholder-details step ships ON; only an explicit false from the service turns it off.
     featureFlagsState.flags.isCardholderDetailsEnabled =
       featureFlagService.getFlag<boolean>('isCardholderDetailsEnabled', true) !== false;
+    // Announcements ship ON; only an explicit false from the service hides them.
+    featureFlagsState.flags.isAnnouncementsEnabled =
+      featureFlagService.getFlag<boolean>('isAnnouncementsEnabled', true) !== false;
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -281,6 +310,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isBitcoinEnabled', (newValue) => {
       featureFlagsState.flags['isBitcoinEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isSolanaEnabled', (newValue) => {
+      featureFlagsState.flags['isSolanaEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       featureFlagsState.flags['isPoolOperatorEnabled'] = newValue === true;
@@ -347,14 +379,23 @@ export const featureFlagsStore = {
     featureFlagService.onFlagChange('isSubmitApiEnabled', (newValue) => {
       featureFlagsState.flags['isSubmitApiEnabled'] = newValue === true;
     });
+    featureFlagService.onFlagChange('isMidnightShieldedDeviceProvingEnabled', (newValue) => {
+      featureFlagsState.flags['isMidnightShieldedDeviceProvingEnabled'] = newValue === true;
+    });
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       featureFlagsState.flags['isCip113Enabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isNftMarketEnabled', (newValue) => {
+      featureFlagsState.flags['isNftMarketEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isMultiAccountEnabled', (newValue) => {
       featureFlagsState.flags['isMultiAccountEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isCardholderDetailsEnabled', (newValue) => {
       featureFlagsState.flags['isCardholderDetailsEnabled'] = newValue !== false;
+    });
+    featureFlagService.onFlagChange('isAnnouncementsEnabled', (newValue) => {
+      featureFlagsState.flags['isAnnouncementsEnabled'] = newValue !== false;
     });
     featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
       featureFlagsState.flags['isKeyEnvelopeV2Enabled'] = newValue === true;
@@ -414,6 +455,14 @@ export const featureFlagsStore = {
    */
   isBitcoinEnabled(): boolean {
     return featureFlagsState.flags.isBitcoinEnabled;
+  },
+
+  /**
+   * Whether the Solana chain is available. Driven by the gero-sync `isSolanaEnabled`
+   * flag (default off), so Solana can ship dark and be turned on without a release.
+   */
+  isSolanaEnabled(): boolean {
+    return featureFlagsState.flags.isSolanaEnabled;
   },
 
   /**
@@ -601,6 +650,14 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isSubmitApiEnabled;
   },
 
+  /**
+   * Prove Midnight private (shielded) sends on this device in Gero Cloud mode.
+   * Ships DARK (default false); see the flag's declaration.
+   */
+  isMidnightShieldedDeviceProvingEnabled(): boolean {
+    return featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled;
+  },
+
   /** Gero Card cardholder-details step; on unless the flag service says false. */
   isCardholderDetailsEnabled(): boolean {
     return featureFlagsState.flags.isCardholderDetailsEnabled;
@@ -613,6 +670,25 @@ export const featureFlagsStore = {
    */
   isCip113Enabled(): boolean {
     return featureFlagsState.flags.isCip113Enabled;
+  },
+
+  /**
+   * Check if the NFT rescue is offered: finding listings and offers stuck at a closed
+   * marketplace's contracts and cancelling them (Cardano mainnet only).
+   * Ships DARK (default false). Gates the UI only; the background verifies every
+   * transaction it signs whatever this says.
+   */
+  isNftMarketEnabled(): boolean {
+    return featureFlagsState.flags.isNftMarketEnabled;
+  },
+
+  /**
+   * Check if broadcast announcements are shown (the bell's "From Gero" rows, the snackbar, the
+   * banner, the dialog and their settings). Default ON: a kill switch, off only on an explicit
+   * `false`. Gates the UI only; the background keeps fetching and verifying whatever this says.
+   */
+  isAnnouncementsEnabled(): boolean {
+    return featureFlagsState.flags.isAnnouncementsEnabled;
   },
 
   /**
@@ -636,6 +712,7 @@ export const featureFlagsStore = {
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
       isBitcoinEnabled: false,
+      isSolanaEnabled: false,
       isPoolOperatorEnabled: false,
       isGovernanceEnabled: false,
       isGovernanceVotingEnabled: false,
@@ -655,9 +732,12 @@ export const featureFlagsStore = {
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       isSubmitApiEnabled: false,
+      isMidnightShieldedDeviceProvingEnabled: false,
       isCip113Enabled: false,
+      isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
       isCardholderDetailsEnabled: true,
+      isAnnouncementsEnabled: true,
       isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
     };

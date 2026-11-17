@@ -1,9 +1,9 @@
+import { computed } from 'vue';
 import cardStoreModule from '@/stores/modules/card';
 
 /**
  * SIMPLE composable for wallet status management
  * Uses only ONE card store - no complexity!
- * Note: 'computed' is auto-imported globally by unplugin-auto-import
  */
 export function useWalletStatus() {
   // ============================================================================
@@ -53,9 +53,9 @@ export function useWalletStatus() {
   /**
    * Set KYC status with optional data
    */
-  function setKYCStatus(status: string, data?: any): void {
+  function setKYCStatus(status: string, data?: unknown): void {
     // Direct state mutation for testing/development
-    cardStoreModule.state.walletStatus.kycStatus = status as any;
+    cardStoreModule.state.walletStatus.kycStatus = status as typeof cardStoreModule.state.walletStatus.kycStatus;
     if (data) {
       cardStoreModule.state.walletStatus.kycData = data;
     }
@@ -98,7 +98,7 @@ export function useWalletStatus() {
   /**
    * Handle KYC completion
    */
-  async function handleKYCComplete(status: string = 'pending', data?: any): Promise<void> {
+  async function handleKYCComplete(status: string = 'pending', data?: unknown): Promise<void> {
     setKYCStatus(status, data);
   }
 

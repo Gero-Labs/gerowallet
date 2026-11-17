@@ -1,6 +1,9 @@
 <template>
   <BottomSheet :model-value="modelValue" @update:model-value="onSheetInput" :title="sheetTitle" height="92%" :persistent="sendDispatched">
     <div class="midnight-send-sheet" ref="stepperEl">
+      <!-- One polite live region for the whole sheet, mounted before any send so
+           its first message is read: proving steps and their hints. -->
+      <div class="g-sr-only" aria-live="polite" aria-atomic="true" data-test="midnight-send-live">{{ liveMessage }}</div>
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
       <div v-if="txSuccess" class="success-overlay">
@@ -37,6 +40,11 @@
 
           <v-expand-transition>
             <div v-show="step === 1" class="step-body">
+              <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): said up front,
+                   before the user fills in anything. Review and Confirm stay held. -->
+              <GNote v-if="writesPaused" :icon="sendHold.icon.value" role="status" class="mb-3" data-test="midnight-send-paused-start">
+                {{ writesHeldText }}
+              </GNote>
               <div class="quick-row">
                 <v-btn size="x-small" variant="outlined" :color="primaryColor" @click="showQR = true">
                   <v-icon size="x-small" class="mr-1">mdi-qrcode</v-icon>{{ $t('wallet.qrScan') }}
@@ -147,11 +155,11 @@
                   </v-btn>
                 </div>
 
-                <!-- An unverified zero warns and offers a sponsor; it does not disable Review. -->
-                <div v-if="mayLackDust" class="midnight-dust-note mt-3">
-                  <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
-                  <span>{{ $t('midnight.send.noDustFee') }}</span>
-                </div>
+                <!-- Less than a fee's worth of DUST, or an unverified zero, warns and
+                     offers a sponsor; it does not disable Review. -->
+                <GNote v-if="mayLackDust" icon="mdi-alert-outline" class="mt-3">
+                  {{ $t(lackDustNotice) }}
+                </GNote>
                 <MidnightSponsorPicker
                   v-if="mayLackDust && loggedWallet"
                   :model-value="sponsorWalletId"
@@ -236,24 +244,51 @@
                 <span>{{ $t('midnight.send.publicTxNote') }}</span>
               </div>
 
-              <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
-                   verified on preprod, the old "reset" was an estimator bug). -->
-              <div v-if="!isDustLow" class="midnight-dust-note mt-3">
-                <v-icon size="14" color="warning" class="mr-1">mdi-information-outline</v-icon>
-                <span>{{ $t('midnight.send.dustResetWarning') }}</span>
-              </div>
-              <!-- Low-DUST hint: informational while any DUST remains (the tiny
-                   fee still clears); red only when DUST is genuinely empty. -->
-              <div v-else class="mt-3" :class="isDustEmpty ? 'midnight-dust-note midnight-dust-note--low' : 'midnight-info-note'">
-                <v-icon size="14" :color="isDustEmpty ? 'error' : 'var(--g-text-3)'" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
-                <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
-              </div>
+              <!-- DUST fee note (under 1 DUST; sending does NOT reset DUST —
+                   verified on preprod, the old "reset" was an estimator bug).
+                   None while sends are paused: nothing is sent, so no fee. -->
+              <template v-if="!writesPaused">
+                <GNote v-if="!isDustLow" icon="mdi-information-outline" class="mt-3">
+                  {{ $t('midnight.send.dustResetWarning') }}
+                </GNote>
+                <!-- Low-DUST hint: informational while there is more DUST than a
+                     fee needs; red below 1 DUST, where a send may not clear. -->
+                <GNote v-else-if="isDustShort" tone="error" icon="mdi-battery-alert-variant-outline" class="mt-3">
+                  {{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}
+                </GNote>
+                <div v-else class="midnight-info-note mt-3">
+                  <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+                  <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
+                </div>
+              </template>
+
+              <!-- Sends on this network are held (midnightWriteGate.ts: network upgrade, or update required): the button
+                   stays, held but focusable (aria-disabled), with the reason linked
+                   to it, and the password step can't open. -->
+              <GNote
+                v-if="writesPaused"
+                id="midnight-sheet-send-paused"
+                :icon="sendHold.icon.value"
+                role="status"
+                class="mt-3"
+                data-test="midnight-send-paused"
+              >
+                {{ writesHeldText }}
+              </GNote>
 
               <div class="step-actions-row mt-4">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
-                <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" @click="goToStep(4)">
+                <GButton
+                  tier="primary"
+                  class="flex-grow-1 ml-2"
+                  :aria-disabled="writesPaused ? 'true' : undefined"
+                  :aria-describedby="writesPaused ? 'midnight-sheet-send-paused' : undefined"
+                  :ripple="!writesPaused"
+                  data-test="midnight-send-confirm"
+                  @click="goToStep(4)"
+                >
                   {{ $t('miniGero.confirmSend') }}
-                </v-btn>
+                </GButton>
               </div>
             </div>
           </v-expand-transition>
@@ -272,61 +307,65 @@
 
           <v-expand-transition>
             <div v-show="step === 4" class="step-body">
-              <!-- ── Normal wallet (password) ── -->
-              <template v-if="isNormalWallet && !isPrfWallet">
-                <div class="text-caption grey--text mb-2">{{ $t('miniGero.spendingPassword') }}</div>
-                <v-text-field
-                  v-model="spendingPassword"
-                  :type="showPassword ? 'text' : 'password'"
-                  variant="outlined"
-                  density="compact"
-                  theme="dark"
-                  hide-details="auto"
-                  :placeholder="$t('miniGero.enterPassword')"
-                  :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                  :disabled="submitting"
-                  @click:append-inner="showPassword = !showPassword"
-                  @keydown.enter="signAndSubmit()"
-                />
-                <v-btn
-                  block
-                  :color="primaryColor"
-                  class="black--text font-weight-bold mt-4"
-                  :disabled="!spendingPassword || submitting"
-                  :loading="submitting"
-                  @click="signAndSubmit()"
-                >
-                  <v-icon start size="small">mdi-send</v-icon>
-                  {{ $t('miniGero.confirmSend') }}
-                </v-btn>
-              </template>
+              <!-- While the send runs the timeline takes this space: no password field, no CTA. -->
+              <template v-if="!submitting">
+                <!-- ── Normal wallet (password) ── -->
+                <template v-if="isNormalWallet && !isPrfWallet">
+                  <div class="text-caption grey--text mb-2">{{ $t('miniGero.spendingPassword') }}</div>
+                  <v-text-field
+                    v-model="spendingPassword"
+                    :type="showPassword ? 'text' : 'password'"
+                    variant="outlined"
+                    density="compact"
+                    theme="dark"
+                    hide-details="auto"
+                    :placeholder="$t('miniGero.enterPassword')"
+                    :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                    :disabled="submitting"
+                    @click:append-inner="showPassword = !showPassword"
+                    @keydown.enter="signAndSubmit()"
+                  />
+                  <GButton
+                    tier="primary"
+                    block
+                    class="mt-4"
+                    :disabled="!spendingPassword || submitting || !!sendBlock"
+                    :loading="submitting"
+                    data-test="midnight-send-submit"
+                    @click="signAndSubmit()"
+                  >
+                    <v-icon start size="small">mdi-send</v-icon>
+                    {{ sendCtaText }}
+                  </GButton>
+                </template>
 
-              <!-- ── PRF wallet (PassKey) ── -->
-              <template v-else-if="isNormalWallet && isPrfWallet">
-                <div class="hw-notice">
-                  <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
-                  <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
-                </div>
-                <v-btn
-                  block
-                  :color="primaryColor"
-                  class="black--text font-weight-bold"
-                  :disabled="submitting"
-                  :loading="submitting"
-                  @click="signAndSubmitPrf()"
-                >
-                  <v-icon start size="small">mdi-fingerprint</v-icon>
-                  {{ $t('miniGero.confirmSend') }}
-                </v-btn>
-              </template>
+                <!-- ── PRF wallet (PassKey) ── -->
+                <template v-else-if="isNormalWallet && isPrfWallet">
+                  <div class="hw-notice">
+                    <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
+                    <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
+                  </div>
+                  <GButton
+                    tier="primary"
+                    block
+                    :disabled="submitting || !!sendBlock"
+                    :loading="submitting"
+                    data-test="midnight-send-submit-prf"
+                    @click="signAndSubmitPrf()"
+                  >
+                    <v-icon start size="small">mdi-fingerprint</v-icon>
+                    {{ sendCtaText }}
+                  </GButton>
+                </template>
 
-              <!-- ── Any other wallet type: Midnight has no hardware-wallet
-                   signing support. ── -->
-              <template v-else>
-                <div class="hw-notice">
-                  <v-icon size="40" color="var(--g-text-3)" class="mb-2">mdi-alert-circle-outline</v-icon>
-                  <div class="text-body-2 grey--text text-center">{{ $t('midnight.connector.walletTypeUnsupported') }}</div>
-                </div>
+                <!-- ── Any other wallet type: Midnight has no hardware-wallet
+                     signing support. ── -->
+                <template v-else>
+                  <div class="hw-notice">
+                    <v-icon size="40" color="var(--g-text-3)" class="mb-2">mdi-alert-circle-outline</v-icon>
+                    <div class="text-body-2 grey--text text-center">{{ $t('midnight.connector.walletTypeUnsupported') }}</div>
+                  </div>
+                </template>
               </template>
 
               <!-- The same five-node timeline the options page shows. This
@@ -338,12 +377,33 @@
                   {{ $t('midnight.sponsor.feePaidByLabel') }}: {{ sponsorWallet.name }}
                 </div>
                 <MidnightSendTimeline compact :nodes="timelineNodes" />
-                <div class="mini-tl__keep">{{ $t('midnight.sponsor.keepOpen') }}</div>
+                <!-- Gero Cloud stayed busy after the automatic resubmits: the transaction is
+                     signed and kept in memory; Try again resends the same bytes, no password. -->
+                <template v-if="busyPrompt">
+                  <GNote icon="mdi-clock-outline" role="status" class="mt-2" data-test="midnight-send-still-busy">
+                    {{ $t('midnight.busy.stillBusy') }}
+                  </GNote>
+                  <div ref="busyActionsEl" class="mini-tl__busy-actions mt-2">
+                    <GButton tier="secondary" compact data-test="midnight-send-busy-cancel" @click="answerBusy('cancel')">{{ $t('common.cancel') }}</GButton>
+                    <GButton tier="primary" compact data-test="midnight-send-busy-retry" @click="answerBusy('retry')">{{ $t('common.tryAgain') }}</GButton>
+                  </div>
+                </template>
+                <!-- The send runs in this panel: closing it stops the send. -->
+                <div v-else class="mini-tl__keep">{{ $t('midnight.send.keepPanelOpen') }}</div>
               </div>
 
-              <div v-if="passwordError" class="text-caption mt-2 text-center" style="color: var(--g-error)">
+              <!-- Not an error: sends are paused on this network, or this build can't sign
+                   for the network's ledger. The amber note, and the CTA is disabled. -->
+              <GNote v-if="sendBlock" icon="mdi-pause-circle-outline" role="status" class="mt-2" data-test="midnight-send-blocked">
+                {{ sendBlockText }}
+              </GNote>
+
+              <p v-if="busyCancelled && !submitting" role="status" class="mini-tl__cancelled t-caption mt-2 mb-0 text-center" data-test="midnight-send-cancelled">
+                {{ $t('midnight.busy.nothingSent') }}
+              </p>
+              <p v-if="passwordError" role="alert" class="t-caption mt-2 mb-0 text-center" style="color: var(--g-error)">
                 {{ passwordError }}
-              </div>
+              </p>
 
               <div class="step-actions-row mt-3">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" block :disabled="sendDispatched" @click="editStep(3)">
@@ -365,9 +425,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, toRefs } from 'vue';
+import { MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY, dustShortForFee } from '@/chains/midnight/midnightFeeEstimate';
+import { ref, computed, watch, nextTick, toRefs, onBeforeUnmount } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
+import { provingDetail } from '@/shared/composables/useProvingElapsed';
+import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import BottomSheet from '../BottomSheet.vue';
@@ -379,6 +442,7 @@ import TransactionDetailsCard, {
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { walletStore } from '@/stores/walletStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
+import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
 import { midnightStore } from '@/stores/midnightStore';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
@@ -386,7 +450,7 @@ import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSendLive, mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive } from '@/chains/midnight/midnightFeeCapacity';
 import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -399,8 +463,14 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useChainContext } from '../../composables/useChainContext';
 import snackbar from '@/plugins/snackbar';
+import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import { debugLog } from '@/utils/debug';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
+import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
+import { isMidnightBusyCancelled, type MidnightBusyHandlers } from '@/services/midnightBusyRetry';
+import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 
 const { t } = useTranslation();
 const { themeColors } = useChainContext();
@@ -413,6 +483,14 @@ const { loggedWallet } = toRefs(walletStore);
 
 // ── State ──
 const step = ref(1);
+/**
+ * Why sends on this wallet's network are held, if they are, as one reason:
+ * update required, the network upgrade, or a rebuild in progress
+ * (useMidnightSendHold.ts). `writesPaused` is "held for any of them".
+ */
+const sendHold = useMidnightSendHold(() => loggedWallet.value?.network);
+const writesPaused = sendHold.held;
+const writesHeldText = sendHold.sendText;
 const stepperEl = ref<HTMLElement | null>(null);
 
 const recipient = ref('');
@@ -422,7 +500,74 @@ const showQR = ref(false);
 const spendingPassword = ref('');
 const showPassword = ref(false);
 const passwordError = ref('');
+/** The last send failed with LEDGER_MISMATCH: the CTA reads "Try again" and sends from a new build. */
+const ledgerMismatch = ref(false);
+const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('miniGero.confirmSend')));
+/** Refused for a state the user can't fix here (midnightApiError.ts): a note, and the CTA is disabled. */
+const sendBlock = ref<MidnightSendBlock | null>(null);
+const sendBlockText = ref('');
+
+/** Seconds until the automatic resubmit while Gero Cloud is busy (midnightBusyRetry.ts). */
+const busySeconds = ref<number | null>(null);
+/** Set while the send waits for Try again or Cancel after the automatic resubmits. */
+const busyPrompt = ref<((choice: 'retry' | 'cancel') => void) | null>(null);
+/** Shown after Cancel on the still-busy prompt: nothing went out, and nothing went wrong. */
+const busyCancelled = ref(false);
+const busyActionsEl = ref<HTMLElement | null>(null);
+/** Ends the current send's busy countdown at once (Cancel, the sheet going away), timer included. */
+let busyAbort: AbortController | null = null;
+
+/** The busy countdown and the still-busy prompt for one send. */
+function busyHandlers(current: () => boolean): MidnightBusyHandlers {
+  busyAbort?.abort();
+  busyAbort = new AbortController();
+  return {
+    signal: busyAbort.signal,
+    onCountdown: (seconds) => { if (current()) busySeconds.value = seconds; },
+    onStillBusy: () => new Promise<'retry' | 'cancel'>((resolve) => {
+      if (!current()) { resolve('cancel'); return; }
+      busyPrompt.value = (choice) => { busyPrompt.value = null; resolve(choice); };
+    }),
+  };
+}
+
+function answerBusy(choice: 'retry' | 'cancel') {
+  if (choice === 'cancel') busyAbort?.abort();
+  busyPrompt.value?.(choice);
+}
+onBeforeUnmount(() => answerBusy('cancel'));
+// The prompt is the next thing to act on: focus Try again when it appears.
+watch(busyPrompt, (prompt) => {
+  if (!prompt) return;
+  void nextTick(() => busyActionsEl.value?.querySelector<HTMLElement>('[data-test="midnight-send-busy-retry"]')?.focus());
+});
+
+/** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
+function showSendError(e: unknown) {
+  // Cancel while Gero Cloud was busy: nothing was sent and nothing went wrong.
+  if (isMidnightBusyCancelled(e)) {
+    busyCancelled.value = true;
+    return;
+  }
+  const message = e instanceof Error ? e.message : String(e);
+  const block = midnightSendBlockOf(e);
+  ledgerMismatch.value = !block && midnightApiErrorKind(e) === 'ledgerMismatch';
+  if (block) {
+    sendBlock.value = block;
+    sendBlockText.value = message;
+    passwordError.value = '';
+    return;
+  }
+  passwordError.value = message;
+}
 const submitting = ref(false);
+// Turned on while the password step is open: back to the review, so no password or PassKey is asked for.
+watch(writesPaused, (paused) => {
+  if (paused && step.value === 4 && !submitting.value) {
+    approval.invalidate();
+    step.value = 3;
+  }
+});
 const txSuccess = ref(false);
 const txId = ref('');
 
@@ -523,7 +668,9 @@ const recipientError = computed(() => {
 
 /**
   * Whether this wallet may be unable to pay the DUST fee. Surfaced on the amount step so
-  * the user learns it before authorizing, not after the SDK stalls.
+  * the user learns it before authorizing, not after the DUST sync and fee balancing:
+  * on ledger 9 `balanceLightDust9` then throws the SDK's InsufficientFundsError (said
+  * as `midnight.errors.dustInsufficient`).
   *
   * Judged on the MERGED live balance (Path A + Path B) — the figure the
   * battery shows — not the store's Path-A `dustState`, which reads zero for a
@@ -541,6 +688,13 @@ const dustFeeInputs = computed(() => ({
   settled: dustLive.settled.value,
 }));
 const mayLackDust = computed(() => mayLackDustLive(dustFeeInputs.value));
+/**
+ * The notice beside the sponsor picker. Some DUST, but under a fee's worth, is
+ * not "no DUST": it gets its own wording.
+ */
+const lackDustNotice = computed(() => (midnightFeeCapacityLive(dustFeeInputs.value) === 'short'
+  ? 'midnight.send.lowDustFee'
+  : 'midnight.send.noDustFee'));
 /** A VERIFIED zero: the only reading that blocks. Nothing verifies one today, so this is never true. */
 const noFeeCapacity = computed(() => blocksMidnightSendLive(dustFeeInputs.value));
 
@@ -591,15 +745,17 @@ const isAmountValid = computed(() =>
 //    store's Path-A `dustState` hid it for a cNIGHT-backed wallet, issue 1118) ──
 const dustBattery = computed<{ percent: number } | null>(() =>
   dustBatteryPercent(dustLive.dustBalance.value, dustLive.dustCap.value));
-const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
-
-// Truly empty DUST: the (~1 Speck) fee can't be paid, so the hint escalates to
-// the error tone. Any nonzero DUST covers the fee and stays informational.
-const isDustEmpty = computed(() => dustLive.settled.value && dustLive.dustBalance.value <= 0n);
+// Too little DUST for a send's fee (under 1 DUST: ledger 9 fees are around
+// 0.6 DUST), so the hint escalates to the error tone. More than that stays
+// informational.
+const isDustShort = computed(() => dustLive.settled.value && dustShortForFee(dustLive.dustBalance.value));
+// The hint names the battery level, so it needs a battery to show.
+const isDustLow = computed(() => !!dustBattery.value && (dustBattery.value.percent < 20 || isDustShort.value));
 
 // ── Review model (fed to the shared TransactionDetailsCard, same as the
 //    dashboard dialog) ──
-const feeEstimateDisplay = '< 0.000001';
+// Ledger 9's fee floor: see midnightFeeEstimate.ts (issue 1452, M14).
+const feeEstimateDisplay = MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY;
 
 function truncate(addr: string): string {
   if (!addr) return '';
@@ -616,6 +772,7 @@ const isSelfSend = computed(() => ownAddresses.value.includes(recipient.value.tr
 const reviewOutputs = computed<TxDetailsOutput[]>(() => [{
   kind: isSelfSend.value ? 'own' : 'external',
   truncatedAddress: truncate(recipient.value.trim()),
+  fullAddress: recipient.value.trim(),
   ada: amount.value || '0',
 }]);
 
@@ -633,12 +790,15 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
 function editStep(target: number) {
   if (target < step.value && !sendDispatched.value) {
     approval.invalidate();
+    sendBlock.value = null;
+    ledgerMismatch.value = false;
     step.value = target;
   }
 }
 
 function goToStep(target: number) {
   if (submitting.value) return;
+  if (target === 4 && writesPaused.value) return;
   if (target === 2 && !isAddressValid.value) return;
   if (target === 3 && !isAmountValid.value) return;
   step.value = target;
@@ -675,16 +835,25 @@ function copyTxId() {
 // ── Sign & submit (mirrors MidnightSendDialog.vue's sendUnshielded exactly:
 //    same service call, same credentials shape, same onStage callback, same
 //    addPendingMidnightTx follow-up call after a successful submit). ──
-async function addOptimisticPendingTx(hash: string, current: () => boolean) {
-  const amountBig = parseAmount(amount.value);
-  const to = recipient.value.trim();
-  // Captured with the amount: without it a token send shows as NIGHT in
-  // history until gero-sync backfills the confirmed row.
-  const token = selectedToken.value;
+/** The wallet that sent is still the one logged in (the sheet may be gone, the wallet not switched). */
+function isSameWallet(sent: { id: number; network: string }): boolean {
+  return walletStore.loggedWallet?.id === sent.id && walletStore.loggedWallet?.network === sent.network;
+}
+
+// From the values the send started with (the token too: without it a token
+// send shows as NIGHT in history until gero-sync backfills the confirmed row).
+// Not tied to the view: an accepted transaction gets its pending row even if
+// the sheet is gone.
+async function addOptimisticPendingTx(
+  hash: string,
+  draft: { amount: bigint; to: string; token: string },
+  sent: { ledgerHash: boolean; fromAddress: string },
+) {
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    if (!current()) return;
-    await addPendingMidnightTx(hash, amountBig, to, false, token);
+    // `ledgerHash`: whether `hash` is the ledger hash the indexer knows (midnightPendingSends.ts);
+    // `fromAddress`: the background records the row only into the sending wallet's history.
+    await addPendingMidnightTx(hash, draft.amount, draft.to, false, draft.token, sent.fromAddress, sent.ledgerHash);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -725,20 +894,28 @@ async function acceptConsent() {
   pendingCredentials.value = null;
   pendingAuthorization = null;
   if (!credentials || !current?.()) { credentials?.prfSecret?.fill(0); return; }
-  const mode = midnightStore.proofServer.mode;
-  if (mode !== 'local' && (mode === 'zkpaas' ? 'zkpaas' : 'cloud') !== consentProvider.value) {
+  // The prover may have changed while the notice was open: decide again.
+  if (sendProver() !== consentProvider.value) {
     await approval.run(() => routeSend(credentials, current));
     return;
   }
   await approval.run(() => submitSend(credentials, current));
 }
+/**
+ * Who proves this public send (midnight-tx.service's rule): in Gero Cloud
+ * mode its DUST fee is proven on this device, so only zkPaaS (and Stagenet,
+ * which this device cannot prove) still needs a consent notice.
+ */
+function sendProver() {
+  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded');
+}
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   if (!current()) { credentials.prfSecret?.fill(0); return; }
-  const mode = midnightStore.proofServer.mode;
-  if (mode !== 'local' && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
+  const prover = sendProver();
+  if ((prover === 'cloud' || prover === 'zkpaas') && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) {
     pendingCredentials.value = credentials;
     pendingAuthorization = current;
-    consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
+    consentProvider.value = prover;
     consentOpen.value = true;
     submitting.value = false;
     return;
@@ -755,8 +932,19 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
     return;
   }
   passwordError.value = '';
+  ledgerMismatch.value = false;
+  busyCancelled.value = false;
   submitting.value = true;
   sendStage.value = 'authorizing';
+  // Captured now: the pending row and the sponsor link are recorded once the
+  // submit is accepted, even if the sheet has been reset or closed by then.
+  const draft = {
+    amount: parseAmount(amount.value),
+    to: recipient.value.trim(),
+    token: selectedToken.value,
+    amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
+  };
+  const paying = sponsorWallet.value;
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
     const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
@@ -767,30 +955,38 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       {
         fromAddress: wallet.baseAddress,
         outputs: [{
-          address: recipient.value.trim(),
-          amount: parseAmount(amount.value).toString(),
-          token: selectedToken.value,
+          address: draft.to,
+          amount: draft.amount.toString(),
+          token: draft.token,
         }],
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
-      (stage) => { if (current()) sendStage.value = stage; },
+      (stage) => {
+        // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
+        if (stage === 'submitting' || stage === 'provingCloud') {
+          credentials.prfSecret?.fill(0);
+          sponsor?.prfSecret?.fill(0);
+        }
+        if (current()) sendStage.value = stage;
+      },
       sponsor,
       false,
       current,
+      busyHandlers(current),
     );
-    if (!current()) return;
     debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
-      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+      'status:', result.status, 'sponsor:', paying?.id ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
     // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
     // match the row later keys on it.
     const historyHash = historyHashForSubmittedTx(result);
 
+    // The transaction is accepted: record it whether or not this view is
+    // still the current one. Only the screen updates below wait on that.
     // Remember who paid, for the battery indicator on both wallets and the
     // transaction details screen. Best effort — never fail a submitted tx.
-    if (sponsorWallet.value) {
-      const paying = sponsorWallet.value;
+    if (paying) {
       try {
         const { recordSponsoredTx, saveSponsorLink } = await import('@/chains/midnight/midnightSponsorLinks');
         const at = Date.now();
@@ -808,33 +1004,36 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
           at,
           sponsoredWalletId: wallet.id,
           sponsoredWalletName: wallet.name,
-          amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
-          recipient: recipient.value.trim(),
+          amountLabel: draft.amountLabel,
+          recipient: draft.to,
         });
       } catch (e) {
         debugLog('🌙 could not record sponsorship for this tx', e);
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
+    // Into this wallet's history only: after a wallet switch it would land in another's.
+    if (isSameWallet(wallet)) void addOptimisticPendingTx(historyHash, draft, { ledgerHash: !!result.ledgerTxHash, fromAddress: wallet.baseAddress });
     if (!current()) return;
-    void addOptimisticPendingTx(historyHash, current);
     txId.value = historyHash;
     txSuccess.value = true;
     snackbar.fireSuccess(t('miniGero.txSubmitted'));
   } catch (e) {
     if (!current()) return;
-    passwordError.value = e instanceof Error ? e.message : String(e);
+    showSendError(e);
   } finally {
     sponsor?.prfSecret?.fill(0);
     credentials.prfSecret?.fill(0);
     spendingPassword.value = '';
+    busySeconds.value = null;
+    answerBusy('cancel');
     submitting.value = false;
     sendStage.value = 'idle';
   }
 }
 
 async function signAndSubmit() {
-  if (!spendingPassword.value || submitting.value || !isAddressValid.value || !isAmountValid.value) return;
+  if (!spendingPassword.value || submitting.value || !isAddressValid.value || !isAmountValid.value || writesPaused.value) return;
   const current = approval.capture();
   const password = spendingPassword.value;
   await approval.run(() => routeSend({ password }, current));
@@ -932,7 +1131,7 @@ watch(mayLackDust, (needsSponsor) => {
 }, { immediate: true });
 
 async function signAndSubmitPrf() {
-  if (submitting.value || !isAddressValid.value || !isAmountValid.value) return;
+  if (submitting.value || !isAddressValid.value || !isAmountValid.value || writesPaused.value) return;
   const current = approval.capture();
   await approval.run(async () => {
   passwordError.value = '';
@@ -942,7 +1141,7 @@ async function signAndSubmitPrf() {
     const prfBytes = await requestRawPrf(current);
     await routeSend({ prfSecret: prfBytes }, current);
   } catch (e) {
-    if (current()) passwordError.value = e instanceof Error ? e.message : String(e);
+    if (current()) showSendError(e);
   } finally {
     submitting.value = false;
     sendStage.value = 'idle';
@@ -976,6 +1175,8 @@ function resetAll() {
   spendingPassword.value = '';
   showPassword.value = false;
   passwordError.value = '';
+  ledgerMismatch.value = false;
+  sendBlock.value = null;
   submitting.value = false;
   sendStage.value = 'idle';
   txSuccess.value = false;
@@ -983,8 +1184,23 @@ function resetAll() {
 }
 
 watch(() => props.modelValue, (val) => {
-  if (val) resetAll();
+  if (!val) return;
+  resetAll();
+  applySendAgain();
 });
+
+/**
+ * "Send again" for a send that never went through (midnightPendingSends.ts):
+ * recipient, token and amount filled in, at the first step; the user reviews
+ * and confirms as for any send.
+ */
+function applySendAgain() {
+  const prefill = takeMidnightSendPrefill();
+  if (!prefill) return;
+  selectedToken.value = prefill.token || 'NIGHT';
+  recipient.value = prefill.recipient;
+  amount.value = toAmountInput(prefill.amount, selectedDecimals.value);
+}
 
 /** Token colours are 64-char hex; show the head so a label stays readable. */
 function shortToken(colour: string): string {
@@ -1004,10 +1220,23 @@ const timelineLabels = computed(() => ({
     : t('midnight.send.stageSync')) as string,
   sign: t('midnight.send.stageSign') as string,
   submit: t('midnight.send.stageSubmit') as string,
+  provingDevice: t('midnight.send.stageProvingDevice') as string,
   provingLocal: t('midnight.send.stageProvingLocal') as string,
   provingZkpaas: t('midnight.send.stageProvingZkpaas') as string,
+  provingCloud: t('midnight.send.stageProvingCloud') as string,
 }));
-const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels);
+const { message: liveMessage, announce } = usePoliteAnnouncer();
+const timelineNodes = useMidnightSendTimeline(
+  computed(() => sendStage.value),
+  timelineLabels,
+  {
+    // "Keep this panel open" is always shown under the timeline, so the slow hint need not repeat it.
+    provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), { keepOpenShown: true }),
+    announce,
+    // Gero Cloud is busy: counting down to the automatic resubmit.
+    submitDetail: computed(() => (busySeconds.value != null ? String(t('midnight.busy.retrying', { n: busySeconds.value })) : undefined)),
+  },
+);
 </script>
 
 <style scoped lang="scss">
@@ -1178,23 +1407,6 @@ const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), t
   border-radius: var(--g-r-control);
   padding: 8px 10px;
 }
-.midnight-dust-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--g-warning);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
-  padding: 8px 10px;
-}
-.midnight-dust-note--low {
-  color: var(--g-error);
-  background: var(--g-error-fill);
-  border-color: var(--g-error-line);
-}
 
 /* Chrome number input spinners off */
 input::-webkit-outer-spin-button,
@@ -1270,9 +1482,20 @@ input[type='number'] {
   color: var(--g-text-2);
 }
 
+.mini-tl__cancelled {
+  color: var(--g-text-2);
+}
+
 .mini-tl__keep {
   margin-top: 4px;
   font-size: 11px;
   color: var(--g-text-3);
+}
+/* The still-busy prompt under the timeline. */
+.mini-tl__busy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+  justify-content: flex-end;
 }
 </style>

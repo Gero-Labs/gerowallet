@@ -25,7 +25,7 @@ import { isEligibleWallet } from './notifyEligibility';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { NotifyDeferred, NotifyError, type NotifyClient } from './notifyClient';
 import type { NotifyStore, NotifyWalletState } from './notifyStore';
-import { NOTIFY_PROTOCOL, type DeviceBody, type DeviceView, type NotifyConfig, type WalletLinkBody, type WalletPrefsWrite, type WalletProof, type WatchOrdersBody, type WebPushTarget } from './notifyTypes';
+import { NOTIFY_PROTOCOL, type DeviceBody, type DeviceView, type NotifyConfig, type WalletLinkBody, type WalletPrefsWrite, type WalletProof, type WatchListingsBody, type WatchOrdersBody, type WebPushTarget } from './notifyTypes';
 
 export const NOTIFY_REASSERT_ALARM = 'notify-reassert';
 export const NOTIFY_RETRY_ALARM = 'notify-retry';
@@ -74,10 +74,21 @@ export interface NotifyRegistrationDeps {
   loadProof: (deviceId: string, stakeAddress: string) => Promise<WalletProof | null>;
   /** walletManager.produceDeviceRegisterProof: signs and caches the proof under user auth. */
   produceProof: (auth: { password?: string; privateKeyBytes?: Uint8Array }) => Promise<boolean>;
+  /** The announcement kinds switched off on this device (`product`, `news`); sent with every PUT /device. */
+  announcementsOff?: () => Promise<string[]>;
+  /**
+   * What this build can do with a push (`DEVICE_CAPS`). gero-sync sends announcement pushes only to
+   * a device that lists `announcements`, so a build that cannot verify one (no key pinned) lists
+   * nothing. Absent: nothing.
+   */
+  caps?: () => string[];
   now?: () => number;
   random?: (n: number) => Uint8Array;
   log?: (message: string) => void;
 }
+
+/** What this client can render beyond wallet alerts (PUT /device `caps`). */
+export const DEVICE_CAPS: readonly string[] = ['announcements'];
 
 export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials' | 'settings';
 export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recovered' | 'needs_attention' | 'unavailable' | 'deferred' | 'error' | 'skipped';
@@ -92,6 +103,14 @@ export interface WatchOrdersInput {
 }
 export type WatchOrdersResult = { result: 'ok'; watching: number } | { result: 'not_registered' } | { result: 'failed' };
 
+/** A Gero market listing to watch for a sale: the wallet, the payment key hash that owns it, and its output ref(s). */
+export interface WatchListingsInput {
+  walletId: number;
+  ownerPkh: string;
+  listingRefs: string[];
+}
+export type WatchListingsResult = WatchOrdersResult;
+
 export interface NotifyRegistration {
   setBrowserEnabled(enabled: boolean): Promise<BrowserEnableResult | 'off'>;
   enableWallet(auth?: { password?: string; privateKeyBytes?: Uint8Array }): Promise<WalletEnableResult>;
@@ -103,6 +122,12 @@ export interface NotifyRegistration {
   walletRemoved(walletId: number): Promise<void>;
   /** Tell the server to watch a submitted swap for a fill or cancel (§4.9). Fire-and-forget: no retry queue. */
   watchOrders(input: WatchOrdersInput): Promise<WatchOrdersResult>;
+  /**
+   * Tell the server to watch a Gero NFT listing for a sale. Fire-and-forget and never fatal: a device with no
+   * push registration is `not_registered`, and anything else the server refuses (a 422 `limit_exceeded` on the
+   * wallet's pending watches included) is `failed`, logged, without a retry.
+   */
+  watchListings(input: WatchListingsInput): Promise<WatchListingsResult>;
   reassert(trigger: ReassertTrigger): Promise<ReassertResult>;
   /** Re-send the logged wallet's link after its credential range grew. */
   credentialsChanged(): Promise<void>;
@@ -143,8 +168,13 @@ export function credentialsHash(creds: string[]): string {
   return bytesToHex(sha256(new TextEncoder().encode(creds.join(','))));
 }
 
-export function targetFingerprint(target: WebPushTarget | null, appVersion: string, locale: string, osPermission: boolean): string {
-  return JSON.stringify({ target, appVersion, locale, osPermission });
+/**
+ * What the last PUT /device said, to tell when it must be sent again. The announcement opt-outs are
+ * part of it only when there are any, so a device without them keeps the fingerprint it had. `caps`
+ * is a constant of the build and rides on `appVersion`.
+ */
+export function targetFingerprint(target: WebPushTarget | null, appVersion: string, locale: string, osPermission: boolean, announcementsOff: readonly string[] = []): string {
+  return JSON.stringify({ target, appVersion, locale, osPermission, ...(announcementsOff.length ? { announcementsOff: [...announcementsOff].sort() } : {}) });
 }
 
 function base64UrlToBytes(s: string): Uint8Array {
@@ -175,7 +205,17 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       osPermission: true, // Chrome grants it with the `notifications` permission
       transport: target ? 'webpush' : 'none',
       ...(target ? { webpush: target } : {}),
+      caps: (deps.caps?.() ?? []).filter((c) => DEVICE_CAPS.includes(c)),
+      announcementsOff: await announcementsOff(),
     };
+  }
+
+  /** Only the kinds that may be switched off, whatever the store hands back: `service` is never sent. */
+  async function announcementsOff(): Promise<string[]> {
+    try {
+      const off: unknown = await deps.announcementsOff?.();
+      return Array.isArray(off) ? ['product', 'news'].filter((k) => off.includes(k)) : [];
+    } catch { return []; }
   }
 
   /** PUT /device and remember what was sent. */
@@ -184,7 +224,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
     const view = await client.putDevice(body);
     await store.updateDevice({
       lastPutAt: now(),
-      lastPutFingerprint: targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission),
+      lastPutFingerprint: targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff),
       targetStatus: view.target.status === 'active' ? 'active' : 'none',
       endpoint: target?.endpoint ?? null,
       vapidKid: target?.vapidKid ?? null,
@@ -436,7 +476,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
     } else {
       const target = targetOf(sub, device.vapidKid ?? (config.vapidKid as string));
       const body = await deviceBody(target);
-      const fingerprint = targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission);
+      const fingerprint = targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff);
       if (fingerprint !== device.lastPutFingerprint || device.lastPutAt === null || now() - device.lastPutAt >= view.reassertAfterMs) {
         try { sent = await putDevice(target); } catch (e) { if (e instanceof NotifyDeferred) return 'deferred'; throw e; }
       }
@@ -568,6 +608,24 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
           return { result: 'not_registered' };
         }
         log(`notify POST orders failed: ${String(e)}`);
+        return { result: 'failed' };
+      }
+    },
+
+    async watchListings({ walletId, ownerPkh, listingRefs }) {
+      const w = await store.getWallet(walletId);
+      if (!w || w.registeredAt === null) return { result: 'not_registered' };
+      const body: WatchListingsBody = { ownerPkh, listingRefs };
+      try {
+        const { watching } = await client.watchListings(w.walletTag, body);
+        return { result: 'ok', watching };
+      } catch (e) {
+        if (e instanceof NotifyError && e.code === 'wallet_not_registered') {
+          await store.setWallet(walletId, { ...w, registeredAt: null });
+          return { result: 'not_registered' };
+        }
+        // limit_exceeded (details.limit = listingWatches) and every other refusal: the listing simply goes unwatched.
+        log(`notify POST listings failed: ${e instanceof NotifyError ? `${e.status} ${e.code}` : String(e)}`);
         return { result: 'failed' };
       }
     },

@@ -38,6 +38,12 @@ interface WsHandlers {
    * DEVICE_REGISTER (which the relay rejects if it arrives before SUBSCRIBE).
    */
   onSocketOpen?: () => void;
+  /**
+   * The `ANNOUNCEMENTS` frame: the version number of the public announcement feed. A poke and
+   * nothing more. It carries no content, and nothing but that number is read from it; whoever
+   * handles it reads the feed and verifies every signature there (announcementEngine).
+   */
+  onAnnouncements?: (seq: unknown) => void;
 }
 
 /**
@@ -229,6 +235,17 @@ class WebSocketService {
           last_synced_block: this.lastSyncedBlock,
           platform: 'extension',
         });
+      } else if (this.chain === 'SOLANA') {
+        // Solana (gero-sync docs/solana-wire.md): one base58 address, and the cursor is a
+        // slot. credentials / addresses / programmableAddresses are ignored for Solana.
+        this.send({
+          type: 'SUBSCRIBE',
+          chain: this.chain,
+          network: this.network,
+          address: this.stakeAddress,
+          lastSyncedBlock: this.lastSyncedBlock,
+          platform: 'extension',
+        });
       } else {
         this.send({
           type: 'SUBSCRIBE',
@@ -405,9 +422,19 @@ class WebSocketService {
             utxos: data['utxos'],
             addresses: data['addresses'],
             account: data['account'],
+            // Solana's snapshot (balance, tokens, tip slot, truncation) is on CATCH_UP_COMPLETE
+            // itself; a wallet with no history has no SYNC batch to carry it.
+            ...Object.fromEntries(Object.entries(data).filter(([key]) => key.startsWith('solana_'))),
           };
           debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as unknown[])?.length || 0} UTxOs`);
-          this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
+          if (this.chain === 'SOLANA') {
+            // Solana's `block` here is the tip, for display. The cursor is the newest slot
+            // actually delivered (docs/solana-wire.md), so a reconnect re-reads from there.
+            const slots = allTransactions.map((tx) => Number((tx as { absolute_slot?: number }).absolute_slot) || 0);
+            if (slots.length > 0) this.lastSyncedBlock = Math.max(this.lastSyncedBlock, ...slots);
+          } else {
+            this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
+          }
           this.clearSyncPendingWhenApplied(this.handlers.onSync?.(combinedPayload), token);
           this.pendingTxBatches = [];
 
@@ -445,6 +472,11 @@ class WebSocketService {
           debugLog('🔄 Force resync requested by admin');
           this.lastSyncedBlock = 0;
           this.handlers.onForceResync?.();
+          break;
+
+        case 'ANNOUNCEMENTS':
+          // Not sync data: it answers no SUBSCRIBE and touches no sync state.
+          this.handlers.onAnnouncements?.(data['seq']);
           break;
 
         default:
@@ -619,6 +651,19 @@ class WebSocketService {
         address: this.stakeAddress, // anchor = segwit external idx 0
         addresses: this.addresses,
         last_synced_block: lastSyncedBlock,
+        platform: 'extension',
+      });
+      return;
+    }
+    if (this.chain === 'SOLANA') {
+      // Mirrors the SOLANA branch of the initial SUBSCRIBE. Used by FORCE_RESYNC (cursor 0).
+      debugLog(`🔄 Resubscribing SOLANA lastSyncedBlock=${lastSyncedBlock}`);
+      this.send({
+        type: 'SUBSCRIBE',
+        chain: this.chain,
+        network: this.network,
+        address: this.stakeAddress,
+        lastSyncedBlock,
         platform: 'extension',
       });
       return;

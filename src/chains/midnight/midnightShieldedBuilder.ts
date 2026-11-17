@@ -28,11 +28,13 @@
 // since last persist).
 //
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
-import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8, resolveMidnightLedger } from './midnightChainLedger';
 import { validateShieldedTokenType } from './midnightTokenCapabilities';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
 import { debugLog } from '@/utils/debug';
+import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
+import { describeWalletProving, walletProvingProvider } from '@/chains/midnight/midnightWalletProver';
 import {
   loadWalletState,
   saveWalletState,
@@ -55,6 +57,8 @@ export interface BuildAndSignShieldedTransferArgs {
   readonly ttl?: Date;
   readonly dustRegisteredAt?: Date;
   readonly onDustSyncProgress?: (percent: number, detail: string) => void;
+  /** Called once, just before the wallet-side proof starts (only with {@link proving}). */
+  readonly onProving?: () => void;
   /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
@@ -70,13 +74,14 @@ export interface BuildAndSignShieldedTransferArgs {
   /** Single-recipient v1; multi-recipient is a follow-up. */
   readonly outputs: readonly BuildAndSignShieldedTransferOutput[];
   /**
-   * When present, prove (and bind) the transfer against a native-API proof
-   * server at {@code url} before returning, instead of leaving it unproven
-   * for Gero Cloud — self-hosted docker, or Arkhia zkPaaS with its
+   * When present, prove (and bind) the transfer before returning, instead of
+   * leaving it unproven for Gero Cloud: on this device (`{ device: true }`,
+   * the off-by-default shielded flag), or against a native-API proof server
+   * at {@code url} — self-hosted docker, or Arkhia zkPaaS with its
    * {@code x-api-key}/{@code x-api-secret} auth in {@code headers}. See
    * {@link BuildAndSignShieldedTransferResult.proven}.
    */
-  readonly proving?: { readonly url: string; readonly headers?: Record<string, string> };
+  readonly proving?: WalletProvingRequest;
 }
 
 /** Result of {@link buildAndSignShieldedTransfer}. */
@@ -148,7 +153,7 @@ export async function buildAndSignShieldedTransfer(
   args: BuildAndSignShieldedTransferArgs,
 ): Promise<BuildAndSignShieldedTransferResult> {
   args.outputs.forEach(output => validateShieldedTokenType(output.tokenType));
-  if (midnightLedgerVersion(args.sdkNetworkId) === 9) {
+  if (await resolveMidnightLedger(args.sdkNetworkId) === 9) {
     const { buildAndSignShieldedLedger9Transfer } = await import('./midnightShieldedLedger9');
     return buildAndSignShieldedLedger9Transfer(args);
   }
@@ -219,12 +224,12 @@ export async function buildAndSignShieldedTransfer(
           Promise<{ bind: () => { serialize: () => Uint8Array } }>;
       };
       // URL only — never the auth header values (file-header privacy note).
-      debugLog('🌙 shielded tx: proving wallet-side', { url: args.proving.url });
+      debugLog('🌙 shielded tx: proving wallet-side', { prover: describeWalletProving(args.proving) });
+      args.onProving?.();
       const proveStartMs = Date.now();
       let proven: { bind: () => { serialize: () => Uint8Array } };
       try {
-        const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-        const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers });
+        const provider = await walletProvingProvider(args.proving, { sdkNetworkId: args.sdkNetworkId, shielded: true });
         proven = await (unprovenTx as unknown as ProvableTx).prove(
           provider, ledgerMod.CostModel.initialCostModel(),
         );
@@ -309,7 +314,7 @@ export async function startAndSyncShieldedWallet(
   args: StartAndSyncShieldedWalletArgs,
   zswapKeys: ledger.ZswapSecretKeys,
 ): Promise<ShieldedWalletInstance> {
-  requireMidnightLedger8(args.sdkNetworkId, 'Shielded wallet synchronization');
+  await requireChainLedger8(args.sdkNetworkId, 'Shielded wallet synchronization');
   const [shieldedMod, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-shielded'),
     import('@midnightntwrk/wallet-sdk-abstractions'),

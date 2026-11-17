@@ -15,6 +15,7 @@ import { Buffer } from 'buffer';
 import { Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { util } from '@cardano-sdk/core';
+import { INVALID_SIGN_DATA_PAYLOAD_MESSAGE, isHexPayload } from './reservedSigningDomains';
 
 export function stringToHex(input: string) {
   let hexString = '';
@@ -44,6 +45,9 @@ const createSigStructureHeaders = (addressBytes: Uint8Array) => {
 };
 
 export const createSignDataBuilder = (addressBytes: Uint8Array, payload: string) => {
+  // Never sign a lenient decode: Buffer.from(x, 'hex') would silently drop an odd last
+  // digit or everything after a non-hex character, signing bytes nobody checked.
+  if (!isHexPayload(payload)) throw new Error(INVALID_SIGN_DATA_PAYLOAD_MESSAGE);
   return COSESign1Builder.new(
     Headers.new(ProtectedHeaderMap.new(createSigStructureHeaders(addressBytes)), HeaderMap.new()),
     Buffer.from(payload, 'hex'),

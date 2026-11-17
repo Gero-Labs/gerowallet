@@ -135,13 +135,11 @@ import NetworkStore from '@/stores/networkStore';
 import governanceActionsStore, { awaitingVoteCount } from '@/stores/governanceActionsStore';
 import type { VoterIdentity, RowVoteStatus } from '@/stores/governanceActionsStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import blockchainApi from '@/api/blockchain-api';
 import { parseGovActionId } from '@/shared/utils/govActionId';
 import { KEYWORD_DREPS } from '@/shared/utils/drepId';
 import { isOpen, daysRemaining } from '@/shared/utils/govLifecycle';
 import { useVoting } from '@/shared/composables/useVoting';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { debugLog } from '@/utils/debug';
 import { orderActions } from '@/modules/governance/components/actions/ordering';
 import ActionRow from '@/modules/governance/components/actions/ActionRow.vue';
 import AsOf from '@/modules/governance/components/actions/AsOf.vue';
@@ -190,50 +188,19 @@ const orderedActions = computed(() => orderActions(state.actions));
 // Batch voting selection
 // ---------------------------------------------------------------------------
 
-const { capability } = useVoting();
+const { capability, isRegisteredDrep, loadDrepRegistration } = useVoting();
 
 // drep129 is an array like every other key list; watch wallets have an empty
 // one — guard it, never index blindly.
 const drepId = computed(() => walletStore.keys?.drep129?.[0]?.address ?? '');
 
-/**
- * Whether this wallet's DRep is registered on chain RIGHT NOW. Having a derived
- * DRep key is not registration, and neither is merely having a record: a
- * retired DRep still returns a row, carrying `registered: false`. Loaded once
- * per mount; a lookup failure leaves it false (selection simply stays hidden).
- */
-const isRegisteredDrep = ref(false);
-
-/**
- * Registration is looked up for the IDENTITY, not just for batch selection: a
- * registered DRep votes as itself on the stat strip whether or not its wallet
- * type can batch-sign. The flag and capability gates stay on `selectable`.
- */
-async function loadDrepRegistration(): Promise<void> {
-  if (!drepId.value || !walletStore.loggedWallet) return;
-  try {
-    const record = await blockchainApi.getDRepById(
-      drepId.value,
-      walletStore.loggedWallet.chain,
-      walletStore.loggedWallet.network,
-    );
-    // `registered === true`, not `!!record`. A deregistered DRep still has a
-    // row, so the presence of one says nothing about whether this wallet can
-    // still vote as itself. Note `registered` is retirement and is permanent,
-    // whereas `active: false` is only an inactivity expiry — an inactive DRep
-    // may still cast votes, which is precisely how it becomes active again, so
-    // liveness must NOT gate this.
-    //
-    // Erring toward false is the cheap direction: a registered DRep misread
-    // here just falls through to the delegated branch and gets labelled "your
-    // DRep" instead of "you", while a retired one misread as self would be
-    // offered batch voting the chain will reject.
-    isRegisteredDrep.value = record?.registered === true;
-  } catch (error) {
-    debugLog('ActionList: DRep registration lookup failed', error);
-    isRegisteredDrep.value = false;
-  }
-}
+// `isRegisteredDrep` (shared with the detail page's Vote CTA via useVoting) is
+// whether this wallet's DRep is registered on chain RIGHT NOW. Registration is
+// looked up for the IDENTITY, not just for batch selection: a registered DRep
+// votes as itself on the stat strip whether or not its wallet type can
+// batch-sign. The flag and capability gates stay on `selectable`. A registered
+// DRep misread as unregistered just falls through to the delegated branch,
+// while a retired one misread as self would be offered votes the chain rejects.
 
 const selectable = computed(
   () =>
@@ -369,7 +336,7 @@ function goToDReps(): void {
  * Resolves once the DRep-registration lookup has settled, so the votes join
  * always runs against a known identity rather than racing it.
  */
-let registrationReady: Promise<void> = Promise.resolve();
+let registrationReady: Promise<unknown> = Promise.resolve();
 
 function reload(page = 1): void {
   // A new page/filter means new rows — a selection kept across it would let

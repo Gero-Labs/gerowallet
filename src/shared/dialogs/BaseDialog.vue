@@ -8,8 +8,9 @@
     transition="g-dialog-transition"
     scrim="var(--g-canvas)"
     opacity="0.6"
+    :content-class="['base-dialog', { 'base-dialog--with-drawer': drawerBeside }]"
   >
-    <v-card class="pa-5 liquid-glass-dialog" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
+    <v-card class="pa-5 liquid-glass-dialog base-dialog__card" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
       <!-- Decoration, clipped to the card: the rings are a fixed 180px, taller than a
            short dialog, and unclipped they overflowed it and gave it a scrollbar. -->
       <div class="rings-clip" aria-hidden="true">
@@ -36,14 +37,14 @@
             <v-img v-else :src="img"  :style="imgStyle"></v-img>
           </v-avatar>
           <div class="ml-5 mr-3 my-4 g-list-icon" v-if="icon">
-            <v-icon style="font-size: 56px">{{icon}}</v-icon>
+            <v-icon style="font-size: 56px" :color="iconColor">{{icon}}</v-icon>
           </div>
           <!-- Header illustration (e.g. an IsoScene) in place of img/icon. -->
           <div v-if="$slots['art']" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
             <slot name="art"></slot>
           </div>
           <div class="g-list-content">
-            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;" :style="{ WebkitLineClamp: titleLines }">
               {{ title }}
               <v-tooltip location="bottom" v-if="titleInfo"  max-width="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ props: activatorProps }">
@@ -60,12 +61,19 @@
                 <span>{{ titleInfo }}</span>
               </v-tooltip>
             </v-list-item-title>
-            <v-list-item-subtitle style="white-space: normal; word-break: break-word">
+            <!-- Never clamped: `lines="two"` gives Vuetify's subtitle a 2-line clamp, which cut
+                 explanations off with nothing to recover them ("Signing does…" in the cashback
+                 claim prompt hid "Signing does not move any funds."). -->
+            <v-list-item-subtitle style="white-space: normal; word-break: break-word; -webkit-line-clamp: unset;">
               {{subtitle}}
             </v-list-item-subtitle>
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
               {{ truncate(subtitle2) }}<CopyButton x-small :value="subtitle2" class="ml-1" />
             </v-list-item-subtitle>
+            <!-- Under the title, for a line that is more than text (chips, a date). -->
+            <div v-if="$slots['meta']" class="base-dialog__meta">
+              <slot name="meta"></slot>
+            </div>
           </div>
         </v-list-item>
       </v-card-title>
@@ -77,11 +85,16 @@
         <v-icon color="var(--g-text-2)">mdi-window-close</v-icon>
       </v-btn>
     </v-card>
+    <!-- Beside the card's right edge: a DialogDrawer inside the dialog opens here, so what it
+         holds sits next to the dialog instead of making the dialog taller. -->
+    <div ref="drawerHost" class="base-dialog__drawer-host"></div>
   </v-dialog>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, provide, ref } from 'vue';
+import { useMediaQuery } from '@vueuse/core';
 import { cssUrl } from '@/shared/utils/cssUrl';
+import { DIALOG_DRAWER_GAP, DIALOG_DRAWER_HOST, DIALOG_DRAWER_WIDTH } from './dialogDrawer';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 
@@ -114,11 +127,20 @@ const props = defineProps({
   icon: {
     type: String,
   },
+  /** The colour of `icon`, e.g. 'var(--g-error)'. Absent: the theme's own. */
+  iconColor: {
+    type: String,
+  },
   title: {
     type: String,
   },
   titleInfo: {
     type: String,
+  },
+  /** Lines the title may take before it is clamped with an ellipsis. */
+  titleLines: {
+    type: Number,
+    default: 1,
   },
   subtitle: {
     type: String
@@ -173,6 +195,25 @@ const SIZE_WIDTHS: Record<string, number> = { sm: 420, md: 560, lg: 720, xl: 960
 /** Explicit `width` wins; otherwise the size token decides. */
 const resolvedWidth = computed(() => props.width ?? SIZE_WIDTHS[props.size] ?? SIZE_WIDTHS['md']);
 
+// ── Drawer beside the dialog (see DialogDrawer) ──
+// The pair needs the dialog, the gap and the drawer side by side, plus the overlay's 24px
+// margin on each side; a narrower window gets the drawer in place instead.
+const VIEWPORT_MARGINS = 48;
+const drawerHost = ref<HTMLElement | null>(null);
+const roomBeside = useMediaQuery(() => `(min-width: ${resolvedWidth.value + DIALOG_DRAWER_GAP + DIALOG_DRAWER_WIDTH + VIEWPORT_MARGINS}px)`);
+const openDrawers = ref(new Set<symbol>());
+const drawerBeside = computed(() => roomBeside.value && openDrawers.value.size > 0);
+provide(DIALOG_DRAWER_HOST, {
+  el: drawerHost,
+  roomBeside,
+  setOpen: (id, open) => {
+    const next = new Set(openDrawers.value);
+    if (open) next.add(id);
+    else next.delete(id);
+    openDrawers.value = next;
+  },
+});
+
 const isDialogOpen = computed({
   get() {
     return props.isOpen;
@@ -184,7 +225,38 @@ const isDialogOpen = computed({
   }
 });
 </script>
+<style>
+/* The overlay content holds the card and, beside it, the drawer host. While a drawer is
+   open the pair is centred: the dialog moves left by half of what the drawer adds. The
+   width and gap mirror DIALOG_DRAWER_WIDTH and DIALOG_DRAWER_GAP. */
+.base-dialog {
+  --dialog-drawer-width: 320px;
+  --dialog-drawer-gap: var(--g-s-3);
+  transition: translate var(--g-dur-slow) var(--g-ease-sheet);
+}
+
+.base-dialog--with-drawer {
+  translate: calc((var(--dialog-drawer-width) + var(--dialog-drawer-gap)) / -2) 0;
+}
+</style>
+
 <style scoped>
+/* Above the drawer host, so a drawer slides out from behind the card's edge. */
+.base-dialog__card {
+  z-index: 1;
+}
+
+.base-dialog__drawer-host {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--dialog-drawer-gap));
+  width: var(--dialog-drawer-width);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
 .close-button {
   position: absolute;
   top: 26px;
@@ -195,6 +267,10 @@ const isDialogOpen = computed({
 .base-dialog-art {
   flex: none;
   width: 96px;
+}
+
+.base-dialog__meta {
+  margin-top: var(--g-s-1);
 }
 
 .base-dialog-img-mask {

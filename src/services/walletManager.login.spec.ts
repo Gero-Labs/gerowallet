@@ -5,6 +5,7 @@ const env = vi.hoisted(() => {
   const loading = { loading: false, isRestoring: false };
   return {
     state, loading, constructed: vi.fn(), lastSync: vi.fn(), waitForSync: vi.fn(),
+    storedWallets: vi.fn(async (): Promise<Record<number, unknown>> => ({})),
     syncing: vi.fn((value: boolean) => { state.isSyncing = value; }),
     locked: vi.fn((value: boolean) => { state.isLocked = value; }),
   };
@@ -13,7 +14,14 @@ vi.mock('@/chrome/walletBg', () => ({
   WalletBg: class {
     id: number;
     chain = 'Cardano';
-    constructor(wallet: { id: number }) { this.id = wallet.id; env.constructed(wallet.id); }
+    xfp?: string;
+    firmwareVersion?: string;
+    constructor(wallet: { id: number; xfp?: string; firmwareVersion?: string }) {
+      this.id = wallet.id;
+      this.xfp = wallet.xfp;
+      this.firmwareVersion = wallet.firmwareVersion;
+      env.constructed(wallet.id);
+    }
     getLastSyncInfo = env.lastSync;
   }, alarmListener: vi.fn(),
 }));
@@ -36,8 +44,8 @@ vi.mock('@/utils/networks', () => ({ default: {} }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ default: {} }));
 vi.mock('@/stores/tapToolsStore', () => ({ default: { clear: vi.fn() } }));
 vi.mock('@/db/wallet-db', () => ({ clearDbCache: vi.fn() }));
-// Login reads the stored record (resolveGroupSecrets); none here, so these log in as given.
-vi.mock('@/db/gero-db', () => ({ getAllWallets: async () => ({}) }));
+// Login reads the stored record (resolveGroupSecrets). None by default, so a wallet logs in as given.
+vi.mock('@/db/gero-db', () => ({ getAllWallets: env.storedWallets }));
 vi.mock('@/stores/musicStore', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
@@ -108,6 +116,33 @@ describe('wallet login after worker startup', () => {
     expect(env.locked).not.toHaveBeenCalled();
     expect(env.state.isLocked).toBe(true);
   });
+  // The Keystone signers read both from loggedWallet (keystone.ts createKeystoneSignRequest).
+  it('carries a Keystone\'s fingerprint and paired firmware version to the logged wallet', async () => {
+    const { instance } = await manager();
+    await instance.login({ ...wallet, type: 'Keystone', xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+    expect(env.state.loggedWallet).toMatchObject({ xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+  });
+
+  // A worker restart logs in with the persisted loggedWallet, which may predate a re-pairing.
+  it('logs a Keystone in with the firmware version stored on its record', async () => {
+    const { instance } = await manager();
+    const persisted = { ...wallet, type: 'Keystone', xfp: '0a1b2c3d', firmwareVersion: '1.7.2' };
+    env.storedWallets.mockResolvedValueOnce({ [wallet.id]: { ...persisted, firmwareVersion: '3.2.0' } });
+    await instance.login(persisted);
+    expect(env.state.loggedWallet).toMatchObject({ xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+  });
+
+  // The persisted loggedWallet is hydrated from chrome.storage.local, which any content script
+  // can rewrite, and the Keystone signer gates pool registrations on the version.
+  it('logs a Keystone whose record carries no firmware version in with none, whatever the login object says', async () => {
+    const { instance } = await manager();
+    const stored = { ...wallet, type: 'Keystone', xfp: '0a1b2c3d' };
+    env.storedWallets.mockResolvedValueOnce({ [wallet.id]: stored });
+    await instance.login({ ...stored, firmwareVersion: '9.9.9' });
+    expect(env.state.loggedWallet).toMatchObject({ xfp: '0a1b2c3d' });
+    expect(env.state.loggedWallet).not.toHaveProperty('firmwareVersion', '9.9.9');
+  });
+
   it('does not restart syncing or unlock an already initialized wallet', async () => {
     const { instance } = await manager();
     const first = await instance.login(wallet);

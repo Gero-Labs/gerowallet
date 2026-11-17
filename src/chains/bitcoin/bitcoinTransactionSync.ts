@@ -5,6 +5,7 @@
  * Integrates with the wallet sync service for real-time updates.
  */
 
+import type { Provider } from '@/models/types';
 import { BitcoinApi } from '@/api/bitcoin-api';
 import type { BitcoinTransaction } from '@/api/bitcoin-api';
 import {
@@ -313,9 +314,17 @@ export class BitcoinTransactionSync {
  * @param config Optional sync configuration
  * @returns BitcoinTransactionSync Sync manager instance
  */
+/** The wallet fields the Bitcoin sync reads. */
+export interface BitcoinSyncWallet {
+  chain: string;
+  network: string;
+  publicKey: string;
+  addressType?: string;
+}
+
 export function createBitcoinTransactionSync(
-  wallet: any,
-  provider: any,
+  wallet: BitcoinSyncWallet,
+  provider: Provider,
   config?: Partial<BitcoinSyncConfig>
 ): BitcoinTransactionSync {
   const api = new BitcoinApi(wallet, provider);
@@ -338,8 +347,8 @@ export function createBitcoinTransactionSync(
  * @returns Promise<UnifiedTransaction[]> Array of unified transactions
  */
 export async function syncBitcoinTransactions(
-  wallet: any,
-  provider: any,
+  wallet: BitcoinSyncWallet,
+  provider: Provider,
   currentBlockHeight?: number
 ): Promise<UnifiedTransaction[]> {
   const sync = createBitcoinTransactionSync(wallet, provider);

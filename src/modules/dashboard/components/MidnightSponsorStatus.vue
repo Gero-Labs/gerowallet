@@ -63,7 +63,7 @@ import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 import MidnightFeeWalletStrip from '@/modules/dashboard/components/MidnightFeeWalletStrip.vue';
 import { loadSponsorCandidates } from '@/chains/midnight/midnightSponsorLookup';
-import { mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
+import { hasAnyDustLive } from '@/chains/midnight/midnightFeeCapacity';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import type { SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import {
@@ -136,7 +136,7 @@ const sponsorUnlock = computed(() => sponsorRecord.value?.encryptionMethod ?? 'p
  * reported counts as none, so the note doesn't flash while Path B loads.
  */
 const dustLive = useMidnightDustLive();
-const hasOwnDust = computed(() => !mayLackDustLive({
+const hasOwnDust = computed(() => hasAnyDustLive({
   dustBalance: dustLive.dustBalance.value,
   settled: dustLive.settled.value,
 }));

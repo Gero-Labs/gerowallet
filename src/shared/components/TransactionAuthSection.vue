@@ -5,6 +5,7 @@
       <PassKeyAuthButton
         v-if="!isSigned"
         :disabled="loading"
+        :text="passkeyText"
         @success="$emit('passkey-success', $event)"
         @prf-output="$emit('passkey-prf-output', $event)"
         @error="$emit('passkey-error', $event)"
@@ -82,6 +83,8 @@ interface Props {
   passwordLabel?: string;
   passwordRules?: ((value: string) => boolean | string)[];
   submitText: string;
+  /** The PassKey button's label before signing; empty keeps its own ("Authenticate with PassKey"). */
+  passkeyText?: string;
   submitColor?: string;
   submitElevation?: number;
   submitOutlined?: boolean;
@@ -95,6 +98,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  passkeyText: '',
   submitColor: 'primary',
   submitElevation: 0,
   submitOutlined: false,

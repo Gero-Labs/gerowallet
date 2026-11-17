@@ -96,6 +96,27 @@ describe('Quick Send transaction review with native lazy stepper windows', () =>
     expect(wrapper.getComponent(TransactionDetailsCard).props('riskBadge')?.label).toBe('high');
   });
 
+  it('shows a payment to someone else with its whole address, and change shortened only (GHSA-m39w-wppc-96w9)', async () => {
+    const recipient = 'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
+    const change = 'addr1qx42424242424242424242424242424242424242424242kvenxvenxvenxvenxvenxvenxvenxvenxvenxvenxvenxqjhw070';
+    walletStore.keys = { payment: [], change: [{ address: change }] } as unknown as typeof walletStore.keys;
+    const tx = reactive({
+      body: {
+        outputs: [{ address: recipient, value: { coins: 50_000_000n } }, { address: change, value: { coins: 949_800_000n } }],
+        fee: 200_000n,
+      },
+    }) as unknown as Cardano.Tx;
+    const wrapper = mountSummary(tx);
+    await flushPromises();
+    const full = wrapper.findAll('[data-testid="tx-output-full-address"]');
+    expect(full).toHaveLength(1);
+    expect(full[0].text()).toBe(recipient);
+    // Shortened, the swap the advisory describes changes only these few characters.
+    expect(wrapper.findAll('.tx-output-addr')[0].text()).toBe('addr1q8l...tnzlfk');
+    expect(wrapper.text()).not.toContain(change);
+    walletStore.keys = { payment: [], change: [] } as unknown as typeof walletStore.keys;
+  });
+
   it('invalidates review when going back and rechecks when the summary is shown again', async () => {
     const pending = deferred<{ score: number }>();
     mocks.scan.mockReturnValueOnce(pending.promise);
@@ -160,5 +181,18 @@ describe('Quick Send transaction review with native lazy stepper windows', () =>
     expect(wrapper.getComponent(TransactionDetailsCard).props('riskLoading')).toBe(false);
     expect(wrapper.vm.isReadyFor(tx)).toBe(true);
     vi.restoreAllMocks();
+  });
+});
+
+describe('Quick Send review of a sweep', () => {
+  it('adds the merge fees to the totals and says how many transactions go out', async () => {
+    const wrapper = mount(SummaryStep, {
+      props: { txData: transaction(), recipients: [], active: true, additionalFeeLovelace: 2_000_000, steps: 3 },
+      global: { plugins: [createTestVuetify()] },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('2.310525');
+    expect(wrapper.text()).toContain('12.310525');
+    expect(wrapper.text()).toContain('send.sweepPlanSummary');
   });
 });

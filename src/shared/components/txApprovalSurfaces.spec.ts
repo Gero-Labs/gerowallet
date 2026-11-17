@@ -20,6 +20,69 @@ describe('signTx approval surfaces share one summary', () => {
     });
   }
 
+  // A dApp transaction that spends the user's own Gero listing or creates one is signable once
+  // approved, so both surfaces must give the summary the wallet's stored listings and the network's
+  // listing scripts (their only protection is the preview), and never behind the UI feature flag:
+  // the signing guard applies whatever the flag says, so the preview must too.
+  for (const file of ['sidepanel/components/DAppOverlay.vue', 'popup/modules/views/SignTx.vue']) {
+    it(`${file} gives the summary the wallet's own listings and the listing scripts, whatever the flag says`, () => {
+      const src = read(file);
+      const at = src.indexOf('approvalMarketContext(');
+      expect(at).toBeGreaterThan(-1);
+      const call = src.slice(at, at + 400);
+      expect(call).toContain('listedListings');
+      expect(call).toContain('networks.resolveNftMarketDeployments(');
+      expect(call).not.toContain('isNftMarketEnabled');
+      expect(src).toMatch(/market: approvalMarketContext\(/);
+    });
+  }
+
+  // A listing a dApp creates that pays someone else (owner or seller not the wallet, terms unreadable,
+  // royalties or share off), or a spent listing whose NFT does not come back, blocks Sign on both
+  // surfaces until the user acknowledges it, and the acknowledgement starts over for each request.
+  for (const [file, gate] of [
+    ['sidepanel/components/DAppOverlay.vue', /approvalSummary\.value\?\.requiresMarketAck && !marketAck\.value/],
+    ['popup/modules/views/SignTx.vue', /approvalSummary\.value\.requiresMarketAck && !marketAck\.value/],
+  ] as const) {
+    it(`${file} gates Sign on the market acknowledgement`, () => {
+      const src = read(file);
+      expect(src).toMatch(gate);
+      expect(src).toContain('v-model:market-ack="marketAck"');
+      expect(src).toContain('const marketAck = ref(false)');
+    });
+  }
+
+  it('the side panel forgets the market acknowledgement with every other per-request one', () => {
+    const src = read('sidepanel/components/DAppOverlay.vue');
+    expect(src).toMatch(/foreignValueAck\.value = false;\s*marketAck\.value = false;/);
+  });
+
+  // The Sign button is disabled while any gate holds, but Enter in the password field and the PassKey,
+  // Ledger, Trezor and Keystone entry points are not the button: each tx signer checks the same gate
+  // itself, before it awaits anything.
+  it('every side-panel tx signer checks signTxBlocked before anything is awaited', () => {
+    const src = read('sidepanel/components/DAppOverlay.vue');
+    for (const name of ['signNormal', 'signPrf', 'signLedger', 'signTrezor', 'signKeystone']) {
+      const at = src.indexOf(`async function ${name}() {`);
+      expect(at, name).toBeGreaterThan(-1);
+      const head = src.slice(at, src.indexOf('await ', at));
+      expect(head, name).toMatch(/if \(signTxBlocked\.value\) return;\s*return approval\.run/);
+    }
+  });
+
+  it('the popup holds Sign for a transaction it sent but could not summarise, until acknowledged', () => {
+    const src = read('popup/modules/views/SignTx.vue');
+    expect(src).toMatch(/txDecodeFailed = computed\(\(\) => !!request\.value\?\.data\?\.tx && !approvalSummary\.value\)/);
+    expect(src).toMatch(/txDecodeFailed\.value && !decodeFailedAck\.value/);
+  });
+
+  it('the approval context takes its market part as required (no empty default that fails open)', () => {
+    const src = read('shared/utils/txApprovalSummary.ts');
+    expect(src).toMatch(/extras: \{[^}]*market: ApprovalMarketContext \}\s*,?\s*\): ApprovalContext/);
+    expect(src).not.toMatch(/market\?: ApprovalMarketContext/);
+    expect(src).not.toMatch(/extras\.market\?\./);
+  });
+
   it('the popup blocks Sign (button, PassKey and Enter) until a network mismatch is acknowledged', () => {
     const src = read('popup/modules/views/SignTx.vue');
     const start = src.indexOf('const sign = () => approval.run(async () => {');

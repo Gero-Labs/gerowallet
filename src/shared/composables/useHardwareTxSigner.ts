@@ -21,7 +21,8 @@ import networks from '@/utils/networks';
  *
  * Each device path asks the worker first, as every hardware signature does: txToLedger and
  * createKeystoneSignRequest call the CIP-113 preflight, and Trezor goes through
- * dispatchTrezor or the worker's TREZOR handler. A refusal throws CIP113_SIGN_REFUSAL_MESSAGE.
+ * dispatchTrezor or the worker's TREZOR handler. A refusal throws the worker's fixed message:
+ * CIP113_SIGN_REFUSAL_MESSAGE, or MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE for a transaction marked to fail.
  *
  * Keystone is a QR round trip: `sign` waits until the host's KeystoneSignDialog, driven by
  * the `keystone` refs, scans the device's answer, fails or is cancelled.

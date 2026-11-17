@@ -2,7 +2,6 @@ import {
   Ada,
   BIP32Path,
   DatumType,
-  DeviceStatusCodes,
   TransactionSigningMode,
   TxOutput,
   TxOutputFormat,
@@ -73,9 +72,16 @@ const witnessPublicKeys = (agent: LedgerKeyAgent, deviceConnection: Pick<Ada, 'g
   };
 };
 
+/**
+ * Cardano app 7's "rejected by user" status, the one code the agent compares with. ledgerjs 8
+ * no longer exports its status codes; app 8 reports a rejection as 0x6985, which the agent maps
+ * to a transport error, so this path does too.
+ */
+const ERR_REJECTED_BY_USER_V7 = 0x6e09;
+
 /** The agent's error mapping. */
 const agentError = (error: unknown): Error =>
-  (error as { code?: number } | null)?.code === DeviceStatusCodes.ERR_REJECTED_BY_USER
+  (error as { code?: number } | null)?.code === ERR_REJECTED_BY_USER_V7
     ? new errors.AuthenticationError('Transaction signing aborted', error)
     : new errors.TransportError('Ledger transport failed', error);
 

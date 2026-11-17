@@ -167,27 +167,38 @@ describe('RealFi Earn page, in-wallet orders', () => {
     expect(run).toHaveBeenCalledWith({ kind: 'stake', amount: '12500000' });
   });
 
-  it("unstakes against the protocol's next cooldown boundary", async () => {
+  // The signer refuses every unstake order Gero would build (orderRecipients.ts
+  // realfiStakeRequest), so unstaking hands off to RealFi's app and says why.
+  it("sends an unstake to RealFi's app and builds no order", async () => {
     withPosition([]);
     state.susdrBalance.value = 3;
     state.susdrUnits.value = '3000000';
     const page = await mountPage();
 
-    await button(page, 'staking.unstake').trigger('click');
+    expect(page.text()).toContain('realfi.unstakeOnRealfiNote');
+    await button(page, 'realfi.unstakeOnRealfi').trigger('click');
     await settle(page);
-    expect(amountDialog(page).props()).toMatchObject({ mode: 'unstake', balanceUnits: '3000000' });
-    amountDialog(page).vm.$emit('confirm', '1000000');
 
-    expect(run).toHaveBeenCalledWith({ kind: 'unstake', amount: '1000000', unlockSlot: '5000' });
+    expect(openSpy).toHaveBeenCalledWith('https://preprod.realfi.co', '_blank', 'noopener,noreferrer');
+    expect(page.findComponent({ name: 'RealFiAmountDialog' }).exists()).toBe(false);
+    expect(run).not.toHaveBeenCalled();
   });
 
-  it('offers no unstake while RealFi gives no cooldown boundary to bind to', async () => {
+  it('offers the hand-off without a cooldown boundary, which only an in-wallet unstake needs', async () => {
     withPosition([]);
     state.susdrBalance.value = 3;
     state.protocol.value = { nextCooldownSlot: null };
     const page = await mountPage();
 
-    expect(page.findAll('button').map((b) => b.text())).not.toContain('staking.unstake');
+    expect(page.findAll('button').map((b) => b.text())).toContain('realfi.unstakeOnRealfi');
+  });
+
+  it('offers no unstake and no note without sUSDrf', async () => {
+    withPosition([]);
+    const page = await mountPage();
+
+    expect(page.findAll('button').map((b) => b.text())).not.toContain('realfi.unstakeOnRealfi');
+    expect(page.text()).not.toContain('realfi.unstakeOnRealfiNote');
   });
 
   it('cancels every stranded order in one transaction', async () => {

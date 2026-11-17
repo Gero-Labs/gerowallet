@@ -28,7 +28,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue';
 import cashbackApi from '@/api/cashback-api';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
@@ -53,6 +53,12 @@ const loading = ref(false);
 const errorState = ref(false);
 
 const theme = 'dark';
+
+/** Bumped whenever the portal document is torn down (leaving the page), so a
+ *  bootstrap still in flight from before never loads into or posts to the new one. */
+let generation = 0;
+/** False while the page is kept alive in the background. */
+let active = false;
 
 /** How long a claim challenge may wait for approval before the portal is told to reset. */
 const SIGN_TIMEOUT_MS = 5 * 60_000;
@@ -100,8 +106,10 @@ async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
     didRefreshOnLoad = false;
     clearPendingSign();
   }
+  const started = generation;
   try {
     const res = await cashbackApi.portal(baseAddress(), theme);
+    if (started !== generation) return;
     if (reason === 'initial' || !portalUrl.value) {
       // Only a pinned portal origin is ever loaded (and so ever trusted to
       // request signatures), whatever URL the bootstrap names.
@@ -112,9 +120,9 @@ async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
       post(sessionUpdateMessage(res.token));
     }
   } catch {
-    errorState.value = true;
+    if (started === generation) errorState.value = true;
   } finally {
-    loading.value = false;
+    if (started === generation) loading.value = false;
   }
 }
 
@@ -202,12 +210,33 @@ watch(() => walletStore.loggedWallet?.baseAddress, (addr, prev) => {
   if (addr === prev) return;
   // The claim was initiated for the previous wallet; never sign it with this one.
   if (pendingSign.value) finishSign(pendingSign.value.seq, null, t('cashback.signWalletChanged'));
-  if (portalUrl.value) bootstrap('resync');
+  if (portalUrl.value && active) bootstrap('resync');
 });
 
 onMounted(() => {
   window.addEventListener('message', onMessage);
+  active = true;
   bootstrap('initial');
+});
+
+// The page sits in the router's <keep-alive>, so it is not re-mounted when the
+// user comes back. Its iframe is detached while away, and re-attaching it
+// reloads the old portalUrl, whose embedded token has long expired: the portal
+// then never loads. So every return visit fetches a fresh portalUrl+token, and
+// leaving drops the old URL so it is never reloaded. (The activation that
+// follows the first mount is skipped: onMounted has already bootstrapped.)
+onActivated(() => {
+  if (active) return;
+  active = true;
+  bootstrap('initial');
+});
+onDeactivated(() => {
+  active = false;
+  generation++;
+  clearPendingSign();
+  portalUrl.value = '';
+  errorState.value = false;
+  loading.value = false;
 });
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage);

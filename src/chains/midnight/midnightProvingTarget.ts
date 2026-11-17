@@ -11,6 +11,7 @@
  */
 
 import { getMidnightEndpoints, isLedger9Network } from '@/chains/midnight/midnightConfig';
+import { midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
 import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
 import type { ZkpaasSettings } from '@/chains/midnight/midnightZkpaas';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
@@ -32,10 +33,10 @@ export function isLoopbackProverUrl(url: string): boolean {
 /** The slice of `midnightStore.proofServer` target resolution needs. */
 export interface ProofServerPreference extends ZkpaasSettings {
   mode: 'remote' | 'local' | 'zkpaas';
-  /** Local proof server for the ledger-8 networks (mainnet, preprod). */
+  /** Local proof server for a chain on ledger 8. */
   localUrl: string;
   /**
-   * Local proof server for the ledger-9 network (stagenet). A separate URL
+   * Local proof server for a chain on ledger 9 (mainnet, preprod, Preview). A separate URL
    * rather than a "which ledger is my server" toggle: the two circuit
    * families need two different servers, and keying the choice off the
    * active wallet's network means there is nothing to switch when the user
@@ -46,8 +47,9 @@ export interface ProofServerPreference extends ZkpaasSettings {
 }
 
 /**
- * The local proof-server URL for a network's circuit family. Ledger 8
- * (mainnet, preprod) → `localUrl`; ledger 9 (stagenet) → `localUrlLedger9`.
+ * The local proof-server URL for the circuit family of `network`'s chain
+ * ledger: ledger 8 → `localUrl`, ledger 9 → `localUrlLedger9`. The ledger is
+ * what the chain last reported (else the newest), never the network name.
  * Accepts both the wallet `Network` value and a `midnight-<id>` slug.
  */
 export function localUrlForNetwork(network: string, ps: Pick<ProofServerPreference, 'localUrl' | 'localUrlLedger9'>): string {
@@ -89,6 +91,58 @@ export type ProvingTarget =
   | { kind: 'cloud' }
   | ProvingServerTarget
   | ProvingUnconfiguredTarget;
+
+/**
+ * Where the background proves a transaction the wallet built: the user's own
+ * proof server (docker or Arkhia zkPaaS), or this device
+ * (midnightDeviceProver.ts). Crosses the background message boundary, so the
+ * background re-validates it (`parseProvingRequest`).
+ */
+export type WalletProvingRequest =
+  | { url: string; headers?: Record<string, string> }
+  | { device: true };
+
+export function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
+  return 'device' in request && request.device === true;
+}
+
+/** Who proves a wallet-built transaction, and so who sees its proof inputs. */
+export type WalletProver = 'device' | 'local' | 'zkpaas' | 'cloud';
+
+/**
+ * Networks whose built-in circuits this device can prove: the ledger 9 key
+ * set (generation 10 DUST) is pinned in midnightZkKeys.ts, so a chain on
+ * ledger 9 (as last read, else the newest). A chain still on ledger 8 keeps
+ * the proof-server paths. The pre-read default (ledger 9) is a preselection
+ * only: the background reads the chain again before it builds or proves.
+ */
+export function canProveOnDevice(network: string): boolean {
+  try {
+    return isLedger9Network(network) && !!getMidnightEndpoints(network);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The prover a wallet-built send uses. Only Gero Cloud mode changes here: a
+ * public (unshielded) send proves its one proof, the DUST fee, on this device,
+ * so no secret reaches Gero. A private (shielded) send also needs Zswap
+ * proofs, which take 30-70 s on a fast laptop; it stays on Gero Cloud unless
+ * `shieldedOnDevice` (the `isMidnightShieldedDeviceProvingEnabled` flag) moves
+ * it here too. Local and zkPaaS mean what the user chose, for both kinds.
+ */
+export function walletProverFor(
+  network: string,
+  ps: Pick<ProofServerPreference, 'mode'>,
+  kind: 'unshielded' | 'shielded',
+  options: { shieldedOnDevice?: boolean } = {},
+): WalletProver {
+  if (ps.mode === 'local') return 'local';
+  if (ps.mode === 'zkpaas') return 'zkpaas';
+  if (canProveOnDevice(network) && (kind === 'unshielded' || options.shieldedOnDevice)) return 'device';
+  return 'cloud';
+}
 
 /**
  * Map the stored preference to a target. Never throws: callers decide what
@@ -179,8 +233,8 @@ export function resolveDappProvingTarget(network: string, ps: ProofServerPrefere
     }
     if (target.reason === 'local-url-missing') {
       throw new DappProvingUnavailableError(
-        `GeroWallet has no local proof server URL for the ${isLedger9Network(network) ? 'ledger-9 (Stagenet)' : 'ledger-8'} `
-        + "circuit family. Set one in GeroWallet's Midnight proof-server settings.",
+        `GeroWallet has no local proof server URL for Midnight ${midnightNetworkName(network)} `
+        + `(ledger ${midnightLedgerOrNewest(network)}). Set one in GeroWallet's Midnight proof-server settings.`,
       );
     }
     throw new DappProvingUnavailableError(

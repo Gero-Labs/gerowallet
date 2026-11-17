@@ -44,18 +44,19 @@ describe('validateConnectorBalanceRequest', () => {
     expect(validateConnectorBalanceRequest({ tx: 'abcd', options: { payFees: true } }, 'Mainnet')).toMatchObject({ ok: true });
   });
 
-  it('rejects fee delegation, Stagenet, bad hex, oversized input and non-objects', () => {
+  it('rejects fee delegation, bad hex, oversized input, non-objects and an unread chain', () => {
     expect(validateConnectorBalanceRequest({ tx: 'abcd', options: { payFees: false } }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/payFees:false/) });
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Stagenet'))
-      .toMatchObject({ ok: false, reason: expect.stringMatching(/Stagenet/) });
+    // Both ledgers balance now; the chain's ledger picks the path (midnightDappBalancer9.spec.ts).
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Stagenet')).toMatchObject({ ok: true });
     expect(validateConnectorBalanceRequest({ tx: 'xyz' }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/hex/) });
     expect(validateConnectorBalanceRequest({ tx: 'ab'.repeat(2 * 1024 * 1024 + 1) }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/large/) });
     expect(validateConnectorBalanceRequest({ tx: '' }, 'Preprod')).toMatchObject({ ok: false });
     expect(validateConnectorBalanceRequest(null, 'Preprod')).toMatchObject({ ok: false });
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, reason: expect.stringMatching(/Unsupported/) });
+    // A chain whose ledger hasn't been read is refused, naming it.
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, reason: expect.stringMatching(/Could not read which ledger Midnight Preview runs/) });
   });
 });
 

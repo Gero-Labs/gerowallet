@@ -9,6 +9,8 @@
       <div class="mtl-node__marker">
         <div class="mtl-dot">
           <v-icon v-if="node.state === 'done'" size="x-small" color="var(--g-canvas)">mdi-check</v-icon>
+          <!-- Waiting for a busy Gero Cloud: a still clock, not the working pulse. -->
+          <v-icon v-else-if="node.state === 'waiting'" size="x-small" color="var(--g-warning)" aria-hidden="true">mdi-clock-outline</v-icon>
           <span v-else-if="node.state === 'active'" class="mtl-pulse"></span>
         </div>
         <div
@@ -18,7 +20,14 @@
         ></div>
       </div>
       <div class="mtl-node__body">
-        <div class="mtl-node__label">{{ node.label }}</div>
+        <!-- The counter sits with the label ("Proving with Gero Cloud · 6 s"). -->
+        <div class="mtl-node__label">
+          {{ node.label }}<span v-if="node.elapsed && node.state === 'active'" class="mtl-node__elapsed g-num"> · {{ node.elapsed }}</span>
+        </div>
+        <!-- The busy countdown comes first, right under the label. -->
+        <div v-if="node.detail && node.state === 'waiting'" class="mtl-node__busy t-body-sm g-num" data-test="mtl-busy">
+          {{ node.detail }}
+        </div>
         <div
           v-if="node.showBar && node.state === 'active'"
           class="mtl-bar"
@@ -29,8 +38,11 @@
             :style="node.percent != null ? { width: node.percent + '%' } : undefined"
           ></div>
         </div>
-        <div v-if="node.detail && node.state === 'active'" class="mtl-node__detail">
+        <div v-if="node.detail && node.state === 'active'" class="mtl-node__detail g-num">
           {{ node.detail }}
+        </div>
+        <div v-if="node.hint && node.state === 'active'" class="mtl-node__hint t-caption">
+          {{ node.hint }}
         </div>
       </div>
     </div>
@@ -113,6 +125,12 @@ withDefaults(defineProps<{
   box-shadow: 0 0 0 2px var(--g-accent);
 }
 
+/* Waiting for a busy Gero Cloud: a static warning ring on the muted warning pair. */
+.mtl-node.waiting .mtl-dot {
+  background: var(--g-warning-fill);
+  box-shadow: 0 0 0 2px var(--g-warning-line);
+}
+
 /* Status pulse — sanctioned motion: it reports that work is ongoing. */
 .mtl-pulse {
   width: 8px;
@@ -156,6 +174,12 @@ withDefaults(defineProps<{
   padding-top: 2px;
 }
 
+/* Room under the working node's bar and lines before the next node. */
+.mtl-node.active .mtl-node__body,
+.mtl-node.waiting .mtl-node__body {
+  padding-bottom: var(--g-s-3);
+}
+
 .mtl-node__label {
   font-size: 13px;
   font-weight: 600;
@@ -167,8 +191,14 @@ withDefaults(defineProps<{
   font-size: 12px;
 }
 
-.mtl-node.active .mtl-node__label {
+.mtl-node.active .mtl-node__label,
+.mtl-node.waiting .mtl-node__label {
   color: var(--g-text-1);
+}
+
+.mtl-node__busy {
+  margin-top: var(--g-s-1);
+  color: var(--g-text-2);
 }
 
 .mtl-node.done .mtl-node__label {
@@ -215,9 +245,26 @@ withDefaults(defineProps<{
   color: var(--g-text-3);
 }
 
+.mtl-node__elapsed {
+  font-weight: 400;
+  color: var(--g-text-2);
+}
+
+/* How long this kind of proving takes: its own line, readable. */
+.mtl-node__hint {
+  margin-top: var(--g-s-1);
+  color: var(--g-text-2);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mtl-pulse,
   .mtl-bar.indeterminate .mtl-bar__fill { animation: none; }
+  /* A still 40% bar would read as 40% done: a faint full-width fill instead;
+     the counter beside the label shows the time passing. */
+  .mtl-bar.indeterminate .mtl-bar__fill {
+    width: 100%;
+    opacity: 0.35;
+  }
   .mtl-bar__fill,
   .mtl-dot,
   .mtl-conn,

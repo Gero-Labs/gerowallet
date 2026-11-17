@@ -9,19 +9,14 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Cardano') }"
       />
       <img
-        :src="assets.apexPrimeBg"
-        class="welcome-background-image"
-        :class="{ 'background-active': selectedNetwork?.blockchain === 'Apex Fusion Prime' }"
-      />
-      <img
-        :src="assets.apexVectorBg"
-        class="welcome-background-image"
-        :class="{ 'background-active': selectedNetwork?.blockchain === 'Apex Fusion Vector' }"
-      />
-      <img
         :src="assets.bitcoinWavesBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
+      />
+      <img
+        :src="assets.solanaBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Solana') }"
       />
       <img
         :src="assets.midnightLoginBg"
@@ -146,7 +141,7 @@ watch(devMode, (val) => {
 // signed in yet), so the chain accent slots stay at the Cardano default while
 // the welcome background already follows the previewed network. Drive the same
 // --g-* slots here from selectedNetwork so the Get Started CTA gradient and any
-// accent-tinted chrome match the chosen chain (teal Prime, orange Vector, …).
+// accent-tinted chrome match the chosen chain.
 watch(selectedNetwork, (n) => applyChainAccent(n?.blockchain), { immediate: true });
 
 // "Add account" (?addAccount=<wallet id>): open onboarding on that wallet's device

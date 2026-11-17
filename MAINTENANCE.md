@@ -30,9 +30,9 @@ Git blob. Diagnostic messages replace the absolute checkout prefix with
 | Design and contrast | 15 metrics and 56 checks pass | Existing budgets unchanged |
 | Secret readers and remote-code guard | Pass | Static compatibility and emitted-code checks |
 | TDZ guard | 27 known, zero new | Five existing export fingerprints changed; baseline not rewritten |
-| Vue-aware type check, after declaration generation | **54 errors** | Failing historical diagnostic baseline |
-| Repository ESLint | **112 errors in 31 files**, zero warnings | All `@typescript-eslint/no-explicit-any` |
-| `npm audit` | **73 affected dependency nodes** | 19 low, 31 moderate, 23 high, zero critical |
+| Vue-aware type check, after declaration generation | **54 errors** (2026-11-16: **0**, #1313) | Gated in CI since #1313 (`ESLint flat config loads` job) |
+| Repository ESLint | **112 errors in 31 files**, zero warnings (2026-11-16: **0**, #1313) | All `@typescript-eslint/no-explicit-any`; gated in CI since #1313 |
+| `npm audit` | **73 affected dependency nodes** (2026-11-16: **32**) | 19 low, 31 moderate, 23 high, zero critical (2026-11-16: 11 low, 21 moderate, zero high or critical) |
 
 Audit totals are not unique-advisory or exploit counts. Registry results change
 over time. A green build does not waive advisories or diagnostics. Compare
@@ -53,7 +53,7 @@ background work, additional staffing, or a committed delivery date.
 
 | Work | Accountable owner | Disposition and acceptance |
 | --- | --- | --- |
-| [#1313: type/lint debt](https://github.com/Gero-Labs/gerowallet/issues/1313) | Adam; Codex implementation | Repair by subsystem, clean every touched code file, preserve behavior, refresh diagnostics; no suppression or weakened config |
+| [#1313: type/lint debt](https://github.com/Gero-Labs/gerowallet/issues/1313) | Adam | Done 2026-11-16: zero type and ESLint errors, both gated in CI. Keep them at zero; no suppression or weakened config |
 | [#1314: dependency advisories](https://github.com/Gero-Labs/gerowallet/issues/1314) | Adam; Codex implementation | Triage reachability and remediation per advisory, coordinate SDK peers, retain explicit no-fix/deferral rationale |
 | [#1284: coverage/baselines](https://github.com/Gero-Labs/gerowallet/issues/1284) | Adam; Codex automation | Resolve scenario exclusions, live prerequisites, and missing coverage |
 | [#1292: vault capability](https://github.com/Gero-Labs/gerowallet/issues/1292) | Adam; Codex implementation | Restore transfers only with supported provider capability and acceptance evidence |
@@ -79,14 +79,21 @@ minor/patch proposals still need normal installation, tests, and build checks.
 Retain these coupled-update constraints until their upstream contracts change:
 
 - ZXing browser/library must have mutually compatible peer ranges.
-- Babylon currently pins `bitcoinjs-lib` to 6.1.7.
+- Babylon pins its `bitcoinjs-lib` peer to exactly 6.1.7. The root pins 6.1.10
+  with a matching `overrides` entry for the critical Merkle advisory; keep the
+  two equal, and drop the override once Babylon widens its peer range.
 - The Midnight v9 ledger and its four aliased wallet consumers must share the
   same WASM instance/version; a successful install alone does not prove this.
 - Vitest/UI, Vite, plugins, and the Node runtime must be reviewed together.
 
 For #1314, start with runtime input/rendering and wallet/device SDK paths,
-including DOMPurify and showdown. Review build/install paths separately:
-TypeScript ESLint/globby, Rollup copy/unplugin, and yorkie also need disposition.
+including DOMPurify (showdown was replaced by the in-house `renderMarkdown`, and
+Trezor Connect moved to 10, which routes through Trezor Suite;
+the ledger 8 Midnight SDK takes `@effect/platform` 0.97 through an `overrides`
+entry until the ledger 9 port removes it).
+Review build/install paths separately (yorkie was replaced by simple-git-hooks,
+`archiver` removed and `unplugin-vue-components` moved to 32; what is left is in
+the November 13 triage record).
 Do not treat a development dependency as automatically harmless. npm's
 `fixAvailable` can propose a major change or downgrade; inspect it before
 editing. Do not use `npm audit fix --force` or bypass peer resolution.
@@ -121,10 +128,10 @@ npm audit --json
 ```
 
 Replace `<absolute-checkout-path>` with the actual path, quoted if it contains
-spaces. The last three commands are expected to fail at this baseline; retain
-their diagnostics. For a new PR, repeat against its base and head. A build
-generates auto-import and component declarations needed for a fair typecheck
-comparison. Inspect generated `src/components.d.ts` changes before committing;
+spaces. `npm audit` is expected to report the deferred advisories; retain its
+output. The typecheck and ESLint commands must pass (CI enforces both). For a
+new PR, repeat against its base and head. A build generates auto-import and
+component declarations needed for a fair typecheck comparison. Inspect generated `src/components.d.ts` changes before committing;
 do not hand-edit declarations or include unrelated generated noise.
 
 The isolated build supplies synthetic configuration and a public manifest key.

@@ -47,6 +47,24 @@ describe('DUST projection transport', () => {
     await vi.advanceTimersByTimeAsync(1);
     await expect(result).resolves.toEqual({ version: 1 });
   });
+  it('reports each server answer as activity, rate limits included, but not a request still waiting', async () => {
+    vi.useFakeTimers();
+    const activity = vi.fn();
+    let answer!: (response: Response) => void;
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '2' } }))
+      .mockReturnValueOnce(new Promise<Response>(resolve => { answer = resolve; }));
+    const result = createDustLightTransport(endpoints, new AbortController().signal, activity)
+      .spends(block, ['12'], 250001, 500000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(activity).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(activity).toHaveBeenCalledTimes(1);
+    answer(Response.json({ blockHash: block.hash, transactions: [], nextBlock: 500001 }));
+    await expect(result).resolves.toEqual({ transactions: [], nextBlock: 500001 });
+    // The second reply's headers, then its body.
+    expect(activity).toHaveBeenCalledTimes(3);
+  });
   it('bounds persistent rate limits and exponential fallback delays', async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementation(() => Promise.resolve(new Response('', { status: 429 })));

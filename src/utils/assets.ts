@@ -1,15 +1,9 @@
 import { resolveIconUrl } from '@/shared/utils/iconResolver'
-import apexBg from '@/assets/apexBg.png'
-import apexPrimeBg from '@/assets/apexPrimeBg.png'
-import apexVectorBg from '@/assets/apexVectorBg.png'
 import bitcoinBg from '@/assets/bitcoinBg.png'
 import bitcoinWavesBg from '@/assets/bitcoinWavesBg.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
-import walletCreateApexBg from '@/modules/welcome/assets/wallet_new_apex.png'
-import walletRestoreApexBg from '@/modules/welcome/assets/wallet_restore_apex.png'
-import hardwareWalletApexBg from '@/modules/welcome/assets/hardware_wallet_apex.png'
 import greenSvg from '@/assets/svg/green.svg'
 import purpleSvg from '@/assets/svg/purple.svg'
 import pinkSvg from '@/assets/svg/pink.svg'
@@ -31,18 +25,14 @@ import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
 import geroDashboardHorizontal from '@/assets/svg/gero_dashboard_horizontal.svg'
 import geroNoText from '@/assets/svg/gero-notext.svg'
-import geroNoTextApex from '@/assets/svg/gero-notext-apex.svg'
-import geroNoTextPrime from '@/assets/svg/gero-notext-prime.svg'
-import geroNoTextVector from '@/assets/svg/gero-notext-vector.svg'
 import geroNoTextMidnight from '@/assets/svg/gero-notext-midnight.svg'
 import geroNoTextBitcoin from '@/assets/svg/gero-notext-bitcoin.svg'
+import geroNoTextSolana from '@/assets/svg/gero-notext-solana.svg'
 import nexusLogo from '@/assets/svg/nexus.svg'
 import koiosLogo from '@/assets/svg/koios.svg'
 import blockfrostLogo from '@/assets/img/blockfrost.png'
-import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
-import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
-import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
 import geroDashboardBitcoin from '@/assets/svg/gero_dashboard_bitcoin.svg'
+import geroDashboardSolana from '@/assets/svg/gero_dashboard_solana.svg'
 import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
@@ -76,12 +66,8 @@ import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import walletConnectLogo from '@/assets/svg/walletconnect.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
-import geroLogoApex from '@/assets/svg/gero-logo-apex.svg'
-import geroLogoPrime from '@/assets/svg/gero-logo-prime.svg'
-import geroLogoVector from '@/assets/svg/gero-logo-vector.svg'
 import geroDashboardText from '@/assets/gero-dashboard.svg'
 import geroText from '@/assets/svg/gero-text.svg'
-import apexBackground from '@/assets/background2.png'
 import moonpay from '@/modules/dashboard/assets/moonpay.svg'
 import welcomeImage from '@/shared/assets/welcome/welcome.png'
 import improvedUxSS from '@/shared/assets/welcome/improved_ux.png'
@@ -111,26 +97,21 @@ import googleOutlineSvg from '@/assets/svg/googleOutline.svg'
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
 import midnightBg from '@/assets/Midnight.webp';
+import solanaBg from '@/assets/solanaBg.webp';
 import midnightLoginBg from '@/assets/midnightBg.png';
 import midnightTokenLogo from '@/assets/svg/midnight.svg';
 import cashbackBg from '@/assets/cashbackBg.png';
 import rectangle from '@/assets/img/rectangle.png';
 import rectangle2 from '@/assets/img/rectangle2.png';
 import walletGeroSvg from '@/assets/svg/walletGero.svg';
-import walletGeroApexSvg from '@/assets/svg/walletGeroApex.svg';
 import keySvg from '@/assets/svg/key.svg';
 import keyGeroSvg from '@/assets/svg/keyGero.svg';
-import keyApexSvg from '@/assets/svg/keyApex.svg';
 import pairSvg from '@/assets/svg/pair.svg';
 import pairGeroSvg from '@/assets/svg/pairGero.svg';
-import pairApexSvg from '@/assets/svg/pairApex.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
 import questionMark from '@/assets/svg/question-mark.svg'
 import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
-import apexBgDashboard from '@/assets/apexCarouselBg.png'
-import apexSvg from '@/assets/svg/ap3x.svg'
-import walletGeroApex from '@/assets/svg/walletGeroApex.svg'
 import debitCardBgImage from '@/assets/debitcardbg.png'
 import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
 import cashbackImage from '@/assets/cashback.png'
@@ -139,7 +120,6 @@ import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/front_card_no_mcx2.png'
 import bringWhite from '@/assets/svg/bring-white.svg'
-import apex from '@/assets/img/apex.jpg'
 import passKeySvg from '@/assets/svg/pass-key.svg'
 import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
 import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
@@ -152,18 +132,13 @@ import mempoolSvg from '@/assets/svg/mempool.svg';
 import miniModeSvg from '@/assets/svg/mini-mode.svg'
 
 export default {
-  apexBg,
-  apexPrimeBg,
-  apexVectorBg,
   midnightBg,
+  solanaBg,
   midnightLoginBg,
   midnightTokenLogo,
   walletCreateBg,
   walletRestoreBg,
   hardwareWalletBg,
-  walletCreateApexBg,
-  walletRestoreApexBg,
-  hardwareWalletApexBg,
   greenSvg,
   purpleSvg,
   pinkSvg,
@@ -185,11 +160,9 @@ export default {
   geroDashboard,
   geroDashboardHorizontal,
   geroNoText,
-  geroNoTextApex,
-  geroNoTextPrime,
-  geroNoTextVector,
   geroNoTextMidnight,
   geroNoTextBitcoin,
+  geroNoTextSolana,
   nexusLogo,
   koiosLogo,
   blockfrostLogo,
@@ -223,14 +196,9 @@ export default {
   walletConnectLogo,
   cardanoShieldBigLogo,
   geroLogo,
-  geroLogoApex,
-  geroLogoPrime,
-  geroLogoVector,
   geroDashboardText,
   geroText,
-  apexBackground,
   cardanoBackground,
-  geroDashboardApex,
   moonpay,
   welcomeImage,
   dao,
@@ -249,18 +217,6 @@ export default {
   bringWhite,
   passKeySvg,
   autoTriggerSvg,
-  // Gero brand logo tinted per chain (Apex Prime teal / Vector orange) —
-  // the single source for QR-center and similar per-chain logo picks.
-  resolveChainLogo(chain?: string): string {
-    switch (chain) {
-      case 'Apex Fusion Prime':
-        return geroLogoPrime;
-      case 'Apex Fusion Vector':
-        return geroLogoVector;
-      default:
-        return geroLogo;
-    }
-  },
   resolveIcon(icon: string): string {
     return resolveIconUrl(icon, {
       greenSvg,
@@ -314,22 +270,16 @@ export default {
   rectangle,
   rectangle2,
   walletGeroSvg,
-  walletGeroApexSvg,
   keySvg,
   keyGeroSvg,
-  keyApexSvg,
   pairSvg,
-  pairApexSvg,
   pairGeroSvg,
   cardanoSvg,
   clarityLogo,
   questionMark,
   questionMarkDark,
-  apexBgDashboard,
   bitcoinBg,
   bitcoinWavesBg,
-  apexSvg,
-  walletGeroApex,
   debitCardBgImage,
   cashbackCarouselImage,
   cashbackImage,
@@ -337,7 +287,6 @@ export default {
   frontCardNoMcx2,
   emptyState,
   cardanoBlueLogo,
-  apex,
   geroDashboardXmas,
   mediumSvg,
   adLabsLogo,
@@ -349,17 +298,13 @@ export default {
 }
 
 export {
-  geroDashboardApex,
-  geroDashboardPrime,
-  geroDashboardVector,
   geroDashboardBitcoin,
+  geroDashboardSolana,
   geroDashboard,
   geroDashboardHorizontal,
   geroNoText,
-  geroNoTextApex,
-  geroNoTextPrime,
-  geroNoTextVector,
   geroNoTextMidnight,
   geroNoTextBitcoin,
+  geroNoTextSolana,
   google,
 }

@@ -3,11 +3,12 @@
     <div class="balance-label t-label grey--text">
       {{ $t('miniGero.portfolioValue') }}
     </div>
-    <div class="balance-row">
+    <!-- While Midnight data is rebuilt the balance is the last one the wallet knew: greyed (.g-stale). -->
+    <div class="balance-row" :class="{ 'g-stale': midnightStale }">
       <transition name="balance-fade" mode="out-in">
         <span v-if="hideBalances" key="masked" class="balance-amount text-h5 white--text font-weight-bold" style="opacity: 0.5">$•••</span>
         <v-skeleton-loader v-else-if="isMidnight && midnightLoading" key="loading" type="heading" width="140" />
-        <span v-else key="visible" class="balance-amount text-h5 white--text font-weight-bold">{{ formattedBalance }}</span>
+        <span v-else key="visible" class="balance-amount balance-amount--value text-h5 font-weight-bold">{{ formattedBalance }}</span>
       </transition>
     </div>
     <div class="balance-sub text-caption" :class="changeColor">
@@ -33,6 +34,10 @@
           {{ Math.abs(priceChange).toFixed(2) }}%
         </span>
       </template>
+    </div>
+    <!-- While Midnight data is rebuilt: the block the last-known balance is from. -->
+    <div v-if="midnightStale && snapshotHeight > 0" class="balance-refresh-caption t-caption g-num" data-test="midnight-refresh-caption">
+      {{ $t('midnight.dataPaused.caption', { block: snapshotHeightLabel, age: snapshotAge }) }}
     </div>
     <div v-if="isMidnight && showNightBreakdown" class="balance-breakdown t-caption g-num">
       {{ hideBalances ? '••••••' : nightBreakdownText }}
@@ -63,6 +68,8 @@ import { priceStore } from '@/stores/priceStore';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { useNightFiat } from '@/shared/composables/useNightFiat';
 import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -96,6 +103,12 @@ const priceChange = computed<number | null>(() => {
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
 const midnightLoading = useMidnightLoading();
+// Midnight data is being rebuilt: the balance is the last one the wallet knew, greyed, with its block.
+const { refreshing: midnightRefreshing, snapshotTip } = useMidnightRefresh();
+const midnightStale = computed(() => isMidnight.value && midnightRefreshing.value);
+const {
+  height: snapshotHeight, heightLabel: snapshotHeightLabel, ageLabel: snapshotAge,
+} = useMidnightDataFreshness(() => snapshotTip.value);
 const nightFiat = useNightFiat();
 // Only mainnet NIGHT has a market; kick a cached fetch when relevant.
 watch(isMidnightMainnet, (on) => { if (on) void nightFiat.refresh(); }, { immediate: true });
@@ -173,6 +186,16 @@ const changeColor = computed(() => {
 </script>
 
 <style scoped>
+/* A token, so .g-stale greys it while Midnight data is rebuilt. */
+.balance-amount--value {
+  color: var(--g-text-1);
+}
+
+.balance-refresh-caption {
+  margin-top: var(--g-s-1);
+  color: var(--g-text-3);
+}
+
 .balance-section {
   display: flex;
   flex-direction: column;

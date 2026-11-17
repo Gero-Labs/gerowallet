@@ -1,3 +1,5 @@
+// Keep first: wraps fetch before anything can call it (signed-response check).
+import '@/api/signedFetchInstall';
 import '../shared/styles/tokens.css';
 import '@fontsource-variable/inter';            // family: 'Inter Variable', wght axis 100-900
 import '@fontsource/jetbrains-mono/400.css';    // family: 'JetBrains Mono'

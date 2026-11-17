@@ -95,50 +95,61 @@
 
         <!-- ════ Step 2: fee ════ -->
         <div v-else-if="currentStep === 2" key="step2" class="bab-stake__body">
-          <div class="bab-fees" role="radiogroup" :aria-label="$t('bitcoin.feeSpeed')">
-            <button
-              v-for="tier in feeTiers"
-              :key="tier.key"
-              type="button"
-              role="radio"
-              :aria-checked="selectedFeePriority === tier.key ? 'true' : 'false'"
-              :class="['glass-tier', 'bab-fee', { 'bab-fee--selected': selectedFeePriority === tier.key }]"
-              @click="selectedFeePriority = tier.key"
-            >
-              <span class="bab-fee__top">
-                <span class="bab-fee__name">{{ tier.label }}</span>
-                <span class="bab-fee__dots" aria-hidden="true">
-                  <span v-for="d in 3" :key="d" :class="['bab-fee__dot', { 'bab-fee__dot--lit': d <= tier.dots }]" />
+          <div v-if="!feeRates" class="bab-notice" role="status">
+            <v-progress-circular indeterminate size="16" width="2" />
+            <span class="bab-notice__text">{{ $t('bitcoin.feeRatesLoading') }}</span>
+          </div>
+          <template v-else>
+            <!-- The network's rates could not be fetched: never pay the built-in ones silently -->
+            <div v-if="feeRates.fallback" class="bab-notice bab-notice--warning" role="status">
+              <v-icon size="small">mdi-alert-outline</v-icon>
+              <span class="bab-notice__text">{{ $t('bitcoin.feeRatesFallback') }}</span>
+            </div>
+            <div class="bab-fees" role="radiogroup" :aria-label="$t('bitcoin.feeSpeed')">
+              <button
+                v-for="tier in feeTiers"
+                :key="tier.key"
+                type="button"
+                role="radio"
+                :aria-checked="selectedFeePriority === tier.key ? 'true' : 'false'"
+                :class="['glass-tier', 'bab-fee', { 'bab-fee--selected': selectedFeePriority === tier.key }]"
+                @click="selectedFeePriority = tier.key"
+              >
+                <span class="bab-fee__top">
+                  <span class="bab-fee__name">{{ tier.label }}</span>
+                  <span class="bab-fee__dots" aria-hidden="true">
+                    <span v-for="d in 3" :key="d" :class="['bab-fee__dot', { 'bab-fee__dot--lit': d <= tier.dots }]" />
+                  </span>
                 </span>
-              </span>
-              <span class="bab-fee__rate g-num">{{ $t('bitcoin.feeRateValue', { value: feeEstimates[tier.key] }) }}</span>
-              <span class="t-caption">{{ tier.time }}</span>
-            </button>
-          </div>
+                <span class="bab-fee__rate g-num">{{ $t('bitcoin.feeRateValue', { value: feeRates[tier.key] }) }}</span>
+                <span class="t-caption">{{ tier.time }}</span>
+              </button>
+            </div>
 
-          <dl class="bab-summary">
-            <div class="bab-summary__row">
-              <dt>{{ $t('babylon.stakeDialog.amount') }}</dt>
-              <dd class="g-num">{{ formatBtc(stakingAmountSats) }} BTC</dd>
-            </div>
-            <div class="bab-summary__row">
-              <dt>{{ $t('babylon.stakeDialog.stakingDuration') }}</dt>
-              <dd class="g-num">{{ lockDuration }}</dd>
-            </div>
-            <div class="bab-summary__row">
-              <dt>{{ $t('send.estimatedFee') }}</dt>
-              <dd class="g-num">≈ {{ formatBtc(estimatedFeeSats) }} BTC</dd>
-            </div>
-            <div class="bab-summary__row bab-summary__row--total">
-              <dt>{{ $t('babylon.stakeDialog.totalLocked') }}</dt>
-              <dd class="g-num">{{ formatBtc(stakingAmountSats + estimatedFeeSats) }} BTC</dd>
-            </div>
-          </dl>
+            <dl class="bab-summary">
+              <div class="bab-summary__row">
+                <dt>{{ $t('babylon.stakeDialog.amount') }}</dt>
+                <dd class="g-num">{{ formatBtc(stakingAmountSats) }} BTC</dd>
+              </div>
+              <div class="bab-summary__row">
+                <dt>{{ $t('babylon.stakeDialog.stakingDuration') }}</dt>
+                <dd class="g-num">{{ lockDuration }}</dd>
+              </div>
+              <div class="bab-summary__row">
+                <dt>{{ $t('send.estimatedFee') }}</dt>
+                <dd class="g-num">≈ {{ formatBtc(estimatedFeeSats) }} BTC</dd>
+              </div>
+              <div class="bab-summary__row bab-summary__row--total">
+                <dt>{{ $t('babylon.stakeDialog.totalLocked') }}</dt>
+                <dd class="g-num">{{ formatBtc(stakingAmountSats + estimatedFeeSats) }} BTC</dd>
+              </div>
+            </dl>
 
-          <div v-if="isInsufficientBalance" class="bab-notice bab-notice--error">
-            <v-icon size="small">mdi-alert-circle-outline</v-icon>
-            {{ $t('send.insufficientBalance') }}
-          </div>
+            <div v-if="isInsufficientBalance" class="bab-notice bab-notice--error">
+              <v-icon size="small">mdi-alert-circle-outline</v-icon>
+              {{ $t('send.insufficientBalance') }}
+            </div>
+          </template>
         </div>
 
         <!-- ════ Step 3: review and sign ════ -->
@@ -266,6 +277,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { BabylonParamVersion, BabylonFinalityProvider } from '@/api/babylon-api';
+import type { FeeTiers } from '@/chains/bitcoin/bitcoinFeeEstimator';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import assts from '@/utils/assets';
@@ -309,9 +321,9 @@ const password = ref('');
 const showPassword = ref(false);
 const privateKeyBytes = ref<Uint8Array | null>(null);
 
-// Fee
+// Fee: the network's rates, null until they arrive
 const selectedFeePriority = ref<'fast' | 'medium' | 'slow'>('medium');
-const feeEstimates = ref({ fast: 50, medium: 25, slow: 10 });
+const feeRates = ref<FeeTiers | null>(null);
 
 const feeTiers = computed(() => [
   { key: 'fast' as const,   label: t('send.fast'),   time: t('bitcoin.etaMinutes', { minutes: 10 }), dots: 3 },
@@ -337,7 +349,7 @@ const stakingAmountSats = computed(() => {
   return isNaN(n) || n <= 0 ? 0 : Math.round(n * 1e8);
 });
 
-const estimatedFeeSats = computed(() => 250 * feeEstimates.value[selectedFeePriority.value]);
+const estimatedFeeSats = computed(() => (feeRates.value ? 250 * feeRates.value[selectedFeePriority.value] : 0));
 
 const timelockDays = computed(() => Math.round((timelockBlocks.value * 10) / 60 / 24));
 
@@ -369,7 +381,7 @@ const isStepValid = computed(() => {
       return sats >= min && sats <= max;
     }
     case 2:
-      return !isInsufficientBalance.value;
+      return !!feeRates.value && !isInsufficientBalance.value;
     case 3:
       if (isPrfWallet.value) return !!privateKeyBytes.value;
       return !!password.value;
@@ -391,15 +403,11 @@ function validateAmount() {
 
 async function updateFeeEstimate() {
   try {
-    const { getBitcoinFeeEstimator, FeePriority } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
-    const estimator = getBitcoinFeeEstimator();
-    const [fast, medium, slow] = await Promise.all([
-      estimator.getFeeEstimate(FeePriority.FAST),
-      estimator.getFeeEstimate(FeePriority.MEDIUM),
-      estimator.getFeeEstimate(FeePriority.SLOW),
-    ]);
-    feeEstimates.value = { fast: fast.feeRate, medium: medium.feeRate, slow: slow.feeRate };
-  } catch { /* fallback to defaults */ }
+    const { getBitcoinFeeEstimatorFor } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
+    feeRates.value = await getBitcoinFeeEstimatorFor(loggedWallet.value?.network || 'Mainnet').getFeeTiers();
+  } catch (e) {
+    console.error('Failed to fetch fee estimates:', e);
+  }
 }
 
 function nextStep() {
@@ -429,7 +437,7 @@ async function authenticateWithPassKey() {
 
 async function confirmStake() {
   if (!isStepValid.value || loading.value) return;
-  if (!props.selectedProvider || !props.params) return;
+  if (!props.selectedProvider || !props.params || !feeRates.value) return;
 
   loading.value = true;
   txStatus.value = { type: 'info', message: t('send.buildingTransaction') };
@@ -444,7 +452,7 @@ async function confirmStake() {
       finalityProviderPkHex: props.selectedProvider.btc_pk,
       stakingTimelock: timelockBlocks.value,
       stakingAmountSat: stakingAmountSats.value,
-      feeRate: feeEstimates.value[selectedFeePriority.value],
+      feeRate: feeRates.value[selectedFeePriority.value],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
       utxos: (utxos.value || []) as any,
       params: props.params,
@@ -498,6 +506,7 @@ function closeDialog() {
   showPassword.value = false;
   privateKeyBytes.value = null;
   selectedFeePriority.value = 'medium';
+  feeRates.value = null;
   txStatus.value = { type: 'info', message: '' };
   amountError.value = '';
   successTxId.value = '';
@@ -899,6 +908,12 @@ watch(() => props.params, (p) => {
   border-color: var(--g-error-line);
   background: var(--g-error-fill);
   color: var(--g-error);
+}
+
+.bab-notice--warning {
+  border-color: var(--g-warning-line);
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .bab-notice--info {

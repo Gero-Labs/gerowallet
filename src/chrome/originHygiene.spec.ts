@@ -42,7 +42,7 @@ describe('WalletConnect session binding', () => {
     expect(walletCaip10Account(mainnetWallet)).toBe(`${MAINNET}:${ADDR}`);
     expect(walletCaip10Account({ chain: 'Bitcoin', network: 'Mainnet', baseAddress: 'x', bitcoinAddress: 'bc1q' }))
       .toBe('bip122:000000000019d6689c085ae165831e93:bc1q');
-    expect(walletCaip10Account({ chain: 'Apex Prime', network: 'Mainnet', baseAddress: ADDR })).toBeNull();
+    expect(walletCaip10Account({ chain: 'UnknownChain', network: 'Mainnet', baseAddress: ADDR })).toBeNull();
   });
 
   it('authorises only the wallet that approved the session', () => {
@@ -219,7 +219,7 @@ describe('embedding-site warning on popup approvals (PR #2 review)', () => {
 
   it('every Midnight prompt carries it to the side panel', () => {
     const bg = read('chrome/background.ts');
-    for (const name of ['connect', 'signData', 'balanceUnsealedTransaction', 'makeTransfer']) {
+    for (const name of ['connect', 'signData', 'balanceUnsealedTransaction', 'makeTransfer', 'makeIntent']) {
       const start = bg.indexOf(`app.add(MIDNIGHT_METHOD.${name}, `);
       expect(start, name).toBeGreaterThan(-1);
       const handler = bg.slice(start, bg.indexOf('\napp.add(', start + 10));

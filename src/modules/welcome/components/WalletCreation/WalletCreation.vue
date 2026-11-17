@@ -24,7 +24,7 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue';
-import { geroDashboardApex, geroDashboardPrime, geroDashboardVector, geroDashboardBitcoin, geroDashboard } from '@/utils/assets';
+import { geroDashboardBitcoin, geroDashboardSolana, geroDashboard } from '@/utils/assets';
 import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import { NetworkInfo } from '@/utils/networks';
 import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
@@ -47,10 +47,8 @@ const { hasWallets } = useAvailableWallets();
 // Logo reacts to the selected network's brand colors.
 const logo = computed(() => {
   const bc = props.selectedNetwork?.blockchain;
-  if (bc === 'Apex Fusion Prime') return geroDashboardPrime;
-  if (bc === 'Apex Fusion Vector') return geroDashboardVector;
-  if (bc?.includes('Apex')) return geroDashboardApex;
   if (bc?.includes('Bitcoin')) return geroDashboardBitcoin;
+  if (bc?.includes('Solana')) return geroDashboardSolana;
   return geroDashboard;
 });
 </script>

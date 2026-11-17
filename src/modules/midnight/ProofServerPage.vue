@@ -116,8 +116,9 @@
               <!-- No profile to choose: the active wallet's network picks the
                    server. Say which one so the steps below make sense. -->
               <p class="t-caption mb-4">
-                {{ activeLedger9 ? t('midnight.proofServer.activeServerLedger9') : t('midnight.proofServer.activeServerLedger8') }}
+                {{ t(activeLedger9 ? 'midnight.proofServer.activeServerLedger9' : 'midnight.proofServer.activeServerLedger8', activeServer) }}
               </p>
+              <ProofServerLedger9Notice :network="loggedWallet?.network" class="mb-4" />
 
               <div class="ps-step">
                 <div class="ps-step-badge">1</div>
@@ -145,10 +146,7 @@
                   <div class="ps-step-title-row">
                     <span class="t-body-lg">{{ t('midnight.proofServerPage.step2Title') }}</span>
                   </div>
-                  <div class="proof-server-command-row">
-                    <code class="proof-server-command g-mono">{{ dockerRunCommand }}</code>
-                    <CopyButton :value="dockerRunCommand" small />
-                  </div>
+                  <CommandBlock :command="dockerRunCommand" class="ps-command" />
                   <p class="t-caption ps-step-hint">{{ t('midnight.proofServer.firstRunNote') }}</p>
                 </div>
               </div>
@@ -183,6 +181,10 @@
                       · {{ t('midnight.proofServerPage.latencyMs', { ms: lastCheckLatencyMs }) }}
                     </template>
                   </p>
+                  <!-- Answers, but runs the other ledger's release: it would fail at proving. -->
+                  <GNote v-if="healthStatus === 'wrongVersion'" tone="error" icon="mdi-alert-circle-outline" role="status" class="ps-check-detail" data-test="proof-server-wrong-version">
+                    {{ t('midnight.proofServer.wrongVersion', { version: serverVersion ?? '', required: requiredVersion }) }}
+                  </GNote>
                 </div>
               </div>
 
@@ -431,8 +433,10 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { useMidnightProofServer, formatRelativeTime } from '@/chains/midnight/useProofServerSettings';
-import CopyButton from '@/shared/components/CopyButton.vue';
+import CommandBlock from '@/shared/components/CommandBlock.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
+import ProofServerLedger9Notice from '@/modules/midnight/ProofServerLedger9Notice.vue';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
@@ -452,6 +456,7 @@ const {
   localUrlLedger9Error,
   onLocalUrlLedger9Blur,
   activeLedger9,
+  activeServer,
   zkpaasUrlDraft,
   zkpaasUrlError,
   onZkpaasUrlBlur,
@@ -469,6 +474,8 @@ const {
   testConnection,
   lastCheckedAt,
   lastCheckLatencyMs,
+  serverVersion,
+  requiredVersion,
   provingHistory,
 } = useMidnightProofServer();
 
@@ -694,24 +701,8 @@ const faqs = computed(() => ([
   text-decoration: underline;
 }
 
-.proof-server-command-row {
-  display: flex;
-  align-items: center;
-  gap: var(--g-s-2);
-  background: var(--g-canvas);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-control);
-  padding: var(--g-s-2) var(--g-s-3);
+.ps-command {
   margin-top: var(--g-s-2);
-  overflow-x: auto;
-}
-
-.proof-server-command {
-  color: var(--g-text-1);
-  font-size: 12.5px;
-  white-space: pre;
-  flex: 1;
-  min-width: 0;
 }
 
 .proof-server-status-row {
@@ -738,8 +729,10 @@ const faqs = computed(() => ([
 .status-dot--detected { background: var(--g-success); }
 .status-dot--notDetected { background: var(--g-text-3); }
 .status-dot--notConfigured { background: var(--g-text-3); }
+.status-dot--wrongVersion { background: var(--g-error); }
 
 .status-pill--detected .status-pill-label { color: var(--g-success); }
+.status-pill--wrongVersion .status-pill-label { color: var(--g-error); }
 
 .ps-check-detail {
   margin-top: var(--g-s-2);

@@ -8,6 +8,8 @@ import * as bip39 from 'bip39';
 import { Bip32PrivateKey, ready } from '@cardano-sdk/crypto';
 import { Blockchain, CoinTypes, HARDENED, WalletTypePurpose } from '@/models/types';
 import { accountXpub, assertAccountIndices, cardanoAccountPath, type AccountXpub } from './walletAccount';
+// Static (see gero-db.ts): no inlined dynamic-import namespace in the background bundle.
+import { deriveSolanaAddressFromMnemonic } from '@/chains/solana/solanaKeyManager';
 
 /** Which chain's accounts a recovery phrase is read for. Bitcoin derives per address type (default segwit), Midnight per network. */
 export interface AccountChain {
@@ -42,6 +44,12 @@ export async function deriveAccountXpubsFromMnemonic(mnemonic: string, accountIn
       accounts.push({ accountIndex, publicKey: await deriveMidnightAccountPublicKey(mnemonic, chain.network, accountIndex), keys: [] });
     }
     return accounts;
+  }
+  if (chain?.chain === Blockchain.SOLANA) {
+    // A Solana account's "xpub" is its address: ed25519 has no public derivation, so the
+    // record stores the account's base58 public key (m/44'/501'/n'/0').
+    const indices = assertAccountIndices(accountIndices);
+    return indices.map((accountIndex) => ({ accountIndex, publicKey: deriveSolanaAddressFromMnemonic(mnemonic, accountIndex), keys: [] }));
   }
   if (chain?.chain === Blockchain.BITCOIN) {
     const indices = assertAccountIndices(accountIndices);

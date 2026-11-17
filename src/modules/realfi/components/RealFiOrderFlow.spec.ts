@@ -8,14 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // The signer and the order runner are stubbed; each is covered by its own spec.
 
 const { signerOpts, sharedSignTx, flowSigner, wallet } = vi.hoisted(() => ({
-  signerOpts: { current: null as null | { getIsBT(): boolean } },
+  signerOpts: { current: null as null | { getIsBT(): boolean; orderBuilder?: string } },
   sharedSignTx: vi.fn(),
   flowSigner: { current: null as null | { signTx(cbor: string): Promise<string> } },
   wallet: { loggedWallet: null as null | Record<string, unknown> },
 }));
 
 vi.mock('@/modules/swap/composables/useNativeSwapSigner', () => ({
-  useNativeSwapSigner: (opts: { getIsBT(): boolean }) => {
+  useNativeSwapSigner: (opts: { getIsBT(): boolean; orderBuilder?: string }) => {
     signerOpts.current = opts;
     return {
       signer: { signTx: sharedSignTx },
@@ -85,6 +85,14 @@ function button(w: VueWrapper, label: string) {
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }
+
+describe('RealFiOrderFlow signer', () => {
+  it('signs only what pays the wallet or a RealFi request for it', () => {
+    wallet.loggedWallet = { type: 'Normal' };
+    mountFlow();
+    expect(signerOpts.current?.orderBuilder).toBe('realfi');
+  });
+});
 
 describe('RealFiOrderFlow Ledger transport', () => {
   beforeEach(() => {

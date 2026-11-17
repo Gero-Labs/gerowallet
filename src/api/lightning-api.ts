@@ -7,6 +7,7 @@
  */
 
 import axios from 'axios';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 export interface LnurlPayEndpoint {
   callback: string;
@@ -214,8 +215,8 @@ class LightningApi {
         return { type, bolt11: decoded as Bolt11Decoded };
       }
       return { type: 'unknown', error: 'Unrecognized Lightning format' };
-    } catch (e: any) {
-      return { type, error: e.message || 'Failed to resolve Lightning input' };
+    } catch (e: unknown) {
+      return { type, error: getErrorMessage(e, '') || 'Failed to resolve Lightning input' };
     }
   }
 }

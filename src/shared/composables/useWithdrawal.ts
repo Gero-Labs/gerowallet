@@ -125,7 +125,6 @@ export function useWithdrawal() {
           tip: tip.value,
           walletContext: {
             keys: keys.value,
-            stakeAddress: loggedWallet.value?.stakeAddress || '',
           }
         });
       }

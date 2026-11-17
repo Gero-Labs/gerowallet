@@ -19,6 +19,11 @@ export interface NotifySnack {
   walletId?: number | null;
   /** The assets of a receipt, for the icon. */
   assets?: Array<{ unit?: string; label: string }>;
+  /**
+   * A broadcast announcement: the id its "Read" opens. The presenter took `title` and `body` from
+   * the verified copy in the private store, never from the message that asked for the snack.
+   */
+  announcementId?: string;
 }
 
 export const SNACK_MS = 8_000;

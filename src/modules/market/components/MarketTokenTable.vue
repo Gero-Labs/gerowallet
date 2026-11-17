@@ -110,6 +110,15 @@
         >
           {{ $t('programmableTokens.badge') }}
         </v-chip>
+        <!-- ADA held in the wallet's own Gero listings: a row of its own beside the spendable ADA. -->
+        <v-chip
+          v-if="item.isListed"
+          size="x-small" label
+          class="holdings-listed-chip ml-1 flex-shrink-0"
+          data-testid="holdings-listed-badge"
+        >
+          {{ $t('nftMarket.holdings.listedBadge') }}
+        </v-chip>
         <v-chip
           v-if="showOwnedBadge && ownedUnits.has(item.unit)"
           size="x-small" label
@@ -527,14 +536,6 @@ const { isColumnVisible } = useColumnPreferences();
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const { currencySymbol: nativeSymbol } = useNativeCurrency();
 
-const isApex = computed(() => {
-  const chain = walletStore.loggedWallet?.chain;
-  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
-});
-
-// Apex wallets: fixed columns from CoinGecko (no column picker, no per-token market API)
-const APEX_ALLOWED_COLUMNS = ['rank', 'name', 'price', 'change24h', 'volume24h', 'mcap', 'balance', 'value', 'watchlist'];
-
 const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);
 const tableSort = computed<DataTableSortItem[]>({
@@ -600,8 +601,6 @@ const HOLDINGS_COLUMNS = ['balance', 'value'];
 
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
-    // Apex wallets: fixed set of columns from CoinGecko, no column preferences
-    if (isApex.value) return APEX_ALLOWED_COLUMNS.includes(header.key);
     if (LOCKED_COLUMNS.includes(header.key)) return true;
     if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.key)) return true;
     return isColumnVisible(header.key);
@@ -871,6 +870,17 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 120px;
+}
+
+/* The ADA held in the wallet's own listings: a chip is a control, so a solid token with a hairline.
+   `html`-prefixed so it wins the tie with Vuetify's chip sizes (its CSS is emitted twice). */
+html .holdings-listed-chip {
+  height: var(--g-s-4);
+  padding: 0 var(--g-s-1);
+  font-size: 10px;
+  color: var(--g-text-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
 }
 
 /* Allocation progress bar */

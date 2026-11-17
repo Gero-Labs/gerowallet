@@ -11,6 +11,11 @@
   />
 </template>
 
+<script lang="ts">
+// Module scope (shared by every instance), unlike <script setup>, which runs per instance.
+let nextIsoUid = 0;
+</script>
+
 <script setup lang="ts">
 import { computed } from 'vue';
 import cardArtwork from '@/assets/front_card_no_mcx2.png';
@@ -24,8 +29,9 @@ const props = withDefaults(defineProps<{
   animated?: boolean;
 }>(), { label: undefined, animated: false });
 
-// Gradient ids are document-global, so every instance needs its own.
-const uid = `g-iso-${Math.random().toString(36).slice(2, 10)}`;
+// Gradient ids are document-global, so every instance needs its own. A module-level counter is
+// unique across every Vue app in the document (useId() restarts per app) and needs no RNG.
+const uid = `g-iso-${(nextIsoUid++).toString(36)}`;
 
 // SVG (SMIL) motion is not covered by the global reduced-motion CSS, so it is opted out here.
 const reducedMotion = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

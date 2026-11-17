@@ -11,13 +11,16 @@
 import i18n from '@/plugins/i18n';
 import {
   CIP113_SIGN_REFUSAL_MESSAGE,
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
   SUBMIT_API_STORAGE_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
+import { marketSignRefusalKey } from '@/shared/utils/nftMarketSignRefusal';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -121,24 +124,59 @@ export function isInsufficientAdaError(message: string): boolean {
 }
 
 /**
- * How much lovelace a rejected build was short, read from the two Nexus shortfall
+ * How much lovelace a rejected build was short, read from the three Nexus shortfall
  * messages the send flow parses: "{ada in inputs: X, ada in outputs: Y, fee Z"
- * (outputs plus fee, minus inputs) and "Available: X lovelace, required: Y lovelace"
- * (required minus available). Undefined for anything else.
+ * (outputs plus fee, minus inputs), "Available: X lovelace, required: Y lovelace"
+ * (required minus available), and the transfer builder's "Required: … ADA (Y lovelace),
+ * available: … ADA (X lovelace)" (required minus available). Undefined for anything else.
  */
 export function shortfallLovelaceFromMessage(message: string): bigint | undefined {
   const inputs = message.match(/ada in inputs:\s*(\d+),\s*ada in outputs:\s*(\d+),\s*fee\s*(\d+)/);
   if (inputs) return BigInt(inputs[2]) + BigInt(inputs[3]) - BigInt(inputs[1]);
   const change = message.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
   if (change) return BigInt(change[2]) - BigInt(change[1]);
+  const transfer = message.match(/Required:\s*[\d.]+\s*ADA\s*\((\d+)\s*lovelace\),\s*available:\s*[\d.]+\s*ADA\s*\((\d+)\s*lovelace\)/);
+  if (transfer) return BigInt(transfer[1]) - BigInt(transfer[2]);
   return undefined;
+}
+
+export interface FriendlyTxErrorOptions {
+  /**
+   * The screen is a dApp's market approval (the side panel overlay, the popup): the worker's market
+   * signing refusal means the approval the transaction was previewed under has run out.
+   */
+  marketApproval?: boolean;
+}
+
+/** True for a 429 from gero-backend's request limiter, by status on the error or by the words in its message. */
+function isRateLimitError(raw: unknown, message: string): boolean {
+  const status = (raw as { response?: { status?: unknown } } | null)?.response?.status;
+  return status === 429 || /rate_limit_exceeded|too many requests/i.test(message);
+}
+
+/**
+ * A signing refusal in the user's language, or undefined for any other message. The worker
+ * and the hardware signers refuse with fixed English strings (`src/chrome/config.ts`), which
+ * a non-English user would otherwise see raw. A signer screen that shows device errors as they
+ * are (the popup) uses this alone; friendlyTxError applies it before its build/submit mappings.
+ */
+export function signRefusalText(message: string, options: FriendlyTxErrorOptions = {}): string | undefined {
+  if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+  if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
+  if (message === TREZOR_GOVERNANCE_REFUSAL_MESSAGE) return i18n.t('errors.trezorGovernanceRefused') as string;
+  // A dApp's market transaction reaches the market's refusal when the approval it was previewed under
+  // has run out (`marketApproval`; useNftMarketFlow maps the same text for Gero's own market flows).
+  // Any other screen (a plain Send to a listing script, staking, ...) gets the honest "only from the
+  // market screens".
+  const marketRefusal = marketSignRefusalKey(message, options.marketApproval ? 'market' : 'other');
+  return marketRefusal ? i18n.t(marketRefusal) as string : undefined;
 }
 
 /**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
-export function friendlyTxError(raw: unknown): string {
+export function friendlyTxError(raw: unknown, options: FriendlyTxErrorOptions = {}): string {
   // Raised by the wallet before any request goes out: the assets to send sit on
   // more UTxOs than one transaction may spend, so only consolidating helps.
   if (raw instanceof InputLimitError) {
@@ -152,7 +190,7 @@ export function friendlyTxError(raw: unknown): string {
   if (rawMessage === SUBMIT_API_HASH_MISMATCH_MESSAGE) return i18n.t('settings.submitApi.errors.hashMismatch') as string;
   if (rawMessage === SUBMIT_API_STORAGE_MESSAGE) return i18n.t('settings.submitApi.errors.storageUnavailable') as string;
   if (rawMessage.startsWith(SUBMIT_API_ENDPOINT_PREFIX)) {
-    const reason = friendlyTxError(rawMessage.slice(SUBMIT_API_ENDPOINT_PREFIX.length));
+    const reason = friendlyTxError(rawMessage.slice(SUBMIT_API_ENDPOINT_PREFIX.length), options);
     return i18n.t('settings.submitApi.errors.endpointFailed', { reason }) as string;
   }
 
@@ -161,13 +199,17 @@ export function friendlyTxError(raw: unknown): string {
   );
   const l = message.toLowerCase();
 
-  // The CIP-113 signing refusal is thrown from the background as a fixed English
-  // string, so it has to be mapped back to a key here or a non-English user sees it raw.
-  if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+  // gero-backend's per-IP request limit on /api/tx/*: a 429, kept on the enriched error
+  // by the Nexus client, or its body ("rate_limit_exceeded" / "Too many requests — slow
+  // down") when only the text reached the UI. Never shown raw.
+  if (isRateLimitError(raw, rawMessage)) return i18n.t('errors.rateLimited') as string;
+
+  const refusal = signRefusalText(message, options);
+  if (refusal) return refusal;
 
   // We never learned the transaction's fate (5xx / no response), which is NOT the
   // same as it being rejected -- the localized copy has to keep that uncertainty.
-  // Same fixed-English-string contract as the CIP-113 refusal above.
+  // Same fixed-English-string contract as the signing refusals above.
   if (message.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE)) return i18n.t('errors.submitUnconfirmed') as string;
 
   // Nexus's shared collateral pool is exhausted — transient infra, retryable.
@@ -181,4 +223,19 @@ export function friendlyTxError(raw: unknown): string {
   if (validation) return i18n.t('errors.txRequestRejected', { reason: validation[1].trim() }) as string;
 
   return message;
+}
+
+/**
+ * `friendlyTxError` for the dApp approval screens (the side panel overlay and the popup), where the
+ * worker's market signing refusal means a dApp's market approval ran out.
+ */
+export const friendlyDappTxError = (raw: unknown): string => friendlyTxError(raw, { marketApproval: true });
+
+/**
+ * Whether a submit failed because an input is unknown to the node that took it: spent
+ * already, or the output of a transaction that node has not seen yet (a sweep's
+ * payment reaching a node before the merges it spends).
+ */
+export function isMissingInputError(message: string): boolean {
+  return /BadInputsUTxO|unknown utxo reference/i.test(message);
 }

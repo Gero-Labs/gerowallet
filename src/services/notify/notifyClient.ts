@@ -19,7 +19,7 @@
 import { encodeBody, signHeaders, type NotifyMethod, type SigningIdentity } from './notifyAuth';
 import type { NotifyStore } from './notifyStore';
 import type {
-  DeviceBody, DeviceView, NotifyConfig, NotifyErrorBody, WalletLinkBody, WalletLinkView, WalletPrefs, WalletPrefsWrite, WatchOrdersBody,
+  DeviceBody, DeviceView, NotifyConfig, NotifyErrorBody, WalletLinkBody, WalletLinkView, WalletPrefs, WalletPrefsWrite, WatchListingsBody, WatchOrdersBody,
 } from './notifyTypes';
 import { NOTIFY_PROTOCOL } from './notifyTypes';
 
@@ -78,6 +78,8 @@ export interface NotifyClient {
   putPrefs(walletTag: string, body: WalletPrefsWrite): Promise<WalletPrefs>;
   /** Register submitted swap transactions so the server can watch their orders (CONTRACT §4.9). */
   watchOrders(walletTag: string, body: WatchOrdersBody): Promise<{ watching: number }>;
+  /** Register a Gero NFT market listing so the server can watch it for a sale (`nft_sold`). */
+  watchListings(walletTag: string, body: WatchListingsBody): Promise<{ watching: number }>;
   /** Current clock correction (serverTime − localNow), for tests and diagnostics. */
   clockOffsetMs(): Promise<number>;
 }
@@ -204,6 +206,7 @@ export function createNotifyClient(deps: NotifyClientDeps): NotifyClient {
     getPrefs: (walletTag) => request<WalletPrefs>('GET', `/device/wallets/${walletTag}/prefs`),
     putPrefs: (walletTag, body) => request<WalletPrefs>('PUT', `/device/wallets/${walletTag}/prefs`, body),
     watchOrders: (walletTag, body) => request<{ watching: number }>('POST', `/device/wallets/${walletTag}/orders`, body),
+    watchListings: (walletTag, body) => request<{ watching: number }>('POST', `/device/wallets/${walletTag}/listings`, body),
     clockOffsetMs: async () => (await deps.store.getDevice()).clockOffsetMs,
   };
 }

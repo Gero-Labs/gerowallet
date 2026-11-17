@@ -30,14 +30,13 @@ const MAX_ACCOUNT_INDEX = 0x7fffffff;
  */
 const MULTI_ACCOUNT_CHAINS: ReadonlySet<string> = new Set([
   Blockchain.CARDANO,
-  Blockchain.APEX_PRIME,
-  Blockchain.APEX_VECTOR,
   Blockchain.BITCOIN,
   Blockchain.MIDNIGHT,
+  Blockchain.SOLANA,
 ]);
 
-/** Chains whose accounts come from the recovery phrase alone: Bitcoin and Midnight. */
-const PHRASE_ACCOUNT_CHAINS: ReadonlySet<string> = new Set([Blockchain.BITCOIN, Blockchain.MIDNIGHT]);
+/** Chains whose accounts come from the recovery phrase alone: Bitcoin, Midnight and Solana. */
+const PHRASE_ACCOUNT_CHAINS: ReadonlySet<string> = new Set([Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.SOLANA]);
 
 export class InvalidAccountIndexError extends Error {
   constructor(message: string) {

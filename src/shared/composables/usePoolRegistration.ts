@@ -116,7 +116,6 @@ export function usePoolRegistration() {
         implicitCoin,
         walletContext: {
           keys: keys.value,
-          stakeAddress: loggedWallet.value?.stakeAddress || '',
         },
       });
 

@@ -12,7 +12,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { verifyStrikeWithdrawTx } from '@/modules/market/utils/strikeWithdrawGuard';
-import { derivedOwnAddresses } from '@/shared/utils/ownAddresses';
+import { derivedOwnAddresses, derivedOwnKeyHashes } from '@/shared/utils/ownAddresses';
 
 /**
  * Strike v2 withdraw quote – wraps the validator response and adds local
@@ -180,7 +180,7 @@ async function signWithdrawTx(
   // says it is (see strikeWithdrawGuard.ts).
   // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts).
   const ownAddresses = derivedOwnAddresses(keys, walletStore.loggedWallet?.baseAddress);
-  const ownKeyHashes = [...(keys.payment ?? []), ...(keys.stake ?? [])].map((k) => k.cred).filter(Boolean);
+  const ownKeyHashes = derivedOwnKeyHashes(keys);
   const violations = verifyStrikeWithdrawTx(txCborHex, { validatorAddress, ownAddresses, ownKeyHashes });
   if (violations.length > 0) {
     debugLog('[strike-withdraw] refused the quote transaction:', violations);

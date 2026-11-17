@@ -8,8 +8,6 @@ import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
-import { Blockchain } from '@/models/types';
-import { chainAccents, chainKeyFor } from '@/config/themes';
 
 
 const { t } = useTranslation();
@@ -27,23 +25,15 @@ const props = defineProps({
   },
 });
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
 // Series color: Highcharts needs a concrete hex (canvas), so we can't use the
-// --g-accent CSS var here. Resolve the chain accent from the single source —
-// teal for Apex Prime, orange for Vector — keeping the Cardano cyan as-is.
-const chartAccent = computed(() =>
-  isApex.value ? chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent : '#00c7f3');
+// --g-accent CSS var here. Rewards are a Cardano view: the Cardano cyan.
+const chartAccent = '#00c7f3';
 
-const chartOptions = computed(() => {
+const chartOptions = computed((): Highcharts.Options => {
   return {
     accessibility: {
       enabled: false,
     },
-    endOnTick: false,
     legend:{ enabled:false },
     title: {
       text: t('staking.rewardsHistory'),
@@ -98,7 +88,7 @@ const chartOptions = computed(() => {
       pointFormat: `{point.y} ${networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)}`,
       outside: false,
       backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      borderColor: chartAccent.value,
+      borderColor: chartAccent,
       borderRadius: 8,
       borderWidth: 1,
       style: {
@@ -109,10 +99,7 @@ const chartOptions = computed(() => {
     xAxis: {
       crosshair: true,
       allowDecimals: false,
-      title: {
-        enabled: false,
-        text: 'Time',
-      },
+      title: { text: null },
       labels: {
         style: {
           fontFamily: 'Inter Variable, Inter, sans-serif',
@@ -123,9 +110,7 @@ const chartOptions = computed(() => {
       categories: Object.keys(props.chartData)
     },
     yAxis: {
-      title: {
-        enabled: false,
-      },
+      title: { text: null },
       labels: {
         style: {
           color: '#fff'
@@ -134,22 +119,23 @@ const chartOptions = computed(() => {
       min: 0,
       opposite: true,
     },
-    colors: [chartAccent.value, '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+    colors: [chartAccent, '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
     series: [
       {
+        type: 'line',
         name: 'ADA',
-        data: Object.values(props.chartData),
-        color: chartAccent.value,
+        data: Object.values(props.chartData) as number[],
+        color: chartAccent,
         lineWidth: 2,
         marker: {
           radius: 2,
-          fillColor: chartAccent.value,
-          lineColor: chartAccent.value,
+          fillColor: chartAccent,
+          lineColor: chartAccent,
           lineWidth: 1
         }
       },
     ],
-    useUTC: true,
+    time: { useUTC: true },
   }
 });
 </script>

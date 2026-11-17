@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listedTokens, type ListableToken } from './listedTokens';
+import { listedTokens, tokenRowDecimals, type ListableToken } from './listedTokens';
 
 const token = (fields: ListableToken & { unit: string }) => fields;
 
@@ -29,5 +29,30 @@ describe('listedTokens', () => {
   it('lists nothing before the wallet has tokens', () => {
     expect(listedTokens(null, programmable)).toEqual([]);
     expect(listedTokens(spendable, null).map((t) => t.unit)).toEqual(['snek']);
+  });
+});
+
+describe('tokenRowDecimals', () => {
+  // Issue 1441: the token sheet read the top level alone, where a wallet token has nothing.
+  it('reads a wallet token\'s decimals from its metadata', () => {
+    expect(tokenRowDecimals({ metadata: { decimals: 2 } })).toBe(2);
+    expect(tokenRowDecimals({ metadata: { decimals: 0 } })).toBe(0);
+  });
+
+  it('reads the pinned ADA row\'s top-level decimals', () => {
+    expect(tokenRowDecimals({ decimals: 6 })).toBe(6);
+  });
+
+  it('states nothing when the row does, so each caller picks its own default', () => {
+    expect(tokenRowDecimals({ metadata: {} })).toBeUndefined();
+    expect(tokenRowDecimals({ metadata: null })).toBeUndefined();
+    expect(tokenRowDecimals(null)).toBeUndefined();
+  });
+
+  it('takes a whole number written as text, and nothing else', () => {
+    expect(tokenRowDecimals({ metadata: { decimals: '2' } })).toBe(2);
+    for (const decimals of [-1, 1.5, Number.NaN, '2.5', '', true]) {
+      expect(tokenRowDecimals({ metadata: { decimals } })).toBeUndefined();
+    }
   });
 });

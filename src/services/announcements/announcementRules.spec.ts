@@ -1,0 +1,167 @@
+import { describe, expect, it } from 'vitest';
+import { check, MAX_FUTURE_MS, MAX_LIFETIME_MS, MAX_PAYLOAD, type AnnouncementTier } from './announcementRules';
+import { at, bytes, editorial, feed, ID, NOW, type Doc } from './__fixtures__/docs';
+
+// A port of gero-sync's AnnouncementRulesTest: the same documents and the same verdicts.
+
+function verdict(doc: Doc, tier: AnnouncementTier): string | null {
+  const r = check(bytes(doc), tier, NOW);
+  return r.ok === false ? r.refusal : null;
+}
+function ofEditorial(change: (d: Doc) => void): string | null {
+  const d = editorial();
+  change(d);
+  return verdict(d, 'editorial');
+}
+function ofFeed(change: (d: Doc) => void): string | null {
+  const d = feed();
+  change(d);
+  return verdict(d, 'feed');
+}
+const firstMedia = (d: Doc) => (d['media'] as Doc[])[0]!;
+
+describe('announcement content rules', () => {
+  it('accept the full editorial document and parse it', () => {
+    const r = check(bytes(editorial()), 'editorial', NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.document.id).toBe(ID);
+    expect(r.document.kind).toBe('service');
+    expect(r.document.platforms).toEqual(['extension', 'ios', 'android']);
+    expect(r.document.media).toHaveLength(1);
+    expect(r.document.actionRoute).toBe('/staking');
+    expect(r.document.actionUrl).toBeNull();
+    expect(r.document.content['de']?.title).toBe('Mainnet-Synchronisierung verzögert');
+  });
+
+  it('accept the feed headline', () => {
+    expect(verdict(feed(), 'feed')).toBeNull();
+  });
+
+  it('check the structure', () => {
+    const raw = (s: string) => { const r = check(new TextEncoder().encode(s), 'editorial', NOW); return r.ok === false ? r.refusal : null; };
+    expect(raw('[1]')).toBe('bad_json');
+    expect(raw('{')).toBe('bad_json');
+    expect(raw('null')).toBe('bad_json');
+    const tooLarge = check(new Uint8Array(MAX_PAYLOAD + 1), 'editorial', NOW);
+    expect(tooLarge.ok === false ? tooLarge.refusal : null).toBe('too_large');
+    const invalidUtf8 = check(new Uint8Array([0x7b, 0xff, 0x7d]), 'editorial', NOW);
+    expect(invalidUtf8.ok === false ? invalidUtf8.refusal : null).toBe('bad_json');
+    expect(ofEditorial((d) => { d['v'] = 2; })).toBe('bad_version');
+    expect(ofEditorial((d) => { d['v'] = '1'; })).toBe('bad_version');
+    expect(ofEditorial((d) => { d['id'] = 'not-a-ulid'; })).toBe('bad_id');
+    expect(ofEditorial((d) => { d['kind'] = 'promo'; })).toBe('bad_kind');
+    expect(ofEditorial((d) => { d['severity'] = 'urgent'; })).toBe('bad_severity');
+  });
+
+  it('parse the payload as the server parses it', () => {
+    const doc = JSON.stringify(editorial());
+    const raw = (s: string) => { const r = check(new TextEncoder().encode(s), 'editorial', NOW); return r.ok === false ? r.refusal : null; };
+    expect(raw(doc)).toBeNull();
+    // Nothing after the document. Whitespace is not something.
+    expect(raw(`${doc}{}`)).toBe('bad_json');
+    expect(raw(`${doc}x`)).toBe('bad_json');
+    expect(raw(`${doc}\n `)).toBeNull();
+    // No byte order mark, and UTF-8 only.
+    expect(raw(`\uFEFF${doc}`)).toBe('bad_json');
+    const utf16 = new Uint8Array(doc.length * 2);
+    for (let i = 0; i < doc.length; i++) { utf16[i * 2] = doc.charCodeAt(i) & 0xff; utf16[i * 2 + 1] = doc.charCodeAt(i) >> 8; }
+    const asUtf16 = check(utf16, 'editorial', NOW);
+    expect(asUtf16.ok === false ? asUtf16.refusal : null).toBe('bad_json');
+    // A number is an integer by its value, within the range a client holds exactly.
+    expect(raw(doc.replace('"v":1', '"v":1.0'))).toBeNull();
+    expect(raw(doc.replace('"v":1', '"v":1.5'))).toBe('bad_version');
+    expect(raw(doc.replace('"v":1', '"v":18446744073709551617'))).toBe('bad_version');
+    expect(raw(doc.replace('"v":1', '"v":1e400'))).toBe('bad_version');
+    expect(raw(doc.replace(/"ts":\d+/, '"ts":9007199254740993').replace(/"exp":\d+/, '"exp":9007199254741993'))).toBe('bad_time');
+    expect(raw(doc.replace('"bytes":4', '"bytes":4.0'))).toBeNull();
+    expect(raw(doc.replace('"bytes":4', '"bytes":4.5'))).toBe('bad_media');
+    // A repeated key takes its last value.
+    expect(raw(`{"v":2,${doc.slice(1)}`)).toBeNull();
+    expect(raw(`${doc.slice(0, -1)},"v":2}`)).toBe('bad_version');
+  });
+
+  it('check the times', () => {
+    expect(ofEditorial((d) => { d['exp'] = 'tomorrow'; })).toBe('bad_time');
+    expect(ofEditorial((d) => { d['exp'] = d['ts']; })).toBe('bad_time');
+    expect(ofEditorial((d) => { d['exp'] = (d['ts'] as number) + MAX_LIFETIME_MS + 1; })).toBe('lifetime_too_long');
+    expect(ofEditorial((d) => { d['ts'] = NOW + MAX_FUTURE_MS + 1; d['exp'] = NOW + MAX_FUTURE_MS + 2; })).toBe('ts_in_future');
+    expect(ofEditorial((d) => { d['ts'] = NOW - 7_200_000; d['exp'] = NOW - 1; })).toBe('expired');
+  });
+
+  it('check the audience', () => {
+    expect(ofEditorial((d) => { at(d, 'audience')['platforms'] = []; })).toBe('bad_audience');
+    expect(ofEditorial((d) => { at(d, 'audience')['platforms'] = ['windows']; })).toBe('bad_audience');
+    expect(ofEditorial((d) => { at(d, 'audience')['networks'] = ['Cardano Mainnet']; })).toBe('bad_audience');
+    expect(ofEditorial((d) => { at(d, 'audience')['networks'] = null; })).toBe('bad_audience');
+    expect(ofEditorial((d) => { at(d, 'audience')['minVersion'] = { extension: 'latest' }; })).toBe('bad_audience');
+    expect(ofEditorial((d) => { delete at(d, 'audience')['networks']; delete at(d, 'audience')['minVersion']; })).toBeNull();
+  });
+
+  it('check the content', () => {
+    expect(ofEditorial((d) => { delete at(d, 'content')['en']; })).toBe('bad_content');
+    expect(ofEditorial((d) => { at(d, 'content')['fr'] = { title: 'a', summary: 'b', body: 'c' }; })).toBe('bad_content');
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['title'] = 'x'.repeat(81); })).toBe('title_too_long');
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['title'] = 'x'.repeat(80); })).toBeNull();
+    // 41 emoji are 41 code points and 82 UTF-16 units: the limit counts units.
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['title'] = '\u{1F680}'.repeat(41); })).toBe('title_too_long');
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['summary'] = 'x'.repeat(201); })).toBe('summary_too_long');
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['body'] = 'x'.repeat(20_001); })).toBe('body_too_long');
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['title'] = ''; })).toBe('bad_content');
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['body'] = null; })).toBe('bad_content');
+  });
+
+  it('check the media', () => {
+    expect(ofEditorial((d) => { firstMedia(d)['type'] = 'image/svg+xml'; })).toBe('bad_media');
+    expect(ofEditorial((d) => { firstMedia(d)['bytes'] = 524_289; })).toBe('bad_media');
+    expect(ofEditorial((d) => { d['media'] = null; })).toBe('bad_media');
+    expect(ofEditorial((d) => { d['thumb'] = '0'.repeat(64); })).toBe('bad_thumb');
+    expect(ofEditorial((d) => { d['thumb'] = null; })).toBe('bad_thumb');
+    expect(ofEditorial((d) => { at(d, 'content', 'de')['body'] = `![x](media:${'0'.repeat(64)})`; })).toBe('bad_media_ref');
+  });
+
+  it('check the action', () => {
+    expect(ofEditorial((d) => { d['action'] = { url: 'https://example.com/' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { url: 'https://gerowallet.io.evil.com/' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { url: 'https://gerowallet.io@evil.com/' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { url: 'http://gerowallet.io/' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { url: 'javascript:alert(1)' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { route: '/send?to=addr1' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { route: '/a', url: 'https://gerowallet.io/' }; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = null; })).toBe('bad_action');
+    expect(ofEditorial((d) => { d['action'] = { url: 'https://support.gerowallet.io/help/sync' }; })).toBeNull();
+    expect(ofEditorial((d) => { delete d['action']; })).toBeNull();
+  });
+
+  it('hold the feed tier to headlines', () => {
+    expect(ofFeed((d) => { d['kind'] = 'service'; })).toBe('tier_limit');
+    expect(ofFeed((d) => { d['severity'] = 'critical'; })).toBe('tier_limit');
+    expect(ofFeed((d) => { at(d, 'content', 'en')['body'] = 'text'; })).toBe('tier_limit');
+    expect(ofFeed((d) => { d['action'] = { route: '/staking' }; })).toBe('tier_limit');
+    expect(ofFeed((d) => { at(d, 'content', 'en')['title'] = 'Claim at gero-airdrop.com'; })).toBe('feed_text_not_allowed');
+    expect(ofFeed((d) => { at(d, 'content', 'en')['summary'] = 'Send to addr1qxy2kgdygjrsqtzq2n0yrf2493p83kkf'; })).toBe('feed_text_not_allowed');
+    expect(ofFeed((d) => { at(d, 'content', 'en')['title'] = 'Go to https://x'; })).toBe('feed_text_not_allowed');
+    expect(ofFeed((d) => { at(d, 'content', 'en')['title'] = 'Version 2.9 is out'; })).toBeNull();
+  });
+
+  it('accept only an allowlist of characters in a headline, so no look-alike carries a domain or an address', () => {
+    const title = (t: string) => ofFeed((d) => { at(d, 'content', 'en')['title'] = t; });
+    const summary = (t: string) => ofFeed((d) => { at(d, 'content', 'en')['summary'] = t; });
+    // The same cases as the server's AnnouncementRulesTest.
+    expect(title('Claim at gero-airdrop\uFF0Ecom')).toBe('feed_text_not_allowed'); // fullwidth full stop
+    expect(title('Claim at gero-airdrop\u3002com')).toBe('feed_text_not_allowed'); // ideographic full stop
+    expect(title('gerowallet\u2024io/claim')).toBe('feed_text_not_allowed'); // one dot leader
+    expect(summary('Send to addr1\u200Bqxy2k\u200Bgdygj\u200Brsqtz')).toBe('feed_text_not_allowed'); // zero-width spaces
+    expect(title('Ger\u043E Wallet update')).toBe('feed_text_not_allowed'); // Cyrillic o
+    expect(title('Gero\u00A0Wallet')).toBe('feed_text_not_allowed'); // no-break space
+    expect(title('Two\nlines')).toBe('feed_text_not_allowed');
+    expect(title('Big news \u{1F680}')).toBe('feed_text_not_allowed');
+    expect(title('Visit gerowallet.c\u00F3m today')).toBe('feed_text_not_allowed');
+    // What a real headline needs still passes.
+    expect(title('Gr\u00F6\u00DFere \u00DCbersicht \u2013 jetzt f\u00FCr alle')).toBeNull();
+    expect(title('Gero\u2019s new look \u2014 what\u2019s changed')).toBeNull();
+    expect(summary('\u00BFQu\u00E9 hay de nuevo? \u00A1M\u00E1s staking!')).toBeNull();
+    // The allowlist is for the server-held feed key only: an editorial document may say anything.
+    expect(ofEditorial((d) => { at(d, 'content', 'en')['title'] = 'Big news \u{1F680} \u65E5\u672C\u8A9E'; })).toBeNull();
+  });
+});

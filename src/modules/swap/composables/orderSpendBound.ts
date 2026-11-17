@@ -100,6 +100,24 @@ function ceilDiv(a: bigint, b: bigint): bigint {
 }
 
 /**
+ * The most the aggregator's fee output may carry for an order within `bound`
+ * (verifyOrderRecipients refuses more). cardano-market-data pays Gero's fee as
+ * one ADA output of max(ceil(ADA side x fee-rate), 0.5 ADA), floored to 1.2 ADA
+ * as an output (FeeCalculator.computeAggregatorFee, SwapTransactionService
+ * MIN_OUTPUT_LOVELACE). This is that rule at SERVICE_FEE_MAX_BPS with the ADA side
+ * bounded by the budget, which comes from what the user typed, never from the
+ * quote: the lovelace the order may take is at least the ADA sold, so the cap
+ * is never below the real fee. A token sale has no ADA side the wallet can trust
+ * (its budget's lovelace is only the order leg), so it gets the 1.2 ADA floor:
+ * the minimum fee TOKEN_SALE_LIMIT_ADA is built on.
+ */
+export function aggregatorFeeCap(bound: SpendBound): bigint {
+  const adaSide = bound.maxOutflow.get('lovelace') ?? 0n;
+  const rated = ceilDiv(adaSide * SERVICE_FEE_MAX_BPS, 10_000n);
+  return rated > SERVICE_FEE_MIN_LOVELACE ? rated : SERVICE_FEE_MIN_LOVELACE;
+}
+
+/**
  * What a swap may take: the amount the user typed of the token they are
  * selling, plus the order's ADA leg. The leg comes from Gero's published fee
  * schedule, not from the quote's fee fields: the largest DEX overhead plus the

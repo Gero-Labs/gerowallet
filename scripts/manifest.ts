@@ -61,7 +61,6 @@ function buildCSP(dev: boolean): string {
     'https://media.bringweb3.io/',
     'https://api.bringweb3.io/',
     'https://api.cardanoshield.com/api/',
-    'https://connect.trezor.io',
     // Strike Finance (perpetuals)
     'https://api.strikefinance.org',
     'https://api-v2.strikefinance.org',
@@ -115,8 +114,8 @@ function buildCSP(dev: boolean): string {
           'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
-      // Local Midnight proof servers: ledger 8 (mainnet, preprod) on 6300 and
-      // ledger 9 (stagenet) on 6301. Loopback only; the wallet refuses a
+      // Local Midnight proof servers, by the ledger the chain runs: ledger 9
+      // (mainnet, preprod, Preview) on 6301, ledger 8 on 6300. Loopback only; the wallet refuses a
       // "local" prover anywhere else (PRIV-01).
       : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300', 'http://localhost:6301', 'http://127.0.0.1:6301']),
     // SPO Node Monitor (Cloudflare Tunnel)
@@ -161,7 +160,6 @@ function buildCSP(dev: boolean): string {
   const frameSrc = [
     ...(dev ? ['http://localhost:*'] : ['https://api.gerowallet.io/', 'https://guardarian.com/']),
     'https://*.moonpay.com/',
-    'https://connect.trezor.io/',
     // Gero Card registration (Zione) and the Zoho form it submits to inside the frame.
     'https://zione.com/',
     'https://forms.zohopublic.eu/',
@@ -257,6 +255,9 @@ async function getManifest() {
       'identity',
       'sidePanel',
       'declarativeNetRequest',
+      // The on-device Midnight prover runs in a Worker inside an offscreen
+      // document (src/chains/midnight/midnightDeviceProver.ts).
+      'offscreen',
     ],
     // The MoonPay frame-header rule is a SESSION rule scoped to frames this
     // extension initiates (src/chrome/moonpayFrameRule.ts), not a static ruleset:
@@ -275,11 +276,10 @@ async function getManifest() {
           '<all_urls>',
         ],
         // Don't inject the wallet-standard/dApp provider into Trezor's own Suite:
-        // connect-webextension (coreMode 'suite-web') drives a suite.trezor.io
-        // connect-popup tab, and injecting window.cardano there disrupts its handshake.
+        // Trezor Connect 10 drives a suite.trezor.io connect-popup tab, and
+        // injecting window.cardano there disrupts its handshake.
         exclude_matches: [
           'https://suite.trezor.io/*',
-          'https://connect.trezor.io/*',
         ],
         js: [ 'content/content.js' ],
         run_at: "document_start",
@@ -288,6 +288,14 @@ async function getManifest() {
     ],
     side_panel: {
       default_path: 'sidepanel/index.html',
+    },
+    // Trezor Connect 10 (src/shared/utils/trezor.ts): when Suite desktop is not
+    // running, Connect opens Suite Web and Suite Web answers through
+    // runtime.sendMessage. Only that origin; declaring the key also stops other
+    // extensions from messaging this one, and nothing here relies on that.
+    // (Suite desktop is reached over ws://127.0.0.1, already in connect-src.)
+    externally_connectable: {
+      matches: ['https://suite.trezor.io/*'],
     },
     content_security_policy: {
       extension_pages: buildCSP(isDev),

@@ -41,7 +41,7 @@
                 @error="handlePassKeyAuthError"
                 block class="mb-2"
               />
-              <v-btn v-else block class="geroButton" style="color: black!important;" @click="sign" :disabled="loading" :loading="loading">
+              <v-btn v-else block class="geroButton" @click="sign" :disabled="loading" :loading="loading">
                 {{ $t('common.confirm') }}
               </v-btn>
             </v-col>
@@ -60,7 +60,7 @@
               </v-btn>
             </v-col>
             <v-col cols="6" v-if="!isPrfWallet && isNormalWallet">
-              <v-btn block class="geroButton" style="color: black!important;" @click="sign" :loading="loading" :disabled="!valid || loading">
+              <v-btn block class="geroButton" @click="sign" :loading="loading" :disabled="!valid || loading">
                 {{ $t('wallet.sign') }}
               </v-btn>
             </v-col>

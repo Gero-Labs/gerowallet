@@ -26,6 +26,12 @@ from the pilot's independently locked packages. Review these deliverables:
   exact target versions, peer requirements, consumers, and migration owners.
 - [Source inventory](inventory.json): every tracked production Vue component,
   its primary work package, routes, feature guards, and audit drift.
+- [Route validation matrix](ROUTE-MATRIX.md): every route in the current
+  routers, its V07–V11 owner and the unit, guard, Help browser, E2E or manual
+  check that covers it, plus the V02 behaviours (async validation, answering a
+  request exactly once, worker restart, lock/unlock, two UIs, wallet and network
+  switch, persistence) with their owners, tests and stated gaps. Generated from
+  [route-matrix.json](route-matrix.json).
 - [Capacity and ownership](capacity.json): the user-confirmed execution model
   and the remaining scheduling decisions.
 - [Vue 2 baseline results](evidence/baseline.json): exact commands, outcomes,
@@ -163,6 +169,25 @@ Sync development weekly and before accepting each ticket. Record the new SHA,
 regenerate the inventory, allocate new routes/files, and review conflicts
 explicitly. Do not silently carry a previous inventory over newly merged UI
 changes.
+
+The route validation matrix reads the routers in the working tree, not a
+frozen revision. CI runs its check, so a new or renamed route needs an entry in
+`route-matrix.json` (its checks, or a manual step when nothing automated covers
+it) before the PR can merge:
+
+~~~sh
+node spikes/vue3-migration/route-matrix.mjs          # regenerate ROUTE-MATRIX.md
+node spikes/vue3-migration/route-matrix.mjs --check  # what CI runs
+~~~
+
+After changing an E2E reference, also run it against a gerowallet-e2e-tests
+checkout at the pinned `harnessSha`. It confirms each cited spec exists and
+names its route (a side-panel route must also open the side panel), or says
+how it gets there with `via`:
+
+~~~sh
+node spikes/vue3-migration/route-matrix.mjs --check --e2e ../gerowallet-e2e-tests
+~~~
 
 ## Integration and acceptance
 

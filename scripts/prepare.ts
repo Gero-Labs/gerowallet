@@ -34,6 +34,18 @@ async function copyDevAssets() {
     }
   }
 
+  // Pinned Midnight DUST-fee proving keys. The prover worker that reads them
+  // exists only in built pages (`npm run build`), not under the dev server.
+  const midnightZkKeys = r('src/assets/midnight-zk')
+  if (await fs.pathExists(midnightZkKeys)) {
+    try {
+      await fs.copy(midnightZkKeys, r('extension/midnight-zk'), { overwrite: true })
+      log('PRE', 'copied Midnight proving keys')
+    } catch (error) {
+      console.warn('Failed to copy Midnight proving keys:', error)
+    }
+  }
+
   // Copy the vendored gero-swap widget (js + css) so the dev stub's absolute
   // /vendor/gero-swap/* hrefs resolve against the extension. The prod build's
   // viteStaticCopy (vite.config.mts) copies only gero-swap.js — the css is

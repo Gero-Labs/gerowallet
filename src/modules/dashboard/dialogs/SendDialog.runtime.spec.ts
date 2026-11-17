@@ -62,6 +62,11 @@ vi.mock('../components/SendRecipientCard.vue', () => ({ default: {
 } }));
 vi.mock('@/shared/components/CopyButton.vue', () => ({ default: { template: '<button>Copy</button>' } }));
 
+vi.mock('@/modules/staking/dialogs/UnstakeDialog.vue', () => ({ default: { props: ['isOpen', 'tx'], emits: ['close', 'submitted'], template: '<div data-unstake-dialog :data-open="isOpen" />' } }));
+vi.mock('@/shared/composables/useUnstake', async () => {
+  const { ref } = await import('vue');
+  return { useUnstake: () => ({ txData: ref(null), unstakeDialog: ref(false), unstake: vi.fn(), closeUnstakeDialog: vi.fn() }) };
+});
 import SendDialog from './SendDialog.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 

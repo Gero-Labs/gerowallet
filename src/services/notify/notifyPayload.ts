@@ -33,6 +33,12 @@ export interface PushDetails {
   orderRef?: string;
   proposalRef?: string;
   drepId?: string;
+  /** A Gero market listing output, `<64 hex tx hash>#<index>` (nft_sold). */
+  listingRef?: string;
+  /** The id of a broadcast announcement (t = announcement). An id only: the push never carries its text. */
+  aid?: string;
+  /** That announcement's kind: `service`, `product` or `news`. */
+  kind?: string;
 }
 
 export interface PushPayload {
@@ -92,8 +98,11 @@ function sanitizeDetails(raw: unknown): PushDetails | undefined {
   if (isInt(raw['epoch']) && (raw['epoch'] as number) >= 0) out.epoch = raw['epoch'] as number;
   const deviceId = str(raw['deviceId']); if (deviceId && HEX32.test(deviceId)) out.deviceId = deviceId;
   const orderRef = str(raw['orderRef']); if (orderRef && /^[0-9a-f]{64}#[0-9]+$/.test(orderRef)) out.orderRef = orderRef;
+  const listingRef = str(raw['listingRef']); if (listingRef && /^[0-9a-f]{64}#[0-9]+$/.test(listingRef)) out.listingRef = listingRef;
   const proposalRef = str(raw['proposalRef']); if (proposalRef && proposalRef.length <= 128) out.proposalRef = proposalRef;
   const drepId = str(raw['drepId']); if (drepId && /^drep1[a-z0-9]{6,}$/.test(drepId)) out.drepId = drepId;
+  const aid = str(raw['aid']); if (aid && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(aid)) out.aid = aid;
+  const kind = str(raw['kind']); if (kind && ['service', 'product', 'news'].includes(kind)) out.kind = kind;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -125,6 +134,15 @@ export function parsePushPayload(input: string | unknown): ParsedPush {
       ...(sanitizeDetails(raw['x']) ? { x: sanitizeDetails(raw['x']) } : {}),
     },
   };
+}
+
+/**
+ * The collapse tag of a broadcast announcement: `hex(SHA-256(id))[0:32]`, the same value gero-sync
+ * sends as the push's `e` (PushPayloads.announcementTag). An announcement belongs to no wallet, so
+ * there is no event key: the tag is public, like the id.
+ */
+export function announcementTag(announcementId: string): string {
+  return bytesToHex(sha256(new TextEncoder().encode(announcementId))).slice(0, 32);
 }
 
 /** §6.3: `e = hex(HMAC-SHA256(eventKey, eventId))[0:32]`, the same on both clients and the server. */

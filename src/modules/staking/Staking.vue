@@ -25,11 +25,11 @@
               </div>
               <div class="staking-gero-support ma-0 g-list-action" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-subtitle>
-                  <v-btn v-if="isDelegationPending" size="small" class="geroButton" style="color: var(--g-on-grad)!important" disabled>
+                  <v-btn v-if="isDelegationPending" size="small" class="geroButton" disabled>
                     <v-progress-circular indeterminate size="14" width="2" class="mr-2" />
                     {{ $t('staking.delegationPending') }}
                   </v-btn>
-                  <v-btn v-else size="small" class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
+                  <v-btn v-else size="small" class="geroButton" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
               </div>
             </v-list-item>

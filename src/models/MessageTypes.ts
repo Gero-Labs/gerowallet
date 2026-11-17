@@ -8,6 +8,10 @@ export enum MessageTypes {
   SIGN_BITCOIN_TX_HARDWARE = 'SIGN_BITCOIN_TX_HARDWARE',
   SEND_BITCOIN = 'SEND_BITCOIN',
   SYNC_BITCOIN = 'SYNC_BITCOIN',
+  /** Fee per level for a SOL transfer (chrome/solanaSend.ts). */
+  SOLANA_SEND_QUOTE = 'SOLANA_SEND_QUOTE',
+  /** Gero's own SOL send: the worker checks, signs and submits (chrome/solanaSend.ts). */
+  SEND_SOLANA = 'SEND_SOLANA',
   BABYLON_STAKE = 'BABYLON_STAKE',
   SUBMIT_TX = 'SUBMIT_TX',
   REQUEST_CROSS_DEVICE_SIGNATURE = 'REQUEST_CROSS_DEVICE_SIGNATURE',
@@ -158,6 +162,8 @@ export enum MessageTypes {
   // and push it back. Deduplicated by hash: the confirmed entry from gero-sync
   // replaces it when it arrives.
   ADD_MIDNIGHT_PENDING_TX = 'ADD_MIDNIGHT_PENDING_TX',
+  DISMISS_MIDNIGHT_PENDING_TX = 'DISMISS_MIDNIGHT_PENDING_TX',
+  CHECK_MIDNIGHT_PENDING_TX = 'CHECK_MIDNIGHT_PENDING_TX',
   // DApp Connector: called by DAppOverlay.vue's Midnight signData branch
   // (side-panel bundle, after the user approves + authenticates) to actually
   // sign the dapp's data with the mandatory midnight_signed_message: prefix.
@@ -167,6 +173,10 @@ export enum MessageTypes {
   // dapp's proven, unbound tx + the user's credential to the background,
   // which funds, fee-pays, signs and seals it (walletBg.balanceMidnightConnectorTransaction).
   BALANCE_MIDNIGHT_CONNECTOR_TX = 'BALANCE_MIDNIGHT_CONNECTOR_TX',
+  // Side panel → background: build, sign and seal the DApp Connector
+  // `makeIntent` swap intent the user approved. The worker re-validates the
+  // request and answers `{ tx, segmentId }`.
+  BUILD_MIDNIGHT_CONNECTOR_INTENT = 'BUILD_MIDNIGHT_CONNECTOR_INTENT',
   // Sent by ChangePasswordDialog after a spending-password change. The DB
   // ciphertext is rotated, but the in-memory copies still hold the OLD blob:
   // the background WalletBg (used to sign) and walletStore.loggedWallet (used to
@@ -187,7 +197,18 @@ export enum MessageTypes {
   NOTIFY_INBOX_READ = 'NOTIFY_INBOX_READ', // page -> worker: one e, or all (B-M3 bell)
   NOTIFY_INBOX_CLEAR = 'NOTIFY_INBOX_CLEAR',
   NOTIFY_WATCH_ORDERS = 'NOTIFY_WATCH_ORDERS', // swap widget -> worker: register a submitted swap for fill/cancel alerts
+  // Market dialog -> worker, after a list, reprice or move went through: have gero-sync watch the new Gero
+  // listing for a sale (`nft_sold`). `{ walletId?, ownerPkh?, listingRefs }`; the worker uses the LOGGED wallet and
+  // a listing it verified itself, and only compares what the page names (listingWatch.ts). Extension pages only.
+  NOTIFY_WATCH_LISTINGS = 'NOTIFY_WATCH_LISTINGS',
   NOTIFY_INTRO_ANSWER = 'NOTIFY_INTRO_ANSWER', // page -> worker: the offer to turn notifications on was answered (notifyIntro.ts)
+  // Broadcast announcements (services/announcements). Extension pages only. The worker is the only
+  // one that fetches, verifies and stores them; a page can only ask for a refresh, mark one read,
+  // dismiss the banner and set which kinds it wants. No message carries announcement content.
+  ANNOUNCEMENTS_REFRESH = 'ANNOUNCEMENTS_REFRESH',
+  ANNOUNCEMENT_READ = 'ANNOUNCEMENT_READ', // { id } or {} for all
+  ANNOUNCEMENT_DISMISS_BANNER = 'ANNOUNCEMENT_DISMISS_BANNER', // { id }
+  ANNOUNCEMENTS_SET_PREFS = 'ANNOUNCEMENTS_SET_PREFS', // { off: ('product' | 'news')[] }
   // The CIP-113 signing refusal for a signer outside the worker (Trezor over WebUSB,
   // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.
   // Answers { success, refused }. Extension-page-only (senderTrust).
@@ -197,6 +218,27 @@ export enum MessageTypes {
   // signed once. Answers { success, result: { txCbor, txId, summary } } or { success: false,
   // error, errorCode }. Extension-page-only (senderTrust).
   CIP113_PREPARE_TRANSFER = 'CIP113_PREPARE_TRANSFER',
+  // NFT rescue: cancel the wallet's own stuck listings and offers at the closed marketplace's
+  // two legacy contracts. { refs: ['txHash#index', ...] } (1 to 10) → the worker checks the
+  // refs belong to the wallet, has Nexus build the cancel, and verifies the CBOR (legacyCancelVerify).
+  // Answers { success, result: { txCbor, txId, summary } } or { success: false, error, errorCode }.
+  // The page then signs those exact bytes. Extension-page-only (senderTrust).
+  LEGACY_LISTING_PREPARE_CANCEL = 'LEGACY_LISTING_PREPARE_CANCEL',
+  // Gero NFT market: the worker turns what the user asked for into one verified, unsigned market
+  // transaction (nftMarket/marketPrepare.ts) and allows exactly that transaction id to be signed
+  // once. The page sends the thing and the price, never an address, key or input:
+  //   LIST     { unit, priceLovelace (decimal text), confirmRoyaltyAboveCap? }
+  //   REPRICE  { ref: 'txHash#index', priceLovelace, confirmRoyaltyAboveCap? }
+  //   CANCEL   { ref }
+  //   BUY      { ref }
+  //   MIGRATE  { legacyRef, priceLovelace, confirmRoyaltyAboveCap? }   (mainnet only)
+  // Answers { success, result: { txCbor, txId, summary } } or { success: false, error, errorCode,
+  // ...details }; the page then signs those exact bytes. Extension-page-only (senderTrust).
+  NFT_MARKET_PREPARE_LIST = 'NFT_MARKET_PREPARE_LIST',
+  NFT_MARKET_PREPARE_REPRICE = 'NFT_MARKET_PREPARE_REPRICE',
+  NFT_MARKET_PREPARE_CANCEL = 'NFT_MARKET_PREPARE_CANCEL',
+  NFT_MARKET_PREPARE_BUY = 'NFT_MARKET_PREPARE_BUY',
+  NFT_MARKET_PREPARE_MIGRATE = 'NFT_MARKET_PREPARE_MIGRATE',
   // Submit API (Settings → Advanced): the per-wallet custom Cardano submit endpoint.
   // Extension-page-only (addToOptions, default-deny for content scripts); each acts on
   // the logged-in wallet and refuses a request naming another wallet id.

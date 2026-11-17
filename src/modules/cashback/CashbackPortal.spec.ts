@@ -241,3 +241,76 @@ describe('cashback claim signing bridge', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 });
+
+// The options router view keeps pages in <keep-alive>: coming back to Cashback
+// does not re-mount the portal, and the re-attached iframe would reload the old
+// portalUrl with its expired token. Every visit must fetch a fresh one.
+describe('cashback portal across visits (keep-alive)', () => {
+  const Away = { name: 'AwayPage', render: () => Vue.h('div', 'away') };
+  let host: VueWrapper;
+  const page = Vue.ref<'cashback' | 'away'>('cashback');
+
+  async function settle() {
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    await host.vm.$nextTick();
+  }
+
+  beforeAll(() => {
+    (window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } })
+      .happyDOM.settings.disableIframePageLoading = true;
+  });
+  beforeEach(async () => {
+    walletStore.loggedWallet = mainnetWallet();
+    page.value = 'cashback';
+    let n = 0;
+    vi.mocked(cashbackApi.portal).mockImplementation(async () => {
+      n++;
+      return { portalUrl: `https://portal.bringweb3.io/?token=t${n}`, token: `tok${n}` };
+    });
+    host = mount({
+      render: () => Vue.h(Vue.KeepAlive, null, [page.value === 'cashback' ? Vue.h(CashbackPortal) : Vue.h(Away)]),
+    }, { attachTo: document.body, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: { 'v-icon': true, 'v-btn': true, 'v-progress-circular': true } } });
+    await settle();
+  });
+  afterEach(() => {
+    host?.unmount();
+    vi.clearAllMocks();
+  });
+
+  it('bootstraps once on the first visit', () => {
+    expect(cashbackApi.portal).toHaveBeenCalledTimes(1);
+    expect(host.find('iframe').attributes('src')).toBe('https://portal.bringweb3.io/?token=t1');
+  });
+
+  it('fetches a fresh portal URL and token on every return visit', async () => {
+    page.value = 'away';
+    await settle();
+    page.value = 'cashback';
+    await settle();
+    expect(cashbackApi.portal).toHaveBeenCalledTimes(2);
+    expect(host.find('iframe').attributes('src')).toBe('https://portal.bringweb3.io/?token=t2');
+
+    page.value = 'away';
+    await settle();
+    page.value = 'cashback';
+    await settle();
+    expect(cashbackApi.portal).toHaveBeenCalledTimes(3);
+    expect(host.find('iframe').attributes('src')).toBe('https://portal.bringweb3.io/?token=t3');
+  });
+
+  it('drops a bootstrap that was still in flight when the user left', async () => {
+    let release!: (v: { portalUrl: string; token: string }) => void;
+    vi.mocked(cashbackApi.portal).mockImplementationOnce(() => new Promise(r => { release = r; }));
+    page.value = 'away';
+    await settle();
+    page.value = 'cashback';
+    await settle();
+    page.value = 'away';
+    await settle();
+    release({ portalUrl: 'https://portal.bringweb3.io/?token=stale', token: 'stale' });
+    await settle();
+    page.value = 'cashback';
+    await settle();
+    expect(host.find('iframe').attributes('src')).not.toContain('stale');
+  });
+});

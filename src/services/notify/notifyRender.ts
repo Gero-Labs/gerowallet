@@ -37,7 +37,7 @@ export interface RouteIntent {
   /** Open the settings dialog on this tab after navigating (pairedDevices). */
   settingsTab?: 'security';
   /** Deep-link data kept for later screens (a tx hash for transaction detail). */
-  highlight?: { tx?: string; deviceId?: string; drepId?: string; orderRef?: string };
+  highlight?: { tx?: string; deviceId?: string; drepId?: string; orderRef?: string; listingRef?: string };
 }
 
 /** What `notificationclick` needs, stored in `Notification.data`. */
@@ -69,7 +69,7 @@ export interface RenderedPush {
 
 const CATEGORY_KEY: Record<string, PushStringKey> = {
   funds: 'PUSH_CATEGORY_FUNDS', staking: 'PUSH_CATEGORY_STAKING', swap: 'PUSH_CATEGORY_SWAP', adam: 'PUSH_CATEGORY_ADAM',
-  governance: 'PUSH_CATEGORY_GOVERNANCE', remoteSigning: 'PUSH_CATEGORY_REMOTESIGNING', system: 'PUSH_CATEGORY_SYSTEM',
+  governance: 'PUSH_CATEGORY_GOVERNANCE', remoteSigning: 'PUSH_CATEGORY_REMOTESIGNING', system: 'PUSH_CATEGORY_SYSTEM', nft: 'PUSH_CATEGORY_NFT',
 };
 
 const EVENT_KEYS: Record<string, { title: PushStringKey; body: PushStringKey }> = {
@@ -80,6 +80,7 @@ const EVENT_KEYS: Record<string, { title: PushStringKey; body: PushStringKey }> 
   reward: { title: 'PUSH_REWARD_TITLE', body: 'PUSH_REWARD_BODY' },
   swap_filled: { title: 'PUSH_SWAP_FILLED_TITLE', body: 'PUSH_SWAP_FILLED_BODY' },
   swap_cancelled: { title: 'PUSH_SWAP_CANCELLED_TITLE', body: 'PUSH_SWAP_CANCELLED_BODY' },
+  nft_sold: { title: 'PUSH_NFT_SOLD_TITLE', body: 'PUSH_NFT_SOLD_BODY' },
   adam_proposal: { title: 'PUSH_ADAM_TITLE', body: 'PUSH_ADAM_BODY' },
   drep_retired: { title: 'PUSH_DREP_RETIRED_TITLE', body: 'PUSH_DREP_RETIRED_BODY' },
   drep_inactive: { title: 'PUSH_DREP_INACTIVE_TITLE', body: 'PUSH_DREP_INACTIVE_BODY' },
@@ -145,6 +146,15 @@ export function receivedAssets(a: PushAmounts, tokenInfo?: TokenLookup): NotifyA
 }
 
 /**
+ * The icons of a sale: the NFT by its unit (the bell and the snackbar look the picture up from what the page
+ * already knows, else show a letter tile), then ADA for the seller share. The NFT is never named by the server.
+ */
+export function soldAssets(a: PushAmounts): NotifyAsset[] {
+  const nfts = a.assets.flatMap((asset) => (asset.unit ? [{ unit: asset.unit, label: 'NFT' }] : []));
+  return [...nfts, ...receivedAssets({ ...(a.ada !== undefined ? { ada: a.ada } : {}), assets: [] })];
+}
+
+/**
  * "12.5 ADA, 1.5 GERO, 1 other token". Quantities are short (one decimal at most, K/M/B when long).
  * An asset with a unit is named by the wallet's registry ticker when it has one (else the server's
  * symbol) and its raw quantity is shown only once the decimals are known; an asset the wallet
@@ -163,16 +173,44 @@ export function formatAmounts(locale: PushLocale, a: PushAmounts, tokenInfo?: To
 
 /** §6.4: destination to routes. Unknown `d` means home; `signRequest` and `adam` are home in v1. */
 export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: boolean): RouteIntent {
-  const highlight = deepLinks && x ? { ...(x.tx ? { tx: x.tx } : {}), ...(x.deviceId ? { deviceId: x.deviceId } : {}), ...(x.drepId ? { drepId: x.drepId } : {}), ...(x.orderRef ? { orderRef: x.orderRef } : {}) } : undefined;
+  const highlight = deepLinks && x ? { ...(x.tx ? { tx: x.tx } : {}), ...(x.deviceId ? { deviceId: x.deviceId } : {}), ...(x.drepId ? { drepId: x.drepId } : {}), ...(x.orderRef ? { orderRef: x.orderRef } : {}), ...(x.listingRef ? { listingRef: x.listingRef } : {}) } : undefined;
   const withHighlight = (r: RouteIntent): RouteIntent => (highlight && Object.keys(highlight).length ? { ...r, highlight } : r);
   switch (d) {
     case 'activity': return withHighlight({ dashboard: highlight?.tx ? `/transactions?tx=${highlight.tx}` : '/transactions', sidepanel: '/activity' });
     case 'staking': return withHighlight({ dashboard: '/staking', sidepanel: '/staking' });
     case 'swapOrders': return withHighlight({ dashboard: '/swap', sidepanel: null });
+    // A Gero market listing sold: Portfolio on its Collectibles view. The side panel has no collectibles view.
+    case 'nftListings': return withHighlight({ dashboard: '/?view=collectibles', sidepanel: null });
     case 'governance': return withHighlight({ dashboard: deepLinks && x?.drepId ? `/governance/dreps/${x.drepId}` : '/governance/me', sidepanel: null });
     case 'pairedDevices': return withHighlight({ dashboard: '/', sidepanel: null, settingsTab: 'security' });
+    // A broadcast announcement: the page opens it by id from what the worker verified and stored.
+    // Without a verified id there is nothing to open, so it is home.
+    case 'announcement': return deepLinks && x?.aid ? { dashboard: `/?announcement=${x.aid}`, sidepanel: `/?announcement=${x.aid}` } : { dashboard: '/', sidepanel: '/' };
     default: return { dashboard: '/', sidepanel: '/' }; // home, signRequest, adam, unknown
   }
+}
+
+// Every route routeFor() can return, and nothing else. The tx and DRep patterns are the ones
+// notifyPayload.ts accepts for `x`. Add a destination to routeFor() and here together:
+// notifyRender.spec.ts runs each destination through isPushRoute().
+const DASHBOARD_ROUTE = /^\/(?:|transactions(?:\?tx=[0-9a-f]{64})?|staking|swap|\?view=collectibles|governance\/(?:me|dreps\/drep1[a-z0-9]{6,}))$/;
+const SIDEPANEL_ROUTES: ReadonlySet<string> = new Set(['/', '/activity', '/staking']);
+// An announcement opens by id on both surfaces; the id pattern is notifyPayload.ts's for `aid`.
+const ANNOUNCEMENT_ROUTE = /^\/\?announcement=[0-9A-HJKMNP-TV-Z]{26}$/;
+
+/**
+ * True when `route` is one routeFor() can return. A page checks this before it follows a route
+ * that reached it in a message (NOTIFY_PRESENT), so a message can never send the router to an
+ * arbitrary path or open the Security tab from a route other than pairedDevices'.
+ */
+export function isPushRoute(route: unknown): route is RouteIntent {
+  if (!route || typeof route !== 'object') return false;
+  const r = route as { dashboard?: unknown; sidepanel?: unknown; settingsTab?: unknown };
+  if (typeof r.dashboard === 'string' && ANNOUNCEMENT_ROUTE.test(r.dashboard)) return r.sidepanel === r.dashboard && r.settingsTab === undefined;
+  if (typeof r.dashboard !== 'string' || !DASHBOARD_ROUTE.test(r.dashboard)) return false;
+  if (r.sidepanel !== null && !(typeof r.sidepanel === 'string' && SIDEPANEL_ROUTES.has(r.sidepanel))) return false;
+  if (r.settingsTab !== undefined && !(r.settingsTab === 'security' && r.dashboard === '/')) return false;
+  return true;
 }
 
 export function renderPush(input: RenderInput): RenderedPush {
@@ -219,7 +257,9 @@ export function renderPush(input: RenderInput): RenderedPush {
   let body = t(locale, keys.body);
   if (p.t === 'funds' && p.a) body = t(locale, 'PUSH_FUNDS_BODY_AMOUNT', { amount: formatAmounts(locale, p.a, input.tokenInfo) });
   if (p.t === 'reward' && p.a?.ada !== undefined) body = t(locale, 'PUSH_REWARD_BODY_AMOUNT', { ada: formatAmountShort(Number(p.a.ada)) });
-  const assets = (p.t === 'funds' || p.t === 'reward') && p.a ? receivedAssets(p.a, input.tokenInfo) : [];
+  // The seller share is the amount of a sale: what the seller earns, not the price (the fee and royalties are out).
+  if (p.t === 'nft_sold' && p.a?.ada !== undefined) body = t(locale, 'PUSH_NFT_SOLD_BODY_AMOUNT', { ada: formatAmountShort(Number(p.a.ada)) });
+  const assets = (p.t === 'funds' || p.t === 'reward') && p.a ? receivedAssets(p.a, input.tokenInfo) : p.t === 'nft_sold' && p.a ? soldAssets(p.a) : [];
   if (p.t === 'funds_summary') body = (p.n ?? 0) === 1 ? t(locale, 'PUSH_FUNDS_SUMMARY_BODY_ONE') : t(locale, 'PUSH_FUNDS_SUMMARY_BODY', { n: p.n ?? 0 });
   // The wallet name only when the user opted into details (`a` present).
   const title = p.a ? `${t(locale, keys.title)} · ${input.wallet.name}` : t(locale, keys.title);

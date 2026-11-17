@@ -18,6 +18,11 @@
         <v-spacer />
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
+      <!-- Midnight data is paused: the relay can't show a registration yet. Its own
+           line, not the pill's short help slot. -->
+      <p v-if="pausedNoteShown" class="paused-note t-body-sm" data-test="dust-paused-note">
+        {{ t('midnight.dataPaused.cnightPending') }}
+      </p>
 
       <!-- Incoming DUST from a Cardano wallet just registered to this address
            (bound to a Cardano stake credential, so the status pill above, which
@@ -26,7 +31,7 @@
         <span class="status-dot status-dot--pending"></span>
         <span>{{ t('midnight.cnightIncomingPending', { count: incomingCnightPending }) }}</span>
         <v-spacer />
-        <span class="status-pill-help">{{ t('midnight.relayFewHours') }}</span>
+        <span class="status-pill-help" data-test="incoming-pending-help">{{ pendingHelp }}</span>
       </div>
 
       <!-- Hero card: the DUST recipient address. This is the thing the user is
@@ -148,17 +153,62 @@
       <template v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid'">
         <!-- Stage 1: pre-build CTA. For PRF wallets `startRegistration` skips
              straight to the PassKey gesture; password wallets get the input. -->
-        <template v-if="!inSigningPhase">
-          <v-btn
-            block
-            size="large"
-            class="geroButton"
-            :disabled="!dustAddress"
-            @click="startRegistration"
+        <template v-if="registrationPending || !inSigningPhase">
+          <!-- The server took a native registration the chain doesn't show yet
+               (midnightDustRegistrationPending.ts): it stands in for Register,
+               which isn't offered again meanwhile. Past the time limit it reads
+               "Not confirmed", and Dismiss brings Register back. No Check again:
+               the registration route returns only the extrinsic hash, which the
+               indexer can't look up. Path B and the portal stay below. -->
+          <div
+            v-if="registrationPending"
+            class="registration-pending"
+            :class="registrationPending === 'pending' ? 'registration-pending--waiting glass-tier' : 'registration-pending--unconfirmed'"
+            data-test="dust-registration-pending"
           >
-            <v-icon start>mdi-shield-plus</v-icon>
-            {{ t('midnight.registerForDust') }}
-          </v-btn>
+            <v-icon size="16" :color="registrationPending === 'pending' ? undefined : 'warning'" class="registration-pending__icon" aria-hidden="true">
+              {{ registrationPending === 'pending' ? 'mdi-clock-outline' : 'mdi-alert-circle-outline' }}
+            </v-icon>
+            <span class="registration-pending__text t-body-sm" role="status">
+              {{ registrationPending === 'pending' ? t('midnight.dustRegistration.submitted') : t('midnight.pending.notConfirmed') }}
+            </span>
+            <GButton
+              v-if="registrationPending === 'unconfirmed'"
+              tier="tertiary"
+              compact
+              data-test="dust-registration-dismiss"
+              @click="dismissRegistrationPending()"
+            >{{ t('midnight.pending.dismiss') }}</GButton>
+          </div>
+          <template v-else>
+            <v-btn
+              block
+              size="large"
+              class="geroButton"
+              :disabled="!dustAddress"
+              :aria-disabled="writesPaused ? 'true' : undefined"
+              :aria-describedby="writesPaused ? 'dust-register-paused' : undefined"
+              :ripple="!writesPaused"
+              data-test="dust-register"
+              @click="startRegistration"
+            >
+              <v-icon start>mdi-shield-plus</v-icon>
+              {{ t('midnight.registerForDust') }}
+            </v-btn>
+            <!-- Native registration is held (update required, the network upgrade, or
+                 a rebuild in progress): Register stays, held but focusable, with this
+                 reason linked to it. The Cardano-held NIGHT sources below stay available. -->
+            <GNote
+              v-if="writesPaused"
+              id="dust-register-paused"
+              :icon="sendHold.icon.value"
+              role="status"
+              class="mt-2"
+              data-test="dust-register-paused"
+            >
+              {{ writesHeldText }}
+            </GNote>
+          </template>
 
           <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
                sources panel), with the external portal kept as a low-prominence
@@ -244,9 +294,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import GNote from '@/shared/components/GNote.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import { geroStore } from '@/stores/geroStore';
 import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
@@ -255,11 +308,18 @@ import { resolveAccountIndex, secretsWalletId } from '@/shared/utils/walletAccou
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { useNow } from '@/shared/composables/useNow';
+import {
+  clearDustRegistrationPending, dustRegistrationPendingRevision, dustRegistrationPendingState, markDustRegistrationPending,
+  pruneDustRegistrationPending,
+} from '@/chains/midnight/midnightDustRegistrationPending';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
-const emit = defineEmits<{ (e: 'close'): void }>();
+defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 const loading = ref(false);
@@ -306,6 +366,21 @@ watch(dustAddress, refreshIncomingPending);
 // every 1s. Module-scoped singleton so the portfolio + this dialog share
 // one poll loop.
 const dustLive = useMidnightDustLive();
+
+// ── A native registration the server took, until the chain shows it ──
+const pendingNow = useNow(30_000);
+const registrationPending = computed(() => {
+  void dustRegistrationPendingRevision.value; // re-read after every write
+  return dustRegistrationPendingState(loggedWallet.value?.baseAddress ?? '', pendingNow.value);
+});
+// Old records and those of removed wallets go (only once the wallet list is there).
+onMounted(() => {
+  const known = Object.values(geroStore.wallets ?? {}).map((w) => (w as { baseAddress?: string }).baseAddress ?? '');
+  pruneDustRegistrationPending(known.includes(loggedWallet.value?.baseAddress ?? '') ? known : []);
+});
+function dismissRegistrationPending() {
+  clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');
+}
 const nightRegistered = computed(() => {
   if (dustLive.hasData.value) return dustLive.nightRegistered.value;
   return balances.value?.nightRegistered ?? 0n;
@@ -327,6 +402,10 @@ const dustGenerating = computed(() => {
 const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid'>(
   () => dustLive.registrationStatus.value as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid',
 );
+// Seen on chain: the submitted registration's record has done its job.
+watch(registrationStatus, (status) => {
+  if (status === 'Registered' || status === 'Pending') clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');
+}, { immediate: true });
 
 // Live DUST balance + cap — composable handles polling + 1s tick. Fall back
 // to gero-sync's AccountInfo snapshot before the first poll completes.
@@ -362,10 +441,19 @@ const statusLabel = computed(() => {
   }
 });
 
+// While Midnight data is paused the relay cannot show a registration, so
+// "a few hours" would be a promise the wallet cannot keep.
+const { paused: midnightDataPaused } = useMidnightDataFreshness();
+// The pill keeps its short help; while paused that help is dropped and the
+// sentence goes on its own line under the pill.
+const pendingHelp = computed(() => (midnightDataPaused.value ? '' : t('midnight.relayFewHours')));
+const pausedNoteShown = computed(() => midnightDataPaused.value
+  && (registrationStatus.value === 'Pending' || incomingCnightPending.value > 0));
+
 const statusHelp = computed(() => {
   switch (registrationStatus.value) {
     case 'Registered': return '';
-    case 'Pending': return t('midnight.relayFewHours');
+    case 'Pending': return pendingHelp.value;
     case 'Invalid': return '';
     default: return '';
   }
@@ -503,6 +591,18 @@ const submitError = ref<string | null>(null);
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
+/**
+ * Why native registration on this wallet's network is held, if it is, as one
+ * reason: update required, the network upgrade, or a rebuild in progress
+ * (useMidnightSendHold.ts). `writesPaused` is "held for any of them".
+ */
+const sendHold = useMidnightSendHold(() => loggedWallet.value?.network);
+const writesPaused = sendHold.held;
+const writesHeldText = sendHold.registrationText;
+// Turned on while the password step is open: back out, so no password or PassKey is asked for.
+watch(writesPaused, (paused) => {
+  if (paused && inSigningPhase.value && !submitBusy.value) resetRegistrationState();
+});
 
 const isPrfWalletForSign = computed(() => isPrfWallet.value);
 
@@ -514,7 +614,7 @@ function resetRegistrationState() {
 }
 
 function startRegistration() {
-  if (!dustAddress.value) return;
+  if (!dustAddress.value || writesPaused.value || registrationPending.value) return;
   // For PRF wallets, kick straight into the PassKey gesture (no input field).
   // For password wallets, show the inline password field first.
   inSigningPhase.value = true;
@@ -524,7 +624,7 @@ function startRegistration() {
 }
 
 const canConfirmRegistration = computed(() => {
-  if (submitBusy.value) return false;
+  if (submitBusy.value || writesPaused.value) return false;
   if (!dustAddress.value) return false;
   if (isPrfWalletForSign.value) return true;
   return !!localPassword.value;
@@ -532,7 +632,7 @@ const canConfirmRegistration = computed(() => {
 
 async function confirmRegistration() {
   const wallet = loggedWallet.value;
-  if (!wallet) return;
+  if (!wallet || writesPaused.value) return;
   if (!dustAddress.value) return;
   if (!wallet.baseAddress) {
     submitError.value = 'Wallet missing Midnight address';
@@ -568,11 +668,11 @@ async function confirmRegistration() {
 
     // Branch on the typed outcome (Dynamic.xyz-style status enum) so the user
     // sees the right next step instead of a raw HTTP error.
-    if (result.status === 'registered') {
-      snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
-      // result.txHash available for a future "view tx" link.
+    if (result.status === 'submitted') {
+      // Submitted, not registered: the dialog shows "Waiting for confirmation"
+      // and offers no second Register until the chain shows it.
+      markDustRegistrationPending(wallet.baseAddress, result.txHash ?? '');
       resetRegistrationState();
-      emit('close');
     } else if (result.status === 'no_night_utxos') {
       // Not a failure — the wallet just needs funding first. Keep the dialog
       // open with actionable guidance rather than a scary error toast.
@@ -631,6 +731,32 @@ void props;
   font-size: 12px;
   font-weight: 600;
   color: var(--g-text-1);
+}
+
+.registration-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  min-height: var(--g-btn-h);
+  padding: var(--g-s-2) var(--g-s-3);
+  border-radius: var(--g-r-control);
+  color: var(--g-text-1);
+}
+
+/* Submitted and waiting: neutral, the nested glass tier. */
+.registration-pending--waiting .registration-pending__icon {
+  color: var(--g-text-2);
+}
+
+/* Not confirmed after the time limit: the muted warning pair. */
+.registration-pending--unconfirmed {
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+}
+
+.registration-pending__text {
+  flex: 1;
+  min-width: 0;
 }
 
 .status-pill-label {
@@ -841,5 +967,9 @@ void props;
   font-size: 12px;
   font-weight: 500;
   color: var(--g-text-1);
+}
+/* "Midnight data is paused" under the status pill, on the spacing grid. */
+.paused-note {
+  margin: var(--g-s-2) 0 0;
 }
 </style>

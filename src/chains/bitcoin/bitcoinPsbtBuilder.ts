@@ -12,6 +12,15 @@ import { HDKey } from '@scure/bip32';
 import type { IUnifiedUtxo, IOutput, IBuildTxParams, IUnsignedTx } from '@/chains/common/interfaces';
 import { selectCoins, CoinSelectionStrategy, calculateTxSize } from './bitcoinCoinSelection';
 
+/** The unsigned PSBT in the three forms callers use. */
+export interface BitcoinPsbtRaw {
+  psbt: bitcoin.Psbt;
+  hex: string;
+  base64: string;
+}
+
+export type BitcoinUnsignedTx = IUnsignedTx<BitcoinPsbtRaw>;
+
 /**
  * PSBT build options
  */
@@ -150,7 +159,7 @@ export function buildPsbt(
   params: IBuildTxParams,
   network: string,
   options: PsbtBuildOptions
-): IUnsignedTx {
+): BitcoinUnsignedTx {
   const bitcoinNetwork = getBitcoinNetwork(network);
 
   // Validate inputs
@@ -241,7 +250,7 @@ export function buildPsbt(
   const psbtBase64 = psbt.toBase64();
 
   // Create unsigned transaction result
-  const unsignedTx: IUnsignedTx = {
+  const unsignedTx: BitcoinUnsignedTx = {
     raw: {
       psbt,           // bitcoinjs-lib PSBT object
       hex: psbtHex,   // Hex encoding (for storage)
@@ -281,7 +290,7 @@ export function buildSimpleSendPsbt(
   feeRate: number,
   network: string,
   account?: PsbtAccount
-): IUnsignedTx {
+): BitcoinUnsignedTx {
   const outputs: IOutput[] = [
     {
       address: recipientAddress,
@@ -320,7 +329,7 @@ export function buildSendAllPsbt(
   recipientAddress: string,
   feeRate: number,
   network: string
-): IUnsignedTx {
+): BitcoinUnsignedTx {
   const bitcoinNetwork = getBitcoinNetwork(network);
 
   // Use all confirmed UTXOs
@@ -379,7 +388,7 @@ export function buildSendAllPsbt(
   const psbtHex = psbt.toHex();
   const psbtBase64 = psbt.toBase64();
 
-  const unsignedTx: IUnsignedTx = {
+  const unsignedTx: BitcoinUnsignedTx = {
     raw: {
       psbt,
       hex: psbtHex,

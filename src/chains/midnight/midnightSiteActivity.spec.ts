@@ -93,6 +93,7 @@ describe('hydrateSiteActivity', () => {
     expect(hydrateSiteActivity(stored)).toEqual(stored);
     expect(hydrateSiteActivity({ ...stored, step: 'submitted', txId: 'x' })).toMatchObject({ txId: 'x' });
     expect(hydrateSiteActivity({ ...stored, step: 'failed', reason: 'declined' })).toMatchObject({ reason: 'declined' });
+    expect(hydrateSiteActivity({ ...stored, step: 'failed', reason: 'paused' })).toMatchObject({ reason: 'paused' });
     expect(hydrateSiteActivity({ ...stored, reason: 'nope' })?.reason).toBeUndefined();
   });
 

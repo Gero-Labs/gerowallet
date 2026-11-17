@@ -9,7 +9,8 @@
 //   NightExternal segment → bind → serialize.
 //
 // The fee transaction is the only part that needs a ZK proof (a DUST spend),
-// so it is the only part that touches the user's proof server. The dapp's
+// so it is the only part the wallet proves: on this device in Gero Cloud mode,
+// else on the user's proof server. The dapp's
 // contract proofs are untouched: PreBinding exists precisely so a wallet can
 // add inputs and outputs before the transaction is bound.
 //
@@ -19,7 +20,9 @@ import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import { countWalletOwnedInputs, decodeUnboundTransaction, summarizeContributions } from './midnightConnectorBalance';
 import type { ConnectorContribution, UnboundTransaction } from './midnightConnectorBalance';
-import { requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8 } from './midnightChainLedger';
+import type { WalletProvingRequest } from './midnightProvingTarget';
+import { describeWalletProving, walletProvingProvider } from './midnightWalletProver';
 import { debugLog } from '@/utils/debug';
 
 export interface BalanceDappTransactionArgs {
@@ -32,8 +35,8 @@ export interface BalanceDappTransactionArgs {
   /** Sender's DUST secret seed. Caller wipes after. */
   readonly dustSecretSeed: Uint8Array;
   readonly dustRegisteredAt?: Date;
-  /** Native-API proof server for the DUST fee proof (resolveDappProvingTarget). */
-  readonly proving: { readonly url: string; readonly headers?: Record<string, string> };
+  /** Where the DUST fee proof is made: this device, or the user's proof server (resolveDappProvingTarget). */
+  readonly proving: WalletProvingRequest;
 }
 
 export interface BalanceDappTransactionResult {
@@ -89,7 +92,7 @@ export async function balanceDappTransaction(
   args: BalanceDappTransactionArgs,
   deps?: BalanceDappTransactionDeps,
 ): Promise<BalanceDappTransactionResult> {
-  requireMidnightLedger8(args.sdkNetworkId, 'Dapp transaction balancing');
+  await requireChainLedger8(args.sdkNetworkId, 'Dapp transaction balancing');
   const tx = await decodeUnboundTransaction(args.txHex, args.sdkNetworkId);
   const contributions = summarizeContributions(tx);
   const ttl = earliestTtl(tx);
@@ -125,10 +128,9 @@ export async function balanceDappTransaction(
     );
 
     // URL only — never the auth header values.
-    debugLog('🌙 dapp balance: proving fee tx wallet-side', { url: args.proving.url });
+    debugLog('🌙 dapp balance: proving fee tx wallet-side', { prover: describeWalletProving(args.proving) });
     const proveStart = Date.now();
-    const { makeLocalProvingProvider } = await import('./midnightLocalProver');
-    const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers, sdkNetworkId: args.sdkNetworkId });
+    const provider = await walletProvingProvider(args.proving, { sdkNetworkId: args.sdkNetworkId, shielded: false });
     const provenFee = await (feeTx as unknown as {
       prove: (p: ledger.ProvingProvider, c: ledger.CostModel) => Promise<UnboundTransaction>;
     }).prove(provider, ledgerMod.CostModel.initialCostModel());

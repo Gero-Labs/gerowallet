@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeEventTag, parsePushPayload, sanitizeAmounts } from './notifyPayload';
-import { formatAmounts, renderPush, routeFor, scaleQuantity, type TokenLookup } from './notifyRender';
+import { formatAmounts, isPushRoute, renderPush, routeFor, scaleQuantity, type TokenLookup } from './notifyRender';
 import { pushStrings } from '@/plugins/i18n/push';
 
 // CONTRACT §6.6 examples, verbatim.
@@ -17,6 +17,9 @@ const EX = {
   drep_retired: '{"v":1,"t":"drep_retired","c":"governance","w":"00112233445566778899aabbccddeeff","e":"23e508501de7bd7ef381b15e1333639e","ts":1790553600000,"exp":1790812800000,"d":"governance","x":{"drepId":"drep1y2uf2gxdj4hhkzkmhgtd7rfxh5q45sne2h3mlra2up53rrg4mwfnf"}}',
   drep_inactive: '{"v":1,"t":"drep_inactive","c":"governance","w":"00112233445566778899aabbccddeeff","e":"1fc44e8a1bed1cc819d0d3f67a8248ec","ts":1790553600000,"exp":1790812800000,"d":"governance","x":{"drepId":"drep1y2uf2gxdj4hhkzkmhgtd7rfxh5q45sne2h3mlra2up53rrg4mwfnf"}}',
   drep_expiring: '{"v":1,"t":"drep_expiring","c":"governance","w":"00112233445566778899aabbccddeeff","e":"cbdeecf66f251a16aed016f0aff9495e","ts":1790553600000,"exp":1790812800000,"d":"governance","x":{"drepId":"drep1y2uf2gxdj4hhkzkmhgtd7rfxh5q45sne2h3mlra2up53rrg4mwfnf"}}',
+  // As gero-sync PushPayloads.webPush writes nft_sold: `a.ada` is the seller share, `a.assets` the one NFT by unit (never a sym),
+  // `x.tx` the buying transaction and `x.listingRef` the listing output.
+  nft_sold: '{"v":1,"t":"nft_sold","c":"nft","w":"00112233445566778899aabbccddeeff","e":"0b6d1f8e2a3c4d5e6f708192a3b4c5d6","ts":1790553600000,"exp":1790640000000,"d":"nftListings","a":{"ada":"93.5","assets":[{"qty":"1","unit":"aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00474e4654"}]},"x":{"tx":"a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130","listingRef":"b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0#1"}}',
   test: '{"v":1,"t":"test","c":"system","w":"00112233445566778899aabbccddeeff","e":"8485b3752ebf592436a6786107e20610","ts":1790553600000,"exp":1790557200000,"d":"home"}',
 };
 const NOW = 1790553700000; // before every exp above
@@ -34,6 +37,104 @@ describe('§6.3 event tag vectors', () => {
     expect(computeEventTag(key, `fundsum:cardano-mainnet:${stake}:1790554200`)).toBe('8d66e9e1e07c4da7b7ecca5915a062d4');
     expect(computeEventTag(key, `reward:cardano-mainnet:${stake}:612`)).toBe('f22fe1d26bdd80a834a7b76c1b8996a2');
     expect(computeEventTag(key, 'test:21fe31dfa154a261626bf854046fd227:adm-0001')).toBe('8485b3752ebf592436a6786107e20610');
+  });
+});
+
+const LISTING_REF = 'b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0#1';
+const BUY_TX = 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130';
+const NFT_UNIT = 'aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00474e4654';
+
+describe('nft_sold (Gero NFT market, category nft, destination nftListings)', () => {
+  it('with amounts: the title carries the wallet name, the body the seller share, the click opens Portfolio collectibles on the listing', () => {
+    const r = render(EX.nft_sold);
+    expect(r.title).toBe('NFT Sold · Daily Cardano');
+    expect(r.body).toBe('Your NFT sold. You receive 93.5 ADA');
+    expect(r.title + r.body).not.toMatch(/—|–/);
+    expect(r.tag).toBe('0b6d1f8e2a3c4d5e6f708192a3b4c5d6');
+    expect(r.requireInteraction).toBe(false);
+    // The side panel has no collectibles view.
+    expect(r.route).toEqual({ dashboard: '/?view=collectibles', sidepanel: null, highlight: { tx: BUY_TX, listingRef: LISTING_REF } });
+    expect(r.data).toMatchObject({ t: 'nft_sold', c: 'nft', d: 'nftListings', walletId: 4, degraded: 'none', x: { tx: BUY_TX, listingRef: LISTING_REF } });
+  });
+
+  it('the bell shows the NFT by its unit and then ADA', () => {
+    expect(render(EX.nft_sold).assets).toEqual([{ unit: NFT_UNIT, label: 'NFT' }, { unit: 'lovelace', label: 'ADA' }]);
+  });
+
+  it('without amounts (the wallet did not opt into details): generic body, no wallet name, still the deep link', () => {
+    const r = render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }));
+    expect(r.title).toBe('NFT Sold');
+    expect(r.body).toBe(us.PUSH_NFT_SOLD_BODY);
+    expect(r.assets).toBeUndefined();
+    expect(r.route.highlight).toEqual({ tx: BUY_TX, listingRef: LISTING_REF });
+  });
+
+  it('renders in German (du, as every other push string, no em dash) and Spanish (tú)', () => {
+    const de = render(EX.nft_sold, { locale: 'de' });
+    expect(de.title).toBe('NFT verkauft · Daily Cardano');
+    expect(de.body).toBe('Dein NFT wurde verkauft. Du erhältst 93.5 ADA');
+    const es = render(EX.nft_sold, { locale: 'es' });
+    expect(es.title).toBe('NFT vendido · Daily Cardano');
+    expect(es.body).toBe('Tu NFT se vendió. Recibes 93.5 ADA');
+    for (const r of [de, es]) expect(r.title + r.body).not.toMatch(/—|–/);
+    expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'de' }).body).toBe('Dein NFT-Angebot wurde gekauft');
+    expect(pushStrings.de.PUSH_CATEGORY_NFT).toBe('Es gibt Neuigkeiten zu deinen NFT-Angeboten');
+    // One register for the whole German push table: no formal address anywhere in the nft strings.
+    for (const key of ['PUSH_CATEGORY_NFT', 'PUSH_NFT_SOLD_TITLE', 'PUSH_NFT_SOLD_BODY', 'PUSH_NFT_SOLD_BODY_AMOUNT'] as const) {
+      expect(pushStrings.de[key], key).not.toMatch(/\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer)\b/);
+    }
+    expect(render(JSON.stringify({ ...JSON.parse(EX.nft_sold), a: undefined }), { locale: 'es' }).body).toBe(pushStrings.es.PUSH_NFT_SOLD_BODY);
+  });
+
+  it('every locale has the three strings, none empty, and the amount one takes {ada}', () => {
+    for (const locale of ['us', 'de', 'es'] as const) {
+      const strings = pushStrings[locale];
+      for (const key of ['PUSH_CATEGORY_NFT', 'PUSH_NFT_SOLD_TITLE', 'PUSH_NFT_SOLD_BODY', 'PUSH_NFT_SOLD_BODY_AMOUNT'] as const) {
+        expect(strings[key], `${locale} ${key}`).toBeTruthy();
+        expect(strings[key], `${locale} ${key}`).not.toMatch(/—|–/);
+      }
+      expect(strings.PUSH_NFT_SOLD_BODY_AMOUNT).toContain('{ada}');
+    }
+  });
+
+  it('expired: the category text, no amounts and no deep link; an unknown type of the category says the category text', () => {
+    const expired = render(EX.nft_sold, { now: 1790640000001 });
+    expect(expired.body).toBe(us.PUSH_CATEGORY_NFT);
+    expect(expired.body).not.toContain('93.5');
+    expect(expired.route).toEqual({ dashboard: '/?view=collectibles', sidepanel: null });
+    expect(expired.data.degraded).toBe('expired');
+    const unknown = render(EX.nft_sold.replace('"t":"nft_sold"', '"t":"nft_bought"'));
+    expect(unknown.title).toBe(us.PUSH_GENERIC_TITLE);
+    expect(unknown.body).toBe(us.PUSH_CATEGORY_NFT);
+  });
+
+  it('routes nftListings with the listing as the highlight, and without it when deep links are off', () => {
+    expect(routeFor('nftListings', { listingRef: LISTING_REF }, true)).toEqual({ dashboard: '/?view=collectibles', sidepanel: null, highlight: { listingRef: LISTING_REF } });
+    expect(routeFor('nftListings', { listingRef: LISTING_REF }, false)).toEqual({ dashboard: '/?view=collectibles', sidepanel: null });
+    expect(routeFor('nftListings', undefined, true)).toEqual({ dashboard: '/?view=collectibles', sidepanel: null });
+  });
+});
+
+describe('x.listingRef (sanitizeDetails)', () => {
+  const withRef = (listingRef: unknown) => parsePushPayload(JSON.stringify({ ...JSON.parse(EX.nft_sold), x: { tx: BUY_TX, listingRef } }));
+  const refOf = (parsed: ReturnType<typeof parsePushPayload>) => (parsed.ok ? parsed.payload.x?.listingRef : 'not parsed');
+
+  it('keeps a valid ref', () => {
+    expect(refOf(withRef(LISTING_REF))).toBe(LISTING_REF);
+    expect(refOf(withRef(`${'0'.repeat(64)}#12345`))).toBe(`${'0'.repeat(64)}#12345`);
+  });
+
+  it('drops a malformed one and keeps the rest of the details', () => {
+    for (const bad of [`${'b1'.repeat(31)}#1`, `${'B1'.repeat(32)}#1`, `${'b1'.repeat(32)}`, `${'b1'.repeat(32)}#`, `${'b1'.repeat(32)}#x`, `${'b1'.repeat(32)}#1\n`, `<b>${LISTING_REF}`, 7, null, {}]) {
+      const parsed = withRef(bad);
+      expect(refOf(parsed), String(bad)).toBeUndefined();
+      expect(parsed.ok && parsed.payload.x).toEqual({ tx: BUY_TX });
+    }
+  });
+
+  it('a payload whose only detail is a bad ref has no details at all', () => {
+    const parsed = parsePushPayload(JSON.stringify({ ...JSON.parse(EX.nft_sold), x: { listingRef: 'nope' } }));
+    expect(parsed.ok && parsed.payload.x).toBeUndefined();
   });
 });
 
@@ -201,5 +302,43 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
     expect(routeFor('pairedDevices', { deviceId: 'b'.repeat(32) }, true)).toEqual({ dashboard: '/', sidepanel: null, settingsTab: 'security', highlight: { deviceId: 'b'.repeat(32) } });
     expect(routeFor('signRequest', undefined, true)).toEqual({ dashboard: '/', sidepanel: '/' });
     expect(routeFor('adam', undefined, true)).toEqual({ dashboard: '/', sidepanel: '/' });
+  });
+});
+
+describe('isPushRoute: the routes a page follows from a message', () => {
+  const x = { tx: 'a'.repeat(64), deviceId: 'b'.repeat(32), drepId: 'drep1qqqqqqqqqqqq', orderRef: `${'a'.repeat(64)}#0`, listingRef: `${'c'.repeat(64)}#1`, aid: '01JC0000000000000000000001' };
+  const DESTINATIONS = ['home', 'activity', 'staking', 'swapOrders', 'nftListings', 'governance', 'pairedDevices', 'announcement', 'signRequest', 'adam', 'somethingNew'];
+
+  it.each(DESTINATIONS)('accepts everything routeFor() returns for %s', (d) => {
+    expect(isPushRoute(routeFor(d, x, true))).toBe(true);
+    expect(isPushRoute(routeFor(d, x, false))).toBe(true);
+    expect(isPushRoute(routeFor(d, undefined, true))).toBe(true);
+    // As a page receives it: through the message's JSON.
+    expect(isPushRoute(JSON.parse(JSON.stringify(routeFor(d, x, true))))).toBe(true);
+  });
+
+  it.each([
+    ['another in-app route', { dashboard: '/settings', sidepanel: null }],
+    ['a known route with a query the worker never adds', { dashboard: '/swap?from=ada&to=evil', sidepanel: null }],
+    ['a route with something appended', { dashboard: '/staking/../send', sidepanel: '/staking' }],
+    ['an absolute URL', { dashboard: 'https://evil.example/', sidepanel: null }],
+    ['a protocol-relative URL', { dashboard: '//evil.example/', sidepanel: null }],
+    ['a script URL', { dashboard: 'javascript:alert(1)', sidepanel: null }],
+    ['a tx that is not 64 hex characters', { dashboard: '/transactions?tx=abc', sidepanel: '/activity' }],
+    ['a DRep id with a path in it', { dashboard: '/governance/dreps/drep1qqqqqq/../../send', sidepanel: null }],
+    ['an announcement id that is not one', { dashboard: '/?announcement=../../send', sidepanel: '/?announcement=../../send' }],
+    ['an announcement the side panel would open differently', { dashboard: '/?announcement=01JC0000000000000000000001', sidepanel: '/?announcement=01JC0000000000000000000002' }],
+    ['an announcement route on the side panel only', { dashboard: '/', sidepanel: '/?announcement=01JC0000000000000000000001' }],
+    ['an announcement that also opens the Security tab', { dashboard: '/?announcement=01JC0000000000000000000001', sidepanel: '/?announcement=01JC0000000000000000000001', settingsTab: 'security' }],
+    ['an unknown side panel route', { dashboard: '/', sidepanel: '/send' }],
+    ['a side panel route that is not a string or null', { dashboard: '/', sidepanel: undefined }],
+    ['the Security tab away from home', { dashboard: '/transactions', sidepanel: '/activity', settingsTab: 'security' }],
+    ['another settings tab', { dashboard: '/', sidepanel: null, settingsTab: 'advanced' }],
+    ['a dashboard route that is not a string', { dashboard: ['/'], sidepanel: null }],
+    ['a string', '/'],
+    ['null', null],
+    ['nothing', undefined],
+  ])('refuses %s', (_name, route) => {
+    expect(isPushRoute(route)).toBe(false);
   });
 });

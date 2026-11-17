@@ -35,6 +35,14 @@ export interface DeviceBody {
   osPermission: boolean;
   transport: NotifyTransport;
   webpush?: WebPushTarget;
+  /**
+   * What this client can render beyond the wallet alerts. `announcements`: broadcast announcements
+   * (gero-sync sends an announcement push only to a device that says so, since an older client would
+   * show it as an unknown-wallet notification). Unknown values are ignored by the server.
+   */
+  caps?: string[];
+  /** The announcement kinds the user switched off on this device: `product`, `news`. Never `service`. */
+  announcementsOff?: string[];
 }
 
 /** From `PushSubscription.toJSON()` plus the `/config` kid it was created with. */
@@ -99,6 +107,19 @@ export interface WalletPrefsWrite {
 export interface WatchOrdersBody {
   ownerPkh: string;
   txHashes: string[];
+}
+
+/**
+ * `POST …/listings` body (gero-sync NotifyApi.postListings): 1-20 unique Gero market listing outputs
+ * (`<64 hex tx hash>#<index>`, no leading zero in the index, at most five digits) the wallet made with
+ * `ownerPkh`, the payment key hash Nexus must name as the listing's owner before the server pushes
+ * `nft_sold`. 202 `{ watching }` counts the rows inserted (a ref already watched counts 0); a request that
+ * would pass the wallet's pending-watch cap is 422 `limit_exceeded` with `details.limit = "listingWatches"`
+ * and keeps nothing. Cardano mainnet and preprod only (422 `unsupported_network` otherwise).
+ */
+export interface WatchListingsBody {
+  ownerPkh: string;
+  listingRefs: string[];
 }
 
 /** The stored DeviceRegisterProof; the server ignores the extra `stakeAddress` (§3.7). */

@@ -17,7 +17,6 @@ vi.mock('vite-plugin-node-polyfills/shims/buffer', async () => {
 
 const connect = vi.hoisted(() => ({ init: vi.fn(), signTransaction: vi.fn(), getPublicKey: vi.fn(), getFeatures: vi.fn(), getAddress: vi.fn() }));
 vi.mock('@trezor/connect-webextension', () => ({ default: connect }));
-vi.mock('@trezor/connect-web', () => ({ default: connect }));
 
 import { HDKey } from '@scure/bip32';
 import { deriveBitcoinAccountXpub, deriveBitcoinAddress, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
@@ -48,7 +47,6 @@ const signedTx = signPsbtWithMnemonic(unsigned.toHex(), PHRASE, 'Testnet').final
 type BitcoinSign = (psbt: string, signer: typeof account) => Promise<string>;
 const bundles: Array<[string, () => Promise<BitcoinSign>]> = [
   ['trezor (Bridge)', async () => { const { default: trezor } = await import('./trezor'); return trezor.signBitcoinTransaction.bind(trezor); }],
-  ['trezorWeb (WebUSB)', async () => { const { default: trezor } = await import('./trezorWeb'); return trezor.signTransaction.bind(trezor); }],
 ];
 
 describe.each(bundles)('%s Bitcoin signing', (_name, load) => {
@@ -81,7 +79,7 @@ describe.each(bundles)('%s Bitcoin signing', (_name, load) => {
   });
 
   it('surfaces the device’s error', async () => {
-    connect.signTransaction.mockResolvedValue({ success: false, payload: { error: 'Cancelled' } });
+    connect.signTransaction.mockResolvedValue({ success: false, error: { message: 'Cancelled', code: 'Failure_ActionCancelled' } });
 
     await expect(sign(unsigned.toHex(), account)).rejects.toThrow('Cancelled');
   });
@@ -93,7 +91,6 @@ type TrezorBitcoin = {
 };
 const pairingBundles: Array<[string, () => Promise<TrezorBitcoin>]> = [
   ['trezor (Bridge)', async () => (await import('./trezor')).default as unknown as TrezorBitcoin],
-  ['trezorWeb (WebUSB)', async () => (await import('./trezorWeb')).default as unknown as TrezorBitcoin],
 ];
 
 // Issue 1327: on testnet the account sits at coin type 1', on Connect's testnet coin,

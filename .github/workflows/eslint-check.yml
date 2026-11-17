@@ -9,15 +9,17 @@ name: ESLint Config Gate
 # committed with --no-verify. There was no ESLint job in CI, so it went
 # unnoticed for a long time.
 #
-# What this job does (and deliberately does NOT do): it installs from the
-# lockfile and resolves the full flat config via `eslint --print-config`. That
-# instantiates every plugin exactly as a real lint run would, so a plugin that
-# is missing / on an incompatible major / renamed makes this job fail — while
-# NOT drowning in the ~730 pre-existing @typescript-eslint/no-explicit-any
-# errors in src/ (print-config resolves config, it does not lint file bodies).
-# New-code linting is enforced separately by the pre-commit hook
-# (scripts/precommit-lint.mjs, staged files only). Clearing the legacy `any`
-# debt so a full `eslint .` gate can go green is a separate task.
+# What this job does: it installs from the lockfile and resolves the full flat
+# config via `eslint --print-config`, which instantiates every plugin exactly as
+# a real lint run would, so a plugin that is missing / on an incompatible major /
+# renamed fails here with a clear message. It then lints the whole repository
+# and typechecks it with vue-tsc. Both were red with legacy debt until #1313
+# cleared it (2026-11); from then on any new ESLint error or type error fails
+# the PR. The pre-commit hook (scripts/precommit-lint.mjs) still lints staged
+# files locally. Its last step checks the V02 route validation matrix
+# (spikes/vue3-migration/route-matrix.mjs --check): a PR that adds or renames
+# a route fails here until route-matrix.json has an entry for it. The job keeps
+# its original name because branch protection requires it by that name.
 #
 # Secret-free by design (contents: read, --ignore-scripts), like
 # lockfile-check.yml, so it runs on every PR including Dependabot's.
@@ -52,7 +54,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.19.0'
           cache: 'npm'
@@ -71,3 +73,17 @@ jobs:
         run: |
           npx eslint --print-config src/options/App.vue > /dev/null
           npx eslint --print-config src/utils/debug.ts > /dev/null
+
+      # The whole repository, not only changed files: the legacy debt is gone
+      # (#1313), so zero errors is the baseline to hold.
+      - name: Lint the repository
+        run: npx eslint .
+
+      - name: Typecheck (vue-tsc)
+        run: npm run typecheck
+
+      # Every shipped route must have an entry in the V02 route validation
+      # matrix (#1284); a new or renamed route fails here until
+      # spikes/vue3-migration/route-matrix.json and ROUTE-MATRIX.md are updated.
+      - name: Route validation matrix is current
+        run: node spikes/vue3-migration/route-matrix.mjs --check

@@ -168,6 +168,27 @@ describe('stakeCertificatesMatch', () => {
     expect(stakeCertificatesMatch({ stakeCredential: own, poolId: POOL, drep: 'noConfidence', registration: 'allowed' })([combined])).toBe(false);
   });
 
+  it('refuses every combined certificate when only separate ones were asked for', () => {
+    const exp = { stakeCredential: own, poolId: POOL, drep: 'abstain' as const, registration: 'allowed' as const, separate: true };
+    const abstain = { __typename: 'AlwaysAbstain' };
+    const separate = [
+      { __typename: Cardano.CertificateType.Registration, stakeCredential: own, deposit: 2_000_000n },
+      deleg(POOL),
+      { __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: own, dRep: abstain },
+    ] as unknown as Cardano.Certificate[];
+    expect(stakeCertificatesMatch(exp)(separate)).toBe(true);
+    for (const certificates of [
+      [{ __typename: Cardano.CertificateType.StakeVoteRegistrationDelegation, stakeCredential: own, poolId: POOL, dRep: abstain, deposit: 2_000_000n }],
+      [{ __typename: Cardano.CertificateType.StakeVoteDelegation, stakeCredential: own, poolId: POOL, dRep: abstain }],
+      [{ __typename: Cardano.CertificateType.StakeRegistrationDelegation, stakeCredential: own, poolId: POOL, deposit: 2_000_000n },
+        { __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: own, dRep: abstain }],
+      [deleg(POOL), { __typename: Cardano.CertificateType.VoteRegistrationDelegation, stakeCredential: own, dRep: abstain, deposit: 2_000_000n }],
+    ] as unknown as Cardano.Certificate[][]) {
+      expect(stakeCertificatesMatch(exp)(certificates)).toBe(false);
+      expect(stakeCertificatesMatch({ ...exp, separate: false })(certificates)).toBe(true);
+    }
+  });
+
   it('accepts a deregistration only when asked for, and refuses an extra delegation beside it', () => {
     const dereg = { __typename: Cardano.CertificateType.Unregistration, stakeCredential: own, deposit: 2_000_000n } as unknown as Cardano.Certificate;
     expect(stakeCertificatesMatch({ stakeCredential: own, deregistration: true })([dereg])).toBe(true);

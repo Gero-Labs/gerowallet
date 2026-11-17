@@ -22,14 +22,25 @@
     </template>
 
     <template v-else>
+      <!-- Midnight: the notices above the balance, at most two by precedence
+           (MidnightNoticeSlot.vue). Renders nothing otherwise. -->
+      <MidnightNoticeSlot v-if="isMidnight" layout="panel" class="home-upgrade-banner" @send-again="showMidnightSend = true" />
+
       <BalanceSection @buy-sell="handleBuySell" />
 
-      <QuickActions @action="handleAction" />
+      <QuickActions
+        :disabled-ids="midnightSendPaused ? ['send'] : []"
+        :described-by="midnightSendPaused ? 'home-send-paused' : undefined"
+        @action="handleAction"
+      />
+      <p v-if="midnightSendPaused" id="home-send-paused" class="home-send-paused t-caption" data-testid="home-send-paused">
+        {{ midnightSendHeldText }}
+      </p>
 
       <!-- Midnight: a connected site's transaction in flight (Prove → Fund → Submit) -->
       <MiniSiteActivity v-if="isMidnight" />
       <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
-      <MiniDustGauge v-if="isMidnight" />
+      <MiniDustGauge v-if="isMidnight" :class="{ 'g-stale': midnightRefreshing }" />
       <MiniProofServerWidget v-if="isMidnight" />
       <FeaturedCarousel v-else />
 
@@ -42,7 +53,7 @@
         </span>
       </div>
 
-      <TokenList @select="handleTokenSelect" />
+      <TokenList :class="{ 'g-stale': isMidnight && midnightRefreshing }" @select="handleTokenSelect" />
     </template>
 
     <!-- Flow sheets -->
@@ -134,7 +145,7 @@
       :unit="programmableSendToken.unit"
       :ticker="programmableSendToken.ticker"
       :name="programmableSendToken.name"
-      :decimals="programmableSendToken.decimals"
+      :decimals="rowDecimals(programmableSendToken)"
     />
   </div>
 </template>
@@ -148,12 +159,15 @@ import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { Blockchain, Network } from '@/models/types';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useAdaLovelace } from '../composables/useAdaLovelace';
-import { listedTokens, type ListableToken } from '../composables/listedTokens';
+import { listedTokens, tokenRowDecimals, type ListableToken } from '../composables/listedTokens';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
+import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
+import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
 import MiniProofServerWidget from '../components/MiniProofServerWidget.vue';
@@ -186,7 +200,9 @@ interface HomeTokenRow {
   price?: number;
   change?: number | null;
   quantity?: number | string | bigint;
+  /** Only on the pinned ADA row; a wallet token states them in `metadata` (read through rowDecimals). */
   decimals?: number;
+  metadata?: { ticker?: string; decimals?: number };
   /** The locked (CIP-113) row of a token, which TokenList lists apart from an ordinary holding. */
   isProgrammable?: boolean;
   cip113Registered?: boolean;
@@ -207,6 +223,13 @@ function openProgrammableSend() {
 }
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+// One reason Midnight Send is held, if it is: update required, the network
+// upgrade, or a rebuild in progress (useMidnightSendHold.ts), said once under it.
+const midnightSendHold = useMidnightSendHold(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
+const midnightSendPaused = midnightSendHold.held;
+const midnightSendHeldText = midnightSendHold.sendTextShort;
+/** Midnight data is being rebuilt (midnightRefresh.ts): the values below show the last ones the wallet knew, greyed. */
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 
 // Mirrors the dashboard's isEmptyMainnet exactly (mini-gero must mirror the
 // dashboard, never approximate): mainnet Cardano whose account row is absent
@@ -245,6 +268,7 @@ function handleAction(id: string) {
   switch (id) {
     case 'send':
       if (isMidnight.value) {
+        if (midnightSendPaused.value) return;
         showMidnightSend.value = true;
       } else {
         showSend.value = true;
@@ -280,8 +304,16 @@ function formatPrice(price: number): string {
   });
 }
 
+/**
+ * A row's decimals as its TokenList row reads them; 0 (base units, as that row shows them) when
+ * the row states none. The sheet's balance, its value and its Send all count with this one figure.
+ */
+function rowDecimals(token: HomeTokenRow): number {
+  return tokenRowDecimals(token) ?? 0;
+}
+
 function formatDetailAmount(token: HomeTokenRow): string {
-  const decimals = token.decimals ?? 6;
+  const decimals = rowDecimals(token);
   let amount = Number(token.quantity);
   if (decimals > 0) {
     amount = amount / Math.pow(10, decimals);
@@ -294,7 +326,7 @@ function formatDetailAmount(token: HomeTokenRow): string {
 
 function formatDetailValue(token: HomeTokenRow): string {
   if (!token.price) return '--';
-  const decimals = token.decimals ?? 6;
+  const decimals = rowDecimals(token);
   let amount = Number(token.quantity);
   if (decimals > 0) {
     amount = amount / Math.pow(10, decimals);
@@ -324,6 +356,18 @@ function formatAdaPrice(price: number): string {
 </script>
 
 <style scoped>
+/* The Midnight notice slot, on the panel's gutter. */
+.home-upgrade-banner {
+  margin: var(--g-s-3) var(--g-s-3) 0;
+}
+
+/* Why Send is held: under the actions, before the widgets. */
+.home-send-paused {
+  margin: 0 var(--g-s-4) var(--g-s-3);
+  color: var(--g-text-2);
+  text-align: center;
+}
+
 .home-page {
   display: flex;
   flex-direction: column;

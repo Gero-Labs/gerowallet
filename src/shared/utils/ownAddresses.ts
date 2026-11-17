@@ -16,3 +16,16 @@ export function derivedOwnAddresses(keys: Partial<Keys> | null | undefined, base
     .filter((a): a is string => typeof a === 'string' && a.length > 0);
   return [...new Set([...(baseAddress ? [baseAddress] : []), ...derived])];
 }
+
+/**
+ * The key hashes of the same derived payment and change keys, plus the stake
+ * keys: the required signers a transaction built for the wallet may name. A
+ * builder may pick an input at a change address and name its key, so change keys
+ * belong here as their addresses belong in derivedOwnAddresses.
+ */
+export function derivedOwnKeyHashes(keys: Partial<Keys> | null | undefined): string[] {
+  const creds = [...(keys?.payment ?? []), ...(keys?.change ?? []), ...(keys?.stake ?? [])]
+    .map((k: Key) => k.cred)
+    .filter((c): c is string => typeof c === 'string' && c.length > 0);
+  return [...new Set(creds)];
+}

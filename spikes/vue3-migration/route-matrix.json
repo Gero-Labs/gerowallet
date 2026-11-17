@@ -1,0 +1,1247 @@
+{
+  "schemaVersion": 1,
+  "purpose": "V02 (#1284): map every shipped route to its V07-V11 owner and to the checks that exercise it. route-matrix.mjs joins this file with the routes read from the current routers and refuses: a route with no entry, an entry that names no route, a unit, guards or help-browser ref that is not a tracked file, an e2e ref that is not a tests/specs path, a route with a view and no unit, help-browser or unfunded e2e check and no manual step, a redirect with no guards check and no manual step, and a manual or note that is not a non-empty string. With --e2e <checkout> it also checks that each e2e spec exists at harnessSha and names its route (a side-panel route must also open the side panel) or says how it gets there with via.",
+  "e2e": {
+    "repository": "Gero-Labs/gerowallet-e2e-tests",
+    "harnessSha": "53a139e4c0c8dfb94e7ef589322e074b4a461a73",
+    "walletPin": "e8a3d1391a2a10efd5e719744e7b530eee7a5528",
+    "note": "They are not checked out here, so route-matrix.mjs checks only their shape; rerun the harness against the exact candidate in V13 (#1295). A check marked funded skips without a funded testnet wallet and is not coverage until that run has one."
+  },
+  "kinds": {
+    "unit": "Vitest spec in this repository (npm test) that mounts the route's view or drives the logic behind it. Source-text tripwires are not listed.",
+    "guards": "src/modules/navigation/router.guards.spec.ts drives the production router: it proves where the route lands (auth, network, feature flag, redirect), not that its view renders. route-matrix.mjs checks the spec pushes the route (in the side-panel block for a side-panel route).",
+    "help-browser": "scripts/help-browser scenario run by the optional Help browser evidence workflow when Help, shared UI or build files change (not a required check).",
+    "e2e": "Playwright spec in the external harness, run against an exact wallet SHA.",
+    "manual": "Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff.",
+    "harness": "scripts/migration-browser harness: drives the real packaged extension in Chromium with production messaging and persistence (no state overrides)."
+  },
+  "routes": {
+    "options:/": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/portfolio/components/LegacyListingsCard.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/dashboard-portfolio.spec.ts",
+          "funded": true
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/portfolio-pending.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cardano-holdings.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/legacy-listing-rescue.spec.ts"
+        }
+      ]
+    },
+    "options:/welcome": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/welcome/views/Welcome.addAccount.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/welcome/views/Welcome.help.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/onboarding.spec.ts",
+          "via": "a fresh profile opens on Welcome"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/wallet-create-flow.spec.ts",
+          "via": "a fresh profile opens on Welcome"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/wallet-library.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/multi-account.spec.ts"
+        }
+      ],
+      "manual": "Pair Ledger, Trezor and Keystone from the hardware step on real devices."
+    },
+    "options:/market": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "note": "Redirect to the dashboard's market view (/?view=all)."
+    },
+    "options:/swap": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/swap/components/__tests__/GeroSwapEmbed.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/swap/components/__tests__/GeroSwapEmbed.spendBound.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/notify-swap-orders.spec.ts"
+        }
+      ],
+      "manual": "Swaps are mainnet only: one live swap per release, software and Ledger."
+    },
+    "options:/staking": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/staking-page.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/staking-flow.spec.ts",
+          "funded": true
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/staking-submit.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Delegate and withdraw with a hardware wallet on preprod."
+    },
+    "options:/nexus": {
+      "checks": [],
+      "manual": "Open the page and confirm the hero, the stats and both outbound links (nexus.gerowallet.io and its API docs) render."
+    },
+    "options:/cashback": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/cashback/CashbackPortal.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/cashback/CashbackSignDialog.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cashback-portal.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "06-v263-features/cashback-retailers.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Mainnet only: open the Bring portal and claim once per release."
+    },
+    "options:/governance": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "note": "Redirect to My governance, or to the DRep directory when ?drep= is present (kept by the guard spec)."
+    },
+    "options:/governance/me": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/MyGovernance.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance-persistence.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance-metadata.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/feature-gates.spec.ts"
+        }
+      ]
+    },
+    "options:/governance/register": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/drepRegister.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance-registration.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/feature-gates.spec.ts"
+        }
+      ],
+      "manual": "Register and retire a DRep on preprod with a funded wallet."
+    },
+    "options:/governance/actions": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/ActionList.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/governance.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/flags-retry.spec.ts"
+        }
+      ]
+    },
+    "options:/governance/actions/:txHash/:index": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/ActionDetail.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/committee-identity.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/global-search.spec.ts"
+        }
+      ],
+      "manual": "Cast a vote on preprod as a registered DRep."
+    },
+    "options:/governance/dreps": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/DRepDirectory.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/governance/views/drepDirectory.sort.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/drep-directory.spec.ts"
+        }
+      ]
+    },
+    "options:/governance/dreps/:drepId": {
+      "checks": [],
+      "manual": "Delegate voting power to a DRep from its profile on preprod."
+    },
+    "options:/pool-operator": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/pool-operator/components/PoolRegistrationForm.contract.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/pool-operator/composables/useColdKeyImport.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cold-key.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/spo-auth.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/spo-transport.spec.ts"
+        }
+      ],
+      "manual": "Pool update signed with the cold key on Ledger (SPO node)."
+    },
+    "options:/realfi": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/realfi/RealFi.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/realfi/RealFi.staking.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/feature-gates.spec.ts"
+        }
+      ],
+      "manual": "Mainnet only: stake and unstake once with the live widget."
+    },
+    "options:/proof-server": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/midnight/ProofServerPage.consent.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/midnight/ProofServerRestartNotice.spec.ts"
+        }
+      ],
+      "manual": "Midnight wallet: switch between the local and remote prover and prove one shielded send."
+    },
+    "options:/media-player": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/navigation.spec.ts"
+        }
+      ],
+      "manual": "Play an audio and a video NFT from a wallet that holds them."
+    },
+    "options:/help": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/helpHome.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/home/HelpHomeDashboard.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/help-center.spec.ts"
+        }
+      ]
+    },
+    "options:/help/topics/:topic": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/helpNavigation.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpLayout.spec.ts"
+        }
+      ]
+    },
+    "options:/help/articles/:slug": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpReader.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/helpRichText.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/published-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/help-center.spec.ts"
+        }
+      ]
+    },
+    "options:/help/search": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpCenter.search.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpSearchForm.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/published-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/help-center.spec.ts"
+        }
+      ]
+    },
+    "options:/help/updates": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/HelpUpdatesView.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/help/useHelpUpdates.spec.ts"
+        },
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/updates-smoke.cjs"
+        }
+      ]
+    },
+    "options:/blog": {
+      "checks": [
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/blog.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/blog-page.spec.ts"
+        }
+      ]
+    },
+    "options:/blog/:slug": {
+      "checks": [
+        {
+          "kind": "help-browser",
+          "ref": "scripts/help-browser/foundation-smoke.cjs"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/blog.spec.ts"
+        }
+      ]
+    },
+    "options:/copilot-feed": {
+      "checks": [],
+      "manual": "With isCopilotEnabled on, open the feed in the full page and confirm the cards render."
+    },
+    "options:/dev-tools": {
+      "checks": [],
+      "manual": "No navigation entry: open #/dev-tools and convert one transaction CBOR to JSON."
+    },
+    "options:/dapp-connect": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/DappConnect.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/dapp-connect-account.spec.ts"
+        }
+      ]
+    },
+    "options:/dapp-sign": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts"
+        }
+      ],
+      "manual": "signData from a live dApp with Ledger and Keystone."
+    },
+    "options:/sign-tx": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/SignTx.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/shared/components/txApprovalSurfaces.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/popup-sign-refusals.spec.ts"
+        }
+      ],
+      "manual": "signTx from a live dApp with Ledger, Trezor and Keystone (QA #1518)."
+    },
+    "options:/sign-bitcoin-psbt": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/BitcoinSignPsbt.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/BitcoinPassKeySigning.spec.ts"
+        }
+      ],
+      "manual": "Sign a PSBT from a Bitcoin dApp on testnet."
+    },
+    "options:/sign-bitcoin-message": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/BitcoinPassKeySigning.spec.ts"
+        }
+      ],
+      "manual": "Sign a message from a Bitcoin dApp on testnet."
+    },
+    "options:/wc-session-proposal": {
+      "checks": [],
+      "manual": "Pair with a WalletConnect dApp (Minswap) and approve, then reject, a session."
+    },
+    "options:/warning": {
+      "checks": [],
+      "manual": "Open a blacklisted site: both acknowledgements are required, and Continue, Back and Report each answer the request once."
+    },
+    "options:/transactions": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/transactions/Transactions.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/vue-release-regression.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/cardano-pending-transactions.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/midnight-transactions-filter.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/bitcoin-utxos.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/transactions-history.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "options:/card": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/wallet/components/dashboard/CardStatusSection.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/wallet/components/dashboard/OrderCardFlowModal.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/gero-card-hardening.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/gero-card-ordering.spec.ts"
+        }
+      ],
+      "manual": "Mainnet only: KYC, order and top-up with the live provider."
+    },
+    "options:/passkey-auth": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/passkeys.spec.ts",
+          "via": "the page object authenticatePasskey()"
+        }
+      ],
+      "manual": "Real authenticator (Touch ID, a security key and a phone) in Chrome and Brave."
+    },
+    "options:/ledger-ble-sign": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "manual": "Sign from the side panel with a Ledger Nano X over Bluetooth."
+    },
+    "options:/gomining": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/gomining/useGoMiningAccount.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/gomining/dialogs/GoMiningBuyDialog.spec.ts"
+        }
+      ],
+      "manual": "Mainnet Bitcoin wallet: sign in to GoMining and view the account."
+    },
+    "options:/babylon": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/babylon/dialogs/BabylonStakeDialog.spec.ts"
+        }
+      ],
+      "manual": "Stake a small amount on Babylon testnet."
+    },
+    "options:/ordinals": {
+      "checks": [],
+      "manual": "Bitcoin wallet holding inscriptions: the gallery renders them."
+    },
+    "options:/thorchain": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/thorchain/ThorchainSwap.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "manual": "Quote a BTC to ADA swap on mainnet (no submit)."
+    },
+    "options:/mempool": {
+      "checks": [],
+      "manual": "Bitcoin wallet: open the Mempool explorer and confirm fee rates, recent blocks and a transaction lookup render."
+    },
+    "options:/lightning": {
+      "checks": [],
+      "manual": "Resolve a Lightning address and a BOLT11 invoice on mainnet (no payment)."
+    },
+    "options:/signing-ceremony": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/signingCeremony/SigningCeremony.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/signingCeremony/ceremony.spec.ts"
+        }
+      ],
+      "manual": "No navigation entry: on a hardware wallet, sign a delegation statement and check the printed entry verifies."
+    },
+    "options:/:pathMatch(.*)*": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/navigation-dao-retired.spec.ts"
+        }
+      ],
+      "note": "Catch-all: unknown paths land on the dashboard."
+    },
+    "sidepanel:/": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/pages/HomePage.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/sidepanel-token-list.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "sidepanel:/staking": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Delegate from the side panel with Ledger over Bluetooth."
+    },
+    "sidepanel:/market": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Open the side-panel market and confirm the token list and category tabs render."
+    },
+    "sidepanel:/perps": {
+      "checks": [
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Mainnet only: open and close a Strike position (QA #1513)."
+    },
+    "sidepanel:/vaults": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/perps/VaultTransfers.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ],
+      "manual": "Mainnet only: open a Strike vault; its details, depositors and your position load, and Deposit and Withdraw stay disabled with the \"not available in GeroWallet yet\" note. Vault transfers are deferred: Strike's API has no vault-specific deposit or withdrawal (#1292)."
+    },
+    "sidepanel:/activity": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/pages/ActivityPage.midnight.spec.ts"
+        },
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/explorer-setting.spec.ts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "07-v270-features/sidepanel.spec.ts",
+          "funded": true
+        }
+      ]
+    },
+    "sidepanel:/feed": {
+      "checks": [
+        {
+          "kind": "guards",
+          "ref": "src/modules/navigation/router.guards.spec.ts"
+        }
+      ],
+      "manual": "With isCopilotEnabled on, open the side-panel feed and confirm cards render."
+    },
+    "sidepanel:/:pathMatch(.*)*": {
+      "checks": [],
+      "note": "Catch-all: unknown side-panel paths land on home.",
+      "manual": "Open sidepanel/index.html#/does-not-exist and confirm home renders."
+    }
+  },
+  "behaviours": {
+    "async-validation-invalid": {
+      "title": "Async validation: an invalid result blocks the action",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/dashboard/dialogs/ChangePasswordDialog.spec.ts",
+          "test": "does not mutate when the awaited form result is invalid"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/shared/composables/useTransactionSigning.spec.ts",
+          "test": "awaits Vuetify validation and blocks repeated clicks while pending; false never signs"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/walletManager.unlock.spec.ts",
+          "test": "a wrong PassKey counts toward the back-off like any wrong credential"
+        },
+        {
+          "kind": "e2e",
+          "ref": "05-edge-cases/send-errors.spec.ts",
+          "test": "57: invalid recipient shows an address validation error"
+        },
+        {
+          "kind": "e2e",
+          "ref": "05-edge-cases/settings-errors.spec.ts",
+          "test": "63: spending password change rejects a wrong current password"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts",
+          "test": "five wrong passwords start a wait that refuses even the right password"
+        }
+      ],
+      "scope": "Recipient address checks are synchronous and there is no ADA Handle validation, so the asynchronous checks are the password and credential ones covered here."
+    },
+    "async-validation-pending": {
+      "title": "Async validation: pending blocks repeat actions; a stale result is discarded",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/dashboard/dialogs/ChangePasswordDialog.spec.ts",
+          "test": "cancels before mutation if %s changes during form validation"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/navigation/dialogs/BackupWalletDialog.spec.ts",
+          "test": "never decrypts if %s changes during form validation"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/shared/composables/useTransactionSigning.spec.ts",
+          "test": "awaits Vuetify validation and blocks repeated clicks while pending; false never signs"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
+          "test": "runs repeated password clicks in one flight and signs only the approved payload"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/flows/SendSheet.spec.ts",
+          "test": "requires a new approval after replacement and serializes repeated clicks"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/behaviour-coverage.spec.ts",
+          "test": "repeated Sign clicks while the password check is pending verify once and sign once"
+        }
+      ]
+    },
+    "approve-once": {
+      "title": "Approve: a connect or signing request is answered exactly once",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/DappConnect.spec.ts",
+          "test": "answers with the account the user picked and connects nothing itself"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
+          "test": "authenticates once on repeated PassKey clicks and signs the current request"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
+          "test": "deduplicates re-delivered requestIds"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a second returnData, a later close or tab removal never changes the first answer"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "a second approval, a later reject or a NACK for an answered request settles nothing"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a second signing request for a popup tab already waiting is declined, not given the first answer"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        }
+      ]
+    },
+    "reject-once": {
+      "title": "Reject: a request is answered exactly once",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/SignTx.spec.ts",
+          "test": "prevents Decline and window closure while the hardware call is pending, then permits decline after failure"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
+          "test": "rejecting a coalesced enable rejects every duplicate"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "a reject is answered once and a later approval cannot overturn it"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "closing the popup of another request never answers this one"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/dapp-connect-account.spec.ts",
+          "test": "rejecting the prompt connects nothing and keeps the logged account"
+        }
+      ]
+    },
+    "cancel-once": {
+      "title": "Cancel, close or dismiss: the pending request is answered exactly once",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
+          "test": "does not publish a signature returned after cancellation"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/midnightProvingPark.spec.ts",
+          "test": "cancelTab cancels the prompt parked for that tab"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "closing the popup (its port disconnects) declines the pending request once"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "removing the popup tab declines the pending request once"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a popup closed before its page connects still declines the request"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a page that dies before speaking still declines its own popup, never another"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "closing the panel answers nothing and keeps the request; the next panel of that tab gets it and can answer"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "a panel that dies while requests are re-delivered leaves them parked for the next connect"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        }
+      ]
+    },
+    "worker-restart": {
+      "title": "Service-worker restart: state recovers after the MV3 worker stops",
+      "owners": [
+        "V05",
+        "V13"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/storePersistence.integration.spec.ts",
+          "test": "a restarted worker hydrates the full store from the split layout"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/stores/storageSecrets.integration.spec.ts",
+          "test": "a restarted worker ignores a logged wallet or lock state planted in chrome.storage"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/storeMessagingBg.snapshot.spec.ts",
+          "test": "serves subscriptions made before the store registers during worker boot"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "after a worker restart, an answer for a request the worker never issued is dropped"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
+          "test": "after a worker restart, drops prompts the new worker does not hold and answers nothing"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/hygiene.spec.ts",
+          "test": "gives a bare transport error the envelope the page matches on"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts",
+          "test": "rewriting loggedWallet and isLocked in chrome.storage.local neither unlocks nor switches the wallet after a worker restart"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/behaviour-coverage.spec.ts",
+          "test": "a restarted worker drops the prompt it no longer holds and answers the next request"
+        }
+      ]
+    },
+    "lock-unlock": {
+      "title": "Lock and unlock: manual and configured lock, credential checks, locked routing",
+      "owners": [
+        "V05",
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/chrome/unlockGuards.spec.ts",
+          "test": "never unlocks a locked session: LOGIN while locked lands locked"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/walletManager.unlock.spec.ts",
+          "test": "locks the wallet before it becomes the logged-in one"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/options/main.spec.ts",
+          "test": "still evicts private content on lock"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "locks once inactivity reaches the threshold and a method is set"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "locks once the configured inactivity has passed, and only once"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "reads an added account's lock settings from account #0 and its activity from itself"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "creates a repeating alarm every period and runs a tick on each of its firings only"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Background lock broadcasts reach both options pages and side panel"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/behaviour-coverage.spec.ts",
+          "test": "the auto-lock alarm locks the wallet once the configured inactivity has passed"
+        }
+      ]
+    },
+    "two-uis": {
+      "title": "Two open UIs: a change reaches both through the background broadcast",
+      "owners": [
+        "V05"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/productionMessaging.integration.spec.ts",
+          "test": "broadcasts login/lock and wallet replacement to two contexts, then persists a restart"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/storeMessagingBg.snapshot.spec.ts",
+          "test": "sends the snapshot only to the joining context"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Second UI-created wallet replaces prior identity across subscribers"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/store-publication.spec.ts",
+          "test": "store publication waits for the requested subscription and retires closed ports @post-v27 @offline"
+        }
+      ]
+    },
+    "wallet-switch": {
+      "title": "Wallet switch: identity and data replaced in every UI, nothing of the previous wallet shown",
+      "owners": [
+        "V05"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/storePersistence.integration.spec.ts",
+          "test": "a wallet switch cut short by a worker restart never shows the previous wallet data"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/walletManager.login.spec.ts",
+          "test": "does not unlock after %s during credential verification"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/websocket.service.syncPending.spec.ts",
+          "test": "re-arms on resubscribe: a new SUBSCRIBE is a new first answer to wait for"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Real wallet switch replaces current identity without fixture-pinned fields"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/multi-account.spec.ts",
+          "test": "removing the active added account returns to account zero and persists after reload"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/behaviour-coverage.spec.ts",
+          "test": "switching wallets subscribes to the new wallet, and back"
+        }
+      ]
+    },
+    "network-switch": {
+      "title": "Network switch: covered as a switch to a wallet on another network",
+      "owners": [
+        "V05"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/productionMessaging.integration.spec.ts",
+          "test": "broadcasts login/lock and wallet replacement to two contexts, then persists a restart"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/stores/midnightStore.spec.ts",
+          "test": "clears the tip when the network changes"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/explorer-setting.spec.ts",
+          "test": "links follow its own network and its own choice"
+        }
+      ],
+      "scope": "The network belongs to each wallet (geroStore.setNetwork has no callers), so a network switch is a switch to a wallet on another network; there is no separate action."
+    },
+    "persistence": {
+      "title": "Persistence: store state survives a worker or browser restart",
+      "owners": [
+        "V05",
+        "V13"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/utils/storePersistence.spec.ts",
+          "test": "restores everything after a restart (a fresh persister over the same storage)"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/stores/storePersistence.integration.spec.ts",
+          "test": "upgrades a record in the old single-value format without losing data"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Browser restart hydrates the UI-created wallet from production persistence"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "01-setup/browser-restart.spec.ts",
+          "test": "a freshly created wallet is still open after the browser restarts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts",
+          "test": "wallet secrets, unlock verifiers and the flag mirror are never written to chrome.storage.local, across login, lock and unlock"
+        }
+      ]
+    }
+  }
+}

@@ -17,10 +17,9 @@ vi.mock('@/stores/walletStore', async () => {
   const { reactive } = await import('vue');
   return { walletStore: reactive({ loggedWallet: { id: 1, network: 'Testnet', encryptionMethod: 'password' }, utxos: [] as unknown[] }) };
 });
-const feeEstimate = vi.hoisted(() => vi.fn(async () => ({ feeRate: 12 })));
+const feeTiers = vi.hoisted(() => vi.fn(async () => ({ fast: 12, medium: 8, slow: 4, fallback: false })));
 vi.mock('@/chains/bitcoin/bitcoinFeeEstimator', () => ({
-  FeePriority: { FAST: 'fast' },
-  getBitcoinFeeEstimator: () => ({ getFeeEstimate: feeEstimate }),
+  getBitcoinFeeEstimatorFor: () => ({ getFeeTiers: feeTiers }),
 }));
 vi.mock('@/chains/bitcoin/bitcoinKeyManager', () => ({
   validateBitcoinAddress: (address: string, network: string) => network === 'Testnet' && address.startsWith('tb1'),
@@ -111,7 +110,7 @@ async function quoteAndFillPassword() {
   await button('gomining.getBtcPrice').trigger('click');
   await vi.waitFor(() => expect(wrapper.find('[data-testid="password"]').exists()).toBe(true));
   // The fee estimator is imported on demand; the dialog cannot price the payment before it answers.
-  await vi.waitFor(() => expect(feeEstimate).toHaveBeenCalled());
+  await vi.waitFor(() => expect(feeTiers).toHaveBeenCalled());
   await settle();
   await wrapper.find('[data-testid="password"]').setValue('pw');
 }
@@ -122,7 +121,7 @@ beforeEach(() => {
   api.getOrder.mockReset();
   send.mockReset().mockResolvedValue({ data: { success: true, txId: TXID } });
   withSessionMock.mockClear();
-  feeEstimate.mockClear();
+  feeTiers.mockClear();
   (walletStore as unknown as { utxos: unknown[] }).utxos = [{ value: '200000' }, { value: '50000' }];
 });
 
@@ -207,5 +206,16 @@ describe('GoMiningBuyDialog', () => {
     mountDialog();
     await quoteAndFillPassword();
     expect(button('gomining.payNow').attributes('disabled')).toBeDefined();
+  });
+
+  it("will not pay at the built-in fee rate when the network's rates cannot be read", async () => {
+    feeTiers.mockResolvedValueOnce({ fast: 20, medium: 10, slow: 5, fallback: true });
+    mountDialog();
+    await quoteAndFillPassword();
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('gomining.errorFeeUnavailable');
+    expect(button('gomining.payNow').attributes('disabled')).toBeDefined();
+    await button('gomining.payNow').trigger('click');
+    expect(send).not.toHaveBeenCalled();
   });
 });

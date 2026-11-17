@@ -282,6 +282,13 @@ describe('NavigationDrawer: the Gero mark', () => {
     expect(logo(wrapper)).toBe(assets.geroNoTextBitcoin);
   });
 
+  it('is the Solana purple-green mark on a Solana wallet', () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, chain: 'Solana', network: 'Devnet' } as never;
+    wrapper = mountDrawer('/dashboard');
+
+    expect(logo(wrapper)).toBe(assets.geroNoTextSolana);
+  });
+
   it('stays the default mark on a Cardano wallet', () => {
     wrapper = mountDrawer('/dashboard');
 

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readVerifiedMidnightChainIdentity, fetchLedger9DustSnapshot, assertMidnightChainIdentityUnchanged, midnightCheckpointNamespace } from './midnightChainIdentity';
+import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged, midnightCheckpointNamespace } from './midnightChainIdentity';
 import { getMidnightEndpoints } from './midnightConfig';
 
 vi.mock('@/services/nexusDevice.service', () => ({
@@ -62,21 +62,9 @@ describe('verified Midnight chain identity', () => {
     await expect(assertMidnightChainIdentityUnchanged(endpoints, identity)).rejects.toThrow('changed during');
     expect(midnightCheckpointNamespace(identity)).not.toBe(midnightCheckpointNamespace({ ...identity, chain_generation: 2 }));
   });
-});
 
-describe('DUST snapshot provenance', () => {
-  const valid = { ...identity, serialized_state: 'sdk-state', chain_time_ms: 1000,
-    sdk_version: 'dust-wallet@5.0.0-beta.2/ledger-v9@1.0.0-rc.3' };
-  it('accepts only a compatible snapshot from before the registration lower bound', async () => {
-    request.mockResolvedValueOnce(json(valid));
-    expect(await fetchLedger9DustSnapshot(endpoints, identity, new Date(2000))).toBe('sdk-state');
-  });
-  it.each([
-    { chain_generation: 2 }, { chain_generation: undefined }, { genesis_hash: `0x${'34'.repeat(32)}` },
-    { sdk_version: 'dust-wallet@4.2.0' }, { chain_time_ms: 3000 }, { chain_time_ms: null }, { chain_time_ms: -1 },
-    { serialized_state: '' },
-  ])('cold replays instead of restoring untrusted snapshot metadata %j', async override => {
-    request.mockResolvedValueOnce(json({ ...valid, ...override }));
-    expect(await fetchLedger9DustSnapshot(endpoints, identity, new Date(2000))).toBeNull();
+  it('keeps wallet SDK 2 checkpoints apart from the beta ones', () => {
+    expect(midnightCheckpointNamespace(identity)).toContain('-ledger9-sdk2-');
+    expect(midnightCheckpointNamespace(identity)).not.toContain('rc3');
   });
 });

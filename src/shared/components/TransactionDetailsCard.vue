@@ -43,11 +43,8 @@
     </div>
 
     <div class="tx-details-section">
-      <div
-        v-for="(out, i) in outputs"
-        :key="'out-' + i"
-        class="tx-output-row"
-      >
+      <template v-for="(out, i) in outputs" :key="'out-' + i">
+      <div class="tx-output-row">
         <div class="tx-output-left">
           <v-tooltip location="top"  content-class="custom-tooltip" max-width="260">
             <template v-slot:activator="{ props: activatorProps }">
@@ -105,6 +102,14 @@
           </v-tooltip>
         </div>
       </div>
+      <!-- Where the money goes, in full: the shortened form above can be matched by a
+           look-alike address, so a payment to someone else is never shown only shortened. -->
+      <div
+        v-if="out.kind === 'external' && out.fullAddress"
+        class="tx-output-full t-caption g-mono"
+        data-testid="tx-output-full-address"
+      >{{ out.fullAddress }}</div>
+      </template>
 
       <div v-if="withdrawal" class="tx-output-row">
         <div class="tx-output-left">
@@ -189,6 +194,11 @@ export interface TxDetailsAsset {
 export interface TxDetailsOutput {
   kind: TxOutputKind;
   truncatedAddress: string;
+  /**
+   * The whole address. Shown in full, under the row, for a payment to someone else
+   * (`kind: 'external'`): a shortened address alone can hide a look-alike recipient.
+   */
+  fullAddress?: string;
   ada: string;
   /** Full asset list — enables the per-asset tooltip. */
   assets?: TxDetailsAsset[];
@@ -338,6 +348,14 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
   align-items: center;
   min-width: 0;
   flex: 1;
+}
+
+.tx-output-full {
+  /* Lines up under the address, past the 14px icon and its 4px gap; breaks anywhere so the
+     whole address shows on any width. */
+  padding-left: 18px;
+  word-break: break-all;
+  color: var(--g-text-2);
 }
 
 .tx-output-addr {

@@ -43,7 +43,7 @@ vi.mock('@/db/wallet-db', () => ({
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/shared/composables/useFeatureNotifications', () => ({ isFeatureNew: () => false, markFeatureAsSeen: vi.fn() }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: vi.fn() }));
-vi.mock('@/utils/assets', () => ({ default: { resolveChainLogo: () => '' } }));
+vi.mock('@/utils/assets', () => ({ default: { geroLogo: '' } }));
 
 import SecurityTab from './SecurityTab.vue';
 import { geroStore } from '@/stores/geroStore';

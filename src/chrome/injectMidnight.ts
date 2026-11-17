@@ -1,5 +1,5 @@
 // Midnight DApp Connector — page-context provider.
-// Spec: @midnight-ntwrk/dapp-connector-api@4.0.1
+// Spec: @midnightntwrk/dapp-connector-api@4.1.0
 // Verified against the installed package's dist/*.d.ts and the fetched
 // SPECIFICATION.md (cross-checked against the internal connector plan).
 //
@@ -12,30 +12,23 @@
 import * as bridge from './midnightWebpage';
 import { GERO_CARDANO_ICON } from './injectIcon';
 import { MidnightErrorCode } from './config';
+import { midnightConnectorError } from './midnightConnectorError';
 import type {
   ConnectedAPI,
   InitialAPI,
   KeyMaterialProvider,
-} from '@midnight-ntwrk/dapp-connector-api';
+} from '@midnightntwrk/dapp-connector-api';
 
 // Must match the pinned npm package version exactly — dapps semver-match
 // against this string to decide compatibility (SPECIFICATION.md §Initial API
 // point 7 and 11: "must report exact version of the package it implemented").
-const MIDNIGHT_CONNECTOR_API_VERSION = '4.0.1';
+const MIDNIGHT_CONNECTOR_API_VERSION = '4.1.0';
 const MIDNIGHT_WALLET_RDNS = 'io.gerowallet.midnight';
 
 declare global {
   interface Window {
     midnight?: Record<string, InitialAPI>;
   }
-}
-
-function apiError(code: string, reason: string): Error & { type: string; code: string; reason: string } {
-  const err = new Error(reason) as Error & { type: string; code: string; reason: string };
-  err.type = 'DAppConnectorAPIError';
-  err.code = code;
-  err.reason = reason;
-  return err;
 }
 
 function isKeyMaterialProvider(value: unknown): value is KeyMaterialProvider {
@@ -48,7 +41,7 @@ function isKeyMaterialProvider(value: unknown): value is KeyMaterialProvider {
 
 /** Methods whose server-side implementation is still Phase 3 (see build plan §4). */
 function notYetImplemented(methodName: string): () => Promise<never> {
-  return () => Promise.reject(apiError(
+  return () => Promise.reject(midnightConnectorError(
     MidnightErrorCode.InternalError,
     `${methodName} is not yet implemented by GeroWallet's connector (planned)`,
   ));
@@ -78,7 +71,7 @@ function buildConnectedAPI(): ConnectedAPI {
     // background against the user's proof server. See midnightProvingBridge.
     getProvingProvider: (keyMaterialProvider) => {
       if (!isKeyMaterialProvider(keyMaterialProvider)) {
-        return Promise.reject(apiError(
+        return Promise.reject(midnightConnectorError(
           MidnightErrorCode.InvalidRequest,
           'keyMaterialProvider must implement getZKIR, getProverKey and getVerifierKey',
         ));
@@ -90,18 +83,27 @@ function buildConnectedAPI(): ConnectedAPI {
     // InvalidRequest before any prompt). Returns the sealed tx.
     balanceUnsealedTransaction: (tx, options) => {
       if (typeof tx !== 'string' || tx.length === 0) {
-        return Promise.reject(apiError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
+        return Promise.reject(midnightConnectorError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
       }
       return bridge.midnightBalanceUnsealedTransaction(tx, options);
     },
-    // Phase 3 remainder — sealed-tx balancing / intents. Present (so the
-    // object stays structurally assignable to the real ConnectedAPI type
-    // real dapps import) but reject until implemented. Spec prose: "The
-    // connected API consists of a couple of parts, each always present" —
-    // omitting them would both break that contract and TypeScript structural
-    // compatibility for dapps typed against the SDK.
+    // Swap intents: public (unshielded) legs on ledger-8 networks. Returns a
+    // sealed, purposefully imbalanced tx; the background rejects shielded
+    // legs, Stagenet and give-only intents with InvalidRequest before any
+    // prompt, and a give the wallet cannot cover with InsufficientFunds.
+    makeIntent: (desiredInputs, desiredOutputs, options) => {
+      if (!Array.isArray(desiredInputs) || !Array.isArray(desiredOutputs)) {
+        return Promise.reject(midnightConnectorError(MidnightErrorCode.InvalidRequest, 'desiredInputs and desiredOutputs must be arrays'));
+      }
+      return bridge.midnightMakeIntent(desiredInputs, desiredOutputs, options);
+    },
+    // Sealed-tx balancing. Present (so the object stays structurally
+    // assignable to the real ConnectedAPI type real dapps import) but rejects
+    // until implemented. Spec prose: "The connected API consists of a couple
+    // of parts, each always present" — omitting it would both break that
+    // contract and TypeScript structural compatibility for dapps typed
+    // against the SDK.
     balanceSealedTransaction: notYetImplemented('balanceSealedTransaction'),
-    makeIntent: notYetImplemented('makeIntent'),
   };
   return Object.freeze(api);
 }
@@ -123,7 +125,7 @@ const initialAPI: InitialAPI = Object.freeze({
     // ConnectedAPI for a connection that was never actually approved.
     const approved = await bridge.midnightConnect(networkId);
     if (!approved) {
-      throw apiError(MidnightErrorCode.Rejected, 'User declined the connection request');
+      throw midnightConnectorError(MidnightErrorCode.Rejected, 'User declined the connection request');
     }
     return buildConnectedAPI();
   },

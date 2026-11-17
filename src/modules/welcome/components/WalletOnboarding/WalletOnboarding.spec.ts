@@ -301,14 +301,11 @@ describe('creating a wallet with several accounts', () => {
     expect((await confirmWith(wrapper, 3)).props('accountCount')).toBe(3);
   });
 
-  it('asks on Bitcoin and Midnight too, but not on a chain onboarding offers no accounts for', async () => {
+  it('asks on Bitcoin and Midnight too', async () => {
     expect((await toSecurity(networks.resolveNetwork(Blockchain.BITCOIN, Network.TESTNET))).findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(true);
     const midnight = await toSecurity(networks.resolveNetwork(Blockchain.MIDNIGHT, Network.PREPROD));
     expect(midnight.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(true);
     expect((await confirmWith(midnight, 3)).props('accountCount')).toBe(3);
-    const apex = await toSecurity(networks.resolveNetwork(Blockchain.APEX_PRIME, Network.MAINNET));
-    expect(apex.findComponent({ name: 'StepSecurity' }).props('offerAccounts')).toBe(false);
-    expect((await confirmWith(apex, 3)).props('accountCount')).toBe(1);
   });
 
   it('creates one account, as before, while multi-account is off', async () => {

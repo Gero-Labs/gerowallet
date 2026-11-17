@@ -100,6 +100,24 @@ describe('DUST mapping-validator transaction check', () => {
     expect(verifyDustMappingTx(t, { ...register, sponsoredCollateralRef: lent })).toContain('unexpectedCollateral');
   });
 
+  it('without a UTxO list, lets a lent collateral return to its lender only when it is proven to sit at another key', () => {
+    const lent = `${TX}#1`;
+    const t = tx({ ...registerBody, collateralReturn: out(ATTACKER, 4_500_000n), totalCollateral: undefined });
+    // Proven to be the pool's: neither of the wallet's keys can spend it.
+    expect(verifyDustMappingTx(t, { ...register, sponsoredCollateralRef: lent, sponsoredCollateralOutput: out(ATTACKER, 5_000_000n) }))
+      .toEqual([]);
+    // Proven to sit at the wallet's own payment key: the user's, whatever Nexus calls it.
+    expect(verifyDustMappingTx(t, { ...register, sponsoredCollateralRef: lent, sponsoredCollateralOutput: out(base('a', 'f'), 5_000_000n) }))
+      .toContain('unexpectedCollateral');
+    // Not proven: the user's own.
+    expect(verifyDustMappingTx(t, { ...register, sponsoredCollateralRef: lent, sponsoredCollateralOutput: null }))
+      .toContain('unexpectedCollateral');
+    // A UTxO list, when the caller has one, decides: it is the wallet's.
+    expect(verifyDustMappingTx(t, {
+      ...register, sponsoredCollateralRef: lent, ownUtxoRefs: [lent], sponsoredCollateralOutput: out(ATTACKER, 5_000_000n),
+    })).toContain('unexpectedCollateral');
+  });
+
   it('refuses certificates, foreign required signers, and a non-zero withdrawal', () => {
     const cert = { __typename: Cardano.CertificateType.StakeDeregistration, stakeCredential: keyCred('b') } as Cardano.Certificate;
     expect(verifyDustMappingTx(tx({ ...registerBody, certificates: [cert] }), register)).toContain('unexpectedCertificate');

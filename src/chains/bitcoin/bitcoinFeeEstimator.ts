@@ -9,9 +9,13 @@
  * - Fee rate recommendations based on network conditions
  */
 
-import type { BitcoinApi, BitcoinFeeEstimates } from '@/api/bitcoin-api';
+import { BitcoinApi, type BitcoinFeeEstimates } from '@/api/bitcoin-api';
 import type { IUnifiedUtxo, IOutput } from '@/chains/common/interfaces';
+import { Blockchain } from '@/models/types';
+import networks from '@/utils/networks';
 import { calculateTxFee, calculateTxSize } from './bitcoinCoinSelection';
+
+const MIN_RELAY_FEE_RATE = 1; // sat/vB
 
 /**
  * Fee priority levels
@@ -32,6 +36,16 @@ export interface FeeEstimate {
   estimatedBlocks: number;   // Estimated blocks until confirmation
   estimatedMinutes: number;  // Estimated minutes until confirmation
   description: string;       // User-friendly description
+}
+
+/**
+ * Rates for a Fast / Medium / Slow fee picker
+ */
+export interface FeeTiers {
+  fast: number;       // Satoshis per vbyte, next block
+  medium: number;     // ~3 blocks
+  slow: number;       // ~6 blocks
+  fallback: boolean;  // The built-in defaults: the network's rates could not be fetched
 }
 
 /**
@@ -84,6 +98,30 @@ export class BitcoinFeeEstimator {
    * Fetch fresh fee estimates from API
    */
   async fetchFeeEstimates(force: boolean = false): Promise<BitcoinFeeEstimates> {
+    return (await this.loadFeeEstimates(force)).estimates;
+  }
+
+  /**
+   * Fast / Medium / Slow rates for a fee picker, from one fetch
+   *
+   * Esplora answers in fractional sat/vB. The picker shows, and the transaction
+   * pays, whole ones: rounded up, never under the minimum relay fee.
+   */
+  async getFeeTiers(force: boolean = false): Promise<FeeTiers> {
+    const { estimates, fallback } = await this.loadFeeEstimates(force);
+    const whole = (rate: number) => Math.max(MIN_RELAY_FEE_RATE, Math.ceil(rate));
+    return {
+      fast: whole(estimates.fastestFee),
+      medium: whole(estimates.halfHourFee),
+      slow: whole(estimates.hourFee),
+      fallback,
+    };
+  }
+
+  /**
+   * Fee estimates, and whether they are the built-in fallback
+   */
+  private async loadFeeEstimates(force: boolean): Promise<{ estimates: BitcoinFeeEstimates; fallback: boolean }> {
     if (!this.api) {
       throw new Error('Bitcoin API not initialized. Call setApi() first.');
     }
@@ -91,7 +129,7 @@ export class BitcoinFeeEstimator {
     // Check cache
     const now = Date.now();
     if (!force && this.cache.estimates && (now - this.cache.timestamp) < this.cache.ttl) {
-      return this.cache.estimates;
+      return { estimates: this.cache.estimates, fallback: false };
     }
 
     // Fetch fresh estimates
@@ -102,19 +140,19 @@ export class BitcoinFeeEstimator {
       this.cache.estimates = estimates;
       this.cache.timestamp = now;
 
-      return estimates;
+      return { estimates, fallback: false };
     } catch (error) {
       console.error('Failed to fetch fee estimates:', error);
 
       // Return cached estimates if available
       if (this.cache.estimates) {
         console.warn('Using cached fee estimates due to API error');
-        return this.cache.estimates;
+        return { estimates: this.cache.estimates, fallback: false };
       }
 
       // Fallback to default estimates if no cache
       console.warn('Using fallback default fee estimates');
-      return this.getDefaultFeeEstimates();
+      return { estimates: this.getDefaultFeeEstimates(), fallback: true };
     }
   }
 
@@ -159,7 +197,7 @@ export class BitcoinFeeEstimator {
       case FeePriority.SLOW:
         return {
           priority: FeePriority.SLOW,
-          feeRate: estimates.economyFee,
+          feeRate: estimates.hourFee,
           estimatedBlocks: 6,
           estimatedMinutes: 60,
           description: 'Slow (~1 hour)',
@@ -200,7 +238,7 @@ export class BitcoinFeeEstimator {
       },
       {
         priority: FeePriority.SLOW,
-        feeRate: estimates.economyFee,
+        feeRate: estimates.hourFee,
         estimatedBlocks: 6,
         estimatedMinutes: 60,
         description: 'Slow (~1 hour)',
@@ -334,6 +372,26 @@ export function getBitcoinFeeEstimator(): BitcoinFeeEstimator {
     feeEstimatorInstance = new BitcoinFeeEstimator();
   }
   return feeEstimatorInstance;
+}
+
+// One page estimator per Bitcoin network (see getBitcoinFeeEstimatorFor)
+const networkEstimators = new Map<string, BitcoinFeeEstimator>();
+
+/**
+ * Fee estimator for an extension page, fetching from the network's Esplora
+ *
+ * Nothing gives the shared getBitcoinFeeEstimator() an API in a page, so every
+ * fetch there throws (issue 1440). One per network, so switching wallets never
+ * reuses another network's cached rates.
+ */
+export function getBitcoinFeeEstimatorFor(network: string): BitcoinFeeEstimator {
+  let estimator = networkEstimators.get(network);
+  if (!estimator) {
+    estimator = new BitcoinFeeEstimator();
+    estimator.setApi(new BitcoinApi({ chain: Blockchain.BITCOIN, network }, networks.resolveDefaultProvider(Blockchain.BITCOIN, network)));
+    networkEstimators.set(network, estimator);
+  }
+  return estimator;
 }
 
 /**

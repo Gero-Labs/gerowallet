@@ -13,6 +13,10 @@ import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { debugLog } from '@/utils/debug';
 import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
 import { findDuplicateWallet, WalletIdentitySource } from '@/db/walletIdentity';
+// Static, not `await import()`: the background is one iife bundle, where an inlined
+// dynamic-import namespace can be read before it is declared (scripts/check-bundle-tdz.mjs).
+// The module is small and depends only on @noble.
+import { deriveSolanaAddressFromMnemonic, solanaSeedFromMnemonic } from '@/chains/solana/solanaKeyManager';
 import { assertAccountIndices, canAddAccounts, isHardwareWallet } from '@/shared/utils/walletAccount';
 
 let cachedDb: Dexie | null = null;
@@ -95,7 +99,7 @@ export async function getDb() {
         let addressType: string;
 
         // Determine addressType based on chain
-        if (wallet.chain === 'Cardano' || wallet.chain === 'Apex Fusion Prime' || wallet.chain === 'Apex Fusion Vector') {
+        if (wallet.chain === 'Cardano') {
           addressType = 'shelley';  // Cardano base addresses
         } else if (wallet.chain === 'Bitcoin') {
           addressType = 'segwit';   // Default Bitcoin address type (P2WPKH)
@@ -296,14 +300,15 @@ function getDefaultAddressType(chain: string): string {
     case Blockchain.BITCOIN:
       return 'segwit';  // P2WPKH (bc1q...)
     case Blockchain.CARDANO:
-    case Blockchain.APEX_PRIME:
-    case Blockchain.APEX_VECTOR:
       return 'shelley';
     case Blockchain.MIDNIGHT:
       // Midnight derives 3 role-specific addresses (Zswap shielded, NightExternal
       // unshielded, Dust). The wallet manages all three; the addressType field
       // stores 'unshielded' as the default receive address category.
       return 'unshielded';
+    case Blockchain.SOLANA:
+      // One ed25519 key per account (m/44'/501'/n'/0'); its base58 public key is the address.
+      return 'ed25519';
     default:
       return 'unknown';
   }
@@ -366,13 +371,18 @@ export async function deriveWalletPublicKey(
     return deriveBitcoinAccountXpub(mnemonic, network, addressType);
   }
 
+  if (chain === Blockchain.SOLANA) {
+    // Solana: account #0's address (base58 ed25519 public key at m/44'/501'/0'/0').
+    return deriveSolanaAddressFromMnemonic(mnemonic, 0);
+  }
+
   if (chain === Blockchain.MIDNIGHT) {
     // Never persist the zswap viewing key (PRIV-01): it decrypts every incoming
     // shielded note, and nothing reads it back.
     return JSON.stringify(midnightAddresses ? withoutViewingKey(midnightAddresses) : { unshielded: '', shielded: '', dust: '' });
   }
 
-  // Cardano and the Apex Fusion chains share the CIP-1852 derivation.
+  // Cardano: the CIP-1852 account key.
   return derivePublicKeyFromMnemonic(mnemonic);
 }
 
@@ -475,6 +485,10 @@ export async function createNewWallet(
     // wallet record under `publicKey`.
     const seed: Uint8Array = bip39.mnemonicToSeedSync(mnemonic);
     rootKey = { privateKey: seed };
+  } else if (chain === Blockchain.SOLANA) {
+    // Solana stores the 64-byte BIP-39 seed, like Midnight: every account's ed25519 key
+    // (SLIP-0010, all levels hardened) derives from it, so added accounts need no phrase.
+    rootKey = { privateKey: solanaSeedFromMnemonic(mnemonic) };
   } else {
     // Cardano key derivation (existing logic)
     rootKey = resolvePrivateKey(mnemonic);
@@ -548,8 +562,8 @@ export async function createNewWallet(
     try {
       // Step 3: Encrypt private key using PRF output (no additional prompt)
       // Extract key bytes based on chain
-      const keyBytes = (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT)
-        ? rootKey.privateKey  // Bitcoin/Midnight: { privateKey: Uint8Array }
+      const keyBytes = (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA)
+        ? rootKey.privateKey  // Bitcoin/Midnight/Solana: { privateKey: Uint8Array }
         : rootKey.bytes();    // Cardano: Bip32PrivateKey has bytes() method
 
       const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
@@ -626,7 +640,7 @@ export async function createNewWallet(
     // Root key bytes per chain: Bitcoin/Midnight store the raw key bytes, Cardano
     // the 96-byte Bip32 key. One strong layer either way (the old crypto-ts outer
     // wrap is gone, see decryptPrivateKey), and gpw2 once the envelope flag is on.
-    const keyBytes: Uint8Array = chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT
+    const keyBytes: Uint8Array = chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA
       ? rootKey.privateKey
       : rootKey.bytes();
     const encryptedPrivateKey: string = await sealKeySecret(keyBytes, password, SecretPurpose.RootKey);
@@ -664,6 +678,37 @@ export async function createNewWallet(
   }
 }
 
+/**
+ * A Keystone reports its firmware version only in its pairing answer. Store it on every
+ * Keystone record of that device (same master fingerprint), the accounts already paired
+ * included, whether this pairing adds a record or is refused as a duplicate, so none keeps a
+ * version from before an update. Only Keystone records are written. Best effort: a failed
+ * write never stops a pairing or hides why one was refused. Takes effect from the next login,
+ * a worker restart's included (walletManager reads it from the record).
+ *
+ * The master fingerprint names the seed, not the device. Two Keystones holding one seed share
+ * its records (pairing the second is refused as a duplicate), so the version stored is the one
+ * the device last paired with that seed reported, older or newer. Nothing a Keystone sends when
+ * it signs names it, so the version can't be kept per device.
+ */
+async function refreshKeystoneFirmware(
+  wallet: { type?: string; xfp?: string; firmwareVersion?: unknown },
+  wallets: Record<string, Wallet>,
+): Promise<void> {
+  if (wallet.type !== WalletType.Keystone || !wallet.xfp || typeof wallet.firmwareVersion !== 'string') return;
+  const version = wallet.firmwareVersion;
+  const xfp = wallet.xfp.toLowerCase();
+  try {
+    const stale = Object.values(wallets as Record<string, Wallet & { xfp?: string }>)
+      .filter((w) => w?.type === WalletType.Keystone && String(w.xfp ?? '').toLowerCase() === xfp && w.firmwareVersion !== version);
+    if (stale.length === 0) return;
+    const db: Dexie = await getDb();
+    await Promise.all(stale.map((w) => db['wallets'].update(w.id, { firmwareVersion: version })));
+  } catch (error) {
+    debugLog('[gero-db] Could not refresh the Keystone firmware version:', error);
+  }
+}
+
 export async function createNewHardwareWallet(wallet) {
   // Validate xfp format before creating wallet (for Keystone wallets)
   if (wallet.xfp) {
@@ -672,9 +717,13 @@ export async function createNewHardwareWallet(wallet) {
     }
   }
 
+  // Read once for the firmware refresh and the duplicate check.
+  const wallets = (await getAllWallets()) as Record<string, Wallet>;
+  await refreshKeystoneFirmware(wallet, wallets);
+
   // Pairing the same device again would otherwise store a second copy of the
   // account it already has. A watch wallet has no public key, so never matches.
-  const duplicate = await findExistingWallet(wallet);
+  const duplicate = findDuplicateWallet<Wallet>(wallet, wallets);
   if (duplicate) {
     throw new DuplicateWalletError(duplicate);
   }

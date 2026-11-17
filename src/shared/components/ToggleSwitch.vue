@@ -22,6 +22,8 @@
       style="margin-top: 0; align-items: center;"
       class="toggleSwitch"
       :disabled="props.disabled"
+      :aria-label="props.label || undefined"
+      :aria-describedby="props.describedby || undefined"
     ></v-switch>
     <p class="right‐text my-auto"
        :style="{
@@ -43,6 +45,16 @@ const props = defineProps({
   modelValue: {
     type: Boolean,
     required: true
+  },
+  /** The switch's accessible name, when no visible <label> is tied to it. */
+  label: {
+    type: String,
+    default: ''
+  },
+  /** The id of the element that describes what the switch does. */
+  describedby: {
+    type: String,
+    default: ''
   },
   disabled: {
     type: Boolean,

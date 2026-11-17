@@ -1,4 +1,5 @@
 import { MidnightGenerationQueue, clearMidnightNetworkCheckpoints } from '@/chains/midnight/midnightSyncGeneration';
+import { checkPendingTx, keptRowsToCheck, keptRowsRetryDelay } from '@/chains/midnight/midnightPendingSends';
 /**
  * Midnight Sync Service
  *
@@ -35,6 +36,12 @@ import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { debugLog } from '@/utils/debug';
 import { Network } from '@/models/types';
 import { getMidnightApi } from '@/api/midnight-api';
+import { blockTimeToMs } from '@/chains/midnight/midnightDataFreshness';
+import { MIDNIGHT_STATUS_POLL_MS, refreshMidnightWriteStatus } from '@/chains/midnight/midnightWriteStatus';
+import { resolveMidnightChain } from '@/chains/midnight/midnightChainLedger';
+import {
+  REFRESH_CHECK_MS, hasDataToKeep, refreshProgressOf, refreshReasonOf, refreshTargetOf, refreshVerdict, type MidnightRefreshTracker,
+} from '@/chains/midnight/midnightRefresh';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import type {
   MidnightAddresses,
@@ -205,11 +212,21 @@ export function resolveOutputIndex(
 class MidnightSyncService {
   private active = false;
   private tipTimer: ReturnType<typeof setInterval> | null = null;
+  /** Re-reads the network's write status (midnightWriteGate.ts) while the session lives. */
+  private writeStatusTimer: ReturnType<typeof setInterval> | null = null;
   private tipRequest: Promise<void> | null = null;
   private readonly generationQueue = new MidnightGenerationQueue();
   private sessionEpoch = 0;
   private currentNetwork: string | null = null;
   private currentAddresses: MidnightAddresses | null = null;
+  /** A rebuild after a reset or a forced resync (midnightRefresh.ts); null when none runs. */
+  private refreshTracker: MidnightRefreshTracker | null = null;
+  /** Re-checks a running rebuild; armed only while one runs. */
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Looks kept sends up again after a lookup that gave no verdict; armed only then. */
+  private keptRowsTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Lookups in a row that gave no verdict, for the retry's backoff. */
+  private keptRowsAttempts = 0;
 
   /**
    * Start syncing a Midnight wallet. Idempotent — calling start while already
@@ -297,20 +314,52 @@ class MidnightSyncService {
     // This is display metadata; fetching it must not mark wallet sync complete.
     void this.refreshTipFromNexus(network);
     this.tipTimer = setInterval(() => { void this.refreshTipFromNexus(network); }, 30_000);
+
+    // Whether sends on this network are paused, read when the wallet opens and
+    // every few minutes, so Send and Register show it before the password.
+    // With it, which ledger the chain runs (its protocol version): the dApp
+    // connector's synchronous checks and the pages read the last answer.
+    if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
+    const readStatus = () => {
+      void refreshMidnightWriteStatus(network, { force: true });
+      void resolveMidnightChain(network, { maxAgeMs: 0 }).catch(() => { /* fails closed where it is needed */ });
+    };
+    readStatus();
+    this.writeStatusTimer = setInterval(readStatus, MIDNIGHT_STATUS_POLL_MS);
+    // A rebuild that was running when this session last stopped picks up again,
+    // also when the worker restarted in between (its snapshot is persisted).
+    let restoringRefresh: Promise<unknown> = Promise.resolve();
+    if (midnightStore.refreshing && midnightStore.refreshSnapshot) {
+      this.trackRefresh(refreshTargetOf(midnightStore.refreshSnapshot.transactions), true);
+    } else {
+      restoringRefresh = midnightActions.restoreRefreshAfterRestart().then((restored) => {
+        if (restored && this.sessionEpoch === sessionEpoch && midnightStore.refreshSnapshot && !this.refreshTracker) {
+          this.trackRefresh(refreshTargetOf(midnightStore.refreshSnapshot.transactions), true);
+        }
+      }).catch(() => undefined);
+    }
+    // Then the pending sends, which aren't in the replay a restarted worker
+    // starts with (midnightPendingSends.ts): put them back, and ask about any
+    // that were kept through a reset and have no verdict yet. In this order, so
+    // the restored refresh is in place before the pending rows land.
+    this.keptRowsAttempts = 0;
+    void restoringRefresh.then(() => midnightActions.restorePendingAfterRestart()).then(() => {
+      if (this.sessionEpoch === sessionEpoch) void this.checkKeptPendingRows();
+    });
   }
 
   private refreshTipFromNexus(network: string): Promise<void> {
     if (this.tipRequest) return this.tipRequest;
     const sessionEpoch = this.sessionEpoch;
     const identity = midnightStore.chainIdentity;
-    const previousTip = midnightStore.tip;
     const request = Promise.resolve().then(async () => {
       const block = await getMidnightApi(network).getLatestBlock();
-      // Neither an old session nor a request spanning a reset/new WS tip may
-      // overwrite the current display. The next poll retries after a reset.
+      // Neither an old session nor a request spanning a reset may overwrite the
+      // current display (the next poll retries after a reset); a newer pushed
+      // tip is kept by applyBlockTip, which never moves the tip back.
       if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch
-        || midnightStore.chainIdentity !== identity || midnightStore.tip !== previousTip) return;
-      this.applyBlockTip(block);
+        || midnightStore.chainIdentity !== identity) return;
+      this.applyBlockTip(block, 'latest');
     }).catch((error) => {
       debugLog('Midnight tip refresh from Nexus failed; will retry:', error);
     }).finally(() => {
@@ -320,15 +369,43 @@ class MidnightSyncService {
     return request;
   }
 
-  private applyBlockTip(block: { height?: number; hash?: string | null; time?: number }): void {
+  /**
+   * Where a block comes from decides what it may say about the tip:
+   * - `sync`: gero-sync's cached chain tip on a frame without transactions
+   *   (SYNC_CHECK_OK keep-alives, the SUBSCRIBE answer). The tip, seen now.
+   * - `latest`: Nexus `/api/blocks/latest`. The tip, seen now.
+   * - `transaction`: the block a transaction on the frame is in, NOT the tip.
+   *   When the wallet opens, gero-sync replays its history, so this can be
+   *   days old: stamped as seen now, it read as "Paused at block N (2d ago)"
+   *   until the next real tip. It only moves the tip forward, and unstamped,
+   *   so its age is unknown (never paused) until a tip read confirms it.
+   *
+   * No source moves the tip back within a chain identity (a reset clears the
+   * tip first). A lower block is older news: a Nexus answer that lost a race
+   * to a pushed tip, or gero-sync's tip cache while it replays the blocks it
+   * missed during an indexer outage (MidnightBlockSubscriber resumes at the
+   * last height + 1 and caches each replayed block as the tip). An equal
+   * height re-stamps it, so a chain that really stopped still reads as paused.
+   */
+  private applyBlockTip(
+    block: { height?: number; hash?: string | null; time?: number },
+    source: 'sync' | 'latest' | 'transaction' = 'sync',
+  ): void {
     // Height-only catch-up markers are cursors, not observed chain tips.
     if (!Number.isSafeInteger(block.height) || block.height! < 0
       || typeof block.hash !== 'string' || !block.hash) return;
+    const height = block.height!;
+    const known = midnightStore.tip.height;
+    if (height < known || (source === 'transaction' && height === known)) return;
     midnightActions.applyTipUpdate({
       hash: block.hash,
-      height: block.height!,
-      timestamp: typeof block.time === 'number' && Number.isFinite(block.time) && block.time > 0
-        ? block.time : 0,
+      height,
+      // `/api/blocks/latest` sends epoch seconds, sync frames may send milliseconds.
+      timestamp: blockTimeToMs(block.time),
+      // When this session saw it as the tip: a tip restored from storage has an
+      // old stamp, and a transaction's block none; both read as unknown, not
+      // paused (midnightDataFreshness.ts).
+      ...(source === 'transaction' ? {} : { observedAt: Date.now() }),
     });
   }
 
@@ -339,7 +416,11 @@ class MidnightSyncService {
   stop(): void {
     if (this.tipTimer) clearInterval(this.tipTimer);
     this.tipTimer = null;
+    if (this.writeStatusTimer) clearInterval(this.writeStatusTimer);
+    this.writeStatusTimer = null;
     this.tipRequest = null;
+    this.stopRefreshTracking();
+    this.stopKeptRowsRetry();
     if (!this.active) return;
     webSocketService.close();
     midnightActions.setNetworkStatus('disconnected');
@@ -365,7 +446,10 @@ class MidnightSyncService {
    */
   forceResync(): void {
     if (!this.active) return;
-    midnightActions.setTransactions([]);
+    // The rebuild shows "Refreshing" over what was on screen (midnightRefresh.ts);
+    // pending sends stay in the history it rebuilds (midnightPendingSends.ts).
+    this.beginRefresh();
+    midnightActions.clearHistoryKeepingPending();
     midnightActions.setUtxos([]);
     // Fire-and-forget: clearing the SDK state blobs is best-effort and must
     // not block the WS resubscribe. Clear ALL of them (no network scope) —
@@ -382,6 +466,123 @@ class MidnightSyncService {
 
   isActive(): boolean {
     return this.active;
+  }
+
+  // ---------------------------------------------------------------- refreshing
+
+  /** Keep what is on screen through a forced resync, and watch for the rebuild's end. */
+  private beginRefresh(): void {
+    const target = refreshTargetOf(midnightStore.refreshSnapshot?.transactions ?? midnightStore.transactions);
+    midnightActions.beginRefresh(null);
+    this.trackRefresh(target, true);
+  }
+
+  /** Start (or restart) watching a rebuild the store is showing as "Refreshing". */
+  private trackRefresh(target: string | null, sameChain: boolean): void {
+    if (!midnightStore.refreshing) {
+      this.stopRefreshTracking();
+      return;
+    }
+    const now = Date.now();
+    this.refreshTracker = { startedAt: now, lastFrameAt: now, lastTxAt: now, target, sameChain };
+    this.scheduleRefreshCheck();
+    // Kept sends are looked up when this rebuild ends, not before.
+    this.stopKeptRowsRetry();
+  }
+
+  private stopRefreshTracking(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+    this.refreshTracker = null;
+  }
+
+  private scheduleRefreshCheck(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.checkRefresh();
+    }, REFRESH_CHECK_MS);
+  }
+
+  /** Ends the refresh when the rebuild is complete, or marks it stalled; re-arms while it runs. */
+  private checkRefresh(): void {
+    const tracker = this.refreshTracker;
+    if (!tracker) return;
+    if (!midnightStore.refreshing) {
+      this.stopRefreshTracking();
+      return;
+    }
+    const verdict = refreshVerdict(tracker, midnightStore.transactions, Date.now(), midnightStore.networkStatus === 'connected');
+    if (verdict === 'done') {
+      this.stopRefreshTracking();
+      midnightActions.endRefresh();
+      // Only now, with the rebuild done, ask about the sends kept through the reset.
+      this.keptRowsAttempts = 0;
+      void this.checkKeptPendingRows();
+      return;
+    }
+    midnightActions.setRefreshStatus({ stalled: verdict === 'stalled' });
+    if (!this.refreshTimer) this.scheduleRefreshCheck();
+  }
+
+  /**
+   * Look up each send kept through a chain reset (midnightPendingSends.ts):
+   * confirmed or rejected settles the row; not found by an indexer past the
+   * send's time to live marks it "didn't go through". A lookup that gave no
+   * verdict (failed, or too early) leaves the row and tries again later, with
+   * a backoff, while this session runs; the next session start or rebuild end
+   * tries too. Rows keyed by an extrinsic hash can't be looked up and stay
+   * "Not confirmed". Never while a rebuild runs.
+   */
+  private async checkKeptPendingRows(): Promise<void> {
+    const network = this.currentNetwork;
+    if (!network || midnightStore.refreshing) return;
+    const rows = keptRowsToCheck(midnightStore.transactions);
+    if (!rows.length) return;
+    const epoch = this.sessionEpoch;
+    const api = getMidnightApi(network);
+    const undecided: typeof rows = [];
+    let failed = false;
+    for (const tx of rows) {
+      const current = () => this.sessionEpoch === epoch && !midnightStore.refreshing;
+      const outcome = await checkPendingTx((query, variables) => api.graphql(query, variables), tx, current);
+      if (!current()) return;
+      if (outcome === 'notFound') midnightActions.markPendingNotIncluded(tx.hash, tx.token);
+      else if (outcome === 'confirmed' || outcome === 'failed') midnightActions.settlePendingTx(tx.hash, tx.token, outcome);
+      else {
+        undecided.push(tx);
+        if (outcome === 'unknown') failed = true;
+      }
+    }
+    if (!undecided.length) {
+      this.keptRowsAttempts = 0;
+      return;
+    }
+    const delay = keptRowsRetryDelay(undecided, this.keptRowsAttempts, failed, Date.now());
+    this.keptRowsAttempts += 1;
+    if (delay === null) return;
+    this.stopKeptRowsRetry();
+    this.keptRowsTimer = setTimeout(() => {
+      this.keptRowsTimer = null;
+      if (this.sessionEpoch === epoch) void this.checkKeptPendingRows();
+    }, delay);
+  }
+
+  private stopKeptRowsRetry(): void {
+    if (this.keptRowsTimer) clearTimeout(this.keptRowsTimer);
+    this.keptRowsTimer = null;
+  }
+
+  /** A frame arrived for a running rebuild: any frame shows the connection lives; one with transactions moves it. */
+  private noteRefreshFrame(data: WsSyncMessage | null, appliedTransactions: boolean): void {
+    const tracker = this.refreshTracker;
+    if (!tracker) return;
+    const now = Date.now();
+    tracker.lastFrameAt = now;
+    if (appliedTransactions) tracker.lastTxAt = now;
+    const progress = refreshProgressOf(data as Record<string, unknown> | null);
+    if (progress !== null) midnightActions.setRefreshStatus({ progress });
+    if (appliedTransactions) this.checkRefresh();
   }
 
   /** The Midnight network this service is currently syncing, or `null` if stopped. */
@@ -402,18 +603,39 @@ class MidnightSyncService {
     const scope = this.currentAddresses?.unshielded;
     const isActive = () => this.active && this.sessionEpoch === sessionEpoch
       && this.currentNetwork === network && this.currentAddresses?.unshielded === scope;
+    // Any frame, keep-alives included, shows a running rebuild's connection is alive.
+    if (isActive()) this.noteRefreshFrame(data, false);
     await this.generationQueue.enqueue(data, toGeroSyncMidnightNetwork(network),
       () => midnightStore.chainIdentity, isActive,
       async (identity) => {
         await clearMidnightNetworkCheckpoints(identity.network);
-        if (isActive()) midnightActions.resetChainState(identity);
+        if (!isActive()) return;
+        // Taken before the wipe: what the rebuild must bring back before it counts as done.
+        // A worker that restarted holds none of the history (its own pending sends at
+        // most), so it keeps what the previous worker persisted, read at boot.
+        const previous = midnightStore.chainIdentity;
+        const inMemory = midnightStore.refreshSnapshot
+          || hasDataToKeep(midnightStore.balances, midnightStore.transactions);
+        const persisted = inMemory ? null : await midnightActions.persistedRefreshSnapshot();
+        if (!isActive()) return;
+        const target = refreshTargetOf(midnightStore.refreshSnapshot?.transactions
+          ?? (inMemory ? midnightStore.transactions : persisted?.transactions ?? []));
+        midnightActions.resetChainState(identity, { reason: refreshReasonOf(data as Record<string, unknown>), persisted });
+        this.trackRefresh(target, !previous || previous.genesisHash === identity.genesisHash);
       }, () => this.applySync(data));
+    // Once this worker holds the wallet's data itself, the previous worker's
+    // record read at boot is no longer needed (midnightStore.ts).
+    if (isActive() && hasDataToKeep(midnightStore.balances, midnightStore.transactions)) midnightActions.releaseBootRecord();
     if (isActive() && midnightStore.tip.hash === null) void this.refreshTipFromNexus(network);
   }
 
   private async applySync(data: WsSyncMessage): Promise<void> {
-    // 1) Tip update
-    if (data.block) this.applyBlockTip(data.block);
+    // 1) Tip update. A frame with transactions names THEIR block (gero-sync
+    // MidnightUnshieldedTxSubscriber), which in a replay is not the tip.
+    if (data.block) {
+      const carriesTransactions = Array.isArray(data.transactions) && data.transactions.length > 0;
+      this.applyBlockTip(data.block, carriesTransactions ? 'transaction' : 'sync');
+    }
 
     // 2) Transactions — UTxO-set model: add created outputs owned by us,
     // remove spent outputs owned by us, idempotently keyed by
@@ -535,6 +757,7 @@ class MidnightSyncService {
 
     midnightActions.markSynced();
     midnightActions.setNetworkStatus('connected');
+    this.noteRefreshFrame(data, Array.isArray(data.transactions) && data.transactions.length > 0);
   }
 
   private async handleRollback(data: WsSyncMessage): Promise<void> {
@@ -549,7 +772,8 @@ class MidnightSyncService {
 
   private async handleForceResync(): Promise<void> {
     debugLog('🌙 Midnight force resync triggered');
-    midnightActions.setTransactions([]);
+    this.beginRefresh();
+    midnightActions.clearHistoryKeepingPending();
     midnightActions.setUtxos([]);
     midnightActions.setNetworkStatus('connecting');
   }

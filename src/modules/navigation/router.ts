@@ -24,6 +24,7 @@ const MediaPlayer = lazyPage(() => import("@/modules/media-player/MediaPlayer.vu
 const Swap = lazyPage(() => import('@/modules/swap/Swap.vue'));
 // Market.vue no longer used as standalone route — unified into PortfolioPage
 const DevTools = lazyPage(() => import('@/modules/devTools/DevTools.vue'));
+const SigningCeremony = lazyPage(() => import('@/modules/signingCeremony/SigningCeremony.vue'));
 const GovernanceActionList = lazyPage(() => import('@/modules/governance/views/ActionList.vue'));
 const GovernanceActionDetail = lazyPage(() => import('@/modules/governance/views/ActionDetail.vue'));
 const GovernanceDReps = lazyPage(() => import('@/modules/governance/views/DRepDirectory.vue'));
@@ -261,6 +262,16 @@ const routes: RouteRecordRaw[] = [
     path: '/dev-tools',
     name: 'devTools',
     component: DevTools,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    // The root-key holders' signing page; deliberately not in the navigation.
+    path: '/signing-ceremony',
+    name: 'signingCeremony',
+    component: SigningCeremony,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -555,8 +566,8 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
       governanceDRep: (c, n) => networks.resolveGovernanceSupport(c, n),
       staking: (c, n) => networks.resolveStakingSupport(c, n),
       // The swap page's route is named 'swap' (‘/market’ is only a redirect, no
-      // named route). Keying this guard 'market' left #/swap ungated, so an Apex
-      // wallet (swapSupport=false) could reach it by direct URL. Key it 'swap'.
+      // named route). Keying this guard 'market' left #/swap ungated, so a
+      // wallet without swapSupport could reach it by direct URL. Key it 'swap'.
       swap: (c, n) => networks.resolveSwapSupport(c, n),
       transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
       card: (c, n) => networks.resolveGeroCardSupport(c, n),

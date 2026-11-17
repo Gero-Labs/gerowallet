@@ -24,14 +24,13 @@
 
 import * as bip39 from 'bip39';
 import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd';
-import { midnightKeystore, midnightLedgerVersion, schnorrHex } from './midnightLedger';
+import { midnightKeystore, schnorrHex } from './midnightLedger';
 import {
   DustAddress,
   MidnightBech32m,
   ShieldedAddress,
   ShieldedCoinPublicKey,
   ShieldedEncryptionPublicKey,
-  ShieldedEncryptionSecretKey,
 } from '@midnightntwrk/wallet-sdk-address-format';
 import { bech32, bech32m } from 'bech32';
 import {
@@ -52,23 +51,18 @@ import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
 import { withoutViewingKey } from '@/chains/midnight/midnightRecordScrub';
 
+/**
+ * Keys and their encodings are the same on both ledgers, so derivation uses
+ * ledger 9 for every network and needs no chain read.
+ */
 async function encodeViewingKey(network: string, seed: Uint8Array): Promise<string> {
-  if (midnightLedgerVersion(network) === 9) {
-    const [ledger, format] = await Promise.all([
-      import('@midnightntwrk/ledger-v9'), import('midnight-v9-address-format'),
-    ]);
-    const keys = ledger.ZswapSecretKeys.fromSeed(seed);
-    try {
-      return format.ShieldedEncryptionSecretKey.codec.encode(
-        network, new format.ShieldedEncryptionSecretKey(keys.encryptionSecretKey),
-      ).toString();
-    } finally { keys.clear(); }
-  }
-  const ledger = await import('@midnight-ntwrk/ledger-v8');
+  const [ledger, format] = await Promise.all([
+    import('@midnightntwrk/ledger-v9'), import('midnight-v9-address-format'),
+  ]);
   const keys = ledger.ZswapSecretKeys.fromSeed(seed);
   try {
-    return ShieldedEncryptionSecretKey.codec.encode(
-      network, new ShieldedEncryptionSecretKey(keys.encryptionSecretKey),
+    return format.ShieldedEncryptionSecretKey.codec.encode(
+      network, new format.ShieldedEncryptionSecretKey(keys.encryptionSecretKey),
     ).toString();
   } finally { keys.clear(); }
 }
@@ -257,9 +251,7 @@ export async function deriveMidnightKeys(
 
   const networkId = midnightNetworkId(network);
   const keystore = await midnightKeystore(unshieldedSecretKey, networkId);
-  const { DustSecretKey, ZswapSecretKeys } = midnightLedgerVersion(networkId) === 9
-    ? await import('@midnightntwrk/ledger-v9')
-    : await import('@midnight-ntwrk/ledger-v8');
+  const { DustSecretKey, ZswapSecretKeys } = await import('@midnightntwrk/ledger-v9');
   const unshieldedAddress = keystore.getBech32Address().toString();
   // These two are needed by the Nexus sidecar for seedless wallet construction.
   const publicKeyHex = schnorrHex(keystore.getPublicKey());

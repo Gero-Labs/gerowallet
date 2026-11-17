@@ -1,5 +1,12 @@
 import type { DustGenerationInfo, QualifiedDustOutput } from '@midnight-ntwrk/ledger-v8';
-import { ScaleBigInt } from '@midnightntwrk/wallet-sdk-address-format';
+// Wallet SDK 2's codec: the SDK 1.x one instantiates ledger 8 when imported.
+import { ScaleBigInt } from 'midnight-v9-address-format';
+import { MidnightLedgerChangedError, ledgerForProtocolVersion, noteMidnightProtocolVersion, type MidnightLedger } from './midnightLedger';
+
+/** Whether `protocolVersion` (a transaction's or an event's) is on `ledger`; malformed is not. */
+function onLedger(protocolVersion: unknown, ledger: MidnightLedger): boolean {
+  try { return ledgerForProtocolVersion(protocolVersion as number) === ledger; } catch { return false; }
+}
 
 export interface DustSyncBlock {
   hash: string;
@@ -60,6 +67,8 @@ export interface DustLightTransport {
 
 /** Keep WASM objects within their own ledger module; only wire values cross adapters. */
 export interface DustLightLedger<State, Key> {
+  /** The ledger this adapter's WASM module implements. */
+  ledger: MidnightLedger;
   createState(parametersHex: string): State;
   publicKey(key: Key): bigint;
   address(key: Key, network: string): string;
@@ -120,24 +129,176 @@ function assertTreeUpdate(update: CollapsedDustTree, start: number, end: number,
 
 class DustRootMismatch extends Error {}
 
+/** A DUST coin as plain wire values (bigints as decimal strings, time in ms). */
+export interface DustCoinWire {
+  initialValue: string;
+  owner: string;
+  nonce: string;
+  seq: number;
+  ctime: number;
+  backingNight: string;
+  mtIndex: string;
+}
+
+/**
+ * Where the last reconstruction left each of the wallet's spend chains, so the
+ * next one scans only the blocks after it. Owned coins, so private: it is kept
+ * in the extension's own storage (midnightWalletStatePersistence), never in
+ * chrome.storage.
+ */
+export interface DustSpendCheckpoint {
+  /** Every spend at or below this height is applied to `heads`. */
+  checkedThrough: number;
+  /** Per generation (`generationKey`), the newest coin of its chain created at or below `checkedThrough`. */
+  heads: Record<string, DustCoinWire>;
+}
+
+export interface ReconstructDustOptions {
+  /** Resume from this checkpoint instead of scanning every spend chain from the first block. */
+  checkpoint?: DustSpendCheckpoint | null;
+  /**
+   * The chain's first block on the snapshot's ledger (MIDNIGHT_LEDGER9_FIRST_BLOCK):
+   * a chain whose coin was created at or after it is scanned from it, not from
+   * block 0. Every wallet scans from the same block, so it tells the server nothing.
+   */
+  ledgerFirstBlock?: { readonly height: number; readonly timestamp: number };
+  /**
+   * Blocks below the snapshot tip the returned checkpoint stays, so a short
+   * reorg never leaves a reverted spend in it. Default `DUST_CHECKPOINT_MARGIN_BLOCKS`.
+   */
+  checkpointMarginBlocks?: number;
+  /** Warm scans start on a multiple of this many blocks (`dustWarmScanStart`); 0 starts right after the checkpoint. Default `DUST_SCAN_ALIGN_BLOCKS`. */
+  scanAlignBlocks?: number;
+}
+
+/** About half an hour of Midnight blocks: a spend this deep is final. */
+export const DUST_CHECKPOINT_MARGIN_BLOCKS = 300;
+
+// The indexer streams a spend scan at ~11 ms per matching record, one page
+// after another: a fork-to-tip scan of one prefix took 56 s on mainnet
+// (2026-11-16), the same scan in 8 block slices 12-13 s with 4 requests in
+// flight. 6 in flight was no faster and drew 429s from Nexus, whose sidecar
+// serves 16 DUST requests at once for every wallet.
+/**
+ * About a day of Midnight blocks. A warm scan starting just after the
+ * checkpoint would cover ~300 blocks, where a prefix matches 2-4 spends on
+ * mainnet (2026-11-16): the next round's prefix would all but name the
+ * wallet's own spend among them. Starting on a shared day boundary keeps a
+ * day or more of spends (~300 per prefix) in every warm scan, and tells the
+ * server only the day the wallet last synced.
+ */
+export const DUST_SCAN_ALIGN_BLOCKS = 14_400;
+
+/**
+ * Where a resumed chain is scanned from: the multiple of `align` that leaves
+ * at least `align` blocks before the first unchecked one, never below `floor`
+ * (the ledger's first block). `align` 0 is the block after the checkpoint.
+ */
+export function dustWarmScanStart(checkedThrough: number, align: number, floor: number): number {
+  if (align === 0) return checkedThrough + 1;
+  return Math.max(floor, 0, Math.floor((checkedThrough + 1 - align) / align) * align);
+}
+
+/** At most this many fixed block slices per scan. */
+export const DUST_SCAN_MAX_SLICES = 8;
+/** No slice shorter than this: a short warm scan stays one request. */
+export const DUST_SCAN_MIN_SLICE_BLOCKS = 2_000;
+/** One reconstruction's spend requests in flight. */
+export const DUST_SPEND_CONCURRENCY = 4;
+
+/**
+ * Splits the inclusive block range of a scan into contiguous slices. They
+ * depend on the range alone, never on an owned nullifier, so asking for the
+ * slices tells the server nothing the whole range would not.
+ */
+export function dustScanSlices(from: number, to: number): [number, number][] {
+  const span = to - from + 1;
+  if (!Number.isSafeInteger(span) || span < 1) throw new Error('Invalid DUST scan range');
+  const count = Math.max(1, Math.min(DUST_SCAN_MAX_SLICES, Math.floor(span / DUST_SCAN_MIN_SLICE_BLOCKS)));
+  const size = Math.ceil(span / count);
+  const slices: [number, number][] = [];
+  for (let start = from; start <= to; start += size) slices.push([start, Math.min(to, start + size - 1)]);
+  return slices;
+}
+
+/** Runs at most `max` tasks at once; a finished task hands its slot to the next waiting one. */
+function concurrencyLimit(max: number) {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active < max) active++;
+    else await new Promise<void>(resolve => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+
+function generationKey(generationMtIndex: number, backingNight: string): string {
+  return `${generationMtIndex}:${backingNight.toLowerCase()}`;
+}
+
+export function dustCoinToWire(coin: QualifiedDustOutput): DustCoinWire {
+  return {
+    initialValue: coin.initialValue.toString(), owner: coin.owner.toString(), nonce: coin.nonce.toString(),
+    seq: coin.seq, ctime: coin.ctime.getTime(), backingNight: coin.backingNight, mtIndex: coin.mtIndex.toString(),
+  };
+}
+
+/** The checkpoint's head for `root`'s chain, or null when it is not a coin this chain can have. */
+function dustCoinFromWire(wire: unknown, root: QualifiedDustOutput, commitmentEnd: number): QualifiedDustOutput | null {
+  try {
+    const w = wire as DustCoinWire;
+    if (!w || typeof w !== 'object' || !Number.isSafeInteger(w.seq) || w.seq < root.seq
+      || !Number.isSafeInteger(w.ctime) || w.ctime < root.ctime.getTime()
+      || typeof w.backingNight !== 'string' || w.backingNight.toLowerCase() !== root.backingNight.toLowerCase()) return null;
+    const coin: QualifiedDustOutput = {
+      initialValue: amount(w.initialValue), owner: amount(w.owner), nonce: amount(w.nonce), seq: w.seq,
+      ctime: new Date(w.ctime), backingNight: root.backingNight, mtIndex: amount(w.mtIndex),
+    };
+    if (coin.owner !== root.owner || coin.mtIndex < root.mtIndex || coin.mtIndex >= BigInt(commitmentEnd)) return null;
+    if (coin.seq === root.seq && (coin.mtIndex !== root.mtIndex || coin.nonce !== root.nonce
+      || coin.initialValue !== root.initialValue)) return null;
+    return coin;
+  } catch {
+    return null;
+  }
+}
+
 /** Legacy indexers can publish tree projections ahead of their block metadata.
  * Retry with a fresh anchor, under the caller's shared deadline; never accept a mismatch. */
 export async function reconstructDustState<State, Key>(
   ledger: DustLightLedger<State, Key>, key: Key, network: string, transport: DustLightTransport,
   progress: (percent: number, detail: string) => void = () => {},
-): Promise<{ state: State; block: DustSyncBlock }> {
+  options: ReconstructDustOptions = {},
+): Promise<{ state: State; block: DustSyncBlock; checkpoint: DustSpendCheckpoint | null }> {
+  // A head the chain does not have (a deep reorg, a damaged row) fails the
+  // commitment root on every resumed attempt; the cold attempts after it
+  // succeed and their checkpoint replaces the bad one.
+  const attempts = options.checkpoint ? 4 : 3;
   for (let attempt = 0; ; attempt++) {
-    try { return await reconstructDustStateOnce(ledger, key, network, transport, progress); }
-    catch (error) { if (!(error instanceof DustRootMismatch) || attempt >= 2) throw error; }
+    const run = options.checkpoint && attempt >= 2 ? { ...options, checkpoint: null } : options;
+    try { return await reconstructDustStateOnce(ledger, key, network, transport, progress, run); }
+    catch (error) { if (!(error instanceof DustRootMismatch) || attempt >= attempts - 1) throw error; }
   }
 }
 
 /** Rebuild from public projections, independent of wallet creation time and event IDs.
- * Only the wallet's own spend chains are followed. Foreign tree ranges are compact hashes. */
+ * Only the wallet's own spend chains are followed. Foreign tree ranges are compact hashes.
+ *
+ * A chain is scanned from the first block, or from a shared day boundary before
+ * a checkpoint's `checkedThrough` when the checkpoint has its head. A successor found on the
+ * way is scanned from where its parent's scan started, never from the block it
+ * was created in: that block would name the wallet's own spend to the server. */
 async function reconstructDustStateOnce<State, Key>(
   ledger: DustLightLedger<State, Key>, key: Key, network: string, transport: DustLightTransport,
   progress: (percent: number, detail: string) => void = () => {},
-): Promise<{ state: State; block: DustSyncBlock }> {
+  options: ReconstructDustOptions = {},
+): Promise<{ state: State; block: DustSyncBlock; checkpoint: DustSpendCheckpoint | null }> {
   const report = (percent: number, detail: string) => { try { progress(percent, detail); } catch { /* advisory */ } };
   report(5, '');
   const snapshot = await transport.snapshot(ledger.address(key, network));
@@ -147,6 +308,12 @@ async function reconstructDustStateOnce<State, Key>(
   const { block } = snapshot;
   if (!/^[0-9a-f]{64}$/i.test(block.hash)) throw new Error('Invalid DUST snapshot block');
   index(block.height); index(block.protocolVersion);
+  // The snapshot block says which ledger the chain is on. Record it, and never
+  // rebuild ledger 9 DUST state with ledger 8 (or the reverse): that is a
+  // network that changed ledger since this send chose its path.
+  noteMidnightProtocolVersion(network, block.protocolVersion);
+  const snapshotLedger = ledgerForProtocolVersion(block.protocolVersion);
+  if (snapshotLedger !== ledger.ledger) throw new MidnightLedgerChangedError(network, snapshotLedger);
   const generationEnd = index(block.dustGenerationEndIndex);
   const commitmentEnd = index(block.dustCommitmentEndIndex);
   const timestamp = new Date(index(block.timestamp));
@@ -166,7 +333,24 @@ async function reconstructDustStateOnce<State, Key>(
     } else throw new Error('Unknown DUST generation record');
   }
   let state = ledger.createState(block.ledgerParameters);
-  const live = new Map<bigint, { coin: QualifiedDustOutput; generation: DustGenerationInfo }>();
+  // A checkpoint resumes only behind this snapshot (a lagging server can answer with an older block).
+  const saved = options.checkpoint;
+  const resume = saved && Number.isSafeInteger(saved.checkedThrough) && saved.checkedThrough >= 0
+    && saved.checkedThrough < block.height && saved.heads && typeof saved.heads === 'object' ? saved : null;
+  const margin = options.checkpointMarginBlocks ?? DUST_CHECKPOINT_MARGIN_BLOCKS;
+  if (!Number.isSafeInteger(margin) || margin < 0) throw new Error('Invalid DUST checkpoint margin');
+  const align = options.scanAlignBlocks ?? DUST_SCAN_ALIGN_BLOCKS;
+  if (!Number.isSafeInteger(align) || align < 0) throw new Error('Invalid DUST scan alignment');
+  // What the returned checkpoint covers: never below the one resumed from.
+  const checkedThrough = Math.max(block.height - margin, resume ? resume.checkedThrough : -1);
+  interface LiveCoin {
+    coin: QualifiedDustOutput; generation: DustGenerationInfo; generationKey: string;
+    /** First block this chain's spends are looked for in. */
+    scanFrom: number;
+    /** The chain's newest coin created at or below `checkedThrough`. */
+    stable: QualifiedDustOutput;
+  }
+  const live = new Map<bigint, LiveCoin>();
   const segments = [...gaps.map(gap => ({ start: gap.startIndex, gap })),
     ...generations.map(generation => ({ start: generation.generationMtIndex, generation }))]
     .sort((a, b) => a.start - b.start);
@@ -192,9 +376,21 @@ async function reconstructDustStateOnce<State, Key>(
       nonce: amount(item.initialNonce), seq: 0, ctime: date(item.ctime),
       backingNight: item.backingNight, mtIndex: BigInt(item.commitmentMtIndex) };
     state = ledger.insertGeneration(state, cursor, generation);
-    const nullifier = ledger.nullifier(coin, key);
+    if (live.has(ledger.nullifier(coin, key))) throw new Error('Duplicate DUST generation');
+    const chainKey = generationKey(item.generationMtIndex, item.backingNight);
+    const head = resume && Object.hasOwn(resume.heads, chainKey)
+      ? dustCoinFromWire(resume.heads[chainKey], coin, commitmentEnd) : null;
+    const start = head ?? coin;
+    const nullifier = ledger.nullifier(start, key);
     if (live.has(nullifier)) throw new Error('Duplicate DUST generation');
-    live.set(nullifier, { coin, generation });
+    // A coin from before the ledger's first block (it should have none: DUST
+    // was reset there) is scanned from block 0, so the check below still
+    // refuses a spend of it from another ledger.
+    const first = options.ledgerFirstBlock;
+    const fromFirst = first && Number.isSafeInteger(first.height) && first.height >= 0 && first.height <= block.height
+      && coin.ctime.getTime() >= first.timestamp ? first.height : 0;
+    live.set(nullifier, { coin: start, generation, generationKey: chainKey,
+      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, stable: start });
     cursor++;
   }
   if (cursor !== generationEnd) throw new Error('Incomplete DUST generation tree');
@@ -212,48 +408,76 @@ async function reconstructDustStateOnce<State, Key>(
   const matches = new Map<bigint, DustSpendTransaction>();
   const seen = new Set<bigint>();
   let discovered = 0;
+  const limit = concurrencyLimit(DUST_SPEND_CONCURRENCY);
   for (;;) {
     const pending = [...live.keys()].filter(n => !checked.has(n));
-    const prefixes = [...new Set(pending.map(n => dustNullifierPrefix(n, commitmentEnd)))];
-    for (const prefix of prefixes) {
-      let fromBlock = 0;
-      let window = 250_000;
-      for (;;) {
-        const toBlock = Math.min(block.height, fromBlock + window - 1);
-        const { transactions, nextBlock } = await transport.spends(block, [prefix], fromBlock, toBlock);
-        if (!Array.isArray(transactions) || (nextBlock !== null
-          && (!Number.isSafeInteger(nextBlock) || nextBlock <= fromBlock || nextBlock > toBlock + 1 || nextBlock > block.height))
-          || (nextBlock === null && toBlock !== block.height)) {
-          throw new Error('Invalid DUST spend page cursor');
-        }
-        for (const tx of transactions) {
-          const height = index(tx.block.height);
-          if (height < fromBlock || height > toBlock || (nextBlock !== null && height >= nextBlock)) {
-            throw new Error('DUST spend is outside its snapshot page');
-          }
-          for (const encoded of tx.matchedNullifiers) {
-            if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
-            const nullifier = BigInt(`0x${Buffer.from(encoded, 'hex').reverse().toString('hex')}`);
-            if (!live.has(nullifier)) continue;
-            const prior = matches.get(nullifier);
-            if (prior && prior.hash !== tx.hash) throw new Error('Conflicting DUST spends');
-            matches.set(nullifier, tx);
-          }
-        }
-        if (nextBlock === null) break;
-        window = nextBlock - fromBlock;
-        fromBlock = nextBlock;
-      }
-      pending.filter(n => dustNullifierPrefix(n, commitmentEnd) === prefix).forEach(n => checked.add(n));
+    // One scan per prefix and start block, each in fixed block slices; a
+    // round's scans and slices run side by side, under one request limit.
+    const scans = new Map<string, { prefix: string; from: number; nullifiers: bigint[] }>();
+    for (const n of pending) {
+      const prefix = dustNullifierPrefix(n, commitmentEnd);
+      const from = live.get(n)!.scanFrom;
+      const id = `${prefix}@${from}`;
+      const scan = scans.get(id) ?? { prefix, from, nullifiers: [] };
+      scan.nullifiers.push(n);
+      scans.set(id, scan);
     }
+    await Promise.all([...scans.values()].map(async ({ prefix, from, nullifiers }) => {
+      await Promise.all(dustScanSlices(from, block.height).map(async ([sliceFrom, sliceTo]) => {
+        let fromBlock = sliceFrom;
+        let window = 250_000;
+        for (;;) {
+          const toBlock = Math.min(sliceTo, fromBlock + window - 1);
+          const { transactions, nextBlock } = await limit(() => transport.spends(block, [prefix], fromBlock, toBlock));
+          if (!Array.isArray(transactions) || (nextBlock !== null
+            && (!Number.isSafeInteger(nextBlock) || nextBlock <= fromBlock || nextBlock > toBlock + 1 || nextBlock > block.height))
+            || (nextBlock === null && toBlock !== block.height)) {
+            throw new Error('Invalid DUST spend page cursor');
+          }
+          for (const tx of transactions) {
+            const height = index(tx.block.height);
+            if (height < fromBlock || height > toBlock || (nextBlock !== null && height >= nextBlock)) {
+              throw new Error('DUST spend is outside its snapshot page');
+            }
+            // DUST state resets once, at the ledger 9 crossing: every coin the
+            // snapshot lists was created on the snapshot's ledger, so a spend
+            // from before the crossing (another ledger's events) cannot be one
+            // of them. Skip that history, but only while it touches no owned
+            // nullifier: a match means the reset assumption does not hold, and
+            // the reconstructed state would be wrong, so fail loudly.
+            // A malformed version is a bad page, not another ledger's history.
+            if (!Number.isSafeInteger(tx.protocolVersion) || tx.protocolVersion < 0) throw new Error('Invalid DUST spend protocol version');
+            const sameLedger = onLedger(tx.protocolVersion, ledger.ledger);
+            for (const encoded of tx.matchedNullifiers) {
+              if (!/^[0-9a-f]{64}$/i.test(encoded)) throw new Error('Invalid matched DUST nullifier');
+              const nullifier = BigInt(`0x${Buffer.from(encoded, 'hex').reverse().toString('hex')}`);
+              if (!live.has(nullifier)) continue;
+              if (!sameLedger) {
+                throw new Error(`An owned DUST coin was spent by a transaction from another ledger (protocol version ${tx.protocolVersion}); the DUST reset at the ledger crossing does not hold`);
+              }
+              const prior = matches.get(nullifier);
+              if (prior && prior.hash !== tx.hash) throw new Error('Conflicting DUST spends');
+              matches.set(nullifier, tx);
+            }
+          }
+          // Below the tip the server answers the block after the page, so a
+          // slice ends when that block is past it.
+          if (nextBlock === null || nextBlock > sliceTo) break;
+          window = nextBlock - fromBlock;
+          fromBlock = nextBlock;
+        }
+      }));
+      nullifiers.forEach(n => checked.add(n));
+    }));
     let advanced = false;
     for (const [nullifier, entry] of [...live]) {
       const transaction = matches.get(nullifier);
       if (!transaction) continue;
       let spend: DustSpendEvent | undefined;
       for (const event of transaction.dustLedgerEvents) {
-        // Decode only transactions with exact owned matches. Unrelated events
-        // can belong to another ledger, but an unreadable owned spend is fatal.
+        // Decode only transactions with exact owned matches, and only this
+        // ledger's events. An unreadable owned spend of this ledger is fatal.
+        if (!onLedger(event.protocolVersion, ledger.ledger)) continue;
         try {
           const decoded = ledger.decodeSpend(event.raw);
           if (decoded?.nullifier === nullifier) spend = decoded;
@@ -268,7 +492,8 @@ async function reconstructDustStateOnce<State, Key>(
       seen.add(nullifier);
       matches.delete(nullifier);
       live.delete(nullifier);
-      live.set(ledger.nullifier(successor, key), { coin: successor, generation: entry.generation });
+      live.set(ledger.nullifier(successor, key), { ...entry, coin: successor,
+        stable: index(transaction.block.height) <= checkedThrough ? successor : entry.stable });
       advanced = true;
       if (++discovered > commitmentEnd) throw new Error('Invalid DUST spend chain');
     }
@@ -302,5 +527,9 @@ async function reconstructDustStateOnce<State, Key>(
     throw new DustRootMismatch('DUST commitment root verification failed');
   }
   report(100, '');
-  return { state, block };
+  const checkpoint: DustSpendCheckpoint | null = checkedThrough < 0 ? null : {
+    checkedThrough,
+    heads: Object.fromEntries([...live.values()].map(entry => [entry.generationKey, dustCoinToWire(entry.stable)])),
+  };
+  return { state, block, checkpoint };
 }

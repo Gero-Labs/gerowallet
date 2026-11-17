@@ -5,9 +5,11 @@
   <v-card
     variant="outlined"
     class="fill-height d-flex flex-column glass-panel recent-tx-card"
+    data-pending-list
   >
     <div class="recent-tx-header flex-grow-0">
-      <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
+      <!-- Focus lands here after a pending row is dismissed (MidnightPendingRowStatus.vue). -->
+      <span class="recent-tx-heading" tabindex="-1" data-pending-list-heading>{{ $t('dashboard.recentTransactions') }}</span>
       <router-link to="/transactions" class="recent-tx-view-all">
         {{ $t('dashboard.viewAll') }}
       </router-link>
@@ -44,6 +46,8 @@
             <div class="recent-tx-time">
               <span v-if="tx.counterparty">{{ shortAddress(tx.counterparty) }} · </span>{{ formatTime(tx.timestamp) }}
             </div>
+            <!-- A pending send past its time limit: "Not confirmed", Check again, Dismiss. -->
+            <MidnightPendingRowStatus v-if="tx.status === 'pending' || hasPendingOutcome(tx)" :tx="tx" />
           </div>
           <div class="recent-tx-amount-wrap">
             <span class="recent-tx-amount" :style="{ color: amountColor(tx.type) }">
@@ -73,9 +77,13 @@ import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
 import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import { useNow } from '@/shared/composables/useNow';
+import MidnightPendingRowStatus from './MidnightPendingRowStatus.vue';
+import { hasPendingOutcome } from '@/shared/composables/useMidnightPendingActions';
 
 const { t } = useTranslation();
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 
 const { transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
@@ -144,6 +152,8 @@ function statusLabel(tx: MidnightTransaction): string {
 }
 
 function amountColor(type: MidnightTransactionType): string {
+  // While Midnight data is rebuilt these are the last rows the wallet knew: metadata, not news.
+  if (midnightRefreshing.value) return 'var(--g-text-3)';
   if (type === 'receive') return '#47CD89';
   if (type === 'send') return '#F97066';
   return '#c4c4c4';
@@ -223,7 +233,7 @@ watch(() => recent.value.length, loadAttribution);
 .recent-tx-heading {
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
   line-height: 1;
 }
 
@@ -278,7 +288,7 @@ watch(() => recent.value.length, loadAttribution);
 .recent-tx-status {
   font-size: 11px;
   font-weight: 500;
-  color: #ffffff;
+  color: var(--g-text-1);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;

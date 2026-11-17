@@ -27,6 +27,9 @@
         <template v-else>
           <span class="dust-gauge__balance-num">{{ dustCurrentFmt }}</span>
           <span class="dust-gauge__balance-unit">{{ dustCurrency }}</span>
+          <!-- Midnight data is paused: the last reading, not ticking. Only for a
+               registered wallet; an unregistered one has nothing generating. -->
+          <span v-if="showEstimate" class="dust-gauge__estimate t-caption" data-test="dust-estimate">{{ $t('midnight.dataPaused.estimate') }}</span>
         </template>
       </div>
     </div>
@@ -49,7 +52,7 @@
       </div>
       <div class="dust-gauge__stat">
         <span class="k">{{ $t('midnight.generationRate') }}</span>
-        <span class="v">{{ isRegistered ? `+${dustRateFmt} ${dustCurrency}/s` : '—' }}</span>
+        <span class="v">{{ isRegistered && !dustEstimate ? `+${dustRateFmt} ${dustCurrency}/s` : '—' }}</span>
       </div>
       <div class="dust-gauge__stat">
         <span class="k">{{ isFull ? $t('midnight.dustCapReached') : $t('midnight.dustTimeToFull') }}</span>
@@ -107,6 +110,7 @@ const {
   dustCap,
   registrationStatus,
   nightRegistered,
+  estimate: dustEstimate,
 } = useMidnightDustLive();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
@@ -194,7 +198,10 @@ const pct = computed(() => {
   return Math.max(0, Math.min(100, p));
 });
 const isFull = computed(() => isRegistered.value && dustCap.value > 0n && pct.value >= 99.95);
-const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value);
+// No charging animation while Midnight data is paused: the value is not moving.
+const isCharging = computed(() => isRegistered.value && dustGenerating.value > 0n && !isFull.value && !dustEstimate.value);
+// "Estimate" labels a registered wallet's generating balance: the registration state outranks it.
+const showEstimate = computed(() => isRegistered.value && dustEstimate.value);
 
 function fmt(value: bigint, digits: number): string {
   const whole = value / DUST_DIVISOR;
@@ -212,6 +219,8 @@ const statusClass = computed(() => (isFull.value ? 'v--full' : isCharging.value 
 
 // Seconds to reach cap at the current rate → coarse human label.
 const timeToFullLabel = computed(() => {
+  // Midnight data is paused: no projection from a reading labelled "estimate".
+  if (dustEstimate.value) return '—';
   if (isFull.value) return t('midnight.dustFullyCharged');
   // Registered but nothing to generate from: a bare dash here reads as "no
   // data" when we actually know the reason. Say it.
@@ -299,6 +308,11 @@ function onSponsorSaved(): void {
 .dust-gauge__balance-unit {
   font-size: 11px;
   color: var(--g-text-3);
+}
+
+.dust-gauge__estimate {
+  color: var(--g-warning);
+  margin-left: var(--g-s-1);
 }
 
 /* Battery track */

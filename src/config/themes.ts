@@ -1,7 +1,7 @@
 // Chain accent palettes: a chain switch changes ONLY these slots.
 // Surfaces, text tones and semantic colors live in tokens.css and never
 // change per chain.
-export type ChainKey = 'cardano' | 'bitcoin' | 'apexPrime' | 'apexVector' | 'apex' | 'midnight';
+export type ChainKey = 'cardano' | 'bitcoin' | 'midnight' | 'solana';
 
 export interface ChainAccent {
   /** Flat accent: links, icons, active tab text, focus ring */
@@ -18,18 +18,13 @@ export interface ChainAccent {
 export const chainAccents: Record<ChainKey, ChainAccent> = {
   cardano: { accent: '#33C7DD', gradient1: '#00DFF3', gradient2: '#00FAD5' },
   bitcoin: { accent: '#F7931A', gradient1: '#F7931A', gradient2: '#FFB84D' },
-  // Apex Fusion has two visually distinct chains: Prime is teal/green, Vector
-  // is orange/red. They must NOT share one accent — the onboarding art and
-  // per-network gradients (see StepStart) are teal for Prime, orange for Vector.
-  apexPrime: { accent: '#16B89E', gradient1: '#16B89E', gradient2: '#3FE0C4' },
-  apexVector: { accent: '#F25140', gradient1: '#FF7A66', gradient2: '#F25140' },
-  // Legacy shared key (kept for the `themes` compat map below only). New code
-  // routes to apexPrime / apexVector via chainKeyFor.
-  apex: { accent: '#E06030', gradient1: '#E06030', gradient2: '#F08040' },
   // Midnight: black-and-white base with a moonlit-purple accent. Bright violet
   // for flat use (icons/links/active); a DARK black->purple gradient for CTAs
   // with BRIGHT WHITE text (onGrad) — never a light button with dark text.
   midnight: { accent: '#A78BFA', gradient1: '#2E1065', gradient2: '#7C3AED', onGrad: '#FFFFFF' },
+  // Solana: its purple -> green brand gradient, lightened at the purple end so the
+  // default dark CTA text stays readable on both stops; flat accent is the brand green.
+  solana: { accent: '#14F195', gradient1: '#C084FC', gradient2: '#14F195' },
 };
 
 /** Blockchain display-string -> ChainKey (walletStore.loggedWallet.chain values) */
@@ -37,12 +32,10 @@ export function chainKeyFor(chain: string | undefined | null): ChainKey {
   switch (chain) {
     case 'Bitcoin':
       return 'bitcoin';
-    case 'Apex Fusion Prime':
-      return 'apexPrime';
-    case 'Apex Fusion Vector':
-      return 'apexVector';
     case 'Midnight':
       return 'midnight';
+    case 'Solana':
+      return 'solana';
     default:
       return 'cardano';
   }
@@ -69,13 +62,9 @@ const legacy = (a: ChainAccent) => ({
 
 export const themes: Record<ChainKey, ReturnType<typeof legacy>> = {
   cardano: legacy(chainAccents.cardano),
-  // Both Apex families, so legacy consumers resolved via chainKeyFor get the
-  // right accent (Prime teal / Vector orange) instead of the old shared orange.
-  apexPrime: legacy(chainAccents.apexPrime),
-  apexVector: legacy(chainAccents.apexVector),
-  apex: legacy(chainAccents.apex),
   bitcoin: legacy(chainAccents.bitcoin),
   midnight: legacy(chainAccents.midnight),
+  solana: legacy(chainAccents.solana),
 };
 
 // iconFilters is DELETED, not rewritten: its only writer (--icon-filter in

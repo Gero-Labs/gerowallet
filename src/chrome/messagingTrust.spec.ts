@@ -125,25 +125,4 @@ describe('approval ports only trust our own pages', () => {
     await Promise.resolve();
     expect(settled).toMatchObject({ data: 'signed' });
   });
-
-  it('side panel: a forged content-script port cannot answer the approval', async () => {
-    const { Messaging } = await import('./messaging');
-    const { METHOD } = await import('./config');
-    let settled: unknown;
-    void Messaging.sendToSidePanelInternal(7, { method: 'signData', data: {} } as never).then(r => { settled = r; });
-
-    const forged = fakePort('anything', CONTENT);
-    connectListeners.forEach(l => l(forged.port));
-    forged.emit({ tabId: 7, method: METHOD.requestData });
-    forged.emit({ tabId: 7, method: METHOD.returnData, data: true });
-    await Promise.resolve();
-    expect(forged.posted).toEqual([]);
-    expect(settled).toBeUndefined();
-
-    const real = fakePort('anything', PAGE);
-    connectListeners.forEach(l => l(real.port));
-    real.emit({ tabId: 7, method: METHOD.returnData, data: 'ok' });
-    await Promise.resolve();
-    expect(settled).toMatchObject({ data: 'ok' });
-  });
 });

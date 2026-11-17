@@ -271,7 +271,6 @@ async function withdrawWithAbstain(): Promise<void> {
         tip: tip.value,
         walletContext: {
           keys: walletKeys,
-          stakeAddress: wallet.stakeAddress,
         },
       },
       buildCardanoTransaction,

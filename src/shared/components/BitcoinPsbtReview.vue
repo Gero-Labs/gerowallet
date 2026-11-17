@@ -120,6 +120,7 @@ const cardOutputs = computed<TxDetailsOutput[]>(() =>
   (props.review?.outputs ?? []).map((output) => ({
     kind: output.change ? 'change' : output.own ? 'own' : 'external',
     truncatedAddress: output.address ? filters.truncate(output.address) : t('bitcoin.dataOutput'),
+    ...(output.address ? { fullAddress: output.address } : {}),
     ada: formatBtc(output.valueSats),
   }))
 );

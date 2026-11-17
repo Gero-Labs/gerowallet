@@ -187,6 +187,10 @@
           </v-row>
         </template>
       </template>
+
+      <!-- Announcements from Gero: for every wallet and chain, whether or not push works here. -->
+      <div class="notify-divider" role="separator"></div>
+      <AnnouncementSettings />
     </div>
 
     <!-- Wallet proof under spending auth (the same step remote signing uses) -->
@@ -238,6 +242,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import AnnouncementSettings from '@/shared/components/announcements/AnnouncementSettings.vue';
 import { alertTypesFor } from '@/services/notify/notifyCatalogue';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
@@ -396,7 +401,7 @@ const synced = computed(() => link.value?.prefs?.synced ?? { categoriesOff: [], 
 const categoriesOff = computed(() => synced.value.categoriesOff);
 // A prefs reply from an older server lacks the field.
 const typesOff = computed(() => synced.value.typesOff ?? []);
-const CATEGORY_LABEL: Record<string, string> = { funds: 'notify.category.funds', staking: 'notify.category.staking', swap: 'notify.category.swap', adam: 'notify.category.adam', governance: 'notify.category.governance' };
+const CATEGORY_LABEL: Record<string, string> = { funds: 'notify.category.funds', staking: 'notify.category.staking', swap: 'notify.category.swap', adam: 'notify.category.adam', governance: 'notify.category.governance', nft: 'notify.category.nft' };
 /** Open question 6: show a category served on ANY transport for the wallet's network; hide one served nowhere. */
 const categories = computed(() => {
   const c = config.value;

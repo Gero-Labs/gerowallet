@@ -991,8 +991,8 @@ function cancelVerification() {
 
 const qrCodeRef = ref<HTMLElement|null>(null)
 
-// QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
-const qrLogo = computed(() => assets.resolveChainLogo(loggedWallet.value?.chain));
+// QR-center Gero logo.
+const qrLogo = computed(() => assets.geroLogo);
 
 const options = computed((): Partial<Options> => ({
   width: 170,

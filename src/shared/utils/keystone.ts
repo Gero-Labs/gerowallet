@@ -14,6 +14,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
+import { isMarkedToFail, walletWitnessPlan, type WitnessRole } from '@/shared/utils/keyCreds';
 import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
@@ -87,12 +88,57 @@ export const getKeystoneAccountsUR = (accountIndices: number[]): Options => {
   return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190);
 }
 
+type FirmwareVersion = [number, number, number];
+
+/** "3.2.0", or with the firmware's edition suffix ("3.2.0 - Cypherpunk", "3.2.0 - BTC"). */
+const parseFirmwareVersion = (version: string | undefined): FirmwareVersion | undefined => {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})( - [A-Za-z]{1,16})?$/.exec(version ?? '');
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+};
+
+const isOlderFirmware = (version: FirmwareVersion, than: FirmwareVersion): boolean =>
+  (version[0] - than[0] || version[1] - than[1] || version[2] - than[2]) < 0;
+
+/** The first firmware that answers pairing with its own version; older firmware sends a fixed 1.1.0. */
+const FIRST_FIRMWARE_REPORTING_VERSION: FirmwareVersion = [1, 7, 2];
+/**
+ * The first firmware that parses and shows a pool registration certificate. Committee
+ * certificates (with their cold and hot credentials) and votes are shown from 1.6.6,
+ * below the first version a Keystone reports, so no recorded firmware is refused them.
+ */
+const POOL_REGISTRATION_FIRMWARE: FirmwareVersion = [1, 5, 8];
+
+/**
+ * The firmware version a Keystone reported in its pairing answer, or undefined when
+ * the answer does not tell: no version, one that does not parse, or the fixed "1.1.0"
+ * that firmware up to 1.7.0 sends instead of its own.
+ */
+export const keystoneFirmwareVersion = (multiAccounts: CryptoMultiAccounts): string | undefined => {
+  const reported = multiAccounts.getVersion();
+  const parsed = parseFirmwareVersion(reported);
+  return parsed && !isOlderFirmware(parsed, FIRST_FIRMWARE_REPORTING_VERSION) ? reported : undefined;
+};
+
+/**
+ * Refuses a pool registration on firmware known to be too old to show one, so the
+ * device is never asked to sign a certificate its screen leaves out. An unknown
+ * version (a Keystone paired before Gero recorded it, or firmware that does not
+ * report it) is not refused.
+ */
+const assertFirmwareShowsCertificates = (txCore: Cardano.Tx, firmwareVersion: string | undefined) => {
+  const version = parseFirmwareVersion(firmwareVersion);
+  if (!version || !isOlderFirmware(version, POOL_REGISTRATION_FIRMWARE)) return;
+  if (txCore.body.certificates?.some((cert) => cert.__typename === Cardano.CertificateType.PoolRegistration)) {
+    throw new Error(i18n.t('wallet.keystoneFirmwareNoPoolRegistration', { version: POOL_REGISTRATION_FIRMWARE.join('.') }) as string);
+  }
+};
+
 /**
  * The accounts in a Keystone `crypto-multi-accounts` answer, by the path each key
  * carries. Only the accounts that were asked for are kept, so a device answering
  * with other paths can never add an account the user did not see listed.
  */
-export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: AccountXpub[] } => {
+export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): { xfp: string; accounts: AccountXpub[]; firmwareVersion?: string } => {
   const multiAccounts = CryptoMultiAccounts.fromCBOR(cbor);
   const wanted = new Set(assertAccountIndices(accountIndices));
   const accounts = multiAccounts.getKeys()
@@ -100,7 +146,8 @@ export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): {
     .filter((account) => wanted.has(account.accountIndex))
     .sort((a, b) => a.accountIndex - b.accountIndex);
   if (accounts.length === 0) throw new InvalidAccountIndexError('The Keystone did not return the requested accounts');
-  return { xfp: multiAccounts.getMasterFingerprint().toString('hex'), accounts };
+  const firmwareVersion = keystoneFirmwareVersion(multiAccounts);
+  return { xfp: multiAccounts.getMasterFingerprint().toString('hex'), accounts, ...(firmwareVersion && { firmwareVersion }) };
 }
 
 export const parseSignature = (ur: UR): CardanoSignature => {
@@ -168,81 +215,42 @@ export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array, ex
   };
 }
 
-/**
- * The wallet's keys a transaction needs beyond its inputs, one per key hash: each required
- * signer that is one of the wallet's payment, change or stake keys, and the stake key for a
- * certificate or reward withdrawal of the wallet's own stake credential. A CIP-113 transfer
- * names its owner (a payment or the stake key) as a required signer and withdraws from
- * scripts, so it needs exactly that key. A required signer that is not the wallet's is
- * skipped: another party signs for it (a multisig), and the device holds no key for it.
- */
-const extraOwnKeys = (txCore: Cardano.Tx, keys: Keys): Key[] => {
-  const byHash = new Map<string, Key>();
-  for (const key of [...keys.payment, ...keys.change, ...keys.stake]) {
-    if (key?.cred && key.path && !byHash.has(key.cred)) byHash.set(key.cred, key);
-  }
-  const ownStakeHashes = new Set(keys.stake.map((key) => key?.cred).filter(Boolean));
-  const needed = new Map<string, Key>();
-  const need = (hash: string) => {
-    const key = byHash.get(hash);
-    if (key && !needed.has(hash)) needed.set(hash, key);
-  };
-  const needStake = (credential: Cardano.Credential | undefined) => {
-    if (credential?.type === Cardano.CredentialType.KeyHash && ownStakeHashes.has(credential.hash)) need(credential.hash);
-  };
+/** A wallet key the Keystone signs with: its path, and the address a hash request lists for it. */
+interface SigningKey { path: string; address?: string }
 
-  txCore.body.requiredExtraSignatures?.forEach((keyHash) => need(keyHash));
-  txCore.body.certificates?.forEach((cert: Cardano.Certificate) => {
-    if ('stakeCredential' in cert) needStake(cert.stakeCredential);
-  });
-  txCore.body.withdrawals?.forEach((withdrawal: Cardano.Withdrawal) => {
-    needStake(Cardano.Address.fromBech32(withdrawal.stakeAddress).asReward()?.getPaymentCredential());
-  });
-  return [...needed.values()];
-};
+/** A witness beyond the inputs' own: the key hash it is for, the key that gives it, and its role. */
+interface ExtraSigner extends SigningKey { keyHash: string; role: WitnessRole }
+
+/** The DRep and committee keys: a DRep ID or committee credential is not an address, so these list none. */
+const GOVERNANCE_ROLES: ReadonlySet<WitnessRole> = new Set<WitnessRole>(['drep', 'ccCold', 'ccHot']);
+
+const signingKey = (key: Key | undefined, listsAddress = true): SigningKey | undefined =>
+  key?.path ? { path: key.path, ...(listsAddress && key.address ? { address: key.address } : {}) } : undefined;
 
 /**
- * Helper function to get owned keypaths and addresses for hash-based signing
+ * Every witness the transaction needs from this wallet, worked out once for both request
+ * types by `walletWitnessPlan` (the rule the software signer follows too):
+ * - `inputs`: each input whose UTxO is known, with the payment or change key that signs for it
+ *   (none for an input the wallet does not own).
+ * - `extra`: the other witnesses, one per key hash: collateral at a key no input uses (as
+ *   Trezor maps it), then the stake, DRep and committee keys for the wallet's own
+ *   certificates, votes and withdrawals, and the required signers the key set carries.
+ * The firmware signs each extra signer at whatever path it carries, and a key it also
+ * signs an input with only once (sign_tx dedupes by public key), so a required signer is
+ * listed even when an input's key is the one it names.
  */
-const getOwnedKeyAddressList = (xfp: string, keys: Keys, tx: Serialization.Transaction, utxos: Cardano.Utxo[]) => {
-  const ownedKeypathList: CryptoKeypath[] = [];
-  const ownedAddressList: string[] = [];
-  const addedPaths = new Set<string>(); // Track added paths to avoid duplicates
-
-  const inputs = tx.body().inputs().values();
-
-  inputs.forEach((input: Serialization.TransactionInput) => {
-    const inputTxHash = input.transactionId();
-    const inputTxIndex = input.index();
-
-    const utxo = utxos.find((utxo: Cardano.Utxo) => {
-      const [txIn, _txOut] = utxo;
-      return inputTxHash === txIn.txId && Number(inputTxIndex) === txIn.index;
-    });
-
-    if (utxo) {
-      const [txIn, txOut] = utxo;
-      const address = txIn.address || txOut.address;
-      const foundKey = keys.payment.find(k => k.address === address)
-                    || keys.change.find(k => k.address === address);
-
-      if (foundKey && !addedPaths.has(foundKey.path)) {
-        ownedKeypathList.push(createCryptoKeypath(foundKey.path, xfp));
-        ownedAddressList.push(foundKey.address);
-        addedPaths.add(foundKey.path);
-      }
-    }
+const walletSigners = (txCore: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[] | null | undefined) => {
+  const plan = walletWitnessPlan(txCore, keys, utxos);
+  // A hash request lists the address each key signs for: the UTxO's own, which may be another
+  // address of that key (an enterprise one, say) than the one the key set lists.
+  const atUtxo = (key: SigningKey | undefined, address: string | undefined) => (key && address ? { ...key, address } : key);
+  const inputs = plan.inputs.map(({ utxo, key }) => ({ utxo, key: atUtxo(signingKey(key), utxo[0].address || utxo[1].address) }));
+  debugLog('[Keystone] Found required signers:', txCore.body.requiredExtraSignatures?.length ?? 0);
+  const extra: ExtraSigner[] = plan.witnesses.flatMap(({ keyHash, role, key, address }) => {
+    const signer = atUtxo(signingKey(key, !GOVERNANCE_ROLES.has(role)), address);
+    return signer ? [{ keyHash, role, ...signer }] : [];
   });
-
-  // The keys the inputs do not name: required signers, own certificates and withdrawals.
-  for (const key of extraOwnKeys(tx.toCore(), keys)) {
-    if (addedPaths.has(key.path)) continue;
-    ownedKeypathList.push(createCryptoKeypath(key.path, xfp));
-    ownedAddressList.push(key.address);
-    addedPaths.add(key.path);
-  }
-
-  return { ownedKeypathList, ownedAddressList };
+  return { inputs, extra };
 };
 
 export interface KeystoneSignRequestResponse {
@@ -255,7 +263,7 @@ export interface KeystoneSignRequestResponse {
 /**
  * Creates a Keystone signing request from a transaction
  * @param tx - The transaction to sign (Serialization.Transaction)
- * @param walletData - Wallet data containing xfp
+ * @param walletData - Wallet data containing xfp and the paired firmwareVersion
  * @param utxos - Array of UTXOs for input resolution
  * @param keys - keys mapping for derivation paths
  * @returns UR object with type and cbor properties for QR code generation
@@ -263,53 +271,22 @@ export interface KeystoneSignRequestResponse {
 export const createKeystoneSignRequest = async (tx: Serialization.Transaction, walletData, utxos: Cardano.Utxo[], keys: Keys): Promise<KeystoneSignRequestResponse> => {
   // Keystone signs whatever QR it is shown, and the page cannot read the CIP-113 refusal
   // index; every caller, the dApp approvals included, passes through here.
-  await assertCip113SignAllowed(tx.toCbor(), i18n.t('wallet.keystoneSigningFailed') as string);
+  const txCborHex = tx.toCbor();
+  await assertCip113SignAllowed(txCborHex, i18n.t('wallet.keystoneSigningFailed') as string);
 
-  const getOwnedUtxos = (txInputs: readonly Serialization.TransactionInput[], xfp: string) => {
-    const keystoneUtxos = [];
-    const extraSigners = [];
+  // Without the key set no path is known, and the device could only refuse the request.
+  if (!keys) throw new Error(i18n.t('wallet.keystoneSigningFailed') as string);
 
-    txInputs.forEach((input: Serialization.TransactionInput) => {
-      const inputTxHash = input.transactionId();
-      const inputTxIndex = input.index();
-
-      const utxo = utxos.find((utxo: Cardano.Utxo) => {
-        // Cardano.Utxo is [TxIn, TxOut]
-        const [txIn, _txOut] = utxo;
-        const hashMatch = inputTxHash === txIn.txId;
-        const indexMatch = Number(inputTxIndex) === txIn.index;  // Convert BigInt to Number
-        return hashMatch && indexMatch;
-      });
-
-      if (utxo) {
-        const [txIn, txOut] = utxo;
-        const address = txIn.address || txOut.address;
-        const foundKey = keys.payment.find(k => k.address === address)
-                      || keys.change.find(k => k.address === address);
-
-        keystoneUtxos.push({
-          transactionHash: txIn.txId,
-          index: txIn.index,
-          amount: String(txOut.value.coins), // Convert BigInt to string
-          xfp,
-          hdPath: foundKey?.path || '',
-          address,
-        });
-      }
-    });
-
-    // Required signers (DEX orders, a CIP-113 transfer's owner) and the wallet's own
-    // certificates and reward withdrawals, each to the key whose hash it names.
-    for (const key of extraOwnKeys(tx.toCore(), keys)) {
-      extraSigners.push({ keyHash: key.cred, xfp, keyPath: key.path });
-      debugLog('[Keystone] Added extra signer:', key.path);
-    }
-    return {keystoneUtxos, extraSigners}
-  }
+  // Convert Serialization.Transaction to Core Cardano.Tx to get proper certificate types
+  const txCore = tx.toCore();
+  // A transaction marked to fail only forfeits its collateral, which an input's witness can
+  // authorise on its own.
+  if (isMarkedToFail(txCore)) throw new Error(i18n.t('errors.markedToFailRefused') as string);
+  assertFirmwareShowsCertificates(txCore, walletData.firmwareVersion);
 
   const xfp = walletData.xfp ?? "";
-  const txCborHex = tx.toCbor();
   const cborBuffer = Buffer.from(txCborHex, 'hex');
+  const { inputs, extra } = walletSigners(txCore, keys, utxos);
 
   // Check if we should sign the hash or full transaction (for multi-sig/script transactions)
   const useHash = sdk.cardano.checkNeedSignTxHash(cborBuffer);
@@ -318,16 +295,27 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
 
   if (useHash) {
     // Hash-based signing (for transactions with existing witnesses/scripts)
-    // Compute transaction hash from transaction body
-    const txCore = tx.toCore();
     const txHash = txCore.id; // Transaction ID is the hash
-
     debugLog('[Keystone] Using hash-based signing for transaction:', txHash);
 
-    const { ownedKeypathList, ownedAddressList } = getOwnedKeyAddressList(xfp, keys, tx, utxos);
+    // The device shows a hash request as the hash alone, so the DRep and committee keys never
+    // sign one: they sign only a transaction the Keystone's screen shows in full.
+    if (extra.some(({ role }) => GOVERNANCE_ROLES.has(role))) {
+      throw new Error(i18n.t('wallet.keystoneHashGovernanceKey') as string);
+    }
 
+    // The firmware signs every listed path with no dedupe of its own, so a repeated path
+    // would add a second witness for the same key.
+    const ownedKeypathList: CryptoKeypath[] = [];
+    const ownedAddressList: string[] = [];
+    const addedPaths = new Set<string>();
+    [...inputs.flatMap(({ key }) => (key ? [key] : [])), ...extra].forEach((key) => {
+      if (addedPaths.has(key.path)) return;
+      addedPaths.add(key.path);
+      ownedKeypathList.push(createCryptoKeypath(key.path, xfp));
+      if (key.address) ownedAddressList.push(key.address);
+    });
     debugLog('[Keystone] Owned keypaths:', ownedKeypathList.length);
-    debugLog('[Keystone] Owned addresses:', ownedAddressList);
 
     return {
       ur: sdk.cardano.generateSignTxHashRequest(
@@ -344,16 +332,21 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
   } else {
     // Full CBOR signing (normal transactions)
     debugLog('[Keystone] Using full CBOR signing');
-    const res = getOwnedUtxos(tx.body().inputs().values(), xfp);
     // Create sign request object following Keystone demo pattern
     const cardanoSignRequest = {
       requestId,
       signData: cborBuffer,
-      utxos: res.keystoneUtxos,
-      extraSigners: res.extraSigners,
+      utxos: inputs.map(({ utxo, key }) => ({
+        transactionHash: utxo[0].txId,
+        index: utxo[0].index,
+        amount: String(utxo[1].value.coins), // Convert BigInt to string
+        xfp,
+        hdPath: key?.path || '',
+        address: utxo[0].address || utxo[1].address,
+      })),
+      extraSigners: extra.map(({ keyHash, path }) => ({ keyHash, xfp, keyPath: path })),
       origin: 'gerowallet'
     };
-    debugLog('[Keystone] Sign request:', cardanoSignRequest);
     // Generate UR using SDK wrapper (as shown in Keystone demo)
     return {
       ur: sdk.cardano.generateSignRequest(cardanoSignRequest),
@@ -443,13 +436,14 @@ export const generateBitcoinSyncQR = (network: string, addressType: string = 'se
  * The key-derivation request from {@link generateBitcoinSyncQR} is answered with a
  * `crypto-multi-accounts` UR; a lone `crypto-hdkey` is read too. Only the key at the
  * account path that was asked for is taken, so an answer for another account is
- * refused rather than paired.
+ * refused rather than paired. Only the `crypto-multi-accounts` answer carries the
+ * firmware version (firmware 1.7.2 and later, the first that accepts this request).
  *
  * @param ur - UR from scanned QR code
  * @param network - The network the account was requested on
  * @param addressType - The address type that was requested
  * @param accountIndex - The account that was requested
- * @returns Object containing xpub (already in the wallet's xpub form), master fingerprint, and path
+ * @returns Object containing xpub (already in the wallet's xpub form), master fingerprint, path, and the firmware version when the answer reports one
  */
 export const parseBitcoinAccount = (ur: UR, network: string, addressType: string = 'segwit', accountIndex: number = 0): {
   xpub: string;
@@ -457,13 +451,16 @@ export const parseBitcoinAccount = (ur: UR, network: string, addressType: string
   path: string;
   publicKey: string;
   chainCode: string;
+  firmwareVersion?: string;
 } => {
   let keys: CryptoHDKey[];
   let xfp: Buffer | undefined;
+  let firmwareVersion: string | undefined;
   if (ur.type === 'crypto-multi-accounts') {
     const multiAccounts = CryptoMultiAccounts.fromCBOR(ur.cbor);
     keys = multiAccounts.getKeys();
     xfp = multiAccounts.getMasterFingerprint();
+    firmwareVersion = keystoneFirmwareVersion(multiAccounts);
   } else if (ur.type === 'crypto-hdkey') {
     keys = [CryptoHDKey.fromCBOR(ur.cbor)];
   } else {
@@ -480,6 +477,7 @@ export const parseBitcoinAccount = (ur: UR, network: string, addressType: string
     path: key.getOrigin()?.getPath() || '',
     publicKey: key.getKey().toString('hex'),
     chainCode: key.getChainCode()?.toString('hex') || '',
+    ...(firmwareVersion && { firmwareVersion }),
   };
 };
 

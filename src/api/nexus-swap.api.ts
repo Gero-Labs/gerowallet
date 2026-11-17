@@ -1,5 +1,6 @@
 // src/api/nexus-swap.api.ts
 import axios, { type AxiosInstance } from 'axios';
+import { installSignedResponses } from './signedResponses';
 
 const NEXUS_BASE: string = import.meta.env['VITE_NEXUS_URL'] || '';
 
@@ -8,6 +9,8 @@ export const swapAxiosInstance: AxiosInstance = axios.create({
   timeout: 30_000,
   headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
 });
+// gero-backend relays Nexus and signs what it relays (build-time mode; off by default).
+installSignedResponses(swapAxiosInstance, 'gero-backend');
 
 export interface SwapRoute {
   dex: string;

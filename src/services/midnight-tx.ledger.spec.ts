@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   api: vi.fn(),
   health: vi.fn(),
+  version: vi.fn(),
   proofServer: { mode: 'remote', localUrl: 'http://localhost:6300', localUrlLedger9: 'http://localhost:6301' },
   /** When true, the user has accepted the notice of the remote prover the current mode uses. */
   consented: true,
@@ -15,11 +17,11 @@ vi.mock('@/stores/midnightStore', () => ({
     proofServer: mocks.proofServer,
     get shieldedProvingConsent() {
       if (!mocks.consented) return null;
-      return { version: 3, acceptedAt: 1, provider: mocks.proofServer.mode === 'zkpaas' ? 'zkpaas' : 'cloud' };
+      return { version: 4, acceptedAt: 1, provider: mocks.proofServer.mode === 'zkpaas' ? 'zkpaas' : 'cloud' };
     },
   },
 }));
-vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health }));
+vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health, checkProofServerVersion: mocks.version }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
 vi.mock('@/chains/midnight/midnightZkpaas', () => ({
   resolveZkpaasUrl: () => 'https://prover.example',
@@ -28,7 +30,10 @@ vi.mock('@/chains/midnight/midnightZkpaas', () => ({
 }));
 
 import { MessageTypes } from '@/models/MessageTypes';
-import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { MidnightApiError } from '@/api/midnightApiError';
+import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
+import { resetMidnightWriteStatusForTests } from '@/chains/midnight/midnightWriteStatus';
+import { backgroundError, balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, ProofServerUnreachableError, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight, walletProvingPreflight } from './midnight-tx.service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -43,6 +48,9 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.proofServer.mode = 'remote';
     mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
+    mocks.version.mockResolvedValue({ status: 'unknown' });
+    // Preprod and Stagenet on ledger 9 (device-provable); Mainnet stands in for a chain still on ledger 8.
+    useMidnightChains({ preprod: [L9, L8], stagenet: [L9, L9], mainnet: [L8, L8] });
   });
 
   it.each(['send', 'connector'])('stops %s before building or signing when authorization becomes stale', async operation => {
@@ -56,7 +64,8 @@ describe('Midnight ledger-specific orchestration', () => {
       ? sendUnshieldedNight('Preprod', request, {}, undefined, undefined, false, () => current)
       : buildAndSignUnshieldedTransfer('Preprod', request, {}, undefined, () => current);
     const rejected = expect(result).rejects.toThrow('Approval is no longer current');
-    expect(mocks.send).toHaveBeenCalledOnce();
+    // The write-gate check (midnightWriteGate.ts) runs first, so the key request is one tick later.
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     current = false;
     keys.resolve({ data: { success: true, publicKeyHex: '11', addressHex: '22' } });
     await rejected;
@@ -86,14 +95,17 @@ describe('Midnight ledger-specific orchestration', () => {
     let current = true;
     const signed = deferred<{ data: { success: boolean; signedTxHex: string; proven: boolean } }>();
     const submit = vi.fn();
-    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit });
+    mocks.api.mockReturnValue({
+      buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit, submitProvenMidnightTx: submit,
+    });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockReturnValueOnce(signed.promise);
     const result = sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: 12345 }, {}, undefined, undefined, false, () => current);
     const rejected = expect(result).rejects.toThrow('Approval is no longer current');
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
     current = false;
-    signed.resolve({ data: { success: true, signedTxHex: 'bb', proven: false } });
+    // Gero Cloud mode proves a public send's fee on this device, so the BG returns it proven.
+    signed.resolve({ data: { success: true, signedTxHex: 'bb', proven: true } });
     await rejected;
     expect(submit).not.toHaveBeenCalled();
   });
@@ -114,15 +126,32 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it('a connector balance or makeIntent the background refused for an unread ledger is said in the user\'s language', async () => {
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'MIDNIGHT_LEDGER_UNKNOWN' } });
+    await expect(balanceConnectorTransaction('Preprod', 'aa', {})).rejects.toThrow('midnight.errors.ledgerUnknown');
+    await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+      .rejects.toThrow('midnight.errors.ledgerUnknown');
+    // A ledger 9 intent asked for before the wallet's sync (review S1).
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'MIDNIGHT_WALLET_NOT_SYNCED' } });
+    await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+      .rejects.toThrow('midnight.errors.walletNotSynced');
+    // Other refusals pass through, with the build-failure mark kept (midnightBuildFailure.ts).
+    mocks.send.mockResolvedValue({ data: { success: false, error: 'Not enough NIGHT', buildFailure: 'InsufficientFunds' } });
+    await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+      .rejects.toMatchObject({ message: 'Not enough NIGHT', buildFailure: 'InsufficientFunds' });
+  });
+
   it('refuses stale connector balancing before dispatch and discards stale completions', async () => {
     let current = false;
-    await expect(balanceConnectorTransaction('aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
+    await expect(balanceConnectorTransaction('Preprod', 'aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
     expect(mocks.send).not.toHaveBeenCalled();
     current = true;
     const signed = deferred<{ data: { success: boolean; tx: string } }>();
     mocks.send.mockReturnValue(signed.promise);
-    const result = balanceConnectorTransaction('aa', {}, () => current);
+    const result = balanceConnectorTransaction('Preprod', 'aa', {}, () => current);
     const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    // The write-gate check runs first, so the dispatch is one tick later.
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     current = false;
     signed.resolve({ data: { success: true, tx: 'signed' } });
     await rejected;
@@ -144,13 +173,13 @@ describe('Midnight ledger-specific orchestration', () => {
 
   it.each(['local', 'zkpaas'])('checks the configured wallet-side prover for both ledger stacks (%s)', async mode => {
     mocks.proofServer.mode = mode;
-    expect(await checkWalletProvingPreflight('Stagenet')).toBe(true);
-    expect(await checkWalletProvingPreflight('Preprod')).toBe(true);
+    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(true);
+    expect(await checkWalletProvingPreflight('Preprod', 'unshielded')).toBe(true);
     expect(mocks.health).toHaveBeenCalledTimes(2);
   });
 
   it('retains remote unshielded availability without calling a local prover', async () => {
-    expect(await checkWalletProvingPreflight('Stagenet')).toBe(true);
+    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(true);
     expect(mocks.health).not.toHaveBeenCalled();
   });
 
@@ -161,7 +190,11 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.api.mockReturnValue({ submitProvenMidnightTx: submitProven, proveAndSubmitMidnightTx: proveAndSubmit });
     mocks.send.mockResolvedValue({ data: { success: true, signedTxHex: 'aabb', proven: mode !== 'remote' } });
     const sponsor = { walletId: 2, password: 'synthetic-test-password' };
-    await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {}, 'InBlock', undefined, false, sponsor);
+    const stages: string[] = [];
+    await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {}, 'InBlock', (s) => stages.push(s), false, sponsor);
+    // Gero Cloud proves inside the submit request: the timeline names it (X-09).
+    expect(stages).toContain(mode === 'remote' ? 'provingCloud' : 'submitting');
+    expect(stages).not.toContain(mode === 'remote' ? 'submitting' : 'provingCloud');
     expect(mocks.send.mock.calls[0][0].data.outputs[0].tokenType).toBe('12'.repeat(32));
     expect(mocks.send.mock.calls[0][0].data.sponsor.walletId).toBe(2);
     expect(submitProven).toHaveBeenCalledTimes(mode === 'remote' ? 0 : 1);
@@ -189,7 +222,7 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: cloud });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true } });
-    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const { tx } = await buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(tx).toBe('sealed');
     expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6300' : 'https://prover.example');
     expect(cloud).not.toHaveBeenCalled();
@@ -205,13 +238,13 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.health).not.toHaveBeenCalled();
   });
 
-  it.each(['remote', 'zkpaas'])('refuses to build for a %s prover without its recorded consent, before any credential is used', async mode => {
-    mocks.proofServer.mode = mode;
+  it('refuses to build for a zkpaas prover without its recorded consent, before any credential is used', async () => {
+    mocks.proofServer.mode = 'zkpaas';
     mocks.consented = false;
     const client = { buildUnshieldedTx: vi.fn(), submitMidnightTx: vi.fn(), submitProvenMidnightTx: vi.fn(), proveAndSubmitMidnightTx: vi.fn() };
     mocks.api.mockReturnValue(client);
     const req = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
-    await expect(buildAndSignUnshieldedTransfer('Preprod', req, {}, mode === 'zkpaas' ? 'zkpaas' : 'cloud')).rejects.toThrow('needs your consent');
+    await expect(buildAndSignUnshieldedTransfer('Preprod', req, {}, 'zkpaas')).rejects.toThrow('needs your consent');
     await expect(sendUnshieldedNight('Preprod', req, {})).rejects.toThrow('needs your consent');
     await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {})).rejects.toThrow('needs your consent');
     expect(mocks.send).not.toHaveBeenCalled();
@@ -219,11 +252,60 @@ describe('Midnight ledger-specific orchestration', () => {
     for (const method of Object.values(client)) expect(method).not.toHaveBeenCalled();
   });
 
-  it('dapp makeTransfer in remote mode returns the tx unproven, for Gero Cloud to prove on submit', async () => {
+  it('in Gero Cloud mode needs consent only where Gero Cloud still proves: private sends and a chain on ledger 8', async () => {
+    mocks.consented = false;
+    const client = { buildUnshieldedTx: vi.fn(), submitMidnightTx: vi.fn(), submitProvenMidnightTx: vi.fn(), proveAndSubmitMidnightTx: vi.fn() };
+    mocks.api.mockReturnValue(client);
+    const req = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
+    await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {})).rejects.toThrow('needs your consent');
+    await expect(sendUnshieldedNight('Mainnet', req, {})).rejects.toThrow('needs your consent');
+    await expect(buildAndSignUnshieldedTransfer('Mainnet', req, {}, 'cloud')).rejects.toThrow('needs your consent');
+    expect(mocks.send).not.toHaveBeenCalled();
+    for (const method of Object.values(client)) expect(method).not.toHaveBeenCalled();
+  });
+
+  it('proves a public send\'s DUST fee on this device in Gero Cloud mode, with no consent and nothing secret to Gero', async () => {
+    mocks.consented = false;
+    const submitProven = vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' });
+    const submitRemote = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
+      submitProvenMidnightTx: submitProven, submitMidnightTx: submitRemote });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true, ledgerTxHash: 'ledger', txIdentifiers: ['00ab'] } });
+    const result = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(mocks.send.mock.calls[1][0].data.proving).toEqual({ device: true });
+    expect(mocks.health).not.toHaveBeenCalled();
+    expect(submitRemote).not.toHaveBeenCalled();
+    expect(submitProven).toHaveBeenCalledWith({ signedTxHex: 'sealed', waitFor: 'InBlock' }, { identifiers: ['00ab'] });
+    expect(result.ledgerTxHash).toBe('ledger');
+  });
+
+  it('the one-off fallback from an unreachable local server proves a public send on this device, not on Gero Cloud', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.consented = false;
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
+      submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0x1', status: 'InBlock' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true } });
+    await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, undefined, undefined, true);
+    expect(mocks.send.mock.calls[1][0].data.proving).toEqual({ device: true });
+  });
+
+  it('dapp makeTransfer in Gero Cloud mode proves the fee on this device and returns a sealed tx', async () => {
+    mocks.consented = false;
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true } });
+    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, 'device');
+    expect(tx).toBe('sealed');
+    expect(mocks.send.mock.calls[1][0].data.proving).toEqual({ device: true });
+  });
+
+  it('dapp makeTransfer on a chain still on ledger 8, in Gero Cloud mode, returns the tx unproven, for Gero Cloud to prove on submit', async () => {
     mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'unproven', proven: false } });
-    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const { tx } = await buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(tx).toBe('unproven');
     expect(mocks.send.mock.calls[1][0].data.proving).toBeUndefined();
   });
@@ -231,13 +313,13 @@ describe('Midnight ledger-specific orchestration', () => {
   it('dapp makeTransfer refuses an unreachable or non-loopback local prover instead of falling back to Gero Cloud', async () => {
     mocks.proofServer.mode = 'local';
     mocks.health.mockResolvedValue(false);
-    await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+    await expect(buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
       .rejects.toThrow('Proof server not reachable');
     mocks.health.mockResolvedValue(true);
     const saved = mocks.proofServer.localUrl;
     mocks.proofServer.localUrl = 'https://abc.trycloudflare.com';
     try {
-      await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+      await expect(buildAndSignUnshieldedTransfer('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
         .rejects.toThrow('Proof server not reachable');
     } finally { mocks.proofServer.localUrl = saved; }
     expect(mocks.send).not.toHaveBeenCalled();
@@ -252,10 +334,52 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.api).not.toHaveBeenCalled();
   });
 
+  it('refuses a local server on the other ledger release before authorization, naming its version', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.version.mockResolvedValue({ status: 'mismatch', version: '8.1.0' });
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: false, reason: 'local-wrong-version', serverVersion: '8.1.0' });
+    expect(mocks.version).toHaveBeenCalledWith('http://localhost:6301', 9);
+    const sent = sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    await expect(sent).rejects.toBeInstanceOf(ProofServerUnreachableError);
+    await expect(sent).rejects.toMatchObject({ reason: 'local-wrong-version', serverVersion: '8.1.0' });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.api).not.toHaveBeenCalled();
+  });
+
+  it('lets a local server through when it is on the right release or does not say', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.version.mockResolvedValue({ status: 'match', version: '9.0.1' });
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: true });
+    mocks.version.mockResolvedValue({ status: 'unknown' });
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: true });
+  });
+
+  it('never asks zkPaaS for a version: Arkhia relays only the proving routes', async () => {
+    mocks.proofServer.mode = 'zkpaas';
+    expect(await walletProvingPreflight('Preprod', 'unshielded')).toEqual({ ok: true });
+    expect(mocks.version).not.toHaveBeenCalled();
+  });
+
+  it('reports why an unusable local preference cannot prove', async () => {
+    mocks.proofServer.mode = 'local'; mocks.proofServer.localUrlLedger9 = '';
+    expect(await walletProvingPreflight('Stagenet', 'unshielded')).toEqual({ ok: false, reason: 'local-url-missing' });
+  });
+
   it('fails before authorization when no ledger-9 URL is set for Stagenet, without touching the ledger-8 server', async () => {
     mocks.proofServer.mode = 'local'; mocks.proofServer.localUrlLedger9 = '';
-    expect(await checkWalletProvingPreflight('Stagenet')).toBe(false);
+    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(false);
     expect(mocks.health).not.toHaveBeenCalled();
+  });
+
+  it('reports a registration the server took as submitted, with its status, never as registered', async () => {
+    mocks.api.mockReturnValue({
+      buildNightDustRegistrationTx: vi.fn().mockResolvedValue({ unprovenTxHex: 'aabb', signaturePayloadHex: '0xcc' }),
+      submitNightDustRegistrationTx: vi.fn().mockResolvedValue({ txHash: '0xfeed', status: 'Submitted' }),
+    });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } })
+      .mockResolvedValueOnce({ data: { success: true, signatures: [{ index: 1, signatureHex: 'ff' }] } });
+    const result = await registerNightForDust('Stagenet', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
+    expect(result).toEqual({ status: 'submitted', txHash: '0xfeed', submitStatus: 'Submitted' });
   });
 
   it('passes the registration envelope to background validation and never submits a rejected payload', async () => {
@@ -292,6 +416,179 @@ describe('Midnight ledger-specific orchestration', () => {
     }));
   });
 
+  it.each([
+    ['MIDNIGHT_BUILT_TX_MISMATCH', 'txGuard.builtTxMismatch'],
+    ['MIDNIGHT_BUILT_TX_UNREADABLE', 'txGuard.builtTxUnreadable'],
+    ['MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED', 'midnight.errors.updateRequired'],
+  ])('reports the background refusal %s with its own copy and code, and submits nothing', async (code, copy) => {
+    const submit = vi.fn();
+    const submitProven = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit, submitProvenMidnightTx: submitProven });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: false, error: code } });
+    const thrown = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {})
+      .catch((e: unknown) => e);
+    expect(thrown).toMatchObject({ name: 'MidnightBuiltTxRefusedError', code, message: copy });
+    expect(submit).not.toHaveBeenCalled();
+    expect(submitProven).not.toHaveBeenCalled();
+  });
+
+  // The wallet SDK's fee-balancing shortfall (InsufficientFundsError for the DUST
+  // token). A ledger 9 fee is around 0.6 DUST, so a wallet holding 0.3 that tries
+  // anyway lands here; it must read in the user's language, not as the SDK's English.
+  const DUST_SHORTFALL = 'Insufficient Funds: could not balance dust';
+  it.each([
+    ['its own DUST', undefined],
+    ['a sponsor\'s DUST', { walletId: 2, password: 'sponsor-password' }],
+  ])('a public send paid with %s that falls short of the fee says so in the user\'s language, and submits nothing', async (_payer, sponsor) => {
+    const submit = vi.fn();
+    const submitProven = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit, submitProvenMidnightTx: submitProven });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: false, error: DUST_SHORTFALL } });
+    await expect(sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, undefined, sponsor))
+      .rejects.toThrow('midnight.errors.dustInsufficient');
+    expect(mocks.send).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
+      data: expect.objectContaining({ sponsor: sponsor ? expect.objectContaining({ walletId: 2 }) : undefined }),
+    }));
+    expect(submit).not.toHaveBeenCalled();
+    expect(submitProven).not.toHaveBeenCalled();
+  });
+
+  it('a private send whose fee wallet falls short of DUST says so in the user\'s language', async () => {
+    mocks.api.mockReturnValue({ submitProvenMidnightTx: vi.fn(), proveAndSubmitMidnightTx: vi.fn() });
+    mocks.send.mockResolvedValue({ data: { success: false, error: DUST_SHORTFALL } });
+    await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'recipient', amount: 1n, tokenType: '12'.repeat(32) }], {}, 'InBlock'))
+      .rejects.toThrow('midnight.errors.dustInsufficient');
+  });
+
+  it('maps only the DUST shortfall: a token or NIGHT shortfall keeps its own message', () => {
+    expect(backgroundError(DUST_SHORTFALL, 'fallback').message).toBe('midnight.errors.dustInsufficient');
+    expect(backgroundError(`  ${DUST_SHORTFALL}\n`, 'fallback').message).toBe('midnight.errors.dustInsufficient');
+    // The SDK names any other token by its type.
+    const token = `Insufficient Funds: could not balance ${'12'.repeat(32)}`;
+    expect(backgroundError(token, 'fallback').message).toBe(token);
+    for (const other of ['Not enough NIGHT', 'Insufficient Funds', 'Insufficient Funds: could not balance dust and more',
+      'The wallet does not hold enough of a token this intent gives']) {
+      expect(backgroundError(other, 'fallback').message).toBe(other);
+    }
+    expect(backgroundError(undefined, 'fallback').message).toBe('fallback');
+  });
+
+  it('a LEDGER_MISMATCH send can be tried again, and the retry asks for a new build', async () => {
+    const build = vi.fn().mockResolvedValue({ unprovenTxHex: 'aa', txHash: 'built' });
+    const submitProven = vi.fn()
+      .mockRejectedValueOnce(new MidnightApiError('ledgerMismatch', { status: 409, errorCode: 'LEDGER_MISMATCH' }, 'Preprod'))
+      .mockResolvedValueOnce({ txHash: 'ok', status: 'InBlock' });
+    mocks.api.mockReturnValue({ buildUnshieldedTx: build, submitProvenMidnightTx: submitProven });
+    mocks.send.mockImplementation(async ({ method }: { method: MessageTypes }) => (method === MessageTypes.GET_MIDNIGHT_WALLET_KEYS
+      ? { data: { success: true, publicKeyHex: '11', addressHex: '22' } }
+      : { data: { success: true, signedTxHex: 'signed', proven: true } }));
+    const request = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
+    await expect(sendUnshieldedNight('Preprod', request, {})).rejects.toMatchObject({ kind: 'ledgerMismatch', message: 'midnight.errors.ledgerMismatch' });
+    expect(build).toHaveBeenCalledTimes(1);
+    await expect(sendUnshieldedNight('Preprod', request, {})).resolves.toMatchObject({ txHash: 'ok' });
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('classifies a DUST registration failure by the server\'s own sentence, and keeps its kind', async () => {
+    const build = vi.fn();
+    mocks.api.mockReturnValue({ buildNightDustRegistrationTx: build });
+    mocks.send.mockResolvedValue({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } });
+    build.mockRejectedValueOnce(new MidnightApiError('server', { status: 400, message: 'No NIGHT UTxOs available' }, 'Preprod'));
+    await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
+      .resolves.toEqual({ status: 'no_night_utxos', message: 'No NIGHT UTxOs available' });
+    build.mockRejectedValueOnce(new MidnightApiError('networkUpgrading', { status: 501, errorCode: 'MIDNIGHT_NETWORK_UPGRADING' }, 'Preprod'));
+    await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
+      .resolves.toEqual({ status: 'failed', message: 'midnight.errors.networkUpgrading', errorKind: 'networkUpgrading' });
+  });
+
+  describe('on a network whose sends are paused for an upgrade', () => {
+    beforeEach(async () => {
+      resetMidnightWriteGateForTests();
+      resetMidnightWriteStatusForTests();
+      await noteMidnightNetworkUpgrading('Preprod', 'response');
+    });
+    afterEach(() => resetMidnightWriteGateForTests());
+    const request = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
+
+    it('a public send stops before keys, build or signing', async () => {
+      const build = vi.fn();
+      mocks.api.mockReturnValue({ buildUnshieldedTx: build });
+      await expect(sendUnshieldedNight('Preprod', request, {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(build).not.toHaveBeenCalled();
+    });
+
+    it('a private send stops before the shielded sync and before proving', async () => {
+      const proveAndSubmit = vi.fn();
+      mocks.api.mockReturnValue({ proveAndSubmitMidnightTx: proveAndSubmit, getWriteStatus: async () => ({ kind: 'unknown', unsupported: true }) });
+      await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
+      // The background builds, syncs and proves: it is never asked.
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(mocks.health).not.toHaveBeenCalled();
+      expect(proveAndSubmit).not.toHaveBeenCalled();
+    });
+
+    it('a private send asks the status read first, so a pause the wallet did not know about also stops it there', async () => {
+      resetMidnightWriteGateForTests();
+      const getWriteStatus = vi.fn(async () => ({ kind: 'closed', reason: 'NETWORK_UPGRADING' }));
+      mocks.api.mockReturnValue({ getWriteStatus });
+      await expect(sendShieldedNight('Mainnet', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
+      expect(getWriteStatus).toHaveBeenCalledOnce();
+      expect(mocks.send).not.toHaveBeenCalled();
+    });
+
+    it('a dapp makeTransfer, balance, makeIntent and a DUST registration stop before keys', async () => {
+      mocks.api.mockReturnValue({ buildUnshieldedTx: vi.fn(), buildNightDustRegistrationTx: vi.fn() });
+      await expect(buildAndSignUnshieldedTransfer('Preprod', request, {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(balanceConnectorTransaction('Preprod', 'aa', {})).rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(buildConnectorIntent('Preprod', { desiredInputs: [], desiredOutputs: [], options: {} }, {}))
+        .rejects.toMatchObject({ kind: 'networkUpgrading' });
+      await expect(registerNightForDust('Preprod', { fromAddress: 'a', dustReceiverAddressBech32: 'd' }, {}))
+        .resolves.toEqual({ status: 'failed', message: 'midnight.errors.networkUpgrading', errorKind: 'networkUpgrading' });
+      expect(mocks.send).not.toHaveBeenCalled();
+    });
+
+    it('another network is not affected', async () => {
+      const build = vi.fn().mockRejectedValue(new Error('reached the build'));
+      mocks.api.mockReturnValue({ buildUnshieldedTx: build });
+      mocks.send.mockResolvedValue({ data: { success: true, publicKeyHex: '11', addressHex: '22' } });
+      await expect(sendUnshieldedNight('Mainnet', request, {})).rejects.toThrow('reached the build');
+      expect(build).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('a busy Gero Cloud gets the same signed bytes again, without asking for keys or a signature again', async () => {
+    vi.useFakeTimers();
+    try {
+      const busy = () => new MidnightApiError('proverBusy', { status: 503, errorCode: 'MIDNIGHT_PROVER_BUSY', message: 'busy', retryAfter: 2 }, 'Preprod');
+      const submitProven = vi.fn().mockRejectedValueOnce(busy()).mockRejectedValueOnce(busy()).mockResolvedValueOnce({ txHash: 'ok', status: 'InBlock' });
+      mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitProvenMidnightTx: submitProven });
+      mocks.send.mockImplementation(async ({ method }: { method: MessageTypes }) => (method === MessageTypes.GET_MIDNIGHT_WALLET_KEYS
+        ? { data: { success: true, publicKeyHex: '11', addressHex: '22' } }
+        : { data: { success: true, signedTxHex: 'signed-once', proven: true } }));
+      const countdown: Array<number | null> = [];
+      const stages: string[] = [];
+      const sent = sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 5 * 60_000 }, {},
+        (stage) => stages.push(stage), undefined, false, () => true, { onCountdown: (s) => countdown.push(s) });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(sent).resolves.toMatchObject({ txHash: 'ok' });
+      expect(submitProven).toHaveBeenCalledTimes(3);
+      expect(submitProven.mock.calls.every(([body]) => body.signedTxHex === 'signed-once')).toBe(true);
+      // One key request and one signing round trip: no second password or signature.
+      expect(mocks.send).toHaveBeenCalledTimes(2);
+      expect(countdown).toEqual([2, 1, null, 2, 1, null]);
+      // The timeline waits during each countdown and submits again after it.
+      expect(stages.slice(stages.indexOf('submitting'))).toEqual(['submitting', 'waiting', 'submitting', 'waiting', 'submitting', 'done']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // ── which side names the ledger hash ─────────────────────────────────────
   //
   // The relay's txHash is the Substrate extrinsic hash; history is keyed on
@@ -299,12 +596,16 @@ describe('Midnight ledger-specific orchestration', () => {
   // on the remote paths, the wallet's own prover on the proven path.
 
   it('surfaces the sidecar ledger hash on a remote public send', async () => {
+    // Gero Cloud still proves public sends on a chain on ledger 8 (the device keys are ledger 9's).
     mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
       submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
-    const result = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const stages: string[] = [];
+    const result = await sendUnshieldedNight('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, (s) => stages.push(s));
     expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' });
+    // The transaction is unproven, so Gero Cloud proves it inside the submit.
+    expect(stages.slice(-2)).toEqual(['provingCloud', 'done']);
   });
 
   it('carries the wallet-proved ledger hash onto a submit-proven result that has none', async () => {
@@ -331,7 +632,7 @@ describe('Midnight ledger-specific orchestration', () => {
       submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
-    const result = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const result = await sendUnshieldedNight('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock' });
     expect('ledgerTxHash' in result).toBe(false);
   });

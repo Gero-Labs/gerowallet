@@ -12,12 +12,14 @@ import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
+import { announcementHooks } from '@/services/announcements/announcementHooks';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 // Static, not dynamic: both land in the same background iife, so a dynamic
 // import buys no code splitting — it only pushes the module's declaration later
 // in the emitted bundle, the temporal-dead-zone shape
 // scripts/check-bundle-tdz.mjs guards against. Its ledger imports stay lazy
 // inside it; nothing it reaches imports this service.
+import { DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
 import { createLocalProverServingOptions, localProverProfile } from '@/services/crossDevice/localProverProfile';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
@@ -85,10 +87,13 @@ import { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMid
 /**
  * Record fields whose only source is the stored wallet record, with its secrets
  * (GROUP_SECRET_FIELDS): the wallet's keys and account. When the record lacks one,
- * the login object must not supply it either (resolveGroupSecrets).
+ * the login object must not supply it either (resolveGroupSecrets). A Keystone's
+ * firmwareVersion is one: a pairing refreshes it on the record (refreshKeystoneFirmware),
+ * and the Keystone signer gates pool registrations on it.
  */
 const RECORD_IDENTITY_FIELDS: readonly string[] = [
   'publicKey', 'accountIndex', 'parentWalletId', 'type', 'chain', 'network', 'addressType', 'watchAddress', 'xfp',
+  'firmwareVersion',
 ];
 
 /**
@@ -213,6 +218,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
@@ -388,6 +394,7 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          firmwareVersion: walletBg.firmwareVersion,
           // PRF encryption fields
           encryptionMethod: walletBg.encryptionMethod,
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
@@ -490,6 +497,12 @@ export class WalletManager {
   private async initializeWallet(walletBg: WalletBg): Promise<void> {
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
+
+    // The previous worker's Midnight record, kept aside for a Midnight wallet's
+    // first reset after a restart (midnightStore.ts), has no use for another chain.
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      void import('@/stores/midnightStore').then(({ midnightActions }) => midnightActions.releaseBootRecord()).catch(() => undefined);
+    }
 
     LoadingState.setText('Loading blockchain data...');
 
@@ -638,7 +651,9 @@ export class WalletManager {
     // --- WebSocket sync (replaces Ably) ---
     // Midnight uses its own bridge (midnightSyncService) — wired separately
     // once the SDK can produce the unshielded address required to subscribe.
-    if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT) {
+    // Solana has its own Gero Sync branch below (SOLANA SUBSCRIBE, slot cursor), so it
+    // never takes this Cardano path.
+    if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT && walletBg.chain !== Blockchain.SOLANA) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
 
@@ -724,6 +739,9 @@ export class WalletManager {
           }
           this.crossDevice?.onCrossDeviceMessage(raw);
         },
+        // Broadcast announcements: the feed's version number. The engine decides whether to read
+        // the feed; nothing from the frame is trusted or shown.
+        onAnnouncements: (seq: unknown) => announcementHooks.feedChanged(seq),
         // A new socket (connect and every reconnect): every earlier challenge is
         // gone. Sends nothing itself. The relay's DEVICE_CHALLENGE triggers the one
         // signed registration; only if none arrives within 5 s does the legacy
@@ -807,6 +825,8 @@ export class WalletManager {
               await walletBg.syncService.applyBitcoinSync(data);
             });
           },
+          // Broadcast announcements reach every session, whatever its chain.
+          onAnnouncements: (seq: unknown) => announcementHooks.feedChanged(seq),
           onRollback: async (data: WsSyncMessage) => {
             // Phase 4: height-based BTC rollback. Serialized under tipMutex so it can't
             // race a concurrent SYNC apply. `rollback_to_height` is snake_case (BTC-specific).
@@ -835,6 +855,52 @@ export class WalletManager {
         },
         undefined, // no Cardano credentials for BTC
         btcAddressSet.addresses
+      );
+    } else if (walletBg.chain === Blockchain.SOLANA) {
+      // ── Solana via gero-sync (docs/solana-wire.md) ──────────────────────────
+      // Same WS state machine: SUBSCRIBE by the account's base58 address with the
+      // persisted slot cursor. websocket.service re-tags CATCH_UP_COMPLETE /
+      // SYNC_CHECK_OK as SYNC; applySolanaSync keeps the cursor at the newest
+      // delivered slot. Confirmed slots don't roll back, so there is no ROLLBACK.
+      let solanaCursor = 0;
+      try {
+        const lastSyncInfo = await walletBg.getLastSyncInfo();
+        if (lastSyncInfo && !Array.isArray(lastSyncInfo)) {
+          solanaCursor = (lastSyncInfo as { height?: number }).height || 0;
+        }
+      } catch {
+        solanaCursor = 0;
+      }
+      debugLog(`◎ [SOL gero-sync] connecting: address=${walletBg.baseAddress} cursor=${solanaCursor}`);
+      webSocketService.connect(
+        chain,
+        network,
+        walletBg.baseAddress,
+        solanaCursor,
+        {
+          onSync: async (data: WsSyncMessage) => {
+            await this.tipMutex.runExclusive(async () => {
+              await walletBg.syncService.applySolanaSync(data);
+            });
+          },
+          onAnnouncements: (seq: unknown) => announcementHooks.feedChanged(seq),
+          onForceResync: async () => {
+            // A devnet reset (the tip really went backwards): drop the history, rewind the
+            // cursor to 0 and subscribe again from scratch.
+            debugLog('◎ [SOL gero-sync] FORCE_RESYNC — clearing and resubscribing');
+            webSocketService.pauseSyncCheck();
+            try {
+              await this.tipMutex.runExclusive(async () => {
+                await walletBg.syncService.handleSolanaForceResync();
+              });
+              const syncPromise = webSocketService.waitForSync();
+              webSocketService.resubscribe(0);
+              await syncPromise;
+            } finally {
+              webSocketService.resumeSyncCheck();
+            }
+          },
+        },
       );
     } else {
       // Reached by Midnight (its own sync path) and by BTC with the gero-sync
@@ -1766,11 +1832,8 @@ export class WalletManager {
   private async proveForPeer(payload: Uint8Array, localUrl: string): Promise<Uint8Array> {
     const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
     const { hexToBytes } = await import('@/chains/midnight/midnightTxBuilder');
-    // Buffer, not proveSession's bytesToHex: importing that module here drags
-    // @noble/curves into walletManager's graph, which perturbs module
-    // resolution for @trezor/device-authenticity's CJS entry and breaks
-    // trezorWeb.spec. This is also the idiom the surrounding Midnight code
-    // already uses (midnightUnshieldedProver, midnightShieldedBuilder).
+    // Buffer, not proveSession's bytesToHex: this is the idiom the surrounding
+    // Midnight code already uses (midnightUnshieldedProver, midnightShieldedBuilder).
     const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
     if (!isLoopbackProverUrl(localUrl)) throw new Error('Cross-device proving needs a proof server on this computer');
     const signedTxHex = Buffer.from(payload).toString('hex');
@@ -1849,11 +1912,11 @@ export class WalletManager {
     const { midnightStore } = await import('@/stores/midnightStore');
     // Capture one server profile and URL for the bridge lifetime. A settings
     // change disposes this bridge before advertising the replacement.
-    // Cross-device serving advertises the device's ledger-8 server; the
-    // ledger-9 URL is send-path only for now (serving both would need the
-    // bridge to advertise two provers).
-    const profile = localProverProfile('legacy');
-    const localUrl = midnightStore.proofServer.localUrl;
+    // Cross-device serving advertises the device's ledger 9 server: mainnet,
+    // preprod and Preview all run ledger 9 (#1452 M13). One prover per bridge;
+    // serving ledger 8 as well would need the bridge to advertise two.
+    const profile = localProverProfile('ledger9');
+    const localUrl = midnightStore.proofServer.localUrlLedger9 || DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9;
     return bootstrapCrossDeviceSigning({
       label: 'Gero Extension',
       hasSigningKey: true,

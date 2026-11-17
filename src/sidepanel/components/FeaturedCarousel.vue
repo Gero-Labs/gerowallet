@@ -3,7 +3,7 @@
        until the Gero Card was removed from the panel; with one slide left the
        drag/snap/auto-scroll machinery and the progress dots had nothing to do,
        so this is now a plain tappable card. -->
-  <div v-if="!isApex" class="featured-promo">
+  <div class="featured-promo">
     <button type="button" class="promo-card cashback-promo" @click="openCashback">
       <div
         class="promo-bg cashback-bg"
@@ -33,9 +33,6 @@
 <script setup lang="ts">
 import assets from '@/utils/assets';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
-import { useChainContext } from '../composables/useChainContext';
-
-const { isApex } = useChainContext();
 
 const cashbackBgImage = assets.cashbackBg;
 const cashbackImage = assets.cashbackImage;

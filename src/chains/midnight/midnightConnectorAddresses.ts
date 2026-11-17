@@ -1,7 +1,7 @@
 /**
  * DApp Connector `getShieldedAddresses()` payload.
  *
- * The spec (`@midnight-ntwrk/dapp-connector-api` `ConnectedAPI`) says the
+ * The spec (`@midnightntwrk/dapp-connector-api` `ConnectedAPI`) says the
  * address AND both public keys are "provided in Bech32m format". The keys
  * therefore go out as `mn_shield-cpk_<net>1…` / `mn_shield-epk_<net>1…`, not
  * as the hex `ShieldedAddress.coinPublicKeyString()` returns — a dapp feeding

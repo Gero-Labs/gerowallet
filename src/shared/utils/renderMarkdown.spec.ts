@@ -739,3 +739,37 @@ describe('renderMarkdown, untrusted-author safety', () => {
     expect(out).toContain('<code>real</code>');
   });
 });
+
+describe('renderMarkdown, a caller-supplied link allowlist', () => {
+  const onlyGero = (url: string) => /^https:\/\/gerowallet\.io(\/|$)/.test(url);
+
+  it('links an allowed destination and keeps only the text of any other', () => {
+    const out = renderMarkdown('[guide](https://gerowallet.io/guide) and [claim](https://evil.test/claim)', { linkAllowed: onlyGero });
+    expect(out).toContain('<a href="https://gerowallet.io/guide" target="_blank" rel="noopener noreferrer">guide</a>');
+    expect(out).toContain('and claim');
+    expect(out).not.toContain('evil.test');
+    expect(out.match(/<a /g)).toHaveLength(1);
+  });
+
+  it('shows the callback the URL as the author wrote it, and writes the escaped one', () => {
+    const seen: string[] = [];
+    const out = renderMarkdown('[a](https://gerowallet.io/?x=1&y=2)', { linkAllowed: (url) => { seen.push(url); return true; } });
+    expect(seen).toEqual(['https://gerowallet.io/?x=1&y=2']);
+    expect(out).toContain('href="https://gerowallet.io/?x=1&amp;y=2"');
+  });
+
+  it('cannot be passed with a look-alike host or credentials', () => {
+    const out = renderMarkdown('[a](https://gerowallet.io.evil.test/) [b](https://gerowallet.io@evil.test/)', { linkAllowed: onlyGero });
+    expect(out).not.toContain('<a ');
+    expect(out).toContain('a b');
+  });
+
+  it('keeps the formatting inside the text of a link it refuses, and leaves no placeholder', () => {
+    const out = renderMarkdown('[**bold** and `code`](https://evil.test/)', { linkAllowed: onlyGero });
+    expect(out).toBe('<p><strong>bold</strong> and <code>code</code></p>');
+  });
+
+  it('changes nothing for callers that pass no allowlist', () => {
+    expect(renderMarkdown('[x](https://evil.test/)')).toContain('<a href="https://evil.test/"');
+  });
+});

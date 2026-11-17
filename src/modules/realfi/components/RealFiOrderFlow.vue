@@ -260,6 +260,7 @@ const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
   getIsBT: () => isBT.value,
+  orderBuilder: 'realfi',
 });
 
 const signer = {

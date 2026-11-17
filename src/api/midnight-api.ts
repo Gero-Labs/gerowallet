@@ -16,16 +16,24 @@
  */
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
-import { Serialization } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import i18n from '@/plugins/i18n';
 import { parseHttpError } from '@/shared/utils/parser';
 import { registrationNftOf, verifyDustMappingTx, type DustTxExpectation } from '@/shared/utils/dustTxGuard';
-import { koiosSource, proveOutputs, type TxCborSource } from '@/shared/utils/provenInputs';
+import { backendSource, proveOutputs, type TxCborSource } from '@/shared/utils/provenInputs';
 import { TxIntentMismatchError, type TxIntentViolation } from '@/shared/utils/txIntentGuard';
 import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
+import { recoverLostSubmit, type MidnightSubmitWatch } from './midnightSubmitRecovery';
+import {
+  CLIENT_UPDATE_REQUIRED, MIDNIGHT_NETWORK_UPGRADING, isMidnightSubmitRefusal, midnightApiErrorFromResponse, toMidnightApiError,
+} from './midnightApiError';
+import { clearDustSpendCheckpoints } from '@/chains/midnight/midnightDustSpendCheckpoint';
+import { midnightLedgerKey } from '@/chains/midnight/midnightLedger';
+import { noteMidnightNetworkUpgrading, noteMidnightUpdateRequired, noteMidnightWritesOpen } from '@/chains/midnight/midnightWriteGate';
+import { geroClientHeaders } from '@/chains/midnight/midnightClientVersion';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -417,23 +425,16 @@ export interface DustBuildContext {
   /**
    * Where to fetch the transaction that created the registration UTxO, to prove
    * which mapping NFT it holds (provenInputs.ts). The wallet's history first,
-   * when the caller has it; Koios is always tried after.
+   * when the caller has it; gero-backend is always tried after.
    */
   proofSources?: TxCborSource[];
 }
 
-/**
- * The mapping NFT the registration UTxO being spent holds, proven from the
- * transaction that created it; null when it cannot be proven.
- */
-async function provenRegistrationNft(
-  registrationRef: string,
-  network: string,
-  sources: TxCborSource[],
-): Promise<string | null> {
+/** The output `ref` names, proven from the transaction that created it; null when it cannot be proven. */
+async function provenOutputOf(ref: string, sources: TxCborSource[]): Promise<Cardano.TxOut | null> {
   try {
-    const { proven } = await proveOutputs([registrationRef], sources);
-    return registrationNftOf(proven.get(registrationRef.toLowerCase()), network);
+    const { proven } = await proveOutputs([ref], sources);
+    return proven.get(ref.toLowerCase()) ?? null;
   } catch {
     return null;
   }
@@ -444,16 +445,23 @@ async function provenRegistrationNft(
  * `dustTxGuard.ts`). Runs on every complete build, before any caller can sign it.
  * On deregister and update the mapping NFT is pinned to the one the registration
  * UTxO provably holds; when that proof is unavailable, the guard's one-unit rule applies.
+ * A caller without the wallet's UTxO list (the DUST sources dialog) gets a lent
+ * collateral ref proven the same way, so the guard can tell the pool's UTxO from the user's.
  */
 async function verifyDustBuild(
   build: BuildDustRegistrationTxResponse,
-  expectation: Omit<DustTxExpectation, 'sponsoredCollateralRef'>,
+  expectation: Omit<DustTxExpectation, 'sponsoredCollateralRef' | 'sponsoredCollateralOutput'>,
   proofSources: TxCborSource[] = [],
 ): Promise<BuildDustRegistrationTxResponse> {
   if (build.status !== 'complete' || !build.txCbor) return build;
-  const registrationNftUnit = expectation.kind !== 'register' && expectation.registrationRef
-    ? await provenRegistrationNft(expectation.registrationRef, expectation.network, proofSources)
-    : null;
+  const sponsoredRef = build.sponsoredCollateralRef;
+  const [registrationOutput, sponsoredCollateralOutput] = await Promise.all([
+    expectation.kind !== 'register' && expectation.registrationRef
+      ? provenOutputOf(expectation.registrationRef, proofSources)
+      : null,
+    sponsoredRef && !expectation.ownUtxoRefs ? provenOutputOf(sponsoredRef, proofSources) : null,
+  ]);
+  const registrationNftUnit = registrationNftOf(registrationOutput ?? undefined, expectation.network);
   if (expectation.kind !== 'register' && !registrationNftUnit) {
     debugLog('DUST build: registration UTxO not proven; the mapping NFT is checked by count only');
   }
@@ -463,14 +471,15 @@ async function verifyDustBuild(
     violations = verifyDustMappingTx(tx, {
       ...expectation,
       registrationNftUnit,
-      sponsoredCollateralRef: build.sponsoredCollateralRef,
+      sponsoredCollateralRef: sponsoredRef,
+      sponsoredCollateralOutput,
     });
   } catch (e) {
     debugLog('DUST build: could not verify the built transaction', e);
     throw new TxIntentMismatchError(String(i18n.t('txGuard.builtTxMismatch')), []);
   }
   if (violations.length > 0) {
-    debugLog('DUST build: refused a transaction that differs from the request', violations);
+    debugLog(`DUST build: refused a transaction that differs from the request: ${violations.join(', ')}`);
     throw new TxIntentMismatchError(
       String(i18n.t('txGuard.builtTxMismatch')),
       violations.filter((v): v is TxIntentViolation => v !== 'unsupported'),
@@ -648,6 +657,9 @@ export interface SubmitNightDustRegistrationResponse {
   status: 'Submitted' | 'InBlock' | 'Finalized';
 }
 
+// Cloudflare in front of Nexus gives up at 100 s, so the edge's 524 normally arrives before this fires.
+const MIDNIGHT_SUBMIT_TIMEOUT_MS = 110_000;
+
 /**
  * Single shared axios instance — uses the Midnight network's Nexus URL from config.
  * Caller passes the `network` per call so we can reuse one instance across sessions.
@@ -657,9 +669,9 @@ export class MidnightApi {
   private readonly nexusBaseUrl: string;
   private readonly axiosInstance: AxiosInstance;
 
-  /** The caller's CBOR sources, then Koios on the Cardano network this Midnight network anchors to. */
+  /** The caller's CBOR sources, then gero-backend on the Cardano network this Midnight network anchors to. */
   private dustProofSources(context: DustBuildContext): TxCborSource[] {
-    return [...(context.proofSources ?? []), koiosSource(cardanoTwinNetwork(this.network))];
+    return [...(context.proofSources ?? []), backendSource(cardanoTwinNetwork(this.network))];
   }
 
   constructor(network: string) {
@@ -674,6 +686,9 @@ export class MidnightApi {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
+        // Which extension build is asking (`X-Gero-Client: extension/<version>`),
+        // so the server can keep sends closed to a build that can't sign for the network.
+        ...geroClientHeaders(),
       },
     });
 
@@ -713,6 +728,34 @@ export class MidnightApi {
         throw error;
       },
     );
+    // A write route's answer opens or closes this network's write gate (midnightWriteGate.ts).
+    this.axiosInstance.interceptors.response.use(
+      (res) => {
+        recordWriteOutcome(this.network, { url: res.config?.url, status: res.status, data: res.data });
+        return res;
+      },
+      (error: AxiosError) => {
+        recordWriteOutcome(this.network, error.response
+          ? { url: error.config?.url, status: error.response.status, data: error.response.data }
+          : undefined);
+        throw error;
+      },
+    );
+  }
+
+  /**
+   * The server's write status for this network: `GET /api/midnight/{network}/status`.
+   * Sent with the build's `X-Gero-Client` header, like every other request here.
+   * A server without the route answers 404 (`unsupported`). Never throws.
+   */
+  async getWriteStatus(): Promise<MidnightWriteStatus> {
+    try {
+      const { data, status } = await this.axiosInstance.get(nexusMidnightPathFor(this.network, 'status'), { timeout: 10_000 });
+      return status === 200 ? parseMidnightWriteStatus(data) : { kind: 'unknown', unsupported: false };
+    } catch (error) {
+      const status = (error as AxiosError)?.response?.status;
+      return { kind: 'unknown', unsupported: status === 404 || status === 405 };
+    }
   }
 
   /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-stagenet` etc.). */
@@ -997,7 +1040,7 @@ export class MidnightApi {
       cardanoAddress: request.cardanoAddress,
       dustAddressHex: request.dustAddressHex,
       ownUtxoRefs: context.ownUtxoRefs,
-    });
+    }, this.dustProofSources(context));
   }
 
   /**
@@ -1131,6 +1174,24 @@ export class MidnightApi {
     }
   }
 
+  /**
+   * A lost reply becomes a lookup of the transaction by `watch.identifiers`; a
+   * real failure throws a readable {@link MidnightApiError} (midnightApiError.ts).
+   */
+  private async resolveSubmitError(error: unknown, watch?: MidnightSubmitWatch): Promise<SubmitMidnightTxResponse> {
+    try {
+      return await recoverLostSubmit(error, watch, {
+        graphql: (query, variables) => this.graphql(query, variables),
+        network: this.network,
+      });
+    } catch (failure) {
+      // A refusal may mean a DUST coin the wallet holds as unspent was spent in
+      // a block its DUST sync missed: the next fee build rescans from scratch.
+      if (isMidnightSubmitRefusal(failure)) void clearDustSpendCheckpoints(midnightLedgerKey(this.network));
+      throw failure;
+    }
+  }
+
   // ─── Native send: build / submit ──────────────────────────────────────────
 
   /**
@@ -1150,10 +1211,10 @@ export class MidnightApi {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/build-unshielded');
       const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, request);
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 
@@ -1180,10 +1241,10 @@ export class MidnightApi {
         ttlMs: request.ttlMs,
       };
       const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, wireBody);
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 
@@ -1196,15 +1257,23 @@ export class MidnightApi {
    *
    * **Endpoint contract (Nexus-side TBD)**:
    * `POST /api/midnight/{network}/tx/submit`
+   *
+   * `watch` (all three submit methods): when the reply is lost, the indexer is
+   * polled for these ledger identifiers instead of reporting a failed send.
    */
-  async submitMidnightTx(request: SubmitMidnightTxRequest): Promise<SubmitMidnightTxResponse> {
+  async submitMidnightTx(
+    request: SubmitMidnightTxRequest,
+    watch?: MidnightSubmitWatch,
+  ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/submit');
-      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
-      if (status !== 200) throw parseHttpError(data);
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
+        timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
+      });
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      return this.resolveSubmitError(error, watch);
     }
   }
 
@@ -1227,14 +1296,17 @@ export class MidnightApi {
    */
   async proveAndSubmitMidnightTx(
     request: { signedTxHex: string; waitFor?: 'Submitted' | 'InBlock' | 'Finalized' },
+    watch?: MidnightSubmitWatch,
   ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/prove-and-submit');
-      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
-      if (status !== 200) throw parseHttpError(data);
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
+        timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
+      });
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      return this.resolveSubmitError(error, watch);
     }
   }
 
@@ -1255,14 +1327,17 @@ export class MidnightApi {
    */
   async submitProvenMidnightTx(
     request: SubmitMidnightTxRequest,
+    watch?: MidnightSubmitWatch,
   ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/submit-proven');
-      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
-      if (status !== 200) throw parseHttpError(data);
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request, {
+        timeout: MIDNIGHT_SUBMIT_TIMEOUT_MS,
+      });
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return data;
     } catch (error) {
-      throw parseHttpError(error);
+      return this.resolveSubmitError(error, watch);
     }
   }
 
@@ -1324,14 +1399,14 @@ export class MidnightApi {
         tx_hash: string;
         signature_payload_hex: string;
       }>(url, wireBody, { timeout: 90_000 });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network);
       return {
         unprovenTxHex: data.unproven_tx_hex,
         txHash: data.tx_hash,
         signaturePayloadHex: data.signature_payload_hex,
       };
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network);
     }
   }
 
@@ -1356,12 +1431,98 @@ export class MidnightApi {
         tx_hash: string;
         status: 'Submitted' | 'InBlock' | 'Finalized';
       }>(url, wireBody, { timeout: 90_000 });
-      if (status !== 200) throw parseHttpError(data);
+      if (status !== 200) throw midnightApiErrorFromResponse(status, data, undefined, this.network, 'submit');
       return { txHash: data.tx_hash, status: data.status };
     } catch (error) {
-      throw parseHttpError(error);
+      throw toMidnightApiError(error, this.network, 'submit');
     }
   }
+}
+
+/** The write routes the server can close per network (answering 501 MIDNIGHT_NETWORK_UPGRADING). */
+const MIDNIGHT_WRITE_ROUTE = /\/api\/midnight\/[^/]+\/(?:tx\/(?:build-unshielded|submit|prove-and-submit|submit-proven)|dust\/(?:build|submit)-night-registration)(?:\?|$)/;
+
+export function isMidnightWriteRoute(url: string | undefined): boolean {
+  return !!url && MIDNIGHT_WRITE_ROUTE.test(url);
+}
+
+/**
+ * What a write route's answer says about the network's write gate
+ * (midnightWriteGate.ts): a 501 MIDNIGHT_NETWORK_UPGRADING closes it for this
+ * session, as "update required" when its `reason` is CLIENT_UPDATE_REQUIRED;
+ * any success opens it. Anything else says nothing. Registered as a response
+ * interceptor on every MidnightApi instance.
+ */
+export function midnightWriteOutcome(
+  network: string,
+  response: { url?: string; status?: number; data?: unknown } | undefined,
+): 'paused' | 'updateRequired' | 'open' | null {
+  if (!response || !isMidnightWriteRoute(response.url) || typeof response.status !== 'number') return null;
+  if (response.status >= 200 && response.status < 300) return 'open';
+  const body = response.data && typeof response.data === 'object' ? response.data as { errorCode?: unknown; reason?: unknown } : {};
+  if (response.status !== 501 || body.errorCode !== MIDNIGHT_NETWORK_UPGRADING) return null;
+  return body.reason === CLIENT_UPDATE_REQUIRED ? 'updateRequired' : 'paused';
+}
+
+function recordWriteOutcome(network: string, response: { url?: string; status?: number; data?: unknown } | undefined): void {
+  const outcome = midnightWriteOutcome(network, response);
+  if (outcome === 'paused') void noteMidnightNetworkUpgrading(network, 'response');
+  else if (outcome === 'updateRequired') void noteMidnightUpdateRequired(network, 'response');
+  else if (outcome === 'open') void noteMidnightWritesOpen(network);
+}
+
+/**
+ * What a status read says about the clients it accepts, when it says it:
+ * `minExtensionVersion` from `minClientVersion.extension`, and the major
+ * `ledger` the network runs. Both are optional; a server that doesn't send them
+ * leaves the "update required" state to the 501's `reason`.
+ */
+export interface MidnightClientRequirements {
+  minExtensionVersion?: string;
+  ledger?: number;
+}
+
+/**
+ * The server's write status for a network (`GET /api/midnight/{network}/status`).
+ * `unknown` covers a server without the route (`unsupported`) and any failed
+ * read; neither may change the gate.
+ */
+export type MidnightWriteStatus =
+  | ({ kind: 'open'; reason?: string } & MidnightClientRequirements)
+  | ({ kind: 'closed'; reason?: string; message?: string } & MidnightClientRequirements)
+  | { kind: 'unknown'; unsupported: boolean };
+
+/** A ledger as the status read may give it (`9`, `"9"`, `"9.0.1"`, `"ledger-9"`): its major number. */
+function parseLedgerMajor(value: unknown): number | undefined {
+  const major = typeof value === 'number' ? Math.trunc(value)
+    : typeof value === 'string' ? Number(/(\d+)/.exec(value)?.[1] ?? NaN) : NaN;
+  return Number.isSafeInteger(major) && major > 0 && major < 100 ? major : undefined;
+}
+
+function parseClientRequirements(body: Record<string, unknown>): MidnightClientRequirements {
+  const min = body['minClientVersion'];
+  const extension = min && typeof min === 'object' ? (min as Record<string, unknown>)['extension'] : undefined;
+  const requirements: MidnightClientRequirements = {};
+  if (typeof extension === 'string' && /^\s*v?\d+(\.\d+)*/.test(extension)) requirements.minExtensionVersion = extension.trim();
+  const ledger = parseLedgerMajor(body['ledger']);
+  if (ledger !== undefined) requirements.ledger = ledger;
+  return requirements;
+}
+
+/** Read a status body. Only `writesOpen` as a boolean counts; the client requirements ride along when present. */
+export function parseMidnightWriteStatus(data: unknown): MidnightWriteStatus {
+  if (!data || typeof data !== 'object') return { kind: 'unknown', unsupported: false };
+  const body = data as Record<string, unknown>;
+  if (typeof body['writesOpen'] !== 'boolean') return { kind: 'unknown', unsupported: false };
+  const reason = typeof body['reason'] === 'string' ? body['reason'] : undefined;
+  const requirements = parseClientRequirements(body);
+  if (body['writesOpen']) return { kind: 'open', ...(reason ? { reason } : {}), ...requirements };
+  return {
+    kind: 'closed',
+    reason,
+    message: typeof body['message'] === 'string' ? body['message'] : undefined,
+    ...requirements,
+  };
 }
 
 /**

@@ -6,6 +6,7 @@ import { ScaleBigInt } from '@midnightntwrk/wallet-sdk-address-format';
 import { dustLedger8, balanceLightDust8 } from './midnightDustLightLedger8';
 import { dustLedger9 } from './midnightDustLightLedger9';
 import { reconstructDustState, littleEndianHex, dustNullifierPrefix, type DustSnapshot, type DustLightTransport, type DustSpendTransaction, type CollapsedDustTree } from './midnightDustLightSync';
+import { MidnightLedgerChangedError, midnightLedgerVersion } from './midnightLedger';
 
 const encoded = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 const root = (value: bigint | undefined) => value === undefined ? null : encoded(ScaleBigInt.encode(value));
@@ -178,11 +179,25 @@ describe('compact DUST sync with the real ledger', () => {
     } finally { f.key.clear(); }
   });
 
+  it('refuses to rebuild with the ledger this send chose when the snapshot block is on the other one', async () => {
+    const key = ledger9.DustSecretKey.fromSeed(new Uint8Array(32).fill(17));
+    const transport = { snapshot: async () => ({ version: 1, network: 'midnight-preprod', generations: [], block: {
+      hash: 'bb'.repeat(32), height: 0, timestamp: Date.now(), protocolVersion: 1_999_999,
+      ledgerParameters: encoded(ledger9.LedgerParameters.initialParameters().serialize()),
+      dustGenerationEndIndex: 0, dustCommitmentEndIndex: 0, dustGenerationMerkleTreeRoot: null, dustCommitmentMerkleTreeRoot: null,
+    } }), spends: vi.fn(), commitments: vi.fn() };
+    try {
+      await expect(reconstructDustState(dustLedger9, key, 'preprod', transport)).rejects.toThrow(MidnightLedgerChangedError);
+      // What the chain said is kept, so the retry takes the matching path.
+      expect(midnightLedgerVersion('preprod')).toBe(8);
+    } finally { key.clear(); }
+  });
+
   it('supports an empty ledger-9 wallet without a replay or negative index', async () => {
     const key = ledger9.DustSecretKey.fromSeed(new Uint8Array(32).fill(17));
     const state = new ledger9.DustLocalState(ledger9.LedgerParameters.initialParameters().dust);
     const transport = { snapshot: async () => ({ version: 1, network: 'midnight-stagenet', generations: [], block: {
-      hash: 'bb'.repeat(32), height: 0, timestamp: Date.now(), protocolVersion: 1,
+      hash: 'bb'.repeat(32), height: 0, timestamp: Date.now(), protocolVersion: 2_001_100,
       ledgerParameters: encoded(ledger9.LedgerParameters.initialParameters().serialize()),
       dustGenerationEndIndex: 0, dustCommitmentEndIndex: 0, dustGenerationMerkleTreeRoot: null, dustCommitmentMerkleTreeRoot: null,
     } }), spends: vi.fn(), commitments: vi.fn() };

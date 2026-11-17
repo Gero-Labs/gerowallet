@@ -109,7 +109,7 @@ describe('buildAbstainWithdrawalTx', () => {
         epochParams: { stakeKeyDeposit: 2000000 },
         changeAddress: 'addr1_change',
         tip: { slot: 1 },
-        walletContext: { keys: null, stakeAddress: STAKE_ADDRESS },
+        walletContext: { keys: null },
       },
       buildTx,
     );

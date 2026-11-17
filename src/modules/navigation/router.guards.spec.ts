@@ -83,20 +83,23 @@ describe('production options router guards', () => {
     await router.push('/missing/deep/path');
     expect(router.currentRoute.value.path).toBe('/');
   });
+  it('redirects the retired /market route to the dashboard market view', async () => {
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
+    await router.push('/market');
+    expect(router.currentRoute.value.path).toBe('/');
+    expect(router.currentRoute.value.query['view']).toBe('all');
+  });
 });
 
 describe('production sidepanel router gates', () => {
-  it('retains Apex restrictions, staking network checks and the feed feature gate', async () => {
+  it('retains staking network checks and the feed feature gate', async () => {
     router = (await import('@/sidepanel/router')).default;
-    state.wallet.loggedWallet = { chain: Blockchain.APEX_PRIME, network: 'mainnet' };
-    await router.push('/market');
-    expect(router.currentRoute.value.name).toBe('home');
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
     await router.push('/activity');
     expect(router.currentRoute.value.name).toBe('activity');
     state.supported = false;
     await router.push('/staking');
     expect(router.currentRoute.value.name).toBe('home');
-    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
     state.enabled = false;
     await router.push('/feed');
     expect(router.currentRoute.value.name).toBe('home');

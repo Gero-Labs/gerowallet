@@ -142,6 +142,7 @@
           :summary="approvalSummary"
           v-model:network-ack="networkMismatchAck"
           v-model:foreign-value-ack="foreignValueAck"
+          v-model:market-ack="marketAck"
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
           :primary-color="primaryColor"
@@ -665,7 +666,8 @@
             <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <!-- No DUST fee while sends are paused: nothing is sent. -->
+          <p v-if="!midnightWritesPaused" class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
           <!-- Who proves this transfer: the user's own setting, never silently Gero Cloud. -->
           <div class="d-flex align-start mt-2" data-testid="midnight-transfer-prover">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
@@ -673,7 +675,18 @@
           </div>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Sends on this network are paused (midnightWriteGate.ts): the reason in place
+             of Approve, no password or PassKey. Closing tells the dapp why. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -760,10 +773,20 @@
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
             <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
           </div>
-          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <p v-if="!midnightWritesPaused" class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
         </div>
 
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <!-- Same pause as makeTransfer above. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -812,6 +835,123 @@
           <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
           <div class="action-buttons">
             <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
+      <!-- Midnight: makeIntent — a swap offer the wallet seals, left incomplete for a counterparty -->
+      <div v-else-if="currentRequest.method === 'midnight_makeIntent'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-swap-horizontal</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('midnight.connector.intentTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="grey--text text-caption mb-3">{{ $t('midnight.connector.intentBody') }}</p>
+
+          <p class="white--text text-caption font-weight-bold mb-1">{{ $t('midnight.connector.intentGive') }}</p>
+          <div v-for="(o, i) in intentGives" :key="'give' + i" class="d-flex justify-end mb-2" data-testid="midnight-intent-give">
+            <span class="white--text text-caption font-weight-bold">{{ outputAmountDisplay(o) }} {{ outputTicker(o) }}</span>
+          </div>
+          <p v-if="intentGives.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.intentGiveNothing') }}</p>
+
+          <p class="white--text text-caption font-weight-bold mt-3 mb-1">{{ $t('midnight.connector.intentWant') }}</p>
+          <div v-for="(o, i) in intentWants" :key="'want' + i" class="mb-2" data-testid="midnight-intent-want">
+            <div class="d-flex justify-end">
+              <span class="white--text text-caption font-weight-bold">{{ outputAmountDisplay(o) }} {{ outputTicker(o) }}</span>
+            </div>
+            <template v-if="!o.toSelf">
+              <div class="d-flex align-start" data-testid="midnight-intent-want-other">
+                <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+                <span class="warning--text text-caption">{{ $t('midnight.connector.intentWantToOther') }}</span>
+              </div>
+              <span class="grey--text text-caption g-mono" style="word-break: break-all;">{{ o.recipient }}</span>
+            </template>
+          </div>
+
+          <div class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
+          </div>
+          <div v-if="intentGivesNight" class="d-flex align-start mt-1">
+            <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
+          </div>
+          <p v-if="!(midnightWritesPaused && intentPaysFees)" class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-fees">
+            {{ intentPaysFees ? $t('midnight.connector.transferFeesNote') : $t('midnight.connector.intentFeesNotPaid') }}
+          </p>
+          <div v-if="intentPaysFees" class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.connector.transferProvedBy', { prover: transferProverLabel }) }}</span>
+          </div>
+          <p class="grey--text text-caption mt-2 mb-0" data-testid="midnight-intent-expiry">{{ $t('midnight.connector.intentExpiry', { minutes: intentTtlMinutes }) }}</p>
+        </div>
+
+        <!-- Same pause as makeTransfer above. -->
+        <template v-if="midnightWritesPaused">
+          <GNote icon="mdi-pause-circle-outline" role="status" class="mb-2 mt-3" data-testid="midnight-writes-paused">
+            {{ midnightWritesPausedReason }}
+          </GNote>
+          <div class="action-buttons">
+            <GButton tier="secondary" block @click="declineMidnightWhilePaused()">{{ $t('common.close') }}</GButton>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            variant="outlined" density="compact" theme="dark"
+            class="password-input"
+            @click:append-inner="showPassword = !showPassword"
+            @keyup.enter="signMidnightIntentNormal"
+          />
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightIntent">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              variant="flat"
+              :loading="signing"
+              :disabled="!spendingPassword"
+              @click="signMidnightIntentNormal"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectMidnightIntent">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              variant="flat"
+              :loading="signing"
+              @click="signMidnightIntentPrf"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Midnight has no hardware-wallet signing support — decline only. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectMidnightIntent">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -1065,6 +1205,7 @@
 
 <script setup lang="ts">
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
+import { useConnectorBuildFailure } from "@/sidepanel/composables/useConnectorBuildFailure";
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -1082,7 +1223,7 @@ import TransactionDetailsCard, {
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
-import { approvalContextFromKeys, approvalDepositsFrom, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -1094,7 +1235,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network, Blockchain } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
-import { friendlyTxError } from '@/shared/utils/txErrors';
+import { friendlyDappTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -1114,12 +1255,17 @@ import KeystoneSignSheet from './KeystoneSignSheet.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { useMidnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import GNote from '@/shared/components/GNote.vue';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
 import { midnightStore } from '@/stores/midnightStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
+import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
@@ -1190,6 +1336,7 @@ function queuedItemMethod(item: DAppRequest): string {
     midnight_signData: 'miniGero.signDataRequest',
     midnight_makeTransfer: 'miniGero.transferRequest',
     midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
+    midnight_makeIntent: 'miniGero.intentRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
   return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
@@ -1942,6 +2089,12 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo, {
       ownUtxos: provenOwnUtxos.value,
       deposits: approvalDepositsFrom(networkStore.epochParams),
+      // The wallet's own Gero listings and the listing scripts, so a transaction that spends
+      // one or creates one is called out (never gated on the isNftMarketEnabled flag).
+      market: approvalMarketContext(
+        WalletStore.state.listedListings,
+        wallet ? networks.resolveNftMarketDeployments(wallet.chain, wallet.network) : [],
+      ),
     }));
   } catch (e) {
     console.error('[DAppOverlay] Failed to summarize signTx:', e);
@@ -2006,6 +2159,11 @@ const networkMismatchAck = ref(false);
 // another address (blocking, acknowledged in TxApprovalIntents).
 const foreignValueAck = ref(false);
 
+// A Gero listing this transaction creates that pays someone else (or whose terms are unreadable
+// or off), or a spent listing whose NFT does not come back to the wallet (blocking, acknowledged
+// in TxApprovalIntents). A dApp can list the user's NFT with itself as owner and seller.
+const marketAck = ref(false);
+
 // The UTxO list misstated an input this transaction spends (blocking,
 // acknowledged in TxApprovalIntents; amounts already use the proven values).
 const inputsMisreportedAck = ref(false);
@@ -2025,6 +2183,7 @@ const signTxBlocked = computed(() =>
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
   || (!!approvalSummary.value?.requiresForeignValueAck && !foreignValueAck.value)
+  || (!!approvalSummary.value?.requiresMarketAck && !marketAck.value)
   || (inputsMisreported.value && !inputsMisreportedAck.value)
   || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
@@ -2043,6 +2202,7 @@ watch(loggedWallet, (newWallet, oldWallet) => {
   else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
   else if (currentRequest.value.method === 'midnight_makeTransfer') rejectMidnightMakeTransfer();
   else if (currentRequest.value.method === 'midnight_balanceUnsealedTransaction') rejectMidnightBalance();
+  else if (currentRequest.value.method === 'midnight_makeIntent') rejectMidnightIntent();
   else reject('wallet_changed');
 });
 
@@ -2178,6 +2338,7 @@ watch(currentRequest, () => {
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
   foreignValueAck.value = false;
+  marketAck.value = false;
   inputsMisreportedAck.value = false;
   highRiskAck.value = false;
 });
@@ -2193,6 +2354,9 @@ function rejectSign() {
 // MPC (Google) wallets reach here too — they carry no spending password (the
 // background resolves the session-cached key), so only require one for non-MPC.
 async function signNormal() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2226,7 +2390,7 @@ async function signNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Normal sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2236,6 +2400,9 @@ async function signNormal() {
 
 // ── PRF wallet: PassKey signing ──
 async function signPrf() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2289,7 +2456,7 @@ async function signPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2392,6 +2559,9 @@ async function signLedgerViaBleWindow(txCbor: string, cip45Authorization?: Cip45
 
 // ── Ledger wallet signing ──
 async function signLedger() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2434,7 +2604,7 @@ async function signLedger() {
     if (e instanceof StaleApprovalError) return;
     ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] Ledger sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Ledger signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
@@ -2445,6 +2615,9 @@ async function signLedger() {
 
 // ── Trezor wallet signing ──
 async function signTrezor() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2484,7 +2657,7 @@ async function signTrezor() {
     if (message.includes('Failure_ActionCancelled') || message.includes('cancelled')) {
       signError.value = 'Transaction cancelled on Trezor';
     } else {
-      signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Trezor signing failed';
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Trezor signing failed';
     }
   } finally {
     signing.value = false;
@@ -2496,6 +2669,9 @@ async function signTrezor() {
 
 // ── Keystone wallet signing ──
 async function signKeystone() {
+  // The Sign button is disabled while the gate holds, but Enter in the password field and every
+  // other entry into this function are not the button: check it here, before anything is awaited.
+  if (signTxBlocked.value) return;
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -2520,7 +2696,7 @@ async function signKeystone() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Failed to create Keystone sign request';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Failed to create Keystone sign request';
   }
 
   });
@@ -2634,7 +2810,7 @@ async function signDataKeystone() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Keystone sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || t('wallet.keystoneSigningFailed');
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('wallet.keystoneSigningFailed');
   }
 
   });
@@ -2710,7 +2886,7 @@ async function signDataNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2792,7 +2968,7 @@ async function signDataPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] PRF sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2870,7 +3046,7 @@ async function signDataHw() {
     if (e instanceof StaleApprovalError) return;
     if (!isTrezor) ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] HW sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
     hardwareLoading.end();
@@ -2917,7 +3093,10 @@ function rejectMidnightSignData() {
 // calling reject() bare for those two methods.
 function onEscapeReject() {
   approval.invalidate();
-  if (currentRequest.value?.method === 'midnight_connect') {
+  if (midnightWritesPaused.value && MIDNIGHT_PAUSABLE_METHODS.has(currentRequest.value?.method ?? '')) {
+    // Same answer as Close: the dapp learns why, not that the user declined.
+    declineMidnightWhilePaused();
+  } else if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {
     rejectMidnightSignData();
@@ -2925,6 +3104,8 @@ function onEscapeReject() {
     rejectMidnightMakeTransfer();
   } else if (currentRequest.value?.method === 'midnight_balanceUnsealedTransaction') {
     rejectMidnightBalance();
+  } else if (currentRequest.value?.method === 'midnight_makeIntent') {
+    rejectMidnightIntent();
   } else if (currentRequest.value?.method === 'midnight_privateBalanceAccess') {
     rejectMidnightPrivateBalance();
   } else if (currentRequest.value?.method === 'midnight_provingServer') {
@@ -2955,7 +3136,7 @@ async function signMidnightDataNormal() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -3009,7 +3190,7 @@ async function signMidnightDataPrf() {
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF sign data error:', e);
-    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -3028,12 +3209,21 @@ function rejectMidnightMakeTransfer() {
   approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
-  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the transfer request'));
+  reject(midnightDecline('this transfer', 'User declined the transfer request'));
+}
+
+// Why closing a prompt after a failed build is not a plain decline: see useConnectorBuildFailure.
+const buildFailure = useConnectorBuildFailure(() => currentRequest.value?.requestId);
+
+/** The answer to a declined build request: why the build failed, or a plain Rejected. */
+function midnightDecline(subject: string, declined: string): string {
+  const { code, reason } = buildFailure.decline(subject, declined);
+  return midnightError(code, reason);
 }
 
 async function buildMidnightTransferTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
-  approvedProver: 'local' | 'cloud' | 'zkpaas',
+  approvedProver: WalletProver,
 ): Promise<{ tx: string }> {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
@@ -3050,33 +3240,34 @@ async function buildMidnightTransferTx(
   // The service re-checks that this is still the prover in use, and that it
   // has consent, after authentication: the setting can change while a
   // PassKey prompt is open (PRIV-01 review).
-  return buildAndSignUnshieldedTransfer(
+  return buildFailure.record(() => buildAndSignUnshieldedTransfer(
     wallet.network,
     { fromAddress: wallet.baseAddress, outputs, ttlMs: Date.now() + 5 * 60_000 },
     credentials,
     approvedProver,
     approvalCurrent,
-  );
+  ));
 }
 
-// The transfer is proved by the user's chosen prover (buildAndSignUnshieldedTransfer).
-// A remote prover receives the DUST-fee proof inputs, so it needs the same
-// consent the wallet's own sends require. The consent dialog records it
-// asynchronously, so the user approves the transfer again afterwards (a PassKey
-// popup must open inside that click).
+// The transfer is proved by the user's chosen prover (buildAndSignUnshieldedTransfer):
+// in Gero Cloud mode its DUST fee is proven on this device. A remote prover
+// (zkPaaS, or Gero Cloud on Stagenet, which this device cannot prove) receives
+// the DUST-fee proof inputs, so it needs the same consent the wallet's own
+// sends require. The consent dialog records it asynchronously, so the user
+// approves the transfer again afterwards (a PassKey popup must open inside
+// that click).
 const transferConsentOpen = ref(false);
-const transferProver = computed<'local' | 'cloud' | 'zkpaas'>(() => {
-  const mode = midnightStore.proofServer.mode;
-  return mode === 'local' ? 'local' : mode === 'zkpaas' ? 'zkpaas' : 'cloud';
-});
+const transferProver = computed<WalletProver>(() =>
+  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded'));
 const transferProverLabel = computed(() => t(
-  transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
-    : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
+  transferProver.value === 'device' ? 'midnight.proofServer.deviceLabel'
+    : transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
+      : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
 ));
 /** True (and the consent dialog opens) when the chosen remote prover has no recorded consent yet. */
 function transferNeedsProvingConsent(): boolean {
   const prover = transferProver.value;
-  if (prover === 'local' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
+  if (prover === 'local' || prover === 'device' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
   transferConsentOpen.value = true;
   return true;
 }
@@ -3085,6 +3276,7 @@ async function signMidnightTransferNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -3119,6 +3311,7 @@ async function signMidnightTransferPrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   if (transferNeedsProvingConsent()) return;
   // The prover the user is approving this transfer for, fixed at the click.
@@ -3199,7 +3392,30 @@ function rejectMidnightBalance() {
   approval.invalidate();
   spendingPassword.value = '';
   signError.value = '';
-  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
+  reject(midnightDecline('this transaction', 'User declined the balancing request'));
+}
+
+// ── Midnight network upgrade or update required (midnightWriteGate.ts) ──────
+// While sends on the wallet's network are paused, or closed to this build until
+// it updates (which takes precedence), makeTransfer,
+// balanceUnsealedTransaction and makeIntent show the reason instead of
+// Approve, and the dapp gets InternalError with the same sentence (on Close
+// and on Escape): a server-side state, not a request the dapp got wrong.
+const MIDNIGHT_PAUSABLE_METHODS: ReadonlySet<string> = new Set([
+  'midnight_makeTransfer', 'midnight_balanceUnsealedTransaction', 'midnight_makeIntent',
+]);
+const midnightWriteBlock = useMidnightWriteBlock(() => (
+  loggedWallet.value?.chain === Blockchain.MIDNIGHT ? loggedWallet.value?.network : ''
+));
+const midnightWritesPaused = computed(() => midnightWriteBlock.value !== null);
+const midnightWritesPausedReason = computed(() => (midnightWriteBlock.value === 'updateRequired'
+  ? t('midnight.errors.updateRequired')
+  : t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
+function declineMidnightWhilePaused() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.InternalError, midnightWritesPausedReason.value));
 }
 
 async function buildMidnightBalanceTx(
@@ -3210,13 +3426,14 @@ async function buildMidnightBalanceTx(
   const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
   if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
   const { balanceConnectorTransaction } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return balanceConnectorTransaction(data.tx, credentials, approvalCurrent);
+  return buildFailure.record(() => balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent));
 }
 
 async function signMidnightBalanceNormal() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value || !spendingPassword.value) return;
   // Capture the request identity BEFORE the multi-second balance round-trip
   // (see signMidnightTransferNormal): never deliver this tx to a superseded request.
@@ -3243,6 +3460,7 @@ async function signMidnightBalancePrf() {
   return approval.run(async () => {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
   if (!currentRequest.value) return;
   const reqId = currentRequest.value.requestId;
   signing.value = true;
@@ -3276,6 +3494,133 @@ async function signMidnightBalancePrf() {
     if (e instanceof StaleApprovalError) return;
     console.error('[DApp] Midnight PRF balanceUnsealedTransaction error:', e);
     signError.value = (e as Error)?.message || 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+
+  });
+}
+
+// ── Midnight DApp Connector: makeIntent ───────────────────────────────────
+// A swap offer: the wallet gives `desiredInputs` and asks for
+// `desiredOutputs`, sealed but left imbalanced for a counterparty. The
+// background validated the request before prompting and validates it again
+// when it builds; the panel only passes it back with the credential.
+type IntentWant = ConnectorDesiredOutput & { toSelf?: boolean };
+type IntentPayload = {
+  desiredInputs?: Array<{ kind: string; type: string; value: string }>;
+  desiredOutputs?: IntentWant[];
+  options?: { intentId?: number | 'random'; payFees?: boolean };
+  ttlMinutes?: number;
+};
+const intentPayload = computed<IntentPayload>(() => (currentRequest.value?.payload?.data as IntentPayload | undefined) ?? {});
+// Inputs render through the same colour-aware helpers as transfer outputs.
+const intentGives = computed<ConnectorDesiredOutput[]>(() => (
+  Array.isArray(intentPayload.value.desiredInputs)
+    ? intentPayload.value.desiredInputs.map((input) => ({ kind: input.kind, type: input.type, value: input.value, recipient: '' }))
+    : []
+));
+// `toSelf` is undefined when the worker did not know the wallet's address yet
+// (just after it restarted); decide it from this page's store, and when that
+// is unknown too, warn (a wrongly shown warning is the safe side).
+const intentWants = computed<IntentWant[]>(() => {
+  const wants = Array.isArray(intentPayload.value.desiredOutputs) ? intentPayload.value.desiredOutputs : [];
+  const own = (midnightStore.addresses?.unshielded ?? '').toLowerCase();
+  return wants.map((want) => (typeof want.toSelf === 'boolean'
+    ? want
+    : { ...want, toSelf: !!own && want.recipient.toLowerCase() === own }));
+});
+const intentGivesNight = computed(() => intentGives.value.some((o) => !o.type || /^0+$/.test(o.type)));
+const intentPaysFees = computed(() => intentPayload.value.options?.payFees === true);
+// The worker sends CONNECTOR_INTENT_TTL_MS in minutes; 55 is its value, for a payload without it.
+const intentTtlMinutes = computed(() => intentPayload.value.ttlMinutes ?? 55);
+function rejectMidnightIntent() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightDecline('this intent', 'User declined the intent request'));
+}
+
+async function buildMidnightIntentTx(
+  credentials: { password?: string; prfSecret?: Uint8Array },
+): Promise<{ tx: string }> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  const { desiredInputs, desiredOutputs, options } = intentPayload.value;
+  const { buildConnectorIntent } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
+  return buildFailure.record(() => buildConnectorIntent(loggedWallet.value?.network ?? '', { desiredInputs, desiredOutputs, options }, credentials, approvalCurrent));
+}
+
+/** Shows the failure; the decline after it is decided by useConnectorBuildFailure. */
+function showIntentError(e: unknown, fallback: string) {
+  signError.value = (e as { buildFailure?: unknown })?.buildFailure === MidnightErrorCode.InsufficientFunds
+    ? t('errors.insufficientBalance')
+    : (e as Error)?.message || fallback;
+}
+
+async function signMidnightIntentNormal() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
+  if (!currentRequest.value || !spendingPassword.value) return;
+  // Never deliver this tx to a superseded request (see signMidnightTransferNormal).
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightIntentTx({ password: spendingPassword.value })), approvalCurrent);
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ tx });
+    spendingPassword.value = '';
+  } catch (e) {
+    if (e instanceof StaleApprovalError) return;
+    console.error('[DApp] Midnight makeIntent error:', e);
+    showIntentError(e, 'Building the intent failed');
+  } finally {
+    signing.value = false;
+  }
+
+  });
+}
+
+async function signMidnightIntentPrf() {
+  return approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  if (midnightWritesPaused.value) return;
+  if (!currentRequest.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    // Same cross-window PassKey popup as signMidnightBalancePrf.
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    const prfBytes = await awaitFreshApproval(async () => (new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    })), approvalCurrent);
+    const { tx } = await awaitFreshApproval(async () => (buildMidnightIntentTx({ prfSecret: prfBytes })), approvalCurrent);
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ tx });
+  } catch (e) {
+    if (e instanceof StaleApprovalError) return;
+    console.error('[DApp] Midnight PRF makeIntent error:', e);
+    showIntentError(e, 'PassKey signing failed');
   } finally {
     signing.value = false;
   }

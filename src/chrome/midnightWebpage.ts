@@ -4,7 +4,7 @@
 // createProxyController). Mirrors the CIP-30 pattern in `webpage.ts`.
 //
 // Wire shapes are verified against the ACTUAL published
-// `@midnight-ntwrk/dapp-connector-api@4.0.1` package (not just spec prose —
+// `@midnightntwrk/dapp-connector-api@4.1.0` package (not just spec prose —
 // the internal connector plan §3.1 records two
 // places the two disagree).
 
@@ -15,6 +15,7 @@ import type {
   ConnectedAPI,
   Configuration,
   ConnectionStatus,
+  DesiredInput,
   DesiredOutput,
   HistoryEntry,
   KeyMaterialProvider,
@@ -22,7 +23,7 @@ import type {
   Signature,
   SignDataOptions,
   TokenType,
-} from '@midnight-ntwrk/dapp-connector-api';
+} from '@midnightntwrk/dapp-connector-api';
 
 interface ContentReply<T = unknown> {
   data: T;
@@ -224,5 +225,33 @@ function bigintRecord(raw: Record<string, string>): Record<TokenType, bigint> {
   return out;
 }
 
-// Phase 3 remainder (not yet implemented server-side — see build plan §4):
-// makeIntent, balanceSealedTransaction.
+/**
+ * Build a purposefully imbalanced swap intent: the wallet gives
+ * `desiredInputs` and asks for `desiredOutputs`. The wallet prompts in its
+ * side panel and returns the SEALED tx hex for a counterparty to balance.
+ * Public (unshielded) legs only; shielded legs, Stagenet and give-only
+ * intents reject with InvalidRequest. `options` is required, as in the type.
+ */
+export const midnightMakeIntent = async (
+  desiredInputs: DesiredInput[],
+  desiredOutputs: DesiredOutput[],
+  options: { intentId: number | 'random'; payFees: boolean },
+): Promise<{ tx: string }> => {
+  const result = (await Messaging.sendToContent({
+    method: MIDNIGHT_METHOD.makeIntent,
+    data: {
+      // Chrome messaging can't carry BigInt — send each value as a decimal string.
+      desiredInputs: Array.isArray(desiredInputs)
+        ? desiredInputs.map((i) => ({ ...i, value: typeof i?.value === 'bigint' ? i.value.toString() : i?.value }))
+        : desiredInputs,
+      desiredOutputs: Array.isArray(desiredOutputs)
+        ? desiredOutputs.map((o) => ({ ...o, value: typeof o?.value === 'bigint' ? o.value.toString() : o?.value }))
+        : desiredOutputs,
+      options,
+      userGesture: navigator.userActivation?.isActive,
+    },
+  })) as ContentReply<{ tx: string }>;
+  return result.data;
+};
+
+// Not implemented yet: balanceSealedTransaction.

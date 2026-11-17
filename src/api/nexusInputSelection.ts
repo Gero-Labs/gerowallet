@@ -67,7 +67,8 @@ export function forEachAsset(txOut: Cardano.TxOut, visit: (unit: string, quantit
   }
 }
 
-function lovelaceOf(utxo: Cardano.Utxo): bigint {
+/** A UTxO's lovelace, whatever type the coins arrive as; zero when it does not parse. */
+export function lovelaceOf(utxo: Cardano.Utxo): bigint {
   try {
     return BigInt(String(utxo[1].value.coins ?? 0));
   } catch {
@@ -75,7 +76,8 @@ function lovelaceOf(utxo: Cardano.Utxo): bigint {
   }
 }
 
-function refOf(utxo: Cardano.Utxo): string {
+/** A UTxO's `txId#index` reference. */
+export function refOf(utxo: Cardano.Utxo): string {
   return `${utxo[0].txId}#${utxo[0].index}`;
 }
 

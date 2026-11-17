@@ -10,12 +10,16 @@ describe('notifyCatalogue', () => {
   });
 
   it('files every alert under a known category', () => {
-    const cats = ['funds', 'staking', 'swap', 'adam', 'governance', 'remoteSigning'];
+    const cats = ['funds', 'staking', 'swap', 'adam', 'governance', 'nft', 'remoteSigning'];
     for (const a of NOTIFY_ALERT_TYPES) expect(cats).toContain(a.category);
   });
 
   it('marks both remoteSigning alerts as security, and nothing else', () => {
     expect(alertTypesFor('remoteSigning').map((a) => a.id).sort()).toEqual(['new_device', 'signwake']);
     for (const a of NOTIFY_ALERT_TYPES) expect(a.security).toBe(a.category === 'remoteSigning');
+  });
+
+  it('lists the NFT sale alert under the nft category, switchable (not a security alert)', () => {
+    expect(alertTypesFor('nft')).toEqual([{ id: 'nft_sold', category: 'nft', security: false }]);
   });
 });

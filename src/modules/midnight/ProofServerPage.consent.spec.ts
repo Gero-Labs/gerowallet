@@ -23,7 +23,7 @@ vi.mock('@/chains/midnight/useProofServerSettings', () => ({
     zkpaasEffectiveUrl: ref(''), zkpaasConfigured: ref(true), arkhiaDashboardUrl: '',
     dockerRunCommand: ref(''), healthStatus: ref('idle'), healthStatusLabel: ref(''),
     testingConnection: ref(false), testConnection: vi.fn(),
-    lastCheckedAt: ref(null), lastCheckLatencyMs: ref(null), provingHistory: ref([]),
+    lastCheckedAt: ref(null), lastCheckLatencyMs: ref(null), serverVersion: ref(null), requiredVersion: ref("9.0.x"), provingHistory: ref([]),
   }),
 }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: { chain: 'Midnight' } }) }));
@@ -31,6 +31,8 @@ vi.mock('@/stores/midnightStore', () => ({ midnightStore: (store = Vue.reactive(
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string, args?: Record<string, string>) => (args?.['provider'] ? `${key}:${args['provider']}` : key) }),
 }));
+// The ledger 9 update notice has its own spec (proofServerLedger9Notice.spec.ts).
+vi.mock('@/modules/midnight/ProofServerLedger9Notice.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', async () => {
   const { defineComponent: define } = await import('vue');
   return {
@@ -84,13 +86,13 @@ describe('proof-server settings: remote-prover consent', () => {
 
   it('asks for Gero Cloud consent in remote mode, and shows it as given once recorded', () => {
     expect(mountPage('remote', null).find('[data-testid="consent-dialog"]').attributes('data-provider')).toBe('cloud');
-    const given = mountPage('remote', { version: 3, acceptedAt: 1, provider: 'cloud' });
+    const given = mountPage('remote', { version: 4, acceptedAt: 1, provider: 'cloud' });
     expect(given.find('[data-testid="ps-consent-card"]').text()).toContain('midnight.proofServerPage.consentGiven');
     expect(given.find('[data-testid="ps-consent-review"]').exists()).toBe(false);
   });
 
   it('consent for the other provider does not count, and local mode needs none', () => {
-    expect(mountPage('zkpaas', { version: 3, acceptedAt: 1, provider: 'cloud' }).find('[data-testid="ps-consent-review"]').exists()).toBe(true);
+    expect(mountPage('zkpaas', { version: 4, acceptedAt: 1, provider: 'cloud' }).find('[data-testid="ps-consent-review"]').exists()).toBe(true);
     expect(mountPage('local', null).find('[data-testid="ps-consent-card"]').exists()).toBe(false);
   });
 });

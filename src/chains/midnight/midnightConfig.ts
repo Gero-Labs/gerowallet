@@ -21,6 +21,7 @@
  */
 
 import { Network } from '@/models/types';
+import { midnightLedgerOrNewest, type MidnightLedger } from './midnightLedger';
 
 export interface MidnightNetworkEndpoints {
   /** Network identifier (matches `Network` enum). */
@@ -30,12 +31,12 @@ export interface MidnightNetworkEndpoints {
   /** Gero-Sync WebSocket URL for live push. */
   geroSyncWsUrl: string;
   /**
-   * Proof server URL. For privacy, prefer `localhost:6300` (user runs Docker)
-   * over a hosted service — proof inputs include sensitive data the proof server sees.
-   * Set to empty string to opt the user into "in-browser WASM proving" (PR-future)
-   * once that path is built.
+   * The default local proof server: the loopback port for the ledger the
+   * chain runs (`defaultLocalProofServerUrl`), read when asked, never fixed
+   * by the network's name. Proof inputs include sensitive data, so a local
+   * server is preferred over a hosted one.
    */
-  defaultProofServerUrl: string;
+  readonly defaultProofServerUrl: string;
   /**
    * Arkhia zkPaaS proof-server base URL for this network (the Midnight
    * ecosystem's hosted prover, run by BCW behind the Arkhia gateway inside
@@ -134,9 +135,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     network: Network.STAGENET,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
-    // Ledger 9's local proof server binds 6301 (midnightProofServerPort), so
-    // the stagenet default must not be the ledger-8 server on 6300.
-    defaultProofServerUrl: 'http://localhost:6301',
+    get defaultProofServerUrl() { return defaultLocalProofServerUrl(Network.STAGENET); },
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
     publicIndexerUrl: 'https://indexer.stagenet.shielded.tools/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws',
@@ -149,7 +148,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     network: Network.PREPROD,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
-    defaultProofServerUrl: 'http://localhost:6300',
+    get defaultProofServerUrl() { return defaultLocalProofServerUrl(Network.PREPROD); },
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
     ...geroSyncIndexerRelay('preprod'),
     faucetUrl: 'https://midnight-tmnight-preprod.nethermind.dev',
@@ -162,7 +161,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     network: Network.MAINNET,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
-    defaultProofServerUrl: 'http://localhost:6300',
+    get defaultProofServerUrl() { return defaultLocalProofServerUrl(Network.MAINNET); },
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_MAINNET,
     ...geroSyncIndexerRelay('mainnet'),
     // explorer.mainnet.cloudwalk.io now 301s to Cloudwalk's homepage.
@@ -170,6 +169,13 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     sdkNetworkId: 'mainnet',
   },
 };
+
+/**
+ * Midnight Preview's public tNIGHT faucet. Stagenet wallets are told to get new
+ * tNIGHT here before they move to Preview (issue 1477). Preview has no entry in
+ * the endpoint map above yet; when it gets one, its `faucetUrl` is this value.
+ */
+export const MIDNIGHT_PREVIEW_FAUCET_URL = 'https://midnight-tmnight-preview.nethermind.dev';
 
 /**
  * The Cardano network a Midnight network's cNIGHT lives on.
@@ -235,34 +241,94 @@ export function nexusMidnightPathFor(network: string, subpath: string): string {
  * composable.
  */
 export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
-export const PROOF_SERVER_DOCKER_COMMAND =
-  `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;
 
-/** True for the ledger-9 network. Accepts the wallet `Network` value or a `midnight-<id>` slug. */
+/**
+ * The ledger 9 proof-server release: 9.0.0, the version upstream lists for
+ * ledger 9.1.0.1 on mainnet, preprod and Preview (patch releases of 9.0.x
+ * serve the same circuits). Mainnet, preprod and Preview all run ledger 9 now.
+ */
+export const PROOF_SERVER_DOCKER_TAG_LEDGER9 = '9.0.0';
+
+/**
+ * True when `network`'s chain runs ledger 9: what the chain last reported,
+ * else the newest ledger (see `midnightLedgerOrNewest`). Never the network
+ * name. Accepts the wallet `Network` value or a `midnight-<id>` slug.
+ */
 export function isLedger9Network(network?: string): boolean {
-  return network?.toLowerCase().replace(/^midnight-/, '') === 'stagenet';
+  return midnightLedgerOrNewest(network) === 9;
 }
 
-/** The Stagenet ledger has different proof circuits from Mainnet/Preprod. */
+/** The proof-server release whose circuits match `ledger`. */
+export function midnightProofServerTagForLedger(ledger: MidnightLedger): string {
+  return ledger === 9 ? PROOF_SERVER_DOCKER_TAG_LEDGER9 : PROOF_SERVER_DOCKER_TAG;
+}
+
+/** The proof-server release for `network`'s chain ledger. */
 export function midnightProofServerTag(network?: string): string {
-  return isLedger9Network(network) ? '9.0.0-rc.6' : PROOF_SERVER_DOCKER_TAG;
+  return midnightProofServerTagForLedger(midnightLedgerOrNewest(network));
+}
+
+/**
+ * The releases a message asks for: `9.0.x` for ledger 9. Patch releases of a
+ * line serve the same circuits, so naming the line, not the pinned tag, keeps
+ * a user on 9.0.1 from being told to change anything.
+ */
+export function midnightProofServerVersionLine(ledger: MidnightLedger): string {
+  return midnightProofServerTagForLedger(ledger).replace(/\.\d+$/, '.x');
 }
 
 /**
  * Host port each ledger's local proof server binds by default. Deliberately
  * different so a user can run both at once — the ledger-8 and ledger-9
  * servers are different circuit families and one server cannot serve both.
- * The wallet picks the URL by the active wallet's network, so there is no
- * profile to switch when moving between networks.
+ * The wallet picks the URL by the ledger of the active wallet's chain, so
+ * there is no profile to switch when moving between networks.
+ *
+ * Decision for the ledger 9 upgrade (#1452 M8): ledger 9 keeps 6301 on every
+ * network rather than taking over 6300. A ledger 8 server a user still runs
+ * on 6300 then never receives ledger 9 jobs (it would fail them with
+ * opaque circuit errors), the ledger 9 URL users already set is kept, and
+ * moving mainnet and preprod users to a new server is one instruction ("start
+ * the 9.0.0 server", the migration notice of #1475).
  */
+export function midnightProofServerPortForLedger(ledger: MidnightLedger): number {
+  return ledger === 9 ? 6301 : 6300;
+}
+
 export function midnightProofServerPort(network?: string): number {
-  return isLedger9Network(network) ? 6301 : 6300;
+  return midnightProofServerPortForLedger(midnightLedgerOrNewest(network));
+}
+
+/** The default loopback URL of the local proof server for `network`'s chain ledger. */
+export function defaultLocalProofServerUrl(network?: string): string {
+  return `http://localhost:${midnightProofServerPort(network)}`;
 }
 
 export const DEFAULT_LOCAL_PROOF_SERVER_URL = 'http://localhost:6300';
 export const DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 = 'http://localhost:6301';
 
-export function midnightProofServerCommand(network?: string): string {
-  const port = midnightProofServerPort(network);
-  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server -v`;
+/**
+ * The one command the wallet suggests for starting a local proof server, for
+ * the given network's ledger. Every surface that shows a command (Settings →
+ * Proof server, Remote signing → "Prove for your phone", the restart notice)
+ * builds it here so they cannot drift apart.
+ *
+ * No verbose flag: verbose mode writes request contents, including private
+ * transaction inputs, to the container log, and the wallet never reads that
+ * output. `--rm` removes the container (and its log) when it stops, and the
+ * port is bound to loopback so the server is not reachable from the network.
+ */
+export function midnightProofServerCommandForLedger(ledger: MidnightLedger): string {
+  const port = midnightProofServerPortForLedger(ledger);
+  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTagForLedger(ledger)} midnight-proof-server`;
 }
+
+export function midnightProofServerCommand(network?: string): string {
+  return midnightProofServerCommandForLedger(midnightLedgerOrNewest(network));
+}
+
+/**
+ * The command for the ledger 9 server that Cross-Device Proving serves from
+ * (it advertises the ledger 9 profile, see localProverProfile.ts).
+ */
+export const PROOF_SERVER_DOCKER_COMMAND = midnightProofServerCommandForLedger(9);

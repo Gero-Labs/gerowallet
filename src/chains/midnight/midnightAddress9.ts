@@ -1,24 +1,23 @@
-import { bech32m } from 'bech32';
-import { mainnet, MidnightBech32m, ShieldedAddress } from 'midnight-v9-address-format';
+import { MidnightBech32m, ShieldedAddress } from 'midnight-v9-address-format';
+
+/** Longer than any Midnight address; bounds the work done on pasted input. */
+const MAX_ADDRESS_LENGTH = 1024;
 
 /**
- * Midnight shielded addresses exceed Bitcoin's default 90-character limit.
- * Keep the checksum, casing, padding, HRP and network checks; only increase
- * the length bound. The beta.2 SDK parser's decodeToBytes uses a 90-char cap.
+ * Midnight shielded addresses exceed Bitcoin's 90-character limit. Wallet SDK
+ * 2.0.0's `MidnightBech32m.parse` lifts that limit itself (beta.2 did not) and
+ * keeps the checksum, casing and prefix checks. It ignores HRP segments after
+ * the network one, so a fourth segment is refused here.
  */
 export function parseMidnightAddress9(encoded: string): MidnightBech32m {
-  const decoded = bech32m.decode(encoded, 1024);
-  const segments = decoded.prefix.split('_');
-  if (segments[0] !== 'mn' || (segments.length !== 2 && segments.length !== 3)) {
-    throw new Error('Invalid Midnight address prefix');
-  }
-  const [, type, network] = segments;
-  return new MidnightBech32m(type, network ?? mainnet, Buffer.from(bech32m.fromWords(decoded.words)));
+  if (typeof encoded !== 'string' || encoded.length > MAX_ADDRESS_LENGTH) throw new Error('Invalid Midnight address');
+  const separator = encoded.lastIndexOf('1');
+  const segments = separator > 0 ? encoded.slice(0, separator).split('_').length : 0;
+  if (segments !== 2 && segments !== 3) throw new Error('Invalid Midnight address prefix');
+  return MidnightBech32m.parse(encoded);
 }
 
+/** The codec checks the network and, since 4.0.0, the two 32-byte key lengths. */
 export function decodeShieldedAddress9(network: string, encoded: string): ShieldedAddress {
-  const parsed = parseMidnightAddress9(encoded);
-  // beta.2's public-key constructors don't enforce their documented lengths.
-  if (parsed.data.length !== 64) throw new Error('A Midnight shielded address requires two 32-byte public keys');
-  return ShieldedAddress.codec.decode(network, parsed);
+  return ShieldedAddress.codec.decode(network, parseMidnightAddress9(encoded));
 }

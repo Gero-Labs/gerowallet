@@ -122,6 +122,25 @@ describe('fresh software wallet on a CIP-113 network', () => {
     expect((walletStore.keys as Keys).payment[3].used).toBe(true);
   });
 
+  // The signers sign nothing for a key whose hash the key set doesn't carry, so a row an
+  // older build cached without them would drop the stake, DRep or committee witness.
+  it('derives the keys again when the cached row lacks a key\'s hash, keeping the addresses it marks used', async () => {
+    const bg = softwareWallet(Network.PREPROD);
+    // Used addresses at 15 and 30: the scan reaches 30 only from 15's used flag.
+    const usedAt = (index: number) => getAddress(XPUB, Blockchain.CARDANO, Network.PREPROD, index).toBech32();
+    const derived = bg.resolvePathsForMissingAddresses([usedAt(15), usedAt(30)]);
+    const db = await getDb(bg.id);
+    await db.table('addresses').put({
+      address: XPUB,
+      resolvedKeys: { ...derived, stake: derived.stake.map(({ cred: _cred, ...key }) => key), ccCold: [] },
+    });
+
+    await bg.loadCachedKeys();
+
+    expect(walletStore.keys).toEqual(derived);
+    expect((walletStore.keys as Keys).payment[30]).toMatchObject({ address: usedAt(30), used: true });
+  });
+
   it('keeps its own programmable UTxO out of the spendable set', async () => {
     const bg = softwareWallet(Network.PREPROD);
     await bg.loadCachedKeys();
@@ -158,5 +177,16 @@ describe('fresh software wallet on a CIP-113 network', () => {
     await bg.loadCachedKeys();
 
     expect(walletStore.keys).toBeNull();
+  });
+});
+
+describe('Keystone wallet record', () => {
+  // The Keystone signers read the paired firmware version through loggedWallet, which
+  // walletManager builds from these fields.
+  it('carries the fingerprint and paired firmware version from the record', () => {
+    const bg = bootWallet({ network: Network.MAINNET, publicKey: XPUB, type: WalletType.Keystone, xfp: '0a1b2c3d', firmwareVersion: '3.2.0' });
+
+    expect(bg.xfp).toBe('0a1b2c3d');
+    expect(bg.firmwareVersion).toBe('3.2.0');
   });
 });

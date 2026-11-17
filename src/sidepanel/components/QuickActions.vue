@@ -1,14 +1,21 @@
 <template>
   <div class="quick-actions">
+    <!-- A held action stays in place and focusable (aria-disabled), with its
+         reason linked by aria-describedby; the parent shows the reason. -->
     <button
       v-for="action in actions"
       :key="action.id"
+      type="button"
       class="action-btn"
+      :class="{ 'action-btn--held': isHeld(action.id) }"
+      :aria-disabled="isHeld(action.id) ? 'true' : undefined"
+      :aria-describedby="isHeld(action.id) ? describedBy : undefined"
+      :data-testid="`quick-action-${action.id}`"
       @click="handleAction(action.id)"
     >
       <div
         class="action-icon"
-        :style="{
+        :style="isHeld(action.id) ? undefined : {
           background: action.bgColor,
           borderColor: action.borderColor,
         }"
@@ -22,7 +29,7 @@
           />
         </v-avatar>
       </div>
-      <span class="action-label text-caption" :style="{ color: action.color }">{{ action.label }}</span>
+      <span class="action-label text-caption" :style="isHeld(action.id) ? undefined : { color: action.color }">{{ action.label }}</span>
     </button>
   </div>
 </template>
@@ -36,9 +43,18 @@ import assets from '@/utils/assets';
 const { t } = useTranslation();
 const { networkInfo } = useChainContext();
 
+const props = withDefaults(defineProps<{
+  /** Actions shown but held (for example Send while the network is paused). */
+  disabledIds?: readonly string[];
+  /** The id of the element that says why. */
+  describedBy?: string;
+}>(), { disabledIds: () => [], describedBy: undefined });
+
 const emit = defineEmits<{
   (e: 'action', id: string): void;
 }>();
+
+const isHeld = (id: string) => props.disabledIds.includes(id);
 
 interface QuickAction {
   id: string;
@@ -95,6 +111,7 @@ const allActions = computed<QuickAction[]>(() => {
 const actions = computed(() => allActions.value.filter(a => a.enabled));
 
 function handleAction(id: string) {
+  if (isHeld(id)) return;
   emit('action', id);
 }
 </script>
@@ -142,5 +159,28 @@ function handleAction(id: string) {
 .action-label {
   font-size: 11px !important;
   font-weight: 500;
+}
+
+/* Held: the design system's disabled look (raised fill, hairline, muted text), no motion. */
+.action-btn--held {
+  cursor: not-allowed;
+}
+
+.action-btn--held .action-icon {
+  background: var(--g-raised);
+  border-color: var(--g-hairline-1);
+}
+
+.action-btn--held:hover .action-icon,
+.action-btn--held:active .action-icon {
+  transform: none;
+}
+
+.action-btn--held .action-label {
+  color: var(--g-text-3);
+}
+
+.action-btn--held :deep(.v-img) {
+  opacity: 0.4;
 }
 </style>

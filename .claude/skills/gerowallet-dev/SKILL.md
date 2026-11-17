@@ -13,7 +13,7 @@ A Manifest V3 Chrome extension: Vue 3.5 + Vuetify 4.2 + TypeScript, four indepen
 `npm run typecheck`, `npm run typecheck:vue`, and repo-wide lint still expose historical diagnostics. The Vue 3 toolchain now supports SFC type checking with vue-tsc; compare diagnostics with the baseline and fix new errors rather than relying on an absolute count. Lint every touched file and run the relevant regression tests. Do not suppress diagnostics or repair unrelated files to make a count look smaller.
 
 **2. What actually blocks you is the pre-commit hook and four required checks.**
-The hook (yorkie, from `package.json` `gitHooks`, not husky) runs on every commit:
+The hook (simple-git-hooks, from `package.json` `simple-git-hooks`, installed by `npm ci` via `prepare`; not husky) runs on every commit:
 `node scripts/precommit-lint.mjs && node scripts/design/audit.mjs && node scripts/design/contrast.mjs`.
 Required on `development`: `Production bundle (SFC parse)`, `npm ci (lock in sync)`, `ESLint flat config loads`, `Ledger tests and extension bundles`. Plus 1 approving review, branch up to date, and all review threads resolved.
 
@@ -40,7 +40,7 @@ Run cheap to expensive, and stop lying to yourself about what each one proves.
 | Command | Time | What it actually proves |
 |---|---|---|
 | `npx eslint <files you changed>` | ~2s | Touched files satisfy the lint rule; global debt is tracked separately. |
-| `npm run design:check` | ~2s | The design ratchet and 56 WCAG checks pass. Also a required-check step. |
+| `npm run design:check` | ~2s | The design ratchet and 50 WCAG checks pass. Also a required-check step. |
 | `npx vitest run <paths>` | seconds | Only what you point it at. Re-run a failing file alone before calling it a regression. |
 | `npm run build:web -- --mode production` | ~90s | Every SFC parses and the bundle resolves. This is the real buildability gate, and what CI runs. |
 | `npm run dev` + load `extension/` in Chrome | minutes | Interactive runtime checks; real packaged-browser harnesses also provide scoped runtime evidence. |

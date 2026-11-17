@@ -5,28 +5,8 @@
         <v-container class="dashboard-container pa-0" style="position: relative">
           <!-- Background - Confined to dashboard working area -->
           <div
-            :class="
-              loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
-                ? 'apex-background-dashboard'
-                : loggedWallet?.chain === Blockchain.BITCOIN
-                  ? 'bitcoin-background-dashboard'
-                  : loggedWallet?.chain === Blockchain.MIDNIGHT
-                    ? 'midnight-background-dashboard'
-                    : 'cardano-background-dashboard'
-            "
-            :style="{
-              backgroundImage: `url(${
-                loggedWallet?.chain === Blockchain.APEX_PRIME
-                  ? assets.apexPrimeBg
-                  : loggedWallet?.chain === Blockchain.APEX_VECTOR
-                    ? assets.apexVectorBg
-                    : loggedWallet?.chain === Blockchain.BITCOIN
-                      ? assets.bitcoinBg
-                      : loggedWallet?.chain === Blockchain.MIDNIGHT
-                        ? assets.midnightBg
-                        : assets.cardanoBg
-              })`,
-            }"
+            :class="dashboardBackground.className"
+            :style="{ backgroundImage: `url(${dashboardBackground.image})` }"
           ></div>
 
           <v-layout>
@@ -79,7 +59,9 @@
                     <v-tooltip
                       location="bottom"
                       :content-class="
-                        (isMidnight ? isMidnightConnected : connected)
+                        isMidnightPaused
+                          ? 'network-tooltip connecting'
+                          : (isMidnight ? isMidnightConnected : connected)
                           ? 'network-tooltip'
                           : (isMidnight ? isMidnightConnecting : connecting)
                           ? 'network-tooltip connecting'
@@ -87,16 +69,27 @@
                       "
                     >
                       <template v-slot:activator="{ props: activatorProps }">
+                        <!-- Focusable, so keyboard and touch users can open the status tooltip. -->
                         <div
                           style="display: flex; align-items: center; gap: 4px"
                           :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
                           v-bind="activatorProps"
-
+                          tabindex="0"
+                          role="button"
+                          :aria-label="`${t('navigation.status')}: ${networkStatusText}`"
                         >
+                          <!-- Midnight: a connected socket whose blocks are old is "Paused", never
+                               "Online": a chip on the muted warning pair, with no streaming animation. -->
+                          <span v-if="isMidnightPaused" class="network-paused-chip t-caption" data-test="network-chip-paused">
+                            <v-icon size="small" color="warning">mdi-pause-circle-outline</v-icon>
+                            {{ t('midnight.dataPaused.chip') }}
+                          </span>
                           <v-icon
+                            v-else
                             size="small"
                             :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                             :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
+                            data-test="network-chip-icon"
                           >
                             {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                           </v-icon>
@@ -123,9 +116,14 @@
 
                       <div class="network-tooltip-content">
                         <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
-                        <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                        <!-- A local clock time looks fresh while the data is not: hidden while paused. -->
+                        <div v-if="!isMidnightPaused"><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                         <template v-if="isMidnight">
-                          <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
+                          <div>
+                            <strong>Block:</strong>
+                            <span class="g-num">{{ midnightTip?.hash ? formatInt(midnightTip.height) : 'N/A' }}</span>
+                            <template v-if="isMidnightPaused"> · {{ midnightFreshness.ageLabel.value }}</template>
+                          </div>
                         </template>
                         <template v-else-if="isBitcoin">
                           <!-- Bitcoin has no epoch — show block height instead. -->
@@ -139,10 +137,14 @@
                           <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                           <span
                             :style="
-                              (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
+                              isMidnightPaused ? { color: 'var(--g-warning)' } : (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
                             "
-                            >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
+                            >{{ networkStatusText }}</span
                           >
+                        </div>
+                        <!-- Last, after the facts it explains. -->
+                        <div v-if="isMidnightPaused" class="network-tooltip-detail" data-test="network-paused-detail">
+                          {{ t('midnight.dataPaused.detail', { block: midnightFreshness.heightLabel.value, age: midnightFreshness.ageLabel.value }) }}
                         </div>
                       </div>
                     </v-tooltip>
@@ -157,7 +159,7 @@
                     >
                       <template v-slot:activator="{ props: activatorProps }">
                         <v-btn class="ml-4 toolbar-icon-btn" icon variant="text" v-bind="activatorProps">
-                          <v-badge :model-value="kesWarningVisible || inboxUnread > 0" :content="inboxUnread > 0 ? String(inboxUnread) : undefined" :dot="inboxUnread === 0" :color="inboxUnread > 0 ? 'var(--g-accent)' : 'error'" text-color="var(--g-on-grad)">
+                          <v-badge :model-value="bellState.visible" :content="bellState.content" :dot="bellState.dot" :color="bellState.color" text-color="var(--g-on-grad)">
                             <v-icon size="20">mdi-bell-outline</v-icon>
                           </v-badge>
                         </v-btn>
@@ -166,7 +168,9 @@
                         :open="notificationsMenu"
                         :kes-visible="kesWarningVisible"
                         :kes-remaining="kesRemainingGlobal"
+                        :legacy-count="legacyCount"
                         @kes="navigateToPoolOperator"
+                        @legacy="openLegacyListings()"
                         @settings="openNotifySettings"
                         @close="notificationsMenu = false"
                       />
@@ -203,6 +207,8 @@
                       </v-avatar>
                     </v-btn>
                   </v-toolbar>
+                  <!-- A critical service notice from Gero: one banner at most, under the app bar. -->
+                  <AnnouncementBanner />
                   <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
                     <v-col cols="12">
                       <v-alert
@@ -258,9 +264,19 @@
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
 
+      <!-- A broadcast announcement in full: opened from the bell, the banner, a snackbar or `?announcement=<id>`. -->
+      <AnnouncementDialog />
+
+      <!-- One-time "Restart your local proof server" notice for anyone who may have run the
+           old verbose command (proofServerRestartNotice.ts): waits behind the other dialogs. -->
+      <ProofServerRestartNotice
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || announcementOpen || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        @open-change="proofServerNoticeOpen = $event"
+      />
+
       <!-- The offer to turn push notifications on for an eligible, unlinked wallet (notifyIntro.ts): waits its turn behind every other dialog. -->
       <NotifyIntroPrompt
-        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || announcementOpen || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true' || proofServerNoticeOpen"
         @turn-on="openNotifySettingsFromIntro"
       />
 
@@ -295,17 +311,26 @@ import { chainAccents, chainKeyFor } from '@/config/themes';
 import { CHROME_WEB_STORE_URL_SIDEBAR } from '@/config/storeLinks';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
-import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
+import { walletStore, hasLockedLovelace } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
+import ProofServerRestartNotice from '@/modules/midnight/ProofServerRestartNotice.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { announcementsStore } from '@/stores/announcementsStore';
+import AnnouncementBanner from '@/shared/components/announcements/AnnouncementBanner.vue';
+import AnnouncementDialog from '@/shared/components/announcements/AnnouncementDialog.vue';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { bellBadge } from './bellBadge';
 import { OPEN_SETTINGS_ON_LOAD_KEY } from '@/services/notify/notifyStorage';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { midnightNetworkChipState } from '@/chains/midnight/midnightDataFreshness';
+import { formatInt } from '@/shared/utils/format';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -358,9 +383,10 @@ const emptyStateShowing = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
   }
-  // Mirrors PortfolioPage: controlled_amount is spendable-only, so CIP-113 locked ADA
-  // has to be counted separately or a fully-locked wallet reads as empty.
-  if (hasProgrammableLockedLovelace()) return false;
+  // Mirrors PortfolioPage: controlled_amount is spendable-only, so CIP-113 locked ADA and the
+  // deposits of the wallet's own Gero listings have to be counted separately or a fully-locked
+  // wallet reads as empty.
+  if (hasLockedLovelace()) return false;
   return !account.value || account.value?.controlled_amount === '0';
 });
 
@@ -369,6 +395,8 @@ const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobal
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
+/** The proof server restart notice is up: the push-notification offer waits behind it. */
+const proofServerNoticeOpen = ref(false);
 
 // Compact nav mode — collapse labels to icons when toolbar is narrow
 const compactNav = ref(false);
@@ -406,7 +434,7 @@ const hasNewSettingsFeatures = computed(() => hasNewFeaturesInPath(['settings'])
 
 // Check if wallet is empty (no native tokens)
 const isWalletEmpty = computed(() => {
-  if (hasProgrammableLockedLovelace()) return false;
+  if (hasLockedLovelace()) return false;
   return !account.value || account.value.controlled_amount === '0';
 });
 // Notifications menu
@@ -470,9 +498,21 @@ const lastSyncTimestamp = computed(() => {
 });
 
 // Midnight WS connection state mirrors midnightStore.networkStatus rather than
-// the global Cardano `loadingState.connected/connecting`.
-const isMidnightConnected = computed(() => midnightNetworkStatus.value === 'connected');
-const isMidnightConnecting = computed(() => midnightNetworkStatus.value === 'connecting');
+// the global Cardano `loadingState.connected/connecting`. A connected socket
+// whose tip is more than ten minutes old is "paused", not online
+// (midnightDataFreshness.ts): the data behind balances is not advancing.
+const midnightFreshness = useMidnightDataFreshness();
+const midnightChipState = computed(() =>
+  midnightNetworkChipState(midnightNetworkStatus.value, midnightFreshness.paused.value));
+const isMidnightConnected = computed(() => midnightChipState.value === 'online');
+const isMidnightPaused = computed(() => isMidnight.value && midnightChipState.value === 'paused');
+const isMidnightConnecting = computed(() => midnightChipState.value === 'connecting');
+/** The status in words, for the tooltip and the chip's accessible name ("Status: Paused"). */
+const networkStatusText = computed(() => (isMidnightPaused.value
+  ? t('midnight.dataPaused.chip')
+  : (isMidnight.value ? isMidnightConnected.value : connected.value) ? t('navigation.online')
+    : (isMidnight.value ? isMidnightConnecting.value : connecting.value) ? t('navigation.connecting')
+      : t('navigation.offline')));
 
 const isWelcomeDone = computed({
   get() {
@@ -513,7 +553,10 @@ function onSheetScroll() {
 
 // Mirror the worker's notifyInbox from the start: the badge counts unread before the menu ever opens.
 notifyInboxStore.init();
-const inboxUnread = computed(() => notifyInboxStore.unread());
+// Announcements from Gero count with it: the bell is one place, whatever put a row there.
+announcementsStore.init();
+const inboxUnread = computed(() => notifyInboxStore.unread() + announcementsStore.unread());
+const announcementOpen = computed(() => announcementsStore.state.openId !== null);
 function openNotifySettings() {
   notificationsMenu.value = false;
   settingsInitialTab.value = 'notifications';
@@ -528,6 +571,20 @@ function openNotifySettingsFromIntro() {
 function navigateToPoolOperator() {
   notificationsMenu.value = false;
   vmProxy.$router.push('/pool-operator');
+}
+
+// Items stuck on a closed marketplace (NFT rescue): the count is the inbox's "Needs you" row, and
+// the row leads to the Collectibles view of Portfolio, where the card gets them back. Calling the
+// composable here starts its lookup with the layout, so the row is real before Portfolio was ever
+// visited; opening the menu asks again, which also retries a lookup that failed. The lookup is
+// off (count 0) unless the isNftMarketEnabled flag is on and the wallet is Cardano mainnet.
+const { count: legacyCount, refresh: refreshLegacyListings } = useLegacyListings();
+watch(notificationsMenu, (isOpen) => { if (isOpen) void refreshLegacyListings(); });
+// Every "Needs you" source lights the bell, the stuck items included (a dot in the accent colour).
+const bellState = computed(() => bellBadge({ kesVisible: kesWarningVisible.value, unread: inboxUnread.value, legacyCount: legacyCount.value }));
+function openLegacyListings() {
+  notificationsMenu.value = false;
+  vmProxy.$router.push({ path: '/', query: { view: 'collectibles' } });
 }
 
 
@@ -579,26 +636,24 @@ async function openMiniMode() {
 // It owns both the CSS accent slots and the Vuetify theme, so the local
 // --*-color writer and its watcher that used to sit here are gone.
 
+/** The dashboard backdrop for the logged wallet's chain: its image and framing class.
+ *  Solana's waves share Bitcoin's composition (black sky, waves below), so its framing. */
+const dashboardBackground = computed(() => {
+  switch (loggedWallet.value?.chain) {
+    case Blockchain.BITCOIN:
+      return { image: assets.bitcoinBg, className: 'bitcoin-background-dashboard' };
+    case Blockchain.SOLANA:
+      return { image: assets.solanaBg, className: 'bitcoin-background-dashboard' };
+    case Blockchain.MIDNIGHT:
+      return { image: assets.midnightBg, className: 'midnight-background-dashboard' };
+    default:
+      return { image: assets.cardanoBg, className: 'cardano-background-dashboard' };
+  }
+});
+
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
-  const currentChain = loggedWallet.value?.chain;
-  let imageUrl: string;
-  switch (currentChain) {
-    case Blockchain.APEX_PRIME:
-      imageUrl = assets.apexPrimeBg;
-      break;
-    case Blockchain.APEX_VECTOR:
-      imageUrl = assets.apexVectorBg;
-      break;
-    case Blockchain.BITCOIN:
-      imageUrl = assets.bitcoinBg;
-      break;
-    case Blockchain.MIDNIGHT:
-      imageUrl = assets.midnightBg;
-      break;
-    default:
-      imageUrl = assets.cardanoBg;
-  }
+  const imageUrl = dashboardBackground.value.image;
   const img = new Image();
   img.onload = () => {
     backgroundImageLoaded.value = true;
@@ -740,28 +795,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Apex background with same styling as Cardano */
-.apex-background-dashboard {
-  position: absolute;
-  top: calc(-50% + 20px);
-  left: 50%;
-  width: 100vw;
-  height: 100vh;
-  z-index: -1; /* Behind dashboard content */
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
-  pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.7);
-  opacity: 0;
-  transition: opacity var(--g-dur-slow) ease-in-out;
-
-  &[style*='url('] {
-    opacity: 1;
-  }
-}
-
 /* Midnight background — wide cinematic shot with a fade-to-black mask so the
    portfolio surface below sits cleanly on transparent black. Mirrors the
    prototype's treatment from `new-midnight-backup`. */
@@ -804,7 +837,8 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Bitcoin background — slightly warmer tint to complement the orange theme */
+/* Bitcoin background — slightly warmer tint to complement the orange theme. Solana's
+   waves share the same composition (black sky, waves below), so it uses this too. */
 .bitcoin-background-dashboard {
   position: absolute;
   top: calc(-50% + 20px);
@@ -957,6 +991,27 @@ div.v-toolbar__content {
 
 .network-tooltip-content strong {
   color: var(--g-accent) !important;
+}
+
+/* The "Data paused" sentence: last, wraps instead of widening the tooltip. */
+.network-tooltip-detail {
+  max-width: 300px;
+  margin-top: var(--g-s-2);
+  white-space: normal;
+  color: var(--g-text-1);
+}
+
+/* The "Paused" chip: the muted warning pair, a pill, the label in g-warning. */
+.network-paused-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  padding: 0 var(--g-s-2);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-pill);
+  color: var(--g-warning);
+  white-space: nowrap;
 }
 
 /* Search field in top nav bar */

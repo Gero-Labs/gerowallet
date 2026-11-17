@@ -82,4 +82,19 @@ describe('market table real Vuetify 4 contract', () => {
     expect(solada.classes()).toContain('mdi-rocket-launch-outline');
     expect(solada.attributes('style')).toContain('var(--g-info)');
   });
+
+  // The ADA held in the wallet's own Gero listings is a second ADA row beside the spendable one,
+  // with the same ticker: it says what it is, and the spendable row stays unmarked.
+  it('labels the ADA held in the wallet\'s own listings', () => {
+    const wrapper = render([
+      token('ADA', 10, { unit: 'lovelace', rowKey: 'lovelace', isNative: true }),
+      token('ADA', 5, { unit: 'lovelace', rowKey: 'lovelace#listed', isListed: true, name: 'ADA in your listings' }),
+    ]);
+    const rows = wrapper.findAll('tbody tr');
+    expect(rows).toHaveLength(2);
+    const marked = rows.filter(tr => tr.find('[data-testid="holdings-listed-badge"]').exists());
+    expect(marked).toHaveLength(1);
+    expect(marked[0]!.get('[data-testid="holdings-listed-badge"]').text()).toBe('In listings');
+    expect(wrapper.findAll('[data-testid="holdings-listed-badge"]')).toHaveLength(1);
+  });
 });

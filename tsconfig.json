@@ -41,7 +41,9 @@
       "@/*": ["src/*"],
       "@test/*": ["test/*"],
       "@midnightntwrk/wallet-sdk-dust-wallet/v1": ["node_modules/@midnightntwrk/wallet-sdk-dust-wallet/dist/v1/index.d.ts"],
-      "midnight-v9-dust-wallet/v1": ["node_modules/midnight-v9-dust-wallet/dist/v1/index.d.ts"]
+      "midnight-v9-dust-wallet/v2": ["node_modules/midnight-v9-dust-wallet/dist/v2/index.d.ts"],
+      "midnight-v9-shielded/v2": ["node_modules/midnight-v9-shielded/dist/v2/index.d.ts"],
+      "midnight-v9-unshielded-wallet/v2": ["node_modules/midnight-v9-unshielded-wallet/dist/v2/index.d.ts"]
     },
     "lib": ["DOM", "ESNext"]
   },

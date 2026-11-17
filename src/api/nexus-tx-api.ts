@@ -13,6 +13,7 @@
  */
 
 import axios, { AxiosError } from 'axios';
+import { installSignedResponses } from './signedResponses';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import i18n from '@/plugins/i18n';
@@ -31,9 +32,11 @@ import {
   type TxIntent,
 } from '@/shared/utils/txIntentGuard';
 import { forEachAsset, selectInputCandidates, type InputSelectionOptions } from './nexusInputSelection';
+import { parseNftMarketBuildResponse, type NftMarketBuildResponse } from './nftMarketValidation';
 
 export { InputLimitError, NEXUS_MAX_INPUTS, selectInputCandidates } from './nexusInputSelection';
 export type { InputSelection, InputSelectionOptions } from './nexusInputSelection';
+export type { NftMarketBuildResponse } from './nftMarketValidation';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -164,8 +167,10 @@ export interface BuildDelegationTxRequest {
  * `poolId` present → combined pool+vote (StakeVoteDelegCert / StakeVoteRegDelegCert);
  * `includeStakeRegistration` → prepend registration, deposit folded server-side.
  * `compensationBasisPoints` adds the CIP-149 donation metadata.
- * `certificateEncoding: 'separate'` emits Trezor-signable individual certs — leave
- * unset (combined) for software/Ledger; Trezor stays on the client builder for now.
+ * `certificateEncoding: 'separate'` emits individual certs, which Trezor and Ledger's
+ * Cardano app 7 need: Ledger sends it, and the built tx is then refused if it carries
+ * a combined cert. Leave unset (combined) for software wallets; Trezor stays on the
+ * client builder for now.
  */
 export interface BuildVoteDelegationTxRequest {
   stakeAddress: string;
@@ -260,6 +265,132 @@ export interface Cip113TransferBuildResponse {
   sponsoredCollateralRef?: string;
 }
 
+/**
+ * Legacy marketplace cancel build request. Matches nexus `LegacyListingCancelRequest`
+ * (`POST /api/tx/build/legacy-listing-cancel`, mainnet only). Nexus re-reads every listed
+ * UTxO from chain and answers 422 `LISTING_NOT_FOUND` for one already spent.
+ */
+export interface LegacyCancelBuildRequest {
+  /** The legacy UTxOs to cancel (1 to 10). */
+  listings: { txHash: string; outputIndex: number }[];
+  /** The wallet's spendable UTxOs for the fee and collateral (at most 50). */
+  feeInputs: NexusTxInput[];
+  /** Where every asset and the ADA locked in the cancelled UTxOs go. */
+  returnAddress: string;
+  changeAddress: string;
+  /** Let Nexus lend pool collateral when no fee input is ADA-only and at least 5 ADA. */
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Matches nexus `LegacyListingCancelResponse`. Advisory only: the wallet verifies the
+ * transaction itself before signing it.
+ */
+export interface LegacyCancelBuildResponse {
+  tx_cbor: string;
+  tx_hash: string;
+  estimated_fee?: string;
+  requiredSigners?: string[];
+  /** `txHash#index` of Nexus pool collateral; the transaction then needs Nexus's cosign. */
+  sponsoredCollateralRef?: string;
+}
+
+/** A payee of a listing besides the seller and the fee address: a creator royalty. */
+export interface NftMarketRoyaltyPayee {
+  address: string;
+  /** Lovelace, a decimal string. */
+  lovelace: string;
+}
+
+/** The UTxO of a listing: a Gero listing, or (migrate) a legacy one. */
+export interface NftMarketListingRef {
+  txHash: string;
+  outputIndex: number;
+}
+
+/**
+ * Gero market list build request (`POST /api/tx/build/nft-market/list`). The worker chooses
+ * every value and checks the built datum against them, so `royalties` are the ones it
+ * computed, not ones Nexus looks up.
+ */
+export interface NftMarketListBuildRequest {
+  /** Policy id followed by the hex asset name. */
+  unit: string;
+  /** What the buyer pays the payees, lovelace as a decimal string. */
+  priceLovelace: string;
+  /** Payment key hash (56 hex) of the address the NFT is listed from; must sign cancels. */
+  ownerPkh: string;
+  /** Where the seller's proceeds and the deposit go; the datum's `seller_address`. */
+  sellerAddress: string;
+  /** The seller's stake credential hash (56 hex): the listing sits at the script plus this. */
+  stakeCredential: string;
+  /** Phase 1 lists publicly only: a private listing (a buyer key) is phase 1b. */
+  buyerPkh: null;
+  royalties: NftMarketRoyaltyPayee[];
+  /** The wallet's spendable UTxOs: the NFT's own, and ADA for the deposit and the fee. */
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+}
+
+/**
+ * Gero market cancel build request (`POST /api/tx/build/nft-market/cancel`). Nexus re-reads
+ * the listing from chain and answers 422 `LISTING_NOT_FOUND` for one already spent.
+ */
+export interface NftMarketCancelBuildRequest {
+  listingRef: NftMarketListingRef;
+  /** Where the NFT and the ADA locked in the listing go. */
+  returnAddress: string;
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  /** Let Nexus lend pool collateral when no fee input is ADA-only and at least 5 ADA. */
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Gero market reprice build request (`POST /api/tx/build/nft-market/reprice`). The new
+ * listing keeps the old datum's owner, seller address and buyer; the price is new, and so are
+ * the royalties: the worker computes them for the new price from the collection's current terms,
+ * exactly as for a list. Nexus sizes the deposit as a new listing's, the difference to the old
+ * one paid from, or returned to, the wallet.
+ */
+export interface NftMarketRepriceBuildRequest {
+  listingRef: NftMarketListingRef;
+  priceLovelace: string;
+  royalties: NftMarketRoyaltyPayee[];
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Gero market buy build request (`POST /api/tx/build/nft-market/buy`). Public listings only.
+ */
+export interface NftMarketBuyBuildRequest {
+  listingRef: NftMarketListingRef;
+  /** Where the NFT goes. */
+  buyerAddress: string;
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  allowSponsoredCollateral?: boolean;
+}
+
+/**
+ * Migrate build request (`POST /api/tx/build/nft-market/migrate`): cancels a legacy listing
+ * and lists the NFT at the Gero contract in one transaction. Mainnet only, as the legacy
+ * contracts are.
+ */
+export interface NftMarketMigrateBuildRequest {
+  legacyRef: NftMarketListingRef;
+  priceLovelace: string;
+  ownerPkh: string;
+  sellerAddress: string;
+  stakeCredential: string;
+  royalties: NftMarketRoyaltyPayee[];
+  feeInputs: NexusTxInput[];
+  changeAddress: string;
+  allowSponsoredCollateral?: boolean;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -267,6 +398,8 @@ const nexusTxClient = axios.create({
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
+// gero-backend relays Nexus and signs what it relays (build-time mode; off by default).
+installSignedResponses(nexusTxClient, 'gero-backend');
 
 /**
  * The message a Nexus error body carries, with the field-level reasons a bean
@@ -293,6 +426,38 @@ export function nexusErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/.test(code) ? code : undefined;
 }
 
+/**
+ * The `errorCode`s Nexus raises for the Gero NFT market (its `NftMarketException`, HTTP 422), the
+ * only ones the wallet believes from a market build or read. Any other code in a response is not a
+ * market code: it may be one the wallet itself uses for another stage (`SUBMIT_FAILED`,
+ * `WRONG_PASSWORD`, `EXPIRED`, `INPUT_SPENT`, `VERIFY_FAILED`, ...), and passed through it would
+ * make a prepare that signed nothing read as a password prompt or a transaction that may have been
+ * sent. Keep it equal to Nexus's list; a code Nexus adds is unknown here until it is added.
+ */
+export const NFT_MARKET_NEXUS_ERROR_CODES: ReadonlySet<string> = new Set([
+  'NETWORK_UNSUPPORTED',
+  'LISTING_NOT_FOUND',
+  'NOT_GERO_LISTING',
+  'PRIVATE_LISTING',
+  'DATUM_UNREADABLE',
+  'NFT_NOT_FOUND',
+  'PRICE_TOO_LOW',
+  'SELLER_SHARE_TOO_LOW',
+  'TOO_MANY_ROYALTIES',
+  'OFFER_NOT_MOVABLE',
+  'TOO_MANY_LISTINGS',
+  'EVALUATION_FAILED',
+  'INSUFFICIENT_ADA',
+  'NO_COLLATERAL',
+  'FEE_INPUT_SPENT',
+]);
+
+/** `nexusErrorCode`, but only for a code in NFT_MARKET_NEXUS_ERROR_CODES; undefined for any other. */
+export function nexusMarketErrorCode(error: unknown): string | undefined {
+  const code = nexusErrorCode(error);
+  return code !== undefined && NFT_MARKET_NEXUS_ERROR_CODES.has(code) ? code : undefined;
+}
+
 // Surface the Nexus error body's message so callers can parse it
 // (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
 // The backend proxy forwards the upstream status + JSON body verbatim.
@@ -311,6 +476,102 @@ nexusTxClient.interceptors.response.use(
     throw error;
   }
 );
+
+// ── Rate limit ──
+
+/**
+ * Per-call options of the build calls a sweep makes (buildTransferTx, calculateMaxAda).
+ * None of them changes a call that does not pass them.
+ */
+export interface NexusCallOptions {
+  /** Wait out a 429 and ask again, instead of failing on it. The call is an unsigned build, so asking twice has no effect. */
+  rateLimitRetry?: boolean;
+  /** Aborts the request in flight, and a wait between attempts; the call rejects with the abort reason. */
+  signal?: AbortSignal;
+  /** Called with how long the next wait is, just before it starts. */
+  onRateLimited?: (waitMs: number) => void;
+}
+
+/** First wait after a 429; doubles on each further one. */
+const RATE_LIMIT_BACKOFF_MS = 2_000;
+/** Longest single wait. */
+const RATE_LIMIT_MAX_WAIT_MS = 15_000;
+/** All the waits of one call together may not pass this: it outlasts a whole minute window. */
+const RATE_LIMIT_WAIT_BUDGET_MS = 90_000;
+
+function responseStatus(error: unknown): number | undefined {
+  const status = (error as { response?: { status?: unknown } } | null)?.response?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/** The `Retry-After` seconds of a 429, as the interceptor keeps the response on the error. Zero when absent or not a number. */
+function retryAfterMs(error: unknown): number {
+  const headers = (error as { response?: { headers?: unknown } } | null)?.response?.headers as
+    | { get?: (name: string) => unknown; [name: string]: unknown }
+    | undefined;
+  if (!headers) return 0;
+  // Axios hands every response, a failed one included, an AxiosHeaders whose `get` ignores case;
+  // the plain-object branch only serves a hand-built response with lower-cased keys.
+  const raw = typeof headers.get === 'function' ? headers.get('retry-after') : headers['retry-after'];
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('The request was aborted', 'AbortError');
+}
+
+/** Resolves after `ms`, or rejects with the abort reason as soon as `signal` aborts. */
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!signal) {
+      setTimeout(resolve, ms);
+      return;
+    }
+    if (signal.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Run `send` and, with `rateLimitRetry`, wait out a 429 and run it again.
+ *
+ * gero-backend's Nexus proxy puts every /api/tx/* request in a per-IP write bucket: 3 a
+ * second and 20 a minute, both fixed windows (the minute starts at its first hit). Over
+ * either it answers 429 with `Retry-After: 1`, which understates a spent minute window
+ * by up to 59 s, so the wait is the larger of Retry-After and a doubling back-off
+ * (2, 4, 8 s, then 15 s), and the waits of one call may add up to 90 s before it gives
+ * up and rethrows the last 429. A sweep needs merges + 2 such requests, more than one
+ * window holds for a wallet of a few thousand UTxOs. Nothing but a 429 is retried.
+ */
+export async function postWithRateLimitRetry<T>(send: () => Promise<T>, options: NexusCallOptions | undefined): Promise<T> {
+  const signal = options?.signal;
+  let waited = 0;
+  for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) throw abortReason(signal);
+    try {
+      return await send();
+    } catch (error) {
+      if (!options?.rateLimitRetry || responseStatus(error) !== 429) throw error;
+      const waitMs = Math.min(RATE_LIMIT_MAX_WAIT_MS, Math.max(retryAfterMs(error), RATE_LIMIT_BACKOFF_MS * 2 ** attempt));
+      if (waited + waitMs > RATE_LIMIT_WAIT_BUDGET_MS) throw error;
+      options.onRateLimited?.(waitMs);
+      await wait(waitMs, signal);
+      waited += waitMs;
+    }
+  }
+}
 
 // ── Helpers ──
 
@@ -522,21 +783,47 @@ export interface MaxAdaResponse {
   total_balance: string;
 }
 
+/**
+ * Post one of the Gero market builds and read the answer. The slug goes in the query and the
+ * body, as for the legacy cancel; a 422's `errorCode` stays on the thrown error for
+ * nexusErrorCode(). A response that does not read back whole throws an NftMarketResponseError.
+ */
+async function postNftMarketBuild(
+  action: 'list' | 'cancel' | 'reprice' | 'buy' | 'migrate',
+  request: object,
+  network: string,
+): Promise<NftMarketBuildResponse> {
+  const nexusNetwork = toNexusNetwork(network);
+  if (!nexusNetwork) throw new Error(`NFT market transactions are not supported on ${network}`);
+  const route = `/api/tx/build/nft-market/${action}`;
+  // The body's network wins over the query's in Nexus; send the slug in both, as above.
+  const { data } = await nexusTxClient.post<unknown>(`${route}?network=${nexusNetwork}`, {
+    ...request,
+    network: nexusNetwork,
+  });
+  return parseNftMarketBuildResponse(data, route);
+}
+
 export const nexusTxApi = {
   /**
    * Build an unsigned transfer transaction (ADA + optional native tokens) via nexus.
-   * Returns the tx CBOR ready for client-side signing and submission.
+   * Returns the tx CBOR ready for client-side signing and submission. `options` lets
+   * a sweep wait out the proxy's rate limit (see postWithRateLimitRetry).
    */
   async buildTransferTx(
     request: BuildTxRequest,
-    network?: string
+    network?: string,
+    options?: NexusCallOptions,
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/build?network=${nexusNetwork}` : '/api/tx/build';
     // The body's `network` must be Nexus's enum keyName ('cardano-mainnet'), NOT the
     // wallet's 'MAINNET'/'PREPROD' — the Network @JsonCreator rejects the latter and
     // Spring returns "Malformed request body". Override with the resolved slug.
-    const { data } = await nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork });
+    const { data } = await postWithRateLimitRetry(
+      () => nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork }, { signal: options?.signal }),
+      options,
+    );
     return verifyBuilt(data, () => ({
       outputs: request.outputs.map((o) => intendedOutputOf(o, !!request.selectAll)),
       ownAddresses: ownAddressesOf(request),
@@ -552,12 +839,16 @@ export const nexusTxApi = {
    */
   async calculateMaxAda(
     request: MaxAdaRequest,
-    network?: string
+    network?: string,
+    options?: NexusCallOptions,
   ): Promise<MaxAdaResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
     // Body `network` must be the slug ('cardano-mainnet'), not 'MAINNET' — see buildTransferTx.
-    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork });
+    const { data } = await postWithRateLimitRetry(
+      () => nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork }, { signal: options?.signal }),
+      options,
+    );
     return data;
   },
 
@@ -641,7 +932,8 @@ export const nexusTxApi = {
    * (VoteDelegCert / StakeVoteDelegCert / StakeVoteRegDelegCert / VoteRegDelegCert)
    * from `poolId` + `includeStakeRegistration`; the deposit is folded server-side.
    * Emits COMBINED certs by default — Trezor cannot sign those, so keep Trezor on
-   * the client builder. Returns CBOR for client signing.
+   * the client builder; Ledger asks for `certificateEncoding: 'separate'`. Returns
+   * CBOR for client signing.
    */
   async buildVoteDelegationTx(
     request: BuildVoteDelegationTxRequest,
@@ -661,6 +953,7 @@ export const nexusTxApi = {
         drep: parseDRepTarget(request.drepId),
         poolId: request.poolId,
         registration: request.includeStakeRegistration ? 'allowed' : undefined,
+        separate: request.certificateEncoding === 'separate',
       }),
     }));
   },
@@ -716,5 +1009,71 @@ export const nexusTxApi = {
       { ...request, network: nexusNetwork },
     );
     return data;
+  },
+
+  /**
+   * Build an unsigned cancel of listings and offers stuck at the legacy marketplace
+   * contracts via nexus (`/api/tx/build/legacy-listing-cancel`). Nexus builds for mainnet
+   * only (422 `NETWORK_UNSUPPORTED` elsewhere); callers gate on that before asking. Anything
+   * Nexus cannot build safely is a 422 whose `errorCode` nexusErrorCode() reads (e.g.
+   * `LISTING_NOT_FOUND` for a listing spent since the index last ran). The caller must
+   * verify the returned transaction before signing it.
+   */
+  async buildLegacyCancel(
+    request: LegacyCancelBuildRequest,
+    network: string,
+  ): Promise<LegacyCancelBuildResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    if (!nexusNetwork) throw new Error(`Legacy listing cancels are not supported on ${network}`);
+    // The body's network wins over the query's in Nexus; send the slug in both, as above.
+    const { data } = await nexusTxClient.post<LegacyCancelBuildResponse>(
+      `/api/tx/build/legacy-listing-cancel?network=${nexusNetwork}`,
+      { ...request, network: nexusNetwork },
+    );
+    return data;
+  },
+
+  /**
+   * Build an unsigned Gero market listing via nexus (`/api/tx/build/nft-market/list`): the
+   * NFT and a deposit to the listing contract at the seller's stake credential, with the
+   * inline datum. Anything Nexus cannot build safely is a 422 whose `errorCode`
+   * nexusErrorCode() reads. The caller must verify the returned transaction before signing it.
+   */
+  buildNftMarketList(request: NftMarketListBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('list', request, network);
+  },
+
+  /**
+   * Build an unsigned cancel of a Gero listing (`/api/tx/build/nft-market/cancel`). A listing
+   * already spent is a 422 `LISTING_NOT_FOUND`. The caller must verify the transaction.
+   */
+  buildNftMarketCancel(request: NftMarketCancelBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('cancel', request, network);
+  },
+
+  /**
+   * Build an unsigned reprice of a Gero listing (`/api/tx/build/nft-market/reprice`): spends
+   * the listing and relists it at the new price. A listing changed since (a quicker reprice)
+   * is a 422 `LISTING_NOT_FOUND`. The caller must verify the transaction.
+   */
+  buildNftMarketReprice(request: NftMarketRepriceBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('reprice', request, network);
+  },
+
+  /**
+   * Build an unsigned buy of a public Gero listing (`/api/tx/build/nft-market/buy`). A private
+   * listing is a 422 `PRIVATE_LISTING`. The caller must verify the transaction.
+   */
+  buildNftMarketBuy(request: NftMarketBuyBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('buy', request, network);
+  },
+
+  /**
+   * Build an unsigned migration of a legacy listing to the Gero contract
+   * (`/api/tx/build/nft-market/migrate`). Nexus builds it for mainnet only (the legacy
+   * contracts exist nowhere else). The caller must verify the transaction.
+   */
+  buildNftMarketMigrate(request: NftMarketMigrateBuildRequest, network: string): Promise<NftMarketBuildResponse> {
+    return postNftMarketBuild('migrate', request, network);
   },
 };

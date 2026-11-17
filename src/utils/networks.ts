@@ -15,11 +15,68 @@ import {
   CIP113_TRANSFER_PREPROD as CIP113_TRANSFER_DEPLOYMENTS_PREPROD,
   CIP113_TRANSFER_PREVIEW as CIP113_TRANSFER_DEPLOYMENTS_PREVIEW,
 } from '@/utils/cip113Deployments';
+import {
+  NFT_MARKET_ALLOWED_NETWORKS,
+  NFT_MARKET_DEPLOYMENTS_MAINNET as NFT_MARKET_LISTED_MAINNET,
+  NFT_MARKET_DEPLOYMENTS_PREPROD as NFT_MARKET_LISTED_PREPROD,
+  type NftMarketDeployment,
+} from '@/utils/nftMarketDeployments';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
-import apexSvg from '@/assets/svg/ap3x.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
+import solanaLogo from '@/assets/svg/solana.svg';
+
+/** Solana entries share everything but their network, title and ticker. Every feature is off until it's built. */
+function solanaNetwork(network: string, title: string, networkId: number, ticker: string): NetworkInfo {
+  return {
+    icon: solanaLogo,
+    iconColor: 'purple',
+    title,
+    blockchain: Blockchain.SOLANA,
+    network,
+    supportedHardware: false,
+    networkId,
+    currencySymbol: ticker,
+    currencyTicker: ticker,
+    currencyName: network === Network.MAINNET ? 'Solana' : 'Solana Devnet',
+    currencyDescription: 'Solana Native Currency',
+    currencyImage: solanaLogo,
+    protocolParams: {
+      min_fee_a: 0,
+      min_fee_b: 0,
+      max_tx_size: 1232,
+      min_utxo_value: '0',
+      key_deposit: '0',
+      pool_deposit: '0',
+      max_val_size: 0,
+      price_mem: 0,
+      price_step: 0,
+      coins_per_utxo_size: '0',
+    },
+    geroPool: '',
+    defaultProvider: Provider.UNDEFINED,
+    cashbackSupport: false,
+    stakingSupport: false,
+    governanceSupport: false,
+    daoSupport: false,
+    // Off until the Solana send flow exists: every other send path is Cardano/Bitcoin-shaped.
+    transactionSupport: false,
+    swapSupport: false,
+    buySupport: false,
+    perpetualsSupport: false,
+    geroCardSupport: false,
+    goMiningSupport: false,
+    babylonSupport: false,
+    ordinalsSupport: false,
+    thorchainSupport: false,
+    mempoolSupport: false,
+    lightningSupport: false,
+    networkParams: {
+      networkMagic: 0,
+    },
+  };
+}
 
 export interface NetworkInfo {
   icon: string;
@@ -76,6 +133,9 @@ export interface NetworkInfo {
   cip113GlobalScriptHashes?: string[];
   // CIP-113 core `transfer` stake scripts. Empty where Gero's Send is unsupported.
   cip113TransferScriptHashes?: string[];
+  // Gero NFT market listing-contract deployments, newest version first (see
+  // nftMarketDeployments.ts). Empty means the market is unavailable on this network.
+  nftMarketDeployments?: readonly NftMarketDeployment[];
   /**
    * RealFi Earn (USDr / sUSDr yield) availability for this network.
    *
@@ -117,6 +177,47 @@ const CIP113_GLOBAL_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_G
 const CIP113_TRANSFER_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_MAINNET);
 const CIP113_TRANSFER_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_PREPROD);
 const CIP113_TRANSFER_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_TRANSFER_DEPLOYMENTS_PREVIEW);
+
+// Deployments come from nftMarketDeployments.ts. Re-validated here for the same reason as the
+// CIP-113 hashes (the script hash and out-ref are taken as granted downstream), plus the
+// contract's parameter review rules from docs/rules.md, which the contract does not enforce
+// itself. An entry that fails any check is dropped, so a mistyped literal fails closed. The
+// result is a copy, newest version first, one entry per script hash.
+function normalizeNftMarketDeployments(
+  deployments: readonly NftMarketDeployment[],
+  feeAddressPattern: RegExp,
+): NftMarketDeployment[] {
+  const byScriptHash = new Map<string, NftMarketDeployment>();
+  for (const entry of deployments) {
+    const scriptHash = typeof entry.scriptHash === 'string' ? entry.scriptHash.trim().toLowerCase() : '';
+    const referenceScript = typeof entry.referenceScript === 'string' ? entry.referenceScript.trim().toLowerCase() : '';
+    const feeAddress = typeof entry.feeAddress === 'string' ? entry.feeAddress.trim() : '';
+    const { version, feeBps, minFeeLovelace, maxFeeLovelace } = entry;
+    if (
+      !/^[0-9a-f]{56}$/.test(scriptHash)
+      || !/^[0-9a-f]{64}#\d+$/.test(referenceScript)
+      || !feeAddressPattern.test(feeAddress)
+      || !Number.isInteger(version) || version < 1
+      || !Number.isInteger(feeBps) || feeBps <= 0 || feeBps > 1000
+      || typeof minFeeLovelace !== 'bigint' || minFeeLovelace < 0n
+      || !(maxFeeLovelace === null || (typeof maxFeeLovelace === 'bigint' && maxFeeLovelace >= minFeeLovelace))
+    ) {
+      continue;
+    }
+    if (!byScriptHash.has(scriptHash)) {
+      byScriptHash.set(scriptHash, { ...entry, scriptHash, referenceScript, feeAddress });
+    }
+  }
+  return Array.from(byScriptHash.values()).sort((a, b) => b.version - a.version);
+}
+
+// A fee address is checked by its prefix (a mainnet list takes `addr1`, the testnet lists
+// `addr_test1`), its bech32 character set and a minimum length; the bech32 checksum is not
+// verified here.
+const MAINNET_ADDRESS = /^addr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
+const TESTNET_ADDRESS = /^addr_test1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,}$/;
+const NFT_MARKET_MAINNET: NftMarketDeployment[] = normalizeNftMarketDeployments(NFT_MARKET_LISTED_MAINNET, MAINNET_ADDRESS);
+const NFT_MARKET_PREPROD: NftMarketDeployment[] = normalizeNftMarketDeployments(NFT_MARKET_LISTED_PREPROD, TESTNET_ADDRESS);
 
 
 export default {
@@ -167,6 +268,7 @@ export default {
       cip113RegistryPolicyIds: CIP113_REGISTRY_MAINNET,
       cip113GlobalScriptHashes: CIP113_GLOBAL_MAINNET,
       cip113TransferScriptHashes: CIP113_TRANSFER_MAINNET,
+      nftMarketDeployments: NFT_MARKET_MAINNET,
       // RealFi launched on mainnet 2026-10-01. Still behind isRealFiEnabled: this says
       // the network CAN reach RealFi, the flag says whether it is switched on.
       realFiSupport: true,
@@ -219,6 +321,7 @@ export default {
       cip113RegistryPolicyIds: CIP113_REGISTRY_PREPROD,
       cip113GlobalScriptHashes: CIP113_GLOBAL_PREPROD,
       cip113TransferScriptHashes: CIP113_TRANSFER_PREPROD,
+      nftMarketDeployments: NFT_MARKET_PREPROD,
       // RealFi runs its public testnet on Cardano preprod; this is the only
       // network the Earn surface is reachable from today.
       realFiSupport: true,
@@ -273,100 +376,6 @@ export default {
       cip113TransferScriptHashes: CIP113_TRANSFER_PREVIEW,
       networkParams: {
         networkMagic: 2
-      }
-    },
-    {
-      icon: apexSvg,
-      iconColor: 'orange',
-      title: 'Apex Prime Mainnet',
-      blockchain: Blockchain.APEX_PRIME,
-      network: Network.MAINNET,
-      supportedHardware: false,
-      networkId: 1,
-      currencySymbol: 'Â',
-      currencyTicker: 'AP3X',
-      currencyName: 'Apex Fusion',
-      currencyDescription: 'Apex Fusion Native Token',
-      currencyImage: apexSvg,
-      protocolParams: {
-        min_fee_a: 47,
-        min_fee_b: 158298,
-        max_tx_size: 16384,
-        min_utxo_value: "0",
-        key_deposit: "2000000",
-        pool_deposit: "300000000",
-        max_val_size: 5000,
-        price_mem: 0.0577,
-        price_step: 0.0000721,
-        coins_per_utxo_size: "4310"
-      },
-      geroPool: 'pool13k76f7tt46psnhp75cwnfg5dtkjvwq64fg53tp2zthnzqyge58k',
-      defaultProvider: Provider.KOIOS,
-      cashbackSupport: false,
-      stakingSupport: true,
-      governanceSupport: false,
-      daoSupport: false,
-      transactionSupport:true,
-      swapSupport: false,
-      buySupport: false,
-      perpetualsSupport: false,
-      geroCardSupport: false,
-      goMiningSupport: false,
-      babylonSupport: false,
-      ordinalsSupport: false,
-      thorchainSupport: false,
-      mempoolSupport: false,
-      lightningSupport: false,
-      networkParams: {
-        networkMagic: 764824073
-      }
-    },
-    {
-      icon: apexSvg,
-      iconColor: 'orange',
-      title: 'Apex Vector Mainnet',
-      blockchain: Blockchain.APEX_VECTOR,
-      network: Network.MAINNET,
-      supportedHardware: false,
-      networkId: 1,
-      currencySymbol: 'Â',
-      currencyTicker: 'AP3X',
-      currencyName: 'Apex Fusion',
-      currencyDescription: 'Apex Fusion Native Token',
-      currencyImage: apexSvg,
-      // Live values from yaci-apex-vector-mainnet /api/v1/epochs/latest/parameters (epoch 233)
-      protocolParams: {
-        min_fee_a: 45,
-        min_fee_b: 156253,
-        max_tx_size: 16384,
-        min_utxo_value: "0",
-        key_deposit: "500000000",
-        pool_deposit: "5000000000000",
-        max_val_size: 5000,
-        price_mem: 0.0577,
-        price_step: 0.0000721,
-        coins_per_utxo_size: "4310"
-      },
-      geroPool: '',
-      defaultProvider: Provider.KOIOS,
-      cashbackSupport: false,
-      // Apex Vector has no delegated staking — hide the Staking page/nav on it.
-      stakingSupport: false,
-      governanceSupport: false,
-      daoSupport: false,
-      transactionSupport:true,
-      swapSupport: false,
-      buySupport: false,
-      perpetualsSupport: false,
-      geroCardSupport: false,
-      goMiningSupport: false,
-      babylonSupport: false,
-      ordinalsSupport: false,
-      thorchainSupport: false,
-      mempoolSupport: false,
-      lightningSupport: false,
-      networkParams: {
-        networkMagic: 764824073  // Apex Vector cardano-node shelley/byron genesis (RequiresNoMagic)
       }
     },
     // Bitcoin visibility is gated by the isBitcoinEnabled feature flag (gero-sync),
@@ -623,6 +632,12 @@ export default {
         networkMagic: 0
       }
     },
+    // Solana: behind isSolanaEnabled. While it is off, NetworkSelector leaves the family
+    // out entirely (no "Soon" tile). Nexus and Gero Sync serve mainnet and devnet only.
+    // Mainnet stays comingSoon until sync and send ship; Devnet is pickable in dev mode only
+    // (NetworkSelector needs a live mainnet for regular users).
+    { ...solanaNetwork(Network.MAINNET, 'Solana Mainnet', 0, 'SOL'), comingSoon: true },
+    solanaNetwork(Network.DEVNET, 'Solana Devnet', 1, 'SOL'),
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);
@@ -782,6 +797,22 @@ export default {
   },
   resolveProgrammableTokenSupport(chain: string, network: string): boolean {
     return this.resolveProgrammableLogicBaseScriptHashes(chain, network).length > 0
+  },
+  // The Gero NFT market's listing-contract deployments, newest first: new listings use index 0,
+  // older ones stay listed until their listings drain. Support is derived from the list.
+  resolveNftMarketDeployments(chain: string, network: string): readonly NftMarketDeployment[] {
+    if (!chain || !network) {
+      return []
+    }
+    // Allowlist first, before the configured deployments are even consulted: a list on its own
+    // must never be enough to bring a network up. See NFT_MARKET_ALLOWED_NETWORKS.
+    if (!NFT_MARKET_ALLOWED_NETWORKS.includes(network)) {
+      return []
+    }
+    return this.resolveNetwork(chain, network)?.nftMarketDeployments || []
+  },
+  isNftMarketSupported(chain: string, network: string): boolean {
+    return this.resolveNftMarketDeployments(chain, network).length > 0
   },
   resolveDaoSupport(chain: string, network: string): boolean {
     if (!chain || !network) {

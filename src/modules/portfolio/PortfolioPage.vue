@@ -6,7 +6,12 @@
          showing NIGHT/DUST as line items. Dust registration dialog is opened
          from a header-action button so the Register CTA stays accessible. -->
     <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
-      <v-row no-gutters class="hero-row">
+      <!-- The Midnight notices above the balance, at most two by precedence
+           (MidnightNoticeSlot.vue); renders nothing (and takes no space) otherwise. -->
+      <MidnightNoticeSlot class="portfolio-upgrade-banner" @send-again="openDialog('SEND')" />
+      <!-- While Midnight data is rebuilt (midnightRefresh.ts), the value containers
+           show the last values the wallet knew, greyed (.g-stale); controls aren't. -->
+      <v-row no-gutters class="hero-row" :class="{ 'g-stale': midnightRefreshing }">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <MidnightPortfolioChart />
         </v-col>
@@ -22,7 +27,7 @@
            /proof-server page via useMidnightProofServer (never a separate
            copy - see that composable's header comment). -->
       <v-row no-gutters>
-        <v-col cols="12" sm="6" class="pa-2">
+        <v-col cols="12" sm="6" class="pa-2" :class="{ 'g-stale': midnightRefreshing }">
           <MidnightDustGauge @register="dustRegistrationOpen = true" />
         </v-col>
         <v-col cols="12" sm="6" class="pa-2">
@@ -64,7 +69,7 @@
               </v-btn>
             </div>
 
-            <MidnightHoldingsTable />
+            <MidnightHoldingsTable :class="{ 'g-stale': midnightRefreshing }" />
           </v-card>
         </v-col>
       </v-row>
@@ -73,6 +78,12 @@
         :is-open="dustRegistrationOpen"
         @close="closeDustRegistration()"
       />
+    </template>
+
+    <!-- Solana: its own view from Gero Sync (balance, SPL tokens, activity); never the
+         Cardano holdings table or empty-state checks, which read Cardano's account. -->
+    <template v-else-if="isSolana">
+      <SolanaDashboard />
     </template>
 
     <!-- Bitcoin: dedicated funded dashboard (balance card + price chart + ecosystem
@@ -184,6 +195,14 @@
       </v-row>
 
 
+      <!-- NFTs and offers still locked at a closed marketplace: listed above the collectibles
+           with a way to get them back. Only on the Collectibles view, and only when there are any. -->
+      <v-row v-if="activeView === 'collectibles' && legacyListingsCount > 0" no-gutters>
+        <v-col cols="12" class="pa-2">
+          <LegacyListingsCard @get-back="openLegacyRescue" @move-to-gero="openMoveToGero" />
+        </v-col>
+      </v-row>
+
       <!-- Filter Chip Bar + Table -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
@@ -260,7 +279,7 @@
               >
                 <template v-slot:activator="{ props: activatorProps }">
                   <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || !showSolada || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || !showSolada || hasCustomColumns" dot color="primary" overlap>
                       <v-icon size="small">mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
@@ -299,30 +318,28 @@
                       </v-list-item-title>
                     </v-list-item>
 
-                    <!-- Column preferences (Cardano only) -->
-                    <template v-if="!isApex">
-                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
-                      <v-list-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-list-subheader>
-                      <v-list-item
-                        v-for="col in columnOptions"
-                        :key="col.key"
-                        @click="toggleColumn(col.key)"
-                        density="compact"
-                      >
-                        <div class="mr-2 g-list-action">
-                          <v-icon size="small" :color="columnPrefs[col.key] ? 'primary' : ''">
-                            {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                          </v-icon>
-                        </div>
-                        <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
-                      </v-list-item>
-                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
-                      <v-list-item density="compact" @click="resetToDefaults">
-                        <v-list-item-title style="font-size: 12px; color: var(--g-info);">
-                          {{ $t('market.resetColumns') }}
-                        </v-list-item-title>
-                      </v-list-item>
-                    </template>
+                    <!-- Column preferences -->
+                    <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                    <v-list-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-list-subheader>
+                    <v-list-item
+                      v-for="col in columnOptions"
+                      :key="col.key"
+                      @click="toggleColumn(col.key)"
+                      density="compact"
+                    >
+                      <div class="mr-2 g-list-action">
+                        <v-icon size="small" :color="columnPrefs[col.key] ? 'primary' : ''">
+                          {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </div>
+                      <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                    </v-list-item>
+                    <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                    <v-list-item density="compact" @click="resetToDefaults">
+                      <v-list-item-title style="font-size: 12px; color: var(--g-info);">
+                        {{ $t('market.resetColumns') }}
+                      </v-list-item-title>
+                    </v-list-item>
                   </v-list>
                 </v-card>
               </v-menu>
@@ -377,7 +394,7 @@
             </div>
 
             <!-- NFT Dialog (for table view clicks) -->
-            <TokensDialog @close="nftDialogData = null" :modalData="nftDialogData" />
+            <TokensDialog @close="closeNftCollection" :modalData="nftDialogData" />
           </v-card>
         </v-col>
       </v-row>
@@ -399,6 +416,13 @@
 
       <!-- cNIGHT → DUST registration -->
       <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="closeDustRegistration()" />
+
+      <!-- Get stuck marketplace items back. Hosted here, not in the card: a cancel that empties
+           the list removes the card, and this dialog's "done" screen must outlive it. -->
+      <LegacyCancelDialog :is-open="legacyRescueOpen" :refs="legacyRescueRefs" @close="legacyRescueOpen = false" />
+
+      <!-- Move one stuck listing straight into a Gero listing. Hosted here for the same reason. -->
+      <MoveToGeroDialog :is-open="moveToGeroOpen" :legacy-ref="moveToGeroRef" @close="moveToGeroOpen = false" />
     </template>
   </div>
 </template>
@@ -416,7 +440,9 @@ import { useColumnPreferences, type ColumnKey } from '@/modules/market/composabl
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
-import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { useCollectibleCollections } from '@/shared/composables/useCollectibleCollections';
+import { walletStore, hasLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
@@ -429,12 +455,18 @@ import BackupCard from '@/modules/portfolio/components/BackupCard.vue';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
+import LegacyListingsCard from '@/modules/portfolio/components/LegacyListingsCard.vue';
+import LegacyCancelDialog from '@/modules/portfolio/components/LegacyCancelDialog.vue';
+import MoveToGeroDialog from '@/modules/portfolio/components/MoveToGeroDialog.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
 import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
+import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
+import SolanaDashboard from '@/modules/dashboard/components/SolanaDashboard.vue';
 import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
 import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
@@ -444,6 +476,7 @@ import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
+import { nftMarketBrowsePolicy } from '@/shared/utils/nftMarketAvailability';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
 import snackbar from '@/plugins/snackbar';
@@ -494,7 +527,10 @@ const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, collections, bitcoinBalance } = toRefs(walletStore);
+const { loggedWallet, transactions, account, bitcoinBalance } = toRefs(walletStore);
+// The wallet's NFT collections, with the ones it has listed on Gero's market added back where the
+// market is available: a listed NFT is locked at the contract, outside the store's own.
+const collections = useCollectibleCollections();
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 
@@ -512,6 +548,7 @@ const {
 // ── UI State ──────────────────────────────────────────────────────────────────
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+const isSolana = computed(() => loggedWallet.value?.chain === Blockchain.SOLANA);
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
@@ -532,8 +569,31 @@ const isCardanoNonMainnet = computed(() =>
 type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist' | 'snekfun';
 const activeView = ref<ViewMode>('holdings');
 
+// Stuck items at a closed marketplace (NFT rescue): the card on the Collectibles view lists them
+// and hands the picked refs here; the dialog gets them back. The lookup itself is gated on the
+// isNftMarketEnabled flag and a Cardano mainnet wallet, so elsewhere the count stays 0.
+const { count: legacyListingsCount } = useLegacyListings();
+const legacyRescueOpen = ref(false);
+const legacyRescueRefs = ref<string[]>([]);
+
+function openLegacyRescue(refs: string[]) {
+  legacyRescueRefs.value = refs;
+  legacyRescueOpen.value = true;
+}
+
+// Moving one stuck listing into a Gero listing (the card offers it only where the market is live).
+const moveToGeroOpen = ref(false);
+const moveToGeroRef = ref('');
+
+function openMoveToGero(ref: string) {
+  moveToGeroRef.value = ref;
+  moveToGeroOpen.value = true;
+}
+
 // DUST registration dialog state — only relevant when chain === Midnight.
 const dustRegistrationOpen = ref(false);
+// Midnight data is being rebuilt: the value containers show the last values the wallet knew, greyed.
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 
 // Midnight "reset sync cache" recovery action state. Forces a full re-sync from
 // block 0 in BG (clears WS cursor + store snapshot + persisted SDK wallet-state
@@ -586,7 +646,7 @@ const searchQuery = ref('');
 const filterMenuOpen = ref(false);
 const verifiedOnly = ref(true);
 // The verified filter only means anything on Cardano mainnet — off-mainnet
-// chains (Apex, preprod, etc.) have no token registry to verify against, so
+// chains (preprod, etc.) have no token registry to verify against, so
 // gating on isMainnetCardano stops the filter from silently hiding real
 // holdings there (issue 1003).
 const verifiedFilterActive = computed(() => verifiedOnly.value && isMainnetCardano.value);
@@ -621,10 +681,11 @@ const isWalletEmpty = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
   }
-  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share is subtracted
-  // from it in the store — so a wallet holding nothing but programmable UTxOs reads
-  // exactly '0' here and would get the "no funds" hero over a funded portfolio.
-  if (hasProgrammableLockedLovelace()) return false;
+  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share and the deposits of
+  // the wallet's own Gero listings are subtracted from it in the store — so a wallet holding
+  // nothing but programmable UTxOs or listings reads exactly '0' here and would get the
+  // "no funds" hero over a funded portfolio.
+  if (hasLockedLovelace()) return false;
   return !account.value || account.value?.controlled_amount === '0';
 });
 
@@ -659,8 +720,8 @@ const adaOnlyChartData = computed(() => {
     // No synced tx history yet (common right after funding a preprod wallet):
     // seed a flat line at the current balance so the ADA value + chart still
     // render instead of collapsing to the "no-data" empty state. Scoped to
-    // non-mainnet Cardano only: on other chains (e.g. Apex) an empty tx list
-    // must stay an honest "no data" state so a real sync stall isn't masked.
+    // non-mainnet Cardano only: elsewhere an empty tx list must stay an
+    // honest "no data" state so a real sync stall isn't masked.
     const bal = adaBalance.value;
     if (isCardanoNonMainnet.value && bal > 0) {
       const now = currentTimestamp.value;
@@ -848,7 +909,7 @@ const displayedTokens = computed(() => {
   // too, or the locked row is dropped and the balance reads short.
   const seen = new Set<string>();
   tokens = tokens.filter(t => {
-    const key = tokenRowKey(t.unit, t.isProgrammable);
+    const key = tokenRowKey(t.unit, t.isProgrammable, t.isListed);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -889,16 +950,12 @@ const hiddenByFilterCount = computed(() => {
 let skipNextOutsideClose = false;
 
 function openToken(token: MarketToken) {
-  // No detail panel for Apex wallets — no Cardano DEX data available
-  if (isApex.value) return;
   selectedToken.value = token;
   panelOpen.value = true;
   skipNextOutsideClose = true;
 }
 
 function openTokenByUnit(unit: string) {
-  // Same rule as openToken: the panel is Cardano DEX data, which an Apex token has none of.
-  if (isApex.value) return;
   // Holdings first: a held token the market feed does not list has no row in
   // allTokens, and global search links to it all the same.
   const token = myHoldings.value.find(t => t.unit === unit) ?? allTokens.value.find(t => t.unit === unit);
@@ -913,8 +970,37 @@ function openNftCollection(policyId: string) {
   const col = (collections.value || {})[policyId];
   if (col) {
     nftDialogData.value = col as NftCollection;
+  } else if (nftMarketBrowsePolicy(policyId) === policyId) {
+    // Not held (search or a link named it): Gero's market can still show the collection's listings.
+    nftDialogData.value = { name: t('nftMarket.browse.notHeldTitle'), items: [], policyId };
   }
 }
+
+/**
+ * Close the collection, and drop the `?nft=` that may have opened it: the page is kept alive, so a
+ * link left in place would make the next identical search a no-op.
+ */
+function closeNftCollection() {
+  nftDialogData.value = null;
+  const query = instance?.proxy?.$route?.query;
+  if (query?.['nft']) {
+    const rest = { ...query };
+    delete rest['nft'];
+    instance?.proxy?.$router?.replace({ query: rest }).catch(() => {});
+  }
+}
+
+// A link can open a collection before the wallet's NFTs have loaded: once they have and it holds
+// some of it, show them (the dialog stays on the listings).
+watch(
+  () => {
+    const open = nftDialogData.value;
+    return open?.policyId && !open.items.length ? (collections.value || {})[open.policyId] : undefined;
+  },
+  (col) => {
+    if (col) nftDialogData.value = col as NftCollection;
+  },
+);
 
 function openSwap(token: MarketToken) {
   swapToken.value = token;
@@ -957,13 +1043,9 @@ function handleBackupWallet() {
   instance?.proxy?.$emit('open-backup-dialog');
 }
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
 async function refreshPortfolioChart() {
   const address = loggedWallet.value?.baseAddress;
-  if (address && !isApex.value) {
+  if (address) {
     await refreshPortfolioData(address);
   }
 }
@@ -983,7 +1065,7 @@ let currentAdaOnly = false;
 
 async function handleChartTimeframeChange(timeframe: string) {
   const address = loggedWallet.value?.baseAddress;
-  if (!address || isApex.value) return;
+  if (!address) return;
 
   currentTimeframe = timeframe;
   await loadForTimeframe(address, timeframe, currentAdaOnly);
@@ -991,7 +1073,7 @@ async function handleChartTimeframeChange(timeframe: string) {
 
 async function handleChartModeChange(adaOnly: boolean) {
   const address = loggedWallet.value?.baseAddress;
-  if (!address || isApex.value) return;
+  if (!address) return;
 
   currentAdaOnly = adaOnly;
   await loadForTimeframe(address, currentTimeframe, adaOnly);
@@ -1053,7 +1135,7 @@ watch(
       // persists across wallet switches — same reason lastChartAddress exists).
       viewTouched = false;
     }
-    if (newAddress === lastChartAddress || isApex.value) return;
+    if (newAddress === lastChartAddress) return;
     if (!(Number(account.value?.controlled_amount) > 0) ||
       loggedWallet.value?.chain !== Blockchain.CARDANO ||
       loggedWallet.value?.network !== Network.MAINNET) {
@@ -1188,6 +1270,11 @@ function closeDustRegistration() {
 </script>
 
 <style scoped>
+/* The Midnight notice slot: the grid's own gutter, only when a notice shows. */
+.portfolio-upgrade-banner {
+  margin: var(--g-s-2) var(--g-s-2) 0;
+}
+
 /* ── Filter toolbar (single row: chips + search + menu) ──────────────────────── */
 
 .filter-toolbar {

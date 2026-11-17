@@ -86,7 +86,8 @@
             />
           </div>
           <div v-if="serveProofs" class="rs-hint rs-serve-note">
-            {{ $t('crossDevice.settings.serveProofsRequirement', { command: dockerRunCommand }) }}
+            {{ $t('crossDevice.settings.serveProofsRequirement') }}
+            <CommandBlock :command="dockerRunCommand" class="rs-command" />
           </div>
 
           <v-divider class="rs-divider" />
@@ -328,6 +329,7 @@ import QRCodeStyling from 'qr-code-styling';
 import { remoteSigningStore, type CrossDeviceListEntry, type PairedResult } from '@/stores/remoteSigningStore';
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
 import { PROOF_SERVER_DOCKER_COMMAND as dockerRunCommand } from '@/chains/midnight/midnightConfig';
+import CommandBlock from '@/shared/components/CommandBlock.vue';
 import { encodePairingQr, type PairingQrPayload } from '@/services/crossDevice/pairingQr';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -759,5 +761,8 @@ onBeforeUnmount(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .rs-qr-scanline, .rs-qr-success { animation: none; }
+}
+.rs-command {
+  margin-top: var(--g-s-2);
 }
 </style>

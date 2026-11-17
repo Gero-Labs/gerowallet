@@ -2,9 +2,9 @@
  * Wallet-side Midnight proof-server integration.
  *
  * Hand-rolled `ledger.ProvingProvider` for any HTTP proof server exposing
- * the NATIVE proof-server API — the self-hosted docker server
- * (`docker run -p 6300:6300 midnightntwrk/proof-server:<tag>
- * midnight-proof-server -v`, default `http://localhost:6300`) and the
+ * the NATIVE proof-server API — the self-hosted docker server (the
+ * command is `midnightProofServerCommand()` in midnightConfig.ts, default
+ * `http://localhost:6300`) and the
  * hosted Arkhia zkPaaS gateway (which relays the same API behind
  * `x-api-key`/`x-api-secret` auth, see midnightZkpaas.ts) — plus a
  * `/health` poller. Deliberately NOT a wrapper around
@@ -28,9 +28,11 @@
  * the target path/host are fine. Never log auth header VALUES either.
  */
 
-import * as ledger from '@midnight-ntwrk/ledger-v8';
-import * as ledger9 from '@midnightntwrk/ledger-v9';
-import { midnightLedgerVersion } from './midnightLedger';
+// Types only: each ledger loads when a proof for it is made, so a host bundle
+// that loads ledger 9 eagerly never loads ledger 8 for a ledger 9 proof.
+import type * as ledger from '@midnight-ntwrk/ledger-v8';
+import type * as ledger9 from '@midnightntwrk/ledger-v9';
+import { midnightLedgerOrNewest, type MidnightLedger } from './midnightLedger';
 import { debugLog } from '@/utils/debug';
 
 /** Transient proof-server states worth retrying (matches the SDK client). */
@@ -64,6 +66,12 @@ function delay(ms: number): Promise<void> {
 export interface ProverRequestOptions {
   headers?: Record<string, string>;
   sdkNetworkId?: string;
+  /**
+   * The ledger whose proving payloads to build: the chain's, read by the
+   * caller (`walletProvingProvider`). Defaults to the network's last-read
+   * ledger, else the newest; never a network name.
+   */
+  ledger?: MidnightLedger;
   /** Covers response headers and the complete binary response body. */
   timeoutMs?: number;
   resolveKeyMaterial?: (keyLocation: string) => Promise<Partial<ledger.ProvingKeyMaterial> | undefined>;
@@ -185,7 +193,10 @@ export function makeLocalProvingProvider(
   baseUrl: string,
   options?: ProverRequestOptions,
 ): ledger.ProvingProvider & ledger9.ProvingProvider {
-  const runtime = midnightLedgerVersion(options?.sdkNetworkId ?? 'mainnet') === 9 ? ledger9 : ledger;
+  const which = options?.ledger ?? midnightLedgerOrNewest(options?.sdkNetworkId);
+  const loadRuntime = (): Promise<typeof ledger | typeof ledger9> => (which === 9
+    ? import('@midnightntwrk/ledger-v9')
+    : import('@midnight-ntwrk/ledger-v8'));
   const resolveKeyMaterial = options?.resolveKeyMaterial ?? (async () => undefined);
   return {
     // Built-in transfer and DUST circuits are supplied by the native server.
@@ -194,6 +205,7 @@ export function makeLocalProvingProvider(
     // because ledger 9's ProvingProvider shape asks for it.
     lookupKey: async () => undefined,
     check: async (serializedPreimage, keyLocation) => {
+      const runtime = await loadRuntime();
       const ir = (await resolveKeyMaterial(keyLocation))?.ir;
       // Both ledgers take the optional artifact as a trailing argument; only
       // pass it when present so the built-in path stays a plain 1-arg call.
@@ -204,6 +216,7 @@ export function makeLocalProvingProvider(
       return runtime.parseCheckResult(result);
     },
     prove: async (serializedPreimage, keyLocation, overwriteBindingInput) => {
+      const runtime = await loadRuntime();
       const keyMaterial = requireFullKeyMaterial(keyLocation, await resolveKeyMaterial(keyLocation));
       const payload = keyMaterial
         ? runtime.createProvingPayload(serializedPreimage, overwriteBindingInput, keyMaterial)
@@ -240,4 +253,62 @@ export async function checkProofServerHealth(
   } catch {
     return false;
   }
+}
+
+/** A proof-server release as `GET /version` reports it: `9.0.1`, `9.0.2-rc.1`. */
+const PROOF_SERVER_VERSION_RE = /^(\d{1,4})\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.-]{1,32})?$/;
+
+/** The release in a `GET /version` body, or undefined when it isn't one. */
+export function parseProofServerVersion(body: string): string | undefined {
+  const text = body.trim();
+  return text.length <= 64 && PROOF_SERVER_VERSION_RE.test(text) ? text : undefined;
+}
+
+/**
+ * `GET {baseUrl}/version`: the native proof server answers with its release
+ * as plain text (`9.0.1`; the route is in every 8.x and 9.x server). Undefined
+ * when the route is missing, the answer isn't a release, or the request fails.
+ * Never throws.
+ */
+export async function readProofServerVersion(
+  baseUrl: string,
+  options?: ProverRequestOptions,
+): Promise<string | undefined> {
+  try {
+    const res = await fetch(joinProverUrl(baseUrl, '/version'), {
+      headers: options?.headers,
+      signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+    });
+    if (res.status !== 200) return undefined;
+    return parseProofServerVersion(await res.text());
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether a local proof server can prove for `ledger`. A server's major
+ * release is the ledger whose circuits it carries (8.1.0 proves ledger 8,
+ * 9.0.x ledger 9), and one family can't prove for the other: it answers its
+ * health check and then fails at proving or at submit. `unknown` when the
+ * server didn't say which release it is.
+ */
+export type ProofServerVersionCheck =
+  | { status: 'match'; version: string }
+  | { status: 'mismatch'; version: string }
+  | { status: 'unknown' };
+
+export function judgeProofServerVersion(version: string | undefined, ledger: MidnightLedger): ProofServerVersionCheck {
+  const major = version ? PROOF_SERVER_VERSION_RE.exec(version)?.[1] : undefined;
+  if (!version || major === undefined) return { status: 'unknown' };
+  return Number(major) === ledger ? { status: 'match', version } : { status: 'mismatch', version };
+}
+
+/** {@link readProofServerVersion} judged against `ledger`. Never throws. */
+export async function checkProofServerVersion(
+  baseUrl: string,
+  ledger: MidnightLedger,
+  options?: ProverRequestOptions,
+): Promise<ProofServerVersionCheck> {
+  return judgeProofServerVersion(await readProofServerVersion(baseUrl, options), ledger);
 }

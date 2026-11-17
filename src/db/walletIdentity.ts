@@ -76,12 +76,12 @@ export function toWalletIdentity(source: WalletIdentitySource): WalletIdentity {
     return { chain, network, key: midnightIdentityKey(publicKey) };
   }
 
-  if (chain === normalizeLabel(Blockchain.BITCOIN)) {
-    // Bitcoin account xpubs are base58 — case is significant, don't fold it.
+  if (chain === normalizeLabel(Blockchain.BITCOIN) || chain === normalizeLabel(Blockchain.SOLANA)) {
+    // Bitcoin account xpubs and Solana addresses are base58: case is significant, don't fold it.
     return { chain, network, key: publicKey };
   }
 
-  // Cardano / Apex Fusion account xpubs are bech32, which is case-insensitive.
+  // Cardano account xpubs are bech32, which is case-insensitive.
   return { chain, network, key: publicKey.toLowerCase() };
 }
 

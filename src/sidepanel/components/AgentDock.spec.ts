@@ -103,7 +103,7 @@ let { mockSupportChat, mockDock, flagsHolder, sheetVisibility, mockWalletStore }
     // before this flag existed.
     flagsHolder: { isLiveChatEnabled: () => true, isCopilotEnabled: () => true } as FlagsHolder,
     sheetVisibility: {} as SheetVisibility,
-    // Undefined by default — AgentDock's isApex/isMidnight both read this via
+    // Undefined by default — AgentDock's chain checks read this via
     // optional chaining, so no logged wallet falls through to the default
     // (Cardano) mark, matching every pre-existing test that doesn't care about
     // chain at all.
@@ -157,7 +157,7 @@ import { ref } from 'vue';
 // Real imports (not mocked): both are pure, side-effect-free constant/asset
 // data — the same category as renderMarkdown/i18n below, not a collaborator
 // like useSupportChat that needs isolating. Importing the real Blockchain
-// enum keeps the mocked chain values (Blockchain.APEX_PRIME, etc.) pinned to
+// enum keeps the mocked chain values (Blockchain.MIDNIGHT, etc.) pinned to
 // whatever AgentDock.vue itself compares against, instead of drifting string
 // literals; importing the real assets barrel lets the chain-accent tests
 // assert against the actual asset.geroNoText*/URL values the component uses.
@@ -1294,27 +1294,13 @@ describe('AgentDock — FAB icon (Gero Companion mark)', () => {
   });
 
   // Each gero-notext*.svg variant bakes its own fixed gradient — the wrong
-  // one shows the wrong brand color on an Apex or Midnight wallet. Mirrors
-  // NavigationDrawer.vue's own isApex/isMidnight -> asset switch exactly, so
+  // one shows the wrong brand color on a Midnight or Bitcoin wallet. Mirrors
+  // NavigationDrawer.vue's own chain -> asset switch exactly, so
   // these assert against the same `assets` barrel values that component uses.
   it('uses the default (Cardano) mark when no chain-specific wallet is logged in', () => {
     mockDock.isOpen.value = false;
     const wrapper = mountDock();
     expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoText);
-  });
-
-  it('switches to the Apex Prime (teal) mark for an Apex Fusion Prime wallet', () => {
-    setWalletChain(Blockchain.APEX_PRIME);
-    mockDock.isOpen.value = false;
-    const wrapper = mountDock();
-    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextPrime);
-  });
-
-  it('switches to the Apex Vector (orange) mark for an Apex Fusion Vector wallet', () => {
-    setWalletChain(Blockchain.APEX_VECTOR);
-    mockDock.isOpen.value = false;
-    const wrapper = mountDock();
-    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextVector);
   });
 
   it('switches to the Midnight mark for a Midnight wallet', () => {
@@ -1329,6 +1315,13 @@ describe('AgentDock — FAB icon (Gero Companion mark)', () => {
     mockDock.isOpen.value = false;
     const wrapper = mountDock();
     expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextBitcoin);
+  });
+
+  it('switches to the Solana mark for a Solana wallet', () => {
+    setWalletChain(Blockchain.SOLANA);
+    mockDock.isOpen.value = false;
+    const wrapper = mountDock();
+    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextSolana);
   });
 
   it('falls back to the default (Cardano) mark for a Cardano wallet', () => {

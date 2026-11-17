@@ -19,7 +19,14 @@ import {
  * importing this composable, which pulls in Vue, snackbar and the stores.
  */
 export { PROOF_SERVER_DOCKER_TAG, PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
-import { isLedger9Network, midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
+import {
+  isLedger9Network,
+  midnightProofServerCommand,
+  midnightProofServerTag,
+  midnightProofServerVersionLine,
+} from '@/chains/midnight/midnightConfig';
+import { midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
+import { markProofServerLedger9NoticeDone } from '@/chains/midnight/proofServerLedger9Notice';
 import { isLoopbackProverUrl, localUrlForNetwork } from '@/chains/midnight/midnightProvingTarget';
 
 
@@ -29,7 +36,8 @@ export type ProofServerMode = 'remote' | 'local' | 'zkpaas';
  * `notConfigured` is zkPaaS-only: the mode is selected but there is no API
  * key (and no override URL) yet, so there is nothing to health-check.
  */
-export type ProofServerHealthStatus = 'checking' | 'detected' | 'notDetected' | 'notConfigured';
+/** `wrongVersion`: a local server that answers but runs another ledger's release. */
+export type ProofServerHealthStatus = 'checking' | 'detected' | 'notDetected' | 'notConfigured' | 'wrongVersion';
 
 /** Health-poll cadence per mode: localhost is free to poll; the Arkhia
  * gateway is a metered third-party API, so poll it an order of magnitude
@@ -194,6 +202,10 @@ export function useMidnightProofServer() {
   const lastCheckedAt = ref<number | null>(null);
   /** Round-trip time of the last health check, or null before the first one. */
   const lastCheckLatencyMs = ref<number | null>(null);
+  /** The release a local server reported at the last check, when it said. */
+  const serverVersion = ref<string | null>(null);
+  /** The releases the active wallet's chain needs: `9.0.x`. */
+  const requiredVersion = computed(() => midnightProofServerVersionLine(midnightLedgerOrNewest(walletNetwork.value)));
   let healthPollTimer: ReturnType<typeof setInterval> | null = null;
   let healthCheckInFlight = false;
 
@@ -226,12 +238,21 @@ export function useMidnightProofServer() {
     healthCheckInFlight = true;
     const startedAt = Date.now();
     try {
-      const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+      const { checkProofServerHealth, checkProofServerVersion } = await import('@/chains/midnight/midnightLocalProver');
       const healthy = await checkProofServerHealth(target.url, {
         headers: target.headers,
         acceptNotFound: target.acceptNotFound,
       });
-      healthStatus.value = healthy ? 'detected' : 'notDetected';
+      // A local server's release must match the chain's ledger: one for the
+      // other ledger answers /health and only fails when it proves. zkPaaS is
+      // Arkhia's to keep current, and its gateway relays only the proving routes.
+      const version = healthy && proofServer.value.mode === 'local'
+        ? await checkProofServerVersion(target.url, midnightLedgerOrNewest(walletNetwork.value))
+        : null;
+      serverVersion.value = version && version.status !== 'unknown' ? version.version : null;
+      // Already on a ledger 9 release: the update notice has nothing left to say.
+      if (version?.status === 'match' && midnightLedgerOrNewest(walletNetwork.value) === 9) markProofServerLedger9NoticeDone();
+      healthStatus.value = !healthy ? 'notDetected' : version?.status === 'mismatch' ? 'wrongVersion' : 'detected';
       lastCheckedAt.value = Date.now();
       lastCheckLatencyMs.value = lastCheckedAt.value - startedAt;
     } finally {
@@ -279,6 +300,7 @@ export function useMidnightProofServer() {
       case 'detected': return t('midnight.proofServer.statusDetected');
       case 'notDetected': return t('midnight.proofServer.statusNotDetected');
       case 'notConfigured': return t('midnight.proofServer.zkpaasKeyMissing');
+      case 'wrongVersion': return t('midnight.proofServer.statusWrongVersion', { version: serverVersion.value ?? '' });
       default: return t('midnight.proofServer.statusChecking');
     }
   });
@@ -309,8 +331,13 @@ export function useMidnightProofServer() {
     localUrlLedger9Draft,
     localUrlLedger9Error,
     onLocalUrlLedger9Blur,
-    /** Which ledger the active wallet is on, so the page can label the relevant server. */
+    /** Which ledger the active wallet's chain runs, so the page can label the relevant server. */
     activeLedger9: computed(() => isLedger9Network(walletNetwork.value)),
+    /** The network and server release the page names for it. */
+    activeServer: computed(() => ({
+      network: midnightNetworkName(walletNetwork.value ?? ''),
+      tag: midnightProofServerTag(walletNetwork.value),
+    })),
     zkpaasUrlDraft,
     zkpaasUrlError,
     onZkpaasUrlBlur,
@@ -322,6 +349,9 @@ export function useMidnightProofServer() {
     zkpaasConfigured,
     arkhiaDashboardUrl: ARKHIA_DASHBOARD_URL,
     dockerRunCommand: computed(() => midnightProofServerCommand(walletStore.loggedWallet?.network)),
+    /** The release the last check read from a local server, when it said. */
+    serverVersion,
+    requiredVersion,
     healthStatus,
     healthStatusLabel,
     testingConnection,

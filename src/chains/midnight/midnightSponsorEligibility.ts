@@ -33,6 +33,8 @@
  * fetches the rows and passes stored wallet records in.
  */
 
+import { dustShortForFee } from './midnightFeeEstimate';
+
 /** A wallet, reduced to what eligibility needs. `dustAddress` comes from the stored `publicKey` blob. */
 export interface SponsorWalletRef {
   readonly id: number;
@@ -68,10 +70,13 @@ export interface DustDestinationRow {
 }
 
 /**
- * - `ready`     — a live registration pays into this wallet and it has capacity now.
+ * - `ready`     — a live registration pays into this wallet and it has enough
+ *                 capacity now for a send's fee (or the capacity is unread).
  * - `relaying`  — a registration UTxO exists on Cardano but the Midnight indexer
- *                 has not relayed it yet (~2.5h). It will become spendable; it
- *                 is NOT the same as "no DUST", and must not be rendered as zero.
+ *                 has not relayed it yet (~2.5h), or a live registration has not
+ *                 charged enough DUST for a fee yet (`capacity` then says how
+ *                 much it has). It will become spendable; it is NOT the same as
+ *                 "no DUST", and must not be rendered as zero.
  * - `unknown`   — no row mentions this wallet. Absence of evidence only: the
  *                 registration may live on a Cardano wallet outside this
  *                 profile, so never present this as "has no DUST".
@@ -119,6 +124,20 @@ function firstCapacity(values: readonly (string | undefined)[]): bigint | null {
 }
 
 /**
+ * The state of a wallet a live registration pays into, from its current capacity.
+ *
+ * A known capacity below what a send's fee can need (`dustShortForFee`, the same
+ * 1 DUST bound the send review warns at for the user's own wallet) is not
+ * `ready`: a ledger 9 fee is around 0.6 DUST, so a wallet holding 0.3 cannot pay
+ * it. A drained registration (zero) is the same case. Both are still charging
+ * from the registration, so they are `relaying`, not `unknown`. An unread
+ * capacity (null) stays `ready`: unknown is never treated as empty.
+ */
+function liveRegistrationState(capacity: bigint | null): SponsorState {
+  return capacity != null && dustShortForFee(capacity) ? 'relaying' : 'ready';
+}
+
+/**
  * Resolve one wallet's sponsor state from the registration rows pointing at it.
  *
  * Exported for the single-wallet case (e.g. rendering "this wallet sponsors
@@ -159,10 +178,7 @@ export function sponsorStateFor(
       walletId: wallet.id,
       name: wallet.name,
       dustAddress: wallet.dustAddress,
-      // Capacity known and zero means genuinely drained, not merely unknown —
-      // but a drained registration is still relaying value in, so it is not
-      // "ready" to pay a fee right now.
-      state: total != null && total === 0n ? 'relaying' : 'ready',
+      state: liveRegistrationState(total),
       capacity: total,
       cap: capTotal,
       fundedBy,
@@ -188,8 +204,8 @@ export function sponsorStateFor(
  * ITS dust address. Same three states and same meaning as `sponsorStateFor`, so
  * the UI does not change:
  *
- * - `ready`    a stake is `active` and the destination has capacity now;
- * - `relaying` a stake is `active` but drained, OR none is active yet and a stake is
+ * - `ready`    a stake is `active` and the destination has enough capacity for a fee now;
+ * - `relaying` a stake is `active` but short of a fee, OR none is active yet and a stake is
  *              `relaying` (on Cardano, not yet counted for this address);
  * - `unknown`  nothing feeds the address. Deliberately not "no DUST": native NIGHT
  *              (Path A) is not looked at here, and a `duplicated` stake may be fixed.
@@ -214,10 +230,7 @@ export function sponsorStateFromDestination(
     const total = toCapacity(destination.currentCapacity);
     return {
       ...base,
-      // Capacity known and zero means genuinely drained, not merely unknown —
-      // but a drained registration is still relaying value in, so it is not
-      // "ready" to pay a fee right now.
-      state: total != null && total === 0n ? 'relaying' : 'ready',
+      state: liveRegistrationState(total),
       capacity: total,
       cap: toCapacity(destination.maxCapacity),
       fundedBy,
@@ -279,7 +292,7 @@ export function sponsorCandidates(
   );
 }
 
-/** True when at least one candidate can pay a fee right now. */
+/** True when at least one candidate can pay a fee right now (see `liveRegistrationState`). */
 export function hasReadySponsor(candidates: readonly SponsorCandidate[]): boolean {
   return candidates.some((c) => c.state === 'ready');
 }

@@ -218,6 +218,8 @@
                 <span>{{ formatTime(tx.timestamp) }}</span>
                 <span v-if="tx.blockHeight"> · #{{ tx.blockHeight }}</span>
               </div>
+              <!-- A pending send past its time limit: the chip (the row itself is the button). -->
+              <MidnightPendingRowStatus v-if="tx.status === 'pending'" :tx="tx" compact />
             </div>
             <div class="mn-tx-row__hash-text">{{ shortHash(tx.hash) }}</div>
             <div class="mn-tx-row__amount" :style="{ color: amountColor(tx.type) }">
@@ -253,9 +255,12 @@ import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
 import { midnightTxRowKey } from '@/chains/midnight/midnightTxHash';
 import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import snackbar from '@/plugins/snackbar';
+import MidnightPendingRowStatus from '@/modules/dashboard/components/MidnightPendingRowStatus.vue';
 
 const { t } = useTranslation();
+const { refreshing: midnightRefreshing } = useMidnightRefresh();
 const { transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 
@@ -509,6 +514,8 @@ function typeLabel(type: MidnightTransactionType): string {
 }
 
 function amountColor(type: MidnightTransactionType): string {
+  // While Midnight data is rebuilt these are the last rows the wallet knew: metadata, not news.
+  if (midnightRefreshing.value) return 'var(--g-text-3)';
   if (type === 'receive') return '#47CD89';
   if (type === 'send') return '#F97066';
   return '#c4c4c4';

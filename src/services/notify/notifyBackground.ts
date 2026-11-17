@@ -12,16 +12,24 @@
 
 import { debugLog } from '@/utils/debug';
 import { geroStore } from '@/stores/geroStore';
+import { supportedWallets } from '@/shared/utils/supportedWallet';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { walletManager } from '@/services/walletManager.service';
 import { loadOrCreateDeviceIdentity } from '@/services/crossDevice/deviceIdentityStore';
 import { loadDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore';
+import { ANNOUNCEMENT_EDITORIAL_KEYS, ANNOUNCEMENT_FEED_KEYS } from '@/utils/announcementKeys';
+import { wireNetwork } from '@/services/announcements/announcementAudience';
+import { createAnnouncementEngine, type RefreshReason } from '@/services/announcements/announcementEngine';
+import { createAnnouncementFeed, DEFAULT_ANNOUNCEMENTS_API_URL } from '@/services/announcements/announcementFeed';
+import { announcementHooks } from '@/services/announcements/announcementHooks';
+import { announcementEventTag, createAnnouncementStore, type StoredAnnouncement } from '@/services/announcements/announcementStore';
+import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
-  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47, wireNetworkOf,
-  type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchOrdersInput,
+  createNotifyRegistration, DEVICE_CAPS, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47, wireNetworkOf,
+  type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchListingsInput, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
 import { requestSettingsTabOnLoad } from './notifyStorage';
@@ -40,6 +48,22 @@ declare const self: { registration?: WorkerRegistration; addEventListener: (type
 const log = (m: string) => debugLog('🔔', m);
 
 export const notifyStore = createNotifyStore(undefined, (m, e) => log(`${m}: ${String(e)}`));
+
+/** Broadcast announcements: verified documents, read marks and the kinds switched off (private store). */
+const announcementStore = createAnnouncementStore();
+/** The keys pinned in this build, and nothing else: no key is ever read from storage or the network. */
+const announcementKeys = { editorial: ANNOUNCEMENT_EDITORIAL_KEYS, feed: ANNOUNCEMENT_FEED_KEYS };
+/**
+ * Announcement pushes are asked for only by a build that can verify one. With no key pinned every
+ * such push could only be the generic "News from Gero", so the server is told not to send any.
+ */
+const announcementCaps = (): string[] => (announcementKeys.editorial.length || announcementKeys.feed.length ? [...DEVICE_CAPS] : []);
+/**
+ * The kill switch, from the flag mirror in the private store (the flag service cannot run in the
+ * worker). On unless the mirror says an explicit `false`, so a worker that starts before any page
+ * has loaded the flags behaves as it does by default.
+ */
+const announcementsOn = async (): Promise<boolean> => (await readFeatureFlagMirror())['isAnnouncementsEnabled'] !== false;
 
 const notifyClient = createNotifyClient({
   baseUrl: import.meta.env['VITE_NOTIFY_API_URL'] || DEFAULT_NOTIFY_API_URL,
@@ -62,6 +86,9 @@ const notifyClient = createNotifyClient({
       locale: toBcp47(await storedLocale()), osPermission: true,
       transport: j && device.vapidKid ? 'webpush' : 'none',
       ...(j && device.vapidKid ? { webpush: { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, vapidKid: device.vapidKid, expirationTime: j.expirationTime ?? null } } : {}),
+      // The same announcement fields the registration machine sends, so a recovery does not lose them.
+      caps: announcementCaps(),
+      announcementsOff: (await announcementStore.getPrefs()).off,
     };
   },
   log,
@@ -96,6 +123,8 @@ export const notifyRegistration: NotifyRegistration = createNotifyRegistration({
   logged: loggedWallet,
   loadProof: loadDeviceRegisterProof,
   produceProof: (auth) => walletManager.produceDeviceRegisterProof(auth),
+  announcementsOff: async () => (await announcementStore.getPrefs()).off,
+  caps: announcementCaps,
   log,
 });
 
@@ -132,7 +161,7 @@ export async function getNotifyState(opts: { refreshConfig?: boolean; syncServer
     device: await notifyStore.getDevice(),
     wallets: await notifyStore.getWallets(),
     logged: logged ? { walletId: logged.id, eligible: isEligibleWallet(logged), network: `cardano-${logged.network.toLowerCase()}` } : null,
-    installed: Object.values(geroStore.wallets ?? {}).map((w) => ({ id: w.id, name: w.name, chain: w.chain, network: w.network, type: w.type, eligible: installedEligible(w) })),
+    installed: supportedWallets(geroStore.wallets).map((w) => ({ id: w.id, name: w.name, chain: w.chain, network: w.network, type: w.type, eligible: installedEligible(w) })),
     config,
     pushSupported: !!self.registration?.pushManager,
   };
@@ -232,10 +261,72 @@ function storedTokenInfo(unit: string): TokenInfo | undefined {
   };
 }
 
+// ---- broadcast announcements (services/announcements) ------------------------
+
+/**
+ * The wire networks of the installed Cardano wallets, for an announcement that names networks.
+ * On a cold start (a push wake) the store is not hydrated yet, so the stored copy stands in. That
+ * copy lives in chrome.storage.local, which a content script could rewrite, but all it decides here
+ * is which of Gero's own signed announcements are relevant: it cannot make an unsigned one show.
+ */
+async function installedNetworks(): Promise<string[]> {
+  let wallets = Object.values(geroStore.wallets ?? {}) as Array<{ chain?: string; network?: string }>;
+  if (!wallets.length) {
+    try {
+      const saved = (await chrome.storage.local.get('geroStore')) as Record<string, { wallets?: Record<string, { chain?: string; network?: string }> } | undefined>;
+      wallets = Object.values(saved?.['geroStore']?.wallets ?? {});
+    } catch { wallets = []; }
+  }
+  const networks = wallets.map((w) => wireNetwork(String(w.chain ?? ''), String(w.network ?? ''))).filter((n): n is string => n !== null);
+  return [...new Set(networks)];
+}
+
+/** Offer a verified announcement to open pages as a snackbar. Never a system notification. */
+async function presentAnnouncement(item: StoredAnnouncement): Promise<boolean> {
+  const locale = pushLocale(await storedLocale());
+  const text = item.document.content[locale === 'us' ? 'en' : locale] ?? item.document.content['en'];
+  if (!text) return false;
+  const id = item.document.id;
+  const path = `/?announcement=${id}`;
+  return presentToPages({ e: announcementEventTag(id), title: text.title, body: text.summary, route: { dashboard: path, sidepanel: path }, walletId: null, announcementId: id });
+}
+
+const announcementEngine = createAnnouncementEngine({
+  feed: createAnnouncementFeed({
+    baseUrl: import.meta.env['VITE_ANNOUNCEMENTS_API_URL'] || DEFAULT_ANNOUNCEMENTS_API_URL,
+    fetch: (input, init) => fetch(input, init),
+  }),
+  store: announcementStore,
+  keys: announcementKeys,
+  flagOn: announcementsOn,
+  install: async () => ({ version: chrome.runtime.getManifest().version, networks: await installedNetworks() }),
+  present: presentAnnouncement,
+  // The server must learn the new opt-outs, or it keeps pushing a kind this browser no longer shows.
+  onPrefsChanged: () => { void reassert('settings'); },
+  log,
+});
+
+announcementHooks.feedChanged = (seq) => announcementEngine.onFeedChanged(seq);
+announcementHooks.forPush = (aid, kind) => announcementEngine.forPush(aid, kind);
+
+/** Read the feed now. Never awaited by anything that matters: a slow or failing feed delays nothing. */
+export function announcementsRefresh(reason: RefreshReason): Promise<void> {
+  return announcementEngine.refresh(reason).then((r) => log(`announcements(${reason}) -> ${r}`), (e) => log(`announcements(${reason}) threw ${String(e)}`));
+}
+
+/** What the announcement messages do (background.ts handlers). Every argument is re-validated inside. */
+export const announcementActions = {
+  refresh: () => announcementsRefresh('page'),
+  read: (id: unknown) => (id === undefined ? announcementEngine.markAllRead() : announcementEngine.markRead(id)),
+  dismissBanner: (id: unknown) => announcementEngine.dismissBanner(id),
+  setPrefs: (off: unknown) => announcementEngine.setPrefs(off),
+};
+
 export const notifyPushHandlers = createNotifyPushHandlers({
   store: notifyStore,
   showNotification: async (title, options) => { await self.registration?.showNotification?.(title, options); },
   presentToPages,
+  announcement: (aid, kind) => announcementHooks.forPush(aid, kind),
   locale: storedLocale,
   tokenInfo: storedTokenInfo,
   walletName: storedWalletName,
@@ -305,4 +396,5 @@ export const notifyActions = {
   inboxRead: (e: string | null) => notifyStore.markInboxRead(e, Date.now()),
   inboxClear: () => notifyStore.clearInbox(),
   watchOrders: (input: WatchOrdersInput) => notifyRegistration.watchOrders(input),
+  watchListings: (input: WatchListingsInput) => notifyRegistration.watchListings(input),
 };

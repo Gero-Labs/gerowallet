@@ -1,8 +1,12 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { balanceAndSignLedger9Transfer } from './midnightLedger9';
 import { getMidnightEndpoints } from './midnightConfig';
+import { DUST_SYNC_INACTIVITY_MS } from './midnightDustSyncWatch';
+import { balanceAndSignUnshieldedTransfer } from './midnightTxBuilder';
+import fixture from './fixtures/nexus-ledger-signing.json';
+import { LEDGER8_PROTOCOL_VERSION, LEDGER9_PROTOCOL_VERSION_SAMPLE, useMidnightChains } from '@test/helpers/midnightChains';
 
 const mocks = vi.hoisted(() => ({ reconstruct: vi.fn(), balance: vi.fn(), transport: vi.fn(), identity: vi.fn(), recheck: vi.fn() }));
 vi.mock('./midnightDustLightSync', () => ({ reconstructDustState: mocks.reconstruct }));
@@ -56,5 +60,106 @@ describe('Stagenet compact DUST balancing', () => {
   it('rejects mismatched endpoints before any synchronization', async () => {
     await expect(balanceAndSignLedger9Transfer({ ...args(), endpoints: getMidnightEndpoints('Preprod')! })).rejects.toThrow('endpoint network mismatch');
     expect(mocks.reconstruct).not.toHaveBeenCalled();
+  });
+
+  // Bounded like the ledger 8 builder (gero-ios#241): by silence and the TTL, not a flat 120 s.
+  describe('synchronization bounds', () => {
+    afterEach(() => vi.useRealTimers());
+    const tick = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+    const withTtl = (minutes: number) => ({ ...args(), ttl: new Date(Date.now() + minutes * 60_000) });
+    const transportSignal = (): AbortSignal => mocks.transport.mock.calls[0][1];
+    const transportActivity = (): (() => void) => mocks.transport.mock.calls[0][2];
+    const synced = () => ({ state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params' } });
+
+    it('lets a slow synchronization finish while the network keeps answering', async () => {
+      vi.useFakeTimers();
+      mocks.reconstruct.mockImplementation(async () => {
+        for (let reply = 0; reply < 10; reply++) { await tick(30_000); transportSignal().throwIfAborted(); transportActivity()(); }
+        return synced();
+      });
+      const result = balanceAndSignLedger9Transfer(withTtl(15));
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await expect(result).resolves.toMatch(/^[0-9a-f]+$/);
+    });
+
+    it('aborts after the inactivity limit of silence', async () => {
+      vi.useFakeTimers();
+      mocks.reconstruct.mockImplementation(async () => new Promise((_resolve, reject) => {
+        transportSignal().addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      }));
+      const outcome = expect(balanceAndSignLedger9Transfer(withTtl(15))).rejects
+        .toThrow('DUST synchronization timed out. Please try again shortly.');
+      await vi.advanceTimersByTimeAsync(DUST_SYNC_INACTIVITY_MS - 1);
+      expect(transportSignal().aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await outcome;
+      expect(mocks.balance).not.toHaveBeenCalled();
+    });
+
+    it('stops at the transaction TTL even while the network keeps answering', async () => {
+      vi.useFakeTimers();
+      mocks.reconstruct.mockImplementation(async () => {
+        for (;;) { await tick(10_000); transportSignal().throwIfAborted(); transportActivity()(); }
+      });
+      const outcome = expect(balanceAndSignLedger9Transfer(withTtl(5))).rejects.toThrow('timed out');
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await outcome;
+      expect(mocks.balance).not.toHaveBeenCalled();
+    });
+
+    it('forwards sync steps to the caller', async () => {
+      const onDustSyncProgress = vi.fn();
+      mocks.reconstruct.mockImplementation(async (_ledger, _key, _network, _transport, progress) => {
+        progress(30, '');
+        return synced();
+      });
+      await balanceAndSignLedger9Transfer({ ...args(), onDustSyncProgress });
+      expect(onDustSyncProgress).toHaveBeenCalledWith(30, '');
+    });
+  });
+});
+
+// M4: mainnet and preprod take the ledger 9 signer once their chains report ledger 9.
+describe('unshielded send on a ledger 9 mainnet or preprod', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    useMidnightChains({
+      mainnet: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION],
+      preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION],
+    });
+    mocks.recheck.mockResolvedValue(undefined);
+    mocks.transport.mockReturnValue({});
+    mocks.reconstruct.mockResolvedValue({ state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params' } });
+  });
+
+  it.each([['mainnet', 'Mainnet'], ['preprod', 'Preprod']])('%s: balances and signs a real Nexus build on ledger 9', async (network, name) => {
+    mocks.identity.mockResolvedValue({ network: `midnight-${network}`, chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
+    mocks.balance.mockReturnValue(ledger.Transaction.fromParts(network));
+    const vector = fixture.transfers.find(candidate => candidate.network === network && candidate.count === 2 && candidate.token === '00'.repeat(32))!;
+    const signed = await balanceAndSignUnshieldedTransfer({
+      sdkNetworkId: network, endpoints: getMidnightEndpoints(name)!, unshieldedSecretKey: Uint8Array.from(Buffer.from(fixture.secret, 'hex')),
+      dustSecretSeed: new Uint8Array(32).fill(2), ttl: new Date(Date.now() + 300000), unprovenTxHex: vector.unprovenTxHex,
+    });
+    const tx: ledger.UnprovenTransaction = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(signed, 'hex'));
+    ledger.Transaction.fromParts(network).merge(tx);
+    const intent = tx.intents!.get(1)!;
+    const offer = intent.fallibleUnshieldedOffer ?? intent.guaranteedUnshieldedOffer!;
+    expect(offer.signatures).toHaveLength(2);
+    for (const signature of offer.signatures) {
+      expect(ledger.verifySignature({ tag: 'schnorr', value: fixture.publicKey }, intent.signatureData(1), signature.value)).toBe(true);
+    }
+    // The DUST state is rebuilt and balanced for the wallet's own network, never 'stagenet'.
+    expect(mocks.reconstruct.mock.calls[0][2]).toBe(network);
+    expect(mocks.balance.mock.calls[0][2]).toBe(network);
+  });
+
+  it('a mainnet chain still below the fork keeps the ledger 8 path', async () => {
+    useMidnightChains({ mainnet: [LEDGER8_PROTOCOL_VERSION, LEDGER8_PROTOCOL_VERSION] });
+    const vector = fixture.transfers.find(candidate => candidate.network === 'mainnet')!;
+    await expect(balanceAndSignUnshieldedTransfer({
+      sdkNetworkId: 'mainnet', endpoints: getMidnightEndpoints('Mainnet')!, unshieldedSecretKey: new Uint8Array(32).fill(1),
+      dustSecretSeed: new Uint8Array(32).fill(2), ttl: new Date(Date.now() + 300000), unprovenTxHex: vector.unprovenTxHex,
+    })).rejects.toThrow();
+    expect(mocks.balance).not.toHaveBeenCalled();
   });
 });

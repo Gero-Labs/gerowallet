@@ -33,7 +33,7 @@ function midnightWallet(id: number, name: string, dust: string, network = NETWOR
 function destination(over: Record<string, unknown> = {}) {
   return {
     dustAddress: DUST_A, registered: true, nightBalance: '935253826', generationRate: '7731743379542',
-    maxCapacity: '9000', currentCapacity: '4500',
+    maxCapacity: '9000000000000000', currentCapacity: '4500000000000000',
     stakes: [
       { cardanoRewardAddress: 'stake1a', state: 'active' },
       { cardanoRewardAddress: 'stake1b', state: 'active' },
@@ -73,8 +73,8 @@ describe('loadSponsorCandidates — destination path', () => {
 
     const alpha = candidates.find((c) => c.walletId === 2)!;
     expect(alpha.state).toBe('ready');
-    expect(alpha.capacity).toBe(4500n); // two active stakes, one destination: not 9000n
-    expect(alpha.cap).toBe(9000n);
+    expect(alpha.capacity).toBe(4_500_000_000_000_000n); // two active stakes, one destination: not twice that
+    expect(alpha.cap).toBe(9_000_000_000_000_000n);
     expect(alpha.fundedBy).toEqual(['stake1a', 'stake1b']);
   });
 
@@ -145,20 +145,20 @@ describe('loadSponsorCandidates — destination path', () => {
 describe('loadSponsorCandidates — fallback for a Nexus without dust/destination', () => {
   const row = (stake: string, dust: string, capacity: string) => ({
     cardanoRewardAddress: stake, dustAddress: dust, registered: true,
-    currentCapacity: capacity, maxCapacity: '9000', registrationUtxoTxHash: 'tx',
+    currentCapacity: capacity, maxCapacity: '9000000000000000', registrationUtxoTxHash: 'tx',
   });
 
   it.each([404, 501])('falls back to the per-stake rows on %i and takes the capacity once', async (status) => {
     mocks.destination.mockRejectedValue(new DustDestinationUnsupportedError(status));
     mocks.enumerate.mockResolvedValue([{ stakeAddress: 'stake1a' }, { stakeAddress: 'stake1b' }]);
-    mocks.batch.mockResolvedValue([row('stake1a', DUST_A, '4500'), row('stake1b', DUST_A, '4500')]);
+    mocks.batch.mockResolvedValue([row('stake1a', DUST_A, '4500000000000000'), row('stake1b', DUST_A, '4500000000000000')]);
 
     const { candidates, lookupIncomplete } = await loadSponsorCandidates(SENDER, NETWORK);
 
     const alpha = candidates.find((c) => c.walletId === 2)!;
     expect(alpha.state).toBe('ready');
-    expect(alpha.capacity).toBe(4500n); // two rows for one address: not 9000n
-    expect(alpha.cap).toBe(9000n);
+    expect(alpha.capacity).toBe(4_500_000_000_000_000n); // two rows for one address: not twice that
+    expect(alpha.cap).toBe(9_000_000_000_000_000n);
     expect(candidates.find((c) => c.walletId === 3)!.state).toBe('unknown');
     expect(lookupIncomplete).toBe(false);
   });

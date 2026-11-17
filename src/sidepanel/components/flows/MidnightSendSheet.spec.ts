@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
@@ -48,6 +49,8 @@ const extensionOrigin = new URL('chrome-extension://test-extension/').origin;
 enableAutoUnmount(afterEach);
 beforeEach(() => {
   vi.clearAllMocks();
+  // Mainnet and preprod run ledger 9, whose DUST fee this device proves.
+  useMidnightChains({ mainnet: [L9, L8], preprod: [L9, L8] });
   mocks.send.mockReset().mockResolvedValue(result);
   mocks.consent.mockReturnValue(false);
   walletStore.loggedWallet = { id: 1, name: 'Sender', type: WalletType.Normal, chain: 'Midnight', network: Network.MAINNET,
@@ -63,8 +66,8 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function render() {
-  return mount(MidnightSendSheet, { props: { modelValue: true }, global: {
+function render(modelValue = true) {
+  return mount(MidnightSendSheet, { props: { modelValue }, global: {
     config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) },
     stubs: {
       ...dialogControls(async () => ({ valid: true, errors: [] })),
@@ -129,7 +132,8 @@ describe('Midnight sidepanel authorization freshness', () => {
     await authenticate(extensionOrigin, { close: vi.fn() });
     expect(mocks.send).not.toHaveBeenCalled();
     expect(popup.close).not.toHaveBeenCalled();
-    await confirm(wrapper).trigger('click');
+    // While the send runs the CTA is gone, so it cannot open a second popup.
+    expect(confirm(wrapper)).toBeUndefined();
     expect(window.open).toHaveBeenCalledTimes(1);
     await authenticate();
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
@@ -137,11 +141,13 @@ describe('Midnight sidepanel authorization freshness', () => {
       expect.objectContaining({ outputs: [{ address: 'mn_addr1recipient', amount: '1000000', token: 'NIGHT' }] }),
       role === 'sender' ? { prfSecret: expect.any(Uint8Array) } : { password: 'sender-password' },
       expect.any(Function), role === 'sponsor' ? { walletId: 2, prfSecret: expect.any(Uint8Array) } : undefined,
-      false, expect.any(Function));
+      false, expect.any(Function),
+      // The busy prover's countdown and still-busy prompt (midnightBusyRetry.ts).
+      expect.objectContaining({ onCountdown: expect.any(Function), onStillBusy: expect.any(Function) }));
     await flushPromises();
     expect(popup.close).toHaveBeenCalledTimes(1);
     expect(window.clearTimeout).toHaveBeenCalled();
-    expect(mocks.pending).toHaveBeenCalledWith(result.ledgerTxHash, 1_000_000n, 'mn_addr1recipient', false, 'NIGHT');
+    expect(mocks.pending).toHaveBeenCalledWith(result.ledgerTxHash, 1_000_000n, 'mn_addr1recipient', false, 'NIGHT', 'mn_addr1sender', true);
     expect(mocks.success).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.success-overlay').exists()).toBe(true);
   });
@@ -193,8 +199,18 @@ describe('Midnight sidepanel authorization freshness', () => {
     expect(wrapper.find('.success-overlay').exists()).toBe(false);
   });
 
+  it('sends a public transfer in Gero Cloud mode without a consent notice (the fee is proven on this device)', async () => {
+    midnightStore.proofServer = { mode: 'remote' } as never;
+    const wrapper = await ready();
+    await confirm(wrapper).trigger('click');
+    await authenticate();
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    expect(wrapper.find('[data-testid="consent"]').exists()).toBe(false);
+  });
+
   it('discards consent approval when its recipient changes and obtains fresh authorization', async () => {
-    midnightStore.proofServer = { mode: 'cloud' } as never;
+    // zkPaaS still receives a public send's DUST witness, so it still needs consent.
+    midnightStore.proofServer = { mode: 'zkpaas' } as never;
     const wrapper = await ready();
     await confirm(wrapper).trigger('click');
     await authenticate();
@@ -208,5 +224,36 @@ describe('Midnight sidepanel authorization freshness', () => {
     await wrapper.get('[data-testid="consent"]').trigger('click');
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
     expect(mocks.send.mock.calls[0][1].outputs[0].address).toBe('mn_addr1replacement');
+  });
+});
+
+// Issue 1470: a send that went out is recorded as pending even when the sheet
+// has moved on, but only for the wallet that sent it; Send again fills it in.
+describe('Midnight sidepanel pending rows and Send again', () => {
+  it('records the pending row for the sending wallet after the view moved on', async () => {
+    const sending = deferred<typeof result>();
+    mocks.send.mockReturnValueOnce(sending.promise);
+    const wrapper = await ready();
+    await confirm(wrapper).trigger('click');
+    await authenticate();
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    await invalidate(wrapper, 'recipient');
+    sending.resolve(result);
+    await flushPromises();
+    expect(mocks.pending).toHaveBeenCalledWith(result.ledgerTxHash, 1_000_000n, 'mn_addr1recipient', false, 'NIGHT', 'mn_addr1sender', true);
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+
+  it('Send again fills in the recipient and amount and sends nothing by itself', async () => {
+    const { requestMidnightSendAgain } = await import('@/chains/midnight/midnightSendPrefill');
+    const wrapper = render(false);
+    requestMidnightSendAgain({ recipient: 'mn_addr1again', amount: 2_500_000n, token: 'NIGHT', shielded: false });
+    await wrapper.setProps({ modelValue: true });
+    await flushPromises();
+    const vm = wrapper.vm as unknown as { recipient: string; amount: string };
+    expect(vm.recipient).toBe('mn_addr1again');
+    expect(vm.amount).toBe('2.5');
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.pending).not.toHaveBeenCalled();
   });
 });

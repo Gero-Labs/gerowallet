@@ -4,7 +4,7 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import {
   describeSubmitFailure,
   isUnexpectedSubmitResponseError,
@@ -49,7 +49,16 @@ import {
   submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
-import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
+import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoPartition, type CachedUtxoRow } from '@/chrome/utxoCache';
+import {
+  ownListingIdentity,
+  verifyOwnListing,
+  type OwnListing,
+  type OwnListingIdentity,
+  type OwnListingRejection,
+} from '@/chrome/nftMarket/ownListings';
+import { findMarketTouch } from '@/chrome/nftMarket/marketGuard';
+import { consumeMarketAuthorization, hasMarketAuthorization } from '@/chrome/nftMarket/marketAllowance';
 import { SecretPurpose, decrypt, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
 import { migrateWalletSecrets, upgradeLegacyTextSecrets } from '@/chrome/secretMigration';
@@ -71,6 +80,7 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
+import { carriesSigningCreds, isMarkedToFail, paymentKeyHash } from '@/shared/utils/keyCreds';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
@@ -88,6 +98,9 @@ import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
 import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex, withGroupSecrets } from '@/shared/utils/walletAccount';
 import { isSameWalletKey } from '@/db/walletIdentity';
+// Static (see gero-db.ts): no inlined dynamic-import namespace in the background bundle.
+import { deriveSolanaKeypairFromMnemonic } from '@/chains/solana/solanaKeyManager';
+import { buildSignedSolTransfer, type SolTransferParams } from '@/chains/solana/solanaTransaction';
 import type { MidnightDerivedKeys } from '@/chains/midnight/midnightKeyManager';
 // Static, not dynamic: walletBg and this module land in the same background
 // IIFE, so a dynamic import buys no code splitting — it only pushes the
@@ -103,13 +116,20 @@ import {
   midnightPrivateSessionEpoch,
   prepareMidnightPrivateSession,
 } from '@/chains/midnight/midnightPrivateSyncSession';
-import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { resolveDappProvingTarget, walletProverFor, type WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
 import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
 import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
+import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
+import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
+import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
+import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
+import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
+import { asBuildStep } from '@/chains/midnight/midnightBuildFailure';
 import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
+import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import {
   assertNativeNightConversionSupported,
   validateShieldedTokenType,
@@ -165,6 +185,7 @@ export class WalletBg {
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
+  firmwareVersion?: string;
 
   encryptedPrivateKey: string;
   passwordLastUpdate: Date;
@@ -223,6 +244,7 @@ export class WalletBg {
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
+    this.firmwareVersion = wallet.firmwareVersion;
     this.api = new Api(wallet, this.provider);
 
     // Chain-specific address derivation
@@ -249,6 +271,11 @@ export class WalletBg {
       } catch {
         this.baseAddress = '';
       }
+      this.stakeAddress = '';
+    } else if (this.chain === Blockchain.SOLANA) {
+      // Solana: the record's publicKey is the account's base58 address (m/44'/501'/n'/0').
+      // No staking address; Gero Sync subscribes by this address.
+      this.baseAddress = this.publicKey ?? '';
       this.stakeAddress = '';
     } else if (wallet.type === WalletType.Watch) {
       // Dev-only watch wallet: read-only, no keys. The watched base address is
@@ -359,10 +386,10 @@ export class WalletBg {
    * Apply UTxOs: set on store, resolve assets, persist to DB.
    * Called on login (from DB) and when server UTxOs arrive.
    *
-   * @param partitionKnown whether this set accounts for BOTH halves of the CIP-113
-   *   partition. False only for a cache written before the programmable half was
-   *   persisted: aggregating from it would report zero locked lovelace and wipe the
-   *   refusal index loadProgrammableRefs() just restored.
+   * @param partitionKnown whether this set accounts for ALL halves of the partition
+   *   (spendable, CIP-113, the wallet's own Gero listings). False only for a cache written
+   *   before the programmable half was persisted: aggregating from it would report zero
+   *   locked lovelace and wipe the refusal index loadProgrammableRefs() just restored.
    */
   async applyUtxos(utxos: Cardano.Utxo[], persist = false, partitionKnown = true) {
     if (!utxos || utxos.length === 0) {
@@ -374,7 +401,8 @@ export class WalletBg {
       // behaviour and deliberately left alone.
       if (partitionKnown) {
         this.setProgrammableAssets([]);
-        if (persist) await this.clearPersistedProgrammableUtxos();
+        this.setListedUtxos([]);
+        if (persist) await this.clearPersistedPartitionRows(['programmable', 'listed']);
       }
       return;
     }
@@ -385,24 +413,41 @@ export class WalletBg {
     // ours to display, never ours to spend. Divert rather than drop. The spendable
     // branch is evaluated first, so nothing spendable can be demoted.
     const programmableBases = this.programmableBaseScriptHashes();
+    // The Gero listing contract's UTxOs sit at a script address under the seller's own stake
+    // key, the same shape: the user's, never spendable. They are diverted too, and the ones the
+    // datum proves to be this wallet's own listings are kept (setListedUtxos below).
+    const listedBases = this.listedScriptHashes();
     const programmableOwners = programmableBases.size > 0
       ? this.programmableOwnerCredentials(myCredentials)
       : new Set<string>();
+    // A listing is the user's only under the wallet's own STAKE key: a listing whose stake slot
+    // holds one of its payment keys is under another reward address (the stake anchor never
+    // returns it for this wallet), so it is not listed and not subtracted. No stake key to derive
+    // means no listing is recognised as own.
+    const listedOwners = listedBases.size > 0 ? this.listedOwnerCredentials() : new Set<string>();
     const programmable: Cardano.Utxo[] = [];
+    const listedCandidates: Cardano.Utxo[] = [];
     // Tripwire: gero-sync scopes results to the subscribed stake address, so a
     // non-zero count means we are being sent holdings that are not ours.
     let programmableOther = 0;
+    let listedOther = 0;
     const filtered = utxos.filter(utxo => {
       const partition = classifyUtxoAddress(
         utxo[1].address as string,
         myCredentials,
         programmableBases,
         programmableOwners,
+        listedBases,
+        listedOwners,
       );
       if (partition === 'programmable') {
         programmable.push(utxo);
       } else if (partition === 'programmable-other') {
         programmableOther++;
+      } else if (partition === 'listed') {
+        listedCandidates.push(utxo);
+      } else if (partition === 'listed-other') {
+        listedOther++;
       }
       return partition === 'spendable';
     });
@@ -414,10 +459,20 @@ export class WalletBg {
         `gero-sync is returning holdings that are not ours`
       );
     }
+    if (listedOther > 0) {
+      console.warn(
+        `NFT market: dropped ${listedOther} listing UTxO(s) under other stake keys — ` +
+        `gero-sync is returning listings that are not ours`
+      );
+    }
     if (filtered.length !== utxos.length) {
-      debugLog(`🔒 Credential filter: ${utxos.length} → ${filtered.length} UTxOs (${utxos.length - filtered.length} Franken removed, ${programmable.length} CIP-113)`);
+      debugLog(`🔒 Credential filter: ${utxos.length} → ${filtered.length} UTxOs (${utxos.length - filtered.length} Franken removed, ${programmable.length} CIP-113, ${listedCandidates.length} listed candidates)`);
     }
     utxos = filtered;
+
+    // Which candidates are really this wallet's own listings is decided from their datums.
+    // Not while only a stale cache is being read: that cache never held the listed half.
+    const listed = partitionKnown ? this.setListedUtxos(listedCandidates) : [];
 
     const uniqueAssets: Set<string> = new Set<string>();
     for (const [, txOut] of utxos) {
@@ -425,8 +480,9 @@ export class WalletBg {
         txOut.value.assets.keys().forEach((key: string) => uniqueAssets.add(key));
       }
     }
-    // Programmable tokens resolve their metadata through the same pipeline.
-    for (const [, txOut] of programmable) {
+    // Programmable tokens resolve their metadata through the same pipeline, and so do the
+    // NFTs the wallet has listed (the listings view shows them).
+    for (const [, txOut] of [...programmable, ...listed]) {
       if (txOut.value.assets) {
         txOut.value.assets.keys().forEach((key: string) => uniqueAssets.add(key));
       }
@@ -434,7 +490,8 @@ export class WalletBg {
 
     debugLog(
       `📦 applyUtxos: ${utxos.length} UTxOs, ${uniqueAssets.size} assets, persist=${persist}` +
-      ` | CIP-113: matched=${programmable.length} otherOwners=${programmableOther}`
+      ` | CIP-113: matched=${programmable.length} otherOwners=${programmableOther}` +
+      ` | listed: own=${listed.length} candidates=${listedCandidates.length} otherOwners=${listedOther}`
     );
 
     // Arm the signing guard before the syncAssets() await: until the set is installed
@@ -453,7 +510,7 @@ export class WalletBg {
       this.setProgrammableAssets(programmable);
     }
 
-    // Persist to per-wallet DB so UTxOs survive logout — both halves, tagged, so the
+    // Persist to per-wallet DB so UTxOs survive logout — every half, tagged, so the
     // locked lovelace is still known to be locked after a service-worker restart.
     if (persist) {
       try {
@@ -463,6 +520,7 @@ export class WalletBg {
         await table.bulkPut([
           ...serializeUtxoRows(utxos, 'spendable'),
           ...serializeUtxoRows(programmable, 'programmable'),
+          ...serializeUtxoRows(listed, 'listed'),
         ]);
       } catch (e) {
         // Half a partition is worse than none: a cache holding only the spendable rows
@@ -485,20 +543,22 @@ export class WalletBg {
   }
 
   /**
-   * Drop the cached programmable rows only. The spendable rows stay tagged, so the
-   * cache still reads as partition-aware — it now records an empty programmable half
-   * rather than an unknown one.
+   * Drop the cached rows of the named halves only. The spendable rows stay tagged, so the
+   * cache still reads as partition-aware — it now records empty halves rather than
+   * unknown ones.
    */
-  private async clearPersistedProgrammableUtxos() {
+  private async clearPersistedPartitionRows(partitions: readonly CachedUtxoPartition[]) {
     try {
       const db = await this.getDb();
       const table = db.table('utxos');
       const rows = await table.toArray();
-      const stale = rows.filter((row: CachedUtxoRow & { id?: number }) => row.partition === 'programmable');
+      const stale = rows.filter(
+        (row: CachedUtxoRow & { id?: number }) => row.partition != null && partitions.includes(row.partition),
+      );
       if (stale.length === 0) return;
       await table.bulkDelete(stale.map(row => row.id));
     } catch (e) {
-      debugLog('Failed to clear cached programmable UTxOs:', e);
+      debugLog('Failed to clear cached partition UTxOs:', e);
     }
   }
 
@@ -543,6 +603,17 @@ export class WalletBg {
     const stakeCred = this.ownStakeCredential();
     if (stakeCred) owners.add(stakeCred);
     return owners;
+  }
+
+  /**
+   * What counts as "own stake" for a Gero listing: this wallet's stake key hash and nothing else.
+   * A listing sits at the listing script under its seller's reward address, so the stake anchor
+   * returns it under the wallet's stake key; a payment key of the wallet in that slot would be a
+   * different reward address. Empty when the stake key cannot be derived (nothing is recognised).
+   */
+  private listedOwnerCredentials(): Set<string> {
+    const stakeCred = this.ownStakeCredential();
+    return new Set<string>(stakeCred ? [stakeCred] : []);
   }
 
   /**
@@ -808,6 +879,93 @@ export class WalletBg {
     return hits;
   }
 
+  // Gero NFT market — the wallet's own listings. Display and balance only, like the
+  // programmable tokens: the listing UTxOs never enter walletStore.utxos.
+
+  /**
+   * The script hashes of every deployed version of the Gero listing contract on this network:
+   * every version, not only the newest, so a listing made under a superseded deployment stays
+   * recognised (kept out of spending, shown, cancellable) until it drains. Empty where the
+   * market is unsupported, which disables the listed partition and leaves
+   * `subscriptionCredentials()` as it was. The gate is `NFT_MARKET_ALLOWED_NETWORKS` plus the
+   * network's deployment list (networks.resolveNftMarketDeployments); the `isNftMarketEnabled`
+   * flag is a UI gate only and has no say here.
+   */
+  listedScriptHashes(): Set<string> {
+    return new Set(networks.resolveNftMarketDeployments(this.chain, this.network).map((d) => d.scriptHash));
+  }
+
+  /**
+   * How `transaction` touches the Gero market: an output at a deployed listing script, or an input
+   * that is one of this wallet's own listings (marketGuard.ts). Non-empty means the transaction
+   * must not be witnessed unless its exact id holds an allowance (a market prepare handler
+   * verified it) or a dApp pass (a dApp sent this CBOR and the user is shown its preview), which
+   * signTx checks (marketAllowance.ts). Reads the logged wallet's verified
+   * listings from the store: a listing the partition has not recognised (yet) cannot be told
+   * apart from somebody else's, and spending somebody else's is not the wallet's loss.
+   * Background only. Never depends on the `isNftMarketEnabled` flag: this is a guard, not UI.
+   */
+  findMarketTouch(transaction: Cardano.Tx): string[] {
+    const deployments = networks.resolveNftMarketDeployments(this.chain, this.network);
+    const ownListedRefs = new Set((WalletStore.state.listedListings ?? []).map((listing) => listing.ref));
+    return findMarketTouch(transaction, deployments, ownListedRefs);
+  }
+
+  /**
+   * Who this wallet is, for deciding whether a listing datum names it: its key set (as gero-sync
+   * last reported it, or derived locally when none has landed yet) and the payment credentials
+   * derived from its xpub. The union, because the cache load and the key load race at login and a
+   * key set can lag a sync, while derivation never does.
+   */
+  private ownListingIdentity(): OwnListingIdentity {
+    const keys = WalletStore.state.keys
+      ?? (this.derivesOwnAddress() ? this.resolvePathsForMissingAddresses([]) : null);
+    return ownListingIdentity(keys, this.derivePaymentCredentials());
+  }
+
+  /**
+   * Decide which `listed` candidates are this wallet's own listings, publish them to the store
+   * and return their UTxOs (for the cache). A candidate counts only when its datum names this
+   * wallet as BOTH owner and seller and it holds exactly one NFT (ownListings.ts); everything
+   * else at the listing script under the wallet's stake key is treated as foreign: not listed,
+   * not subtracted from the balance, not shown. An empty list clears the store's listings.
+   */
+  private setListedUtxos(candidates: Cardano.Utxo[]): Cardano.Utxo[] {
+    const listings: OwnListing[] = [];
+    const kept: Cardano.Utxo[] = [];
+    const rejected: Partial<Record<OwnListingRejection, number>> = {};
+    const deployments = networks.resolveNftMarketDeployments(this.chain, this.network);
+    if (candidates.length > 0 && deployments.length > 0) {
+      const ctx = {
+        networkId: networks.resolveNetworkId(this.chain, this.network) as number,
+        deployments,
+        own: this.ownListingIdentity(),
+      };
+      for (const utxo of candidates) {
+        const verdict = verifyOwnListing(utxo, ctx);
+        if ('listing' in verdict) {
+          listings.push(verdict.listing);
+          kept.push(utxo);
+        } else {
+          rejected[verdict.rejected] = (rejected[verdict.rejected] ?? 0) + 1;
+        }
+      }
+    }
+    // The same refs in the same order are the same listings (an output never changes), so the
+    // store can tell a repeat push from a change.
+    const byRef = (a: OwnListing, b: OwnListing) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
+    const order = listings.map((l, i) => [l, kept[i]] as const).sort(([a], [b]) => byRef(a, b));
+    const sorted = order.map(([l]) => l);
+    WalletStore.setListedListings(sorted);
+    if (Object.keys(rejected).length > 0) {
+      // console.warn, not debugLog: debugLog no-ops in normal builds, and someone locking an NFT
+      // at the listing script under this wallet's stake key with a datum that is not this
+      // wallet's own is worth seeing.
+      console.warn('NFT market: treated listing-script UTxO(s) as foreign', rejected);
+    }
+    return order.map(([, utxo]) => utxo);
+  }
+
   /**
    * Load persisted UTxOs from per-wallet DB. Fast — no server needed.
    */
@@ -839,23 +997,32 @@ export class WalletBg {
    * with. The derived set marks nothing as used, and the first sync that does name an
    * address replaces it. It is not persisted, so the cached row only ever holds keys a
    * sync resolved.
+   *
+   * A row missing a key's hash (an older build's) is derived again from the addresses it marks
+   * used, so it keeps those and the gap scan past them: the signers sign nothing for a key whose
+   * hash the key set doesn't carry. A wallet that can't derive its own keys keeps the row it has.
    */
   public async loadCachedKeys() {
+    let cached: Keys | undefined;
     try {
       const db = await this.getDb();
       const table = db.table('addresses');
       const row = await table.where({ address: this.publicKey }).first();
-      if (row?.resolvedKeys) {
-        debugLog('🔑 Loading cached keys from DB');
-        WalletStore.setKeys(row.resolvedKeys);
-        return;
-      }
+      cached = row?.resolvedKeys;
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
     }
-    if (!this.derivesOwnAddress()) return;
-    debugLog('🔑 No cached keys; deriving them locally');
-    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+    // A complete row (or a watch wallet's) is used as it is, with no derivation.
+    const derives = cached && (this.type === WalletType.Watch || carriesSigningCreds(cached)) ? null : this.derivesOwnAddress();
+    if (cached && !derives) {
+      debugLog('🔑 Loading cached keys from DB');
+      WalletStore.setKeys(cached);
+      return;
+    }
+    if (!derives) return;
+    debugLog(cached ? '🔑 Cached keys lack key hashes; deriving them locally' : '🔑 No cached keys; deriving them locally');
+    const used = [...(cached?.payment ?? []), ...(cached?.change ?? [])].flatMap((key) => (key?.used && key.address ? [key.address] : []));
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses(used));
   }
 
   /**
@@ -1469,19 +1636,13 @@ export class WalletBg {
       // programmable-token script address, and the next push would drop them.
       let added = false;
       for (const addr of serverAddresses) {
-        try {
-          // Key credentials only, as on the HD branch below. With the CIP-113 filter
-          // off the server also reports the programmable-token SCRIPT address; absorbing
-          // its hash would make classifyUtxoAddress call those UTxOs spendable.
-          const paymentCred = Cardano.Address.fromString(addr)?.getProps().paymentPart;
-          if (paymentCred?.type === Cardano.CredentialType.ScriptHash) continue;
-          const cred = keyHashFromAddress(addr) as unknown as string;
-          if (cred && !this.watchCredentials.has(cred)) {
-            this.watchCredentials.add(cred);
-            added = true;
-          }
-        } catch {
-          continue;
+        // Key credentials only, as on the HD branch below. With the CIP-113 filter
+        // off the server also reports the programmable-token SCRIPT address; absorbing
+        // its hash would make classifyUtxoAddress call those UTxOs spendable.
+        const cred = paymentKeyHash(addr);
+        if (cred && !this.watchCredentials.has(cred)) {
+          this.watchCredentials.add(cred);
+          added = true;
         }
       }
       if (!added) return null;
@@ -1546,12 +1707,13 @@ export class WalletBg {
    *
    * A non-empty list is a strict allowlist: the server returns only UTxOs at addresses
    * whose payment credential is in it, and it never matches the CIP-113 script address
-   * (adding the script hash returns nothing — verified against the live endpoint). An
-   * empty list disables the filter so the server resolves by stake address instead, and
+   * (adding the script hash returns nothing — verified against the live endpoint), nor the
+   * Gero listing script's: so a network with either configured empties it. An empty list
+   * disables the filter so the server resolves by stake address instead, and
    * classifyUtxoAddress does the filtering client-side.
    *
-   * Networks without a deployment take the non-empty branch, so the server-side filter
-   * stays active there exactly as it does for any other credential list.
+   * Networks with neither a CIP-113 nor a market deployment take the non-empty branch, so the
+   * server-side filter stays active there exactly as it does for any other credential list.
    *
    * The empty list loses no UTxO the allowlist returned. Verified against mainnet gero-sync
    * on 2026-10-07: the allowlist only FILTERS the stake-anchored set and never reaches past
@@ -1574,6 +1736,10 @@ export class WalletBg {
    */
   subscriptionCredentials(): string[] {
     if (this.programmableBaseScriptHashes().size > 0) return [];
+    // The Gero listing contract is the same case: its script hash is never a payment key hash,
+    // so a payment-key allowlist can never return the user's own listings. With it configured,
+    // the server resolves by stake address and classifyUtxoAddress filters client-side.
+    if (this.listedScriptHashes().size > 0) return [];
     return this.derivePaymentCredentials();
   }
 
@@ -2007,7 +2173,10 @@ export class WalletBg {
    */
   private async deriveMidnightAccountKeys(mnemonic: string, network: string): Promise<MidnightDerivedKeys> {
     const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-    const derived = await deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true });
+    const { midnightTimer } = await import('@/chains/midnight/midnightTiming');
+    const timer = midnightTimer('derive account keys');
+    const derived = await timer.time('derive', () => deriveMidnightKeys(mnemonic, network, this.accountIndex, { skipCardano: true }));
+    timer.done();
     if (this.accountIndex > 0 && !isSameWalletKey(Blockchain.MIDNIGHT, JSON.stringify(derived.addresses), this.publicKey)) {
       derived.unshieldedSecretKey.fill(0);
       derived.dustSecretKey.fill(0);
@@ -2122,6 +2291,42 @@ export class WalletBg {
       console.error('Failed to sign Bitcoin transaction:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Transaction signing failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Signs a native SOL transfer from this record's account (software wallets: password or
+   * PassKey). The key is derived from the recovery phrase at `m/44'/501'/accountIndex'/0'`
+   * and must give the address the record stores, so a mismatched record never signs. The
+   * secret key is wiped before returning.
+   */
+  async signSolanaTransfer(
+    params: Omit<SolTransferParams, 'from'>,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ signature: string; base64: string }> {
+    if (this.chain !== Blockchain.SOLANA) throw new Error('signSolanaTransfer called on a non-Solana wallet');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      mnemonic = await this.openMnemonicWithPassword(password);
+    }
+    const keypair = deriveSolanaKeypairFromMnemonic(mnemonic, this.accountIndex);
+    try {
+      if (!isSameWalletKey(Blockchain.SOLANA, keypair.address, this.publicKey)) {
+        throw new InvalidAccountIndexError('The signing key does not belong to this account');
+      }
+      return buildSignedSolTransfer({ ...params, from: keypair.address }, keypair.secretKey);
+    } finally {
+      keypair.secretKey.fill(0);
     }
   }
 
@@ -2394,7 +2599,12 @@ export class WalletBg {
   private async openMnemonicWithPassword(password: string): Promise<string> {
     const encryptedMnemonic = this.encryptedMnemonic;
     if (!encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-    return withUnlockThrottle(this.secretsWalletId, async () => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic), { rejected: () => false });
+    const startedAt = Date.now();
+    try {
+      return await withUnlockThrottle(this.secretsWalletId, async () => decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic), { rejected: () => false });
+    } finally {
+      if (this.chain === Blockchain.MIDNIGHT) console.debug('[midnight-timing] open mnemonic', { totalMs: Date.now() - startedAt });
+    }
   }
 
   /**
@@ -2434,6 +2644,23 @@ export class WalletBg {
       debugLog('CIP-113: refusing to sign, programmable inputs:', programmableInputs);
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
+    // A transaction marked to fail only forfeits its collateral, which an input's witness can
+    // authorise on its own: refused whoever asks, before the root key is decrypted.
+    if (isMarkedToFail(transaction)) throw new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE);
+
+    // The Gero NFT market, the same shape: a transaction that creates a listing or spends one of
+    // this wallet's own is signed only with an authorization for its exact id (used up below,
+    // just before the signature): the one-shot allowance a market prepare handler granted after
+    // verifying what Nexus built, or the pass the worker opened when a dApp's signing request
+    // arrived with this very CBOR (marketAllowance.ts; the dApp's approval screen previews what
+    // it creates or spends). Neither exists for anything else, so an unverified market
+    // transaction a page hands over is refused here, whoever built it.
+    const marketHits = this.findMarketTouch(transaction);
+    // OX Agent: Authorization prevented by refusing to sign a market transaction without an allowance or dApp pass for its exact id
+    if (marketHits.length > 0 && !hasMarketAuthorization(this.id, transaction.id, marketHits)) {
+      debugLog('NFT market: refusing to sign, unverified market transaction:', marketHits);
+      throw new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    }
 
     // Get root private key
     let rootPrivateKey: Bip32PrivateKey;
@@ -2451,18 +2678,17 @@ export class WalletBg {
     if (programmableInputs.length > 0 && !consumeCip113SignAllowance(this.id, transaction.id, programmableInputs)) {
       throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
     }
+    // OX Agent: Authorization prevented by using whichever authorization matched up right before the signature
+    if (marketHits.length > 0 && !consumeMarketAuthorization(this.id, transaction.id, marketHits)) {
+      throw new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
+    }
     const accountPrivateKey: Bip32PrivateKey = deriveSigningAccountKey(rootPrivateKey, this.accountIndex, this.publicKey);
 
     // Create a signature map for the witness
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
-    const requiredSigners = analyzeTransactionForSignatures(
-      transaction,
-      utxos,
-      addresses,
-      this.stakeAddress,
-    );
+    const requiredSigners = analyzeTransactionForSignatures(transaction, utxos, addresses);
 
     // Sign with each required key
     for (const signer of requiredSigners) {
@@ -2576,8 +2802,8 @@ export class WalletBg {
    * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
    * proven, unbound tx and return the SEALED hex. Same credential handling
    * and key hygiene as balanceAndSignMidnightUnshieldedTransfer; the DUST fee
-   * proof is generated wallet-side against the user's proof-server
-   * preference (resolveDappProvingTarget), never through Gero Cloud, so the
+   * proof is generated wallet-side, on this device in Gero Cloud mode or on
+   * the user's proof server otherwise, never through Gero Cloud, so the
    * dapp's contract proofs and the wallet's witness stay off our servers.
    */
   async balanceMidnightConnectorTransaction(
@@ -2620,12 +2846,37 @@ export class WalletBg {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
         if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
-        const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+        // The fee proof is the wallet's own DUST spend. In Gero Cloud mode it is
+        // made on this device (Gero Cloud never proves a dapp's transaction, and
+        // the DUST secret must not leave the wallet); otherwise on the proof
+        // server the user chose.
+        let proving: WalletProvingRequest;
+        if (walletProverFor(network, midnightStore.proofServer, 'unshielded') === 'device') {
+          proving = { device: true };
+        } else {
+          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          proving = { url: target.url, headers: target.headers };
+        }
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
+        // The chain's ledger decides the path, never the network's name.
+        if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
+          // The build itself: a failure here is the wallet's, not the user's (midnightBuildFailure.ts).
+          const result9 = await asBuildStep(() => balanceDappTransaction9({
+            sdkNetworkId: endpoints.sdkNetworkId,
+            endpoints,
+            txHex,
+            unshieldedSecretKey: derived.unshieldedSecretKey,
+            dustSecretSeed: derived.dustSecretKey,
+            utxos: midnightStore.utxos,
+            proving,
+          }));
+          assertSession();
+          return { tx: result9.txHex };
+        }
         const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
-        const result = await balanceDappTransaction({
+        const result = await asBuildStep(() => balanceDappTransaction({
           sdkNetworkId: endpoints.sdkNetworkId,
           endpoints,
           txHex,
@@ -2634,10 +2885,113 @@ export class WalletBg {
           dustRegisteredAt: Number.isFinite(createdMs)
             ? new Date(createdMs)
             : new Date(Date.now() - 90 * 24 * 3_600_000),
-          proving: { url: target.url, headers: target.headers },
-        });
+          proving,
+        }));
         assertSession();
         return { tx: result.txHex };
+      } finally {
+        derived.unshieldedSecretKey.fill(0); derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0); derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+    }
+  }
+
+  /**
+   * DApp Connector `makeIntent`: build the purposefully imbalanced swap
+   * intent the user approved (what the wallet gives, what it wants) and
+   * return it SEALED. `request` must come from `validateConnectorIntentRequest`.
+   * Same credential handling, key hygiene and fee proving as
+   * balanceMidnightConnectorTransaction; nothing is proved when the dapp asks
+   * the wallet not to pay fees. The chain's ledger picks the builder; on
+   * ledger 9 the coins come from the wallet's own sync, so nothing is
+   * unlocked before that sync has run (review S1).
+   */
+  async buildMidnightConnectorIntent(
+    request: ConnectorIntentRequest,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ tx: string; segmentId: number }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('buildMidnightConnectorIntent called on non-Midnight wallet');
+    }
+
+    const network = this.network;
+    const { walletStore } = await import('@/stores/walletStore');
+    {
+      const { midnightStore } = await import('@/stores/midnightStore');
+      if (await resolveMidnightLedger(network) === 9 && !connectorIntentSyncReady(midnightStore)) {
+        throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);
+      }
+    }
+    const assertSession = captureMidnightSigningSession(this.id, network, () => ({
+      walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = await this.openMnemonicWithPassword(password);
+    }
+
+    try {
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
+      try {
+        assertSession();
+        const endpoints = getMidnightEndpoints(network);
+        if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
+        // Same prover choice as the connector balance: the fee is the wallet's
+        // own DUST spend, proved on this device in Gero Cloud mode.
+        let proving: WalletProvingRequest;
+        if (walletProverFor(network, midnightStore.proofServer, 'unshielded') === 'device') {
+          proving = { device: true };
+        } else {
+          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          proving = { url: target.url, headers: target.headers };
+        }
+        // The chain's ledger decides the path, never the network's name.
+        if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
+          // The build itself: a failure here is the wallet's, not the user's (midnightBuildFailure.ts).
+          const result9 = await asBuildStep(() => buildConnectorIntent9({
+            sdkNetworkId: endpoints.sdkNetworkId,
+            endpoints,
+            request,
+            unshieldedSecretKey: derived.unshieldedSecretKey,
+            dustSecretSeed: derived.dustSecretKey,
+            utxos: midnightStore.utxos,
+            sync: midnightStore,
+            proving,
+          }));
+          assertSession();
+          return { tx: result9.txHex, segmentId: result9.segmentId };
+        }
+        const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+        const result = await asBuildStep(() => buildConnectorIntent({
+          sdkNetworkId: endpoints.sdkNetworkId,
+          endpoints,
+          request,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          dustRegisteredAt: Number.isFinite(createdMs)
+            ? new Date(createdMs)
+            : new Date(Date.now() - 90 * 24 * 3_600_000),
+          proving,
+        }));
+        assertSession();
+        return { tx: result.txHex, segmentId: result.segmentId };
       } finally {
         derived.unshieldedSecretKey.fill(0); derived.dustSecretKey.fill(0);
         derived.zswapSecretKey.fill(0); derived.seed.fill(0);
@@ -2698,6 +3052,7 @@ export class WalletBg {
     if (!unprovenTxHex || !dustReceiverAddressBech32) {
       throw new Error('The registration transaction and DUST address are required to check it before signing');
     }
+    await resolveMidnightLedger(this.network);
     await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
 
     // Decrypt the mnemonic once for the batch — we wipe it before returning.
@@ -2805,8 +3160,8 @@ export class WalletBg {
 
   /**
    * DApp Connector `signData` — signs arbitrary dapp-supplied bytes with the
-   * NightExternal (unshielded) key, per @midnight-ntwrk/dapp-connector-api
-   * v4.0.1 (`keyType: 'unshielded'` is the only value the spec currently
+   * NightExternal (unshielded) key, per @midnightntwrk/dapp-connector-api
+   * v4.1.0 (`keyType: 'unshielded'` is the only value the spec currently
    * defines). Distinct from `signMidnightSegments` (which signs Nexus-built
    * TRANSACTION segments) — this signs arbitrary APPLICATION data, so per the
    * spec's own security requirement it must be prefixed with
@@ -2819,10 +3174,8 @@ export class WalletBg {
    * Returns the exact bytes that were cryptographically signed (prefix +
    * data, hex-encoded) as `data`, so a third party can independently verify
    * `signature` against `verifyingKey` without needing to know the prefixing
-   * rule out-of-band. The wire type (`Signature`) has no `scheme` field in
-   * the 4.0.1 package we're pinned to — see the build plan doc §3.1 — so we
-   * omit it; the spec's own default when absent is `schnorr_bip340`, which is
-   * exactly what this signs with.
+   * rule out-of-band. The background handler adds `scheme: 'schnorr_bip340'`
+   * (4.1.0's optional `Signature.scheme`), which is what this signs with.
    */
   async signMidnightConnectorData(
     dataBytes: Uint8Array,
@@ -3026,11 +3379,13 @@ export class WalletBg {
         // Nexus built this transaction. Every unshielded input it spends is this
         // wallet's and the signature below authorizes all of them, so sign only
         // a transaction that is exactly the send the user asked for.
-        await assertMidnightTransferMatches(
+        // A refusal here and the balancing below are build failures (midnightBuildFailure.ts);
+        // the sponsor's credential in between is not.
+        await asBuildStep(() => assertMidnightTransferMatches(
           sdkNetworkId, unprovenTxHex,
           { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
           intendedOutputs,
-        );
+        ));
 
         // Registration lower bound for the dust snapshot bootstrap: the wallet
         // can't have registered for DUST before it was created. For restored
@@ -3071,7 +3426,7 @@ export class WalletBg {
           : new Date(Date.now() - 90 * 24 * 3_600_000);
 
         assertSession();
-        const signedTxHex = await balanceAndSignUnshieldedTransfer({
+        const signedTxHex = await asBuildStep(() => balanceAndSignUnshieldedTransfer({
           sdkNetworkId,
           endpoints,
           // Always THIS wallet's signing key: a sponsor authorises a fee,
@@ -3080,15 +3435,16 @@ export class WalletBg {
           dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
           unprovenTxHex,
           ttl: new Date(ttlMs),
-          // Restore timestamps are not proof of the original registration time.
-          dustRegisteredAt: sdkNetworkId === 'stagenet' ? undefined : dustRegisteredAt,
+          // Deprecated and unread: compact DUST sync finds registrations on chain,
+          // on either ledger (a restore timestamp proves nothing anyway).
+          dustRegisteredAt,
           // Forward the (long) DUST-ledger sync percentage to the store so the
           // send dialog's stage timeline renders a real bar. Broadcast-only,
           // cleared in the finally below.
           onDustSyncProgress: (percent, detail) => {
             midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
           },
-        });
+        }));
         assertSession();
         return signedTxHex;
       } finally {
@@ -3140,7 +3496,7 @@ export class WalletBg {
     outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
     password?: string,
     prfSecret?: Uint8Array,
-    proving?: { url: string; headers?: Record<string, string> },
+    proving?: WalletProvingRequest,
     sponsor?: { walletId: number; password?: string; prfSecret?: Uint8Array },
   ): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
@@ -3239,6 +3595,8 @@ export class WalletBg {
             dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
             ttl: new Date(Date.now() + 30 * 60_000),
             onDustSyncProgress: (percent, detail) => midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail }),
+            // The send timeline names its prover from here, not from the start of this call.
+            onProving: () => midnightActions.setSendProgress({ phase: 'proving', percent: -1 }),
             outputs: outputs.map((o) => ({
               receiverAddress: o.receiverAddress,
               amount: o.amount,
@@ -3292,7 +3650,7 @@ export class WalletBg {
     _amount: bigint,
     _password?: string,
     _prfSecret?: Uint8Array,
-    _proving?: { url: string; headers?: Record<string, string> },
+    _proving?: WalletProvingRequest,
   ): Promise<{ signedTxHex: string; proven: boolean }> {
     return assertNativeNightConversionSupported();
   }
@@ -3333,7 +3691,14 @@ export class WalletBg {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('getMidnightWalletKeys called on non-Midnight wallet');
     }
-    let parsed: Record<string, string> | null = null;
+    let parsed: {
+      publicKeyHex?: string;
+      addressHex?: string;
+      cardanoXpub?: string;
+      cardanoBaseAddress?: string;
+      cardanoStakeAddress?: string;
+      cardanoPaymentKeyHashHex?: string;
+    } | null = null;
     try {
       parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
     } catch {

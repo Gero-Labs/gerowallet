@@ -256,13 +256,19 @@ function stopPolling() {
 
 async function loadFeeRate() {
   try {
-    const { getBitcoinFeeEstimator, FeePriority } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
-    // Fast: the payment has to be seen before the quote runs out.
-    feeRate.value = (await getBitcoinFeeEstimator().getFeeEstimate(FeePriority.FAST)).feeRate;
+    const { getBitcoinFeeEstimatorFor } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
+    const rates = await getBitcoinFeeEstimatorFor(props.walletNetwork).getFeeTiers();
+    // Fast: the payment has to be seen before the quote runs out. Never the built-in
+    // fallback, which is a guess and not what the network asks for now.
+    if (!rates.fallback) {
+      feeRate.value = rates.fast;
+      return;
+    }
   } catch {
-    feeRate.value = null;
-    errorMessage.value = t('gomining.errorFeeUnavailable');
+    // Reported below, as when the network's rates could not be fetched.
   }
+  feeRate.value = null;
+  errorMessage.value = t('gomining.errorFeeUnavailable');
 }
 
 /** Opens the order. A retry with the same request id returns the same order, so a lost reply costs nothing. */

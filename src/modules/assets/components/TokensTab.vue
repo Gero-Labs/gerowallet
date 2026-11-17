@@ -254,13 +254,6 @@ const customSort = (items: TokenRow[], sortBy: string[], sortDesc: boolean[]) =>
       if (loggedWallet.value?.chain === 'Cardano' && item.name === 'Cardano') {
         return true;
       }
-      // For Apex blockchains, pin AP3X (Apex Fusion)
-      if (
-        (loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector') &&
-        item.name === 'Apex Fusion'
-      ) {
-        return true;
-      }
     }
     return false;
   });
@@ -268,12 +261,6 @@ const customSort = (items: TokenRow[], sortBy: string[], sortDesc: boolean[]) =>
   const otherTokens = items.filter(item => {
     if (item.policy_id === '') {
       if (loggedWallet.value?.chain === 'Cardano' && item.name === 'Cardano') {
-        return false;
-      }
-      if (
-        (loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector') &&
-        item.name === 'Apex Fusion'
-      ) {
         return false;
       }
     }
@@ -336,14 +323,7 @@ const tokensList = computed(() => {
       // Convert to user's selected currency (USD or EUR)
       const usdPrice = priceStore.adaUsd?.lastPrice || 0;
       token.price = convertFiat(usdPrice);
-      let coinGeckoCurrency = 'cardano';
-      if (token.name === 'Cardano') {
-        coinGeckoCurrency = 'cardano';
-      } else if (token.name === 'Apex Fusion') {
-        coinGeckoCurrency = 'apex-4';
-        token.price = convertFiat(coinGeckoMetric('apex-4', 'usd'));
-      }
-      token.mcap = convertFiat(coinGeckoMetric(coinGeckoCurrency, 'usd_market_cap'));
+      token.mcap = convertFiat(coinGeckoMetric('cardano', 'usd_market_cap'));
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );

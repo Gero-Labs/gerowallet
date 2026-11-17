@@ -61,12 +61,28 @@
     <!-- The bell's inbox (B-M3): the dashboard's notification centre in a sheet. Rows route on
          the panel's router where a page exists and hand over to the full dashboard otherwise. -->
     <BottomSheet v-model="showNotifications" height="85%">
-      <NotifyInbox surface="sidepanel" :open="showNotifications" @close="showNotifications = false" @settings="openDashboardSettings('notifications')" />
+      <NotifyInbox
+        surface="sidepanel"
+        :open="showNotifications"
+        :legacy-count="legacyCount"
+        @close="showNotifications = false"
+        @legacy="openDashboardCollectibles()"
+        @settings="openDashboardSettings('notifications')"
+      />
     </BottomSheet>
+
+    <!-- A broadcast announcement in full: opened from the inbox, a snackbar or `?announcement=<id>`. -->
+    <AnnouncementSheet v-if="hasActiveWallet && !isLocked" />
 
     <!-- Global, so every hardware-wallet signing path gets the "continue on
          your device" prompt without each sheet re-declaring it. -->
     <HardwareSignPrompt />
+    <!-- One-time "Restart your local proof server" notice (proofServerRestartNotice.ts),
+         here too for people who only use the side panel; waits behind the open sheets. -->
+    <ProofServerRestartNotice
+      v-if="hasActiveWallet && !isLocked"
+      :suppressed="showWalletSwitcher || showNotifications || dappRequestPending || announcementOpen"
+    />
     <!-- In-app toast for a push that arrives while the panel is focused (B8). -->
 
   </v-app>
@@ -78,6 +94,7 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import ProofServerRestartNotice from '@/modules/midnight/ProofServerRestartNotice.vue';
 import MiniLayout from './layouts/MiniLayout.vue';
 import NoWalletScreen from './components/NoWalletScreen.vue';
 import WalletSelector from './components/WalletSelector.vue';
@@ -85,11 +102,16 @@ import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
-import { initDappRequestHub } from './services/dappRequestHub';
+import AnnouncementSheet from './components/AnnouncementSheet.vue';
+import { announcementsStore } from '@/stores/announcementsStore';
+import { hub, initDappRequestHub } from './services/dappRequestHub';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
+import { useLegacyListings } from '@/shared/composables/useLegacyListings';
+import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
@@ -110,13 +132,25 @@ initDappRequestHub();
 
 const showWalletSwitcher = ref(false);
 const showNotifications = ref(false);
+// Items stuck on a closed marketplace (NFT rescue): the inbox's "Needs you" row. Calling the
+// composable here starts its lookup with the panel; opening the sheet asks again (it also retries
+// a failed lookup). The lookup is off (count 0) unless the isNftMarketEnabled flag is on and the
+// logged wallet is Cardano mainnet.
+const { count: legacyCount, refresh: refreshLegacyListings } = useLegacyListings();
+watch(showNotifications, (isOpen) => { if (isOpen) void refreshLegacyListings(); });
 // When set, a full-screen pre-switch unlock overlay is shown for this target MPC
 // wallet — we authenticate it (Google + passkey/password) BEFORE switching, so the
 // current wallet stays active until the switch actually completes.
 const pendingSwitchWallet = ref<Wallet | null>(null);
 
-const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
+// The same rule as the wallet list this screen then shows (WalletSelector): a
+// stored wallet the list hides must not count as "a wallet exists".
+const { hasWallets } = useAvailableWallets();
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
+/** A DApp request is waiting for approval: the restart notice never opens over it. */
+const dappRequestPending = computed(() => !!hub.currentRequest.value || hub.requestQueue.value.length > 0);
+// An announcement opened in full (AnnouncementSheet): the notice waits behind it too.
+const announcementOpen = computed(() => announcementsStore.state.openId !== null);
 const isLocked = computed(() => walletStore.isLocked);
 // No Gero Companion dock here by design: the mini panel is ~360px of
 // single-purpose surface, and a fixed FAB parked over it covered the very
@@ -208,6 +242,16 @@ async function onWalletSwitch(wallet: Wallet) {
 async function onSwitchUnlocked(wallet: Wallet) {
   pendingSwitchWallet.value = null;
   await doLogin(wallet);
+}
+
+/**
+ * The inbox row for stuck items: the card that gets them back lives on the full dashboard, at
+ * Portfolio -> Collectibles. An open dashboard tab is sent there too (forceNavigate), since the
+ * whole point of the click is to land on that view.
+ */
+function openDashboardCollectibles() {
+  showNotifications.value = false;
+  void openFullDashboard('#/?view=collectibles', true);
 }
 
 /** Open the full dashboard's settings dialog, on a given tab when asked (the bell's Settings link). */

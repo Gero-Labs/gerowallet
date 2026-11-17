@@ -163,7 +163,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'submitted']);
 
 const { loggedWallet, account } = toRefs(walletStore);
 const { epochParams } = toRefs(networkStore);
@@ -199,7 +199,10 @@ const {
   successMessageKey: 'staking.unstakeTxSubmitted',
   // Unstake sweeps outstanding rewards — zero the local balance so a second
   // withdrawal/send before the next account sync doesn't re-attach it (issue 941)
-  onSuccess: () => clearWithdrawableAmount(),
+  onSuccess: () => {
+    clearWithdrawableAmount();
+    emit('submitted');
+  },
   onClose: () => emit('close'),
 });
 

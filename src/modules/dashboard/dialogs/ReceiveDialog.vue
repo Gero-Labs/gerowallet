@@ -273,6 +273,7 @@ import networks from '@/utils/networks';
 import { Blockchain, Network, type Key } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { debugLog } from '@/utils/debug';
+import { solanaAccountPath } from '@/chains/solana/solanaPaths';
 
 interface Segment {
   id: string;
@@ -304,7 +305,8 @@ const { loggedWallet, keys } = toRefs(walletStore);
 
 const isBitcoinWallet = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 const isMidnightWallet = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
-const isCardanoWallet = computed(() => !isBitcoinWallet.value && !isMidnightWallet.value);
+const isSolanaWallet = computed(() => loggedWallet.value?.chain === Blockchain.SOLANA);
+const isCardanoWallet = computed(() => !isBitcoinWallet.value && !isMidnightWallet.value && !isSolanaWallet.value);
 
 const ticker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
 
@@ -355,7 +357,7 @@ const activeDrepFormat = computed<DrepFormat | undefined>(() =>
 );
 
 const segments = computed<Segment[]>(() => {
-  if (isBitcoinWallet.value) {
+  if (isBitcoinWallet.value || isSolanaWallet.value) {
     return [];
   }
   if (isMidnightWallet.value) {
@@ -376,7 +378,7 @@ const segments = computed<Segment[]>(() => {
   return list;
 });
 
-const activeSegment = computed(() => (isBitcoinWallet.value ? bitcoinAddressType.value : selected.value));
+const activeSegment = computed(() => (isBitcoinWallet.value ? bitcoinAddressType.value : isSolanaWallet.value ? 'address' : selected.value));
 
 function selectSegment(id: string): void {
   selected.value = id;
@@ -386,7 +388,7 @@ function selectSegment(id: string): void {
 // or the wallet switches). Fall back to the first tab rather than keep a
 // selection nothing on screen represents.
 watch(segments, (list) => {
-  if (isBitcoinWallet.value || !list.length) return;
+  if (isBitcoinWallet.value || isSolanaWallet.value || !list.length) return;
   if (!list.some((segment) => segment.id === selected.value)) {
     selected.value = list[0].id;
   }
@@ -482,6 +484,15 @@ const target = computed<ReceiveTarget>(() => {
       hint: bitcoinAddressTypeDescription.value,
       // This account's own path: coin type 1 off Mainnet, and its account index.
       path: `m/${bitcoinDerivationPurpose.value}'/${loggedWallet.value?.network === Network.MAINNET ? 0 : 1}'/${loggedWallet.value?.accountIndex ?? 0}'/0/${bitcoinAddressIndex.value}`,
+    };
+  }
+  if (isSolanaWallet.value) {
+    // One address per account: the record's public key, at m/44'/501'/account'/0'.
+    return {
+      label: t('wallet.address'),
+      value: loggedWallet.value?.publicKey ?? '',
+      hint: t('solana.receiveInfo', { ticker: ticker.value }),
+      path: solanaAccountPath(loggedWallet.value?.accountIndex ?? 0),
     };
   }
   return isMidnightWallet.value ? midnightTarget() : cardanoTarget();
@@ -599,8 +610,8 @@ function nextBitcoinAddress(): void {
 
 // ---- QR -------------------------------------------------------------------------
 
-// QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
-const qrLogo = computed(() => assets.resolveChainLogo(loggedWallet.value?.chain));
+// QR-center Gero logo.
+const qrLogo = computed(() => assets.geroLogo);
 
 // Bitcoin encodes a BIP21 URI so the optional amount and label travel with it.
 const qrData = computed(() => {
@@ -653,7 +664,7 @@ function renderQr(): void {
 // Saves a print-size PNG rather than the 192px on-screen render.
 function saveQr(): void {
   if (!qrData.value) return;
-  const chain = isBitcoinWallet.value ? 'bitcoin' : isMidnightWallet.value ? 'midnight' : 'cardano';
+  const chain = isBitcoinWallet.value ? 'bitcoin' : isMidnightWallet.value ? 'midnight' : isSolanaWallet.value ? 'solana' : 'cardano';
   new QRCodeStyling(qrOptions(QR_EXPORT_SIZE, qrData.value))
     .download({ name: `gero-${chain}-${activeSegment.value}-qr`, extension: 'png' })
     .catch((error) => debugLog('Receive: QR download failed', error));

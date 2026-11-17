@@ -109,7 +109,6 @@ export async function buildCardanoTransaction({
   walletContext?: {
     /** `Keys | null` because callers pass the store's nullable keys straight through. */
     keys: Keys | null;
-    stakeAddress: string;
   };
   auxiliaryData?: Cardano.AuxiliaryData;
   excludeCollateral?: boolean;

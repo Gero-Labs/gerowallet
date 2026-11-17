@@ -34,6 +34,24 @@
           </span>
         </button>
 
+        <!-- A live registration short of a fee's worth of DUST: its balance is
+             known, so it is shown, but it can't be chosen until it charges. -->
+        <template v-if="charging.length">
+          <div class="fwd-group">{{ t('midnight.sponsor.charging') }}</div>
+          <div v-for="c in charging" :key="c.walletId" class="fwd-row fwd-row--off">
+            <span class="av">{{ initials(c.name) }}</span>
+            <span class="fwd-id">
+              <span class="fwd-name">{{ c.name }}</span>
+              <span class="fwd-net">{{ network }}</span>
+            </span>
+            <span class="grow"></span>
+            <span class="fwd-num g-num">
+              <span>{{ amount(c) }}</span>
+              <span class="fwd-pct">{{ pctLabel(c) }}</span>
+            </span>
+          </div>
+        </template>
+
         <template v-if="unchecked.length">
           <div class="fwd-group">{{ t('midnight.sponsor.notChecked') }}</div>
           <div v-for="c in unchecked" :key="c.walletId" class="fwd-row fwd-row--off">
@@ -47,7 +65,7 @@
           </div>
         </template>
 
-        <div v-if="!ready.length && !unchecked.length" class="fwd-state">
+        <div v-if="!ready.length && !charging.length && !unchecked.length" class="fwd-state">
           {{ t('midnight.sponsor.noneFound') }}
         </div>
 
@@ -96,7 +114,9 @@
  * Eligibility is resolved from live cNIGHT registrations, never from a battery
  * reading — see `midnightSponsorEligibility` for why that distinction is
  * load-bearing. Wallets whose DUST has not been read are listed as "not
- * checked", never as empty, and are not selectable.
+ * checked", never as empty, and are not selectable. Wallets a live registration
+ * pays into but holding less than a fee's worth of DUST are listed as charging,
+ * with their balance, and are not selectable either.
  */
 import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -133,7 +153,9 @@ const selected = ref<number | null>(null);
 const hasLink = ref(false);
 
 const ready = computed(() => candidates.value.filter((c) => c.state === 'ready'));
-const unchecked = computed(() => candidates.value.filter((c) => c.state !== 'ready'));
+/** Relaying with a known capacity: a live registration still charging toward a fee. */
+const charging = computed(() => candidates.value.filter((c) => c.state === 'relaying' && c.capacity != null));
+const unchecked = computed(() => candidates.value.filter((c) => c.state !== 'ready' && !charging.value.includes(c)));
 const selectedName = computed(() => ready.value.find((c) => c.walletId === selected.value)?.name ?? '');
 
 const dustTicker = computed(() => (props.network === 'Mainnet' ? 'DUST' : 'tDUST'));

@@ -16,28 +16,23 @@
  */
 import { computed, toRefs } from 'vue';
 import { tokenRowKey } from '@/shared/utils/tokenRowKey';
-import { walletStore, totalProgrammableLockedLovelace } from '@/stores/walletStore';
+import { walletStore, totalProgrammableLockedLovelace, totalListedLockedLovelace } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
-import { Blockchain } from '@/models/types';
 import { getBalance } from '@/chrome/serialization';
 import type { Cardano } from '@cardano-sdk/core';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { isRealFiAsset } from '@/modules/realfi/assets';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 export function useHoldingsValuation() {
-  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
+  const { utxos, collateral, tokens: walletTokens, programmableTokens } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
-
-  const isApex = computed(() =>
-    loggedWallet.value?.chain === Blockchain.APEX_PRIME
-    || loggedWallet.value?.chain === Blockchain.APEX_VECTOR,
-  );
+  const { t } = useTranslation();
 
   /** ADA (or native) balance from the UTxO set, in whole coins. */
   const adaBalance = computed(() => {
@@ -51,9 +46,6 @@ export function useHoldingsValuation() {
    * (market-API lovelace price first — same source as holdings rows).
    */
   const nativePriceUsd = computed(() => {
-    if (isApex.value) {
-      return coinGeckoStore.cache['apex-4']?.usd ?? 0;
-    }
     const marketAdaPrice = allTokens.value.find(t => t.unit === 'lovelace')?.price;
     return marketAdaPrice || 0;
   });
@@ -64,16 +56,14 @@ export function useHoldingsValuation() {
    */
   const holdings = computed<MarketToken[]>(() => {
     const tokens = walletTokens.value || {};
-    const adaPriceUsd = isApex.value
-      ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
-      : (priceStore.adaUsd?.lastPrice || 0);
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
     const dhTokens = tokenMetadataStore.tokens || {};
     const rows: MarketToken[] = [];
 
     // Programmable tokens live in their own store map so nothing that selects
     // transaction inputs can reach them; merged here because this composable is the
     // one place both the dashboard and mini-Gero read holdings from.
-    type HoldingEntry = [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }, boolean];
+    type HoldingEntry = [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }, boolean, boolean?];
     const entries: HoldingEntry[] = [
       ...Object.entries(tokens).map(([unit, token]) => [unit, token, false] as HoldingEntry),
       ...Object.entries(programmableTokens.value || {}).map(([unit, token]) => [unit, token, true] as HoldingEntry),
@@ -93,7 +83,19 @@ export function useHoldingsValuation() {
       }, true] as HoldingEntry);
     }
 
-    entries.forEach(([unit, token, isProgrammable]: HoldingEntry) => {
+    // ADA held by the wallet's own Gero listings (their deposits): the user's as well, and just
+    // as unspendable until the listing is bought or cancelled. Its own row ('lovelace#listed'),
+    // kept apart from the spendable row and from the CIP-113 one, at the native price.
+    const listedLovelace = Number(totalListedLockedLovelace());
+    if (listedLovelace > 0) {
+      entries.push(['lovelace', {
+        quantity: listedLovelace,
+        name: nativeCurrencyName.value,
+        metadata: { name: nativeCurrencyName.value, ticker: nativeCurrencyTicker.value, decimals: 6 },
+      }, false, true] as HoldingEntry);
+    }
+
+    entries.forEach(([unit, token, isProgrammable, isListed = false]: HoldingEntry) => {
       if (!token.quantity || Number(token.quantity) <= 0) return;
 
       // Find in market data for enrichment
@@ -145,7 +147,11 @@ export function useHoldingsValuation() {
 
       rows.push({
         unit,
-        name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
+        // The ADA in the wallet's own listings is a second ADA row beside the spendable one: it says
+        // what it is, wherever a holdings row renders its name.
+        name: isListed
+          ? t('nftMarket.holdings.listedAda')
+          : marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
         // The table renders `ticker` as the row label, so an empty one leaves a
         // nameless row. Tokens with no registry entry and no market data have none,
         // so fall back to the asset name resolveAsset() already decoded.
@@ -171,8 +177,9 @@ export function useHoldingsValuation() {
         // Same for Solada graduates.
         isSolada: marketToken?.isSolada ?? false,
         isProgrammable,
+        isListed,
         cip113Registered,
-        rowKey: tokenRowKey(unit, isProgrammable),
+        rowKey: tokenRowKey(unit, isProgrammable, isListed),
         isScam: (token as { isScam?: boolean }).isScam ?? false,
         price: priceUsd,
         priceAda,
@@ -226,5 +233,5 @@ export function useHoldingsValuation() {
     return { ada: totalAda, usd: totalUsd, eur: totalEur };
   });
 
-  return { holdings, totals, nativePriceUsd, adaBalance, isApex };
+  return { holdings, totals, nativePriceUsd, adaBalance };
 }

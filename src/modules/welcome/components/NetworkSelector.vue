@@ -3,29 +3,24 @@
     <!-- Blockchain family -->
     <div class="t-label mb-2">{{ $t('welcome.blockchain') }}</div>
     <div class="chain-row" :class="{ 'mb-3': devMode }">
-      <template :key="'break-' + idx" v-for="(fam, idx) in families">
-        <!-- Force the Apex chains onto a second row → 3 (Cardano/Midnight/Bitcoin) + 2 (Apex Prime/Vector) -->
-        <div
-          v-if="idx > 0 && fam.name.includes('Apex') && !families[idx - 1].name.includes('Apex')"
-          class="chain-row__break"
-        ></div>
-        <button
-          type="button"
-          class="chain-tile glass-tier"
-          :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': !isFamilySelectable(fam) }"
-          :disabled="!isFamilySelectable(fam)"
-          @click="selectFamily(fam)"
-        >
-          <v-avatar size="26" class="chain-tile__icon">
-            <v-img :src="fam.icon" ></v-img>
-          </v-avatar>
-          <span class="chain-tile__label t-body">{{ fam.name }}</span>
-          <span v-if="!isFamilySelectable(fam)" class="chain-tile__ribbon">
-            <span class="chain-tile__fold"><span /></span>
-            <span class="chain-tile__face"><span>{{ $t('welcome.soon') }}</span></span>
-          </span>
-        </button>
-      </template>
+      <button
+        v-for="fam in families"
+        :key="fam.name"
+        type="button"
+        class="chain-tile glass-tier"
+        :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': !isFamilySelectable(fam) }"
+        :disabled="!isFamilySelectable(fam)"
+        @click="selectFamily(fam)"
+      >
+        <v-avatar size="26" class="chain-tile__icon">
+          <v-img :src="fam.icon" ></v-img>
+        </v-avatar>
+        <span class="chain-tile__label t-body">{{ fam.name }}</span>
+        <span v-if="!isFamilySelectable(fam)" class="chain-tile__ribbon">
+          <span class="chain-tile__fold"><span /></span>
+          <span class="chain-tile__face"><span>{{ $t('welcome.soon') }}</span></span>
+        </span>
+      </button>
     </div>
 
     <!-- Network within the chosen family — dev only -->
@@ -66,13 +61,15 @@ const props = defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{ (e: 'change', n: NetworkInfo): void }>();
 
 // One family per blockchain. The blockchain enum values are already display
-// names (e.g. "Apex Fusion Prime", "Apex Fusion Vector", "Cardano").
+// names (e.g. "Cardano", "Bitcoin", "Midnight").
 const familyName = (blockchain: string): string => blockchain;
 
 const families = computed<Family[]>(() => {
   const order: string[] = [];
   const map = new Map<string, Family>();
   for (const n of networks.networks) {
+    // Solana is not announced: while isSolanaEnabled is off it has no tile at all.
+    if (n.blockchain === Blockchain.SOLANA && !featureFlagsStore.isSolanaEnabled()) continue;
     const name = familyName(n.blockchain);
     if (!map.has(name)) {
       map.set(name, { name, icon: n.icon, nets: [], comingSoon: true });
@@ -82,9 +79,7 @@ const families = computed<Family[]>(() => {
     fam.nets.push(n);
     if (!n.comingSoon) fam.comingSoon = false;
   }
-  // Non-Apex chains first (Cardano / Bitcoin / Midnight), Apex chains second.
-  const list = order.map(k => map.get(k)!);
-  return [...list.filter(f => !f.name.includes('Apex')), ...list.filter(f => f.name.includes('Apex'))];
+  return order.map(k => map.get(k)!);
 });
 
 const activeFamily = computed<string>(() => familyName(props.network?.blockchain || ''));
@@ -107,8 +102,7 @@ const isFamilySelectable = (fam: Family): boolean => {
 const isNetActive = (net: NetworkInfo): boolean =>
   props.network?.blockchain === net.blockchain && props.network?.network === net.network;
 
-// Strip the family prefix so labels stay short: "Cardano Mainnet" -> "Mainnet",
-// "Apex Prime Mainnet" -> "Prime Mainnet".
+// Strip the family prefix so labels stay short: "Cardano Mainnet" -> "Mainnet".
 const optionLabel = (net: NetworkInfo): string => {
   const fam = familyName(net.blockchain);
   return net.title.startsWith(fam + ' ') ? net.title.slice(fam.length + 1) : (net.title || net.network);
@@ -156,14 +150,6 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: var(--g-s-2);
-}
-
-/* Zero-size full-width flex item: forces everything after it onto a new line
-   (used to split non-Apex chains from the Apex chains → 3 + 2 rows). */
-.chain-row__break {
-  flex-basis: 100%;
-  width: 100%;
-  height: 0;
 }
 
 .chain-tile {

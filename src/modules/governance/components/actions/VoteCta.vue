@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, onMounted, toRefs } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
@@ -32,11 +32,18 @@ const props = defineProps({
 defineEmits(['vote']);
 
 const { keys, transactions: txs } = toRefs(walletStore);
-const { capability } = useVoting();
+const { capability, isRegisteredDrep, loadDrepRegistration } = useVoting();
 
 // drep129 is an array like every other key list; a watch wallet has an empty
 // one — guard it, never index blindly (same guard the DRep views use).
 const drepId = computed(() => keys.value?.drep129?.[0]?.address ?? '');
+
+// Every software wallet derives a DRep key, so the key alone is not enough:
+// the node rejects votes from a DRep that is not registered on chain (issue 1091).
+// Looked up on each mount, so registering and coming back enables the button.
+onMounted(() => {
+  void loadDrepRegistration();
+});
 
 const visible = computed(
   () =>
@@ -63,14 +70,14 @@ const voteTxIsPending = computed(() => {
 });
 
 const canVoteNow = computed(
-  () => !!drepId.value && capability.value.canVote && !voteTxIsPending.value,
+  () => !!drepId.value && isRegisteredDrep.value && capability.value.canVote && !voteTxIsPending.value,
 );
 
 /** Why the button is disabled, translated — empty when it is enabled. */
 const reason = computed(() => {
   if (canVoteNow.value) return '';
   if (voteTxIsPending.value) return String(t('governance.votePending'));
-  if (!drepId.value) return String(t('governance.drepRequiredToVote'));
+  if (!drepId.value || !isRegisteredDrep.value) return String(t('governance.drepRequiredToVote'));
   return String(t(capability.value.reasonKey || 'governance.watchWalletReadOnly'));
 });
 </script>

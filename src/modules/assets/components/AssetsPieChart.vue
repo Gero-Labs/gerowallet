@@ -85,7 +85,7 @@ const computedColors = computed(() => {
 
 const theme = useTheme();
 
-const chartOptions = computed(() => {
+const chartOptions = computed((): Highcharts.Options | null => {
   // Don't render chart while wallet is loading to prevent flickering
   if (loading.value) {
     return null
@@ -176,8 +176,7 @@ const chartOptions = computed(() => {
     colors: computedColors.value,
     series: [
       {
-        // name: 'Percentage',
-        colorByPoint: true,
+        type: 'pie',
         data: filteredChartData.value,
         dataLabels: {
           color: theme.current.value.dark ? '#FFF' : '#000',
@@ -187,7 +186,7 @@ const chartOptions = computed(() => {
         },
       },
     ],
-    useUTC: true,
+    time: { useUTC: true },
   }
 })
 </script>

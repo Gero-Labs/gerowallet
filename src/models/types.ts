@@ -70,6 +70,17 @@ export interface Wallet {
    * cleared at login by applyPendingBackupRecheck(). Non-indexed: no new index.
    */
   backupRecheckPending?: boolean;
+  /**
+   * Keystone (Cardano and Bitcoin): the firmware version the device reported when it was
+   * paired, e.g. "3.2.0". Firmware 1.7.2 and later report it; older firmware answers with
+   * a fixed "1.1.0", which keystoneFirmwareVersion() does not record. A Keystone paired
+   * before Gero recorded it, or a Bitcoin account exported as a lone crypto-hdkey, has
+   * none. Pairing the same device again is refused but refreshes it on every Keystone record
+   * of that seed (createNewHardwareWallet), so a Keystone updated since it was paired can
+   * report its new version. Two Keystones holding one seed share it: it is the version the
+   * one last paired reported. Non-indexed: no schema bump.
+   */
+  firmwareVersion?: string;
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
   mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
   mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)
@@ -129,6 +140,7 @@ const CoinTypes = {
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
   BITCOIN: HARDENED + 0, // HARD_DERIVATION_START + 0 (Bitcoin BIP44 coin type);
   MIDNIGHT: HARDENED + coin_type.midnight, // HARD_DERIVATION_START + 2400 (Midnight BIP44 coin type)
+  SOLANA: HARDENED + 501, // SLIP-44 coin type 501 (src/chains/solana/solanaPaths.ts)
 };
 
 const BIP44_SCAN_SIZE = 20;
@@ -152,10 +164,10 @@ enum Provider {
 
 const Blockchain = {
   CARDANO: 'Cardano',
-  APEX_PRIME: 'Apex Fusion Prime',
-  APEX_VECTOR: 'Apex Fusion Vector',
   BITCOIN: 'Bitcoin',
   MIDNIGHT: 'Midnight',
+  // Gated by `isSolanaEnabled` (default off). The key is the Gero Sync wire name ('SOLANA').
+  SOLANA: 'Solana',
 };
 
 const Network = {
@@ -166,6 +178,8 @@ const Network = {
   // Midnight-only. Nexus retired `midnight-preview` on 2026-09-06; stagenet is
   // the network that replaced it. No Cardano network carries this name.
   STAGENET: 'Stagenet',
+  // Solana-only. Solana mainnet uses MAINNET; no Cardano network carries this name.
+  DEVNET: 'Devnet',
 };
 
 const ERROR = {

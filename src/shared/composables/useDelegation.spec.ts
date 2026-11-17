@@ -186,6 +186,75 @@ describe('stake transaction registration preflight', () => {
     expect(delegation.isDialogOpen.value).toBe(false);
   });
 
+  describe('separate certificates for a Ledger wallet (issue 1431)', () => {
+    const abstain = { __typename: 'AlwaysAbstain' };
+    const registration = { __typename: Cardano.CertificateType.Registration, stakeCredential: credential, deposit: 2000000n };
+    const poolDelegation = { __typename: Cardano.CertificateType.StakeDelegation, stakeCredential: credential, poolId };
+    const voteDelegation = (dRep: unknown) => ({ __typename: Cardano.CertificateType.VoteDelegation, stakeCredential: credential, dRep });
+    const UNREGISTERED = { active: false, pool_id: null, drep_id: null };
+    const NO_DREP = { active: true, pool_id: 'pool1existing', drep_id: null };
+
+    beforeEach(() => {
+      walletStore.loggedWallet.type = WalletType.Ledger;
+    });
+
+    it.each([[UNREGISTERED, true], [NO_DREP, false]])('asks Nexus for separate pool + vote certificates: %j', async (account, includeStakeRegistration) => {
+      fresh(account);
+      await useDelegation().delegate({ pool_id_bech32: poolId });
+      expect(nexusTxApi.buildVoteDelegationTx).toHaveBeenCalledWith(expect.objectContaining({
+        poolId, drepId: 'drep_always_abstain', includeStakeRegistration, certificateEncoding: 'separate',
+      }), Network.PREPROD);
+    });
+
+    it('keeps combined Nexus certificates for a software wallet', async () => {
+      walletStore.loggedWallet.type = WalletType.Normal;
+      fresh(UNREGISTERED);
+      await useDelegation().delegate({ pool_id_bech32: poolId });
+      expect(vi.mocked(nexusTxApi.buildVoteDelegationTx).mock.calls[0][0].certificateEncoding).toBeUndefined();
+    });
+
+    it.each([
+      [UNREGISTERED, 2000000n, [registration, poolDelegation, voteDelegation(abstain)]],
+      [NO_DREP, 0n, [poolDelegation, voteDelegation(abstain)]],
+      [{ active: true, pool_id: 'pool1existing', drep_id: 'drep_always_abstain' }, 0n, [poolDelegation]],
+    ])('builds separate certificates locally: %j', async (account, implicitCoin, certificates) => {
+      fresh(account);
+      vi.mocked(featureFlagsStore.isNexusDelegateEnabled).mockReturnValue(false);
+      await useDelegation().delegate({ pool_id_bech32: poolId });
+      expect(buildCardanoTransaction).toHaveBeenCalledWith(expect.objectContaining({ implicitCoin, certificates }));
+    });
+
+    it('asks Nexus for a separate registration + vote delegation to a DRep', async () => {
+      fresh(UNREGISTERED);
+      await useDRepDelegation().delegateToPredefined('abstain');
+      expect(nexusTxApi.buildVoteDelegationTx).toHaveBeenCalledWith(expect.objectContaining({
+        drepId: 'drep_always_abstain', includeStakeRegistration: true, certificateEncoding: 'separate',
+      }), Network.PREPROD);
+      expect(vi.mocked(nexusTxApi.buildVoteDelegationTx).mock.calls[0][0].poolId).toBeUndefined();
+    });
+
+    it.each([WalletType.Ledger, WalletType.Trezor])('registers separately before a %s DRep delegation built locally', async type => {
+      walletStore.loggedWallet.type = type;
+      fresh(UNREGISTERED);
+      vi.mocked(featureFlagsStore.isNexusVoteDelegationEnabled).mockReturnValue(false);
+      await useDRepDelegation().delegateToPredefined('noConfidence');
+      expect(buildCardanoTransaction).toHaveBeenCalledWith(expect.objectContaining({
+        implicitCoin: 2000000n, certificates: [registration, voteDelegation({ __typename: 'AlwaysNoConfidence' })],
+      }));
+    });
+
+    it('keeps the combined registration + vote delegation for a software wallet built locally', async () => {
+      walletStore.loggedWallet.type = WalletType.Normal;
+      fresh(UNREGISTERED);
+      vi.mocked(featureFlagsStore.isNexusVoteDelegationEnabled).mockReturnValue(false);
+      await useDRepDelegation().delegateToPredefined('abstain');
+      expect(buildCardanoTransaction).toHaveBeenCalledWith(expect.objectContaining({
+        implicitCoin: 2000000n,
+        certificates: [{ __typename: Cardano.CertificateType.VoteRegistrationDelegation, stakeCredential: credential, dRep: abstain, deposit: 2000000n }],
+      }));
+    });
+  });
+
   it.each([true, false])('discards unstaking after a wallet switch during the %s Nexus build', async nexus => {
     vi.mocked(featureFlagsStore.isNexusUnstakeEnabled).mockReturnValue(nexus);
     const switchWallet = async () => {

@@ -4,26 +4,26 @@ Gero is multi-chain by a runtime data table plus explicit per-chain branches, **
 
 ## The table
 
-`src/utils/networks.ts` (there is no `src/config/networks*`) holds 10 entries keyed by `(blockchain, network)`: Cardano Mainnet/Preprod/Preview, Apex Prime Mainnet, Apex Vector Mainnet, Bitcoin Mainnet/Testnet4, Midnight Stagenet/Preprod/Mainnet. Each carries a flat boolean capability matrix, protocol params, currency metadata and a default provider, read through 28 `resolve*(chain, network)` helpers, 17 of them boolean capability gates (`resolveStakingSupport`, `resolveSwapSupport`, ...).
+`src/utils/networks.ts` (there is no `src/config/networks*`) holds 8 entries keyed by `(blockchain, network)`: Cardano Mainnet/Preprod/Preview, Bitcoin Mainnet/Testnet4, Midnight Stagenet/Preprod/Mainnet. Each carries a flat boolean capability matrix, protocol params, currency metadata and a default provider, read through 28 `resolve*(chain, network)` helpers, 17 of them boolean capability gates (`resolveStakingSupport`, `resolveSwapSupport`, ...).
 
 `resolveNetwork(chain, network)` returns `undefined` for an unknown pair, and every caller must handle that.
 
 ## Two type traps
 
-**`Blockchain` and `Network` are const objects of display strings, not enums.** `CARDANO = 'Cardano'`, `APEX_PRIME = 'Apex Fusion Prime'`, `APEX_VECTOR = 'Apex Fusion Vector'`, `BITCOIN = 'Bitcoin'`, `MIDNIGHT = 'Midnight'`. Consequences:
+**`Blockchain` and `Network` are const objects of display strings, not enums.** `CARDANO = 'Cardano'`, `BITCOIN = 'Bitcoin'`, `MIDNIGHT = 'Midnight'`. Consequences:
 
 - `switch (chain)` is **never exhaustiveness-checked**. A new chain silently falls into whatever `default:` the switch happens to have, with no compile error. Most default to Cardano; two do not - `getExplorerUrl()` in `src/shared/utils/explorer.ts` returns `''` (which is why Midnight explorer links render empty) and `getDefaultAddressType()` in `src/db/gero-db.ts` returns `'unknown'`. Grep every `switch` on a chain when adding one.
-- Comparing against literals is a live bug source. `'Apex Prime'` is not a value; the real one is `'Apex Fusion Prime'`. Always compare against `Blockchain.APEX_PRIME`.
+- Comparing against literals is a live bug source: a string that is not exactly the display value never matches. Always compare against the `Blockchain.*` member.
 - **The wire protocol does not use these strings.** Every backend and WebSocket call reverse-looks-up the uppercase enum key: `Object.keys(Blockchain).find(k => Blockchain[k] === chain)` -> `'CARDANO'`/`'BITCOIN'`/`'MIDNIGHT'`. Sending the display string gives a backend 4xx or a gero-sync close.
 
-**The networks array ends `] as NetworkInfo[]`**, and that type assertion disables both excess-property and missing-property checking. A typo'd capability field compiles and sits dead forever (`zkFoldSupport` is doing exactly that today), and a new field you forget on one entry is `undefined`, not a compile error. Add the field to the interface, set it on all ten entries, add the resolver, then grep to confirm.
+**The networks array ends `] as NetworkInfo[]`**, and that type assertion disables both excess-property and missing-property checking. A typo'd capability field compiles and sits dead forever (`zkFoldSupport` is doing exactly that today), and a new field you forget on one entry is `undefined`, not a compile error. Add the field to the interface, set it on all eight entries, add the resolver, then grep to confirm.
 
 ## Where the three diverge
 
-| | Cardano / Apex | Bitcoin | Midnight |
+| | Cardano | Bitcoin | Midnight |
 |---|---|---|---|
 | Code location | `src/chrome/serialization.ts`, `cardanoJsSdkCbor.ts`, `src/services/sync.service.ts`, `src/api/` - **there is no `src/chains/cardano`** | `src/chains/bitcoin/` | `src/chains/midnight/` |
-| Derivation | CIP-1852, one path shared by Cardano and both Apex chains | BIP44/84/86 by `addressType` (segwit default), coinType 0 / 1 | `m/44'/2400'/account'/role/index`, 5 roles, three bech32m addresses stored as JSON in `wallet.publicKey` |
+| Derivation | CIP-1852 | BIP44/84/86 by `addressType` (segwit default), coinType 0 / 1 | `m/44'/2400'/account'/role/index`, 5 roles, three bech32m addresses stored as JSON in `wallet.publicKey` |
 | Sync | `SyncService` + gero-sync Cardano SUBSCRIBE | gero-sync WS (address-set SUBSCRIBE) with an Esplora poller fallback | `midnightSyncService` over the same socket, with `midnight-<network>` slugs |
 | Tx build | Mostly **server-side via Nexus**; local `@cardano-sdk` builder is the minority path | PSBT via bitcoinjs-lib, four coin-selection strategies | Nexus builds the unproven tx; the wallet proves and balances |
 | Signing key | Decrypts `encryptedPrivateKey` | Decrypts the **mnemonic** and re-derives every time | Decrypts the **mnemonic** and re-derives every time |
@@ -56,9 +56,9 @@ Per-chain visual assets are switched by a literal `switch (loggedWallet.chain)` 
 
 Four places at once, or you get a runtime throw rather than a graceful degrade:
 
-`src/utils/networks.ts`, `MIDNIGHT_NETWORK_ENDPOINTS`, `midnightLedgerVersion()`'s switch, and `midnightKeyManager`'s `midnightNetworkId` switch - plus `toGeroSyncMidnightNetwork` if it needs live push.
+`src/utils/networks.ts`, `MIDNIGHT_NETWORK_ENDPOINTS`, and `midnightKeyManager`'s `midnightNetworkId` switch - plus `toGeroSyncMidnightNetwork` if it needs live push.
 
-Midnight runs **two incompatible ledger generations selected purely by network**: Mainnet/Preprod use ledger 8, Stagenet uses ledger 9, reached through different npm packages via package.json aliases. `midnightLedgerVersion(network)` is the single dispatcher and throws on anything else.
+Midnight has **two incompatible ledger generations, chosen by the chain, never by the network name**: a chain reporting protocol version `>= 2000000` runs ledger 9 (mainnet, preprod and Preview all do now; preprod moved in place). `resolveMidnightChain(network)` (`midnightChainLedger.ts`) reads it from the indexer; `midnightLedgerVersion(network)` returns the last read and throws `MidnightLedgerUnknownError` before one. Ledger 9 code uses `@midnightntwrk/ledger-v9` and wallet SDK 2's `/v2` subpaths under the `midnight-v9-*` aliases; the ledger 8 modules use `@midnight-ntwrk/ledger-v8` with SDK 1.x.
 
 ## Not everything is proxied
 

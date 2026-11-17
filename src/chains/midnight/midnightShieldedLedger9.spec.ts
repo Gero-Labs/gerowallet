@@ -1,17 +1,18 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-shielded/v1';
+import { CoreWallet, CoinsAndBalances, Keys, Transacting } from 'midnight-v9-shielded/v2';
 import { ShieldedAddress, ShieldedCoinPublicKey, ShieldedEncryptionPublicKey } from 'midnight-v9-address-format';
 import { buildAndSignShieldedLedger9Transfer } from './midnightShieldedLedger9';
 import { buildAndSignShield } from './midnightShieldSwapBuilder';
 import type { BuildAndSignShieldedTransferArgs } from './midnightShieldedBuilder';
+import { LEDGER8_PROTOCOL_VERSION, LEDGER9_PROTOCOL_VERSION_SAMPLE, useMidnightChains } from '@test/helpers/midnightChains';
 
 const mocks = vi.hoisted(() => ({
-  factory: vi.fn(), fees: vi.fn(), prove: vi.fn(), load: vi.fn(), save: vi.fn(), clear: vi.fn(),
+  factory: vi.fn(), forking: vi.fn(), fees: vi.fn(), prove: vi.fn(), load: vi.fn(), save: vi.fn(), clear: vi.fn(),
   identity: vi.fn(), unchanged: vi.fn(),
 }));
-vi.mock('midnight-v9-shielded', () => ({ ShieldedWallet: mocks.factory }));
+vi.mock('midnight-v9-shielded', () => ({ CustomShieldedWallet: mocks.factory, ShieldedWallet: mocks.forking }));
 vi.mock('./midnightLedger9', () => ({ balanceLedger9Fees: mocks.fees }));
 vi.mock('./midnightUnshieldedProver', () => ({ proveUnshieldedTransfer: mocks.prove }));
 vi.mock('./midnightWalletStatePersistence', () => ({
@@ -42,15 +43,16 @@ function args(): BuildAndSignShieldedTransferArgs {
   } finally { recipient.clear(); }
 }
 
-function realWallet() {
+let stamp = 0n;
+function realWallet(network = 'stagenet') {
   const keys = ledger.ZswapSecretKeys.fromSeed(seed);
   const coin = { nonce: '11'.repeat(32), type: token, value: 100n };
   const output = ledger.ZswapOutput.new(coin, 0, keys.coinPublicKey, keys.encryptionPublicKey);
-  const core = CoreWallet.apply(CoreWallet.initEmpty(keys, 'stagenet'), keys,
+  const core = CoreWallet.apply(CoreWallet.initEmpty(keys, network), keys,
     ledger.ZswapOffer.fromOutput(output, token, 100n));
   const publicAddress = address(keys);
   keys.clear();
-  const capability = Transacting.makeDefaultTransactingCapability({ networkId: 'stagenet' }, () => ({
+  const capability = Transacting.makeDefaultTransactingCapability({ networkId: network }, () => ({
     coinSelection: (coins, type) => coins.find(coin => coin.type === type),
     coinsAndBalancesCapability: CoinsAndBalances.makeDefaultCoinsAndBalancesCapability(),
     keysCapability: Keys.makeDefaultKeysCapability(),
@@ -60,10 +62,15 @@ function realWallet() {
     state: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
     waitForSyncedState: vi.fn().mockResolvedValue(publicAddress),
     serializeState: vi.fn().mockResolvedValue('real-sdk-checkpoint-boundary'),
-    transferTransaction: vi.fn(async (secrets, outputs) => {
-      const result = capability.makeTransfer(secrets, core, outputs);
-      if (result._tag === 'Left') throw result.left;
-      return result.right[0];
+    // SDK 2 keeps the keys the wallet was started with and returns a handle.
+    transferTransaction: vi.fn(async (outputs) => {
+      const secrets = ledger.ZswapSecretKeys.fromSeed(seed);
+      try {
+        const result = capability.makeTransfer(secrets, core, outputs);
+        if (result._tag === 'Left') throw result.left;
+        const tx = result.right[0];
+        return { protocolVersion: stamp, serialize: () => tx.serialize() };
+      } finally { secrets.clear(); }
     }),
   };
 }
@@ -95,6 +102,8 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
       expect([...received.state.coins].map(coin => coin.value)).toEqual([60n]);
     } finally { recipient.clear(); }
     expect(wallet.waitForSyncedState).toHaveBeenCalledWith();
+    // SDK 2 starts with one ledger's keys per variant; this wallet runs the ledger 9 one only.
+    expect(wallet.start).toHaveBeenCalledWith({ v9: expect.anything() });
     expect(mocks.load).toHaveBeenCalledWith('verified-stagenet-7', 'shielded', seed);
     expect(mocks.fees).toHaveBeenCalledOnce();
     expect(mocks.unchanged).toHaveBeenCalledTimes(2);
@@ -183,3 +192,45 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
     expect(mocks.factory).not.toHaveBeenCalled();
   });
 });
+
+// #1452 M9: a chain that crossed the upgrade (mainnet, preprod) has notes from
+// before it, which only the fork-aware wallet reads.
+describe('ledger 9 shielded send on a chain that crossed the upgrade', () => {
+  let wallet: ReturnType<typeof realWallet>;
+  const preprodArgs = (): BuildAndSignShieldedTransferArgs => {
+    const base = args();
+    const recipient = ledger.ZswapSecretKeys.fromSeed(recipientSeed);
+    try {
+      return { ...base, sdkNetworkId: 'preprod',
+        endpoints: { ...base.endpoints, sdkNetworkId: 'preprod' } as BuildAndSignShieldedTransferArgs['endpoints'],
+        outputs: [{ ...base.outputs[0], receiverAddress: ShieldedAddress.codec.encode('preprod', address(recipient)).toString() }] };
+    } finally { recipient.clear(); }
+  };
+  beforeEach(() => {
+    vi.resetAllMocks();
+    useMidnightChains({ preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION] });
+    wallet = realWallet('preprod');
+    mocks.forking.mockReturnValue({ startWithKeys: async () => wallet, restore: () => wallet });
+    mocks.fees.mockResolvedValue(ledger.Transaction.fromParts('preprod'));
+    mocks.load.mockResolvedValue(null);
+    mocks.save.mockResolvedValue(undefined);
+    mocks.identity.mockResolvedValue({ chain_generation: 7 });
+    mocks.unchanged.mockResolvedValue(undefined);
+  });
+
+  it('builds with the fork-aware wallet, started with both ledgers\' keys, once it is on ledger 9', async () => {
+    stamp = 2_001_100n;
+    const result = await buildAndSignShieldedLedger9Transfer(preprodArgs());
+    expect(result.proven).toBe(false);
+    expect(mocks.factory).not.toHaveBeenCalled();
+    expect(mocks.forking).toHaveBeenCalledWith(expect.objectContaining({ networkId: 'preprod', forks: { v9: 2_000_000n } }));
+    expect(wallet.start).toHaveBeenCalledWith({ v8: expect.anything(), v9: expect.anything() });
+  });
+
+  it('refuses while the wallet is still on the ledger 8 side, before any fee', async () => {
+    stamp = 1_000_000n;
+    await expect(buildAndSignShieldedLedger9Transfer(preprodArgs())).rejects.toThrow('caught up with the ledger 9 upgrade');
+    expect(mocks.fees).not.toHaveBeenCalled();
+  });
+});
+

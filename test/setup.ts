@@ -1,4 +1,6 @@
+import { beforeEach } from 'vitest';
 import { config } from '@vue/test-utils';
+import { useDefaultMidnightChainsForTests } from './helpers/midnightChains';
 
 // VTU1 rendered the default slot of explicitly stubbed components. Preserve
 // that observable content while migrating each test to VTU2's global options.
@@ -20,3 +22,7 @@ if (!globalThis.ResizeObserver) {
 if (!('visualViewport' in globalThis)) {
   Object.defineProperty(globalThis, 'visualViewport', { value: null, configurable: true });
 }
+
+// Which ledger a Midnight chain runs is read from the chain (midnightChainLedger.ts)
+// and fails closed until read. Specs start from a known answer instead of a fetch.
+beforeEach(() => { useDefaultMidnightChainsForTests(); });

@@ -58,13 +58,14 @@
         </v-alert>
       </v-form>
     </v-card-text>
-    <v-card-actions class="px-5 pb-5 pt-3">
-      <v-btn block variant="outlined" color="error" data-testid="cashback-sign-cancel" @click="cancel">
+    <!-- Two buttons share one row: `block` would give each min-width 100% and push
+         the second past the dialog edge. -->
+    <v-card-actions class="cashback-sign__actions px-5 pb-5 pt-3">
+      <v-btn variant="outlined" color="error" data-testid="cashback-sign-cancel" @click="cancel">
         {{ t('common.cancel') }}
       </v-btn>
       <v-btn
         v-if="canSign"
-        block
         class="geroButton"
         :loading="loading"
         :disabled="loading || (usesPassword && !valid)"
@@ -337,5 +338,10 @@ function onPassKeyError(error: Error) {
   border-radius: var(--g-r-control);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.cashback-sign__actions > .v-btn {
+  flex: 1 1 0;
+  min-width: 0;
 }
 </style>

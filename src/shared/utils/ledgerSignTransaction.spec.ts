@@ -15,6 +15,7 @@ import {
 import { HexBlob } from '@cardano-sdk/util';
 import {
   DatumType,
+  DeviceStatusError,
   type BIP32Path,
   type GetExtendedPublicKeyRequest,
   type SignedTransactionData,
@@ -321,6 +322,17 @@ describe('signLedgerTransaction: otherwise LedgerKeyAgent.signTransaction', () =
     const error = await signLedgerTransaction(agent, body(SCRIPT_REF_TX), CONTEXT).catch((error: unknown) => error);
 
     expect(agentError).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf((agentError as Error).constructor);
+    expect(error).toEqual(agentError);
+  });
+
+  it('fails as the agent does when the user declines on Cardano app 8', async () => {
+    device(() => Promise.reject(new DeviceStatusError(0x6985)));
+
+    const agentError = await agent.signTransaction(body(SCRIPT_REF_TX), CONTEXT).catch((error: unknown) => error);
+    const error = await signLedgerTransaction(agent, body(SCRIPT_REF_TX), CONTEXT).catch((error: unknown) => error);
+
+    expect((agentError as Error).message).toContain('Action rejected by user on device.');
     expect(error).toBeInstanceOf((agentError as Error).constructor);
     expect(error).toEqual(agentError);
   });

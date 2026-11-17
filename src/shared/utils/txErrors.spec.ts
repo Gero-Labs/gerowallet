@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import i18n from '@/plugins/i18n';
-import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
+import { extractNexusErrorMessage, friendlyDappTxError, friendlyTxError, isCollateralError, isInsufficientAdaError, isMissingInputError, signRefusalText, shortfallLovelaceFromMessage } from './txErrors';
 import {
+  MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE,
+  TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
@@ -9,6 +13,7 @@ import {
   SUBMIT_API_STORAGE_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
+import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 describe('isCollateralError', () => {
   it('matches a genuine missing-collateral error', () => {
@@ -99,6 +104,43 @@ describe('friendlyTxError on submit failures', () => {
     expect(localized.toLowerCase()).not.toContain('was not sent');
   });
 
+  // A dApp's market transaction is signable only under the approval it was previewed with; once
+  // that runs out the worker refuses with a fixed English string, which has to read as a sentence
+  // the user can act on, in their own language.
+  it('localizes the market signing refusal for a dApp approval, where an approval ran out', () => {
+    const localized = friendlyDappTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    expect(localized).toBe('This took too long. Start it again.');
+    expect(localized).not.toContain('Gero cannot sign');
+    expect(friendlyTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE), { marketApproval: true })).toBe(localized);
+  });
+
+  // A plain Gero Send (or any other flow of the wallet's own) to a listing-script address meets the
+  // same refusal. Nothing there took too long: the transaction is simply not one to sign from there.
+  it('says so honestly for every other caller: the transaction can only be signed from the market screens', () => {
+    const localized = friendlyTxError(new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE));
+    expect(localized).toBe('This transaction touches an NFT listing, so it can only be signed from the market screens.');
+    expect(localized).not.toMatch(/took too long|start it again/i);
+    expect(localized).not.toContain('Gero cannot sign');
+    expect(friendlyTxError(NFT_MARKET_SIGN_REFUSAL_MESSAGE)).toBe(localized);
+  });
+
+  it('keeps the market copy for the dApp approval screens only: the side panel and the popup both ask for it', () => {
+    const read = (file: string) => readFileSync(join(__dirname, file), 'utf8');
+    const overlay = read('../../sidepanel/components/DAppOverlay.vue');
+    expect(overlay).toContain('friendlyDappTxError(');
+    expect(overlay.replace(/friendlyDappTxError/g, '')).not.toMatch(/friendlyTxError\(/);
+    // The popup shows device errors as they are, so it reads the refusals alone.
+    const popup = read('../../popup/modules/views/SignTx.vue');
+    expect(popup).toContain('signRefusalText(message, { marketApproval: true })');
+    expect(popup).not.toMatch(/friendlyTxError\(|friendlyDappTxError\(/);
+  });
+
+  it('signRefusalText words the market refusal for its caller and leaves any other message alone', () => {
+    expect(signRefusalText(NFT_MARKET_SIGN_REFUSAL_MESSAGE, { marketApproval: true })).toBe('This took too long. Start it again.');
+    expect(signRefusalText(NFT_MARKET_SIGN_REFUSAL_MESSAGE)).toBe('This transaction touches an NFT listing, so it can only be signed from the market screens.');
+    expect(signRefusalText('Device rejected synthetic test request', { marketApproval: true })).toBeUndefined();
+  });
+
   it('drops our prefix from a plain-text node rejection', () => {
     const raw = 'Wallet could not send the tx. Ogmios rejected tx: The withdrawal amount does not match the reward balance.';
     expect(friendlyTxError(new Error(raw)))
@@ -112,6 +154,16 @@ describe('friendlyTxError on submit failures', () => {
       + 'The \'data\' field, therefore, contains errors for each era.';
     expect(friendlyTxError(new Error(essay)))
       .toBe('Invalid transaction; It looks like the given transaction wasn\'t well-formed.');
+  });
+});
+
+describe('friendlyTxError on a signing refusal', () => {
+  it('localizes the background\'s refusal of a transaction marked to fail', () => {
+    expect(friendlyTxError(new Error(MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE))).toBe(i18n.t('errors.markedToFailRefused'));
+  });
+
+  it('localizes the Trezor refusal of a body it cannot carry', () => {
+    expect(friendlyTxError(new Error(TREZOR_GOVERNANCE_REFUSAL_MESSAGE))).toBe(i18n.t('errors.trezorGovernanceRefused'));
   });
 });
 
@@ -139,6 +191,13 @@ describe('shortfallLovelaceFromMessage', () => {
   it('reads required minus available from a change min-UTxO rejection', () => {
     expect(shortfallLovelaceFromMessage('Insufficient ADA to cover minimum UTXO for change output. Available: 800000 lovelace, required: 1200000 lovelace'))
       .toBe(BigInt(400_000));
+  });
+
+  // Nexus's transfer builder, when the inputs it was offered hold less than the outputs:
+  // the case a wallet spread over more UTxOs than one request carries runs into.
+  it('reads required minus available from a transfer build short of ADA', () => {
+    expect(shortfallLovelaceFromMessage('Insufficient ADA. Required: 15000.170000 ADA (15000170000 lovelace), available: 9112.400000 ADA (9112400000 lovelace)'))
+      .toBe(BigInt(5_887_770_000));
   });
 
   it('returns undefined for anything else', () => {
@@ -180,5 +239,43 @@ describe('friendlyTxError: Submit API', () => {
     const raw = `${SUBMIT_API_ENDPOINT_PREFIX}Wallet could not send the tx. Ogmios rejected tx: The withdrawal amount does not match the reward balance.`;
     expect(friendlyTxError(new Error(raw))).toContain('Your submit endpoint: ');
     expect(friendlyTxError(new Error(raw))).toContain('withdrawal amount does not match');
+  });
+});
+
+describe('friendlyTxError on the request rate limit', () => {
+  // gero-backend's Nexus proxy answers 429 `{"error":"rate_limit_exceeded","message":"Too many
+  // requests — slow down"}`; a sweep on a large wallet hit it (2026-11-02) and the dialog showed
+  // the raw text, em dash mangled. The status may come on the enriched error, the words in the
+  // message, or both.
+  it('localizes a 429 whichever way it arrives', () => {
+    const expected = i18n.t('errors.rateLimited');
+    const enriched = Object.assign(new Error('Too many requests — slow down'), {
+      response: { status: 429, data: { error: 'rate_limit_exceeded', message: 'Too many requests — slow down' } },
+    });
+    expect(friendlyTxError(enriched)).toBe(expected);
+    expect(friendlyTxError(Object.assign(new Error('Request failed with status code 429'), { response: { status: 429 } }))).toBe(expected);
+    expect(friendlyTxError(new Error('Too many requests — slow down'))).toBe(expected);
+    expect(friendlyTxError(new Error(JSON.stringify({ data: { error: 'rate_limit_exceeded', message: 'slow down' }, status: 429 })))).toBe(expected);
+  });
+
+  it('never shows the server text', () => {
+    const localized = friendlyTxError(new Error('Too many requests — slow down'));
+    expect(localized).not.toContain('slow down');
+    expect(localized).not.toBe('errors.rateLimited');
+  });
+});
+
+describe('isMissingInputError', () => {
+  it.each([
+    'BadInputsUTxO',
+    'Ogmios rejected tx: (BadInputsUTxO (fromList [TxIn ...]))',
+    'The transaction contains unknown UTxO references as inputs',
+  ])('recognises %s', (message) => {
+    expect(isMissingInputError(message)).toBe(true);
+  });
+
+  it('does not mistake other refusals for it', () => {
+    expect(isMissingInputError('ValueNotConservedUTxO')).toBe(false);
+    expect(isMissingInputError('OutsideValidityIntervalUTxO')).toBe(false);
   });
 });

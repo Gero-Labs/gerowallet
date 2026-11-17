@@ -32,10 +32,11 @@ import { DustSecretKey } from '@midnight-ntwrk/ledger-v8';
 import { dustLedger8, balanceLightDust8 } from './midnightDustLightLedger8';
 import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
-import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
+import { requireChainLedger8, resolveMidnightLedger } from './midnightChainLedger';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } from './midnightChainIdentity';
+import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 
 export interface BalanceAndSignUnshieldedTransferArgs {
   /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
@@ -81,24 +82,30 @@ export type DustBalanceableTransaction =
   | ledger.UnprovenTransaction
   | ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
 
+export { DUST_SYNC_INACTIVITY_MS } from './midnightDustSyncWatch';
+
 /** Nexus supplies compact public projections; only key-dependent work stays local. */
 export async function syncDustWalletAndBalanceFees(
   args: SyncDustAndBalanceFeesArgs,
   txs: ReadonlyArray<DustBalanceableTransaction>,
 ): Promise<ledger.UnprovenTransaction> {
-  requireMidnightLedger8(args.sdkNetworkId, 'DUST balancing');
+  await requireChainLedger8(args.sdkNetworkId, 'DUST balancing');
   if (args.endpoints.sdkNetworkId !== args.sdkNetworkId) throw new Error('Midnight endpoint network mismatch');
   if (!txs.length) throw new Error('At least one Midnight transaction is required');
   if (!Number.isFinite(args.ttl.getTime()) || args.ttl.getTime() <= Date.now()) throw new Error('Midnight transaction expiry must be in the future');
   const key = DustSecretKey.fromSeed(args.dustSecretSeed);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  // A fee for a transaction past its TTL is useless, so the TTL bounds the whole preparation.
+  const watchdog = watchDustSync(controller, DUST_SYNC_INACTIVITY_MS, args.ttl.getTime());
+  const { progress, reply } = dustSyncReporting(watchdog, args.onDustSyncProgress);
   try {
     const identity = await readVerifiedMidnightChainIdentity(args.endpoints, controller.signal);
+    watchdog.activity();
     const { state, block } = await reconstructDustState(dustLedger8, key, args.sdkNetworkId,
-      createDustLightTransport(args.endpoints, controller.signal), args.onDustSyncProgress);
+      createDustLightTransport(args.endpoints, controller.signal, reply), progress);
     controller.signal.throwIfAborted();
     const fee = balanceLightDust8(state, key, args.sdkNetworkId, txs, args.ttl, new Date(block.timestamp), block.ledgerParameters);
+    watchdog.activity();
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal);
     debugLog('🌙 DUST fee prepared from verified compact state');
     return fee;
@@ -106,7 +113,7 @@ export async function syncDustWalletAndBalanceFees(
     if (controller.signal.aborted) throw new Error('DUST synchronization timed out. Please try again shortly.');
     throw error;
   } finally {
-    clearTimeout(timeout);
+    watchdog.stop();
     controller.abort();
     key.clear();
   }
@@ -168,7 +175,7 @@ export async function startUnshieldedWalletForKey(
   wallet: Awaited<ReturnType<typeof unshieldedBuilderStart>>;
   keystore: ReturnType<typeof import('@midnightntwrk/wallet-sdk-unshielded-wallet').createKeystore>;
 }> {
-  requireMidnightLedger8(sdkNetworkId, 'Legacy segment signing');
+  await requireChainLedger8(sdkNetworkId, 'Legacy segment signing');
   const [{ UnshieldedWallet, createKeystore }, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
     import('@midnightntwrk/wallet-sdk-abstractions'),
@@ -215,7 +222,8 @@ export async function startUnshieldedWalletForKey(
 export async function balanceAndSignUnshieldedTransfer(
   args: BalanceAndSignUnshieldedTransferArgs,
 ): Promise<string> {
-  if (midnightLedgerVersion(args.sdkNetworkId) === 9) {
+  // The chain says which ledger to build for; never the network's name.
+  if (await resolveMidnightLedger(args.sdkNetworkId) === 9) {
     const { balanceAndSignLedger9Transfer } = await import('./midnightLedger9');
     return balanceAndSignLedger9Transfer(args);
   }

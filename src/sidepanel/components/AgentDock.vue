@@ -431,19 +431,15 @@ export default defineComponent({
     // FAB always shows the same chain-accented mark the nav drawer does. Each
     // gero-notext*.svg variant bakes its own fixed gradient rather than
     // reading --g-accent, so picking the wrong one shows the wrong brand
-    // color — e.g. Cardano cyan on an Apex, Midnight or Bitcoin wallet. Apex
-    // Prime and Vector each get their own variant (teal vs orange), and
-    // Bitcoin its own Bitcoin orange.
+    // color — e.g. Cardano cyan on a Midnight or Bitcoin wallet.
     const geroMark = computed(() => {
       switch (walletStore.loggedWallet?.chain) {
-        case Blockchain.APEX_PRIME:
-          return assets.geroNoTextPrime;
-        case Blockchain.APEX_VECTOR:
-          return assets.geroNoTextVector;
         case Blockchain.MIDNIGHT:
           return assets.geroNoTextMidnight;
         case Blockchain.BITCOIN:
           return assets.geroNoTextBitcoin;
+        case Blockchain.SOLANA:
+          return assets.geroNoTextSolana;
         default:
           return assets.geroNoText;
       }

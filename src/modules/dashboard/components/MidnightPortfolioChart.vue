@@ -20,6 +20,14 @@
             {{ formatNight(totalNight) }} <span class="currency-symbol">{{ nightCurrency }}</span>
           </span>
         </div>
+        <!-- Only while Midnight data is paused: the block the balances are based on. -->
+        <div v-if="dataPaused" class="data-paused-caption t-caption g-num" data-test="midnight-data-paused-caption">
+          <v-icon size="12" color="warning" class="mr-1">mdi-pause-circle-outline</v-icon>{{ $t('midnight.dataPaused.caption', { block: tipHeightLabel, age: tipAge }) }}
+        </div>
+        <!-- While Midnight data is rebuilt: the block the last-known balances are from. -->
+        <div v-else-if="refreshing && snapshotHeight > 0" class="data-paused-caption t-caption g-num" data-test="midnight-refresh-caption">
+          {{ $t('midnight.dataPaused.caption', { block: snapshotHeightLabel, age: snapshotAge }) }}
+        </div>
 
         <div class="address-section" v-if="shortenedAddress">
           <CopyButton
@@ -96,6 +104,8 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 
 defineEmits<{ (e: 'refresh'): void }>();
 
@@ -107,6 +117,11 @@ const midnightLoading = useMidnightLoading();
 // the raw store field is Path-A-only, so this dot used to stay neutral
 // beside a battery already showing a real Path-B charge.
 const dustLive = useMidnightDustLive();
+const { paused: dataPaused, heightLabel: tipHeightLabel, ageLabel: tipAge } = useMidnightDataFreshness();
+const { refreshing, snapshotTip } = useMidnightRefresh();
+const {
+  height: snapshotHeight, heightLabel: snapshotHeightLabel, ageLabel: snapshotAge,
+} = useMidnightDataFreshness(() => snapshotTip.value);
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
@@ -437,6 +452,14 @@ function formatNight(value: bigint): string {
   align-items: baseline;
   gap: 0.1em;
   margin-bottom: 4px;
+}
+
+/* "As of block N · age", shown only while Midnight data is paused: metadata in
+   t-caption's g-text-3, with the amber pause glyph in front. */
+.data-paused-caption {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--g-s-1);
 }
 
 .portfolio-amount-masked {

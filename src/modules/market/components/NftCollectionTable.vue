@@ -46,6 +46,15 @@
               <v-chip v-if="item.isScam" size="x-small" color="error" class="ml-1" style="height: 16px; font-size: 11px; padding: 0 4px;">
                 {{ $t('portfolio.scam') }}
               </v-chip>
+              <!-- NFTs of this collection listed on Gero's market: they are not held, so Held leaves them out. -->
+              <v-chip
+                v-if="item.listedCount > 0"
+                size="x-small" label
+                class="nft-listed-chip ml-1"
+                data-testid="nft-table-listed-badge"
+              >
+                {{ tc('nftMarket.badge.listedCount', item.listedCount, { count: item.listedCount }) }}
+              </v-chip>
             </v-list-item-title>
             <v-list-item-subtitle class="d-flex align-center" style="font-size: 11px; opacity: 0.5">
               {{ filters.truncate(item.policyId) }}
@@ -147,7 +156,7 @@ const emit = defineEmits<{
   (e: 'collection-click', policyId: string): void;
 }>();
 
-const { t } = useTranslation();
+const { t, tc } = useTranslation();
 const { collections, loading, fetchUserNftCollections } = useNftMarketData();
 
 const filteredCollections = computed(() => {
@@ -206,6 +215,16 @@ function lastSaleVsFloorColor(item: NftCollectionDisplay): string {
 </script>
 
 <style scoped>
+/* A chip is a control: a solid token with a hairline reads on any row. `html`-prefixed so it wins
+   the tie with Vuetify's chip sizes (its CSS is emitted twice). */
+html .nft-listed-chip {
+  height: 16px;
+  padding: 0 var(--g-s-1);
+  color: var(--g-text-1);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+}
+
 .nft-collection-table :deep(.v-table__wrapper) {
   overflow-x: auto;
 }

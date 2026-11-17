@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { createTestVuetify } from '@test/helpers/vuetify';
 import BottomSheet from './BottomSheet.vue';
+import { useSheetVisibility } from '../composables/useSheetVisibility';
 
 enableAutoUnmount(afterEach);
 beforeEach(() => {
@@ -91,5 +92,45 @@ describe('BottomSheet dismissal policy', () => {
     await dismiss(wrapper, 'Escape');
     expect(wrapper.emitted('escape')).toHaveLength(1);
     expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
+});
+
+// A parent that mounts its sheet with v-if and opens it in the same tick
+// (HomePage's CIP-113 Send, issue 1439) hands BottomSheet modelValue = true
+// at mount, with no later change for a watcher to see.
+describe('BottomSheet mounted with its initial modelValue', () => {
+  const { isAnySheetOpen } = useSheetVisibility();
+
+  it('opens, takes focus and holds the open credit when mounted open', async () => {
+    const opener = document.body.appendChild(document.createElement('button'));
+    opener.focus();
+    const wrapper = mount(BottomSheet, {
+      props: { modelValue: true, title: 'Send' },
+      attachTo: document.body,
+      global: { plugins: [createTestVuetify()] },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(isAnySheetOpen.value).toBe(true);
+    expect(wrapper.get('.bottom-sheet-container').element.contains(document.activeElement)).toBe(true);
+
+    await dismiss(wrapper, 'close button');
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
+    expect(isAnySheetOpen.value).toBe(false);
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('does nothing when mounted closed', async () => {
+    const wrapper = mount(BottomSheet, {
+      props: { modelValue: false, title: 'Send' },
+      global: { plugins: [createTestVuetify()] },
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    expect(wrapper.emitted('close')).toBeUndefined();
+    expect(isAnySheetOpen.value).toBe(false);
   });
 });

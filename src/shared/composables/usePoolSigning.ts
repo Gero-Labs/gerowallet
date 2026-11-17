@@ -42,8 +42,8 @@ export function assembleWitnesses(
   fee: { vkey: string; signature: string },
 ): Cardano.Signatures {
   const sigs = new Map(ownerSignatures);
-  sigs.set(cold.vkey as unknown as Cardano.Ed25519PublicKeyHex, cold.signature as unknown as Cardano.Ed25519SignatureHex);
-  sigs.set(fee.vkey as unknown as Cardano.Ed25519PublicKeyHex, fee.signature as unknown as Cardano.Ed25519SignatureHex);
+  sigs.set(cold.vkey as unknown as Ed25519PublicKeyHex, cold.signature as unknown as Ed25519SignatureHex);
+  sigs.set(fee.vkey as unknown as Ed25519PublicKeyHex, fee.signature as unknown as Ed25519SignatureHex);
   return sigs;
 }
 
@@ -143,7 +143,7 @@ function buildHotKeyTx(
 
   const minAda = BrowserTxConstruction.minAdaRequired(
     { address: destinationAddress as Cardano.PaymentAddress, value: { coins: changeCoins, assets: new Map() } },
-    epochParams.coinsPerUtxoByte,
+    BigInt(epochParams.coinsPerUtxoByte),
   );
   if (changeCoins < minAda) {
     throw new Error('Hot key balance is below the minimum ADA required for the output');
@@ -174,7 +174,7 @@ function computeHotKeyFundAmount(
   ];
   const draft = buildHotKeyTx(dummyUtxo, hotAddress, certificate, POOL_UPDATE_WITNESS_COUNT, epochParams, tip);
   const fee = draft.body.fee;
-  const minAda = BrowserTxConstruction.minAdaRequired(draft.body.outputs[0], epochParams.coinsPerUtxoByte);
+  const minAda = BrowserTxConstruction.minAdaRequired(draft.body.outputs[0], BigInt(epochParams.coinsPerUtxoByte));
   return fee + minAda + FUND_SAFETY_MARGIN;
 }
 
@@ -286,7 +286,7 @@ export function usePoolSigning(options: {
       const sweepBodyHashHex = Serialization.TransactionBody.fromCore(sweepTx.body).hash() as unknown as string;
       const sweepFeeWitness = hotFeeKey.signBodyHash(sweepBodyHashHex);
       const sweepSignatures: Cardano.Signatures = new Map([
-        [sweepFeeWitness.vkey as unknown as Cardano.Ed25519PublicKeyHex, sweepFeeWitness.signature as unknown as Cardano.Ed25519SignatureHex],
+        [sweepFeeWitness.vkey as unknown as Ed25519PublicKeyHex, sweepFeeWitness.signature as unknown as Ed25519SignatureHex],
       ]);
       const sweepWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures: sweepSignatures });
       const sweepResult = (await Messaging.sendToBackgroundFromOptions({
@@ -430,7 +430,6 @@ export function usePoolSigning(options: {
         tip: tip.value,
         walletContext: {
           keys: keys.value,
-          stakeAddress: loggedWallet.value.stakeAddress || '',
         },
       });
 
