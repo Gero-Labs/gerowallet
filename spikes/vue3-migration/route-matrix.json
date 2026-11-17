@@ -12,7 +12,8 @@
     "guards": "src/modules/navigation/router.guards.spec.ts drives the production router: it proves where the route lands (auth, network, feature flag, redirect), not that its view renders. route-matrix.mjs checks the spec pushes the route (in the side-panel block for a side-panel route).",
     "help-browser": "scripts/help-browser scenario run by the optional Help browser evidence workflow when Help, shared UI or build files change (not a required check).",
     "e2e": "Playwright spec in the external harness, run against an exact wallet SHA.",
-    "manual": "Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff."
+    "manual": "Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff.",
+    "harness": "scripts/migration-browser harness: drives the real packaged extension in Chromium with production messaging and persistence (no state overrides)."
   },
   "routes": {
     "options:/": {
@@ -766,6 +767,383 @@
       "checks": [],
       "note": "Catch-all: unknown side-panel paths land on home.",
       "manual": "Open sidepanel/index.html#/does-not-exist and confirm home renders."
+    }
+  },
+  "behaviours": {
+    "async-validation-invalid": {
+      "title": "Async validation: an invalid result blocks the action",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/dashboard/dialogs/ChangePasswordDialog.spec.ts",
+          "test": "does not mutate when the awaited form result is invalid"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/shared/composables/useTransactionSigning.spec.ts",
+          "test": "awaits Vuetify validation and blocks repeated clicks while pending; false never signs"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/walletManager.unlock.spec.ts",
+          "test": "a wrong PassKey counts toward the back-off like any wrong credential"
+        },
+        {
+          "kind": "e2e",
+          "ref": "05-edge-cases/send-errors.spec.ts",
+          "test": "57: invalid recipient shows an address validation error"
+        },
+        {
+          "kind": "e2e",
+          "ref": "05-edge-cases/settings-errors.spec.ts",
+          "test": "63: spending password change rejects a wrong current password"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts",
+          "test": "five wrong passwords start a wait that refuses even the right password"
+        }
+      ],
+      "gap": "Recipient address checks are synchronous and there is no ADA Handle validation, so only password and credential checks are asynchronous."
+    },
+    "async-validation-pending": {
+      "title": "Async validation: pending blocks repeat actions; a stale result is discarded",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/dashboard/dialogs/ChangePasswordDialog.spec.ts",
+          "test": "cancels before mutation if %s changes during form validation"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/navigation/dialogs/BackupWalletDialog.spec.ts",
+          "test": "never decrypts if %s changes during form validation"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/shared/composables/useTransactionSigning.spec.ts",
+          "test": "awaits Vuetify validation and blocks repeated clicks while pending; false never signs"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
+          "test": "runs repeated password clicks in one flight and signs only the approved payload"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/flows/SendSheet.spec.ts",
+          "test": "requires a new approval after replacement and serializes repeated clicks"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        }
+      ],
+      "gap": "Only unit tests assert the blocked, one-flight state; the browser test covers discarding the stale result."
+    },
+    "approve-once": {
+      "title": "Approve: a connect or signing request is answered exactly once",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/DappConnect.spec.ts",
+          "test": "answers with the account the user picked and connects nothing itself"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
+          "test": "authenticates once on repeated PassKey clicks and signs the current request"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
+          "test": "deduplicates re-delivered requestIds"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        }
+      ],
+      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer. The browser tests show the answer takes effect, not that it is sent once."
+    },
+    "reject-once": {
+      "title": "Reject: a request is answered exactly once",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/popup/modules/views/SignTx.spec.ts",
+          "test": "prevents Decline and window closure while the hardware call is pending, then permits decline after failure"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
+          "test": "rejecting a coalesced enable rejects every duplicate"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/dapp-connect-account.spec.ts",
+          "test": "rejecting the prompt connects nothing and keeps the logged account"
+        }
+      ],
+      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer, here a decline after an answer."
+    },
+    "cancel-once": {
+      "title": "Cancel, close or dismiss: the pending request is answered exactly once",
+      "owners": [
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
+          "test": "does not publish a signature returned after cancellation"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/midnightProvingPark.spec.ts",
+          "test": "cancelTab cancels the prompt parked for that tab"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/signing-cancellation.spec.ts",
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
+        }
+      ],
+      "gap": "No test closes the popup window or side panel with a request pending, so the port.onDisconnect and tabs.onRemoved answers in src/chrome/messaging.ts are untested. The e2e covers navigating away, not closing."
+    },
+    "worker-restart": {
+      "title": "Service-worker restart: state recovers after the MV3 worker stops",
+      "owners": [
+        "V05",
+        "V13"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/storePersistence.integration.spec.ts",
+          "test": "a restarted worker hydrates the full store from the split layout"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/stores/storageSecrets.integration.spec.ts",
+          "test": "a restarted worker ignores a logged wallet or lock state planted in chrome.storage"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/storeMessagingBg.snapshot.spec.ts",
+          "test": "serves subscriptions made before the store registers during worker boot"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts",
+          "test": "rewriting loggedWallet and isLocked in chrome.storage.local neither unlocks nor switches the wallet after a worker restart"
+        }
+      ],
+      "gap": "No test restarts the worker while a dApp request is pending; dappRequestHub only simulates a dropped port."
+    },
+    "lock-unlock": {
+      "title": "Lock and unlock: manual and configured lock, credential checks, locked routing",
+      "owners": [
+        "V05",
+        "V08"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/chrome/unlockGuards.spec.ts",
+          "test": "never unlocks a locked session: LOGIN while locked lands locked"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/walletManager.unlock.spec.ts",
+          "test": "locks the wallet before it becomes the logged-in one"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/options/main.spec.ts",
+          "test": "still evicts private content on lock"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "locks once inactivity reaches the threshold and a method is set"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Background lock broadcasts reach both options pages and side panel"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        }
+      ],
+      "gap": "Auto-lock is tested only as the shouldAutoLock predicate; nothing drives the timer or alarm, and no browser test sees auto-lock fire."
+    },
+    "two-uis": {
+      "title": "Two open UIs: a change reaches both through the background broadcast",
+      "owners": [
+        "V05"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/productionMessaging.integration.spec.ts",
+          "test": "broadcasts login/lock and wallet replacement to two contexts, then persists a restart"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/storeMessagingBg.snapshot.spec.ts",
+          "test": "sends the snapshot only to the joining context"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Second UI-created wallet replaces prior identity across subscribers"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/store-publication.spec.ts",
+          "test": "store publication waits for the requested subscription and retires closed ports @post-v27 @offline"
+        }
+      ]
+    },
+    "wallet-switch": {
+      "title": "Wallet switch: identity and data replaced in every UI, nothing of the previous wallet shown",
+      "owners": [
+        "V05"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/storePersistence.integration.spec.ts",
+          "test": "a wallet switch cut short by a worker restart never shows the previous wallet data"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/walletManager.login.spec.ts",
+          "test": "does not unlock after %s during credential verification"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/websocket.service.syncPending.spec.ts",
+          "test": "re-arms on resubscribe: a new SUBSCRIBE is a new first answer to wait for"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Real wallet switch replaces current identity without fixture-pinned fields"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/multi-account.spec.ts",
+          "test": "removing the active added account returns to account zero and persists after reload"
+        }
+      ],
+      "gap": "No browser test checks that Gero Sync re-subscribes to the new wallet after a switch."
+    },
+    "network-switch": {
+      "title": "Network switch: covered as a switch to a wallet on another network",
+      "owners": [
+        "V05"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/stores/productionMessaging.integration.spec.ts",
+          "test": "broadcasts login/lock and wallet replacement to two contexts, then persists a restart"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/stores/midnightStore.spec.ts",
+          "test": "clears the tip when the network changes"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/explorer-setting.spec.ts",
+          "test": "links follow its own network and its own choice"
+        }
+      ],
+      "gap": "The network belongs to each wallet (geroStore.setNetwork has no callers), so there is no separate network-switch action to test."
+    },
+    "persistence": {
+      "title": "Persistence: store state survives a worker or browser restart",
+      "owners": [
+        "V05",
+        "V13"
+      ],
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/utils/storePersistence.spec.ts",
+          "test": "restores everything after a restart (a fresh persister over the same storage)"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/stores/storePersistence.integration.spec.ts",
+          "test": "upgrades a record in the old single-value format without losing data"
+        },
+        {
+          "kind": "harness",
+          "ref": "scripts/migration-browser/store-sync-smoke.cjs",
+          "test": "Browser restart hydrates the UI-created wallet from production persistence"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/production-store-sync.spec.ts",
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
+        },
+        {
+          "kind": "e2e",
+          "ref": "01-setup/browser-restart.spec.ts",
+          "test": "a freshly created wallet is still open after the browser restarts"
+        },
+        {
+          "kind": "e2e",
+          "ref": "08-post-v27/security-hardening-280.spec.ts",
+          "test": "wallet secrets, unlock verifiers and the flag mirror are never written to chrome.storage.local, across login, lock and unlock"
+        }
+      ]
     }
   }
 }

@@ -30,9 +30,9 @@ assert(e2eIndex < 0 || args[e2eIndex + 1], usage);
 const e2eRoot = e2eIndex < 0 ? null : path.resolve(args[e2eIndex + 1]);
 
 const ROUTERS = [['src/modules/navigation/router.ts', 'options'], ['src/sidepanel/router.ts', 'sidepanel']];
-const KINDS = ['unit', 'guards', 'help-browser', 'e2e', 'manual'];
-const AUTOMATED = ['unit', 'guards', 'help-browser', 'e2e'];
-const LOCAL_KINDS = new Set(['unit', 'guards', 'help-browser']);
+const KINDS = ['unit', 'guards', 'help-browser', 'harness', 'e2e', 'manual'];
+const AUTOMATED = ['unit', 'guards', 'help-browser', 'harness', 'e2e'];
+const LOCAL_KINDS = new Set(['unit', 'guards', 'help-browser', 'harness']);
 const GUARD_SPEC = 'src/modules/navigation/router.guards.spec.ts';
 const E2E_REF = /^\d{2}-[a-z0-9-]+\/[A-Za-z0-9.-]+\.spec\.ts$/;
 
@@ -56,7 +56,7 @@ assert.equal(keys.size, routes.length, 'Duplicate route paths');
 const problems = [];
 for (const key of keys) if (!matrix.routes[key]) problems.push(`${key}: shipped route has no entry in route-matrix.json`);
 for (const key of Object.keys(matrix.routes)) if (!keys.has(key)) problems.push(`${key}: entry names no route in the routers`);
-for (const [key, entry] of Object.entries(matrix.routes)) {
+function checkReferences(key, entry) {
   assert(Array.isArray(entry.checks), `${key}: checks must be an array`);
   for (const item of entry.checks) {
     if (!AUTOMATED.includes(item.kind)) problems.push(`${key}: unknown check kind ${item.kind}`);
@@ -65,7 +65,12 @@ for (const [key, entry] of Object.entries(matrix.routes)) {
     else if (item.kind === 'e2e' && !E2E_REF.test(item.ref)) problems.push(`${key}: ${item.ref} is not a tests/specs path`);
     if (item.funded !== undefined && (item.kind !== 'e2e' || item.funded !== true)) problems.push(`${key}: funded is only for e2e checks`);
     if (item.via !== undefined && (item.kind !== 'e2e' || typeof item.via !== 'string' || !item.via)) problems.push(`${key}: via is a non-empty string, only on e2e checks`);
+    if (item.test !== undefined && (typeof item.test !== 'string' || !item.test.trim())) problems.push(`${key}: test is a non-empty string`);
   }
+}
+for (const [key, entry] of Object.entries(matrix.routes)) {
+  checkReferences(key, entry);
+  if (entry.checks.some(item => item.test !== undefined)) problems.push(`${key}: test titles are for behaviours; a route check names its spec only`);
   if (entry.via !== undefined) problems.push(`${key}: via belongs on an e2e check, not the route`);
   for (const field of ['manual', 'note']) {
     if (entry[field] !== undefined && (typeof entry[field] !== 'string' || !entry[field].trim())) problems.push(`${key}: ${field} must be a non-empty string`);
@@ -81,7 +86,24 @@ for (const route of routes) {
     problems.push(`${routeKey(route)}: ${route.component ? 'no check renders this view' : 'no guard check covers this redirect'}, so a manual step is required`);
   }
 }
-problems.push(...verifyGuards());
+// Behaviours (V02's behavioural acceptance item and the V05 assignment): each
+// names its owner and either a check in this repository (verified by --check in
+// CI) or the gap.
+const OWNER = /^V(0[1-9]|1[0-6])$/;
+assert(matrix.behaviours && typeof matrix.behaviours === 'object' && Object.keys(matrix.behaviours).length, 'route-matrix.json: behaviours is required');
+for (const [key, entry] of Object.entries(matrix.behaviours)) {
+  const label = `behaviour ${key}`;
+  checkReferences(label, entry);
+  if (entry.checks.some(item => item.kind === 'guards')) problems.push(`${label}: guards checks are for routes`);
+  if (entry.checks.some(item => item.via !== undefined)) problems.push(`${label}: via is for route checks`);
+  if (entry.checks.some(item => !item.test)) problems.push(`${label}: every check names its test`);
+  if (typeof entry.title !== 'string' || !entry.title.trim()) problems.push(`${label}: title must be a non-empty string`);
+  if (!Array.isArray(entry.owners) || !entry.owners.length || !entry.owners.every(owner => OWNER.test(owner))) problems.push(`${label}: owners must list work packages such as V05`);
+  if (entry.gap !== undefined && (typeof entry.gap !== 'string' || !entry.gap.trim())) problems.push(`${label}: gap must be a non-empty string`);
+  // CI runs --check without --e2e, so only local checks are verified there.
+  if (!entry.checks.some(item => LOCAL_KINDS.has(item.kind)) && !entry.gap) problems.push(`${label}: no check in this repository covers it, so the gap must be stated`);
+}
+problems.push(...verifyGuards(), ...verifyTestTitles());
 if (e2eRoot) problems.push(...verifyE2e());
 assert.equal(problems.length, 0, `route-matrix.json does not match the routers:\n  ${problems.join('\n  ')}`);
 
@@ -125,19 +147,57 @@ function verifyE2e() {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: e2eRoot, encoding: 'utf8', timeout: 10000 }).trim();
   if (head !== matrix.e2e.harnessSha) found.push(`e2e checkout is at ${head}, not harnessSha ${matrix.e2e.harnessSha}`);
   const specs = path.join(e2eRoot, 'tests', 'specs');
+  /** The spec file inside tests/specs, or null when it is missing or outside. */
+  const resolveSpec = ref => {
+    // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
+    const file = path.resolve(specs, ref);
+    return file.startsWith(specs + path.sep) && existsSync(file) ? file : null;
+  };
   for (const route of routes) {
     const entry = matrix.routes[routeKey(route)];
     const needle = route.path.split(/[:(]/)[0].replace(/\/+$/, '');
     for (const item of entry?.checks.filter(check => check.kind === 'e2e') ?? []) {
-      // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
-      const file = path.resolve(specs, item.ref);
-      if (!file.startsWith(specs + path.sep) || !existsSync(file)) { found.push(`${routeKey(route)}: ${item.ref} does not exist in the e2e checkout`); continue; }
+      const file = resolveSpec(item.ref);
+      if (!file) { found.push(`${routeKey(route)}: ${item.ref} does not exist in the e2e checkout`); continue; }
       if (item.via) continue;
       const text = readFileSync(file, 'utf8');
       // Both apps share paths such as /staking and /market, so a side-panel
       // reference must also open the side panel.
       if (route.app === 'sidepanel' && !text.includes('sidepanel')) found.push(`${routeKey(route)}: ${item.ref} never opens the side panel; fix the reference or say how it gets there with via`);
       else if (needle && !text.includes(needle)) found.push(`${routeKey(route)}: ${item.ref} never names ${needle}; fix the reference or say how it gets there with via`);
+    }
+  }
+  // Behaviour references name a test, not a route: the spec must exist and
+  // contain that test's title.
+  for (const [key, entry] of Object.entries(matrix.behaviours)) {
+    for (const item of entry.checks.filter(check => check.kind === 'e2e')) {
+      const file = resolveSpec(item.ref);
+      if (!file) { found.push(`behaviour ${key}: ${item.ref} does not exist in the e2e checkout`); continue; }
+      if (!namesTest(readFileSync(file, 'utf8'), item.test)) found.push(`behaviour ${key}: ${item.ref} has no test titled "${item.test}"`);
+    }
+  }
+  return found;
+}
+
+/**
+ * The whole title must appear as a string literal ('…', "…" or `…`), as it is
+ * written in it()/test()/it.each() (with its %s), so a fragment of a title or of
+ * a comment never counts. It is a rename and deletion guard, not proof the test
+ * runs: an it.skip title still matches. An escaped quote in a title never
+ * matches, which fails closed.
+ */
+function namesTest(text, title) {
+  return ["'", '"', '`'].some(quote => text.includes(quote + title + quote));
+}
+
+/** A local test's title must appear in its file, so a renamed or deleted test fails --check. */
+function verifyTestTitles() {
+  const found = [];
+  for (const [key, entry] of Object.entries(matrix.behaviours)) {
+    for (const item of entry.checks) {
+      // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by reading only paths in the git ls-files allowlist under the repository root
+      if (!LOCAL_KINDS.has(item.kind) || !item.test || !tracked.has(item.ref)) continue;
+      if (!namesTest(read(item.ref), item.test)) found.push(`behaviour ${key}: ${item.ref} has no test titled "${item.test}"`);
     }
   }
   return found;
@@ -161,7 +221,7 @@ function gates(route) {
   if (route.redirect) items.push(typeof route.redirect === 'string' ? `redirect ${code(route.redirect)}` : 'redirect (computed)');
   return [...new Set(items)].join(', ') || '-';
 }
-const label = item => `${item.kind}: ${code(item.ref.replace(/^src\//, ''))}${item.funded ? ' (funded)' : ''}${item.via ? ` (via ${item.via})` : ''}`;
+const label = item => `${item.kind}: ${code(item.ref.replace(/^src\//, ''))}${item.test ? ` › ${item.test}` : ''}${item.funded ? ' (funded)' : ''}${item.via ? ` (via ${item.via})` : ''}`;
 function checks(entry) {
   const lines = entry.checks.map(label);
   if (entry.note) lines.push(`_${entry.note}_`);
@@ -216,6 +276,14 @@ for (const [, app] of ROUTERS) {
   }
   lines.push('');
 }
+const behaviourGaps = Object.values(matrix.behaviours).filter(entry => entry.gap).length;
+lines.push('## Behaviours', '',
+  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. Each check names its test after ›, written in full as in its file: \`--check\` fails if a local test is renamed or deleted, and \`--e2e\` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap. The title check guards against renames and deletions; it does not prove the test runs (a skipped test still matches).`,
+  '', '| Behaviour | Owner | Checks | Gap |', '|---|---|---|---|');
+for (const entry of Object.values(matrix.behaviours)) {
+  lines.push(`| ${cell(entry.title)} | ${entry.owners.join(', ')} | ${cell(checks(entry))} | ${cell(entry.gap ?? '-')} |`);
+}
+lines.push('');
 const document = lines.join('\n');
 const output = path.join(root, here, 'ROUTE-MATRIX.md');
 if (check) assert.equal(read(`${here}/ROUTE-MATRIX.md`), document, 'ROUTE-MATRIX.md is stale: run node spikes/vue3-migration/route-matrix.mjs and commit the result.');
