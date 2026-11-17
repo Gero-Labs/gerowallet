@@ -87,10 +87,23 @@ jobs:
           ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
           ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
         run: |
-          expires_at="$(gh api "repos/$GH_REPO/actions/artifacts/$ARTIFACT_ID" --jq '.expires_at')"
+          # A just-uploaded artifact can briefly 404 on the REST API. This step
+          # only annotates the summary, so retry and never fail the job over it.
+          expires_at=''
+          for attempt in 1 2 3 4 5; do
+            if expires_at="$(gh api "repos/$GH_REPO/actions/artifacts/$ARTIFACT_ID" --jq '.expires_at' 2>/dev/null)" && [ -n "$expires_at" ]; then
+              break
+            fi
+            expires_at=''
+            sleep $((attempt * 3))
+          done
           {
             printf '### Help browser evidence\n\n'
             printf '[Download screenshots and JSON reports](%s)\n\n' "$ARTIFACT_URL"
-            printf 'GitHub reports expiry at **%s**. Download before that time.\n' "$expires_at"
+            if [ -n "$expires_at" ]; then
+              printf 'GitHub reports expiry at **%s**. Download before that time.\n' "$expires_at"
+            else
+              printf 'GitHub did not report the expiry time. The artifact is kept for 2 days from upload.\n'
+            fi
             printf 'The scenario scripts and synthetic fixtures remain in Git after expiry.\n'
           } >> "$GITHUB_STEP_SUMMARY"
