@@ -48,11 +48,10 @@ import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { findExistingWallet } from '@/db/gero-db';
-import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, discoveredBalance, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { Blockchain } from '@/models/types';
 import { debugLog } from '@/utils/debug';
 import { formatBalance } from '@/shared/utils/format';
-import { toLovelace } from '@/shared/utils/lovelace';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 import type { NetworkInfo } from '@/utils/networks';
 
@@ -89,7 +88,7 @@ const probing = computed(() => pending.value > 0);
 
 async function discover(chain: string, network: string, accounts: AccountXpub[]): Promise<DiscoveredAccount[]> {
   if (chain === Blockchain.MIDNIGHT) return discoverMidnightAccounts(accounts);
-  if (chain === Blockchain.SOLANA) return discoverSolanaAccounts(accounts);
+  if (chain === Blockchain.SOLANA) return discoverSolanaAccounts(network, accounts);
   if (chain === Blockchain.BITCOIN) return discoverBitcoinAccounts(network, props.addressType ?? 'segwit', accounts);
   return discoverAccounts(chain, network, accounts);
 }
@@ -144,7 +143,7 @@ const rows = computed<Row[]>(() => [...props.accounts]
       accountIndex,
       address: found?.address,
       balance: found?.balance != null && found.activity === 'used'
-        ? `${formatBalance(Number(toLovelace(found.balance)) / 1_000_000)} ${props.network.currencySymbol}`
+        ? `${formatBalance(discoveredBalance(found) ?? 0)} ${props.network.currencySymbol}`
         : undefined,
       activity: found?.activity,
       existing: accountIndex in existing.value ? existing.value[accountIndex] : undefined,

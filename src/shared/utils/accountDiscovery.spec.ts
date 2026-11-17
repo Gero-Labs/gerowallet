@@ -4,7 +4,7 @@ import { Blockchain, CoinTypes, HARDENED, Network, WalletTypePurpose } from '@/m
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import { resolvePrivateKey } from './resolver';
 import { accountXpub, type AccountXpub } from './walletAccount';
-import { accountReceiveAddress, BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
+import { accountReceiveAddress, BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, discoveredBalance, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
 
 // bitcoinjs-lib rejects the test runner's Buffer: name each address after its xpub and index instead.
 vi.mock('@/chains/bitcoin/bitcoinKeyManager', () => ({
@@ -155,11 +155,47 @@ describe('accountReceiveAddress', () => {
 });
 
 describe('discoverSolanaAccounts', () => {
-  it('shows each account by its address (its key) and never probes it', () => {
-    const address = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
-    expect(discoverSolanaAccounts([{ accountIndex: 1, publicKey: address, keys: [] }])).toEqual([
-      { accountIndex: 1, publicKey: address, keys: [], address, stakeAddress: '', activity: 'unchecked' },
-    ]);
+  const sol = (accountIndex: number): AccountXpub => ({ accountIndex, publicKey: `So1anaAccount${accountIndex}xxxxxxxxxxxxxxxxxxxxxxxxxxxx`, keys: [] });
+  /** History and lamports per account index; a missing entry has neither. */
+  function solanaApi(history: Record<number, number>, lamports: Record<number, bigint>, failing: { history?: number; balance?: number } = {}) {
+    const index = (address: string) => Number(address.replace('So1anaAccount', '').replace(/x+$/, ''));
+    return {
+      getSignatures: vi.fn(async (address: string) => {
+        if (index(address) === failing.history) throw new Error('nexus down');
+        return Array.from({ length: history[index(address)] ?? 0 }, (_, i) => ({ signature: `s${i}`, slot: i, success: true }));
+      }),
+      getBalance: vi.fn(async (address: string) => {
+        if (index(address) === failing.balance) throw new Error('nexus down');
+        return { address, lamports: lamports[index(address)] ?? 0n, slot: 1 };
+      }),
+    };
+  }
+
+  it('calls an account with history used, even emptied, and one with neither unused', async () => {
+    const api = solanaApi({ 0: 3, 1: 1 }, { 0: 1_500_000_000n });
+    const found = await discoverSolanaAccounts('Devnet', [0, 1, 2].map(sol), api);
+    expect(found.map((a) => [a.accountIndex, a.activity, a.balance])).toEqual([[0, 'used', '1500000000'], [1, 'used', '0'], [2, 'unused', '0']]);
+    expect(found[0]).toMatchObject({ address: sol(0).publicKey, stakeAddress: '', balanceDecimals: 9 });
+    // One signature is enough to tell.
+    expect(api.getSignatures).toHaveBeenCalledWith(sol(0).publicKey, { limit: 1 });
+  });
+
+  it('calls a balance with no history (an airdrop never moved) used', async () => {
+    const [found] = await discoverSolanaAccounts('Devnet', [sol(4)], solanaApi({}, { 4: 10n }));
+    expect(found.activity).toBe('used');
+  });
+
+  it('gives unknown when the history cannot be read, and leaves out a balance it could not read', async () => {
+    const found = await discoverSolanaAccounts('Devnet', [sol(0), sol(1)], solanaApi({ 1: 2 }, {}, { history: 0, balance: 1 }));
+    expect(found[0].activity).toBe('unknown');
+    expect(found[1]).toMatchObject({ activity: 'used' });
+    expect(found[1].balance).toBeUndefined();
+  });
+
+  it('shows a balance in whole coins: lamports for Solana, lovelace otherwise', () => {
+    expect(discoveredBalance({ balance: '1500000000', balanceDecimals: 9 })).toBe(1.5);
+    expect(discoveredBalance({ balance: '2500000' })).toBe(2.5);
+    expect(discoveredBalance({})).toBeUndefined();
   });
 
   it('gives a Solana record its address for the account picker', async () => {
