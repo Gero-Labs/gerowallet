@@ -101,9 +101,9 @@ export async function sendSolana(
   const fees = await api.getFees().catch(() => undefined);
   const priority = priorityPriceFor(feeLevel, fees?.prioritizationFeeMicroLamports);
   // Sending less than the rent-exempt minimum to an empty account fails on chain, so ask.
-  // An unreadable recipient is treated as empty: only an amount below that minimum can
-  // be refused for it, and such a transfer would only fail after the user signed it.
-  const recipientBalance = await api.getBalance(recipientAddress).then((b) => b.lamports).catch(() => 0n);
+  // An unreadable recipient (null) refuses only an amount below that minimum, with its own
+  // code: such a transfer could fail on chain after the user signed it.
+  const recipientBalance = await api.getBalance(recipientAddress).then((b) => b.lamports).catch(() => null);
   const refusal = checkSolTransfer({
     from: sender.publicKey,
     to: recipientAddress,

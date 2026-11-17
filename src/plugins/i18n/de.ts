@@ -6454,6 +6454,7 @@ export default {
   'solana.balanceUnknown': 'Ihr Guthaben ist noch nicht geladen. Versuchen Sie es gleich noch einmal.',
   'solana.senderBelowRent': 'Lassen Sie mindestens {amount} {ticker} in der Wallet oder senden Sie mit „Max“ alles.',
   'solana.recipientBelowRent': 'Diese Adresse hat noch kein {ticker} und braucht mindestens {amount} {ticker}, um eröffnet zu werden.',
+  'solana.recipientUnverified': 'Diese Adresse konnte gerade nicht geprüft werden. Unter {amount} {ticker} schlägt eine Überweisung an eine neue Adresse fehl. Bitte versuchen Sie es gleich noch einmal.',
   'solana.signFailed': 'Signieren fehlgeschlagen. Prüfen Sie Ihr Passwort oder Ihren PassKey und versuchen Sie es erneut.',
   'solana.submitFailed': 'Das Netzwerk hat die Transaktion möglicherweise nicht erhalten. Prüfen Sie Ihre Aktivität, bevor Sie es erneut versuchen.',
   'solana.sendFailed': 'Senden fehlgeschlagen. Bitte versuchen Sie es erneut.',

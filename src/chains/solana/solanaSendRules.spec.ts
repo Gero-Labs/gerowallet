@@ -46,7 +46,10 @@ describe('checkSolTransfer', () => {
     const small = { ...base, lamports: SOLANA_RENT_EXEMPT_MINIMUM - 1n };
     expect(checkSolTransfer({ ...small, recipientBalance: 0n })).toBe('RECIPIENT_BELOW_RENT');
     expect(checkSolTransfer({ ...small, recipientBalance: 5n })).toBeNull();
-    expect(checkSolTransfer({ ...small, recipientBalance: null })).toBeNull();
+    expect(checkSolTransfer({ ...small, recipientBalance: null })).toBe('RECIPIENT_UNVERIFIED');
+    expect(checkSolTransfer({ ...small, recipientBalance: undefined })).toBeNull();
+    expect(checkSolTransfer({ ...small, lamports: SOLANA_RENT_EXEMPT_MINIMUM, recipientBalance: null })).toBeNull();
+    expect(solanaSendErrorKey('RECIPIENT_UNVERIFIED')).toBe('solana.recipientUnverified');
   });
 });
 

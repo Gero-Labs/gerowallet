@@ -6561,6 +6561,7 @@ export default {
   'solana.balanceUnknown': 'Your balance hasn’t loaded yet. Try again in a moment.',
   'solana.senderBelowRent': 'Leave at least {amount} {ticker} in the wallet, or send everything with Max.',
   'solana.recipientBelowRent': 'This address holds no {ticker} yet, so it needs at least {amount} {ticker} to open.',
+  'solana.recipientUnverified': "Couldn't check this address right now. Below {amount} {ticker}, a send to a new address fails, so try again in a moment.",
   'solana.signFailed': 'Couldn’t sign. Check your password or PassKey and try again.',
   'solana.submitFailed': 'The network may not have received it. Check your activity before you try again.',
   'solana.sendFailed': 'Couldn’t send. Please try again.',

@@ -39,7 +39,8 @@ export type SolanaSendRefusal =
   | 'BALANCE_UNKNOWN'
   | 'INSUFFICIENT_FUNDS'
   | 'SENDER_BELOW_RENT'
-  | 'RECIPIENT_BELOW_RENT';
+  | 'RECIPIENT_BELOW_RENT'
+  | 'RECIPIENT_UNVERIFIED';
 
 export interface SolanaSendCheck {
   from: string;
@@ -48,7 +49,10 @@ export interface SolanaSendCheck {
   /** Sender's balance in lamports; null when not known yet. */
   balance: bigint | null;
   priorityMicroLamports: bigint;
-  /** Recipient's balance; null skips the rent rule for a new account (the worker passes 0 when unreadable). */
+  /**
+   * Recipient's balance. undefined: not checked (the page). null: the read failed, so an
+   * amount below the rent-exempt minimum is refused as unverifiable rather than signed.
+   */
   recipientBalance?: bigint | null;
 }
 
@@ -61,7 +65,10 @@ export function checkSolTransfer(check: SolanaSendCheck): SolanaSendRefusal | nu
   const remaining = check.balance - check.lamports - estimateSolTransferFee(check.priorityMicroLamports);
   if (remaining < 0n) return 'INSUFFICIENT_FUNDS';
   if (remaining > 0n && remaining < SOLANA_RENT_EXEMPT_MINIMUM) return 'SENDER_BELOW_RENT';
-  if (check.recipientBalance === 0n && check.lamports < SOLANA_RENT_EXEMPT_MINIMUM) return 'RECIPIENT_BELOW_RENT';
+  if (check.lamports < SOLANA_RENT_EXEMPT_MINIMUM) {
+    if (check.recipientBalance === 0n) return 'RECIPIENT_BELOW_RENT';
+    if (check.recipientBalance === null) return 'RECIPIENT_UNVERIFIED';
+  }
   return null;
 }
 
@@ -85,6 +92,7 @@ export function solanaSendErrorKey(code: string | undefined): string {
     case 'INSUFFICIENT_FUNDS': return 'send.insufficientBalance';
     case 'SENDER_BELOW_RENT': return 'solana.senderBelowRent';
     case 'RECIPIENT_BELOW_RENT': return 'solana.recipientBelowRent';
+    case 'RECIPIENT_UNVERIFIED': return 'solana.recipientUnverified';
     case 'BUILD_FAILED': return 'solana.signFailed';
     case 'SUBMIT_FAILED': return 'solana.submitFailed';
     default: return 'solana.sendFailed';

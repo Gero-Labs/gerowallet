@@ -78,10 +78,10 @@ describe('SOL send in the worker', () => {
     await expect(sendSolana(wallet(), { ...request, lamports: '1000' }, a)).rejects.toMatchObject({ code: 'RECIPIENT_BELOW_RENT' });
   });
 
-  it('treats an unreadable recipient as empty: below rent is refused, rent or more still goes', async () => {
+  it('an unreadable recipient: below rent is refused as unverified, rent or more still goes', async () => {
     const unreadable = () => api({ getBalance: vi.fn(async () => { throw new Error('nexus down'); }) });
     const w = wallet();
-    await expect(sendSolana(w, { ...request, lamports: '1000' }, unreadable())).rejects.toMatchObject({ code: 'RECIPIENT_BELOW_RENT' });
+    await expect(sendSolana(w, { ...request, lamports: '1000' }, unreadable())).rejects.toMatchObject({ code: 'RECIPIENT_UNVERIFIED' });
     expect(w.signSolanaTransfer).not.toHaveBeenCalled();
     await expect(sendSolana(wallet(), request, unreadable())).resolves.toEqual({ signature: 'sig-from-nexus' });
   });

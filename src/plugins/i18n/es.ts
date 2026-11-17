@@ -6329,6 +6329,7 @@ export default {
   'solana.balanceUnknown': 'Tu saldo aún no se ha cargado. Inténtalo de nuevo en un momento.',
   'solana.senderBelowRent': 'Deja al menos {amount} {ticker} en la billetera o envía todo con Máx.',
   'solana.recipientBelowRent': 'Esta dirección aún no tiene {ticker}, así que necesita al menos {amount} {ticker} para abrirse.',
+  'solana.recipientUnverified': 'No pudimos comprobar esta dirección ahora. Por debajo de {amount} {ticker}, un envío a una dirección nueva falla, así que inténtalo de nuevo en un momento.',
   'solana.signFailed': 'No se pudo firmar. Revisa tu contraseña o tu PassKey e inténtalo de nuevo.',
   'solana.submitFailed': 'Es posible que la red no la haya recibido. Revisa tu actividad antes de intentarlo de nuevo.',
   'solana.sendFailed': 'No se pudo enviar. Inténtalo de nuevo.',
