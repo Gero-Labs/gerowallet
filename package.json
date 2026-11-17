@@ -41,7 +41,6 @@
   "dependencies": {
     "@babylonlabs-io/btc-staking-ts": "^2.8.6",
     "@bringweb3/chrome-extension-kit": "1.8.0",
-    "@cardano-foundation/cardano-verify-datasignature": "^1.0.11",
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^8.1.0",
     "@cardano-sdk/core": "^0.47.1",
     "@cardano-sdk/crypto": "^0.4.7",
@@ -127,6 +126,7 @@
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",
     "qrcode": "^1.5.4",
+    "readable-stream": "^4.8.0",
     "rxjs": "7.8.2",
     "shamir-secret-sharing": "0.0.4",
     "sockjs-client": "^1.6.1",
