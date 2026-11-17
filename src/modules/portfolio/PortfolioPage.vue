@@ -80,6 +80,12 @@
       />
     </template>
 
+    <!-- Solana: its own view from Gero Sync (balance, SPL tokens, activity); never the
+         Cardano holdings table or empty-state checks, which read Cardano's account. -->
+    <template v-else-if="isSolana">
+      <SolanaDashboard />
+    </template>
+
     <!-- Bitcoin: dedicated funded dashboard (balance card + price chart + ecosystem
          widget) — BTC has its own view, not the Cardano holdings table (which would
          also mis-handle its UTxO shape). Empty BTC wallets fall through to the shared
@@ -460,6 +466,7 @@ import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldin
 import MidnightNoticeSlot from '@/modules/dashboard/components/MidnightNoticeSlot.vue';
 import { useMidnightRefresh } from '@/shared/composables/useMidnightRefresh';
 import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
+import SolanaDashboard from '@/modules/dashboard/components/SolanaDashboard.vue';
 import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
 import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
@@ -541,6 +548,7 @@ const {
 // ── UI State ──────────────────────────────────────────────────────────────────
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+const isSolana = computed(() => loggedWallet.value?.chain === Blockchain.SOLANA);
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );

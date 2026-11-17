@@ -163,6 +163,7 @@ import {
 } from '@/chrome/mpcWalletHandlers';
 import type { DeviceShareSecret } from '@/shared/utils/mpc';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
+import { quoteSolanaSend, sendSolana, solanaSendErrorCode } from '@/chrome/solanaSend';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -4114,6 +4115,27 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+  }
+});
+
+// Solana send (chrome/solanaSend.ts): the page names recipient, amount and fee level only.
+app.addToOptions(MessageTypes.SOLANA_SEND_QUOTE, async (request, sendResponse) => {
+  try {
+    const result = await quoteSolanaSend(walletManager.getWallet());
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.SEND_SOLANA, async (request, sendResponse) => {
+  try {
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Solana signing');
+    const result = await sendSolana(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    console.error('Solana send failed:', solanaSendErrorCode(error));
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
   }
 });
 

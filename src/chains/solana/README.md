@@ -2,7 +2,7 @@
 
 Solana support, gated by the `isSolanaEnabled` feature flag (default off).
 
-This folder is the chain core. Wallet create/restore and Gero Sync are wired in; the screens (balance, receive, send, history) are the next step.
+This folder is the chain core. Wallet create/restore, Gero Sync and the screens (balance, tokens, activity, receive, send) are wired in. The side panel shows no Solana view yet.
 
 ## Wiring
 
@@ -13,6 +13,12 @@ This folder is the chain core. Wallet create/restore and Gero Sync are wired in;
   - `websocket.service` sends the Solana SUBSCRIBE. On a catch-up it keeps the cursor at the newest delivered slot, and carries the `solana_*` snapshot through.
   - `sync.service.applySolanaSync` merges into `walletStore.solanaTransactions` (IndexedDB bulk field) and `walletStore.solana` (balance, tokens, tip slot), and persists the cursor.
   - `FORCE_RESYNC` clears both and re-subscribes at 0.
+- **Screens**: `PortfolioPage` renders `SolanaDashboard.vue` (balance, SPL tokens by mint, the latest 25 transactions with Solscan links). Receive is the shared `ReceiveDialog` (one address, its path). Send is `SolanaSendDialog.vue`, opened from the quick actions.
+- **Send** (`chrome/solanaSend.ts`, extension pages only):
+  - `SOLANA_SEND_QUOTE` gives the fee at two levels: Standard (median priority price) and Fast (p75), from Nexus `/api/sol/fees`, capped at `MAX_PRIORITY_MICRO_LAMPORTS`.
+  - `SEND_SOLANA` takes only the recipient, lamports and fee level. The worker reads the sender, balance and price itself and applies `checkSolTransfer` (`solanaSendRules.ts`, the same rules the dialog shows): a valid address that is not the wallet's own, a known balance, the fee counted, no leftover below the rent-exempt minimum, and no new recipient account opened below it.
+  - It then takes a recent blockhash from Nexus `chain/tip`, signs in `WalletBg.signSolanaTransfer` (phrase → key at the record's account, refused unless it gives the record's address, wiped after) and submits through Nexus.
+  - Pages see an error code only (`solanaSendErrorKey`), never server text. `SUBMIT_FAILED` tells the user to check their activity before retrying, because the transaction may have landed.
 - Imports of this folder from code in the background bundle are static, never `await import()`: an inlined dynamic-import namespace can be read before it is declared (`scripts/check-bundle-tdz.mjs`).
 
 | File | What it does |
@@ -22,6 +28,8 @@ This folder is the chain core. Wallet create/restore and Gero Sync are wired in;
 | `solanaBase58.ts` | Base58 for addresses, blockhashes and signatures. |
 | `solanaAmount.ts` | Lamports and SPL raw units as `bigint` (a u64 can exceed `Number.MAX_SAFE_INTEGER`); `formatSol`/`parseSol`. |
 | `solanaTransaction.ts` | Native SOL transfer: hand-encoded legacy message (SystemProgram transfer, optional ComputeBudget limit and price), ed25519 signing, fee estimate. |
+| `solanaSendRules.ts` | The rules a SOL send must pass, fee levels, Max, and the page text for each error code. Shared by the dialog and the worker. |
+| `solanaExplorer.ts` | Solscan links, only for a well-formed signature or address. |
 | `solanaWireSync.ts` | Gero Sync `SOLANA` messages → transactions, balance, tokens, cursor. Contract: gero-sync `docs/solana-wire.md`. |
 
 `src/api/solana-api.ts` is the Nexus `/api/sol` client. It calls Nexus directly with the device JWT, as the Midnight client does; device tokens carry `SOLANA_READ`/`SOLANA_WRITE`. Realtime updates come from Gero Sync, and this client covers on-demand reads, fees and submit.
