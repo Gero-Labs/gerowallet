@@ -651,8 +651,8 @@ export class WalletManager {
     // --- WebSocket sync (replaces Ably) ---
     // Midnight uses its own bridge (midnightSyncService) — wired separately
     // once the SDK can produce the unshielded address required to subscribe.
-    // Solana gets its own Gero Sync branch (SOLANA SUBSCRIBE, slot cursor) in a follow-up;
-    // until then it must not take the Cardano path.
+    // Solana has its own Gero Sync branch below (SOLANA SUBSCRIBE, slot cursor), so it
+    // never takes this Cardano path.
     if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT && walletBg.chain !== Blockchain.SOLANA) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
