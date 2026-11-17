@@ -41,7 +41,10 @@ import { useChainContext } from '../composables/useChainContext';
 import assets from '@/utils/assets';
 
 const { t } = useTranslation();
-const { networkInfo } = useChainContext();
+const { networkInfo, isSolana } = useChainContext();
+// Solana keeps transactionSupport off (the generic send paths are Cardano- and
+// Bitcoin-shaped), but the panel has its own SOL send and receive sheets.
+const canTransact = computed(() => !!networkInfo.value?.transactionSupport || isSolana.value);
 
 const props = withDefaults(defineProps<{
   /** Actions shown but held (for example Send while the network is paused). */
@@ -83,7 +86,7 @@ const allActions = computed<QuickAction[]>(() => {
       bgColor: 'color-mix(in srgb, var(--g-text-1) 10%, transparent)',
       borderColor: 'color-mix(in srgb, var(--g-text-1) 35%, transparent)',
       filter: 'brightness(0) invert(1)',
-      enabled: !!networkInfo.value?.transactionSupport,
+      enabled: canTransact.value,
     },
     {
       id: 'receive',
@@ -93,7 +96,7 @@ const allActions = computed<QuickAction[]>(() => {
       bgColor: 'color-mix(in srgb, var(--g-success) 12%, transparent)',
       borderColor: 'color-mix(in srgb, var(--g-success) 40%, transparent)',
       filter: 'invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%)',
-      enabled: !!networkInfo.value?.transactionSupport,
+      enabled: canTransact.value,
     },
     {
       id: 'perps',
