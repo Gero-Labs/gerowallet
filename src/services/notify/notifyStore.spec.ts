@@ -109,3 +109,62 @@ describe('inbox (the bell, B-M3)', () => {
     expect(await s.getInbox()).toEqual([]);
   });
 });
+
+// Push handlers run concurrently (one per push event), so two pushes arriving together
+// must not each read the old value and overwrite the other's write (B-M3: the bell lost a row).
+describe('notifyStore concurrent updates', () => {
+  /** Storage whose reads and writes take a turn of the event loop, as IndexedDB does. */
+  const slowStorage = (): NotifyStorage => {
+    const inner = memoryNotifyStorage();
+    const later = <T>(fn: () => Promise<T>) => new Promise<T>((resolve, reject) => { setTimeout(() => { fn().then(resolve, reject); }, 0); });
+    return { get: (k) => later(() => inner.get(k)), set: (k, v) => later(() => inner.set(k, v)), remove: (k) => later(() => inner.remove(k)) };
+  };
+  const row = (e: string, ts: number) => ({ e, t: 'tx_in', c: 'tx', d: 'home', walletId: 1, walletName: 'W', title: e, body: '', ts, readAt: null, needsYou: false });
+
+  it('keeps every inbox row when pushes arrive together', async () => {
+    const s = createNotifyStore(slowStorage());
+    await Promise.all([s.addInbox(row('e1', 1)), s.addInbox(row('e2', 2)), s.addInbox(row('e3', 3))]);
+    expect((await s.getInbox()).map((i) => i.e).sort()).toEqual(['e1', 'e2', 'e3']);
+  });
+
+  it('remembers every seen event, and a concurrent repeat is reported once as new', async () => {
+    const s = createNotifyStore(slowStorage());
+    const results = await Promise.all([s.markSeen('a', 1), s.markSeen('b', 1), s.markSeen('a', 2)]);
+    expect(results).toEqual([false, false, true]);
+    expect(await Promise.all([s.markSeen('a', 3), s.markSeen('b', 3)])).toEqual([true, true]);
+  });
+
+  it('a read mark does not undo a row added at the same time', async () => {
+    const s = createNotifyStore(slowStorage());
+    await s.addInbox(row('e1', 1));
+    await Promise.all([s.markInboxRead('e1', 5), s.addInbox(row('e2', 2))]);
+    const inbox = await s.getInbox();
+    expect(inbox.map((i) => [i.e, i.readAt])).toEqual([['e2', null], ['e1', 5]]);
+  });
+
+  it('keeps every wallet and pending delete written together', async () => {
+    const s = createNotifyStore(slowStorage());
+    await Promise.all([s.setWallet(1, wallet('a'.repeat(32))), s.setWallet(2, wallet('b'.repeat(32)))]);
+    expect(Object.keys(await s.getWallets()).sort()).toEqual(['1', '2']);
+    await Promise.all([s.enqueueDelete({ kind: 'wallet', walletTag: 't1', enqueuedAt: 1 }), s.enqueueDelete({ kind: 'wallet', walletTag: 't2', enqueuedAt: 2 })]);
+    expect(await s.getPendingDeletes()).toHaveLength(2);
+  });
+
+  it('removing sent deletes keeps one queued while they were in flight', async () => {
+    const s = createNotifyStore(slowStorage());
+    await s.enqueueDelete({ kind: 'wallet', walletTag: 't1', enqueuedAt: 1 });
+    const sent = await s.getPendingDeletes();
+    await s.enqueueDelete({ kind: 'wallet', walletTag: 't2', enqueuedAt: 2 });
+    await s.removePendingDeletes(sent);
+    expect(await s.getPendingDeletes()).toEqual([{ kind: 'wallet', walletTag: 't2', enqueuedAt: 2 }]);
+  });
+
+  it('a failed update does not block the next one', async () => {
+    let fail = true;
+    const inner = memoryNotifyStorage();
+    const flaky: NotifyStorage = { get: inner.get, set: async (k, v) => { if (fail) { fail = false; throw new Error('quota'); } return inner.set(k, v); }, remove: inner.remove };
+    const s = createNotifyStore(flaky);
+    await Promise.all([s.addInbox(row('e1', 1)), s.addInbox(row('e2', 2))]);
+    expect((await s.getInbox()).map((i) => i.e)).toEqual(['e2']);
+  });
+});

@@ -368,11 +368,12 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
           log(`notify pending delete dropped (${e.code})`); // a bug-class 4xx never succeeds later
           continue;
         }
-        await store.setPendingDeletes(queue.slice(i));
+        // Only what this pass handled leaves the queue: a push may have queued another DELETE meanwhile.
+        await store.removePendingDeletes(queue.slice(0, i));
         return;
       }
     }
-    await store.setPendingDeletes([]);
+    await store.removePendingDeletes(queue);
   }
 
   /** §8.2 step 4. `serverLinks` is the wallets[] of the last GET or PUT response. */
