@@ -88,7 +88,8 @@ for (const route of routes) {
 }
 // Behaviours (V02's behavioural acceptance item and the V05 assignment): each
 // names its owner and either a check in this repository (verified by --check in
-// CI) or the gap.
+// CI) or the gap. `scope` says what the behaviour covers when part of what V02
+// names does not exist in the product (nothing to test), which is not a gap.
 const OWNER = /^V(0[1-9]|1[0-6])$/;
 assert(matrix.behaviours && typeof matrix.behaviours === 'object' && Object.keys(matrix.behaviours).length, 'route-matrix.json: behaviours is required');
 for (const [key, entry] of Object.entries(matrix.behaviours)) {
@@ -100,6 +101,7 @@ for (const [key, entry] of Object.entries(matrix.behaviours)) {
   if (typeof entry.title !== 'string' || !entry.title.trim()) problems.push(`${label}: title must be a non-empty string`);
   if (!Array.isArray(entry.owners) || !entry.owners.length || !entry.owners.every(owner => OWNER.test(owner))) problems.push(`${label}: owners must list work packages such as V05`);
   if (entry.gap !== undefined && (typeof entry.gap !== 'string' || !entry.gap.trim())) problems.push(`${label}: gap must be a non-empty string`);
+  if (entry.scope !== undefined && (typeof entry.scope !== 'string' || !entry.scope.trim())) problems.push(`${label}: scope must be a non-empty string`);
   // CI runs --check without --e2e, so only local checks are verified there.
   if (!entry.checks.some(item => LOCAL_KINDS.has(item.kind)) && !entry.gap) problems.push(`${label}: no check in this repository covers it, so the gap must be stated`);
 }
@@ -278,10 +280,10 @@ for (const [, app] of ROUTERS) {
 }
 const behaviourGaps = Object.values(matrix.behaviours).filter(entry => entry.gap).length;
 lines.push('## Behaviours', '',
-  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. Each check names its test after ›, written in full as in its file: \`--check\` fails if a local test is renamed or deleted, and \`--e2e\` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap. The title check guards against renames and deletions; it does not prove the test runs (a skipped test still matches).`,
-  '', '| Behaviour | Owner | Checks | Gap |', '|---|---|---|---|');
+  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. Each check names its test after ›, written in full as in its file: \`--check\` fails if a local test is renamed or deleted, and \`--e2e\` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap. Scope names what V02 lists but the product does not have, so there is nothing to test. The title check guards against renames and deletions; it does not prove the test runs (a skipped test still matches).`,
+  '', '| Behaviour | Owner | Checks | Scope | Gap |', '|---|---|---|---|---|');
 for (const entry of Object.values(matrix.behaviours)) {
-  lines.push(`| ${cell(entry.title)} | ${entry.owners.join(', ')} | ${cell(checks(entry))} | ${cell(entry.gap ?? '-')} |`);
+  lines.push(`| ${cell(entry.title)} | ${entry.owners.join(', ')} | ${cell(checks(entry))} | ${cell(entry.scope ?? '-')} | ${cell(entry.gap ?? '-')} |`);
 }
 lines.push('');
 const document = lines.join('\n');

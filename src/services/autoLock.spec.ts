@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAutoLock, shouldAutoLock, type AutoLockDeps } from './autoLock';
+import { AUTO_LOCK_ALARM, AUTO_LOCK_PERIOD_MINUTES, checkAutoLock, scheduleAutoLock, shouldAutoLock, type AutoLockDeps } from './autoLock';
 
 describe('shouldAutoLock', () => {
   it('does not lock when auto-lock is disabled (0 minutes)', () => {
@@ -89,5 +89,30 @@ describe('auto-lock alarm tick (checkAutoLock)', () => {
     });
     expect(ran).toBe(false);
     expect(lock).not.toHaveBeenCalled();
+  });
+});
+
+describe('auto-lock alarm registration', () => {
+  function fakeAlarms() {
+    const listeners: Array<(alarm: chrome.alarms.Alarm) => void> = [];
+    const create = vi.fn();
+    const alarms = { create, onAlarm: { addListener: (fn: (alarm: chrome.alarms.Alarm) => void) => listeners.push(fn) } };
+    const fire = (name: string) => listeners.forEach(fn => fn({ name, scheduledTime: 0 } as chrome.alarms.Alarm));
+    return { alarms: alarms as unknown as Pick<typeof chrome.alarms, 'create' | 'onAlarm'>, create, fire };
+  }
+
+  it('creates a repeating alarm every period and runs a tick on each of its firings only', () => {
+    const { alarms, create, fire } = fakeAlarms();
+    const tick = vi.fn();
+    scheduleAutoLock(alarms, tick);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(AUTO_LOCK_ALARM, { delayInMinutes: AUTO_LOCK_PERIOD_MINUTES, periodInMinutes: AUTO_LOCK_PERIOD_MINUTES });
+    expect(AUTO_LOCK_PERIOD_MINUTES).toBe(1);
+    fire('clearProcessedDomains');
+    fire('refreshCoinGeckoPrices');
+    expect(tick).not.toHaveBeenCalled();
+    fire(AUTO_LOCK_ALARM);
+    fire(AUTO_LOCK_ALARM);
+    expect(tick).toHaveBeenCalledTimes(2);
   });
 });

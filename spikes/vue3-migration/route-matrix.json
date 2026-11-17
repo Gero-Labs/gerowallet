@@ -807,7 +807,7 @@
           "test": "five wrong passwords start a wait that refuses even the right password"
         }
       ],
-      "gap": "Recipient address checks are synchronous and there is no ADA Handle validation, so only password and credential checks are asynchronous."
+      "scope": "Recipient address checks are synchronous and there is no ADA Handle validation, so the asynchronous checks are the password and credential ones covered here."
     },
     "async-validation-pending": {
       "title": "Async validation: pending blocks repeat actions; a stale result is discarded",
@@ -966,12 +966,21 @@
           "test": "a page that dies before speaking still declines its own popup, never another"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "closing the panel answers nothing and keeps the request; the next panel of that tab gets it and can answer"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/dappPanelSettlement.spec.ts",
+          "test": "a panel that dies while requests are re-delivered leaves them parked for the next connect"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
           "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
-      ],
-      "gap": "Closing the side panel parks a request instead of answering it (by design: it is re-delivered when a panel reconnects); that parking, in background.ts, has no test."
+      ]
     },
     "worker-restart": {
       "title": "Service-worker restart: state recovers after the MV3 worker stops",
@@ -1059,6 +1068,11 @@
           "kind": "unit",
           "ref": "src/services/autoLock.spec.ts",
           "test": "reads an added account's lock settings from account #0 and its activity from itself"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/services/autoLock.spec.ts",
+          "test": "creates a repeating alarm every period and runs a tick on each of its firings only"
         },
         {
           "kind": "harness",
@@ -1172,7 +1186,7 @@
           "test": "links follow its own network and its own choice"
         }
       ],
-      "gap": "The network belongs to each wallet (geroStore.setNetwork has no callers), so there is no separate network-switch action to test."
+      "scope": "The network belongs to each wallet (geroStore.setNetwork has no callers), so a network switch is a switch to a wallet on another network; there is no separate action."
     },
     "persistence": {
       "title": "Persistence: store state survives a worker or browser restart",

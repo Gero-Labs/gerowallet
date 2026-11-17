@@ -22,7 +22,7 @@ import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, M
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { ownExtension } from '@/chrome/senderTrust';
-import { admitPanelPort, settlePanelMessage } from '@/chrome/dappPanelSettlement';
+import { admitPanelPort, attachPanelPort } from '@/chrome/dappPanelSettlement';
 import { connectApprovedAccount, readConnectApproval, type ConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
@@ -68,7 +68,7 @@ import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 import { announcementActions, announcementsRefresh, getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
-import { AUTO_LOCK_ALARM, AUTO_LOCK_PERIOD_MINUTES, checkAutoLock } from '@/services/autoLock';
+import { checkAutoLock, scheduleAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
 import { isMidnightServerSideFailure, readableMidnightError } from '@/api/midnightApiError';
@@ -523,28 +523,6 @@ function syncDappRequestBadge(): void {
   applyDappRequestBadge(pendingDAppRequests.size);
 }
 
-function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
-  const requestIds: string[] = [];
-  for (const [requestId, entry] of pendingDAppRequests.entries()) {
-    const matchesTab = entry.tabId === tabId || Number.isNaN(entry.tabId);
-    if (!matchesTab) continue;
-    requestIds.push(requestId);
-    try {
-      port.postMessage({ type: 'dapp-request', method: entry.method, requestId, payload: entry.payload });
-    } catch {
-      // Port died mid-loop; the next connect will retry.
-      return;
-    }
-  }
-  // Then name what this worker still holds, so the panel drops a prompt that
-  // died with a previous worker (see dappRequestHub.dropRequestsNotLive).
-  try {
-    port.postMessage({ type: 'dapp-live', requestIds });
-  } catch {
-    // Port died; the next connect sends it again.
-  }
-}
-
 // The offscreen Midnight prover document's port (midnightDeviceProver.ts).
 chrome.runtime.onConnect.addListener((port) => { acceptMidnightProverPort(port); });
 
@@ -554,34 +532,17 @@ chrome.runtime.onConnect.addListener((port) => {
   const tabId = admitPanelPort(port, ownExtension(), () => syntheticPortSeq--);
   if (tabId === null) return;
 
-  const oldPort = miniGeroPorts.get(tabId);
-  if (oldPort) {
-    try { oldPort.disconnect(); } catch { /* already disconnected */ }
-  }
-  miniGeroPorts.set(tabId, port);
   // The panel is open now, so a "waiting for you" notification is stale.
   clearDappParkedNotification(tabId);
-
-  port.onMessage.addListener((message) => {
-    // Answered at most once; see settlePanelMessage. The wallet-switch guard
-    // keeps an approval from being honoured silently for another wallet.
-    const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
-    if (settlePanelMessage(pendingDAppRequests, message, tabId, activeWalletId)) syncDappRequestBadge();
-  });
-
-  port.onDisconnect.addListener(() => {
-    if (miniGeroPorts.get(tabId) === port) {
-      miniGeroPorts.delete(tabId);
-    }
-    // PARK, do not reject: closing the panel, locking it, or switching tabs
-    // must not answer a pending dApp request on the user's behalf. Pending
-    // entries stay in the map and are re-delivered once a panel port
-    // reconnects (see redeliverParkedRequests below); only an explicit user
-    // action (approve/reject) or a NACK settles them.
-  });
-
-  // Re-deliver anything parked for this tab (and tabless requests).
-  redeliverParkedRequests(tabId, port);
+  // Settles answers once, parks requests when the panel closes and re-delivers
+  // them on reconnect (see attachPanelPort). The wallet-switch guard keeps an
+  // approval from being honoured silently for another wallet.
+  attachPanelPort({
+    ports: miniGeroPorts,
+    pending: pendingDAppRequests,
+    activeWalletId: () => (WalletStore.state.loggedWallet as { id?: string } | null)?.id,
+    onSettled: syncDappRequestBadge,
+  }, port, tabId);
 });
 
 function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promise<BackgroundResponse> {
@@ -814,11 +775,8 @@ chrome.alarms.create('clearProcessedDomains', {
   periodInMinutes: 24 * 60 // repeat every 24 hours
 });
 
-// Create auto-lock alarm to check every minute
-chrome.alarms.create(AUTO_LOCK_ALARM, {
-  delayInMinutes: AUTO_LOCK_PERIOD_MINUTES,
-  periodInMinutes: AUTO_LOCK_PERIOD_MINUTES
-});
+// Auto-lock check every minute (see scheduleAutoLock).
+scheduleAutoLock(chrome.alarms, () => { void runAutoLockCheck(); });
 
 // Populate the CoinGecko price cache. Nothing else calls updatePrices(), so
 // without this the cache stays {} and every consumer that reads it (the ADA
@@ -833,8 +791,6 @@ chrome.alarms.create('refreshCoinGeckoPrices', {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'clearProcessedDomains') {
     clearProcessedDomains();
-  } else if (alarm.name === AUTO_LOCK_ALARM) {
-    void runAutoLockCheck();
   } else if (alarm.name === 'refreshCoinGeckoPrices') {
     coinGeckoStore.updatePrices().catch(error => {
       console.warn('❌ Error refreshing CoinGecko prices:', error);
