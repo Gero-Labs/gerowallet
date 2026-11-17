@@ -14,6 +14,11 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
       <img
+        :src="assets.solanaBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Solana') }"
+      />
+      <img
         :src="assets.midnightLoginBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Midnight') }"

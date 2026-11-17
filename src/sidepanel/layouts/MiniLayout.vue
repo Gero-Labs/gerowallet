@@ -53,6 +53,8 @@ const bgImage = computed(() => {
       return assets.bitcoinBg;
     case Blockchain.MIDNIGHT:
       return assets.midnightBg;
+    case Blockchain.SOLANA:
+      return assets.solanaBg;
     default:
       return assets.cardanoBg;
   }

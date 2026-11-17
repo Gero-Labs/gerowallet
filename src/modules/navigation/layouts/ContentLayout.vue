@@ -6,7 +6,7 @@
           <!-- Background - Confined to dashboard working area -->
           <div
             :class="
-              loggedWallet?.chain === Blockchain.BITCOIN
+              loggedWallet?.chain === Blockchain.BITCOIN || loggedWallet?.chain === Blockchain.SOLANA
                 ? 'bitcoin-background-dashboard'
                 : loggedWallet?.chain === Blockchain.MIDNIGHT
                   ? 'midnight-background-dashboard'
@@ -16,7 +16,9 @@
               backgroundImage: `url(${
                 loggedWallet?.chain === Blockchain.BITCOIN
                   ? assets.bitcoinBg
-                  : loggedWallet?.chain === Blockchain.MIDNIGHT
+                  : loggedWallet?.chain === Blockchain.SOLANA
+                    ? assets.solanaBg
+                    : loggedWallet?.chain === Blockchain.MIDNIGHT
                     ? assets.midnightBg
                     : assets.cardanoBg
               })`,
@@ -661,6 +663,9 @@ const preloadBackgroundImage = () => {
     case Blockchain.MIDNIGHT:
       imageUrl = assets.midnightBg;
       break;
+    case Blockchain.SOLANA:
+      imageUrl = assets.solanaBg;
+      break;
     default:
       imageUrl = assets.cardanoBg;
   }
@@ -847,7 +852,8 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Bitcoin background — slightly warmer tint to complement the orange theme */
+/* Bitcoin background — slightly warmer tint to complement the orange theme. Solana's
+   waves share the same composition (black sky, waves below), so it uses this too. */
 .bitcoin-background-dashboard {
   position: absolute;
   top: calc(-50% + 20px);
