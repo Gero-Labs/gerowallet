@@ -146,7 +146,8 @@ export interface NotifyStore {
   setWallet(walletId: number | string, state: NotifyWalletState): Promise<void>;
   removeWallet(walletId: number | string): Promise<void>;
   getPendingDeletes(): Promise<PendingDelete[]>;
-  setPendingDeletes(queue: PendingDelete[]): Promise<void>;
+  /** Takes these entries (as read, sent or dropped) off the queue, keeping any queued since. */
+  removePendingDeletes(done: PendingDelete[]): Promise<void>;
   enqueueDelete(item: PendingDelete): Promise<void>;
   getConfigCache(): Promise<NotifyConfigCache | null>;
   setConfigCache(cache: NotifyConfigCache | null): Promise<void>;
@@ -186,6 +187,18 @@ export function createNotifyStore(storage: NotifyStorage = privateNotifyStorage,
       log(`notifyStore write ${key} failed`, e);
     }
   }
+  // Every change to a key is read-modify-write, and the worker runs push handlers concurrently
+  // (one per push event): two of them reading the same old value lose one write (B-M3: a push
+  // burst dropped bell rows). So the changes to one key run one after another. The tail swallows
+  // the result, so a failed change never blocks the next one.
+  const tails = new Map<string, Promise<unknown>>();
+  function serial<T>(key: string, change: () => Promise<T>): Promise<T> {
+    const run = (tails.get(key) ?? Promise.resolve()).then(change);
+    const tail = run.catch(() => undefined);
+    tails.set(key, tail);
+    void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); });
+    return run;
+  }
   const isDevice = (v: unknown): v is Partial<NotifyDeviceState> => isObject(v);
   const isWallets = (v: unknown): v is Record<string, NotifyWalletState> => isObject(v);
   const isQueue = (v: unknown): v is PendingDelete[] => Array.isArray(v);
@@ -200,58 +213,63 @@ export function createNotifyStore(storage: NotifyStorage = privateNotifyStorage,
 
   return {
     getDevice,
-    async updateDevice(patch) {
+    updateDevice: (patch) => serial(KEYS.device, async () => {
       const next = { ...(await getDevice()), ...patch };
       await write(KEYS.device, next);
       return next;
-    },
+    }),
     getWallets,
     async getWallet(walletId) { return (await getWallets())[String(walletId)] ?? null; },
-    async setWallet(walletId, state) { await write(KEYS.wallets, { ...(await getWallets()), [String(walletId)]: state }); },
-    async removeWallet(walletId) {
+    setWallet: (walletId, state) => serial(KEYS.wallets, async () => { await write(KEYS.wallets, { ...(await getWallets()), [String(walletId)]: state }); }),
+    removeWallet: (walletId) => serial(KEYS.wallets, async () => {
       const all = await getWallets();
       delete all[String(walletId)];
       await write(KEYS.wallets, all);
-    },
+    }),
     getPendingDeletes,
-    setPendingDeletes: (queue) => write(KEYS.pendingDeletes, queue),
-    async enqueueDelete(item) {
+    removePendingDeletes: (done) => serial(KEYS.pendingDeletes, async () => {
+      const same = (a: PendingDelete, b: PendingDelete) => a.kind === b.kind && a.walletTag === b.walletTag && a.enqueuedAt === b.enqueuedAt;
+      const queue = await getPendingDeletes();
+      const rest = queue.filter((q) => !done.some((d) => same(q, d)));
+      if (rest.length !== queue.length) await write(KEYS.pendingDeletes, rest);
+    }),
+    enqueueDelete: (item) => serial(KEYS.pendingDeletes, async () => {
       const queue = await getPendingDeletes();
       const same = queue.some((q) => q.kind === item.kind && q.walletTag === item.walletTag);
       if (!same) await write(KEYS.pendingDeletes, [...queue, item]);
-    },
+    }),
     getConfigCache: () => read(KEYS.configCache, null as NotifyConfigCache | null, (v): v is NotifyConfigCache | null => v === null || isConfigCache(v)),
     setConfigCache: (cache) => write(KEYS.configCache, cache),
     getRetry: () => read(KEYS.retry, null as NotifyRetryState | null, (v): v is NotifyRetryState | null => v === null || isRetry(v)),
     setRetry: (retry) => write(KEYS.retry, retry),
-    async markSeen(e, now) {
+    markSeen: (e, now) => serial(KEYS.seen, async () => {
       const seen = (await read(KEYS.seen, [] as Array<{ e: string; at: number }>, (v): v is Array<{ e: string; at: number }> => Array.isArray(v)))
         .filter((s) => isObject(s) && typeof s.e === 'string' && typeof s.at === 'number' && now - s.at < SEEN_TTL_MS);
       const already = seen.some((s) => s.e === e);
       const next = [...seen.filter((s) => s.e !== e), { e, at: now }].slice(-SEEN_MAX);
       await write(KEYS.seen, next);
       return already;
-    },
+    }),
     getPendingOpen: () => read(KEYS.pendingOpen, null as NotifyPendingOpen | null, (v): v is NotifyPendingOpen | null => v === null || (isObject(v) && typeof v['walletId'] === 'number' && typeof v['d'] === 'string')),
     setPendingOpen: (open) => write(KEYS.pendingOpen, open),
     getInbox,
-    async addInbox(item) {
+    addInbox: (item) => serial(KEYS.inbox, async () => {
       const rest = (await getInbox()).filter((i) => i.e !== item.e);
       await write(KEYS.inbox, [item, ...rest].slice(0, INBOX_MAX));
-    },
-    async markInboxRead(e, now) {
+    }),
+    markInboxRead: (e, now) => serial(KEYS.inbox, async () => {
       const all = await getInbox();
       if (!all.some((i) => (e === null || i.e === e) && i.readAt === null)) return;
       await write(KEYS.inbox, all.map((i) => ((e === null || i.e === e) && i.readAt === null ? { ...i, readAt: now } : i)));
-    },
-    clearInbox: () => write(KEYS.inbox, null),
+    }),
+    clearInbox: () => serial(KEYS.inbox, () => write(KEYS.inbox, null)),
     getIntro: async () => readIntroState(await read(KEYS.intro, undefined as unknown, (v): v is unknown => true)),
-    async updateIntro(patch) {
+    updateIntro: (patch) => serial(KEYS.intro, async () => {
       const current = readIntroState(await read(KEYS.intro, undefined as unknown, (v): v is unknown => true));
       const next: NotifyIntroState = { ...current, ...patch, offered: { ...current.offered, ...(patch.offered ?? {}) } };
       await write(KEYS.intro, next);
       return next;
-    },
+    }),
   };
 }
 
