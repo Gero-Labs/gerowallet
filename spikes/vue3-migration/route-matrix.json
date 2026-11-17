@@ -731,7 +731,7 @@
           "funded": true
         }
       ],
-      "manual": "Mainnet only: deposit to and withdraw from a Strike vault."
+      "manual": "Mainnet only: open a Strike vault; its details, depositors and your position load, and Deposit and Withdraw stay disabled with the \"not available in GeroWallet yet\" note. Vault transfers are deferred: Strike's API has no vault-specific deposit or withdrawal (#1292)."
     },
     "sidepanel:/activity": {
       "checks": [
