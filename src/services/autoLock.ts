@@ -27,9 +27,9 @@ export interface AutoLockDeps<W extends { id: number | string }> {
   loggedWallet: () => W | null | undefined;
   isLocked: () => boolean;
   /** The record whose DB holds the lock settings: account #0 of the wallet's group. */
-  settingsWalletId: (wallet: W) => number | string;
+  settingsWalletId: (wallet: W) => W['id'];
   /** A row of the per-wallet `config` table, or undefined. */
-  readConfig: (walletId: number | string, key: string) => Promise<{ value?: unknown } | undefined>;
+  readConfig: (walletId: W['id'], key: string) => Promise<{ value?: unknown } | undefined>;
   lock: () => Promise<unknown>;
   now: () => number;
 }

@@ -795,7 +795,7 @@ async function runAutoLockCheck(): Promise<void> {
       isLocked: () => walletStore.isLocked,
       settingsWalletId: (wallet) => secretsWalletId(wallet),
       readConfig: async (walletId, key) => {
-        const db = await getDb(walletId as number);
+        const db = await getDb(walletId);
         // A wallet DB that will not open must not read as "no activity": log it.
         if (!db) throw new Error(`wallet ${walletId} database unavailable`);
         return db.table('config').where({ key }).first();
