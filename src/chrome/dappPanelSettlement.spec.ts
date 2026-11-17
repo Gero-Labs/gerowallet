@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { settlePanelMessage, type PanelPendingEntry } from './dappPanelSettlement';
+import { admitPanelPort, settlePanelMessage, type PanelPendingEntry } from './dappPanelSettlement';
 
 function pendingWith(entry: Partial<PanelPendingEntry> = {}) {
   const resolve = vi.fn();
@@ -71,5 +71,33 @@ describe('side-panel answers settle a dApp request exactly once', () => {
     const { pending, resolve } = pendingWith({ method: 'enable' });
     settlePanelMessage(pending, { requestId: 'r1', type: 'dapp-response', data: { accountId: 2 } }, 7, 2);
     expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ data: { accountId: 2 } }));
+  });
+});
+
+describe('side-panel port admission', () => {
+  const OWN_ID = 'abcdefghijklmnopabcdefghijklmnop';
+  const own = { id: OWN_ID, root: `chrome-extension://${OWN_ID}/` };
+  const page = { id: OWN_ID, url: `chrome-extension://${OWN_ID}/sidepanel/index.html?tabId=7` };
+  const content = { id: OWN_ID, url: 'https://evil.example/', tab: { id: 7 } as chrome.tabs.Tab, frameId: 0 };
+  const port = (name: string, sender: chrome.runtime.MessageSender) =>
+    ({ name, sender, disconnect: vi.fn() }) as unknown as chrome.runtime.Port & { disconnect: ReturnType<typeof vi.fn> };
+
+  it('registers our own panel page under its tab, or a synthetic key without one', () => {
+    let next = -1;
+    expect(admitPanelPort(port('mini-gero-dapp-channel:7', page), own, () => next--)).toBe(7);
+    expect(admitPanelPort(port('mini-gero-dapp-channel:', page), own, () => next--)).toBe(-1);
+    expect(admitPanelPort(port('mini-gero-dapp-channel', page), own, () => next--)).toBe(-2);
+  });
+
+  it('refuses and disconnects a content-script port claiming to be the panel', () => {
+    const forged = port('mini-gero-dapp-channel:7', content);
+    expect(admitPanelPort(forged, own, () => -1)).toBeNull();
+    expect(forged.disconnect).toHaveBeenCalled();
+  });
+
+  it('ignores other ports without touching them', () => {
+    const other = port('store-sync', page);
+    expect(admitPanelPort(other, own, () => -1)).toBeNull();
+    expect(other.disconnect).not.toHaveBeenCalled();
   });
 });

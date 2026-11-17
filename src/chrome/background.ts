@@ -21,8 +21,8 @@ import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
-import { isOwnExtensionPageSender, ownExtension } from '@/chrome/senderTrust';
-import { settlePanelMessage } from '@/chrome/dappPanelSettlement';
+import { ownExtension } from '@/chrome/senderTrust';
+import { admitPanelPort, settlePanelMessage } from '@/chrome/dappPanelSettlement';
 import { connectApprovedAccount, readConnectApproval, type ConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
@@ -549,25 +549,10 @@ function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
 chrome.runtime.onConnect.addListener((port) => { acceptMidnightProverPort(port); });
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (!port.name.startsWith('mini-gero-dapp-channel')) return;
-  // Only our own extension pages may register an approval surface. A content
-  // script has the same sender.id, so the page URL must be ours too: otherwise a
-  // forged port could replace the real panel, read pending payloads and approve.
-  if (!isOwnExtensionPageSender(port.sender, ownExtension())) {
-    console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
-    try { port.disconnect(); } catch { /* noop */ }
-    return;
-  }
-  // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123").
-  const parts = port.name.split(':');
-  const parsed = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
-  // A panel opened without a tab context (manually / pinned) can't resolve its
-  // tab id and connects with an empty one. Register it anyway under a synthetic
-  // negative key so tab-agnostic routing (miniGeroPorts.size / any-panel
-  // fallback in the sign handlers) still finds it — we only lose the exact-tab
-  // match, which the fallback already covers. Negative keys never collide with
-  // real chrome tab ids.
-  const tabId = isNaN(parsed) ? syntheticPortSeq-- : parsed;
+  // Our own panel pages only; a panel without a tab gets a synthetic negative
+  // key (see admitPanelPort), which never collides with a real chrome tab id.
+  const tabId = admitPanelPort(port, ownExtension(), () => syntheticPortSeq--);
+  if (tabId === null) return;
 
   const oldPort = miniGeroPorts.get(tabId);
   if (oldPort) {
@@ -809,7 +794,12 @@ async function runAutoLockCheck(): Promise<void> {
       loggedWallet: () => walletStore.loggedWallet,
       isLocked: () => walletStore.isLocked,
       settingsWalletId: (wallet) => secretsWalletId(wallet),
-      readConfig: async (walletId, key) => (await getDb(walletId as number))?.table('config').where({ key }).first(),
+      readConfig: async (walletId, key) => {
+        const db = await getDb(walletId as number);
+        // A wallet DB that will not open must not read as "no activity": log it.
+        if (!db) throw new Error(`wallet ${walletId} database unavailable`);
+        return db.table('config').where({ key }).first();
+      },
       lock: () => walletManager.lock(),
       now: () => Date.now(),
     });

@@ -1,5 +1,5 @@
 import { approvalNamesActiveAccount } from '@/chrome/connectApproval';
-import { panelMaySettleRequest } from '@/chrome/senderTrust';
+import { isOwnExtensionPageSender, panelMaySettleRequest, type OwnExtension } from '@/chrome/senderTrust';
 
 /** A dApp request waiting in the worker for the side panel's answer. */
 export interface PanelPendingEntry {
@@ -55,4 +55,28 @@ export function settlePanelMessage(
   }
   pending.delete(requestId);
   return true;
+}
+
+/** Side-panel dApp ports are named `mini-gero-dapp-channel` or `mini-gero-dapp-channel:<tabId>`. */
+export const PANEL_PORT_PREFIX = 'mini-gero-dapp-channel';
+
+/**
+ * The key a side-panel dApp port registers under, or null when the port is not
+ * one (another port name) or is refused. Only our own extension pages may
+ * register an approval surface: a content script has the same sender.id, so a
+ * forged port could otherwise replace the real panel, read pending payloads and
+ * approve; it is disconnected. A panel opened without a tab context (manually or
+ * pinned) connects with an empty tab id and gets a synthetic negative key from
+ * `syntheticKey`, so tab-agnostic routing still finds it.
+ */
+export function admitPanelPort(port: chrome.runtime.Port, own: OwnExtension, syntheticKey: () => number): number | null {
+  if (!port.name.startsWith(PANEL_PORT_PREFIX)) return null;
+  if (!isOwnExtensionPageSender(port.sender, own)) {
+    console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
+    try { port.disconnect(); } catch { /* already disconnected */ }
+    return null;
+  }
+  const parts = port.name.split(':');
+  const parsed = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+  return Number.isNaN(parsed) ? syntheticKey() : parsed;
 }

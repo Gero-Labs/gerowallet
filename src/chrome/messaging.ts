@@ -294,6 +294,11 @@ export function toPageReply(response: unknown, requestId: unknown): Record<strin
   };
 }
 
+/** Popup tabs waiting on a request: the method, and how many share it. */
+const popupWaiters = new Map<number, { method: string | undefined; count: number }>();
+/** Connect prompts a dApp may fire several times; duplicates share one popup answer. */
+const POPUP_SHARED_METHODS = new Set<string | undefined>([METHOD.enable, MIDNIGHT_METHOD.connect, BITCOIN_METHOD.enable]);
+
 export const Messaging = {
   sendToBackgroundFromOptions: async function (request: Message) {
     return new Promise((resolve) => {
@@ -375,11 +380,24 @@ export const Messaging = {
    * exactly once: with the popup's returnData, or with the declined error when
    * that popup closes (its tab is removed, or a port it used disconnects). The
    * tab listener is registered up front, so a popup closed before its page
-   * connects still answers. Only a port that spoke for this popup's tab can
-   * decline it: closing another request's popup never answers this one.
+   * connects still answers. A port belongs to this popup by its sender tab (or,
+   * without one, by the tab it speaks for): closing another request's popup
+   * never answers this one.
+   *
+   * One popup tab waits on one request. focusOrCreatePopup reuses an open popup
+   * with the same URL, so a second request for a tab already waiting would get
+   * the first one's answer (a signature made for another transaction); it is
+   * declined at once instead. Duplicate connect requests of the same method
+   * (dApps call enable() several times) may share the prompt and its answer.
    */
   sendToPopupInternal: function (popupTabId: number, request: Message) {
     return new Promise((resolve) => {
+      const waiting = popupWaiters.get(popupTabId);
+      if (waiting && !(waiting.method === request.method && POPUP_SHARED_METHODS.has(request.method))) {
+        resolve({ target: TARGET, sender: SENDER.extension, error: popupDisconnectedError(request) });
+        return;
+      }
+      popupWaiters.set(popupTabId, { method: request.method, count: (waiting?.count ?? 0) + 1 });
       let answered = false;
       const bound = new Map<chrome.runtime.Port, { message: (response: PortMessage) => void; disconnect: () => void }>();
       const unbind = (port: chrome.runtime.Port) => {
@@ -392,6 +410,8 @@ export const Messaging = {
       const answer = (response: unknown) => {
         if (answered) return;
         answered = true;
+        const entry = popupWaiters.get(popupTabId);
+        if (entry && --entry.count <= 0) popupWaiters.delete(popupTabId);
         chrome.runtime.onConnect.removeListener(connectionHandler);
         chrome.tabs.onRemoved.removeListener(tabsHandler);
         for (const port of [...bound.keys()]) unbind(port);
@@ -409,8 +429,11 @@ export const Messaging = {
         // Only our own extension pages may answer an approval: a content script
         // shares our sender.id, so the port name alone is not proof.
         if (!isOwnExtensionPageSender(port.sender, ownExtension())) return;
+        // A popup page's port names its tab: another popup's port is never ours.
+        const senderTab = port.sender?.tab?.id;
+        if (senderTab !== undefined && senderTab !== popupTabId) return;
 
-        let spokeForPopup = false;
+        let spokeForPopup = senderTab === popupTabId;
         const message = (response: PortMessage) => {
           if (response.tabId !== popupTabId) return;
           spokeForPopup = true;
@@ -420,7 +443,7 @@ export const Messaging = {
           }
           if (response.method === METHOD.returnData) answer(response);
         };
-        // The user closed this popup without answering.
+        // The user closed this popup (or its page died) without answering.
         const disconnect = () => {
           if (spokeForPopup) answer(declined());
           else unbind(port);

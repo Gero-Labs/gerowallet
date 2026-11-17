@@ -880,6 +880,11 @@
           "test": "a second approval, a later reject or a NACK for an answered request settles nothing"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a second signing request for a popup tab already waiting is declined, not given the first answer"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
           "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
@@ -956,12 +961,17 @@
           "test": "a popup closed before its page connects still declines the request"
         },
         {
+          "kind": "unit",
+          "ref": "src/chrome/messagingPopupAnswer.spec.ts",
+          "test": "a page that dies before speaking still declines its own popup, never another"
+        },
+        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
           "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
       ],
-      "gap": "Closing the side panel parks a request instead of answering it (by design: it is re-delivered when a panel reconnects); that parking, in background.ts, is covered only by the browser tests."
+      "gap": "Closing the side panel parks a request instead of answering it (by design: it is re-delivered when a panel reconnects); that parking, in background.ts, has no test."
     },
     "worker-restart": {
       "title": "Service-worker restart: state recovers after the MV3 worker stops",
