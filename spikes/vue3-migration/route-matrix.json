@@ -784,27 +784,27 @@
         {
           "kind": "unit",
           "ref": "src/shared/composables/useTransactionSigning.spec.ts",
-          "test": "false never signs"
+          "test": "awaits Vuetify validation and blocks repeated clicks while pending; false never signs"
         },
         {
           "kind": "unit",
           "ref": "src/services/walletManager.unlock.spec.ts",
-          "test": "a wrong PassKey counts toward the back-off"
+          "test": "a wrong PassKey counts toward the back-off like any wrong credential"
         },
         {
           "kind": "e2e",
           "ref": "05-edge-cases/send-errors.spec.ts",
-          "test": "invalid recipient shows an address validation error"
+          "test": "57: invalid recipient shows an address validation error"
         },
         {
           "kind": "e2e",
           "ref": "05-edge-cases/settings-errors.spec.ts",
-          "test": "spending password change rejects a wrong current password"
+          "test": "63: spending password change rejects a wrong current password"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/security-hardening-280.spec.ts",
-          "test": "five wrong passwords start a wait"
+          "test": "five wrong passwords start a wait that refuses even the right password"
         }
       ],
       "gap": "Recipient address checks are synchronous and there is no ADA Handle validation, so only password and credential checks are asynchronous."
@@ -818,32 +818,32 @@
         {
           "kind": "unit",
           "ref": "src/modules/dashboard/dialogs/ChangePasswordDialog.spec.ts",
-          "test": "cancels before mutation if"
+          "test": "cancels before mutation if %s changes during form validation"
         },
         {
           "kind": "unit",
           "ref": "src/modules/navigation/dialogs/BackupWalletDialog.spec.ts",
-          "test": "never decrypts if"
+          "test": "never decrypts if %s changes during form validation"
         },
         {
           "kind": "unit",
           "ref": "src/shared/composables/useTransactionSigning.spec.ts",
-          "test": "blocks repeated clicks while pending"
+          "test": "awaits Vuetify validation and blocks repeated clicks while pending; false never signs"
         },
         {
           "kind": "unit",
           "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
-          "test": "runs repeated password clicks in one flight"
+          "test": "runs repeated password clicks in one flight and signs only the approved payload"
         },
         {
           "kind": "unit",
           "ref": "src/sidepanel/components/flows/SendSheet.spec.ts",
-          "test": "serializes repeated clicks"
+          "test": "requires a new approval after replacement and serializes repeated clicks"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
-          "test": "during password verification cannot sign the abandoned request"
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
       ],
       "gap": "Only unit tests assert the blocked, one-flight state; the browser test covers discarding the stale result."
@@ -857,12 +857,12 @@
         {
           "kind": "unit",
           "ref": "src/popup/modules/views/DappConnect.spec.ts",
-          "test": "answers with the account the user picked"
+          "test": "answers with the account the user picked and connects nothing itself"
         },
         {
           "kind": "unit",
           "ref": "src/sidepanel/components/DAppOverlay.spec.ts",
-          "test": "authenticates once on repeated PassKey clicks"
+          "test": "authenticates once on repeated PassKey clicks and signs the current request"
         },
         {
           "kind": "unit",
@@ -872,15 +872,10 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
-          "test": "during password verification cannot sign the abandoned request"
-        },
-        {
-          "kind": "e2e",
-          "ref": "08-post-v27/dapp-connect-account.spec.ts",
-          "test": "a wallet with one account shows no picker"
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
       ],
-      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer."
+      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer. The browser tests show the answer takes effect, not that it is sent once."
     },
     "reject-once": {
       "title": "Reject: a request is answered exactly once",
@@ -891,7 +886,7 @@
         {
           "kind": "unit",
           "ref": "src/popup/modules/views/SignTx.spec.ts",
-          "test": "prevents Decline and window closure while the hardware call is pending"
+          "test": "prevents Decline and window closure while the hardware call is pending, then permits decline after failure"
         },
         {
           "kind": "unit",
@@ -899,21 +894,17 @@
           "test": "rejecting a coalesced enable rejects every duplicate"
         },
         {
-          "kind": "unit",
-          "ref": "src/sidepanel/composables/useConnectorBuildFailure.spec.ts",
-          "test": "is still Rejected"
-        },
-        {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
-          "test": "during password verification cannot sign the abandoned request"
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/dapp-connect-account.spec.ts",
-          "test": "rejecting the prompt connects nothing"
+          "test": "rejecting the prompt connects nothing and keeps the logged account"
         }
-      ]
+      ],
+      "gap": "No test checks that the background messaging layer (sendToPopupInternal / sendToSidePanelInternal) ignores a second answer, here a decline after an answer."
     },
     "cancel-once": {
       "title": "Cancel, close or dismiss: the pending request is answered exactly once",
@@ -928,18 +919,13 @@
         },
         {
           "kind": "unit",
-          "ref": "src/sidepanel/services/dappRequestHub.spec.ts",
-          "test": "queues a response while disconnected and flushes it after reconnect"
-        },
-        {
-          "kind": "unit",
           "ref": "src/chrome/midnightProvingPark.spec.ts",
           "test": "cancelTab cancels the prompt parked for that tab"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/signing-cancellation.spec.ts",
-          "test": "during password verification cannot sign the abandoned request"
+          "test": "${cancellation} during password verification cannot sign the abandoned request @post-v27 @offline"
         }
       ],
       "gap": "No test closes the popup window or side panel with a request pending, so the port.onDisconnect and tabs.onRemoved answers in src/chrome/messaging.ts are untested. The e2e covers navigating away, not closing."
@@ -969,12 +955,12 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
-          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides"
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/security-hardening-280.spec.ts",
-          "test": "neither unlocks nor switches the wallet after a worker restart"
+          "test": "rewriting loggedWallet and isLocked in chrome.storage.local neither unlocks nor switches the wallet after a worker restart"
         }
       ],
       "gap": "No test restarts the worker while a dApp request is pending; dappRequestHub only simulates a dropped port."
@@ -989,7 +975,7 @@
         {
           "kind": "unit",
           "ref": "src/chrome/unlockGuards.spec.ts",
-          "test": "never unlocks a locked session"
+          "test": "never unlocks a locked session: LOGIN while locked lands locked"
         },
         {
           "kind": "unit",
@@ -1004,7 +990,7 @@
         {
           "kind": "unit",
           "ref": "src/services/autoLock.spec.ts",
-          "test": "locks once inactivity reaches the threshold"
+          "test": "locks once inactivity reaches the threshold and a method is set"
         },
         {
           "kind": "harness",
@@ -1014,7 +1000,7 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
-          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides"
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         }
       ],
       "gap": "Auto-lock is tested only as the shouldAutoLock predicate; nothing drives the timer or alarm, and no browser test sees auto-lock fire."
@@ -1028,7 +1014,7 @@
         {
           "kind": "unit",
           "ref": "src/stores/productionMessaging.integration.spec.ts",
-          "test": "broadcasts login/lock and wallet replacement to two contexts"
+          "test": "broadcasts login/lock and wallet replacement to two contexts, then persists a restart"
         },
         {
           "kind": "unit",
@@ -1043,12 +1029,12 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
-          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides"
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/store-publication.spec.ts",
-          "test": "store publication waits for the requested subscription and retires closed ports"
+          "test": "store publication waits for the requested subscription and retires closed ports @post-v27 @offline"
         }
       ]
     },
@@ -1066,12 +1052,12 @@
         {
           "kind": "unit",
           "ref": "src/services/walletManager.login.spec.ts",
-          "test": "does not unlock after"
+          "test": "does not unlock after %s during credential verification"
         },
         {
           "kind": "unit",
           "ref": "src/services/websocket.service.syncPending.spec.ts",
-          "test": "re-arms on resubscribe"
+          "test": "re-arms on resubscribe: a new SUBSCRIBE is a new first answer to wait for"
         },
         {
           "kind": "harness",
@@ -1081,12 +1067,12 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
-          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides"
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/multi-account.spec.ts",
-          "test": "removing the active added account returns to account zero"
+          "test": "removing the active added account returns to account zero and persists after reload"
         }
       ],
       "gap": "No browser test checks that Gero Sync re-subscribes to the new wallet after a switch."
@@ -1100,7 +1086,7 @@
         {
           "kind": "unit",
           "ref": "src/stores/productionMessaging.integration.spec.ts",
-          "test": "broadcasts login/lock and wallet replacement to two contexts"
+          "test": "broadcasts login/lock and wallet replacement to two contexts, then persists a restart"
         },
         {
           "kind": "unit",
@@ -1110,7 +1096,7 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
-          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides"
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         },
         {
           "kind": "e2e",
@@ -1130,7 +1116,7 @@
         {
           "kind": "unit",
           "ref": "src/utils/storePersistence.spec.ts",
-          "test": "restores everything after a restart"
+          "test": "restores everything after a restart (a fresh persister over the same storage)"
         },
         {
           "kind": "unit",
@@ -1145,17 +1131,17 @@
         {
           "kind": "e2e",
           "ref": "08-post-v27/production-store-sync.spec.ts",
-          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides"
+          "test": "production broadcasts, configured lock and restart update both Vue apps without state overrides @post-v27 @offline"
         },
         {
           "kind": "e2e",
           "ref": "01-setup/browser-restart.spec.ts",
-          "test": "still open after the browser restarts"
+          "test": "a freshly created wallet is still open after the browser restarts"
         },
         {
           "kind": "e2e",
           "ref": "08-post-v27/security-hardening-280.spec.ts",
-          "test": "never written to chrome.storage.local"
+          "test": "wallet secrets, unlock verifiers and the flag mirror are never written to chrome.storage.local, across login, lock and unlock"
         }
       ]
     }

@@ -70,6 +70,7 @@ function checkReferences(key, entry) {
 }
 for (const [key, entry] of Object.entries(matrix.routes)) {
   checkReferences(key, entry);
+  if (entry.checks.some(item => item.test !== undefined)) problems.push(`${key}: test titles are for behaviours; a route check names its spec only`);
   if (entry.via !== undefined) problems.push(`${key}: via belongs on an e2e check, not the route`);
   for (const field of ['manual', 'note']) {
     if (entry[field] !== undefined && (typeof entry[field] !== 'string' || !entry[field].trim())) problems.push(`${key}: ${field} must be a non-empty string`);
@@ -86,17 +87,21 @@ for (const route of routes) {
   }
 }
 // Behaviours (V02's behavioural acceptance item and the V05 assignment): each
-// names its owner and either automated checks that run without funds or the gap.
+// names its owner and either a check in this repository (verified by --check in
+// CI) or the gap.
 const OWNER = /^V(0[1-9]|1[0-6])$/;
 assert(matrix.behaviours && typeof matrix.behaviours === 'object' && Object.keys(matrix.behaviours).length, 'route-matrix.json: behaviours is required');
 for (const [key, entry] of Object.entries(matrix.behaviours)) {
   const label = `behaviour ${key}`;
   checkReferences(label, entry);
   if (entry.checks.some(item => item.kind === 'guards')) problems.push(`${label}: guards checks are for routes`);
+  if (entry.checks.some(item => item.via !== undefined)) problems.push(`${label}: via is for route checks`);
+  if (entry.checks.some(item => !item.test)) problems.push(`${label}: every check names its test`);
   if (typeof entry.title !== 'string' || !entry.title.trim()) problems.push(`${label}: title must be a non-empty string`);
   if (!Array.isArray(entry.owners) || !entry.owners.length || !entry.owners.every(owner => OWNER.test(owner))) problems.push(`${label}: owners must list work packages such as V05`);
   if (entry.gap !== undefined && (typeof entry.gap !== 'string' || !entry.gap.trim())) problems.push(`${label}: gap must be a non-empty string`);
-  if (!entry.checks.some(item => !item.funded) && !entry.gap) problems.push(`${label}: no check runs without funds, so the gap must be stated`);
+  // CI runs --check without --e2e, so only local checks are verified there.
+  if (!entry.checks.some(item => LOCAL_KINDS.has(item.kind)) && !entry.gap) problems.push(`${label}: no check in this repository covers it, so the gap must be stated`);
 }
 problems.push(...verifyGuards(), ...verifyTestTitles());
 if (e2eRoot) problems.push(...verifyE2e());
@@ -142,13 +147,18 @@ function verifyE2e() {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: e2eRoot, encoding: 'utf8', timeout: 10000 }).trim();
   if (head !== matrix.e2e.harnessSha) found.push(`e2e checkout is at ${head}, not harnessSha ${matrix.e2e.harnessSha}`);
   const specs = path.join(e2eRoot, 'tests', 'specs');
+  /** The spec file inside tests/specs, or null when it is missing or outside. */
+  const resolveSpec = ref => {
+    // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
+    const file = path.resolve(specs, ref);
+    return file.startsWith(specs + path.sep) && existsSync(file) ? file : null;
+  };
   for (const route of routes) {
     const entry = matrix.routes[routeKey(route)];
     const needle = route.path.split(/[:(]/)[0].replace(/\/+$/, '');
     for (const item of entry?.checks.filter(check => check.kind === 'e2e') ?? []) {
-      // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
-      const file = path.resolve(specs, item.ref);
-      if (!file.startsWith(specs + path.sep) || !existsSync(file)) { found.push(`${routeKey(route)}: ${item.ref} does not exist in the e2e checkout`); continue; }
+      const file = resolveSpec(item.ref);
+      if (!file) { found.push(`${routeKey(route)}: ${item.ref} does not exist in the e2e checkout`); continue; }
       if (item.via) continue;
       const text = readFileSync(file, 'utf8');
       // Both apps share paths such as /staking and /market, so a side-panel
@@ -161,13 +171,21 @@ function verifyE2e() {
   // contain that test's title.
   for (const [key, entry] of Object.entries(matrix.behaviours)) {
     for (const item of entry.checks.filter(check => check.kind === 'e2e')) {
-      // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by path normalization and base directory validation
-      const file = path.resolve(specs, item.ref);
-      if (!file.startsWith(specs + path.sep) || !existsSync(file)) { found.push(`behaviour ${key}: ${item.ref} does not exist in the e2e checkout`); continue; }
-      if (item.test && !readFileSync(file, 'utf8').includes(item.test)) found.push(`behaviour ${key}: ${item.ref} has no test named "${item.test}"`);
+      const file = resolveSpec(item.ref);
+      if (!file) { found.push(`behaviour ${key}: ${item.ref} does not exist in the e2e checkout`); continue; }
+      if (!namesTest(readFileSync(file, 'utf8'), item.test)) found.push(`behaviour ${key}: ${item.ref} has no test titled "${item.test}"`);
     }
   }
   return found;
+}
+
+/**
+ * The whole title must appear as a string literal ('…', "…" or `…`), as it is
+ * written in it()/test()/it.each() (with its %s), so a fragment of a title or of
+ * a comment never counts.
+ */
+function namesTest(text, title) {
+  return ["'", '"', '`'].some(quote => text.includes(quote + title + quote));
 }
 
 /** A local test's title must appear in its file, so a renamed or deleted test fails --check. */
@@ -177,7 +195,7 @@ function verifyTestTitles() {
     for (const item of entry.checks) {
       // OX Agent: [javascript-path-traversal-prevention] Path Traversal prevented by reading only paths in the git ls-files allowlist under the repository root
       if (!LOCAL_KINDS.has(item.kind) || !item.test || !tracked.has(item.ref)) continue;
-      if (!read(item.ref).includes(item.test)) found.push(`behaviour ${key}: ${item.ref} has no test named "${item.test}"`);
+      if (!namesTest(read(item.ref), item.test)) found.push(`behaviour ${key}: ${item.ref} has no test titled "${item.test}"`);
     }
   }
   return found;
@@ -258,7 +276,7 @@ for (const [, app] of ROUTERS) {
 }
 const behaviourGaps = Object.values(matrix.behaviours).filter(entry => entry.gap).length;
 lines.push('## Behaviours', '',
-  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. A test title shown after › must appear in its file; \`--check\` fails if it is renamed or deleted.`,
+  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. Each check names its test after ›, written in full as in its file: \`--check\` fails if a local test is renamed or deleted, and \`--e2e\` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap.`,
   '', '| Behaviour | Owner | Checks | Gap |', '|---|---|---|---|');
 for (const entry of Object.values(matrix.behaviours)) {
   lines.push(`| ${cell(entry.title)} | ${entry.owners.join(', ')} | ${cell(checks(entry))} | ${cell(entry.gap ?? '-')} |`);
