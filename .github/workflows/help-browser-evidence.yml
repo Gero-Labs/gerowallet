@@ -97,7 +97,7 @@ jobs:
               break
             fi
             expires_at=''
-            [ "$attempt" -lt 5 ] && sleep $((attempt * 3))
+            if [ "$attempt" -lt 5 ]; then sleep $((attempt * 3)); fi
           done
           if [ -z "$expires_at" ]; then
             echo "::warning::Artifact $ARTIFACT_ID expiry lookup failed after 5 attempts; summary written without the exact time."
