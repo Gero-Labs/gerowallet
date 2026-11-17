@@ -1317,6 +1317,13 @@ describe('AgentDock — FAB icon (Gero Companion mark)', () => {
     expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextBitcoin);
   });
 
+  it('switches to the Solana mark for a Solana wallet', () => {
+    setWalletChain(Blockchain.SOLANA);
+    mockDock.isOpen.value = false;
+    const wrapper = mountDock();
+    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextSolana);
+  });
+
   it('falls back to the default (Cardano) mark for a Cardano wallet', () => {
     setWalletChain(Blockchain.CARDANO);
     mockDock.isOpen.value = false;

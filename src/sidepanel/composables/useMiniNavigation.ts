@@ -26,18 +26,18 @@ const CARDANO_TABS: NavTab[] = [
   { name: 'feed', icon: 'mdi-bell-outline', activeIcon: 'mdi-bell', route: '/feed' },
 ];
 
-// Midnight: only home + tx history are meaningful today (no staking/card/market).
-const MIDNIGHT_TABS: NavTab[] = [
+// Midnight and Solana: only home + tx history are meaningful today (no staking/card/market).
+const HOME_ACTIVITY_TABS: NavTab[] = [
   { name: 'home', icon: 'mdi-home-outline', activeIcon: 'mdi-home', route: '/' },
   { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
 ];
 
 export function useMiniNavigation() {
   const route = useRoute();
-  const { isMidnight, networkInfo } = useChainContext();
+  const { isMidnight, isSolana, networkInfo } = useChainContext();
 
   const navTabs = computed<NavTab[]>(() => {
-    const base = isMidnight.value ? MIDNIGHT_TABS : CARDANO_TABS;
+    const base = isMidnight.value || isSolana.value ? HOME_ACTIVITY_TABS : CARDANO_TABS;
     return base.filter((tab) => {
       // Gero Copilot feed tab gated by the master flag (ships dark)
       if (tab.name === 'feed') return featureFlagsStore.isCopilotEnabled();

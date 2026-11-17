@@ -65,9 +65,10 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { useChainContext } from '../../composables/useChainContext';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import networks from '@/utils/networks';
 
 const { t } = useTranslation();
-const { themeColors, isMidnight } = useChainContext();
+const { themeColors, isMidnight, isSolana } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 const props = defineProps<{
@@ -100,6 +101,10 @@ const receiveAddress = computed(() => {
   if (isMidnight.value) {
     return activeMidnightTab.value.value;
   }
+  // Solana: one address per account, the record's public key (as ReceiveDialog).
+  if (isSolana.value) {
+    return walletStore.loggedWallet?.publicKey ?? '';
+  }
   // Use the first payment address (matches dashboard ReceiveDialog behavior)
   const keys = walletStore.keys;
   if (keys?.payment?.length > 0) {
@@ -109,7 +114,14 @@ const receiveAddress = computed(() => {
 });
 
 const addressLabel = computed(() => isMidnight.value ? activeMidnightTab.value.label : t('miniGero.yourAddress'));
-const addressInfo = computed(() => isMidnight.value ? activeMidnightTab.value.info : t('miniGero.shareAddress'));
+const addressInfo = computed(() => {
+  if (isMidnight.value) return activeMidnightTab.value.info;
+  if (isSolana.value) {
+    const ticker = networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network);
+    return t('solana.receiveInfo', { ticker });
+  }
+  return t('miniGero.shareAddress');
+});
 
 // Generate QR code when sheet opens and address is available
 watch([() => props.modelValue, receiveAddress], async ([isOpen, addr]) => {

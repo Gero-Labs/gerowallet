@@ -1,7 +1,7 @@
 // Chain accent palettes: a chain switch changes ONLY these slots.
 // Surfaces, text tones and semantic colors live in tokens.css and never
 // change per chain.
-export type ChainKey = 'cardano' | 'bitcoin' | 'midnight';
+export type ChainKey = 'cardano' | 'bitcoin' | 'midnight' | 'solana';
 
 export interface ChainAccent {
   /** Flat accent: links, icons, active tab text, focus ring */
@@ -22,6 +22,9 @@ export const chainAccents: Record<ChainKey, ChainAccent> = {
   // for flat use (icons/links/active); a DARK black->purple gradient for CTAs
   // with BRIGHT WHITE text (onGrad) — never a light button with dark text.
   midnight: { accent: '#A78BFA', gradient1: '#2E1065', gradient2: '#7C3AED', onGrad: '#FFFFFF' },
+  // Solana: its purple -> green brand gradient, lightened at the purple end so the
+  // default dark CTA text stays readable on both stops; flat accent is the brand green.
+  solana: { accent: '#14F195', gradient1: '#C084FC', gradient2: '#14F195' },
 };
 
 /** Blockchain display-string -> ChainKey (walletStore.loggedWallet.chain values) */
@@ -31,6 +34,8 @@ export function chainKeyFor(chain: string | undefined | null): ChainKey {
       return 'bitcoin';
     case 'Midnight':
       return 'midnight';
+    case 'Solana':
+      return 'solana';
     default:
       return 'cardano';
   }
@@ -59,6 +64,7 @@ export const themes: Record<ChainKey, ReturnType<typeof legacy>> = {
   cardano: legacy(chainAccents.cardano),
   bitcoin: legacy(chainAccents.bitcoin),
   midnight: legacy(chainAccents.midnight),
+  solana: legacy(chainAccents.solana),
 };
 
 // iconFilters is DELETED, not rewritten: its only writer (--icon-filter in
