@@ -4,7 +4,7 @@ import { Blockchain, CoinTypes, HARDENED, Network, WalletTypePurpose } from '@/m
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import { resolvePrivateKey } from './resolver';
 import { accountXpub, type AccountXpub } from './walletAccount';
-import { accountReceiveAddress, BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
+import { accountReceiveAddress, BITCOIN_PROBE_ADDRESSES, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, mergeScannedAccounts, nextScanIndices } from './accountDiscovery';
 
 // bitcoinjs-lib rejects the test runner's Buffer: name each address after its xpub and index instead.
 vi.mock('@/chains/bitcoin/bitcoinKeyManager', () => ({
@@ -151,5 +151,19 @@ describe('accountReceiveAddress', () => {
     expect(await accountReceiveAddress(record(Blockchain.CARDANO, undefined))).toBe('');
     expect(await accountReceiveAddress(record(Blockchain.CARDANO, 'not an xpub'))).toBe('');
     expect(await accountReceiveAddress(record(Blockchain.MIDNIGHT, 'not json'))).toBe('');
+  });
+});
+
+describe('discoverSolanaAccounts', () => {
+  it('shows each account by its address (its key) and never probes it', () => {
+    const address = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
+    expect(discoverSolanaAccounts([{ accountIndex: 1, publicKey: address, keys: [] }])).toEqual([
+      { accountIndex: 1, publicKey: address, keys: [], address, stakeAddress: '', activity: 'unchecked' },
+    ]);
+  });
+
+  it('gives a Solana record its address for the account picker', async () => {
+    const address = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
+    expect(await accountReceiveAddress({ chain: Blockchain.SOLANA, network: 'Devnet', publicKey: address })).toBe(address);
   });
 });

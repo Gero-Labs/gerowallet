@@ -96,6 +96,15 @@ export function discoverMidnightAccounts(accounts: AccountXpub[]): DiscoveredAcc
   return accounts.map((account) => ({ ...account, address: midnightUnshieldedAddress(account.publicKey), stakeAddress: '', activity: 'unchecked' }));
 }
 
+/**
+ * Solana accounts, shown by their address (a Solana account's "xpub" is its address) and
+ * never probed ('unchecked'), as on Midnight: the Cardano probe cannot read them. So only
+ * account #0 is chosen by default.
+ */
+export function discoverSolanaAccounts(accounts: AccountXpub[]): DiscoveredAccount[] {
+  return accounts.map((account) => ({ ...account, address: account.publicKey, stakeAddress: '', activity: 'unchecked' }));
+}
+
 /** The unshielded address of a Midnight account's addresses JSON; '' for an unreadable blob. */
 function midnightUnshieldedAddress(publicKey: string): string {
   try {
@@ -114,6 +123,7 @@ export async function accountReceiveAddress(record: Pick<Wallet, 'chain' | 'netw
   if (!record.publicKey) return '';
   try {
     if (record.chain === Blockchain.MIDNIGHT) return midnightUnshieldedAddress(record.publicKey);
+    if (record.chain === Blockchain.SOLANA) return record.publicKey;
     if (record.chain === Blockchain.BITCOIN) {
       const { deriveBitcoinAddress } = await import('@/chains/bitcoin/bitcoinKeyManager');
       return deriveBitcoinAddress(record.publicKey, record.network, record.addressType || 'segwit', 0, 0);

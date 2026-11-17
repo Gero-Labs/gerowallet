@@ -48,8 +48,9 @@ import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { findExistingWallet } from '@/db/gero-db';
-import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { ACCOUNTS_PER_SCAN, discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { Blockchain } from '@/models/types';
+import { debugLog } from '@/utils/debug';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
@@ -88,6 +89,7 @@ const probing = computed(() => pending.value > 0);
 
 async function discover(chain: string, network: string, accounts: AccountXpub[]): Promise<DiscoveredAccount[]> {
   if (chain === Blockchain.MIDNIGHT) return discoverMidnightAccounts(accounts);
+  if (chain === Blockchain.SOLANA) return discoverSolanaAccounts(accounts);
   if (chain === Blockchain.BITCOIN) return discoverBitcoinAccounts(network, props.addressType ?? 'segwit', accounts);
   return discoverAccounts(chain, network, accounts);
 }
@@ -99,7 +101,12 @@ watch(() => props.accounts, async (accounts) => {
   try {
     const { blockchain: chain, network } = props.network;
     const [found, stored] = await Promise.all([
-      discover(chain, network, fresh),
+      // A failed probe must not leave the rows unselectable: the accounts are still
+      // offered, as 'unknown', and account #0 still comes along.
+      discover(chain, network, fresh).catch((error: unknown): DiscoveredAccount[] => {
+        debugLog('StepAccounts: account probe failed', { chain, network, error });
+        return fresh.map((account) => ({ ...account, address: '', stakeAddress: '', activity: 'unknown' }));
+      }),
       Promise.all(fresh.map((account) => findExistingWallet({ chain, network, publicKey: account.publicKey }))),
     ]);
     found.forEach((account, i) => {
