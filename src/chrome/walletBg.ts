@@ -98,6 +98,9 @@ import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
 import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, resolveAccountIndex, withGroupSecrets } from '@/shared/utils/walletAccount';
 import { isSameWalletKey } from '@/db/walletIdentity';
+// Static (see gero-db.ts): no inlined dynamic-import namespace in the background bundle.
+import { deriveSolanaKeypairFromMnemonic } from '@/chains/solana/solanaKeyManager';
+import { buildSignedSolTransfer, type SolTransferParams } from '@/chains/solana/solanaTransaction';
 import type { MidnightDerivedKeys } from '@/chains/midnight/midnightKeyManager';
 // Static, not dynamic: walletBg and this module land in the same background
 // IIFE, so a dynamic import buys no code splitting — it only pushes the
@@ -268,6 +271,11 @@ export class WalletBg {
       } catch {
         this.baseAddress = '';
       }
+      this.stakeAddress = '';
+    } else if (this.chain === Blockchain.SOLANA) {
+      // Solana: the record's publicKey is the account's base58 address (m/44'/501'/n'/0').
+      // No staking address; Gero Sync subscribes by this address.
+      this.baseAddress = this.publicKey ?? '';
       this.stakeAddress = '';
     } else if (wallet.type === WalletType.Watch) {
       // Dev-only watch wallet: read-only, no keys. The watched base address is
@@ -2283,6 +2291,42 @@ export class WalletBg {
       console.error('Failed to sign Bitcoin transaction:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Transaction signing failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Signs a native SOL transfer from this record's account (software wallets: password or
+   * PassKey). The key is derived from the recovery phrase at `m/44'/501'/accountIndex'/0'`
+   * and must give the address the record stores, so a mismatched record never signs. The
+   * secret key is wiped before returning.
+   */
+  async signSolanaTransfer(
+    params: Omit<SolTransferParams, 'from'>,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ signature: string; base64: string }> {
+    if (this.chain !== Blockchain.SOLANA) throw new Error('signSolanaTransfer called on a non-Solana wallet');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      mnemonic = await this.openMnemonicWithPassword(password);
+    }
+    const keypair = deriveSolanaKeypairFromMnemonic(mnemonic, this.accountIndex);
+    try {
+      if (!isSameWalletKey(Blockchain.SOLANA, keypair.address, this.publicKey)) {
+        throw new InvalidAccountIndexError('The signing key does not belong to this account');
+      }
+      return buildSignedSolTransfer({ ...params, from: keypair.address }, keypair.secretKey);
+    } finally {
+      keypair.secretKey.fill(0);
     }
   }
 

@@ -152,6 +152,11 @@
       :model-value="quickActionState.activeDialog === dialogs.SEND"
       @update:model-value="val => !val && closeDialog()"
     />
+    <SolanaSendDialog
+      v-else-if="isSolana"
+      :model-value="quickActionState.activeDialog === dialogs.SEND"
+      @update:model-value="val => !val && closeDialog()"
+    />
     <SendDialog v-else :isOpen="quickActionState.activeDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
     <PerpetualsDialog v-if="!isPerpetualsDisabled" :visible="quickActionState.activeDialog === dialogs.PERPETUALS" @update:visible="val => !val && closeDialog()"></PerpetualsDialog>
   </div>
@@ -163,6 +168,7 @@ import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
 import BitcoinSendDialog from '@/modules/transactions/dialogs/BitcoinSendDialog.vue';
+import SolanaSendDialog from '@/modules/transactions/dialogs/SolanaSendDialog.vue';
 import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
 import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
@@ -191,6 +197,7 @@ const dialogs = {
 } as const;
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+const isSolana = computed(() => loggedWallet.value?.chain === Blockchain.SOLANA);
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {

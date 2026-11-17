@@ -8,6 +8,10 @@ export enum MessageTypes {
   SIGN_BITCOIN_TX_HARDWARE = 'SIGN_BITCOIN_TX_HARDWARE',
   SEND_BITCOIN = 'SEND_BITCOIN',
   SYNC_BITCOIN = 'SYNC_BITCOIN',
+  /** Fee per level for a SOL transfer (chrome/solanaSend.ts). */
+  SOLANA_SEND_QUOTE = 'SOLANA_SEND_QUOTE',
+  /** Gero's own SOL send: the worker checks, signs and submits (chrome/solanaSend.ts). */
+  SEND_SOLANA = 'SEND_SOLANA',
   BABYLON_STAKE = 'BABYLON_STAKE',
   SUBMIT_TX = 'SUBMIT_TX',
   REQUEST_CROSS_DEVICE_SIGNATURE = 'REQUEST_CROSS_DEVICE_SIGNATURE',

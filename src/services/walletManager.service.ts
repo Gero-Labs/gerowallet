@@ -651,7 +651,9 @@ export class WalletManager {
     // --- WebSocket sync (replaces Ably) ---
     // Midnight uses its own bridge (midnightSyncService) — wired separately
     // once the SDK can produce the unshielded address required to subscribe.
-    if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT) {
+    // Solana has its own Gero Sync branch below (SOLANA SUBSCRIBE, slot cursor), so it
+    // never takes this Cardano path.
+    if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT && walletBg.chain !== Blockchain.SOLANA) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
 
@@ -853,6 +855,52 @@ export class WalletManager {
         },
         undefined, // no Cardano credentials for BTC
         btcAddressSet.addresses
+      );
+    } else if (walletBg.chain === Blockchain.SOLANA) {
+      // ── Solana via gero-sync (docs/solana-wire.md) ──────────────────────────
+      // Same WS state machine: SUBSCRIBE by the account's base58 address with the
+      // persisted slot cursor. websocket.service re-tags CATCH_UP_COMPLETE /
+      // SYNC_CHECK_OK as SYNC; applySolanaSync keeps the cursor at the newest
+      // delivered slot. Confirmed slots don't roll back, so there is no ROLLBACK.
+      let solanaCursor = 0;
+      try {
+        const lastSyncInfo = await walletBg.getLastSyncInfo();
+        if (lastSyncInfo && !Array.isArray(lastSyncInfo)) {
+          solanaCursor = (lastSyncInfo as { height?: number }).height || 0;
+        }
+      } catch {
+        solanaCursor = 0;
+      }
+      debugLog(`◎ [SOL gero-sync] connecting: address=${walletBg.baseAddress} cursor=${solanaCursor}`);
+      webSocketService.connect(
+        chain,
+        network,
+        walletBg.baseAddress,
+        solanaCursor,
+        {
+          onSync: async (data: WsSyncMessage) => {
+            await this.tipMutex.runExclusive(async () => {
+              await walletBg.syncService.applySolanaSync(data);
+            });
+          },
+          onAnnouncements: (seq: unknown) => announcementHooks.feedChanged(seq),
+          onForceResync: async () => {
+            // A devnet reset (the tip really went backwards): drop the history, rewind the
+            // cursor to 0 and subscribe again from scratch.
+            debugLog('◎ [SOL gero-sync] FORCE_RESYNC — clearing and resubscribing');
+            webSocketService.pauseSyncCheck();
+            try {
+              await this.tipMutex.runExclusive(async () => {
+                await walletBg.syncService.handleSolanaForceResync();
+              });
+              const syncPromise = webSocketService.waitForSync();
+              webSocketService.resubscribe(0);
+              await syncPromise;
+            } finally {
+              webSocketService.resumeSyncCheck();
+            }
+          },
+        },
       );
     } else {
       // Reached by Midnight (its own sync path) and by BTC with the gero-sync

@@ -28,6 +28,9 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'REQUEST_CROSS_DEVICE_SIGNATURE',
   'PRODUCE_DEVICE_REGISTER_PROOF',
   'SUPPORT_CHAT_AUTH',
+  // Signs and submits a SOL transfer from the logged wallet.
+  'SEND_SOLANA',
+  'SOLANA_SEND_QUOTE',
   // Push notifications: subscribe / register / unregister this browser and its wallets.
   'NOTIFY_SET_BROWSER_ENABLED',
   'NOTIFY_ENABLE_WALLET',

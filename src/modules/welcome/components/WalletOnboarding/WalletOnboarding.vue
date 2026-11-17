@@ -239,9 +239,9 @@ const connection = ref<ConnectionPayload | null>(null);
 // exported or a restored recovery phrase derives, and the ones chosen.
 const { t } = useTranslation();
 const multiAccount = computed(() => featureFlagsStore.isMultiAccountEnabled() && props.network?.blockchain === Blockchain.CARDANO);
-// A restore also lists Bitcoin and Midnight accounts; pairing a Bitcoin device still
-// adds account #0 only, and Midnight has no hardware wallets.
-const PHRASE_ACCOUNT_CHAINS: readonly string[] = [Blockchain.BITCOIN, Blockchain.MIDNIGHT];
+// A restore also lists Bitcoin, Midnight and Solana accounts; pairing a Bitcoin device
+// still adds account #0 only, and Midnight and Solana have no hardware wallets.
+const PHRASE_ACCOUNT_CHAINS: readonly string[] = [Blockchain.BITCOIN, Blockchain.MIDNIGHT, Blockchain.SOLANA];
 const multiAccountRestore = computed(() => multiAccount.value
   || (featureFlagsStore.isMultiAccountEnabled() && PHRASE_ACCOUNT_CHAINS.includes(props.network?.blockchain ?? '')));
 // Creating a recovery-phrase or PassKey wallet asks how many accounts to start with.

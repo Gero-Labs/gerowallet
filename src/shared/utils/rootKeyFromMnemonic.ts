@@ -9,7 +9,7 @@ import { Blockchain } from '@/models/types';
  * The root-key bytes a wallet stores in `encryptedPrivateKey`, re-derived from
  * its mnemonic. Mirrors `createWallet()` in gero-db.ts exactly:
  *  - Bitcoin: BIP-32 master private key (32 bytes) from the BIP-39 seed.
- *  - Midnight: the 64-byte BIP-39 seed itself.
+ *  - Midnight and Solana: the 64-byte BIP-39 seed itself.
  *  - Everything else (Cardano): the 96-byte Icarus / CIP-3 root key,
  *    `Bip32PrivateKey.fromBip39Entropy(entropy, '')`.
  *
@@ -24,7 +24,7 @@ export function rootKeyFromMnemonic(chain: string | undefined, mnemonic: string)
     if (!key) throw new Error('Could not derive Bitcoin root key');
     return key;
   }
-  if (chain === Blockchain.MIDNIGHT) {
+  if (chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA) {
     return new Uint8Array(bip39.mnemonicToSeedSync(mnemonic));
   }
   // Icarus (CIP-3): PBKDF2-HMAC-SHA512(passphrase '', salt = entropy, 4096, 96), then clamp.

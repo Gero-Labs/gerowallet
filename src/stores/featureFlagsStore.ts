@@ -18,6 +18,9 @@ export interface FeatureFlags {
   // is hidden (shown as a "Soon" teaser) until flipped ON via gero-sync — this
   // replaces the hardcoded BITCOIN_REMOVED_2_7 comment-out in networks.ts.
   isBitcoinEnabled: boolean;
+  // Master gate for the Solana chain (src/chains/solana, Nexus /api/sol, Gero Sync SOLANA).
+  // Default OFF: nothing Solana is reachable until it is flipped ON via gero-sync.
+  isSolanaEnabled: boolean;
   // Master gate for the daemon-free Trezor WebUSB signing path.
   isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
@@ -146,6 +149,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isBitcoinEnabled: false,
+    isSolanaEnabled: false,
     isTrezorWebUsbEnabled: false,
     isPoolOperatorEnabled: false,
     isGovernanceEnabled: false,
@@ -232,6 +236,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
+    featureFlagsState.flags.isSolanaEnabled = featureFlagService.getFlag('isSolanaEnabled', false);
     featureFlagsState.flags.isTrezorWebUsbEnabled = featureFlagService.getFlag('isTrezorWebUsbEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isGovernanceEnabled = featureFlagService.getFlag('isGovernanceEnabled', false);
@@ -305,6 +310,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isBitcoinEnabled', (newValue) => {
       featureFlagsState.flags['isBitcoinEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isSolanaEnabled', (newValue) => {
+      featureFlagsState.flags['isSolanaEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       featureFlagsState.flags['isPoolOperatorEnabled'] = newValue === true;
@@ -447,6 +455,14 @@ export const featureFlagsStore = {
    */
   isBitcoinEnabled(): boolean {
     return featureFlagsState.flags.isBitcoinEnabled;
+  },
+
+  /**
+   * Whether the Solana chain is available. Driven by the gero-sync `isSolanaEnabled`
+   * flag (default off), so Solana can ship dark and be turned on without a release.
+   */
+  isSolanaEnabled(): boolean {
+    return featureFlagsState.flags.isSolanaEnabled;
   },
 
   /**
@@ -696,6 +712,7 @@ export const featureFlagsStore = {
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
       isBitcoinEnabled: false,
+      isSolanaEnabled: false,
       isPoolOperatorEnabled: false,
       isGovernanceEnabled: false,
       isGovernanceVotingEnabled: false,

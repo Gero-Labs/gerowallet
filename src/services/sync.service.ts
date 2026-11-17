@@ -13,7 +13,14 @@ import { notifyHooks } from '@/services/notify/notifyHooks';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { convertNexusUtxos } from '@/services/nexusUtxo';
-import WalletStore, { totalListedLockedLovelace, walletStore } from '@/stores/walletStore';
+import WalletStore, {
+  emptySolanaState,
+  flushWalletStorePersistence,
+  totalListedLockedLovelace,
+  walletStore,
+  type SolanaWalletState,
+} from '@/stores/walletStore';
+import { mergeSolanaTransactions, parseSolanaSyncMessage, type SolanaWireMessage } from '@/chains/solana/solanaWireSync';
 import type { BitcoinTip } from '@/stores/networkStore';
 import {
   convertBtcUtxos,
@@ -58,8 +65,8 @@ export class SyncService {
    * @param tip - Optional blockchain tip to sync to
    */
   async sync(tip?: Tip) {
-    // Bitcoin wallets don't use the Gero backend sync service
-    if (this.walletBg?.chain === Blockchain.BITCOIN) {
+    // Bitcoin and Solana wallets don't use the Gero backend (Cardano) sync service
+    if (this.walletBg?.chain === Blockchain.BITCOIN || this.walletBg?.chain === Blockchain.SOLANA) {
       return;
     }
 
@@ -136,8 +143,8 @@ export class SyncService {
    * @param tip - Optional blockchain tip to sync to
    */
   async syncViaRest(tip?: Tip) {
-    // Bitcoin wallets don't use the Gero backend sync service
-    if (this.walletBg?.chain === Blockchain.BITCOIN) {
+    // Bitcoin and Solana wallets don't use the Gero backend (Cardano) sync service
+    if (this.walletBg?.chain === Blockchain.BITCOIN || this.walletBg?.chain === Blockchain.SOLANA) {
       return;
     }
 
@@ -550,6 +557,79 @@ export class SyncService {
       const db = await this.walletBg.getDb();
       await db.table('sync').put({ ...syncInfo, id: 1, height: 0 });
     }
+  }
+
+  /**
+   * Apply a Gero Sync SOLANA message (SYNC, or CATCH_UP_COMPLETE / SYNC_CHECK_OK re-tagged as
+   * SYNC by websocket.service). Contract: gero-sync docs/solana-wire.md.
+   *
+   * - Transactions merge into `solanaTransactions`, deduped by signature.
+   * - Balance and tokens replace the snapshot only when present: an absent field means Nexus
+   *   didn't answer, and must not read as an empty wallet.
+   * - The slot cursor persisted in the `sync` table is the newest delivered transaction's slot
+   *   (monotonic), never the tip.
+   */
+  async applySolanaSync(payload: WsSyncMessage): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.SOLANA) return;
+    if (!payload || (payload.type !== 'SYNC' && payload['success'] !== true)) return;
+
+    const update = parseSolanaSyncMessage(payload as SolanaWireMessage);
+
+    if (update.transactions.length > 0) {
+      WalletStore.setSolanaTransactions(mergeSolanaTransactions(walletStore.solanaTransactions ?? [], update.transactions));
+    }
+
+    const snapshot: Partial<SolanaWalletState> = {};
+    if (update.lamports !== undefined) snapshot.lamports = update.lamports.toString();
+    if (update.tokens !== undefined) {
+      snapshot.tokens = update.tokens.map((t) => ({
+        mint: t.mint,
+        amount: t.amount.toString(),
+        decimals: t.decimals,
+        ...(t.tokenAccount ? { tokenAccount: t.tokenAccount } : {}),
+        ...(t.programId ? { programId: t.programId } : {}),
+      }));
+    }
+    if (update.tipSlot !== undefined) snapshot.tipSlot = update.tipSlot;
+    // Sticky on purpose: once older history was cut off it stays missing here until a
+    // FORCE_RESYNC rebuilds it, whatever later pushes say.
+    if (update.historyTruncated) snapshot.historyTruncated = true;
+    if (Object.keys(snapshot).length > 0) WalletStore.setSolanaState(snapshot);
+
+    if (update.cursorSlot !== undefined) {
+      // The history goes to IndexedDB through the debounced persister; write it before the
+      // cursor so a worker killed in between re-receives those slots instead of losing them.
+      if (update.transactions.length > 0) await flushWalletStorePersistence();
+      const syncInfo = await this.walletBg.getLastSyncInfo();
+      const current = syncInfo && typeof syncInfo.height === 'number' ? syncInfo.height : 0;
+      if (update.cursorSlot > current) {
+        const db = await this.walletBg.getDb();
+        await db.table('sync').put({ ...(syncInfo || {}), id: 1, height: update.cursorSlot, hash: '' });
+      }
+    }
+
+    debugLog('◎ [SOL gero-sync] applied', {
+      txs: update.transactions.length,
+      lamports: update.lamports?.toString(),
+      tokens: update.tokens?.length,
+      cursor: update.cursorSlot,
+      tip: update.tipSlot,
+    });
+  }
+
+  /**
+   * FORCE_RESYNC for Solana: the network's confirmed tip really went backwards (a devnet
+   * reset). Drop the Solana history and snapshot and rewind the cursor to 0; the caller
+   * re-subscribes with lastSyncedBlock 0.
+   */
+  async handleSolanaForceResync(): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.SOLANA) return;
+    debugLog('◎ [SOL gero-sync] force resync — clearing Solana history');
+    WalletStore.setSolanaTransactions([]);
+    WalletStore.setSolanaState(emptySolanaState());
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    const db = await this.walletBg.getDb();
+    await db.table('sync').put({ ...(syncInfo || {}), id: 1, height: 0, hash: '' });
   }
 
   /**

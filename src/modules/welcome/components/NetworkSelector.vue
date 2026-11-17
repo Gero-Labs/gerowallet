@@ -68,6 +68,8 @@ const families = computed<Family[]>(() => {
   const order: string[] = [];
   const map = new Map<string, Family>();
   for (const n of networks.networks) {
+    // Solana is not announced: while isSolanaEnabled is off it has no tile at all.
+    if (n.blockchain === Blockchain.SOLANA && !featureFlagsStore.isSolanaEnabled()) continue;
     const name = familyName(n.blockchain);
     if (!map.has(name)) {
       map.set(name, { name, icon: n.icon, nets: [], comingSoon: true });
