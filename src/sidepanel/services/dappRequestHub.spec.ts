@@ -179,6 +179,55 @@ describe('dappRequestHub', () => {
     expect(hub.isVisible.value).toBe(false);
   });
 
+  it('after a worker restart, drops prompts the new worker does not hold and answers nothing', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e1', payload: { website: 'https://a.example' } });
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e2', payload: { website: 'https://a.example' } });
+    port._drop(); // the worker stopped
+    const port2 = makePort();
+    vi.mocked(chrome.runtime.connect).mockReturnValueOnce(port2 as unknown as chrome.runtime.Port);
+    await hub._reconnectNow();
+    port2._fire({ type: 'dapp-live', requestIds: [] } as unknown as FiredMessage); // the restarted worker holds none
+    expect(hub.currentRequest.value).toBe(null);
+    expect(hub.requestQueue.value).toEqual([]);
+    expect(hub.isVisible.value).toBe(false);
+    expect(port2.postMessage).not.toHaveBeenCalled();
+    // A new request after the restart is shown, and an enable is no longer coalesced onto a dead one.
+    port2._fire({ type: 'dapp-request', method: 'enable', requestId: 'e3', payload: { website: 'https://a.example' } });
+    expect(hub.currentRequest.value?.requestId).toBe('e3');
+  });
+
+  it('a panel reconnect to the same worker keeps every live prompt', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signData', requestId: 'r2', payload: {} });
+    port._drop();
+    const port2 = makePort();
+    vi.mocked(chrome.runtime.connect).mockReturnValueOnce(port2 as unknown as chrome.runtime.Port);
+    await hub._reconnectNow();
+    port2._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
+    port2._fire({ type: 'dapp-request', method: 'signData', requestId: 'r2', payload: {} });
+    port2._fire({ type: 'dapp-live', requestIds: ['r1', 'r2'] } as unknown as FiredMessage);
+    expect(hub.currentRequest.value?.requestId).toBe('r1');
+    expect(hub.requestQueue.value.map(r => r.requestId)).toEqual(['r2']);
+  });
+
+  it('a dead current prompt gives way to the next live one', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signData', requestId: 'r2', payload: {} });
+    port._fire({ type: 'dapp-live', requestIds: ['r2'] } as unknown as FiredMessage);
+    expect(hub.currentRequest.value?.requestId).toBe('r2');
+    expect(hub.requestQueue.value).toEqual([]);
+  });
+
   it('rejectQueued removes one queued item without disturbing currentRequest', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();

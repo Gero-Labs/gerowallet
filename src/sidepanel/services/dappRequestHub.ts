@@ -9,6 +9,12 @@ export interface DAppRequest {
   payload: unknown;
 }
 
+/** Sent by the worker after re-delivery: the requests it still holds for this panel. */
+interface DAppLiveMessage {
+  type: 'dapp-live';
+  requestIds: string[];
+}
+
 // The response value handed back to the dApp: a signature string, a boolean
 // (enable), a COSE object (signData), etc. — opaque to the hub itself.
 type DAppResponseData = unknown;
@@ -105,7 +111,11 @@ function connect() {
   retryCount = 0;
   flushPendingResponses();
 
-  port.onMessage.addListener((message: DAppRequest) => {
+  port.onMessage.addListener((message: DAppRequest | DAppLiveMessage) => {
+    if (message?.type === 'dapp-live') {
+      if (Array.isArray(message.requestIds)) dropRequestsNotLive(new Set(message.requestIds));
+      return;
+    }
     if (message?.type !== 'dapp-request' || !message.requestId) return;
     if (!VALID_METHODS.has(message.method)) {
       safePost({ type: 'dapp-nack', requestId: message.requestId, error: 'unsupported_method' });
@@ -195,6 +205,31 @@ function respond(requestId: string, data: DAppResponseData, error: string | null
     drainCoalescedEnables(originOf(finalized), data, error);
   }
   promoteNext();
+}
+
+/**
+ * After (re)connecting, the worker re-delivers what it still holds for this tab
+ * and then names those requests in a `dapp-live` message. Anything shown or
+ * queued here that is not named died with a restarted worker: the dApp already
+ * got an error, and an answer would go nowhere, so the prompt is dropped
+ * instead of asking the user to approve a request no one is waiting for.
+ */
+function dropRequestsNotLive(live: Set<string>) {
+  const dead = (id: string) => !live.has(id);
+  for (const r of requestQueue.value) if (dead(r.requestId)) seenRequestIds.delete(r.requestId);
+  requestQueue.value = requestQueue.value.filter((r) => !dead(r.requestId));
+  for (const [origin, ids] of coalescedEnables) {
+    const kept = ids.filter((id) => !dead(id));
+    for (const id of ids) if (dead(id)) seenRequestIds.delete(id);
+    if (kept.length) coalescedEnables.set(origin, kept);
+    else coalescedEnables.delete(origin);
+  }
+  if (currentRequest.value && dead(currentRequest.value.requestId)) {
+    seenRequestIds.delete(currentRequest.value.requestId);
+    currentRequest.value = null;
+    isVisible.value = false;
+    promoteNext();
+  }
 }
 
 // Pull the next queued request into view — but only when the overlay is mounted
