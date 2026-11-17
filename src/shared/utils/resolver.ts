@@ -27,6 +27,7 @@ const placeholders: IconPlaceholders = {
   yellowSvg: isServiceWorker ? '' : assetsModule.yellowSvg,
   blueSvg: isServiceWorker ? '' : assetsModule.blueSvg,
   greySvg: isServiceWorker ? '' : assetsModule.greySvg,
+  solanaSvg: isServiceWorker ? '' : assetsModule.solanaSvg,
   errorImage: isServiceWorker ? '' : assetsModule.errorImage,
 };
 

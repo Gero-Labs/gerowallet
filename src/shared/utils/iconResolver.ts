@@ -77,6 +77,7 @@ export interface IconPlaceholders {
   orangeSvg: string;
   blueSvg: string;
   greySvg: string;
+  solanaSvg: string;
   errorImage: string;
 }
 
@@ -132,6 +133,8 @@ export function resolveIconUrl(icon: string, placeholders: IconPlaceholders): st
       return placeholders.blueSvg;
     case 'grey':
       return placeholders.greySvg;
+    case 'solana':
+      return placeholders.solanaSvg;
   }
 
   const firstChar = icon.charAt(0);
