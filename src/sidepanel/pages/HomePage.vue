@@ -21,6 +21,9 @@
       </div>
     </template>
 
+    <!-- Solana: its own home from Gero Sync (SOL, Send/Receive, SPL tokens) -->
+    <SolanaHome v-else-if="isSolana" @action="handleAction" />
+
     <template v-else>
       <!-- Midnight: the notices above the balance, at most two by precedence
            (MidnightNoticeSlot.vue). Renders nothing otherwise. -->
@@ -59,6 +62,7 @@
     <!-- Flow sheets -->
     <SendSheet v-model="showSend" />
     <MidnightSendSheet v-model="showMidnightSend" />
+    <SolanaSendSheet v-if="isSolana" v-model="showSolanaSend" />
     <ReceiveSheet v-model="showReceive" />
     <SwapSheet v-model="showSwap" />
     <BuySellSheet v-model="showBuySell" />
@@ -176,6 +180,8 @@ import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
 import MidnightSendSheet from '../components/flows/MidnightSendSheet.vue';
+import SolanaHome from '../components/SolanaHome.vue';
+import SolanaSendSheet from '../components/flows/SolanaSendSheet.vue';
 import ReceiveSheet from '../components/flows/ReceiveSheet.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
 import BuySellSheet from '../components/flows/BuySellSheet.vue';
@@ -187,6 +193,7 @@ const { adaLovelace } = useAdaLovelace();
 
 const showSend = ref(false);
 const showMidnightSend = ref(false);
+const showSolanaSend = ref(false);
 const showReceive = ref(false);
 const showSwap = ref(false);
 const showBuySell = ref(false);
@@ -223,6 +230,7 @@ function openProgrammableSend() {
 }
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+const isSolana = computed(() => walletStore.loggedWallet?.chain === Blockchain.SOLANA);
 // One reason Midnight Send is held, if it is: update required, the network
 // upgrade, or a rebuild in progress (useMidnightSendHold.ts), said once under it.
 const midnightSendHold = useMidnightSendHold(() => (isMidnight.value ? walletStore.loggedWallet?.network : ''));
@@ -270,6 +278,8 @@ function handleAction(id: string) {
       if (isMidnight.value) {
         if (midnightSendPaused.value) return;
         showMidnightSend.value = true;
+      } else if (isSolana.value) {
+        showSolanaSend.value = true;
       } else {
         showSend.value = true;
       }

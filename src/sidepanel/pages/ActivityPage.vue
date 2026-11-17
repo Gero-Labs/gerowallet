@@ -37,6 +37,50 @@
       </div>
     </template>
 
+    <!-- Solana: history from Gero Sync (walletStore.solanaTransactions), each row
+         opening on Solscan; older history than Gero Sync sends is there too. -->
+    <template v-else-if="isSolana">
+      <div v-if="solanaTxs.length === 0" class="empty-state">
+        <v-icon size="56" color="var(--g-text-3)">mdi-history</v-icon>
+        <div class="text-body-1 white--text mt-3">{{ $t('solana.noActivity') }}</div>
+      </div>
+      <div v-else class="tx-list" data-test="sol-activity">
+        <a
+          v-for="tx in solanaTxs"
+          :key="tx.signature"
+          :href="solscanUrl('tx', tx.signature, solanaNetwork) || undefined"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="tx-item tx-item--link"
+          :title="tx.signature"
+        >
+          <div class="tx-icon-wrapper" :class="tx.success ? 'icon-neutral' : 'icon-send'">
+            <v-icon size="18" color="white">{{ tx.success ? 'mdi-swap-vertical' : 'mdi-alert-circle-outline' }}</v-icon>
+          </div>
+          <div class="tx-info">
+            <div class="tx-title text-body-2 g-mono">{{ shortSignature(tx.signature) }}</div>
+            <div class="tx-time text-caption grey--text">
+              {{ tx.blockTime ? formatSolanaTime(tx.blockTime) : $t('solana.pending') }}
+            </div>
+          </div>
+          <div class="tx-amount-col text-right">
+            <div v-if="!tx.success" class="text-caption error-text">{{ $t('transactions.failed') }}</div>
+            <v-icon size="x-small" color="var(--g-text-3)">mdi-open-in-new</v-icon>
+          </div>
+        </a>
+        <a
+          v-if="solanaHistoryTruncated && solanaAccountUrl"
+          :href="solanaAccountUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="sol-more t-caption"
+        >
+          {{ $t('solana.olderActivity') }}
+          <v-icon size="x-small">mdi-open-in-new</v-icon>
+        </a>
+      </div>
+    </template>
+
     <!-- Loading skeleton -->
     <div v-else-if="loading" class="pa-4">
       <v-skeleton-loader v-for="i in 6" :key="i" type="list-item-two-line" theme="dark" class="mb-2" />
@@ -96,6 +140,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { formatTokenAmount } from '@/chains/midnight/midnightAmount';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
+import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import type { StoredTransaction, TxAsset } from '@/models/transaction.types';
 import { isCardanoTx } from '@/models/transaction.types';
 import filters from '@/shared/utils/filters';
@@ -109,6 +154,27 @@ const showTxDetail = ref(false);
 const selectedTx = shallowRef<StoredTransaction | null>(null);
 
 const loading = computed(() => !walletStore.transactions);
+
+// ── Solana branch ─────────────────────────────────────────────────────────────
+/** Rows shown; the rest is on Solscan (as the dashboard's SolanaDashboard). */
+const SOLANA_ACTIVITY_LIMIT = 50;
+const isSolana = computed(() => walletStore.loggedWallet?.chain === Blockchain.SOLANA);
+const solanaNetwork = computed(() => walletStore.loggedWallet?.network ?? '');
+const solanaAccountUrl = computed(() => solscanUrl('account', walletStore.loggedWallet?.publicKey ?? '', solanaNetwork.value));
+const solanaTxs = computed(() => (walletStore.solanaTransactions ?? []).slice(0, SOLANA_ACTIVITY_LIMIT));
+const solanaHistoryTruncated = computed(() =>
+  !!walletStore.solana?.historyTruncated || (walletStore.solanaTransactions?.length ?? 0) > SOLANA_ACTIVITY_LIMIT);
+
+/** Not grouped by day like Cardano's list, so each row carries its date. */
+function formatSolanaTime(seconds: number): string {
+  return new Date(seconds * 1000).toLocaleString(getLocaleCode(i18n.locale), {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function shortSignature(signature: string): string {
+  return signature.length > 20 ? `${signature.slice(0, 8)}…${signature.slice(-8)}` : signature;
+}
 
 // ── Midnight branch ───────────────────────────────────────────────────────────
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
@@ -287,6 +353,19 @@ function openTxDetail(tx: StoredTransaction) {
   padding: 12px 16px;
   cursor: pointer;
   transition: background 0.15s;
+}
+
+.tx-item--link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sol-more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  padding: var(--g-s-3) var(--g-s-4);
+  color: var(--g-accent);
 }
 
 .tx-item:hover {
