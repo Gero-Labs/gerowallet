@@ -5,22 +5,8 @@
         <v-container class="dashboard-container pa-0" style="position: relative">
           <!-- Background - Confined to dashboard working area -->
           <div
-            :class="
-              loggedWallet?.chain === Blockchain.BITCOIN
-                ? 'bitcoin-background-dashboard'
-                : loggedWallet?.chain === Blockchain.MIDNIGHT
-                  ? 'midnight-background-dashboard'
-                  : 'cardano-background-dashboard'
-            "
-            :style="{
-              backgroundImage: `url(${
-                loggedWallet?.chain === Blockchain.BITCOIN
-                  ? assets.bitcoinBg
-                  : loggedWallet?.chain === Blockchain.MIDNIGHT
-                    ? assets.midnightBg
-                    : assets.cardanoBg
-              })`,
-            }"
+            :class="dashboardBackground.className"
+            :style="{ backgroundImage: `url(${dashboardBackground.image})` }"
           ></div>
 
           <v-layout>
@@ -650,20 +636,24 @@ async function openMiniMode() {
 // It owns both the CSS accent slots and the Vuetify theme, so the local
 // --*-color writer and its watcher that used to sit here are gone.
 
+/** The dashboard backdrop for the logged wallet's chain: its image and framing class.
+ *  Solana's waves share Bitcoin's composition (black sky, waves below), so its framing. */
+const dashboardBackground = computed(() => {
+  switch (loggedWallet.value?.chain) {
+    case Blockchain.BITCOIN:
+      return { image: assets.bitcoinBg, className: 'bitcoin-background-dashboard' };
+    case Blockchain.SOLANA:
+      return { image: assets.solanaBg, className: 'bitcoin-background-dashboard' };
+    case Blockchain.MIDNIGHT:
+      return { image: assets.midnightBg, className: 'midnight-background-dashboard' };
+    default:
+      return { image: assets.cardanoBg, className: 'cardano-background-dashboard' };
+  }
+});
+
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
-  const currentChain = loggedWallet.value?.chain;
-  let imageUrl: string;
-  switch (currentChain) {
-    case Blockchain.BITCOIN:
-      imageUrl = assets.bitcoinBg;
-      break;
-    case Blockchain.MIDNIGHT:
-      imageUrl = assets.midnightBg;
-      break;
-    default:
-      imageUrl = assets.cardanoBg;
-  }
+  const imageUrl = dashboardBackground.value.image;
   const img = new Image();
   img.onload = () => {
     backgroundImageLoaded.value = true;
@@ -847,7 +837,8 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Bitcoin background — slightly warmer tint to complement the orange theme */
+/* Bitcoin background — slightly warmer tint to complement the orange theme. Solana's
+   waves share the same composition (black sky, waves below), so it uses this too. */
 .bitcoin-background-dashboard {
   position: absolute;
   top: calc(-50% + 20px);

@@ -27,10 +27,12 @@ import geroDashboardHorizontal from '@/assets/svg/gero_dashboard_horizontal.svg'
 import geroNoText from '@/assets/svg/gero-notext.svg'
 import geroNoTextMidnight from '@/assets/svg/gero-notext-midnight.svg'
 import geroNoTextBitcoin from '@/assets/svg/gero-notext-bitcoin.svg'
+import geroNoTextSolana from '@/assets/svg/gero-notext-solana.svg'
 import nexusLogo from '@/assets/svg/nexus.svg'
 import koiosLogo from '@/assets/svg/koios.svg'
 import blockfrostLogo from '@/assets/img/blockfrost.png'
 import geroDashboardBitcoin from '@/assets/svg/gero_dashboard_bitcoin.svg'
+import geroDashboardSolana from '@/assets/svg/gero_dashboard_solana.svg'
 import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
@@ -95,6 +97,7 @@ import googleOutlineSvg from '@/assets/svg/googleOutline.svg'
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
 import midnightBg from '@/assets/Midnight.webp';
+import solanaBg from '@/assets/solanaBg.webp';
 import midnightLoginBg from '@/assets/midnightBg.png';
 import midnightTokenLogo from '@/assets/svg/midnight.svg';
 import cashbackBg from '@/assets/cashbackBg.png';
@@ -130,6 +133,7 @@ import miniModeSvg from '@/assets/svg/mini-mode.svg'
 
 export default {
   midnightBg,
+  solanaBg,
   midnightLoginBg,
   midnightTokenLogo,
   walletCreateBg,
@@ -158,6 +162,7 @@ export default {
   geroNoText,
   geroNoTextMidnight,
   geroNoTextBitcoin,
+  geroNoTextSolana,
   nexusLogo,
   koiosLogo,
   blockfrostLogo,
@@ -294,10 +299,12 @@ export default {
 
 export {
   geroDashboardBitcoin,
+  geroDashboardSolana,
   geroDashboard,
   geroDashboardHorizontal,
   geroNoText,
   geroNoTextMidnight,
   geroNoTextBitcoin,
+  geroNoTextSolana,
   google,
 }

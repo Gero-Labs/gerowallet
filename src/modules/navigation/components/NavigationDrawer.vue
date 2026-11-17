@@ -373,6 +373,8 @@ const navLogo = computed(() => {
       return assets.geroNoTextMidnight;
     case Blockchain.BITCOIN:
       return assets.geroNoTextBitcoin;
+    case Blockchain.SOLANA:
+      return assets.geroNoTextSolana;
     default:
       return assets.geroNoText;
   }
