@@ -73,21 +73,26 @@
         </v-alert>
       </v-card-text>
     </v-card>
+
+    <SetCollateralDialog
+      :is-open="signDialogOpen"
+      :tx="collateralTx"
+      @close="closeSignDialog"
+      @success="onCollateralSubmitted"
+    />
   </v-window-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs, computed, onMounted } from 'vue';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
-import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import SetCollateralDialog from '@/modules/dashboard/dialogs/SetCollateralDialog.vue';
 import snackbar from '@/plugins/snackbar';
-import { Messaging } from '@/chrome/messaging';
 import { walletStore } from '@/stores/walletStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { MessageTypes } from '@/models/MessageTypes';
 import { HexBlob } from '@cardano-sdk/util';
 import { nexusTxApi, walletUtxosToNexusInputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
@@ -103,6 +108,8 @@ const { loggedWallet, utxos, collateral, keys } = toRefs(walletStore);
 const { t } = useTranslation();
 
 const isCreating = ref(false);
+const signDialogOpen = ref(false);
+const collateralTx = ref<Cardano.Tx | undefined>(undefined);
 
 const hasNewCollateralFeature = computed(() => isFeatureNew('settings.collateral.autoDetect'));
 
@@ -136,30 +143,14 @@ const setCollateral = async () => {
       loggedWallet.value.network
     );
 
-    // Reconstruct the unsigned transaction from the CBOR returned by nexus,
-    // then follow the same sign + merge-witness + submit flow as before.
-    const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+    if (!txCborHex) throw new Error('Nexus returned an empty transaction CBOR');
 
-    const signaturesRes = await Messaging.sendToBackground({
-      method: METHOD.signTx,
-      data: { tx: txCborHex, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
-    }) as { data?: string; error?: { info?: string; code?: number | string } };
-    if (signaturesRes.error) {
-      // Detect user rejection (no info / "user_rejected" reason) and stay silent — clicking
-      // Reject in the sign popup is an intentional action, not an error to surface.
-      const info = signaturesRes.error.info;
-      const isUserReject =
-        !info ||
-        /reject|cancel|denied|user_rejected/i.test(String(info)) ||
-        signaturesRes.error.code === 2; // CIP-30 UserDeclined
-      if (!isUserReject) {
-        snackbar.setError(info || t('settings.failedToBuildCollateral'));
-      }
-    } else if (signaturesRes.data) {
-      const witnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
-      const newTx: Serialization.Transaction = new Serialization.Transaction(transaction.body(), witnessSet)
-      await submit(newTx.toCbor())
-    }
+    // Sign and submit in-wallet (SetCollateralDialog → useTransactionSigning), like the
+    // staking and governance flows. The dApp CIP-30 signTx route refuses the wallet's own
+    // pages (it only serves whitelisted dApp origins), which surfaced as
+    // "The request was refused due to lack of access" (issue 1558).
+    collateralTx.value = Serialization.Transaction.fromCbor(HexBlob(txCborHex)).toCore();
+    signDialogOpen.value = true;
   } catch (error) {
     console.error('Error building collateral transaction via nexus:', error);
     const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
@@ -179,23 +170,15 @@ const setCollateral = async () => {
   }
 };
 
-const submit = async (cborHex: string) => {
-  const submitResult = await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.SUBMIT_TX,
-    data: {
-      txCbor: cborHex,
-      witnessHex: null,
-      utxos: utxos.value
-    }
-  }) as { data: { txId?: string; error?: string } };
-  if (submitResult.data.error) {
-    throw new Error(submitResult.data.error);
-  }
-  const txId = submitResult.data.txId;
-  snackbar.fireSuccess(t('settings.collateralTxSetSuccess', { txId }));
-  console.log(txId)
-  emit('close')
-}
+const closeSignDialog = () => {
+  signDialogOpen.value = false;
+  collateralTx.value = undefined;
+};
+
+const onCollateralSubmitted = () => {
+  closeSignDialog();
+  emit('close');
+};
 </script>
 
 <style scoped>
