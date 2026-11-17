@@ -36,6 +36,8 @@ jobs:
     name: Help browser scenarios
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      EVIDENCE_RETENTION_DAYS: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -77,7 +79,7 @@ jobs:
           name: help-browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/help-browser-evidence
           if-no-files-found: warn
-          retention-days: 2
+          retention-days: ${{ env.EVIDENCE_RETENTION_DAYS }}
 
       - name: Report actual artifact expiry
         if: always() && steps.evidence.outputs.artifact-id != ''
@@ -87,10 +89,26 @@ jobs:
           ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
           ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
         run: |
-          expires_at="$(gh api "repos/$GH_REPO/actions/artifacts/$ARTIFACT_ID" --jq '.expires_at')"
+          # A just-uploaded artifact can briefly 404 on the REST API. This step
+          # only annotates the summary, so retry and never fail the job over it.
+          expires_at=''
+          for attempt in 1 2 3 4 5; do
+            if expires_at="$(gh api "repos/$GH_REPO/actions/artifacts/$ARTIFACT_ID" --jq '.expires_at' 2>/dev/null)" && [ -n "$expires_at" ]; then
+              break
+            fi
+            expires_at=''
+            if [ "$attempt" -lt 5 ]; then sleep $((attempt * 3)); fi
+          done
+          if [ -z "$expires_at" ]; then
+            echo "::warning::Artifact $ARTIFACT_ID expiry lookup failed after 5 attempts; summary written without the exact time."
+          fi
           {
             printf '### Help browser evidence\n\n'
             printf '[Download screenshots and JSON reports](%s)\n\n' "$ARTIFACT_URL"
-            printf 'GitHub reports expiry at **%s**. Download before that time.\n' "$expires_at"
+            if [ -n "$expires_at" ]; then
+              printf 'GitHub reports expiry at **%s**. Download before that time.\n' "$expires_at"
+            else
+              printf 'GitHub did not report the expiry time. The artifact is kept for %s days from upload.\n' "$EVIDENCE_RETENTION_DAYS"
+            fi
             printf 'The scenario scripts and synthetic fixtures remain in Git after expiry.\n'
           } >> "$GITHUB_STEP_SUMMARY"
