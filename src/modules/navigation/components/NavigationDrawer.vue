@@ -933,10 +933,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   border-radius: 4px;
-  padding: 0;
   margin-left: -2px;
-  padding-left: 2px;
-  padding-right: 2px;
+  padding: 0 2px;
   transition: background 0.15s;
 
   .edit-icon {
