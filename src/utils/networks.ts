@@ -31,7 +31,8 @@ import solanaLogo from '@/assets/svg/solana.svg';
 function solanaNetwork(network: string, title: string, networkId: number, ticker: string): NetworkInfo {
   return {
     icon: solanaLogo,
-    iconColor: 'purple',
+    // The Solana gradient avatar (assets solanaSvg, iconResolver 'solana').
+    iconColor: 'solana',
     title,
     blockchain: Blockchain.SOLANA,
     network,

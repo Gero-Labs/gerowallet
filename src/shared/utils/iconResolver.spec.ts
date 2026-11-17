@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const BACKEND = 'https://api.gerowallet.io';
 const placeholders = {
-  greenSvg: 'g', yellowSvg: 'y', purpleSvg: 'p', pinkSvg: 'pk', orangeSvg: 'o', blueSvg: 'b', greySvg: 'gr', errorImage: 'err',
+  greenSvg: 'g', yellowSvg: 'y', purpleSvg: 'p', pinkSvg: 'pk', orangeSvg: 'o', blueSvg: 'b', greySvg: 'gr', solanaSvg: 'sol', errorImage: 'err',
 };
 
 async function load(backendUrl: string | undefined) {
@@ -13,6 +13,14 @@ async function load(backendUrl: string | undefined) {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe('wallet avatars', () => {
+  it('gives a Solana wallet the Solana gradient avatar, and keeps the colour names', async () => {
+    const { resolveIconUrl } = await load(BACKEND);
+    expect(resolveIconUrl('solana', placeholders)).toBe('sol');
+    expect(resolveIconUrl('purple', placeholders)).toBe('p');
+  });
 });
 
 describe('metadata images', () => {

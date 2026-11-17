@@ -11,6 +11,8 @@ import orangeSvg from '@/assets/svg/orange.svg'
 import yellowSvg from '@/assets/svg/yellow.svg'
 import blueSvg from '@/assets/svg/blue.svg'
 import greySvg from '@/assets/svg/grey.svg'
+// Solana wallets' avatar (networks.ts iconColor 'solana'), in the Solana gradient.
+import solanaSvg from '@/assets/svg/solana-wallet.svg'
 import ledgerSvg from '@/assets/svg/ledger.svg'
 import trezorSvg from '@/assets/svg/trezor.svg'
 import keystoneSvg from '@/assets/svg/keystone.svg'
@@ -146,6 +148,7 @@ export default {
   yellowSvg,
   blueSvg,
   greySvg,
+  solanaSvg,
   ledgerSvg,
   trezorSvg,
   keystoneSvg,
@@ -226,6 +229,7 @@ export default {
       orangeSvg,
       blueSvg,
       greySvg,
+      solanaSvg,
       errorImage,
     });
   },
