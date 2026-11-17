@@ -22,6 +22,19 @@ export function shouldAutoLock(params: {
 export const AUTO_LOCK_ALARM = 'auto-lock-check';
 export const AUTO_LOCK_PERIOD_MINUTES = 1;
 
+/**
+ * Registers the auto-lock alarm (first tick after one period, then every
+ * period) and runs `tick` on each of its firings, never on another alarm's.
+ * Re-creating the alarm on every worker start is harmless: Chrome replaces an
+ * alarm of the same name.
+ */
+export function scheduleAutoLock(alarms: Pick<typeof chrome.alarms, 'create' | 'onAlarm'>, tick: () => void): void {
+  void alarms.create(AUTO_LOCK_ALARM, { delayInMinutes: AUTO_LOCK_PERIOD_MINUTES, periodInMinutes: AUTO_LOCK_PERIOD_MINUTES });
+  alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === AUTO_LOCK_ALARM) tick();
+  });
+}
+
 /** What one auto-lock tick reads and does; background.ts wires the wallet store, the wallet DBs and walletManager. */
 export interface AutoLockDeps<W extends { id: number | string }> {
   loggedWallet: () => W | null | undefined;

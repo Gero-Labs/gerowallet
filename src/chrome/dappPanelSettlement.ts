@@ -9,6 +9,8 @@ export interface PanelPendingEntry {
   method: string;
   /** The wallet the request was issued against (a wallet record id). */
   walletId?: unknown;
+  /** Kept so the request can be re-delivered when a panel (re)connects. */
+  payload?: unknown;
 }
 
 /** What a side-panel port sends back for a request. */
@@ -79,4 +81,62 @@ export function admitPanelPort(port: chrome.runtime.Port, own: OwnExtension, syn
   const parts = port.name.split(':');
   const parsed = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
   return Number.isNaN(parsed) ? syntheticKey() : parsed;
+}
+
+/**
+ * Sends a connecting panel every request parked for its tab (and every tabless
+ * one), then the ids this worker still holds (`dapp-live`), so the panel drops
+ * a prompt that died with a previous worker. A port that dies mid-way is left
+ * alone: the next connect sends everything again.
+ */
+export function redeliverParkedRequests(pending: Map<string, PanelPendingEntry>, tabId: number, port: chrome.runtime.Port): void {
+  const requestIds: string[] = [];
+  for (const [requestId, entry] of pending.entries()) {
+    // OX Agent: [javascript-authorization-security] A panel gets only its own tab's requests and tabless ones, never another tab's prompt
+    if (entry.tabId !== tabId && !Number.isNaN(entry.tabId)) continue;
+    requestIds.push(requestId);
+    try {
+      port.postMessage({ type: 'dapp-request', method: entry.method, requestId, payload: entry.payload });
+    } catch {
+      return;
+    }
+  }
+  try {
+    port.postMessage({ type: 'dapp-live', requestIds });
+  } catch {
+    // Port died; the next connect sends it again.
+  }
+}
+
+export interface PanelChannel {
+  /** The connected panel port of each tab key. */
+  ports: Map<number, chrome.runtime.Port>;
+  pending: Map<string, PanelPendingEntry>;
+  /** The logged wallet's id now, for the wallet-switch guard. */
+  activeWalletId: () => unknown;
+  /** Called after an answer settled a request (the badge count changed). */
+  onSettled: () => void;
+}
+
+/**
+ * Wires an admitted panel port: it replaces the tab's previous port, settles
+ * answers through `settlePanelMessage`, and gets everything parked for it.
+ * Closing the panel PARKS its requests instead of answering them: locking the
+ * panel, switching tabs or closing it must not answer a dApp on the user's
+ * behalf, so the entries stay in `pending` until a panel reconnects and the
+ * user approves or rejects, or the panel NACKs.
+ */
+export function attachPanelPort(channel: PanelChannel, port: chrome.runtime.Port, tabId: number): void {
+  const previous = channel.ports.get(tabId);
+  if (previous) {
+    try { previous.disconnect(); } catch { /* already disconnected */ }
+  }
+  channel.ports.set(tabId, port);
+  port.onMessage.addListener((message) => {
+    if (settlePanelMessage(channel.pending, message, tabId, channel.activeWalletId())) channel.onSettled();
+  });
+  port.onDisconnect.addListener(() => {
+    if (channel.ports.get(tabId) === port) channel.ports.delete(tabId);
+  });
+  redeliverParkedRequests(channel.pending, tabId, port);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { admitPanelPort, settlePanelMessage, type PanelPendingEntry } from './dappPanelSettlement';
+import { admitPanelPort, attachPanelPort, settlePanelMessage, type PanelChannel, type PanelPendingEntry } from './dappPanelSettlement';
 
 function pendingWith(entry: Partial<PanelPendingEntry> = {}) {
   const resolve = vi.fn();
@@ -99,5 +99,93 @@ describe('side-panel port admission', () => {
     const other = port('store-sync', page);
     expect(admitPanelPort(other, own, () => -1)).toBeNull();
     expect(other.disconnect).not.toHaveBeenCalled();
+  });
+});
+
+describe('closing the side panel parks a request; a reconnecting panel gets it again', () => {
+  type Listener = (message?: unknown) => void;
+  /** A connected panel page's port: what the worker posts to it, and its two events. */
+  function panelPort() {
+    const messages: Listener[] = [];
+    const disconnects: Listener[] = [];
+    const posted: Array<{ type: string; requestId?: string; requestIds?: string[] }> = [];
+    const port = {
+      postMessage: (message: never) => posted.push(message),
+      disconnect: vi.fn(),
+      onMessage: { addListener: (fn: Listener) => messages.push(fn) },
+      onDisconnect: { addListener: (fn: Listener) => disconnects.push(fn) },
+    } as unknown as chrome.runtime.Port;
+    return {
+      port, posted,
+      answer: (message: unknown) => messages.forEach(fn => fn(message)),
+      close: () => disconnects.forEach(fn => fn()),
+    };
+  }
+
+  function channelWith(...entries: Array<[string, Partial<PanelPendingEntry>]>) {
+    const resolves = new Map<string, ReturnType<typeof vi.fn>>();
+    const pending = new Map<string, PanelPendingEntry>();
+    for (const [id, entry] of entries) {
+      const resolve = vi.fn();
+      resolves.set(id, resolve);
+      pending.set(id, { resolve, tabId: 7, method: 'signTx', walletId: 1, payload: { tx: id }, ...entry });
+    }
+    const onSettled = vi.fn();
+    const channel: PanelChannel = { ports: new Map(), pending, activeWalletId: () => 1, onSettled };
+    return { channel, pending, resolves, onSettled };
+  }
+
+  it('closing the panel answers nothing and keeps the request; the next panel of that tab gets it and can answer', () => {
+    const { channel, pending, resolves, onSettled } = channelWith(['r1', {}]);
+    const first = panelPort();
+    attachPanelPort(channel, first.port, 7);
+    expect(first.posted.map(m => m.type)).toEqual(['dapp-request', 'dapp-live']);
+    first.close();
+    expect(channel.ports.has(7)).toBe(false);
+    expect(resolves.get('r1')).not.toHaveBeenCalled();
+    expect(pending.has('r1')).toBe(true);
+
+    const second = panelPort();
+    attachPanelPort(channel, second.port, 7);
+    expect(second.posted).toEqual([
+      { type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: { tx: 'r1' } },
+      { type: 'dapp-live', requestIds: ['r1'] },
+    ]);
+    second.answer({ requestId: 'r1', type: 'dapp-response', data: 'signed' });
+    expect(resolves.get('r1')).toHaveBeenCalledTimes(1);
+    expect(resolves.get('r1')).toHaveBeenCalledWith(expect.objectContaining({ data: 'signed' }));
+    expect(onSettled).toHaveBeenCalledTimes(1);
+    expect(pending.size).toBe(0);
+  });
+
+  it("a panel gets its own tab's and tabless requests, never another tab's", () => {
+    const { channel } = channelWith(['mine', {}], ['other', { tabId: 8 }], ['tabless', { tabId: NaN }]);
+    const panel = panelPort();
+    attachPanelPort(channel, panel.port, 7);
+    expect(panel.posted.filter(m => m.type === 'dapp-request').map(m => m.requestId)).toEqual(['mine', 'tabless']);
+    expect(panel.posted.at(-1)).toEqual({ type: 'dapp-live', requestIds: ['mine', 'tabless'] });
+  });
+
+  it('a new panel for the tab replaces the old port; the old one closing later keeps the new one', () => {
+    const { channel } = channelWith(['r1', {}]);
+    const old = panelPort();
+    attachPanelPort(channel, old.port, 7);
+    const next = panelPort();
+    attachPanelPort(channel, next.port, 7);
+    expect(old.port.disconnect).toHaveBeenCalled();
+    old.close();
+    expect(channel.ports.get(7)).toBe(next.port);
+  });
+
+  it('a panel that dies while requests are re-delivered leaves them parked for the next connect', () => {
+    const { channel, pending, resolves } = channelWith(['r1', {}], ['r2', {}]);
+    const dying = panelPort();
+    (dying.port as { postMessage: unknown }).postMessage = () => { throw new Error('Attempting to use a disconnected port object'); };
+    expect(() => attachPanelPort(channel, dying.port, 7)).not.toThrow();
+    expect(pending.size).toBe(2);
+    expect([...resolves.values()].every(resolve => resolve.mock.calls.length === 0)).toBe(true);
+    const next = panelPort();
+    attachPanelPort(channel, next.port, 7);
+    expect(next.posted.filter(m => m.type === 'dapp-request').map(m => m.requestId)).toEqual(['r1', 'r2']);
   });
 });
