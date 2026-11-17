@@ -33,6 +33,9 @@ import {
 import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
 import { getStakeRegistrationState, StakeAccountError } from '@/shared/utils/stakeRegistration';
 
+/** A Solana message that changes nothing but the sync time rewrites the store at most this often. */
+export const SOLANA_LAST_SYNC_MIN_INTERVAL_MS = 30_000;
+
 /**
  * SyncService handles all wallet synchronization operations
  * Manages blockchain sync, account info, transactions, assets, and rewards
@@ -594,9 +597,14 @@ export class SyncService {
     // Sticky on purpose: once older history was cut off it stays missing here until a
     // FORCE_RESYNC rebuilds it, whatever later pushes say.
     if (update.historyTruncated) snapshot.historyTruncated = true;
-    // Every applied message is a sync, changed or not: the network popup's "Last Sync".
-    snapshot.lastSyncAt = Date.now();
-    WalletStore.setSolanaState(snapshot);
+    // Every applied message is a sync, changed or not: the network popup's "Last Sync". The
+    // `solana` record lives in chrome.storage.local, whose every write reaches each tab's
+    // listeners, so a message that changes nothing else rewrites it at most every 30 s.
+    const now = Date.now();
+    const lastSyncAt = walletStore.solana?.lastSyncAt ?? 0;
+    if (Object.keys(snapshot).length > 0 || now - lastSyncAt >= SOLANA_LAST_SYNC_MIN_INTERVAL_MS) {
+      WalletStore.setSolanaState({ ...snapshot, lastSyncAt: now });
+    }
 
     if (update.cursorSlot !== undefined) {
       // The history goes to IndexedDB through the debounced persister; write it before the
