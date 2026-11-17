@@ -69,8 +69,12 @@ function schemaVersion(network: string): number {
 }
 const KEY_PREFIX = 'midnight_wallet_state';
 
-/** `dust-light9`: the ledger 9 DUST light sync's spend checkpoint (midnightDustSpendCheckpoint.ts). */
-export type MidnightWalletKind = 'dust' | 'shielded' | 'unshielded' | 'dust-light9';
+/**
+ * `dust-light9`: the ledger 9 DUST light sync's spend checkpoint (midnightDustSpendCheckpoint.ts).
+ * `shielded-sync9`: the ledger 9 private sync's own checkpoint, a shielded state and the
+ * history saved with it (`loadPrivateSyncCheckpoint`).
+ */
+export type MidnightWalletKind = 'dust' | 'shielded' | 'unshielded' | 'dust-light9' | 'shielded-sync9';
 
 interface PersistedWalletState {
   schemaVersion: number;
@@ -275,6 +279,49 @@ export async function clearWalletState(
   } catch {
     // Best-effort: the next restore fails the same way and clears again.
   }
+}
+
+/**
+ * The ledger 9 private sync's own checkpoint: a shielded wallet state and the
+ * transaction history saved with it, in ONE row. Its own row, not the
+ * `shielded` one: the shielded send path writes that row too, with no history,
+ * and this one must never resume a state its history has not caught up with.
+ */
+export interface PrivateSyncCheckpoint {
+  /** The SDK's serialized shielded state. */
+  state: string;
+  /** The SDK's serialized transaction history (`InMemoryTransactionHistoryStorage.serialize()`). */
+  history: string;
+}
+
+const PRIVATE_SYNC_KIND: MidnightWalletKind = 'shielded-sync9';
+const PRIVATE_SYNC_FORMAT = 1;
+
+/** The private sync's checkpoint, or null (cold replay): none, damaged or of another format. */
+export async function loadPrivateSyncCheckpoint(namespace: string, identitySeed: Uint8Array): Promise<PrivateSyncCheckpoint | null> {
+  const raw = await loadWalletState(namespace, PRIVATE_SYNC_KIND, identitySeed);
+  if (!raw) return null;
+  let record: unknown;
+  try { record = JSON.parse(raw); } catch { return null; }
+  const { v, state, history } = (record ?? {}) as { v?: unknown; state?: unknown; history?: unknown };
+  if (v !== PRIVATE_SYNC_FORMAT || typeof state !== 'string' || state.length === 0 || typeof history !== 'string') return null;
+  return { state, history };
+}
+
+/**
+ * Save the private sync's checkpoint. The caller decides which state is safe
+ * to save: one whose history is complete (midnightPrivateSync.ts saves only a
+ * state that has settled past the SDK's history lookups).
+ */
+export async function savePrivateSyncCheckpoint(namespace: string, identitySeed: Uint8Array, checkpoint: PrivateSyncCheckpoint): Promise<void> {
+  if (typeof checkpoint.state !== 'string' || checkpoint.state.length === 0 || typeof checkpoint.history !== 'string') return;
+  await saveWalletState(namespace, PRIVATE_SYNC_KIND, identitySeed,
+    JSON.stringify({ v: PRIVATE_SYNC_FORMAT, state: checkpoint.state, history: checkpoint.history }));
+}
+
+/** Drop the private sync's checkpoint (unreadable, or of another key). Never the send path's `shielded` row. */
+export async function clearPrivateSyncCheckpoint(namespace: string, identitySeed: Uint8Array): Promise<void> {
+  await clearWalletState(namespace, PRIVATE_SYNC_KIND, identitySeed);
 }
 
 /**
