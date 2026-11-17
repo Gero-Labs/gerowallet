@@ -36,6 +36,8 @@ jobs:
     name: Help browser scenarios
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      EVIDENCE_RETENTION_DAYS: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -77,7 +79,7 @@ jobs:
           name: help-browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/help-browser-evidence
           if-no-files-found: warn
-          retention-days: 2
+          retention-days: ${{ env.EVIDENCE_RETENTION_DAYS }}
 
       - name: Report actual artifact expiry
         if: always() && steps.evidence.outputs.artifact-id != ''
@@ -95,15 +97,18 @@ jobs:
               break
             fi
             expires_at=''
-            sleep $((attempt * 3))
+            [ "$attempt" -lt 5 ] && sleep $((attempt * 3))
           done
+          if [ -z "$expires_at" ]; then
+            echo "::warning::Artifact $ARTIFACT_ID expiry lookup failed after 5 attempts; summary written without the exact time."
+          fi
           {
             printf '### Help browser evidence\n\n'
             printf '[Download screenshots and JSON reports](%s)\n\n' "$ARTIFACT_URL"
             if [ -n "$expires_at" ]; then
               printf 'GitHub reports expiry at **%s**. Download before that time.\n' "$expires_at"
             else
-              printf 'GitHub did not report the expiry time. The artifact is kept for 2 days from upload.\n'
+              printf 'GitHub did not report the expiry time. The artifact is kept for %s days from upload.\n' "$EVIDENCE_RETENTION_DAYS"
             fi
             printf 'The scenario scripts and synthetic fixtures remain in Git after expiry.\n'
           } >> "$GITHUB_STEP_SUMMARY"
