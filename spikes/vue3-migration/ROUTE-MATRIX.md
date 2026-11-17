@@ -15,7 +15,7 @@ The ESLint Config Gate workflow runs `route-matrix.mjs --check`, so a route adde
 - **e2e**: Playwright spec in the external harness, run against an exact wallet SHA.
 - **manual**: Needs a device, a live provider, mainnet or funds; record the result in the V13 signoff.
 
-E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests](https://github.com/Gero-Labs/gerowallet-e2e-tests) at harness `10da54c6`, whose wallet pin is `e8a3d139`. They are not checked out here, so route-matrix.mjs checks only their shape; rerun the harness against the exact candidate in V13 (#1295). A check marked funded skips without a funded testnet wallet and is not coverage until that run has one.
+E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests](https://github.com/Gero-Labs/gerowallet-e2e-tests) at harness `c41699e7`, whose wallet pin is `e8a3d139`. They are not checked out here, so route-matrix.mjs checks only their shape; rerun the harness against the exact candidate in V13 (#1295). A check marked funded skips without a funded testnet wallet and is not coverage until that run has one.
 
 ## Summary
 
