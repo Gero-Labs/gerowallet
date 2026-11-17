@@ -3,7 +3,7 @@
   "purpose": "V02 (#1284): map every shipped route to its V07-V11 owner and to the checks that exercise it. route-matrix.mjs joins this file with the routes read from the current routers and refuses: a route with no entry, an entry that names no route, a unit, guards or help-browser ref that is not a tracked file, an e2e ref that is not a tests/specs path, a route with a view and no unit, help-browser or unfunded e2e check and no manual step, a redirect with no guards check and no manual step, and a manual or note that is not a non-empty string. With --e2e <checkout> it also checks that each e2e spec exists at harnessSha and names its route (a side-panel route must also open the side panel) or says how it gets there with via.",
   "e2e": {
     "repository": "Gero-Labs/gerowallet-e2e-tests",
-    "harnessSha": "c41699e70da763b3bd7c4feff0d4d5c1b03b535c",
+    "harnessSha": "53a139e4c0c8dfb94e7ef589322e074b4a461a73",
     "walletPin": "e8a3d1391a2a10efd5e719744e7b530eee7a5528",
     "note": "They are not checked out here, so route-matrix.mjs checks only their shape; rerun the harness against the exact candidate in V13 (#1295). A check marked funded skips without a funded testnet wallet and is not coverage until that run has one."
   },
