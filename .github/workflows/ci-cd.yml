@@ -91,9 +91,12 @@ jobs:
       # build's config comes from ONE controlled source instead of a
       # per-developer gitignored .env.production (which drifts — a stale machine
       # would ship e.g. the wrong VITE_NEXUS_URL). Values are passed through env:
-      # and written to the file via $VAR (never interpolated into the shell), so
-      # a value cannot inject commands. Registered secrets are masked in logs and
-      # only written to the file, never echoed.
+      # and written by Node (never interpolated into the shell), so a value cannot
+      # inject commands, and one holding a line break is refused. Registered
+      # secrets are masked in logs and only written to the file, never echoed.
+      # The list and the pinned VITE_DEBUG_STORES=false live in the script, shared
+      # with the upgrade rehearsal's builds in chrome-web-store.yml; its spec fails
+      # if this env block passes a different set of names.
       - name: Write production env
         env:
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -115,32 +118,7 @@ jobs:
           VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
           VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
           VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
-        run: |
-          {
-            echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
-            echo "VITE_NEXUS_URL=$VITE_NEXUS_URL"
-            echo "VITE_BACKEND_URL=$VITE_BACKEND_URL"
-            echo "VITE_APP_NAME=$VITE_APP_NAME"
-            echo "VITE_ADA_HANDLE_BASE_URL=$VITE_ADA_HANDLE_BASE_URL"
-            echo "VITE_FLAGS_BASE_URL=$VITE_FLAGS_BASE_URL"
-            echo "VITE_SYNC_WS_URL=$VITE_SYNC_WS_URL"
-            echo "VITE_KAISEREX_OAUTH_URL=$VITE_KAISEREX_OAUTH_URL"
-            echo "VITE_KRAKEN_API_URL=$VITE_KRAKEN_API_URL"
-            echo "VITE_KRAKEN_WS_URL=$VITE_KRAKEN_WS_URL"
-            echo "VITE_ZKFOLD_API_URL=$VITE_ZKFOLD_API_URL"
-            echo "VITE_ZKFOLD_PROVER_URL=$VITE_ZKFOLD_PROVER_URL"
-            echo "VITE_CASHBACK_ENVIRONMENT=$VITE_CASHBACK_ENVIRONMENT"
-            echo "VITE_CASHBACK_IDENTIFIER=$VITE_CASHBACK_IDENTIFIER"
-            echo "VITE_IS_BETA=$VITE_IS_BETA"
-            echo "VITE_CIP45_DEFAULT_ENABLED=$VITE_CIP45_DEFAULT_ENABLED"
-            # Pinned off: debugLog() output includes wallet records, unlock
-            # responses and PRF metadata, so a release must never enable it.
-            echo "VITE_DEBUG_STORES=false"
-            echo "VITE_USE_MOCK_PROOF=$VITE_USE_MOCK_PROOF"
-            echo "VITE_MOONPAY_API_KEY=$VITE_MOONPAY_API_KEY"
-            echo "VITE_GUARDARIAN_API_KEY=$VITE_GUARDARIAN_API_KEY"
-          } > .env.production
-          echo "Wrote .env.production ($(grep -c '^VITE_' .env.production) vars)"
+        run: node scripts/write-production-env.mjs .env.production
 
       # A build that cannot open the gpw2 secret envelope locks out every wallet
       # already migrated to it. Refuse to produce one (e.g. a rollback cut from an

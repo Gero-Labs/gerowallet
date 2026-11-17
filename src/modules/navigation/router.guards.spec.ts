@@ -83,6 +83,12 @@ describe('production options router guards', () => {
     await router.push('/missing/deep/path');
     expect(router.currentRoute.value.path).toBe('/');
   });
+  it('redirects the retired /market route to the dashboard market view', async () => {
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
+    await router.push('/market');
+    expect(router.currentRoute.value.path).toBe('/');
+    expect(router.currentRoute.value.query['view']).toBe('all');
+  });
 });
 
 describe('production sidepanel router gates', () => {
