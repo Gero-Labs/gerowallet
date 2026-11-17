@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PINNED, SECRETS, VARIABLES, productionEnv } from './write-production-env.mjs';
+import { PINNED, REQUIRED, SECRETS, VARIABLES, productionEnv } from './write-production-env.mjs';
+
+/** The two a release cannot do without; each case adds what it checks. */
+const BASE = { VITE_BACKEND_URL: 'https://backend.example', VITE_SYNC_WS_URL: 'wss://sync.example' };
 
 const lines = text => text.trim().split('\n');
 const names = text => lines(text).map(line => line.slice(0, line.indexOf('=')));
@@ -22,7 +25,7 @@ function envBlocks(workflow) {
 
 describe('productionEnv', () => {
   it('writes every listed variable and secret, plus the pinned debug switch, and nothing else', () => {
-    const text = productionEnv({ VITE_BACKEND_URL: 'https://backend.example', VITE_MOONPAY_API_KEY: 'pk_test', MANIFEST_KEY: 'not-for-the-env', PATH: '/usr/bin' });
+    const text = productionEnv({ ...BASE, VITE_BACKEND_URL: 'https://backend.example', VITE_MOONPAY_API_KEY: 'pk_test', MANIFEST_KEY: 'not-for-the-env', PATH: '/usr/bin' });
     expect(names(text)).toEqual([...VARIABLES, ...SECRETS, ...Object.keys(PINNED)]);
     expect(lines(text)).toContain('VITE_BACKEND_URL=https://backend.example');
     expect(lines(text)).toContain('VITE_MOONPAY_API_KEY=pk_test');
@@ -33,18 +36,24 @@ describe('productionEnv', () => {
   });
 
   it('keeps debug logging off even when a variable asks for it', () => {
-    const text = productionEnv({ VITE_DEBUG_STORES: 'true' });
+    const text = productionEnv({ ...BASE, VITE_DEBUG_STORES: 'true' });
     expect(lines(text).filter(line => line.startsWith('VITE_DEBUG_STORES='))).toEqual(['VITE_DEBUG_STORES=false']);
   });
 
   it('drops the trailing line break a pasted secret often carries', () => {
-    expect(lines(productionEnv({ VITE_MOONPAY_API_KEY: 'pk_live\n', VITE_IS_BETA: 'false\r\n' })))
+    expect(lines(productionEnv({ ...BASE, VITE_MOONPAY_API_KEY: 'pk_live\n', VITE_IS_BETA: 'false\r\n' })))
       .toEqual(expect.arrayContaining(['VITE_MOONPAY_API_KEY=pk_live', 'VITE_IS_BETA=false']));
   });
 
   it('refuses a line break inside a value, which would add a line of its own', () => {
-    expect(() => productionEnv({ VITE_IS_BETA: 'false\nVITE_DEBUG_STORES=true' })).toThrow('VITE_IS_BETA holds a line break');
-    expect(() => productionEnv({ VITE_MOONPAY_API_KEY: 'a\rb' })).toThrow('line break');
+    expect(() => productionEnv({ ...BASE, VITE_IS_BETA: 'false\nVITE_DEBUG_STORES=true' })).toThrow('VITE_IS_BETA holds a line break');
+    expect(() => productionEnv({ ...BASE, VITE_MOONPAY_API_KEY: 'a\rb' })).toThrow('line break');
+  });
+
+  it('refuses a release without the backend or Gero Sync URL, which the derived endpoints need', () => {
+    expect(REQUIRED).toEqual(['VITE_BACKEND_URL', 'VITE_SYNC_WS_URL']);
+    expect(() => productionEnv({})).toThrow('VITE_BACKEND_URL, VITE_SYNC_WS_URL must be set');
+    expect(() => productionEnv({ ...BASE, VITE_SYNC_WS_URL: '  ' })).toThrow('VITE_SYNC_WS_URL must be set');
   });
 
   it('leaves the derived endpoints to the build (scripts/env-defaults.mjs)', () => {

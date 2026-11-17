@@ -34,12 +34,20 @@ export const VARIABLES = [
 export const SECRETS = ['VITE_MOONPAY_API_KEY'];
 
 /**
+ * A release cannot do without these: VITE_NEXUS_URL and VITE_FLAGS_BASE_URL are derived
+ * from them, so an empty one would ship a build with no Nexus or no feature flags.
+ */
+export const REQUIRED = ['VITE_BACKEND_URL', 'VITE_SYNC_WS_URL'];
+
+/**
  * Pinned whatever the variables say. debugLog() output includes wallet records, unlock
  * responses and PRF metadata, so a release must never enable it.
  */
 export const PINNED = { VITE_DEBUG_STORES: 'false' };
 
 export function productionEnv(env) {
+  const missing = REQUIRED.filter(name => !(env[name] ?? '').trim());
+  if (missing.length) throw new Error(`${missing.join(', ')} must be set`);
   const entries = [
     ...[...VARIABLES, ...SECRETS].map(name => [name, env[name]]),
     ...Object.entries(PINNED),

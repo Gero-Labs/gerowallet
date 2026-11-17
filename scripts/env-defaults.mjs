@@ -4,6 +4,10 @@
  *   VITE_NEXUS_URL       = VITE_BACKEND_URL + '/api/nexus'   (gero-backend's Nexus proxy)
  *   VITE_FLAGS_BASE_URL  = VITE_SYNC_WS_URL as http(s)       (gero-sync serves both)
  *
+ * VITE_SYNC_WS_URL is gero-sync's BASE URL, path included (websocket.service.ts adds
+ * `/ws/sync`; midnightConfig.ts builds its http relay from it the same way), so a path
+ * such as `ws://localhost:8081/sync` carries over: flags at `http://localhost:8081/sync`.
+ *
  * A value set explicitly (an env file or the process environment) always wins, so a
  * setup with a separate Nexus or flag host keeps working. Vite reads env files after
  * the plugins' `config` hooks and lets `process.env` override them, so writing the

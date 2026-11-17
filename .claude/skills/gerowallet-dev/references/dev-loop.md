@@ -11,15 +11,15 @@ npm ci               # use the committed lockfile; `prepare` installs the simple
 touch .env.development
 ```
 
-There is no committed `.env.example`. Create local configuration explicitly. Three variables are all you need to boot against a local backend:
+There is no committed `.env.example`. Create local configuration explicitly. Two variables are all you need to boot against a local backend:
 
 ```bash
-printf 'VITE_BACKEND_URL=http://localhost:8081\nVITE_NEXUS_URL=http://localhost:8081/api/nexus\nVITE_SYNC_WS_URL=ws://localhost:8081/sync\n' > .env.development
+printf 'VITE_BACKEND_URL=http://localhost:8081\nVITE_SYNC_WS_URL=ws://localhost:8081/sync\n' > .env.development
 ```
 
-`VITE_NEXUS_URL` points at `<backend>/api/nexus`, not at Nexus directly - the backend injects the API key. Integration-specific settings may also be needed; `VITE_*` values are public client configuration. To see everything the code can read: `grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u`.
+The build derives the rest (`scripts/env-defaults.mjs`): `VITE_NEXUS_URL` = `<backend>/api/nexus` (the backend's proxy, which injects the API key; never Nexus directly) and `VITE_FLAGS_BASE_URL` = `VITE_SYNC_WS_URL` over http(s), path included. Set either only to point it elsewhere. Integration-specific settings may also be needed; `VITE_*` values are public client configuration. To see everything the code can read: `grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u`.
 
-Those three point at a **backend you still have to run**, or the extension boots with no data - correct layout, empty wallet, every call failing. Use the current backend deployment/setup instructions; `curl http://localhost:8081/health` is the check. Decide up front which rung of the verification ladder you actually need:
+Those two point at a **backend you still have to run**, or the extension boots with no data - correct layout, empty wallet, every call failing. Use the current backend deployment/setup instructions; `curl http://localhost:8081/health` is the check. Decide up front which rung of the verification ladder you actually need:
 
 | You need | You need a backend? |
 |---|---|
