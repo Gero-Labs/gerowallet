@@ -238,9 +238,10 @@ export const sharedConfig: UserConfig = {
       dropLabels: [], // Don't drop any labels
       ignoreAnnotations: true, // Ignore pure annotations for speed
       format: 'esm',
+      // No '.ts' -> 'tsx' mapping: the repo has no TSX, and parsing .ts as TSX
+      // turns generic arrows like `<T>(x: T) => x` into JSX, failing the scan.
       loader: {
         '.js': 'jsx',
-        '.ts': 'tsx',
       },
     },
     // Reuse Vite's dependency cache between starts (lockfile/config changes
