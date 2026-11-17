@@ -72,7 +72,7 @@
                         <!-- Focusable, so keyboard and touch users can open the status tooltip. -->
                         <div
                           style="display: flex; align-items: center; gap: 4px"
-                          :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
+                          :style="{ minWidth: (compactNav || isMidnight || isBitcoin || isSolana) ? '20px' : '60px' }"
                           v-bind="activatorProps"
                           tabindex="0"
                           role="button"
@@ -99,7 +99,7 @@
                                Midnight/Bitcoin: no epoch concept, so no bar at all —
                                the connection icon already carries the status. -->
                           <v-progress-linear
-                            v-if="!compactNav && !isMidnight && !isBitcoin"
+                            v-if="!compactNav && !isMidnight && !isBitcoin && !isSolana"
                             class="epoch-progress-liquid-glass"
                             height="8"
                             :buffer-value="isMidnight ? 100 : epochSlotPercentage"
@@ -128,6 +128,10 @@
                         <template v-else-if="isBitcoin">
                           <!-- Bitcoin has no epoch — show block height instead. -->
                           <div><strong>Block:</strong> {{ btcTipHeight ?? 'N/A' }}</div>
+                        </template>
+                        <template v-else-if="isSolana">
+                          <!-- Solana: the confirmed slot Gero Sync last reported, not Cardano's epoch. -->
+                          <div><strong>{{ t('poolOperator.slot') }}:</strong> <span class="g-num">{{ solanaTipSlot != null ? formatInt(solanaTipSlot) : 'N/A' }}</span></div>
                         </template>
                         <template v-else>
                           <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip && 'epoch' in tip ? tip.epoch : 'N/A' }}</div>
@@ -356,6 +360,9 @@ const { musicPlaylist, context } = toRefs(musicStore);
 
 const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+const isSolana = computed(() => loggedWallet.value?.chain === Blockchain.SOLANA);
+/** Solana keeps its own sync state (walletStore.solana): networkStore.tip is Cardano-shaped. */
+const solanaTipSlot = computed(() => walletStore.solana?.tipSlot ?? null);
 // Bitcoin testnet is specifically testnet4 (backend electrs-testnet4) — show the
 // variant so it matches the onboarding pill / balance card, not a bare "Testnet".
 const networkDisplay = computed(() => {
@@ -473,8 +480,8 @@ const isAgentVisible = computed(() =>
 );
 
 const epochSlotPercentage = computed(() => {
-  // Midnight has no epoch concept — show 0 (the progress bar will render flat).
-  if (isMidnight.value) return 0;
+  // Midnight and Solana have no Cardano epoch — show 0 (the progress bar will render flat).
+  if (isMidnight.value || isSolana.value) return 0;
   // epoch_slot is Cardano-only; a height-only BTC tip has no epoch progress bar.
   const t = tip.value;
   return t && !isBitcoinTip(t) ? (t.epoch_slot / 432000) * 100 : 0;
@@ -483,7 +490,9 @@ const epochSlotPercentage = computed(() => {
 // Format last sync as timestamp (e.g., "2:45:32 PM")
 const lastSyncTimestamp = computed(() => {
   // Midnight records successful wallet sync separately from the chain block timestamp.
-  const t = isMidnight.value ? midnightLastSync.value : tip.value?.time;
+  const t = isMidnight.value ? midnightLastSync.value
+    : isSolana.value ? walletStore.solana?.lastSyncAt
+      : tip.value?.time;
   if (!t) {
     return 'N/A';
   }
