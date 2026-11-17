@@ -77,6 +77,7 @@ describe('applySolanaSync', () => {
       tokens: [{ mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount: '2500000', decimals: 6 }],
       tipSlot: 130,
       historyTruncated: false,
+      lastSyncAt: expect.any(Number),
     });
     expect(syncRow()).toMatchObject({ id: 1, height: 120 });
     // The history is written before the cursor moves past it.
@@ -114,6 +115,13 @@ describe('applySolanaSync', () => {
     expect(store.state.solanaTransactions.map((t) => t['signature'])).toEqual(['b', 'a']);
   });
 
+  it('records when the last update arrived, even one that changes nothing', async () => {
+    const { service } = setup();
+    const before = Date.now();
+    await service.applySolanaSync({ type: 'SYNC_CHECK_OK', success: true } as unknown as WsSyncMessage);
+    expect(store.state.solana['lastSyncAt']).toBeGreaterThanOrEqual(before);
+  });
+
   it('records truncated history', async () => {
     const { service } = setup();
     await service.applySolanaSync({ type: 'SYNC', transactions: [tx('a', 10)], solana_history_truncated: true } as unknown as WsSyncMessage);
@@ -126,6 +134,7 @@ describe('applySolanaSync', () => {
     const solana = setup();
     await solana.service.applySolanaSync({ type: 'ERROR', transactions: [tx('a', 10)] } as unknown as WsSyncMessage);
     expect(store.setSolanaTransactions).not.toHaveBeenCalled();
+    expect(store.setSolanaState).not.toHaveBeenCalled();
   });
 });
 

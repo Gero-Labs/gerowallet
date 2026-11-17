@@ -166,9 +166,11 @@ export interface SolanaWalletState {
   tipSlot: number | null;
   /** Older history above the cursor exists that was not sent (page it from Nexus). */
   historyTruncated: boolean;
+  /** When Gero Sync last delivered a Solana update (epoch ms; display). Absent until then. */
+  lastSyncAt?: number | null;
 }
 
-export const emptySolanaState = (): SolanaWalletState => ({ lamports: null, tokens: null, tipSlot: null, historyTruncated: false });
+export const emptySolanaState = (): SolanaWalletState => ({ lamports: null, tokens: null, tipSlot: null, historyTruncated: false, lastSyncAt: null });
 
 /**
  * `controlled_amount` is reported per stake address, and CIP-113 UTxOs owned by this

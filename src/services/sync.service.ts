@@ -594,7 +594,9 @@ export class SyncService {
     // Sticky on purpose: once older history was cut off it stays missing here until a
     // FORCE_RESYNC rebuilds it, whatever later pushes say.
     if (update.historyTruncated) snapshot.historyTruncated = true;
-    if (Object.keys(snapshot).length > 0) WalletStore.setSolanaState(snapshot);
+    // Every applied message is a sync, changed or not: the network popup's "Last Sync".
+    snapshot.lastSyncAt = Date.now();
+    WalletStore.setSolanaState(snapshot);
 
     if (update.cursorSlot !== undefined) {
       // The history goes to IndexedDB through the debounced persister; write it before the
