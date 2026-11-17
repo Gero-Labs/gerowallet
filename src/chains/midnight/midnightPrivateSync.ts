@@ -9,11 +9,14 @@ import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import type { MidnightTransaction } from './midnightTypes';
 import { readVerifiedMidnightChainIdentity, midnightCheckpointNamespace, type MidnightChainIdentity } from './midnightChainIdentity';
-import { saveWalletState } from './midnightWalletStatePersistence';
+import {
+  clearPrivateSyncCheckpoint, loadPrivateSyncCheckpoint, savePrivateHistoryCheckpoint, saveWalletState, type PrivateSyncCheckpoint,
+} from './midnightWalletStatePersistence';
 import {
   forkingShieldedWallet, ledger9ShieldedWallet, shieldedKeysByEpoch, type ForkingShieldedWallet, type Ledger9ShieldedWallet,
 } from './midnightShieldedWallet9';
 import { midnightLedgerKey } from './midnightLedger';
+import { midnightTimer, type MidnightTimer } from './midnightTiming';
 
 export interface MidnightPrivateSyncArgs {
   walletId: string;
@@ -55,13 +58,34 @@ export function privateHistoryRows(entries: readonly ShieldedTransactionHistoryE
   });
 }
 
-async function bounded<T>(work: Promise<T>): Promise<T> {
+async function bounded<T>(work: Promise<T>, ms = 30_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([work, new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Private wallet operation timed out')), 30_000);
+      timer = setTimeout(() => reject(new Error('Private wallet operation timed out')), ms);
     })]);
   } finally { if (timer) clearTimeout(timer); }
+}
+
+/** How long a start waits for the checkpoint before replaying cold: a stalled IndexedDB never holds the sync back. */
+const CHECKPOINT_LOAD_TIMEOUT_MS = 3_000;
+
+/** The saved checkpoint, or null: none, unpaired, unreadable or slow all mean a cold replay. */
+async function loadCheckpoint(namespace: string, seed: Uint8Array): Promise<PrivateSyncCheckpoint | null> {
+  try {
+    return await bounded(loadPrivateSyncCheckpoint(namespace, seed), CHECKPOINT_LOAD_TIMEOUT_MS);
+  } catch {
+    return null;
+  }
+}
+
+/** The history saved in `checkpoint`, or undefined when it cannot be read (then the start is cold). */
+function restoredHistory(checkpoint: PrivateSyncCheckpoint): InMemoryTransactionHistoryStorage<ShieldedTransactionHistoryEntry, unknown> | undefined {
+  try {
+    return InMemoryTransactionHistoryStorage.restore(checkpoint.history, TransactionHistory.ShieldedTransactionHistoryEntrySchema);
+  } catch {
+    return undefined;
+  }
 }
 
 type Wallet = Ledger9ShieldedWallet | ForkingShieldedWallet;
@@ -89,6 +113,10 @@ class PrivateSync {
   private identity?: MidnightChainIdentity;
   private latest?: ShieldedWalletState;
   private history?: InMemoryTransactionHistoryStorage<ShieldedTransactionHistoryEntry, unknown>;
+  /** The running wallet resumed from a checkpoint rather than replaying from the first block. */
+  private restored = false;
+  /** Times this wallet's start until its first complete state; cleared once logged. */
+  private syncTimer?: MidnightTimer;
 
   constructor(readonly args: MidnightPrivateSyncArgs) {
     this.seed = args.seed.slice();
@@ -118,6 +146,27 @@ class PrivateSync {
     finally { keys?.clear(); keys8?.clear(); }
   }
 
+  /**
+   * A wallet resumed from `checkpoint` and the history saved with it, or
+   * undefined for a cold replay. A checkpoint the SDK cannot read is dropped,
+   * so a bad one costs one cold replay, not every start.
+   */
+  private resume(namespace: string, checkpoint: PrivateSyncCheckpoint): { wallet: Wallet; history: NonNullable<PrivateSync['history']> } | undefined {
+    const history = restoredHistory(checkpoint);
+    if (history) {
+      try {
+        const wallet: Wallet = this.args.forking
+          ? forkingShieldedWallet(this.network, this.args.endpoints, history).restore(checkpoint.state)
+          : ledger9ShieldedWallet(this.network, this.args.endpoints, history).restore(checkpoint.state);
+        return { wallet, history };
+      } catch {
+        // Unreadable state: dropped below, replayed cold.
+      }
+    }
+    void clearPrivateSyncCheckpoint(namespace, this.seed).catch(() => {});
+    return undefined;
+  }
+
   async stop() {
     this.active = false;
     this.seed.fill(0);
@@ -136,28 +185,42 @@ class PrivateSync {
         await this.releaseWallet();
         if (!this.isCurrent()) return;
         this.identity = identity;
+        const namespace = midnightCheckpointNamespace(identity);
+        this.syncTimer = midnightTimer('private sync');
+        const checkpoint = await loadCheckpoint(namespace, this.seed);
+        this.syncTimer.lap('checkpointLoad');
+        if (!this.isCurrent()) return;
         this.keys = ledger.ZswapSecretKeys.fromSeed(this.seed);
         const expected = decodeShieldedAddress9(this.network, midnightStore.addresses.shielded);
         if (expected.coinPublicKey.toHexString() !== this.keys.coinPublicKey
           || expected.encryptionPublicKey.toHexString() !== this.keys.encryptionPublicKey)
           throw new Error('Private key does not belong to the active wallet');
-        this.history = new InMemoryTransactionHistoryStorage(TransactionHistory.ShieldedTransactionHistoryEntrySchema);
-        let start: { v9: ledger.ZswapSecretKeys; v8?: unknown };
+        let start: { v9: ledger.ZswapSecretKeys; v8?: unknown } = { v9: this.keys };
         if (this.args.forking) {
           const both = await shieldedKeysByEpoch(this.seed);
           this.keys8 = both.v8;
           start = { v8: both.v8, v9: this.keys };
           both.v9.clear();
+        }
+        // Resume from the last checkpoint (its state and the history saved with
+        // it) and read only the events after it. Without one, replay from the
+        // first block, which also rebuilds the private history.
+        const resumed = checkpoint ? this.resume(namespace, checkpoint) : undefined;
+        this.restored = !!resumed;
+        if (resumed) {
+          this.history = resumed.history;
+          this.wallet = resumed.wallet;
+        } else if (this.args.forking) {
+          this.history = new InMemoryTransactionHistoryStorage(TransactionHistory.ShieldedTransactionHistoryEntrySchema);
           // Asynchronous: it asks the indexer which side of the fork the chain is on first.
           this.wallet = await bounded(forkingShieldedWallet(this.network, this.args.endpoints, this.history)
             .startWithKeys(start as Parameters<ReturnType<typeof forkingShieldedWallet>['startWithKeys']>[0]));
           if (!this.isCurrent()) { await this.releaseWallet(); return; }
         } else {
-          start = { v9: this.keys };
+          this.history = new InMemoryTransactionHistoryStorage(TransactionHistory.ShieldedTransactionHistoryEntrySchema);
           this.wallet = ledger9ShieldedWallet(this.network, this.args.endpoints, this.history).startWithSecretKeys(this.keys);
         }
-        // Cold replay reconstructs private history too. A state-only checkpoint
-        // cannot recover historical spends for a newly restored wallet.
+        this.syncTimer.note({ warm: this.restored });
         midnightActions.setPrivateSyncStatus('syncing');
         const wallet = this.wallet;
         this.subscription = wallet.state.pipe(sampleTime(1000)).subscribe({
@@ -193,8 +256,11 @@ class PrivateSync {
       const state = this.latest;
       if (!state?.progress.isStrictlyComplete() || !this.isCurrent() || !this.keys) return;
       if (state.coinPublicKey.toHexString() !== this.keys.coinPublicKey
-        || state.encryptionPublicKey.toHexString() !== this.keys.encryptionPublicKey)
+        || state.encryptionPublicKey.toHexString() !== this.keys.encryptionPublicKey) {
+        // A resumed state of another key: drop it, so the next start replays cold instead of failing again.
+        if (this.restored) await clearPrivateSyncCheckpoint(midnightCheckpointNamespace(identity), this.seed).catch(() => {});
         throw new Error('Private wallet identity mismatch');
+      }
       const observed = midnightStore.chainIdentity;
       if (observed?.network !== identity.network || observed.generation !== identity.chain_generation
         || observed.genesisHash !== identity.genesis_hash) return;
@@ -207,9 +273,21 @@ class PrivateSync {
         .map(([color, amount]) => [color.toLowerCase(), amount]));
       midnightActions.applyPrivateSnapshot(balances, privateHistoryRows(entries));
       this.hasPublished = true;
+      this.syncTimer?.done(); this.syncTimer = undefined;
       // Secret seed is used only to derive the opaque cache key, never stored.
-      await saveWalletState(midnightCheckpointNamespace(identity), 'shielded', this.seed, state.serialize());
+      const namespace = midnightCheckpointNamespace(identity);
+      const serialized = state.serialize();
+      // The history first, paired with this state. If only one of the two writes
+      // lands the pair no longer matches and the next start replays cold. The
+      // history is read after the state, so it is never older than it.
+      try {
+        await savePrivateHistoryCheckpoint(namespace, this.seed, serialized, await this.history!.serialize());
+      } catch {
+        // Only costs the next start a cold replay.
+      }
+      await saveWalletState(namespace, 'shielded', this.seed, serialized);
     } catch {
+      this.syncTimer?.done('failed'); this.syncTimer = undefined;
       if (this.isCurrent()) midnightActions.setPrivateSyncStatus('error');
       await this.releaseWallet().catch(() => {});
     } finally {
