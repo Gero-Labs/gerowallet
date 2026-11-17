@@ -6,15 +6,15 @@ import {
   loadWalletState,
   midnightWalletStatesForTest,
   resetMidnightWalletStateDbForTest,
-  savePrivateHistoryCheckpoint,
+  savePrivateSyncCheckpoint,
   saveWalletState,
 } from './midnightWalletStatePersistence';
 
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
 
-// The ledger 9 private sync resumes from a shielded state plus the history saved
-// with it. A state without its own history would resume past transactions the
-// history never recorded, so only a matching pair restores.
+// The ledger 9 private sync resumes from its own row: a shielded state and the
+// history saved with it. It is not the `shielded` row, which the shielded send
+// path also writes, with no history.
 const ns = 'midnight-mainnet-ledger9-sdk2-0xab-3';
 const seed = new Uint8Array(32).fill(5);
 const otherSeed = new Uint8Array(32).fill(6);
@@ -31,53 +31,43 @@ beforeEach(async () => {
   });
 });
 
-describe('private sync checkpoint pairing', () => {
-  it('restores a state together with the history saved beside it', async () => {
-    await savePrivateHistoryCheckpoint(ns, seed, 'state-1', 'history-1');
-    await saveWalletState(ns, 'shielded', seed, 'state-1');
+const privateRow = async () => (await midnightWalletStatesForTest().toArray()).find(r => r.kind === 'shielded-sync9')!;
+
+describe('private sync checkpoint', () => {
+  it('round-trips a state with the history saved with it', async () => {
+    await savePrivateSyncCheckpoint(ns, seed, { state: 'state-1', history: 'history-1' });
     expect(await loadPrivateSyncCheckpoint(ns, seed)).toEqual({ state: 'state-1', history: 'history-1' });
   });
 
-  it('refuses a state newer than its history (written by the send path, or a lost history write)', async () => {
-    await savePrivateHistoryCheckpoint(ns, seed, 'state-1', 'history-1');
-    await saveWalletState(ns, 'shielded', seed, 'state-2');
+  it('never resumes from the send path\'s `shielded` row, which has no history', async () => {
+    await saveWalletState(ns, 'shielded', seed, 'newer-state-from-a-send');
     expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
+    await savePrivateSyncCheckpoint(ns, seed, { state: 'state-1', history: 'history-1' });
+    expect(await loadPrivateSyncCheckpoint(ns, seed)).toEqual({ state: 'state-1', history: 'history-1' });
   });
 
-  it('refuses either half alone', async () => {
-    await saveWalletState(ns, 'shielded', seed, 'state-1');
-    expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
-    await clearPrivateSyncCheckpoint(ns, seed);
-    await savePrivateHistoryCheckpoint(ns, seed, 'state-1', 'history-1');
-    expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
-  });
-
-  it('refuses another wallet\'s pair and a damaged history row', async () => {
-    await savePrivateHistoryCheckpoint(ns, seed, 'state-1', 'history-1');
-    await saveWalletState(ns, 'shielded', seed, 'state-1');
+  it('refuses another wallet\'s row, a damaged row and another format', async () => {
+    await savePrivateSyncCheckpoint(ns, seed, { state: 'state-1', history: 'history-1' });
     expect(await loadPrivateSyncCheckpoint(ns, otherSeed)).toBeNull();
-    const row = (await midnightWalletStatesForTest().toArray()).find(r => r.kind === 'shielded-history9')!;
-    await midnightWalletStatesForTest().put({ ...row, serializedState: '{not json' });
-    expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
-    await midnightWalletStatesForTest().put({ ...row, serializedState: JSON.stringify({ v: 2, state: 'x', history: 'h' }) });
-    expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
-  });
-
-  it('stores a fingerprint of the state, never the state itself, in the history row', async () => {
-    await savePrivateHistoryCheckpoint(ns, seed, 'secret-shielded-state', 'history-1');
-    const row = (await midnightWalletStatesForTest().toArray()).find(r => r.kind === 'shielded-history9')!;
-    expect(row.serializedState).not.toContain('secret-shielded-state');
-    expect(JSON.parse(row.serializedState).state).toMatch(/^[0-9a-f]{64}$/);
-  });
-
-  it('clearing drops both halves and leaves other wallets alone', async () => {
-    for (const s of [seed, otherSeed]) {
-      await savePrivateHistoryCheckpoint(ns, s, 'state-1', 'history-1');
-      await saveWalletState(ns, 'shielded', s, 'state-1');
+    const row = await privateRow();
+    for (const serializedState of ['{not json', JSON.stringify({ v: 2, state: 's', history: 'h' }),
+      JSON.stringify({ v: 1, state: '', history: 'h' }), JSON.stringify({ v: 1, state: 's' })]) {
+      await midnightWalletStatesForTest().put({ ...row, serializedState });
+      expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
     }
+  });
+
+  it('does not write an empty state', async () => {
+    await savePrivateSyncCheckpoint(ns, seed, { state: '', history: 'history-1' });
+    expect(await midnightWalletStatesForTest().count()).toBe(0);
+  });
+
+  it('clearing drops only this wallet\'s private sync row, never the send path\'s `shielded` row', async () => {
+    for (const s of [seed, otherSeed]) await savePrivateSyncCheckpoint(ns, s, { state: 'state-1', history: 'history-1' });
+    await saveWalletState(ns, 'shielded', seed, 'send-path-state');
     await clearPrivateSyncCheckpoint(ns, seed);
-    expect(await loadWalletState(ns, 'shielded', seed)).toBeNull();
-    expect(await loadWalletState(ns, 'shielded-history9', seed)).toBeNull();
+    expect(await loadPrivateSyncCheckpoint(ns, seed)).toBeNull();
+    expect(await loadWalletState(ns, 'shielded', seed)).toBe('send-path-state');
     expect(await loadPrivateSyncCheckpoint(ns, otherSeed)).toEqual({ state: 'state-1', history: 'history-1' });
   });
 });

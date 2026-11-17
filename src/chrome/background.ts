@@ -6701,6 +6701,10 @@ app.addToOptions(MessageTypes.RESYNC_MIDNIGHT, async (request, sendResponse) => 
       throw new Error('Midnight sync service is not active');
     }
     midnightSyncService.forceResync();
+    // The private balance sync keeps its own checkpoint and running wallet: replay it from the first block too.
+    void import('@/chains/midnight/midnightPrivateSync')
+      .then(({ replayMidnightPrivateSyncCold }) => replayMidnightPrivateSyncCold())
+      .catch(() => { /* non-fatal: the next start can still resume */ });
     sendResponse({
       id: request.id,
       data: { success: true },
