@@ -22,11 +22,11 @@ function envBlocks(workflow) {
 
 describe('productionEnv', () => {
   it('writes every listed variable and secret, plus the pinned debug switch, and nothing else', () => {
-    const text = productionEnv({ VITE_NEXUS_URL: 'https://nexus.example', VITE_MOONPAY_API_KEY: 'pk_test', MANIFEST_KEY: 'not-for-the-env', PATH: '/usr/bin' });
+    const text = productionEnv({ VITE_BACKEND_URL: 'https://backend.example', VITE_MOONPAY_API_KEY: 'pk_test', MANIFEST_KEY: 'not-for-the-env', PATH: '/usr/bin' });
     expect(names(text)).toEqual([...VARIABLES, ...SECRETS, ...Object.keys(PINNED)]);
-    expect(lines(text)).toContain('VITE_NEXUS_URL=https://nexus.example');
+    expect(lines(text)).toContain('VITE_BACKEND_URL=https://backend.example');
     expect(lines(text)).toContain('VITE_MOONPAY_API_KEY=pk_test');
-    expect(lines(text)).toContain('VITE_GUARDARIAN_API_KEY=');
+    expect(lines(text)).toContain('VITE_KAISEREX_OAUTH_URL=');
     expect(lines(text)).toContain('VITE_DEBUG_STORES=false');
     expect(text).not.toContain('MANIFEST_KEY');
     expect(text).not.toContain('PATH=');
@@ -38,13 +38,19 @@ describe('productionEnv', () => {
   });
 
   it('drops the trailing line break a pasted secret often carries', () => {
-    expect(lines(productionEnv({ VITE_GUARDARIAN_API_KEY: 'gk_live\n', VITE_APP_NAME: 'Gero\r\n' })))
-      .toEqual(expect.arrayContaining(['VITE_GUARDARIAN_API_KEY=gk_live', 'VITE_APP_NAME=Gero']));
+    expect(lines(productionEnv({ VITE_MOONPAY_API_KEY: 'pk_live\n', VITE_IS_BETA: 'false\r\n' })))
+      .toEqual(expect.arrayContaining(['VITE_MOONPAY_API_KEY=pk_live', 'VITE_IS_BETA=false']));
   });
 
   it('refuses a line break inside a value, which would add a line of its own', () => {
-    expect(() => productionEnv({ VITE_APP_NAME: 'Gero\nVITE_DEBUG_STORES=true' })).toThrow('VITE_APP_NAME holds a line break');
-    expect(() => productionEnv({ VITE_GUARDARIAN_API_KEY: 'a\rb' })).toThrow('line break');
+    expect(() => productionEnv({ VITE_IS_BETA: 'false\nVITE_DEBUG_STORES=true' })).toThrow('VITE_IS_BETA holds a line break');
+    expect(() => productionEnv({ VITE_MOONPAY_API_KEY: 'a\rb' })).toThrow('line break');
+  });
+
+  it('leaves the derived endpoints to the build (scripts/env-defaults.mjs)', () => {
+    expect(VARIABLES).not.toContain('VITE_NEXUS_URL');
+    expect(VARIABLES).not.toContain('VITE_FLAGS_BASE_URL');
+    expect(VARIABLES).toEqual(expect.arrayContaining(['VITE_BACKEND_URL', 'VITE_SYNC_WS_URL']));
   });
 
   it.each([
