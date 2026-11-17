@@ -182,7 +182,9 @@ function verifyE2e() {
 /**
  * The whole title must appear as a string literal ('…', "…" or `…`), as it is
  * written in it()/test()/it.each() (with its %s), so a fragment of a title or of
- * a comment never counts.
+ * a comment never counts. It is a rename and deletion guard, not proof the test
+ * runs: an it.skip title still matches. An escaped quote in a title never
+ * matches, which fails closed.
  */
 function namesTest(text, title) {
   return ["'", '"', '`'].some(quote => text.includes(quote + title + quote));
@@ -276,7 +278,7 @@ for (const [, app] of ROUTERS) {
 }
 const behaviourGaps = Object.values(matrix.behaviours).filter(entry => entry.gap).length;
 lines.push('## Behaviours', '',
-  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. Each check names its test after ›, written in full as in its file: \`--check\` fails if a local test is renamed or deleted, and \`--e2e\` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap.`,
+  `V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). ${Object.keys(matrix.behaviours).length} behaviours, ${behaviourGaps} with a stated gap. Each check names its test after ›, written in full as in its file: \`--check\` fails if a local test is renamed or deleted, and \`--e2e\` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap. The title check guards against renames and deletions; it does not prove the test runs (a skipped test still matches).`,
   '', '| Behaviour | Owner | Checks | Gap |', '|---|---|---|---|');
 for (const entry of Object.values(matrix.behaviours)) {
   lines.push(`| ${cell(entry.title)} | ${entry.owners.join(', ')} | ${cell(checks(entry))} | ${cell(entry.gap ?? '-')} |`);

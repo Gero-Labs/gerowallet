@@ -94,7 +94,7 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 
 ## Behaviours
 
-V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). 11 behaviours, 9 with a stated gap. Each check names its test after ›, written in full as in its file: `--check` fails if a local test is renamed or deleted, and `--e2e` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap.
+V02 also asks that behavioural cases cover async validation, approve/reject/cancel exactly once, worker restart, lock/unlock, two open UIs and wallet/network switching, and that unoverridden login/lock, switching, broadcast and restart/persistence coverage is assigned to V05 with exact-candidate reruns in V13 (#1295). 11 behaviours, 9 with a stated gap. Each check names its test after ›, written in full as in its file: `--check` fails if a local test is renamed or deleted, and `--e2e` does the same for E2E titles, which CI does not run, so a behaviour needs a check in this repository or a stated gap. The title check guards against renames and deletions; it does not prove the test runs (a skipped test still matches).
 
 | Behaviour | Owner | Checks | Gap |
 |---|---|---|---|
