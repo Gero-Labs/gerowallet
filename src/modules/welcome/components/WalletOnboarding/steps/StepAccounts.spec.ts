@@ -15,6 +15,7 @@ vi.mock('@/shared/utils/accountDiscovery', async (importOriginal) => ({
   discoverBitcoinAccounts: mocks.discoverBitcoin,
   // Midnight accounts are never probed: the real one makes no network call.
   discoverMidnightAccounts: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoverMidnightAccounts,
+  discoverSolanaAccounts: (await importOriginal<typeof import('@/shared/utils/accountDiscovery')>()).discoverSolanaAccounts,
 }));
 
 import StepAccounts from './StepAccounts.vue';
@@ -175,5 +176,35 @@ describe('choosing Midnight accounts', () => {
     expect(rows(wrapper)[1].find('.account-row__meta').text()).toBe('');
     await rows(wrapper)[2].trigger('click');
     expect(await continueWith(wrapper)).toEqual([0, 2]);
+  });
+});
+
+describe('choosing Solana accounts', () => {
+  const sol = (accountIndex: number): AccountXpub => ({ accountIndex, publicKey: `So1anaAccount${accountIndex}xxxxxxxxxxxxxxxxxxxxxxxxxxxx`, keys: [] });
+
+  it('shows each by its address, never runs the Cardano probe, and pre-selects account #0 so Continue works', async () => {
+    mocks.findExisting.mockResolvedValue(null);
+    const wrapper = render([0, 1, 2].map(sol), networks.resolveNetwork(Blockchain.SOLANA, Network.DEVNET));
+    await flushPromises();
+
+    expect(mocks.discover).not.toHaveBeenCalled();
+    expect(checked(wrapper)).toEqual(['true', 'false', 'false']);
+    expect(rows(wrapper)[1].find('.account-row__address').attributes('title')).toBe(sol(1).publicKey);
+    expect(wrapper.find('.accounts-summary').text()).toBe('accounts.notChecked');
+    expect(await continueWith(wrapper)).toEqual([0]);
+  });
+});
+
+describe('a probe that throws', () => {
+  it('still offers the accounts and keeps account #0, so the step is never stuck', async () => {
+    mocks.discover.mockRejectedValue(new Error('probe failed'));
+    mocks.findExisting.mockResolvedValue(null);
+    const wrapper = render([0, 1].map(account));
+    await flushPromises();
+
+    expect(checked(wrapper)).toEqual(['true', 'false']);
+    expect(rows(wrapper)[1].attributes('disabled')).toBeUndefined();
+    await rows(wrapper)[1].trigger('click');
+    expect(await continueWith(wrapper)).toEqual([0, 1]);
   });
 });

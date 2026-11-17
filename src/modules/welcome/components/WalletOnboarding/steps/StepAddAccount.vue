@@ -57,7 +57,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
 import GeroStore, { geroStore } from '@/stores/geroStore';
 import snackbar from '@/plugins/snackbar';
-import { discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { discoverAccounts, discoverBitcoinAccounts, discoverMidnightAccounts, discoverSolanaAccounts, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
 import { isSameWalletKey } from '@/db/walletIdentity';
 import { formatBalance } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
@@ -167,6 +167,7 @@ async function derivePassKeyAccountFromPhrase(): Promise<string> {
 async function probe(found: AccountXpub): Promise<DiscoveredAccount> {
   const { chain, network } = props.wallet;
   if (isMidnight.value) return discoverMidnightAccounts([found])[0];
+  if (chain === Blockchain.SOLANA) return discoverSolanaAccounts([found])[0];
   const [result] = isBitcoin.value
     ? await discoverBitcoinAccounts(network, props.wallet.addressType ?? 'segwit', [found])
     : await discoverAccounts(chain, network, [found]);
