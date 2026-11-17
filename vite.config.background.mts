@@ -396,6 +396,8 @@ export default defineConfig({
         if (warning.code === 'PLUGIN_WARNING' && warning.message?.includes('externalized')) return;
         // Suppress eval warnings from third-party dependencies (protobufjs)
         if (warning.code === 'EVAL' && warning.id?.includes('node_modules')) return;
+        // Suppress misplaced /* @__PURE__ */ annotations in third-party code (@scure/base, ox, @polkadot)
+        if (warning.code === 'INVALID_ANNOTATION' && warning.id?.includes('node_modules')) return;
         // Use default warning handler for everything else
         warn(warning);
       },
