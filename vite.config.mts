@@ -12,6 +12,7 @@ import { existsSync, createReadStream, readFileSync } from 'node:fs';
 import { forbidRemoteCode } from './scripts/remote-code-guard.mjs';
 import { localeMessagesPlugin } from './scripts/i18n-compiler.mjs';
 import { bringSdkPatch } from './scripts/bring-sdk-patch.mjs';
+import { envDefaults } from './scripts/env-defaults.mjs';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
 // alias on Windows (r() yields backslashes), so we hand it a literal path.
@@ -141,6 +142,8 @@ export const sharedConfig: UserConfig = {
     '__INTLIFY_DROP_MESSAGE_COMPILER__': true,
   },
   plugins: [
+    // VITE_NEXUS_URL and VITE_FLAGS_BASE_URL from the backend and Gero Sync URLs, unless set.
+    envDefaults(),
     stubEffectApiDocs,
     // Bring cashback SDK: address only to Bring's own iframe, bridge only from
     // Bring origins. Fails the build if the SDK no longer matches the reviewed one.

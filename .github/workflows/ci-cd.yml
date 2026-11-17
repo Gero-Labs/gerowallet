@@ -24,8 +24,6 @@ on:
         required: false
       VITE_MOONPAY_API_KEY:
         required: false
-      VITE_GUARDARIAN_API_KEY:
-        required: false
 permissions:
   contents: read
 
@@ -90,7 +88,7 @@ jobs:
       # Materialize .env.production from repo Variables/Secrets so the shipped
       # build's config comes from ONE controlled source instead of a
       # per-developer gitignored .env.production (which drifts — a stale machine
-      # would ship e.g. the wrong VITE_NEXUS_URL). Values are passed through env:
+      # would ship e.g. the wrong VITE_BACKEND_URL). Values are passed through env:
       # and written by Node (never interpolated into the shell), so a value cannot
       # inject commands, and one holding a line break is refused. Registered
       # secrets are masked in logs and only written to the file, never echoed.
@@ -100,24 +98,15 @@ jobs:
       - name: Write production env
         env:
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          VITE_NEXUS_URL: ${{ vars.VITE_NEXUS_URL }}
           VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL }}
-          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
-          VITE_ADA_HANDLE_BASE_URL: ${{ vars.VITE_ADA_HANDLE_BASE_URL }}
-          VITE_FLAGS_BASE_URL: ${{ vars.VITE_FLAGS_BASE_URL }}
           VITE_SYNC_WS_URL: ${{ vars.VITE_SYNC_WS_URL }}
           VITE_KAISEREX_OAUTH_URL: ${{ vars.VITE_KAISEREX_OAUTH_URL }}
-          VITE_KRAKEN_API_URL: ${{ vars.VITE_KRAKEN_API_URL }}
           VITE_KRAKEN_WS_URL: ${{ vars.VITE_KRAKEN_WS_URL }}
-          VITE_ZKFOLD_API_URL: ${{ vars.VITE_ZKFOLD_API_URL }}
-          VITE_ZKFOLD_PROVER_URL: ${{ vars.VITE_ZKFOLD_PROVER_URL }}
           VITE_CASHBACK_ENVIRONMENT: ${{ vars.VITE_CASHBACK_ENVIRONMENT }}
           VITE_CASHBACK_IDENTIFIER: ${{ vars.VITE_CASHBACK_IDENTIFIER }}
           VITE_IS_BETA: ${{ vars.VITE_IS_BETA }}
           VITE_CIP45_DEFAULT_ENABLED: ${{ vars.VITE_CIP45_DEFAULT_ENABLED }}
-          VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
           VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
-          VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
         run: node scripts/write-production-env.mjs .env.production
 
       # A build that cannot open the gpw2 secret envelope locks out every wallet

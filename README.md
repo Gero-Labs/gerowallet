@@ -139,12 +139,12 @@ may need additional public configuration. Never put backend secrets in
 # Gero backend base URL (localhost for development)
 VITE_BACKEND_URL=http://localhost:8081
 
-# Nexus is reached through the backend proxy (server injects the Nexus key).
-# Point this at <gero-backend>/api/nexus, NOT at Nexus directly.
-VITE_NEXUS_URL=http://localhost:8081/api/nexus
-
-# Gero Sync WebSocket (real-time blockchain updates, served by the backend)
+# Gero Sync base URL (real-time blockchain updates, served by the backend)
 VITE_SYNC_WS_URL=ws://localhost:8081/sync
+
+# Derived by the build (scripts/env-defaults.mjs); set only to point elsewhere:
+#   VITE_NEXUS_URL      = <VITE_BACKEND_URL>/api/nexus  (backend proxy, which injects the Nexus key)
+#   VITE_FLAGS_BASE_URL = VITE_SYNC_WS_URL over http(s), path included
 ```
 
 An unavailable backend leaves data-driven views empty or failing even when

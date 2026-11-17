@@ -97,7 +97,7 @@ Serializing user data to a file is also a security surface: rows carry attacker-
 Not uniform, despite what CLAUDE.md says. Copy the right shape:
 
 - `src/api/blockchain-api.ts` - `baseURL: import.meta.env['VITE_BACKEND_URL']`. **This is the pattern to copy.**
-- `src/api/governance-api.ts` - `VITE_NEXUS_URL`, with bigJson transform and network-slug mapping.
+- `src/api/governance-api.ts` - `VITE_NEXUS_URL` (derived from `VITE_BACKEND_URL` by `scripts/env-defaults.mjs`), with bigJson transform and network-slug mapping.
 - `src/api/spo-api.ts` - calls Koios **directly** from the browser with a hardcoded per-network URL map. A documented exception, not a template.
 
 ## Checklist for a new screen
