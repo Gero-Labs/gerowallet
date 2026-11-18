@@ -208,9 +208,9 @@
         <v-col cols="12" class="pa-2">
           <v-card flat class="glass-panel holdings-table-card">
             <!-- Filter chips + search + filter menu — single row -->
-            <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
+            <div ref="chipToolbarRef" class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
-              <div ref="chipBarRef" class="filter-chip-bar d-flex align-center flex-shrink-0" style="gap: 4px; overflow-x: auto; min-width: 0;">
+              <div class="filter-chip-bar d-flex align-center flex-shrink-0" style="gap: 4px; overflow-x: auto; min-width: 0;">
                 <v-tooltip location="bottom" v-for="chip in filterChips" :key="chip.value"  :disabled="!compactChips">
                   <template v-slot:activator="{ props: activatorProps }">
                     <v-chip
@@ -432,6 +432,7 @@ import { ref, computed, watch, toRefs, onMounted, onBeforeUnmount, getCurrentIns
 import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
+import { useNarrowerThan } from '@/shared/composables/useNarrowerThan';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { LAUNCHPADS } from '@/modules/market/utils/launchpads';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
@@ -622,10 +623,11 @@ async function resetMidnightCache() {
   }
 }
 
-// Compact chip mode — collapse labels to icons when space is tight
-const compactChips = ref(false);
-const chipBarRef = ref<HTMLElement | null>(null);
-let chipBarObserver: ResizeObserver | null = null;
+// Compact chip mode: collapse labels to icons ONLY when the toolbar is genuinely
+// narrow. It measures the toolbar against a fixed threshold, never the chip bar
+// itself: the chip bar shrinks when compact, so it could never re-expand.
+const chipToolbarRef = ref<HTMLElement | null>(null);
+const compactChips = useNarrowerThan(chipToolbarRef, 560); // px: full labels at/above this width
 
 // Set when the user actively picks a chip; the empty-wallet Market default
 // (watcher near the deep-link handlers) never overrides an explicit choice.
@@ -1089,20 +1091,6 @@ onMounted(() => {
   if (isMainnetCardano.value) {
     fetchPnl();
   }
-
-  // Watch chip bar width — go compact when content would overflow
-  if (chipBarRef.value) {
-    // Compact chips to icons ONLY when the toolbar is genuinely narrow. Observe
-    // the toolbar (the chip bar's parent) against a fixed threshold — measuring
-    // the chip bar's own width was self-referential: it collapses when compact,
-    // so it could never re-expand and got stuck in icon mode at fine resolutions.
-    const COMPACT_BELOW = 560; // px — show full chip labels at/above this width
-    const target = chipBarRef.value.parentElement ?? chipBarRef.value;
-    chipBarObserver = new ResizeObserver(([entry]) => {
-      compactChips.value = entry.contentRect.width < COMPACT_BELOW;
-    });
-    chipBarObserver.observe(target);
-  }
 });
 
 onBeforeUnmount(() => {
@@ -1110,7 +1098,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick);
   if (searchDebounce) clearTimeout(searchDebounce);
   if (chartRefetchTimer) clearTimeout(chartRefetchTimer);
-  chipBarObserver?.disconnect();
 });
 
 // ── Watchers ──────────────────────────────────────────────────────────────────
