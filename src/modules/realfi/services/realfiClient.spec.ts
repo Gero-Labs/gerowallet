@@ -6,6 +6,7 @@ import {
   toOrders,
   toPosition,
   toProtocol,
+  toReserves,
 } from './realfiClient';
 import { isRealFiAsset, REALFI_ASSETS, usdrAssetIdFor } from '../assets';
 
@@ -197,3 +198,124 @@ describe('toProtocol yield and rate', () => {
   });
 });
 
+
+describe('reserves mapping', () => {
+  // Made-up figures: RealFi's own feed is private.
+  const REPORT = {
+    publishedAt: '2026-01-03T03:00:00Z',
+    reserves: {
+      asOf: '2026-01-02',
+      totalUsd: 1000,
+      sleeves: [{ sleeve: 'emerging_markets_private_credit', usd: 900, share: 0.9 }],
+      custodians: [
+        {
+          custodian: 'Custodian A',
+          usd: 900,
+          share: 0.9,
+          valuedAsOf: '2025-12-01',
+          holdings: [
+            {
+              symbol: 'PRIVATE_CREDIT',
+              assetClass: 'private_credit',
+              sleeve: 'emerging_markets_private_credit',
+              quantity: null,
+              usd: 900,
+              valuedAsOf: '2025-12-01',
+            },
+          ],
+        },
+      ],
+    },
+    supply: { asOf: '2026-01-01', usdr: 998.5, susdr: null },
+    nav: { asOf: '2025-12-28', totalUsd: 1003.1, perToken: 1.0031, tokensOutstanding: 1000, source: 'NFS' },
+    coverage: null,
+    history: {
+      supply: [{ date: '2026-01-01', usdr: 998.5 }],
+      nav: [{ date: '2025-12-28', totalUsd: 1003.1, perToken: 1.0031 }],
+    },
+  };
+
+  it('reads the report from Nexus with the network and no address', async () => {
+    const { http, get } = fakeHttp({ reserves: REPORT });
+    const resolved = await resolveRealFiReadClient('Mainnet', http);
+    if (resolved.status !== 'ok') throw new Error('expected a client');
+
+    const report = await resolved.client.getReserves();
+
+    expect(get).toHaveBeenCalledWith('/api/realfi/reserves', { params: { network: 'cardano-mainnet' } });
+    expect(report).toEqual(REPORT);
+  });
+
+  it('drops a part that is missing its date or total, never the whole report', () => {
+    const report = toReserves({
+      ...REPORT,
+      nav: { ...REPORT.nav, asOf: 'last week' },
+      supply: { asOf: '2026-01-01', usdr: null },
+    })!;
+    expect(report.nav).toBeNull();
+    expect(report.supply).toBeNull();
+    expect(report.reserves).not.toBeNull();
+  });
+
+  it('treats reserves with no positive total as unpublished', () => {
+    expect(toReserves({ ...REPORT, reserves: { ...REPORT.reserves, totalUsd: 0 } })!.reserves).toBeNull();
+  });
+
+  it('keeps a published NAV total without its per-token figure, and the reverse', () => {
+    const totalOnly = toReserves({ ...REPORT, nav: { asOf: '2025-12-28', totalUsd: 1003.1 } })!;
+    expect(totalOnly.nav).toMatchObject({ totalUsd: 1003.1, perToken: null });
+    const perTokenOnly = toReserves({ ...REPORT, nav: { asOf: '2025-12-28', perToken: 1.0031 } })!;
+    expect(perTokenOnly.nav).toMatchObject({ totalUsd: null, perToken: 1.0031 });
+    expect(toReserves({ ...REPORT, nav: { asOf: '2025-12-28' } })!.nav).toBeNull();
+  });
+
+  it('keeps a NAV history point that has a total but no per-token figure', () => {
+    const report = toReserves({
+      ...REPORT,
+      history: { supply: [], nav: [{ date: '2025-12-28', totalUsd: 1003.1 }] },
+    })!;
+    expect(report.history.nav).toEqual([{ date: '2025-12-28', totalUsd: 1003.1, perToken: null }]);
+  });
+
+  it('skips custodians and holdings it cannot draw', () => {
+    const report = toReserves({
+      ...REPORT,
+      reserves: {
+        ...REPORT.reserves,
+        custodians: [
+          REPORT.reserves.custodians[0],
+          { custodian: '', usd: 5, holdings: [] },
+          { custodian: 'Custodian B', usd: -1, holdings: [] },
+          {
+            custodian: 'Custodian C',
+            usd: 10,
+            share: 0.01,
+            holdings: [{ symbol: 'ETH', usd: 'lots' }, { symbol: 'USDC', assetClass: 'stablecoin', usd: 10 }],
+          },
+        ],
+      },
+    })!;
+    expect(report.reserves!.custodians.map((c) => c.custodian)).toEqual(['Custodian A', 'Custodian C']);
+    expect(report.reserves!.custodians[1]!.holdings.map((h) => h.symbol)).toEqual(['USDC']);
+  });
+
+  it('keeps an official coverage ratio only with its date', () => {
+    expect(toReserves({ ...REPORT, coverage: { asOf: '2026-01-02', ratio: 1.002 } })!.coverage).toEqual({
+      asOf: '2026-01-02',
+      ratio: 1.002,
+    });
+    expect(toReserves({ ...REPORT, coverage: { ratio: 1.002 } })!.coverage).toBeNull();
+  });
+
+  it('keeps a published ratio of zero, the one a reader most needs to see', () => {
+    expect(toReserves({ ...REPORT, coverage: { asOf: '2026-01-02', ratio: 0 } })!.coverage).toEqual({
+      asOf: '2026-01-02',
+      ratio: 0,
+    });
+  });
+
+  it('answers null for a body that is not a report', () => {
+    expect(toReserves(null)).toBeNull();
+    expect(toReserves('error code: 502')).toBeNull();
+  });
+});

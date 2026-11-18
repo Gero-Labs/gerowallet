@@ -27,6 +27,11 @@ import {
   type RealFiProtocol,
   type RealFiRateInputs,
   type RealFiReferrals,
+  type RealFiReserveCustodian,
+  type RealFiReserveHolding,
+  type RealFiReserves,
+  type RealFiReservesReport,
+  type RealFiReserveSleeve,
   type RealFiUnavailableReason,
   type SmallestUnit,
 } from '../types';
@@ -41,6 +46,8 @@ export interface RealFiReadClient {
   getReferrals(address: string, issueCode?: boolean): Promise<RealFiReferrals>;
   getOrders(address: string): Promise<RealFiOrder[]>;
   getProtocol(): Promise<RealFiProtocol | null>;
+  /** What backs USDrf. Protocol-wide; no address leaves the wallet for it. */
+  getReserves(): Promise<RealFiReservesReport | null>;
 }
 
 /**
@@ -240,6 +247,140 @@ export function toProtocol(raw: unknown): RealFiProtocol | null {
   };
 }
 
+/** A calendar date as RealFi publishes it; anything else would print as "Invalid Date". */
+function toDate(value: unknown): string | null {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+/** A dollar figure that can be drawn and summed: finite and not negative. */
+function toAmount(value: unknown): number | null {
+  const n = toNumberOrNull(value);
+  return n !== null && n >= 0 ? n : null;
+}
+
+function toHolding(raw: unknown): RealFiReserveHolding[] {
+  const h = asRecord(raw);
+  const symbol = toStringOrNull(get(h, 'symbol'));
+  const usd = toAmount(get(h, 'usd'));
+  if (!h || !symbol || usd === null) return [];
+  return [
+    {
+      symbol,
+      assetClass: toStringOrNull(get(h, 'assetClass')) ?? '',
+      sleeve: toStringOrNull(get(h, 'sleeve')) ?? '',
+      quantity: toAmount(get(h, 'quantity')),
+      usd,
+      valuedAsOf: toDate(get(h, 'valuedAsOf')),
+    },
+  ];
+}
+
+function toCustodian(raw: unknown): RealFiReserveCustodian[] {
+  const c = asRecord(raw);
+  const custodian = toStringOrNull(get(c, 'custodian'));
+  const usd = toAmount(get(c, 'usd'));
+  if (!c || !custodian || usd === null) return [];
+  const holdings = get(c, 'holdings');
+  return [
+    {
+      custodian,
+      usd,
+      share: toAmount(get(c, 'share')) ?? 0,
+      valuedAsOf: toDate(get(c, 'valuedAsOf')),
+      holdings: Array.isArray(holdings) ? holdings.flatMap(toHolding) : [],
+    },
+  ];
+}
+
+function toSleeve(raw: unknown): RealFiReserveSleeve[] {
+  const s = asRecord(raw);
+  const sleeve = toStringOrNull(get(s, 'sleeve'));
+  const usd = toAmount(get(s, 'usd'));
+  return s && sleeve && usd !== null ? [{ sleeve, usd, share: toAmount(get(s, 'share')) ?? 0 }] : [];
+}
+
+/** Each part stands alone: a missing date or total drops that part, never the report. */
+export function toReserves(raw: unknown): RealFiReservesReport | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+
+  const res = asRecord(get(r, 'reserves'));
+  const resAsOf = toDate(get(res, 'asOf'));
+  const resTotal = toAmount(get(res, 'totalUsd'));
+  const sleeves = get(res, 'sleeves');
+  const custodians = get(res, 'custodians');
+  const reserves: RealFiReserves | null =
+    res && resAsOf && resTotal !== null && resTotal > 0
+      ? {
+          asOf: resAsOf,
+          totalUsd: resTotal,
+          sleeves: Array.isArray(sleeves) ? sleeves.flatMap(toSleeve) : [],
+          custodians: Array.isArray(custodians) ? custodians.flatMap(toCustodian) : [],
+        }
+      : null;
+
+  const sup = asRecord(get(r, 'supply'));
+  const supAsOf = toDate(get(sup, 'asOf'));
+  const usdr = toAmount(get(sup, 'usdr'));
+  const supply =
+    supAsOf && usdr !== null ? { asOf: supAsOf, usdr, susdr: toAmount(get(sup, 'susdr')) } : null;
+
+  const n = asRecord(get(r, 'nav'));
+  const navAsOf = toDate(get(n, 'asOf'));
+  const navTotal = toAmount(get(n, 'totalUsd'));
+  const perToken = toAmount(get(n, 'perToken'));
+  // Either figure alone is still a published NAV; dropping one with the other would
+  // turn a real total into "not published yet".
+  const nav =
+    navAsOf && (navTotal !== null || perToken !== null)
+      ? {
+          asOf: navAsOf,
+          totalUsd: navTotal,
+          perToken,
+          tokensOutstanding: toAmount(get(n, 'tokensOutstanding')),
+          source: toStringOrNull(get(n, 'source')),
+        }
+      : null;
+
+  const cov = asRecord(get(r, 'coverage'));
+  const covAsOf = toDate(get(cov, 'asOf'));
+  const ratio = toAmount(get(cov, 'ratio'));
+  // A published 0 is RealFi's figure too, and the one a reader most needs to see.
+  const coverage = covAsOf && ratio !== null ? { asOf: covAsOf, ratio } : null;
+
+  const hist = asRecord(get(r, 'history'));
+  const supplyHistory = get(hist, 'supply');
+  const navHistory = get(hist, 'nav');
+  return {
+    publishedAt: toStringOrNull(get(r, 'publishedAt')),
+    reserves,
+    supply,
+    nav,
+    coverage,
+    history: {
+      supply: Array.isArray(supplyHistory)
+        ? supplyHistory.flatMap((entry) => {
+            const p = asRecord(entry);
+            const date = toDate(get(p, 'date'));
+            const value = toAmount(get(p, 'usdr'));
+            return date && value !== null ? [{ date, usdr: value }] : [];
+          })
+        : [],
+      nav: Array.isArray(navHistory)
+        ? navHistory.flatMap((entry) => {
+            const p = asRecord(entry);
+            const date = toDate(get(p, 'date'));
+            const total = toAmount(get(p, 'totalUsd'));
+            // The trend draws the total; a point without one has nothing to draw.
+            return date && total !== null
+              ? [{ date, totalUsd: total, perToken: toAmount(get(p, 'perToken')) }]
+              : [];
+          })
+        : [],
+    },
+  };
+}
+
 /* ── The Nexus-backed implementation ─────────────────────────────────────────── */
 
 const nexusAxios = axios.create({
@@ -274,6 +415,9 @@ export function createNexusReadClient(http: AxiosInstance, network: string): Rea
     },
     async getProtocol() {
       return toProtocol(await read('protocol', {}));
+    },
+    async getReserves() {
+      return toReserves(await read('reserves', {}));
     },
   };
 }

@@ -453,6 +453,11 @@
             </section>
           </div>
 
+          <!-- What backs USDrf. Last, and with or without a stake: it informs the choice
+               to stake rather than asking for anything, and it hides itself wherever
+               Nexus has no feed (every network but mainnet, today). -->
+          <RealFiReserves v-if="reserves && showReserves" :report="reserves" />
+
           <p v-if="isTestnet" class="t-caption realfi-foot">{{ $t('realfi.preview') }}</p>
         </template>
 
@@ -495,6 +500,7 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import { useRealFi } from './composables/useRealFi';
 import RealFiYieldChart from './components/RealFiYieldChart.vue';
 import RealFiGettingStarted from './components/RealFiGettingStarted.vue';
+import RealFiReserves from './components/RealFiReserves.vue';
 import { heldUnits, MAINNET_USDCX_UNIT, usdcxAssetIdFor, usdrAssetIdFor } from './assets';
 import { useRealFiSwapAvailability } from './composables/useRealFiSwapAvailability';
 import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
@@ -551,9 +557,13 @@ const {
   susdrUnits,
   susdrBalance,
   currentSlot,
+  reserves,
 } = useRealFi();
 
 const t = (key: string, values?: Record<string, unknown>) => i18n.t(key, values) as string;
+
+/** Something worth a section: custody positions or a published NAV. */
+const showReserves = computed(() => !!reserves.value && !!(reserves.value.reserves || reserves.value.nav));
 
 /* ── Network ──────────────────────────────────────────────────────────────── */
 

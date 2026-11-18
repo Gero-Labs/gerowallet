@@ -29,6 +29,7 @@ import {
   type RealFiPosition,
   type RealFiProtocol,
   type RealFiReferrals,
+  type RealFiReservesReport,
   type RealFiUnavailableReason,
   type SmallestUnit,
 } from '../types';
@@ -43,6 +44,8 @@ export function useRealFi() {
   const referrals = ref<RealFiReferrals>(EMPTY_REFERRALS);
   const orders = ref<RealFiOrder[]>([]);
   const protocol = ref<RealFiProtocol | null>(null);
+  /** What backs USDrf. Null until read, and wherever Nexus has no feed for the network. */
+  const reserves = ref<RealFiReservesReport | null>(null);
 
   const wallet = computed(() => WalletStore.state.loggedWallet);
 
@@ -122,12 +125,45 @@ export function useRealFi() {
   let activeAddress: string | null = null;
   const isRequestingCode = ref(false);
 
+  /** Which read of the reserves is current, and the network the shown report is for. */
+  let reservesRequest = 0;
+  let reservesNetwork: string | null = null;
+
   function reset(): void {
     position.value = null;
     points.value = EMPTY_POINTS;
     referrals.value = EMPTY_REFERRALS;
     orders.value = [];
     protocol.value = null;
+    reserves.value = null;
+    // Anything still in flight now answers for a page that has moved on.
+    reservesRequest += 1;
+    reservesNetwork = null;
+  }
+
+  /**
+   * Read the reserves on their own, never awaited by `load()`.
+   *
+   * The feed is RealFi's, protocol-wide and optional: the position and orders must not
+   * wait up to a request timeout for it, and a gap in it must never read as "we could
+   * not load your position". A report belongs to one network, so a switch clears it
+   * at once, and an answer that arrives after a newer read started is dropped.
+   */
+  function loadReserves(client: RealFiReadClient, network: string): void {
+    const request = ++reservesRequest;
+    if (reservesNetwork !== network) {
+      reserves.value = null;
+      reservesNetwork = network;
+    }
+    client
+      .getReserves()
+      .then((report) => {
+        if (request === reservesRequest) reserves.value = report;
+      })
+      .catch((error) => {
+        // Same network: what is shown stays, as with every other read on this page.
+        if (request === reservesRequest) debugLog('[RealFi] reserves unavailable', error);
+      });
   }
 
   /**
@@ -176,6 +212,8 @@ export function useRealFi() {
       // Independent reads — one slow endpoint should not hold up the rest of the page.
       // `allSettled` so a single failing call degrades that card alone rather than
       // blanking a screen that may be showing someone their staked balance.
+      loadReserves(client, w.network);
+
       const [positionResult, pointsResult, referralsResult, ordersResult, protocolResult] =
         await Promise.allSettled([
           client.getPosition(address),
@@ -243,6 +281,7 @@ export function useRealFi() {
     referrals,
     orders,
     protocol,
+    reserves,
     actionableOrders,
     reviewOrders,
     failedOrders,
