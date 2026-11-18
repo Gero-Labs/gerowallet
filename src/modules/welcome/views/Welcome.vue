@@ -95,10 +95,11 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Wallet } from '@/models/types';
 import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
 import { canAddAccounts, parentWallet } from '@/shared/utils/walletAccount';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import networks, { NetworkInfo } from '@/utils/networks';
@@ -143,6 +144,15 @@ watch(devMode, (val) => {
 // --g-* slots here from selectedNetwork so the Get Started CTA gradient and any
 // accent-tinted chrome match the chosen chain.
 watch(selectedNetwork, (n) => applyChainAccent(n?.blockchain), { immediate: true });
+// The preview writes the shared slots, but useChainAccent writes them again only
+// when the signed-in wallet's CHAIN changes. A page that opens before the worker's
+// login reaches it lands here first, and the wallet's chain is already set (or is
+// set while this page is open), so the dashboard kept the preview's Cardano accent
+// until a reload (issue 1582). Hand the slots back to the signed-in wallet on the way out.
+onUnmounted(() => {
+  const chain = walletStore.loggedWallet?.chain;
+  if (chain) applyChainAccent(chain);
+});
 
 // "Add account" (?addAccount=<wallet id>): open onboarding on that wallet's device
 // and network. The wallet list can still be hydrating, so this also waits for it.
